@@ -215,6 +215,15 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
     ) -> sov_modules_api::OperatingMode {
         self.chain_state.operating_mode(state).unwrap_infallible()
     }
+
+    #[cfg(feature = "native")]
+    fn test_only_set_rollup_height_for_genesis(
+        &mut self,
+        state: &mut KernelStateAccessor<'_, Self::Spec>,
+    ) {
+        self.chain_state
+            .test_only_set_rollup_height_for_genesis(state);
+    }
 }
 
 /// These methods are used in the tests to access the internal state of the kernel.

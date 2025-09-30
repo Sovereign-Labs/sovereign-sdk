@@ -35,8 +35,9 @@ mod helpers;
 use alloy_primitives::U256;
 use alloy_primitives::{Address, B256};
 pub use authenticate::{
-    authenticate, decode_evm_tx, Eip712Authenticator, EthereumAuthenticator, EvmAuthenticator,
-    EvmAuthenticatorInput, SchemaProvider,
+    authenticate, decode_evm_tx, Eip712Authenticator, Eip712AuthenticatorInput,
+    Eip712AuthenticatorTrait, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
+    SchemaProvider,
 };
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -318,6 +319,10 @@ impl<S: Spec> Evm<S> {
         self.transaction_hashes
             .get(tx_hash, state)
             .unwrap_infallible()
+    }
+
+    pub(crate) fn base_fee(&self) -> u64 {
+        0
     }
 }
 

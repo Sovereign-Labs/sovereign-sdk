@@ -9,6 +9,7 @@ use sov_modules_api::capabilities::{
     TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
+use sov_modules_api::CryptoSpec;
 use sov_modules_api::{
     call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
     GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
@@ -17,7 +18,8 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
-use sov_state::{Namespace, StateAccesses, StateRoot, Storage};
+use sov_state::sequencer_state::SequencerStateChanges;
+use sov_state::{StateRoot, Storage};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
@@ -45,7 +47,7 @@ where
     pub execution_time_micros: u64,
 }
 
-type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, ChangeSet, StateAccesses);
+type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, StateCheckpoint<S>);
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum RollupBlockExecutorError<S: Spec> {
@@ -117,6 +119,8 @@ pub struct RollupBlockExecutorConfig<S: Spec> {
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
 }
 
+type Hasher<S> = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
+
 pub struct RollupBlockExecutor<S, Rt>
 where
     S: Spec,
@@ -135,12 +139,12 @@ where
     // each background task when it is spawned, ensuring that this channel remains open as long
     // as any background task is operational even if the acceptor is dropped.
     shutdown_notifier: Sender<()>,
-    pub(crate) state_update_notifier: watch::Sender<RollupHeight>,
     state_root_request_sender: tokio::sync::mpsc::Sender<StateRootComputeRequest<S>>,
     pub(crate) state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
     state_root_responses: VecDeque<StateRootReceiver<S>>,
     id: Uuid,
     startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
+    pub(super) uncommitted_changes: SequencerStateChanges<Hasher<S>>,
     phantom: PhantomData<Rt>,
 }
 
@@ -154,8 +158,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         info: &StateUpdateInfo<S::Storage>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        uncommitted_changes: SequencerStateChanges<Hasher<S>>,
     ) -> RollupBlockExecutor<S, Rt> {
-        Self::new_helper(info, None, rollup_exec_config, seq_config)
+        Self::new_helper(
+            info,
+            None,
+            rollup_exec_config,
+            seq_config,
+            uncommitted_changes,
+        )
     }
 
     pub fn new_with_tx_cache_writer(
@@ -163,8 +174,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         tx_cache_writer: TxResultWriter<S, Rt>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        uncommitted_changes: SequencerStateChanges<Hasher<S>>,
     ) -> RollupBlockExecutor<S, Rt> {
-        Self::new_helper(info, Some(tx_cache_writer), rollup_exec_config, seq_config)
+        Self::new_helper(
+            info,
+            Some(tx_cache_writer),
+            rollup_exec_config,
+            seq_config,
+            uncommitted_changes,
+        )
     }
 
     fn new_helper(
@@ -172,6 +190,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         tx_cache_writer: Option<TxResultWriter<S, Rt>>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        uncommitted_changes: SequencerStateChanges<Hasher<S>>,
     ) -> Self {
         let mut rt = Rt::default();
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
@@ -183,7 +202,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             shutdown_receiver,
             shutdown_sender,
         } = rollup_exec_config;
-        let (state_update_notifier, _) = watch::channel(RollupHeight::GENESIS);
 
         Self {
             checkpoint,
@@ -199,8 +217,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             id: Uuid::now_v7(),
             shutdown_receiver,
             shutdown_sender,
-            state_update_notifier,
             startup_transaction_cache_writer: tx_cache_writer,
+            uncommitted_changes,
             phantom: PhantomData,
         }
     }
@@ -226,6 +244,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.rollup_block_task_state = other.rollup_block_task_state;
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
+        self.uncommitted_changes = other.uncommitted_changes;
 
         // Update our list of state roots from the other executor.
         self.state_roots = other.state_roots;
@@ -509,7 +528,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 shutdown_notifier: self.shutdown_notifier.clone(),
                 old_rollup_height: self.checkpoint.rollup_height_to_access(),
                 minimum_profit_per_tx,
-                state_update_notifier: self.state_update_notifier.subscribe(),
                 admin_addresses: self.seq_config.admin_addresses.clone().into(),
                 sequencer_rollup_address: self.seq_config.rollup_address.clone(),
                 sequencer_da_address: self.da_address.clone(),
@@ -671,8 +689,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
-
-        let (batch_receipts, changes, state_accesses) = self
+        let (batch_receipts, new_checkpoint) = self
+            .rollup_block_task_state
+            .take()
+            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
             .shutdown()
             .await
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
@@ -695,16 +715,16 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!(
             executor_id = %self.id,
             %rollup_height,
-            user_writes = %state_accesses.user.ordered_writes.len(),
-            kernel_writes = %state_accesses.kernel.ordered_writes.len(),
             "Sending state root computation request to background task");
         let (response_channel, response_receiver) = oneshot::channel();
         self.state_root_responses.push_back(response_receiver);
+        let changes = Arc::new(new_checkpoint.to_raw_state_changes());
 
         if self
             .state_root_request_sender
             .send(StateRootComputeRequest {
-                state_accesses,
+                raw_state_changes: changes.clone(),
+                uncommitted_changes: self.uncommitted_changes.clone(),
                 storage: self.checkpoint.storage().clone(),
                 rollup_height,
                 max_slot_number: self.checkpoint.max_allowed_slot_number_to_access(),
@@ -716,7 +736,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             tracing::info!(executor_id = %self.id, "State root computation background task has shutdown. State root will not be computed.");
         }
 
-        self.checkpoint.apply_changes(changes);
+        // Add the changes to the executor's local uncommitted changes and set up a fresh checkpoint that points at the latest uncommitted change.
+        self.uncommitted_changes.push_front(changes);
+        self.checkpoint = StateCheckpoint::new_with_uncomitted_changes(
+            self.checkpoint.storage().clone(),
+            &Rt::default().kernel(),
+            Box::new(self.uncommitted_changes.clone()),
+        );
 
         trace!(%rollup_height, "Successfully ended rollup block");
     }
@@ -749,7 +775,6 @@ struct RollupBlockTaskContext<S: Spec> {
     setup_sender: oneshot::Sender<ChangeSet>,
     result_sender: mpsc::Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
     shutdown_notifier: mpsc::Sender<()>,
-    state_update_notifier: watch::Receiver<RollupHeight>,
     // Config values
     // --------
     minimum_profit_per_tx: u128,
@@ -778,7 +803,6 @@ where
         admin_addresses,
         sequencer_rollup_address,
         sequencer_da_address,
-        state_update_notifier,
         executor_context,
     } = ctx;
 
@@ -868,21 +892,11 @@ where
         next_root,
     );
 
-    let updated_rollup_height = *state_update_notifier.borrow();
-    let mut changes = checkpoint.changes_after(updated_rollup_height.get());
-    let (mut accessory_delta, state_accesses, _witness) =
-        stf.materialize_accessory_state(&mut Default::default(), checkpoint);
-    accessory_delta.prune_changes_before(updated_rollup_height.get());
+    stf.materialize_accessory_state(&mut Default::default(), &mut checkpoint);
 
-    changes.changes.extend(
-        accessory_delta
-            .freeze_with_height()
-            .into_iter()
-            .map(|(k, v)| ((k.clone(), Namespace::Accessory), v)),
-    );
     drop(shutdown_notifier);
 
-    (batch_receipts, changes, state_accesses)
+    (batch_receipts, checkpoint)
 }
 
 fn reject_reason_to_error(

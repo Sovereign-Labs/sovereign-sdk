@@ -121,6 +121,24 @@ where
             && version_to_use == self.latest_version()
     }
 
+    fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
+        match N::NAMESPACE {
+            Namespace::User => self
+                .historical_state
+                .get_user_value_option_by_key_unbound(key.as_ref())
+                .expect("Unable to read from UserDb"),
+            Namespace::Kernel => self
+                .historical_state
+                .get_kernel_value_option_by_key_unbound(key.as_ref())
+                .expect("Unable to read from KernelDb"),
+            Namespace::Accessory => self
+                .accessory
+                .get_value_option(key.as_ref(), SlotNumber::MAX)
+                .expect("Unable to read from AccessoryDb"),
+        }
+        .map(Into::into)
+    }
+
     fn read_value<N: CompileTimeNamespace>(
         &self,
         key: &SlotKey,
@@ -657,5 +675,9 @@ where
             borsh::from_slice(&raw_root).expect("Failed to deserialize root hash");
         tracing::trace!(%version, root_hash = %storage_root_historical, "Got unbound root hash");
         Ok(storage_root_historical)
+    }
+
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
+        self.read_value_unbound::<N>(&key)
     }
 }

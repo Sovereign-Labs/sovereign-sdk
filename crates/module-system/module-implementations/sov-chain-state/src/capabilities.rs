@@ -488,12 +488,28 @@ impl<S: Spec> ChainState<S> {
     ) -> Result<Option<S::Gas>, <Reader as StateReader<Kernel>>::Error> {
         self.block_gas_limit_at(state.rollup_height_to_access(), state)
     }
+
+    /// This method is used for testing only. It sets the rollup height to zero.
+    #[cfg(feature = "native")]
+    pub fn test_only_set_rollup_height_for_genesis(
+        &mut self,
+        state: &mut KernelStateAccessor<'_, S>,
+    ) {
+        self.current_heights
+            .set(&(RollupHeight::GENESIS, VisibleSlotNumber::GENESIS), state)
+            .unwrap_infallible();
+        self.true_slot_number
+            .set(&SlotNumber::GENESIS, state)
+            .unwrap_infallible();
+    }
 }
 
 #[cfg(feature = "native")]
 const _: () = {
     use sov_modules_api::ApiStateAccessor;
     use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+    use sov_state::StateItemDecoder;
+    use sov_state::{NativeStorage, StateCodec};
 
     impl<S: Spec> KernelWithSlotMapping<S> for ChainState<S> {
         fn visible_slot_number_at(
@@ -523,7 +539,6 @@ const _: () = {
                 .0
         }
 
-        #[cfg(feature = "native")]
         fn true_slot_number_at_historical_height(
             &self,
             height: RollupHeight,
@@ -553,6 +568,39 @@ const _: () = {
             self.true_slot_number_to_rollup_height
                 .get(&slot_number, state)
                 .unwrap_infallible()
+        }
+
+        fn get_latest_rollup_height(&self, state: &S::Storage) -> RollupHeight {
+            let key = self.current_heights.slot_key();
+            let value = state.get_unbound::<User>(key);
+            let Some(value) = value else {
+                return RollupHeight::GENESIS;
+            };
+            let (rollup_height, _): (RollupHeight, VisibleSlotNumber) = self
+                .current_heights
+                .codec()
+                .value_codec()
+                .try_decode(value.value())
+                .expect("Decoding error retrieving value from state! This is impossible!");
+            rollup_height
+        }
+
+        fn get_true_slot_number_for_height_unbound(
+            &self,
+            height: RollupHeight,
+            state: &S::Storage,
+        ) -> Option<SlotNumber> {
+            use sov_state::Accessory;
+
+            let key = self.true_slot_number_history.slot_key(&height);
+            let value = state.get_unbound::<Accessory>(key)?;
+            Some(
+                self.true_slot_number_history
+                    .codec()
+                    .value_codec()
+                    .try_decode(value.value())
+                    .expect("Decoding error retrieving value from state! This is impossible!"),
+            )
         }
     }
 };

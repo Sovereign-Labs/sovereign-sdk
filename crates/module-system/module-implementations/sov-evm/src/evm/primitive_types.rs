@@ -111,6 +111,13 @@ impl SealedBlock {
     pub fn transactions(&self) -> &Range<u64> {
         &self.transactions
     }
+
+    pub fn base_fee(&self) -> u64 {
+        self.header
+            .base_fee_per_gas
+            // This is justified. We set it at genesis and never remove it — only overwrite it.
+            .expect("The base_fee_per_gas must be set.")
+    }
 }
 
 impl serde::Serialize for SealedBlock {

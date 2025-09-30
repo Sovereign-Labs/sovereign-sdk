@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 
 mod bytes;
-mod cache;
+pub(crate) mod cache;
 pub mod codec;
 pub mod config;
 mod event;
@@ -11,6 +11,9 @@ pub mod namespaces;
 pub mod nomt;
 #[cfg(feature = "native")]
 mod prover_storage;
+#[cfg(feature = "native")]
+/// Defines data structures for managing state in the sequencer.
+pub mod sequencer_state;
 pub mod storage;
 /// Defines the data structures needed by both the zk-storage and the prover storage.
 mod storage_internals;

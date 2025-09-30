@@ -21,7 +21,7 @@ const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
 #[derive(Deref)]
 pub struct TestClient {
-    contract: SimpleStorage,
+    pub contract: SimpleStorage,
     node_client: NodeClient,
     pub nonce: Arc<AtomicU64>,
     #[deref]

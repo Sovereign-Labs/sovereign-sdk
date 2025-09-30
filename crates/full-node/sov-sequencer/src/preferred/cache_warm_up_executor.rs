@@ -97,8 +97,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut shutdown_receiver = exec_config.shutdown_receiver.clone();
-            let mut executor =
-                RollupBlockExecutor::<_, Rt>::new(&info, exec_config, seq_config.clone());
+            let mut executor = RollupBlockExecutor::<_, Rt>::new(
+                &info,
+                exec_config,
+                seq_config.clone(),
+                Default::default(),
+            );
 
             let mut is_started = false;
             loop {

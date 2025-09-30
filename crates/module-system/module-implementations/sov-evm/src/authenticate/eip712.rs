@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::OnceLock;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::EvmCryptoSpec;
 use sov_modules_api::capabilities::{
     self, calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
@@ -13,7 +14,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Spec, TxHash,
+    ProvableStateReader, RawTx, Runtime, Spec, TxHash,
 };
 use sov_state::User;
 
@@ -36,26 +37,56 @@ pub trait SchemaProvider {
     }
 }
 
+/// Indicates that a runtime supports the Eip712 transaction authenticator
+/// and provides suitable methods for encoding and decoding EIP712-signed transactions.
+pub trait Eip712AuthenticatorTrait<S: Spec>: Runtime<S> {
+    /// Add the Solana offchain discriminant to a transaction the runtime.
+    fn add_eip712_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input;
+
+    /// Encode a transaction with the Solana offchain discriminant for the runtime.
+    fn encode_with_eip712_auth(tx: RawTx) -> FullyBakedTx {
+        <Self::Auth as TransactionAuthenticator<S>>::encode_authenticator_input(
+            &Self::add_eip712_auth(tx),
+        )
+    }
+}
+
 /// EIP-712-compatible transaction authenticator. See [`TransactionAuthenticator`].
 pub struct Eip712Authenticator<S, D, SP>(PhantomData<(S, D, SP)>);
 
-impl<S, D, SP> TransactionAuthenticator<S> for Eip712Authenticator<S, D, SP>
+/// See [`TransactionAuthenticator::Input`].
+#[derive(std::fmt::Debug, Clone, BorshSerialize, BorshDeserialize)]
+pub enum Eip712AuthenticatorInput {
+    /// Authenticate using EIP712 an signature.
+    Eip712(RawTx),
+    /// Authenticate using the standard `sov-module` authenticator.
+    Standard(RawTx),
+}
+
+impl<S, Rt, SP> TransactionAuthenticator<S> for Eip712Authenticator<S, Rt, SP>
 where
     S: Spec<CryptoSpec = EvmCryptoSpec>,
-    D: DispatchCall<Spec = S>,
+    Rt: Runtime<S> + DispatchCall<Spec = S>,
     SP: SchemaProvider,
 {
-    type Decodable = D::Decodable;
-    type Input = RawTx;
+    type Decodable = Rt::Decodable;
+    type Input = Eip712AuthenticatorInput;
 
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
     ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
-        let tx: RawTx = borsh::from_slice(&tx.data)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+        let auth_variant: Eip712AuthenticatorInput = borsh::from_slice(&tx.data).map_err(|e| {
+            sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
+        })?;
 
-        capabilities::decode_sov_tx::<S, D>(&tx.data)
+        match auth_variant {
+            Eip712AuthenticatorInput::Standard(raw_tx)
+            | Eip712AuthenticatorInput::Eip712(raw_tx) => {
+                let call = sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
+                Ok(call)
+            }
+        }
     }
 
     fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
@@ -65,21 +96,35 @@ where
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::AuthenticationError,
     > {
-        let tx: RawTx = borsh::from_slice(&tx.data).map_err(|e| {
-            capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, state)
+        let input: Eip712AuthenticatorInput = borsh::from_slice(&tx.data).map_err(|e| {
+            sov_modules_api::capabilities::fatal_deserialization_error::<_, S, _>(
+                &tx.data, e, state,
+            )
         })?;
 
-        authenticate::<_, S, D, SP>(&tx.data, state)
+        match input {
+            Eip712AuthenticatorInput::Eip712(tx) => authenticate::<_, S, Rt, SP>(&tx.data, state),
+            Eip712AuthenticatorInput::Standard(tx) => {
+                sov_modules_api::capabilities::authenticate::<_, S, Rt>(
+                    &tx.data,
+                    &Rt::CHAIN_HASH,
+                    state,
+                )
+            }
+        }
     }
 
     #[cfg(feature = "native")]
     fn compute_tx_hash(
         tx: &sov_modules_api::FullyBakedTx,
     ) -> anyhow::Result<sov_modules_api::TxHash> {
-        use sov_modules_api::capabilities::calculate_hash;
+        let input: Eip712AuthenticatorInput = borsh::from_slice(&tx.data)?;
 
-        let tx: RawTx = borsh::from_slice(&tx.data)?;
-        Ok(calculate_hash::<S>(&tx.data))
+        match input {
+            Eip712AuthenticatorInput::Eip712(tx) | Eip712AuthenticatorInput::Standard(tx) => {
+                Ok(sov_modules_api::capabilities::calculate_hash::<S>(&tx.data))
+            }
+        }
     }
 
     fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S>>(
@@ -89,14 +134,41 @@ where
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::UnregisteredAuthenticationError,
     > {
-        let tx: RawTx = borsh::from_slice(&batch.tx.data)
-            .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?;
+        let Self::Input::Standard(input) = borsh::from_slice(&batch.tx.data)
+            .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?
+        else {
+            return Err(UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant);
+        };
 
-        Ok(authenticate::<_, S, D, SP>(&tx.data, state)?)
+        let (tx_and_raw_hash, auth_data, runtime_call) =
+            sov_modules_api::capabilities::authenticate::<_, S, Rt>(
+                &input.data,
+                &Rt::CHAIN_HASH,
+                state,
+            )
+            .map_err(|e| match e {
+                AuthenticationError::FatalError(err, hash) => {
+                    UnregisteredAuthenticationError::FatalError(err, hash)
+                }
+                AuthenticationError::OutOfGas(err) => {
+                    UnregisteredAuthenticationError::OutOfGas(err)
+                }
+            })?;
+
+        if Rt::allow_unregistered_tx(&runtime_call) {
+            Ok((tx_and_raw_hash, auth_data, runtime_call))
+        } else {
+            Err(UnregisteredAuthenticationError::FatalError(
+                FatalError::Other(
+                    "The runtime call included in the transaction was invalid.".to_string(),
+                ),
+                tx_and_raw_hash.raw_tx_hash,
+            ))?
+        }
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {
-        tx
+        Eip712AuthenticatorInput::Standard(tx)
     }
 }
 
@@ -195,7 +267,7 @@ fn verify_eip712_signature<
         ))?;
 
     let eip712_hash = schema
-        .eip712_signing_hash(transaction_type_index, &unsigned_tx_bytes)
+        .eip712_signing_digest(transaction_type_index, &unsigned_tx_bytes)
         .map_err(|e| {
             AuthenticationError::FatalError(
                 FatalError::SigVerificationFailed(format!("Failed to calculate EIP712 hash: {e}")),

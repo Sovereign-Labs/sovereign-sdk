@@ -19,6 +19,7 @@ jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 sov-address = { workspace = true, features = ["evm"] }
 
 sov-evm = { workspace = true, features = ["native"] }
+sov-uniqueness = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-eth-dev-signer = { workspace = true }

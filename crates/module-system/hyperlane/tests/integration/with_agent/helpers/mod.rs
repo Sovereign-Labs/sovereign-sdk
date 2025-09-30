@@ -195,9 +195,9 @@ impl HyperlaneBuilder {
         let docker_image = env::var("CUSTOM_HLP_DOCKER_IMAGE");
         let has_custom_image = !matches!(docker_image, Err(env::VarError::NotPresent));
 
-        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/integration-2025-08-27-rebase branch
+        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/integration-2025-09-17-rebase branch
         let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/sovereign-labs/hyperlane-agent:integration-2".into());
+            .unwrap_or_else(|_| "ghcr.io/sovereign-labs/hyperlane-agent:integration-5".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));
