@@ -27,8 +27,6 @@ impl AnvilRunner {
         // Hard code tag, so we don't accidental breakages
         let container = AnvilNode::default()
             .with_tag(TAG)
-            // Single string is on purpose, otherwise arguments go to `sh -c` and not into anvil
-            .with_cmd([format!("--port {ANVIL_PORT} --block-time 5")])
             .start()
             .await
             .expect("failed to start anvil");
