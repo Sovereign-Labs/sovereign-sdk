@@ -12016,11 +12016,10 @@ dependencies = [
 name = "sov-evm-soak-testing"
 version = "0.3.0"
 dependencies = [
+ "alloy",
  "alloy-primitives",
  "anyhow",
- "ethers",
  "sov-eth-client",
- "sov-node-client",
  "sov-test-utils",
  "tokio",
 ]
@@ -12945,6 +12944,7 @@ dependencies = [
 name = "sov-test-utils"
 version = "0.3.0"
 dependencies = [
+ "alloy",
  "alloy-contract",
  "alloy-primitives",
  "alloy-rpc-types-eth",
