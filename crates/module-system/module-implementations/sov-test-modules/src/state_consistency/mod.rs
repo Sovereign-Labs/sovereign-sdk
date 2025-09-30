@@ -13,6 +13,14 @@ use sov_modules_api::{
 };
 use sov_state::Storage;
 
+/// Initial configuration for StateConsistency module.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, JsonSchema)]
+#[schemars(bound = "S: Spec", rename = "StateConsistencyConfig")]
+pub struct StateConsistencyConfig<S: Spec> {
+    /// Admin of the module.
+    pub admin: S::Address,
+}
+
 /// Events emitted by the StateConsistency module
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -45,12 +53,16 @@ pub struct StateConsistency<S: Spec> {
     /// The latest state root stored by the begin slot hook
     #[state]
     pub latest_state_root: StateValue<<<S as Spec>::Storage as Storage>::Root>,
+
+    /// The admin address that is allowed to call the module's functions
+    #[state]
+    pub admin: StateValue<S::Address>,
 }
 
 impl<S: Spec> Module for StateConsistency<S> {
     type Spec = S;
 
-    type Config = ();
+    type Config = StateConsistencyConfig<S>;
 
     type CallMessage = call::CallMessage;
 
@@ -59,9 +71,10 @@ impl<S: Spec> Module for StateConsistency<S> {
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
-        _config: &Self::Config,
+        config: &Self::Config,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
+        self.admin.set(&config.admin, state)?;
         self.value.set(&0, state)?;
         self.accessory_value.set(&0, state)?;
         Ok(())

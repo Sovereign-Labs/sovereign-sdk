@@ -52,9 +52,17 @@ impl<S: Spec> StateConsistency<S> {
         &mut self,
         old_check: u64,
         new: u64,
-        _context: &Context<S>,
+        context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
+        // Check admin permission
+        let admin = self.admin.get_or_err(state)??;
+        anyhow::ensure!(
+            &admin == context.sender(),
+            "Only admin can update value. Admin: {}, Sender: {}",
+            admin,
+            context.sender()
+        );
         let old_value = self.value.get(state)?.ok_or(anyhow::anyhow!(
             "Empty state `value`, should not be possible"
         ))?;
@@ -77,9 +85,17 @@ impl<S: Spec> StateConsistency<S> {
     pub(crate) fn update_accessory_state(
         &mut self,
         new: u64,
-        _context: &Context<S>,
+        context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
+        // Check admin permission
+        let admin = self.admin.get_or_err(state)??;
+        anyhow::ensure!(
+            &admin == context.sender(),
+            "Only admin can update accessory state. Admin: {}, Sender: {}",
+            admin,
+            context.sender()
+        );
         Ok(self.accessory_value.set(&new, state)?)
     }
 
@@ -88,9 +104,17 @@ impl<S: Spec> StateConsistency<S> {
         expected_visible_slot_number: u64,
         expected_rollup_height: u64,
         expected_state_root: Vec<u8>,
-        _context: &Context<S>,
+        context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
+        // Check admin permission
+        let admin = self.admin.get_or_err(state)??;
+        anyhow::ensure!(
+            &admin == context.sender(),
+            "Only admin can assert block state. Admin: {}, Sender: {}",
+            admin,
+            context.sender()
+        );
         let visible_slot_number = state.current_visible_slot_number();
         anyhow::ensure!(
             visible_slot_number.get() == expected_visible_slot_number,
