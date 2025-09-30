@@ -1,5 +1,6 @@
 # 2025-09-29
 - #1770 **Breaking change** introduces a required `buffer_raw_txs` field to `EthRpcConfig`. This change is only breaking for EVM rollups.
+- #1783 Adds `da.tx_priority` optional field for celestia adapter. Possible values are `Low`, `Medium` or `High`. It can be used to improve blob inclusion.
 
 # 2025-09-25
 - #1758 A new config value in rollup.toml: `runner.da_total_timeout_secs`. It should be larger than the total time da service attempts to fetch data. Default value is 10 minutes.
