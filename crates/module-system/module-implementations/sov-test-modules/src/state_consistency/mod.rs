@@ -9,24 +9,37 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{
     AccessoryStateValue, Context, DaSpec, GenesisState, Module, ModuleId, ModuleInfo,
-    ModuleRestApi, Spec, StateValue, TxState,
+    ModuleRestApi, Spec, StateMap, StateValue, TxState,
 };
-use sov_state::Storage;
+use sov_state::{BorshCodec, Storage};
 
 /// Initial configuration for StateConsistency module.
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, JsonSchema)]
 #[schemars(bound = "S: Spec", rename = "StateConsistencyConfig")]
 pub struct StateConsistencyConfig<S: Spec> {
-    /// Admin of the module.
-    pub admin: S::Address,
+    /// List of admin addresses allowed to call the module.
+    pub admins: Vec<S::Address>,
 }
 
 /// Events emitted by the StateConsistency module
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, BorshSerialize, BorshDeserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Event {
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    JsonSchema,
+)]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S: Spec", rename = "Event")]
+pub enum Event<S: Spec> {
     /// Emitted when the value is updated
     ValueUpdated {
+        /// The address whose value was updated
+        address: S::Address,
         /// The old value that was replaced
         old_value: u64,
         /// The new value that was set
@@ -42,9 +55,9 @@ pub struct StateConsistency<S: Spec> {
     #[id]
     pub id: ModuleId,
 
-    /// Arbitrary value that gets updated.
+    /// Per-account values that get updated
     #[state]
-    pub value: StateValue<u64>,
+    pub values: StateMap<S::Address, u64, BorshCodec>,
 
     /// A value that can be set for checking accessory state consistency.
     #[state]
@@ -54,9 +67,9 @@ pub struct StateConsistency<S: Spec> {
     #[state]
     pub latest_state_root: StateValue<<<S as Spec>::Storage as Storage>::Root>,
 
-    /// The admin address that is allowed to call the module's functions
+    /// The list of admin addresses that are allowed to call the module's functions
     #[state]
-    pub admin: StateValue<S::Address>,
+    pub admins: StateValue<Vec<S::Address>>,
 }
 
 impl<S: Spec> Module for StateConsistency<S> {
@@ -66,7 +79,7 @@ impl<S: Spec> Module for StateConsistency<S> {
 
     type CallMessage = call::CallMessage;
 
-    type Event = Event;
+    type Event = Event<S>;
 
     fn genesis(
         &mut self,
@@ -74,8 +87,8 @@ impl<S: Spec> Module for StateConsistency<S> {
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
-        self.admin.set(&config.admin, state)?;
-        self.value.set(&0, state)?;
+        self.admins
+            .set::<Vec<S::Address>, _>(&config.admins, state)?;
         self.accessory_value.set(&0, state)?;
         Ok(())
     }

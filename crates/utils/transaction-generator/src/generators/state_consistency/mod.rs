@@ -4,15 +4,14 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sov_modules_api::prelude::arbitrary;
-use sov_modules_api::prelude::arbitrary::Arbitrary;
 use sov_modules_api::prelude::axum::async_trait;
-use sov_modules_api::{CryptoSpec, PrivateKey, Spec};
+use sov_modules_api::{CryptoSpec, PrivateKey, PublicKey, Spec};
 use strum::EnumDiscriminants;
 
 use crate::generators::basic::BasicClientConfig;
 use crate::interface::{
-    CallMessageGenerator, Distribution, GeneratedMessage, GeneratorState, MessageValidity,
-    MessageOutcome, Percent, TagAction, Taggable,
+    CallMessageGenerator, GeneratedMessage, GeneratorState, MessageOutcome, MessageValidity,
+    TagAction, Taggable,
 };
 use crate::state::{AccountState, ApplyToState};
 use crate::ChangelogEntry;
@@ -20,58 +19,36 @@ use crate::ChangelogEntry;
 mod harness_interface;
 pub use harness_interface::*;
 
-/// Tags used for state consistency accounts
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StateConsistencyTag {
-    /// The singleton account that tracks the global state value
-    GlobalStateSingleton,
-}
-
-/// Additional data stored in the singleton account to track global state
-#[derive(Debug, Clone, Default)]
-pub struct StateConsistencyData {
-    /// The current global value being tracked
-    pub current_value: u64,
-}
-
 /// The state of a state consistency test account
 #[derive(Debug, Clone)]
-pub struct StateConsistencyAccount<S: Spec> {
-    pub(crate) private_key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
+pub struct StateConsistencyAccount {
     pub(crate) current_value: u64,
-    pub(crate) tag_changes: Vec<TagAction<StateConsistencyTag>>,
 }
 
-impl<S: Spec> From<&AccountState<S, StateConsistencyData>> for StateConsistencyAccount<S> {
-    fn from(value: &AccountState<S, StateConsistencyData>) -> StateConsistencyAccount<S> {
+impl<S: Spec, T> From<&AccountState<S, T>> for StateConsistencyAccount {
+    fn from(value: &AccountState<S, T>) -> StateConsistencyAccount {
         StateConsistencyAccount {
-            private_key: value.private_key.clone(),
-            current_value: value.additional_info.current_value,
-            tag_changes: Vec::new(),
+            current_value: value.consistency_value,
         }
     }
 }
 
-impl<S: Spec> ApplyToState<S, StateConsistencyData> for StateConsistencyAccount<S> {
-    fn apply_to(self, account: &mut AccountState<S, StateConsistencyData>) {
-        account.additional_info.current_value = self.current_value;
+impl<S: Spec, T> ApplyToState<S, T> for StateConsistencyAccount {
+    fn apply_to(self, account: &mut AccountState<S, T>) {
+        account.consistency_value = self.current_value;
     }
 }
 
-impl<S: Spec> Taggable for StateConsistencyAccount<S> {
-    type Tag = StateConsistencyTag;
-
-    fn add_tag(&mut self, tag: Self::Tag) {
-        self.tag_changes.push(TagAction::Add(tag));
-    }
-
-    fn remove_tag(&mut self, tag: Self::Tag) {
-        self.tag_changes.push(TagAction::Remove(tag));
-    }
+impl Taggable for StateConsistencyAccount {
+    type Tag = ();
 
     fn take_tags(&mut self) -> impl IntoIterator<Item = TagAction<Self::Tag>> {
-        std::mem::take(&mut self.tag_changes)
+        vec![].into_iter()
     }
+
+    fn add_tag(&mut self, _tag: Self::Tag) {}
+
+    fn remove_tag(&mut self, _tag: Self::Tag) {}
 }
 
 /// A message generator for the `StateConsistency` module.
@@ -83,38 +60,29 @@ pub struct StateConsistencyMessageGenerator<S: Spec> {
 
 impl<S: Spec> StateConsistencyMessageGenerator<S> {
     /// Creates a new [`StateConsistencyMessageGenerator`]
-    pub fn new(
-        test_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
-    ) -> Self {
+    pub fn new(test_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey) -> Self {
         Self { test_key }
     }
 
-    /// Get the singleton account address (derived from test key)
-    fn singleton_address(&self) -> S::Address {
+    /// Get the test account address (derived from test key)
+    fn test_address(&self) -> S::Address {
         self.test_key.pub_key().credential_id().into()
     }
 
-    /// Gets or creates the singleton account that tracks global state
-    fn get_or_create_singleton(
+    /// Gets or creates the test account for this generator
+    fn get_or_create_test_account(
         &self,
-        generator_state: &mut impl GeneratorState<
-            S,
-            AccountView = StateConsistencyAccount<S>,
-            Tag: From<StateConsistencyTag>,
-        >,
-    ) -> (S::Address, StateConsistencyAccount<S>) {
-        let address = self.singleton_address();
+        generator_state: &mut impl GeneratorState<S, AccountView = StateConsistencyAccount>,
+    ) -> (S::Address, StateConsistencyAccount) {
+        let address = self.test_address();
 
         if let Some(account) = generator_state.get_account(&address) {
             (address, account)
         } else {
-            // Create new singleton account
-            let mut account = StateConsistencyAccount {
-                private_key: self.test_key.clone(),
-                current_value: 0, // Start from 0
-                tag_changes: Vec::new(),
+            // Create new test account
+            let account = StateConsistencyAccount {
+                current_value: 0, // TODO: query from state on init?
             };
-            account.add_tag(StateConsistencyTag::GlobalStateSingleton);
 
             // Save it immediately so it exists in the generator state
             generator_state.update_account(&address, account.clone());
@@ -169,18 +137,14 @@ impl ChangelogEntry for StateConsistencyChangeLogEntry {
 #[async_trait]
 impl<S: Spec> CallMessageGenerator<S> for StateConsistencyMessageGenerator<S> {
     type Module = sov_test_modules::state_consistency::StateConsistency<S>;
-    type AccountView = StateConsistencyAccount<S>;
+    type AccountView = StateConsistencyAccount;
     type ChangelogEntry = StateConsistencyChangeLogEntry;
     type Tag = ();
 
     fn generate_setup_messages(
         &self,
         _u: &mut arbitrary::Unstructured<'_>,
-        _generator_state: &mut impl GeneratorState<
-            S,
-            AccountView = Self::AccountView,
-            Tag: From<Self::Tag>,
-        >,
+        _generator_state: &mut impl GeneratorState<S, AccountView = Self::AccountView>,
     ) -> arbitrary::Result<
         Vec<
             GeneratedMessage<
@@ -197,35 +161,27 @@ impl<S: Spec> CallMessageGenerator<S> for StateConsistencyMessageGenerator<S> {
     fn generate_call_message(
         &self, // Note: &self, not &mut self!
         u: &mut arbitrary::Unstructured<'_>,
-        generator_state: &mut impl GeneratorState<
-            S,
-            AccountView = Self::AccountView,
-            Tag: From<Self::Tag>,
-        >,
+        generator_state: &mut impl GeneratorState<S, AccountView = Self::AccountView>,
         validity: MessageValidity,
     ) -> arbitrary::Result<
-        GeneratedMessage<
-            S,
-            sov_test_modules::state_consistency::CallMessage,
-            Self::ChangelogEntry,
-        >,
+        GeneratedMessage<S, sov_test_modules::state_consistency::CallMessage, Self::ChangelogEntry>,
     > {
         use sov_test_modules::state_consistency::CallMessage;
 
-        // Get the singleton account that tracks our global state
-        let (singleton_addr, mut singleton_account) = self.get_or_create_singleton(generator_state);
+        // Get the test account for this generator
+        let (test_addr, mut test_account) = self.get_or_create_test_account(generator_state);
 
         match validity {
             MessageValidity::Valid => {
                 // Generate UpdateValue with correct old_check for consistency
-                let old_value = singleton_account.current_value;
+                let old_value = test_account.current_value;
                 let new_value = u.int_in_range(0..=u64::MAX)?;
 
-                // Update the singleton's tracked value
-                singleton_account.current_value = new_value;
+                // Update the account's tracked value
+                test_account.current_value = new_value;
 
-                // Save the updated singleton back to generator state
-                generator_state.update_account(&singleton_addr, singleton_account);
+                // Save the updated account back to generator state
+                generator_state.update_account(&test_addr, test_account);
 
                 Ok(GeneratedMessage::new(
                     CallMessage::UpdateValue {
@@ -240,11 +196,11 @@ impl<S: Spec> CallMessageGenerator<S> for StateConsistencyMessageGenerator<S> {
             }
             MessageValidity::Invalid => {
                 // Generate with intentionally wrong old_check
-                let current_value = singleton_account.current_value;
+                let current_value = test_account.current_value;
                 let wrong_old = current_value.wrapping_add(12345); // Guaranteed wrong
                 let new_value = u.int_in_range(0..=u64::MAX)?;
 
-                // Don't update the singleton since this will revert
+                // Don't update the account since this will revert
                 Ok(GeneratedMessage::new(
                     CallMessage::UpdateValue {
                         old_check: wrong_old,

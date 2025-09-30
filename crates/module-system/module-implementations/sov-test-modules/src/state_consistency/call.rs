@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::Result;
 use schemars::JsonSchema;
 use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::{Context, Spec, TxState, EventEmitter};
+use sov_modules_api::{Context, EventEmitter, Spec, TxState};
 use strum::{EnumDiscriminants, EnumIs, VariantArray};
 
 use super::{Event, StateConsistency};
@@ -32,7 +32,7 @@ pub enum CallMessage {
         /// is invalid on mismatch.
         old_check: u64,
         /// The new value to save.
-        new: u64
+        new: u64,
     },
     /// Updates the value stored in accessory state.
     UpdateAccessoryState(u64),
@@ -56,28 +56,36 @@ impl<S: Spec> StateConsistency<S> {
         state: &mut impl TxState<S>,
     ) -> Result<()> {
         // Check admin permission
-        let admin = self.admin.get_or_err(state)??;
+        let admins = self.admins.get_or_err(state)??;
         anyhow::ensure!(
-            &admin == context.sender(),
-            "Only admin can update value. Admin: {}, Sender: {}",
-            admin,
+            admins.contains(context.sender()),
+            "Only admins can update value. Sender: {}",
             context.sender()
         );
-        let old_value = self.value.get(state)?.ok_or(anyhow::anyhow!(
-            "Empty state `value`, should not be possible"
-        ))?;
+
+        // Get the current value for this sender's address
+        let sender_address = context.sender();
+        let current_value = self.values.get(sender_address, state)?.unwrap_or(0);
+
         anyhow::ensure!(
-            old_value == old_check,
-            "Current value mismatched: stored value {old_value}, transaction expected {old_check}"
+            current_value == old_check,
+            "Current value mismatched: stored value {}, transaction expected {}",
+            current_value,
+            old_check
         );
 
-        self.value.set(&new, state)?;
+        // Update the value for this address
+        self.values.set(sender_address, &new, state)?;
 
+        // Emit event
         self.emit_event(
-            state,Event::ValueUpdated {
-            old_value,
-            new_value: new,
-            });
+            state,
+            Event::ValueUpdated {
+                address: sender_address.clone(),
+                old_value: current_value,
+                new_value: new,
+            },
+        );
 
         Ok(())
     }
@@ -89,14 +97,15 @@ impl<S: Spec> StateConsistency<S> {
         state: &mut impl TxState<S>,
     ) -> Result<()> {
         // Check admin permission
-        let admin = self.admin.get_or_err(state)??;
+        let admins = self.admins.get_or_err(state)??;
         anyhow::ensure!(
-            &admin == context.sender(),
-            "Only admin can update accessory state. Admin: {}, Sender: {}",
-            admin,
+            admins.contains(context.sender()),
+            "Only admins can update accessory state. Sender: {}",
             context.sender()
         );
-        Ok(self.accessory_value.set(&new, state)?)
+
+        self.accessory_value.set(&new, state)?;
+        Ok(())
     }
 
     pub(crate) fn assert_block_state(
@@ -108,11 +117,10 @@ impl<S: Spec> StateConsistency<S> {
         state: &mut impl TxState<S>,
     ) -> Result<()> {
         // Check admin permission
-        let admin = self.admin.get_or_err(state)??;
+        let admins = self.admins.get_or_err(state)??;
         anyhow::ensure!(
-            &admin == context.sender(),
-            "Only admin can assert block state. Admin: {}, Sender: {}",
-            admin,
+            admins.contains(context.sender()),
+            "Only admins can assert block state. Sender: {}",
             context.sender()
         );
         let visible_slot_number = state.current_visible_slot_number();
