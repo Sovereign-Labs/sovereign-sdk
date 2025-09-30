@@ -440,7 +440,7 @@ pub enum PendingOrBlock {
     Invalid(String),
 }
 
-const ABSOLUTE_MARGIN: u64 = 100_000;
+const ABSOLUTE_MARGIN: u64 = 100_000_000;
 /// gas * 1.5 + 100_000
 fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
