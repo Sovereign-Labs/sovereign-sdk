@@ -806,10 +806,13 @@ where
         executor_context,
     } = ctx;
 
-    let _span = tracing::trace_span!(
-        "preferred_seq_bg_task",
-        checkpoint_height = %checkpoint.rollup_height_to_access(),
-    )
+    let _span = match executor_context {
+        ExecutionContext::Sequencer => tracing::trace_span!(ExecutionContext::SEQUENCER),
+        ExecutionContext::SequencerWarmUp => {
+            tracing::trace_span!(ExecutionContext::SEQUENCER_WARM_UP)
+        }
+        ExecutionContext::Node => tracing::trace_span!(ExecutionContext::NODE),
+    }
     .entered();
 
     let stf = StfBlueprint::<S, Rt>::new();
