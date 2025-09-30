@@ -4,17 +4,7 @@ use anyhow::Result;
 use sov_eth_client::TestClient;
 use sov_test_utils::{Erc20, Pair, Router, Submit};
 
-trait ProviderConstraints<N: Network>: Provider<N> + Clone + Send + Sync {}
-impl<P, N: Network> ProviderConstraints<N> for P where P: Provider<N> + Clone + Send + Sync {}
-
-trait NetworkConstraints: Network + Send + Sync {}
-impl<N: Network> NetworkConstraints for N where N: Network + Send + Sync {}
-
-struct Contracts<'a, P, N> 
-where
-    P: ProviderConstraints<N>,
-    N: NetworkConstraints,
-{
+struct Contracts<'a, P, N> {
     weth: Erc20::Erc20Instance<&'a P, N>,
     usdc: Erc20::Erc20Instance<&'a P, N>,
     router: Router::RouterInstance<&'a P, N>,
@@ -43,10 +33,10 @@ async fn execute_swap<P, N>(
     signer: Address,
     amount_in: U256,
     path: Vec<Address>,
-) -> Result<()>
+) -> Result<()> 
 where
-    P: ProviderConstraints<N>,
-    N: NetworkConstraints,
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
 {
     let expected_out = contracts.router.getAmountsOut(amount_in, path.clone()).call().await?[1];
     println!("Swapping {} -> {} ETH", format_ether(amount_in), format_ether(expected_out));
@@ -68,10 +58,10 @@ async fn add_initial_liquidity<P, N>(
     signer: Address,
     weth_amount: U256,
     usdc_amount: U256,
-) -> Result<()>
+) -> Result<()> 
 where
-    P: ProviderConstraints<N>,
-    N: NetworkConstraints,
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
 {
     mint_and_approve(&contracts.weth, signer, *contracts.router.address(), weth_amount).await?;
     mint_and_approve(&contracts.usdc, signer, *contracts.router.address(), usdc_amount).await?;
@@ -91,10 +81,10 @@ where
 
 async fn deploy_uniswap_contracts<P, N>(
     client: &P,
-) -> Result<Contracts<'_, P, N>>
+) -> Result<Contracts<'_, P, N>> 
 where
-    P: ProviderConstraints<N>,
-    N: NetworkConstraints,
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
 {
     let weth = Erc20::deploy(client, "Weth".into(), "WETH".into()).await?;
     let usdc = Erc20::deploy(client, "Usdc".into(), "USDC".into()).await?;
@@ -124,10 +114,10 @@ async fn mint_and_approve<P, N>(
     to: Address, 
     spender: Address, 
     amount: U256
-) -> Result<()>
+) -> Result<()> 
 where
-    P: ProviderConstraints<N>,
-    N: NetworkConstraints,
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
 {
     token.mint(to, amount).submit().await?;
     token.approve(spender, amount).submit().await?;
