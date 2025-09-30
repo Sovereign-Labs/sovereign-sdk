@@ -179,7 +179,8 @@ async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericI
         .is_running()
         .await
         .expect("failed to get running status");
-    for _ in 0..300 {
+    // 600 * 100ms = 60_000ms = 60s
+    for _ in 0..600 {
         is_running = container.is_running().await.unwrap();
         if !is_running {
             break;
