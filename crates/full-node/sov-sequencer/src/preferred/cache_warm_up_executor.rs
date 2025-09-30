@@ -76,14 +76,18 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         let (sender, receiver) = oneshot::channel();
 
         // Skip update if consumer is too slow.
-        let _ = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
+        let res = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
             tx: tx.clone(),
             sender,
         });
 
-        FullyBakedTxWithMaybeChangeSet {
-            tx,
-            receiver: Some(receiver),
+        if res.is_err() {
+            FullyBakedTxWithMaybeChangeSet { tx, receiver: None }
+        } else {
+            FullyBakedTxWithMaybeChangeSet {
+                tx,
+                receiver: Some(receiver),
+            }
         }
     }
 
