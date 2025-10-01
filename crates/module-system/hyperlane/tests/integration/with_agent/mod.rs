@@ -1,7 +1,7 @@
 //! End-to-end tests for hyperlane implementation that utilize real relayer, validators and evm devnet.
 //!
 //! The docker setup uses several containers:
-//! 1. Hyperlane agents are built from official [Dockerfile](https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/integration-2025-08-27-rebase/rust/Dockerfile)
+//! 1. Hyperlane agents are built from official [Dockerfile](https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/integration-2025-09-17-rebase/rust/Dockerfile)
 //! 2. Hyperlane CLI is built from [docker/hyperlane/hyperlane-cli.Dockerfile](https://github.com/Sovereign-Labs/sovereign-sdk/blob/39e6ee0e94b7a8a5d1e23c346efdab856814c62a/docker/hyperlane/hyperlane-cli.Dockerfile)j
 //! 3. EVM uses official anvil image: `ghcr.io/foundry-rs/foundry`
 //!
@@ -367,7 +367,8 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 .unwrap();
 
             // Find the dispatched message on counterparty
-            // TODO: How to do it more reliably?
+            // TODO: How to do it more reliably? Check relayer metrics repeatedly, including error
+            // If error metrics increases, fail early and print logs.
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
             sleep(Duration::from_secs(20)).await; // give relayer extra time to relay
 

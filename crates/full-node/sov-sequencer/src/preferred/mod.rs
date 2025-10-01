@@ -101,7 +101,6 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
-    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -131,6 +130,7 @@ where
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
         let da_address = da.get_signer().await;
+
         debug!(
             ?latest_state_update,
             %da_address,
@@ -191,7 +191,7 @@ where
         }
 
         let (state_root_compute_handle, state_root_compute_task) =
-            StateRootBackgroundTaskState::create(
+            StateRootBackgroundTaskState::create::<Rt>(
                 block_executors_shutdown_rx,
                 !config
                     .sequencer_kind_config
@@ -280,7 +280,6 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
-            cache_warm_up_executor,
         });
 
         // Launch replica sync task only for replicas
@@ -851,7 +850,6 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
-        self.cache_warm_up_executor.send_tx(baked_tx.clone());
 
         let res = self
             .synchronized_state_updator
@@ -1089,15 +1087,28 @@ fn err_cant_fit_tx(current_batch_size: usize, max_batch_size: usize, tx_len: usi
     }
 }
 
-pub(crate) async fn exit_rollup(shutdown_sender: &watch::Sender<()>) {
+#[track_caller]
+pub(crate) fn exit_rollup(
+    shutdown_sender: &watch::Sender<()>,
+) -> impl std::future::Future<Output = ()> {
+    let location = std::panic::Location::caller();
+    exit_rollup_inner(shutdown_sender.clone(), location)
+}
+
+async fn exit_rollup_inner(
+    shutdown_sender: watch::Sender<()>,
+    location: &'static std::panic::Location<'static>,
+) {
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
     if shutdown_sender.send(()).is_err() {
-        tracing::error!("Failed to send shutdown signal");
+        tracing::error!("Failed to send shutdown signal: {location}");
     }
     sleep(Duration::from_secs(5)).await;
-    tracing::info!("Calling std::process::exit(1).");
+    let msg = format!("Calling std::process::exit(1): {location}");
+    tracing::error!(msg);
+    println!("{msg}");
     std::process::exit(1);
 }
 

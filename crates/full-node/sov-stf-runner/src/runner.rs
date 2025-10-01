@@ -161,6 +161,25 @@ where
         sync_state: Arc<DaSyncState>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
+        let mut background_handles = Vec::new();
+
+        // This sender is not used immediately,
+        // But when REST and RPC handlers start, sender is used to get another subscription.
+        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
+        secondary_shutdown_receiver.mark_unchanged();
+        let receiver_for_metrics = secondary_shutdown_receiver.clone();
+        let metrics_handle = tokio::spawn(async move {
+            if let Some(handle) =
+                sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+            {
+                handle.await?;
+            } else {
+                tracing::warn!("Metics have been initialized outside of runner, some measurements can be lost on shutdown");
+            };
+
+            Ok(())
+        });
+        background_handles.push(metrics_handle);
 
         let axum_config = &runner_config.http_config;
 
@@ -214,15 +233,7 @@ where
             shutdown_receiver.clone(),
         )
         .await?;
-
-        // This sender is not used immediately,
-        // But when REST and RPC handlers start, sender is used to get another subscription.
-        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
-        secondary_shutdown_receiver.mark_unchanged();
-
-        tokio::spawn(async move {
-            sov_metrics::init_metrics_tracker(&monitoring_config);
-        });
+        background_handles.push(fetcher_background_handle);
 
         Ok(Self {
             first_unprocessed_height_at_startup,
@@ -238,7 +249,7 @@ where
             sync_fetcher,
             shutdown_receiver,
             secondary_shutdown_sender,
-            background_handles: vec![fetcher_background_handle],
+            background_handles,
             start_at_rollup_height,
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
@@ -410,7 +421,7 @@ where
         info!("Runner main loop is completed, keep shutting down...");
         if let Err(e) = self.secondary_shutdown_sender.send(()) {
             tracing::warn!(
-                ?e,
+                error = ?e,
                 "Failed to send secondary shutdown signal. Happens if no HTTP handlers are running"
             );
         }
@@ -456,7 +467,6 @@ where
         Ok(false)
     }
 
-    #[tracing::instrument(skip(self))]
     async fn process_next_slot(
         &mut self,
         mut next_da_height: NextDaHeightToProcess,
@@ -465,6 +475,14 @@ where
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
         let prev_state_root = self.get_state_root().clone();
+        let span = tracing::info_span!("process_next_slot", next_da_height = next_da_height);
+
+        if let Some(h) = start_at_rollup_height {
+            span.record("start_at_rollup_height", tracing::field::display(h));
+        }
+        if let Some(h) = stop_at_rollup_height {
+            span.record("stop_at_rollup_height", tracing::field::display(h));
+        }
         debug!("Requesting DA block");
 
         let mut transaction_count = 0;

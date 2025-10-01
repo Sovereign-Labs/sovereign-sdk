@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::state::RawTxResponse;
 use sov_metrics::Metric;
@@ -37,8 +35,6 @@ impl NamespaceDataMetrics {
         let shares = data.rows.iter().map(|r| r.shares.len()).sum();
         Self { rows, shares }
     }
-
-    fn serialize_for_telegraf(&self) {}
 }
 
 #[derive(Debug)]
@@ -152,5 +148,51 @@ impl Metric for BlobSubmitMeasurement {
         }
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct GetBlockHeaderMeasurement {
+    pub height: u64,
+    pub fetch_header_time: std::time::Duration,
+    pub is_success: bool,
+}
+
+impl Metric for GetBlockHeaderMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_get_header_at"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},height={},is_success={} total_time_us={}",
+            self.measurement_name(),
+            self.height,
+            self.is_success as u8,
+            self.fetch_header_time.as_micros(),
+        )
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct GetChainHeadMeasurement {
+    pub fetch_header_time: std::time::Duration,
+    pub is_success: bool,
+}
+
+impl Metric for GetChainHeadMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_get_head_block"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},is_success={} total_time_us={}",
+            self.measurement_name(),
+            self.is_success as u8,
+            self.fetch_header_time.as_micros(),
+        )
     }
 }

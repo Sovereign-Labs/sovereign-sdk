@@ -122,6 +122,7 @@ async fn start_stop_empty(
         ),
         (Level::WARN, "Skipping pruning of sequence number because it's already been pruned".to_string()),
         (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
+        (Level::WARN, "Metics have been initialized outside of runner, some measurements can be lost on shutdown".to_string()),
     ];
 
     let mut recorded_errors_warnings =
@@ -309,6 +310,10 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         (
             Level::WARN,
             "Received error updating target height, stopping background task".to_string(),
+        ),
+        (
+            Level::WARN,
+            "Metics have been initialized outside of runner, some measurements can be lost on shutdown".to_string(),
         ),
     ];
     recorded_errors_warnings.retain(|e| !known.contains(e));

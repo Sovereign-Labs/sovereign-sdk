@@ -13,7 +13,7 @@ use testcontainers::{ContainerAsync, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
 
 pub const ANVIL_PORT: u16 = 8545;
-const TAG: &str = "v1.1.0";
+const TAG: &str = "v1.3.6";
 
 pub struct AnvilRunner {
     container: ContainerAsync<AnvilNode>,
@@ -27,7 +27,6 @@ impl AnvilRunner {
         // Hard code tag, so we don't accidental breakages
         let container = AnvilNode::default()
             .with_tag(TAG)
-            .with_cmd(["--port", &ANVIL_PORT.to_string()])
             .start()
             .await
             .expect("failed to start anvil");

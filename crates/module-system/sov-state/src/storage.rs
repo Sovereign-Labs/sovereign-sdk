@@ -10,13 +10,17 @@ use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 #[cfg(feature = "native")]
-use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
 use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};
+#[cfg(feature = "native")]
+use crate::sequencer_state::MaybePresentValue;
+#[cfg(feature = "native")]
+use crate::{CompileTimeNamespace, Namespace};
 use crate::{
     MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
 };
@@ -418,6 +422,44 @@ pub trait StateRoot:
     fn from_namespace_roots(user_root: [u8; 32], kernel_root: [u8; 32]) -> Self;
 }
 
+/// A write to the accessory state.
+#[derive(Debug, Clone)]
+pub struct AccessoryWrite {
+    /// The value to write.
+    pub value: Option<SlotValue>,
+}
+
+impl AccessoryWrite {
+    /// Create a new accessory write.
+    pub fn new(value: Option<SlotValue>) -> Self {
+        Self { value }
+    }
+}
+
+#[cfg(feature = "native")]
+/// An object-safe interface for retrieving values. The implementer may be storage or a cache of some kind.
+pub trait StateGetter: core::fmt::Debug + Send + Sync {
+    /// Get the size of the value.
+    fn get_leaf(
+        &self,
+        namespace: ProvableNamespace,
+        key: &SlotKey,
+    ) -> MaybePresentValue<NodeLeafAndMaybeValue>;
+
+    /// Get the value.
+    fn get(&self, namespace: Namespace, key: &SlotKey) -> MaybePresentValue<SlotValue>;
+
+    /// Any writes from changesets *after* (not including) the given rollup height will be ignored, as if they are absent from this reader.
+    /// This is a permanent change to the getter that cannot be undone except by creating a new `StateGetter` from the original source.
+    fn ignore_changes_after_height(&mut self, rollup_height: RollupHeight);
+
+    /// Get the latest rollup height available in the getter.
+    fn latest_rollup_height(&self) -> Option<RollupHeight>;
+
+    /// Clones the state getter, returning a new type-erased object.
+    fn box_clone(&self) -> Box<dyn StateGetter>;
+}
+
 /// An interface for retrieving values from the storage and producing change set of new write operations.
 pub trait Storage: Clone + core::fmt::Debug {
     /// Hasher
@@ -552,6 +594,13 @@ pub trait NativeStorage: Storage {
     fn get_latest_root_hash(&self) -> anyhow::Result<Self::Root> {
         self.get_root_hash(self.latest_version())
     }
+
+    /// Get a root hash at the latest version
+    fn get_latest_root_hash_unbound(&self) -> anyhow::Result<Self::Root> {
+        self.get_root_hash_unbound(self.latest_version_unbound())
+    }
+    /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

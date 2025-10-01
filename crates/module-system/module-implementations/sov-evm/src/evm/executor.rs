@@ -18,6 +18,9 @@ use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
+/// The maximum contract code size is 512KiB by default.
+pub const DEFAULT_MAX_CONTRACT_CODE_SIZE: usize = 512 * 1024;
+
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
 // Copies context-dependent values from template_cfg or default if not provided
@@ -28,7 +31,11 @@ pub(crate) fn get_cfg_env(
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = config_value!("CHAIN_ID");
-    cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
+    cfg_env.limit_contract_code_size = Some(
+        cfg.chain_spec
+            .limit_contract_code_size
+            .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
+    );
     cfg_env.disable_block_gas_limit = true;
     cfg_env.disable_balance_check = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());

@@ -519,4 +519,18 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
 
         Ok(StorageRoot::<S>::new(user_root.0, kernel_root.0))
     }
+
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
+        match N::NAMESPACE {
+            Namespace::User => self.read_value_namespace::<DBUserNamespace>(&key, SlotNumber::MAX),
+            Namespace::Kernel => {
+                self.read_value_namespace::<DBKernelNamespace>(&key, SlotNumber::MAX)
+            }
+            Namespace::Accessory => self
+                .accessory_db
+                .get_value_option(key.as_ref(), SlotNumber::MAX)
+                .expect("Unable to read from AccessoryDb")
+                .map(Into::into),
+        }
+    }
 }

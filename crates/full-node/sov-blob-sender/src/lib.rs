@@ -481,7 +481,10 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
         let res = self.db.set_state(blob_id, state).await;
         if let Err(err) = &res {
             tracing::error!(
-                "BlobSender: unable to save blob state: {state:?}, error: {err}, blob_id: {blob_id}. Shutting down."
+                blob_id,
+                error = ?err,
+                ?state,
+                "BlobSender: unable to save blob state. Shutting down."
             );
         }
         res
@@ -500,7 +503,11 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
 
         if let Err(err) = &is_finalized {
             tracing::error!(
-                "BlobSender: unable to check if blob is finalized: {state:?}, error: {err}, blob_id: {blob_id}. Shutting down."
+                blob_id,
+                %blob_hash,
+                error = ?err,
+                ?state,
+                "BlobSender: unable to check if blob is finalized. Shutting down."
             );
         }
 
@@ -533,7 +540,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                 ?da_tx_id,
                 blob_processing_timeout = ?self.blob_processing_timeout,
                 ?elapsed,
-                "BlobSender: elapsed time for blob submission exceeded the resubmit interval.",
+                "BlobSender: elapsed time for blob processing exceeded the timeout.",
             );
             return true;
         }
@@ -629,13 +636,18 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                     MAX_NB_OF_BLOB_SUBMISSION_RETRIES,
                                     ?da_tx_id,
                                     %blob_hash,
-                                    "Shutting down the rollup. Blob submission failed."
+                                    "Shutting down the rollup. Blob processing wasn't completed on time."
                                 );
                                 let _ = self.shutdown_sender.send(());
                                 return;
                             }
 
-                            debug!(%blob_id, %receipt, "Timeout: Blob status set from Published to MustSubmit.");
+                            info!(
+                                %blob_id,
+                                %receipt,
+                                attempted = nb_of_retries_attempted,
+                                max_attempts = MAX_NB_OF_BLOB_SUBMISSION_RETRIES,
+                                "Processing timeout: Blob status set from Published to MustSubmit.");
                             blob_status = BlobExecutionStatus {
                                 blob_submission_status: BlobSubmissionStatus::MustSubmit,
                                 blob_selector_status: None,
@@ -649,6 +661,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             .await
                         {
                             Ok(finality_status) => finality_status,
+                            // Error is logged inside the method
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
                                 let _ = self.shutdown_sender.send(());

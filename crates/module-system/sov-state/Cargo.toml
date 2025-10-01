@@ -59,4 +59,4 @@ native = [
     "dep:tracing",
 ]
 
-test-utils = ["native"]
+test-utils = []

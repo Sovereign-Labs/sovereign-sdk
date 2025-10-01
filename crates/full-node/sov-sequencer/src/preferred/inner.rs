@@ -476,6 +476,7 @@ where
             self.tx_cache_writer.clone(), // Recovery executor fills the cache
             self.rollup_exec_config.clone(),
             self.seq_config.clone(),
+            Default::default(), // Since we're entering recovery, we don't re-use any of the uncommitted changes
         );
 
         self.force_overwrite_state(info.clone(), recovery_executor)
@@ -876,6 +877,7 @@ where
             &latest_info,
             rollup_exec_config.clone(),
             seq_config.clone(),
+            Default::default(),
         ),
         latest_info,
         tx_queue_id,
@@ -1224,7 +1226,7 @@ where
                         reason,
                     } => {
                         let ret = self
-                            .process_accept_tx(&baked_tx, tx_hash, original_tx_queue_id, reason)
+                            .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
                             .await;
 
                         self.send_response(resp, ret, "accept_tx").await;
@@ -1488,20 +1490,24 @@ where
 
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     let tx_cache_writer = inner.tx_cache_writer.clone();
-
                     Some(Box::new(
                         RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
                             info,
                             tx_cache_writer,
                             inner.rollup_exec_config.clone(),
                             inner.seq_config.clone(),
+                            Default::default(), // Since we're replaying from the node state, don't reuse any uncommitted changes
                         ),
                     ))
                 } else {
+                    let rollup_height =
+                        StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+                            .rollup_height_to_access();
                     debug!(
                         is_startup,
                         is_resync,
                         is_recover,
+                        %rollup_height,
                         ?info,
                         "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
                     );
@@ -1531,7 +1537,7 @@ where
 
     async fn process_accept_tx(
         &mut self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -1586,16 +1592,19 @@ where
             executor,
             batch_size_tracker,
             executor_events_sender,
+            cache_warm_up_executor,
             ..
         } = &mut *inner;
 
-        if !batch_size_tracker.can_fit_tx_bytes(baked_tx.data.len()) {
+        let tx_len = baked_tx.data.len();
+        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
             return Err(AcceptTxError::TxTooBig {
                 current_batch_size: batch_size_tracker.current_batch_size,
                 max_batch_size: batch_size_tracker.max_batch_size,
             });
         }
 
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
@@ -1619,7 +1628,7 @@ where
             }
         };
 
-        batch_size_tracker.add_tx(baked_tx.data.len(), execution_time_micros);
+        batch_size_tracker.add_tx(tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
@@ -1637,17 +1646,20 @@ where
     async fn process_new_storage(&mut self, info: StateUpdateInfo<S::Storage>) {
         let mut inner = self.get_inner_with_timing("update_state::fast_path").await;
         // Atomically swap in the new storage and prune the old one.
+        // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
+        // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
         let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
-        // Notify the executor that the storage has been replaced so it can drop any writes that have now been persisted.
+
         inner
             .executor
-            .state_update_notifier
-            .send_replace(new_rollup_height);
+            .uncommitted_changes
+            .prune_changes_through(new_rollup_height.get());
+        let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor
             .checkpoint
-            .replace_storage_and_prune(info.storage.clone(), &Rt::default().kernel());
+            .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
@@ -1778,6 +1790,7 @@ where
             transaction_cache_write_handle,
             inner.rollup_exec_config.clone(),
             inner.seq_config.clone(),
+            Default::default(), // Since we're entering recovery, we don't re-use any of the uncommitted changes
         );
 
         inner
@@ -1793,7 +1806,7 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let execution_time_micros = inner.executor.replay_tx(tx_hash, &baked_tx).await;
+        let execution_time_micros = inner.executor.replay_tx(tx_hash, baked_tx.clone()).await;
         inner
             .batch_size_tracker
             .add_tx(baked_tx.data.len(), execution_time_micros);
