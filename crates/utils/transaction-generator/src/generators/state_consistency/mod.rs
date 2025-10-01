@@ -1,4 +1,4 @@
-//! Implements call message generation for the [`sov_test_modules::state_consistency::StateConsistency`] module.
+//! Implements call message generation for the [`sov_test_state_consistency::StateConsistency`] module.
 
 use std::sync::Arc;
 
@@ -136,7 +136,7 @@ impl ChangelogEntry for StateConsistencyChangeLogEntry {
 
 #[async_trait]
 impl<S: Spec> CallMessageGenerator<S> for StateConsistencyMessageGenerator<S> {
-    type Module = sov_test_modules::state_consistency::StateConsistency<S>;
+    type Module = sov_test_state_consistency::StateConsistency<S>;
     type AccountView = StateConsistencyAccount;
     type ChangelogEntry = StateConsistencyChangeLogEntry;
     type Tag = ();
@@ -146,13 +146,7 @@ impl<S: Spec> CallMessageGenerator<S> for StateConsistencyMessageGenerator<S> {
         _u: &mut arbitrary::Unstructured<'_>,
         _generator_state: &mut impl GeneratorState<S, AccountView = Self::AccountView>,
     ) -> arbitrary::Result<
-        Vec<
-            GeneratedMessage<
-                S,
-                sov_test_modules::state_consistency::CallMessage,
-                Self::ChangelogEntry,
-            >,
-        >,
+        Vec<GeneratedMessage<S, sov_test_state_consistency::CallMessage, Self::ChangelogEntry>>,
     > {
         // No setup
         Ok(vec![])
@@ -164,9 +158,9 @@ impl<S: Spec> CallMessageGenerator<S> for StateConsistencyMessageGenerator<S> {
         generator_state: &mut impl GeneratorState<S, AccountView = Self::AccountView>,
         validity: MessageValidity,
     ) -> arbitrary::Result<
-        GeneratedMessage<S, sov_test_modules::state_consistency::CallMessage, Self::ChangelogEntry>,
+        GeneratedMessage<S, sov_test_state_consistency::CallMessage, Self::ChangelogEntry>,
     > {
-        use sov_test_modules::state_consistency::CallMessage;
+        use sov_test_state_consistency::CallMessage;
 
         // Get the test account for this generator
         let (test_addr, mut test_account) = self.get_or_create_test_account(generator_state);

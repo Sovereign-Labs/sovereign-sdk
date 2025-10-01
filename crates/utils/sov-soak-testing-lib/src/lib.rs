@@ -16,7 +16,7 @@ use sov_synthetic_load::CallMessageDiscriminants::{
     ReadAndSetHeavyState, ReadAndSetManyIndividualValues, RunCPUHeavyOperation,
 };
 use sov_synthetic_load::SyntheticLoad;
-use sov_test_modules::state_consistency::StateConsistency;
+use sov_test_state_consistency::StateConsistency;
 use sov_test_utils::{TransactionType, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 use sov_transaction_generator::generators::bank::harness_interface::BankHarness;
 use sov_transaction_generator::generators::bank::BankMessageGenerator;

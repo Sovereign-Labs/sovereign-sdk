@@ -13,6 +13,7 @@ sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-value-setter = { workspace = true }
 sov-synthetic-load = { workspace = true }
 sov-test-modules = { workspace = true, features = ["native"] }
+sov-test-state-consistency = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native", "arbitrary"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-node-client = { workspace = true }

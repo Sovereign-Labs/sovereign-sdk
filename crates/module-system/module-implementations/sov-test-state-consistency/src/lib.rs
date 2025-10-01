@@ -1,5 +1,5 @@
 #![deny(missing_docs)]
-#![doc = include_str!("./README.md")]
+#![doc = include_str!("../README.md")]
 mod call;
 
 use borsh::{BorshDeserialize, BorshSerialize};
