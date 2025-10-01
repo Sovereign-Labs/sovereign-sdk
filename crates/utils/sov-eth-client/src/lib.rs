@@ -25,7 +25,7 @@ pub struct TestClient {
     node_client: NodeClient,
     pub nonce: Arc<AtomicU64>,
     #[deref]
-    rpc_client: RpcClient,
+    pub rpc_client: RpcClient,
 }
 
 impl TestClient {

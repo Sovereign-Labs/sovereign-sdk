@@ -15,18 +15,6 @@ sol!(
 sol!(
     #[sol(
         rpc,
-        bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/evm/test-data/artifacts/", "Pair.bin")))]
-    Pair,
-    concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/evm/test-data/artifacts/",
-        "Pair.abi"
-    )
-);
-
-sol!(
-    #[sol(
-        rpc,
         bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/evm/test-data/artifacts/", "Router.bin")))]
     Router,
     concat!(

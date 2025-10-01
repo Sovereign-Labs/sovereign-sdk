@@ -7,7 +7,7 @@ use ethers::core::abi::Abi;
 
 mod fake_uni;
 mod simple_storage;
-pub use fake_uni::{Erc20, Pair, Router};
+pub use fake_uni::{Erc20, Router};
 pub use simple_storage::SimpleStorage;
 
 /// Helper trait to submit contract calls without needing to handle the response
