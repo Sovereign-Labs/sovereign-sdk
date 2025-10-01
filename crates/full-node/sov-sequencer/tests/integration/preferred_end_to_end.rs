@@ -254,7 +254,6 @@ pub(crate) enum InvalidGeneration {
     TooOld,
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn create_test_rollup(
     minimum_profit_per_tx: u128,
     max_batch_size: usize,
@@ -1699,8 +1698,15 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
         .await;
 }
 
+/// Test starts rollup, submits transaction, blocks blob submission on mock da.
+/// Then submit many transactions, until we hit backpressure
+/// Unblock MockDa submission, produce some blocks and let sequencer recover
+/// Send transaction again and it should be accepted
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_seq_back_pressure() {
+async fn sequencer_back_pressure() {
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
+    //     "info,sov_sequencer::preferred::inner=debug,sov_mock_da::storable::layer=debug,tower=off",
+    // );
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -1713,63 +1719,83 @@ async fn flaky_seq_back_pressure() {
         return;
     };
 
+    let warm_up_blocks = 5;
+    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
     test_rollup
         .da_service
-        .produce_n_blocks_now(5)
+        .produce_n_blocks_now(warm_up_blocks)
         .await
         .unwrap();
-
-    sleep(Duration::from_millis(200)).await;
+    for _ in 0..2 {
+        let _slot = slot_subscription.next().await.unwrap();
+    }
 
     let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, 0, 9);
 
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
-
+    let mut generation = 0;
     // Pause block submission and produce some pending blocks.
     {
+        let expected_patterns = [
+            "The sequencer is temporarily overloaded",
+            "The preferred sequencer is recovering from downtime and cannot provide soft-confirmations at this time; No new transactions can be accepted, try again later",
+            "The sequencer is waiting for the blob sender to be ready"
+        ];
         test_rollup.da_service.set_blob_submission_pause().await;
-        let num_blocks_needed =
-            default_ideal_lag_behind_finalized_slot() + TEST_MAX_CONCURRENT_BLOBS as u64;
-        for _ in 0..num_blocks_needed + 8 {
-            // Add a little cushion to reduce flakiness
-            test_rollup.da_service.produce_block_now().await.unwrap();
-            sleep(Duration::from_millis(800)).await;
+
+        let mut bytes_submitted = 0;
+        let max_batch_size = TEST_MAX_BATCH_SIZE * 100 / 99;
+        let max_total = max_batch_size * TEST_MAX_CONCURRENT_BLOBS;
+        let mut has_hit_backpressure = false;
+        while bytes_submitted < max_total {
+            let tx = tx_set_value(&admin.private_key, generation, generation + 10);
+            let result = client.send_raw_tx_to_sequencer(&tx).await;
+            match result {
+                Ok(_) => {
+                    generation += 1;
+                    bytes_submitted += tx.data.len();
+                }
+                Err(err) => {
+                    let error_string = err.to_string();
+                    let found = expected_patterns
+                        .iter()
+                        .find(|pattern| error_string.contains(**pattern));
+                    if found.is_some() {
+                        has_hit_backpressure = true;
+                        break;
+                    }
+                    panic!("Unexpected error from sequencer: {error_string}");
+                }
+            }
         }
-
-        let tx = tx_set_value(&admin.private_key, 1, 9);
-        let err = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap_err();
-
         assert!(
-            err.to_string()
-                .contains("The sequencer is waiting for the blob sender to be ready"),
-            "Unexpected error: {err}"
+            has_hit_backpressure,
+            "Test hasn't hit backpressure after {generation} txs and total bytes {bytes_submitted} submitted"
         );
-
+        tracing::warn!("BACKPRESSURE GOT, RESUMING BLOB SUBMISSION AFTER {generation} txs send");
         test_rollup.da_service.resume_blob_submission().await;
     }
 
-    for _ in 0..10 {
+    // TODO: Figure out how many blocks needs to be produced after blob submissions
+    tracing::warn!("PUSHING NEW BLOCKS TO GET THINGS ROLLING!!!");
+    let end_padding_blocks = 200;
+    for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(800)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    sleep(Duration::from_millis(1000)).await;
 
-    let tx = tx_set_value(&admin.private_key, 1, 9);
+    for _ in 0..100 {
+        let _slot = slot_subscription.next().await.unwrap().unwrap();
+    }
+
+    tracing::warn!("WAITING FOR SEQUENCER TO BECOME READY");
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // /rollup/sync-status:
+    let tx = tx_set_value(&admin.private_key, generation + 1, 9);
     client
-        .send_raw_tx_to_sequencer_with_retry(&tx)
+        .send_raw_tx_to_sequencer(&tx)
         .await
-        .unwrap();
+        .expect("Sequencer failed to accept tx after recovery");
 }
 
 #[tokio::test(flavor = "multi_thread")]

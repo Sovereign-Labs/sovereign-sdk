@@ -860,7 +860,7 @@ where
             Ok(rx) => rx.await.map_err(database_error_500),
             Err(e) => match e {
                 AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503());
+                    return Err(sequencer_overloaded_503("Other"));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))
@@ -870,7 +870,7 @@ where
                     nb_of_concurrent_blob_submissions,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
-                        return Err(sequencer_overloaded_503());
+                        return Err(sequencer_overloaded_503("No finalized slots available"));
                     }
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
@@ -1122,9 +1122,9 @@ pub enum BatchCreationError {
     #[error("Internal database error; batch could not be created. Error: {0}")]
     DatabaseError(anyhow::Error),
     /// The sequencer was not able to start a batch because it has consumed its whole buffer of finalized slots.
-    #[error("The sequencer is temporarily overloaded. Try again in a few seconds")]
+    #[error("The sequencer is temporarily overloaded (No finalized slots available). Try again in a few seconds")]
     NoFinalizedSlotAvailable,
-    /// The prefered sequencer has reached the stop height and is no longer creating new batches.
+    /// The preferred sequencer has reached the stop height and is no longer creating new batches.
     #[error(
         "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}"
     )]

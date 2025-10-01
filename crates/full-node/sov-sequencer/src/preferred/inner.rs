@@ -5,33 +5,20 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::preferred::block_executor::StartBlockData;
-use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
-use crate::preferred::RollupBlockExecutorConfig;
-use anyhow::anyhow;
-use sov_blob_sender::BlobInternalId;
-use sov_blob_storage::SequenceNumber;
-use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::{
-    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
-    VersionReader, VisibleSlotNumber,
-};
-use sov_state::{NativeStorage, Storage};
-use tokio::sync::{mpsc, oneshot, watch};
-use tokio::task::JoinHandle;
-use tracing::{debug, error, info, warn};
-
 use super::batch_size_tracker::BatchSizeTracker;
 use crate::metrics::{
     track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
     PreferredSequencerPruneMetrics,
 };
+use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
+use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::update_state::do_next_event;
+use crate::preferred::RollupBlockExecutorConfig;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, exit_rollup,
     get_next_sequence_number_according_to_node, is_lagging_less_than_ideal_amount,
@@ -41,6 +28,19 @@ use crate::preferred::{
     PreferredSequencerReadBatch, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
+use anyhow::anyhow;
+use sov_blob_sender::BlobInternalId;
+use sov_blob_storage::SequenceNumber;
+use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::macros::config_value;
+use sov_modules_api::{
+    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
+    VersionReader, VisibleSlotNumber,
+};
+use sov_state::{NativeStorage, Storage};
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio::task::JoinHandle;
+use tracing::{debug, error, info, warn};
 
 /// These two constants are used to calculate the comfortable batch size limit.
 /// Currently, this is 99% of the hard limit. After the comfortable limit is reached,
@@ -1455,7 +1455,11 @@ where
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
             (false, true, false, _, _) => {
-                error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
+                error!(
+                    slot_number_according_to_node=%info.slot_number,
+                    %current_visible_slot_number,
+                    deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
+                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
                 inner.trigger_recovery(info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp

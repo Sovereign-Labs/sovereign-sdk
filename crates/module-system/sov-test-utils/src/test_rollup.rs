@@ -8,6 +8,10 @@ use std::sync::Arc;
 
 use crate::postgres::create_postgres_container;
 use crate::postgres::PostgresImage;
+use crate::{
+    TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
+    TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
+};
 use anyhow::Context;
 use derivative::Derivative;
 use serde::Deserialize;
@@ -47,11 +51,6 @@ use tokio::sync::{watch, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
-
-use crate::{
-    TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
-};
 
 /// Specifies how to source the genesis data for a rollup.
 #[derive(Derivative)]
@@ -716,7 +715,7 @@ where
     StoragePath: AsPath,
 {
     /// Default timeout for polling operations in seconds.
-    pub const POLLING_TIMEOUT: u64 = 20;
+    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
     /// Pauses batch production for the preferred sequencer.
     ///
@@ -805,7 +804,13 @@ where
 
     /// Checks if the sequencer is ready without waiting.
     pub async fn is_sequencer_ready(&self) -> bool {
-        self.client.client.is_ready().await.is_ok()
+        match self.client.client.is_ready().await {
+            Ok(_) => true,
+            Err(error) => {
+                tracing::debug!(?error, "Sequencer is not ready");
+                false
+            }
+        }
     }
 
     /// Polls the sequencer until is_ready() returns Err(). Useful when you expect the sequencer to
@@ -845,11 +850,11 @@ where
             }
         };
 
-        timeout(Duration::from_secs(Self::POLLING_TIMEOUT), wait_loop)
+        timeout(Self::POLLING_TIMEOUT, wait_loop)
             .await
             .with_context(|| {
                 format!(
-                    "Timeout waiting for {condition_string} after {} seconds",
+                    "Timeout waiting for {condition_string} after {:?}",
                     Self::POLLING_TIMEOUT
                 )
             })?
