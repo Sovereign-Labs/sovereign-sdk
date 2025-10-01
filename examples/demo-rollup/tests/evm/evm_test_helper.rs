@@ -6,7 +6,7 @@ use ethers::core::abi::Address;
 use futures::future::join_all;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
-use sov_eth_client::TestClient;
+use sov_eth_client::SimpleStorageClient;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
@@ -52,14 +52,17 @@ pub(crate) async fn start_node(
 }
 
 /// Creates a test client to communicate with the rollup node.
-pub(crate) async fn create_test_client(rest_port: SocketAddr, private_key: &str) -> TestClient {
+pub(crate) async fn create_test_client(
+    rest_port: SocketAddr,
+    private_key: &str,
+) -> SimpleStorageClient {
     let contract = SimpleStorage::default();
-    TestClient::new(private_key, contract, rest_port).await
+    SimpleStorageClient::new(private_key, contract, rest_port).await
 }
 
 /// Deploys a test contract on the test rollup.
 pub(crate) async fn deploy_contract_check(
-    client: &TestClient,
+    client: &SimpleStorageClient,
 ) -> Result<Address, Box<dyn std::error::Error>> {
     let runtime_code = client.deploy_contract_call().await?;
 
@@ -81,7 +84,7 @@ pub(crate) async fn deploy_contract_check(
 
 /// Calls `set_value` on the test contract.
 pub(crate) async fn set_value_check(
-    client: &TestClient,
+    client: &SimpleStorageClient,
     contract_address: Address,
     set_arg: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -105,7 +108,7 @@ pub(crate) async fn set_value_check(
 
 /// Calls `set_values` on the test contract.
 pub(crate) async fn set_multiple_values_check(
-    client: &TestClient,
+    client: &SimpleStorageClient,
     contract_address: Address,
     values: Vec<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -128,7 +131,7 @@ pub(crate) async fn set_multiple_values_check(
 pub async fn setup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
-) -> (TestRollup<MockDemoRollup<Native>>, TestClient, u64) {
+) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
     let rollup_prover_config =
         get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
 

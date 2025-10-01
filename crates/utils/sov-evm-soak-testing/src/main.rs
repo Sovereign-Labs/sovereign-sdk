@@ -1,7 +1,7 @@
 use alloy_primitives::Address;
 use anyhow::Result;
 use clap::Parser;
-use sov_eth_client::TestClient;
+use sov_eth_client::{RpcClient, SimpleStorageClient};
 use sov_test_utils::SimpleStorage;
 use std::net::SocketAddr;
 
@@ -46,16 +46,16 @@ enum TestType {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let contract = SimpleStorage::default();
-    let client = TestClient::new(&args.private_key, contract, args.rpc_addr).await;
-    let signer = Address::from_slice(client.address().as_bytes());
-
     match args.test {
         TestType::Uniswap { count } => {
-            let test = UniSoakTest::new(client.rpc_client.alloy_client, signer).await?;
+            let client = RpcClient::new(&args.private_key, args.rpc_addr).await;
+            let signer = Address::from_slice(client.address().as_bytes());
+            let test = UniSoakTest::new(client.alloy_client, signer).await?;
             test.run(count).await?;
         }
         TestType::SimpleStorage => {
+            let contract = SimpleStorage::default();
+            let client = SimpleStorageClient::new(&args.private_key, contract, args.rpc_addr).await;
             simple_storage::run(client).await?;
         }
     }

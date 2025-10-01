@@ -60,7 +60,7 @@ async fn evm_test_balances() -> anyhow::Result<()> {
 async fn get_balances(
     address: Address,
     test_rollup: &test_rollup::TestRollup<MockDemoRollup<Native>>,
-    evm_client: &sov_eth_client::TestClient,
+    evm_client: &sov_eth_client::SimpleStorageClient,
 ) -> (u128, u128) {
     let sov_to_addr = MultiAddress::Vm(EthereumAddress::new(address.0));
 

@@ -13,14 +13,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 mod rpc;
-use rpc::RpcClient;
+pub use rpc::RpcClient;
 
 const GAS: u64 = 9000000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
 const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
 #[derive(Deref)]
-pub struct TestClient {
+pub struct SimpleStorageClient {
     pub contract: SimpleStorage,
     node_client: NodeClient,
     pub nonce: Arc<AtomicU64>,
@@ -28,7 +28,7 @@ pub struct TestClient {
     pub rpc_client: RpcClient,
 }
 
-impl TestClient {
+impl SimpleStorageClient {
     pub async fn new(
         private_key: &str,
         contract: SimpleStorage,
@@ -54,7 +54,7 @@ impl TestClient {
 }
 
 // Tx/nonce utils
-impl TestClient {
+impl SimpleStorageClient {
     pub fn make_tx(
         &self,
         to_address: Option<Address>,
@@ -92,7 +92,7 @@ impl TestClient {
     }
 }
 
-impl TestClient {
+impl SimpleStorageClient {
     pub async fn deploy_contract(
         &self,
     ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
@@ -183,7 +183,7 @@ impl TestClient {
 }
 
 // Rollup interactions
-impl TestClient {
+impl SimpleStorageClient {
     pub async fn send_transactions_and_wait_slot<S: Spec, Rt: Runtime<S>>(
         &self,
         transactions: &[sov_modules_api::transaction::Transaction<Rt, S>],
@@ -202,7 +202,7 @@ impl TestClient {
 }
 
 // Alloy
-impl TestClient {
+impl SimpleStorageClient {
     pub async fn alloy_deploy_contract(&self) -> alloy_primitives::Address {
         let typed_transaction = self.make_tx(None, Some(self.contract.byte_code()));
         let addr = self

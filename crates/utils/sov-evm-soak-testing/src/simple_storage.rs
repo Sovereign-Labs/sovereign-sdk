@@ -1,8 +1,8 @@
 use anyhow::Result;
-use sov_eth_client::TestClient;
+use sov_eth_client::SimpleStorageClient;
 
 #[allow(dead_code)]
-pub async fn run(client: TestClient) -> Result<()> {
+pub async fn run(client: SimpleStorageClient) -> Result<()> {
     let deploy_receipt = client
         .deploy_contract()
         .await
