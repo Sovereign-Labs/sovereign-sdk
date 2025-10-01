@@ -165,7 +165,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.num_workers,
             args.runtime,
             args.validity_profile,
-            args.tx_type.clone(),
+            args.tx_type,
         ));
     }
 

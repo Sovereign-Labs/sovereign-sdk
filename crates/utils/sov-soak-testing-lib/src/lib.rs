@@ -170,9 +170,8 @@ where
     where
         R: EncodeCall<StateConsistency<S>>,
     {
-        let state_consistency_harness = StateConsistencyHarness::new(
-            StateConsistencyMessageGenerator::default()
-        );
+        let state_consistency_harness =
+            StateConsistencyHarness::new(StateConsistencyMessageGenerator::default());
         self.modules.push(Arc::new(state_consistency_harness));
         self
     }
