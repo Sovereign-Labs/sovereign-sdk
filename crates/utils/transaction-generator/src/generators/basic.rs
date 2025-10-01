@@ -12,6 +12,7 @@ use super::access_pattern::{
 use super::bank::harness_interface::BankHarness;
 use super::bank::{BankChangeLogDiscriminant, BankChangeLogEntry, BankTag};
 use super::factory::CallMessageFactory;
+use super::state_consistency::StateConsistencyTag;
 use super::value_setter::{
     ValueSetterChangeLogDiscriminant, ValueSetterChangeLogEntry, ValueSetterHarness,
 };
@@ -52,6 +53,8 @@ pub enum BasicTag {
     ValueSetter(()),
     /// Tags for the access pattern module
     AccessPattern(AccessPatternTag),
+    /// Tags for the state consistency module
+    StateConsistency(StateConsistencyTag),
 }
 
 /// The set of change log entries supported by the [`BasicCallMessageFactory`].

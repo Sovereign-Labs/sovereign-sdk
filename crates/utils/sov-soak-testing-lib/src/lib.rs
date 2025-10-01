@@ -246,10 +246,8 @@ pub async fn run_generator_task_for_state_consistency<
     num_workers: u32,
     validity: Distribution<MessageValidity>,
 ) -> anyhow::Result<()> {
-    let state_consistency_admin = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
-    let state_consistency_harness = StateConsistencyHarness::new(
-        StateConsistencyMessageGenerator::new(state_consistency_admin),
-    );
+    let state_consistency_harness =
+        StateConsistencyHarness::new(StateConsistencyMessageGenerator::default());
 
     let modules: Vec<BasicModuleRef<S, R>> = vec![Arc::new(state_consistency_harness.clone())];
     prepare_and_send_txs(modules, client, rx, worker_id, num_workers, validity).await
