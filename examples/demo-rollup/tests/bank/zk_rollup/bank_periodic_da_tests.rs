@@ -19,8 +19,6 @@ use crate::test_helpers::DemoRollupSpec;
 
 type TestSpec = DemoRollupSpec;
 
-const WAIT_TIME: u64 = 500;
-
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
     inner(0).await
@@ -55,6 +53,8 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
         .get_balance::<TestSpec>(&user_address, &sov_bank::config_gas_token_id(), Some(0))
         .await?;
 
+    let mut slots_subscription = client.client.subscribe_slots().await?;
+
     // There's no guarantee that we subscribed before the first proof is published.
     // But we know that it should be less or equal rollup_height of the first published batch
     let mut aggregated_proof_subscription = client
@@ -71,22 +71,26 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
 
     let tx = build_create_token_tx(&key, 0, 1000);
 
-    let _slot_batch_1 = send_tx_and_wait_for_status(&[tx], client).await?;
+    let slot_batch_1 = send_tx_and_wait_for_status(&[tx], client).await?;
+    let mut processed_slot = slots_subscription.next().await.unwrap()?;
+    while processed_slot.number < slot_batch_1 {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
 
     assert_balance(client, 1000, token_id, user_address, None)
         .await
         .context("Initial balance at latest version")?;
 
-    tokio::time::sleep(std::time::Duration::from_millis(WAIT_TIME)).await;
     // transfer 100 tokens. assert sender balance.
     let tx = build_transfer_token_tx(&key, token_id, recipient_address, 100, 1);
-    let _slot_batch_2 = send_tx_and_wait_for_status(&[tx], client).await?;
+    let slot_batch_2 = send_tx_and_wait_for_status(&[tx], client).await?;
+    while processed_slot.number < slot_batch_2 {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
 
     assert_balance(client, 900, token_id, user_address, None)
         .await
         .context("Balance decreased after first transaction, latest version")?;
-
-    tokio::time::sleep(std::time::Duration::from_millis(WAIT_TIME)).await;
 
     let gas_balance_height_1 = client
         .get_balance::<TestSpec>(&user_address, &sov_bank::config_gas_token_id(), None)
@@ -97,13 +101,14 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     // transfer 200 tokens. assert sender balance.
     let tx = build_transfer_token_tx(&key, token_id, recipient_address, 200, 2);
 
-    let _slot_batch_3 = send_tx_and_wait_for_status(&[tx], client).await?;
+    let slot_batch_3 = send_tx_and_wait_for_status(&[tx], client).await?;
+    while processed_slot.number < slot_batch_3 {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
 
     assert_balance(client, 700, token_id, user_address, None)
         .await
         .context("Balance decreased after second transaction, latest version")?;
-
-    tokio::time::sleep(std::time::Duration::from_millis(WAIT_TIME)).await;
 
     // 10 transfers of 10,11..20
     let transfer_amounts: Vec<u128> = (10u128..20).collect();

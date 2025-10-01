@@ -1,22 +1,15 @@
-use core::time::Duration;
 use std::sync::Arc;
-use std::thread::sleep;
 
 use anyhow::Context;
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
 use sov_mock_da::storable::service::StorableMockDaService;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::OperatingMode;
-use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::DemoRollupSpec;
-
-const ESTIMATED_BLOCK_PROCESSING_TIME: Duration =
-    Duration::from_millis(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
@@ -55,18 +48,11 @@ async fn send_test_bank_txs(
     let initial_balance = 1000;
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
-    da_service.produce_n_blocks_now(3).await.unwrap();
+    da_service.produce_n_blocks_now(3).await?;
 
     let batch_1_rollup_height = send_tx_and_wait_for_status(&[tx], client).await?;
 
     assert!(batch_1_rollup_height >= 1);
-
-    // FIXME(@theochap): Remove that once we are confident that we don't have a race condition in the sequencer.
-    sleep(Duration::from_millis(
-        (ESTIMATED_BLOCK_PROCESSING_TIME.as_millis() * config_value!("DEFERRED_SLOTS_COUNT") * 2)
-            .try_into()
-            .unwrap(),
-    ));
 
     assert_slot_finality(
         client,
@@ -85,7 +71,7 @@ async fn send_test_bank_txs(
     let mut rollup_height = 1;
     let mut verified_attested_height = 0;
 
-    // How many slots rollup allowed to lag behind in posting attestations
+    // How many slots rollup allowed lagging behind in posting attestations
     let attestation_publish_threshold = 1000;
 
     while verified_attested_height <= batch_1_rollup_height {
@@ -121,7 +107,10 @@ async fn get_max_attested_height(
         .map(|h| format!("?rollup_height={h}"))
         .unwrap_or_default();
     let url = format!("/modules/attester-incentives/state/maximum-attested-height{param}");
-    let response = client.query_rest_endpoint::<ValueResponse>(&url).await?;
+    let response = client
+        .query_rest_endpoint::<ValueResponse>(&url)
+        .await
+        .with_context(|| format!("Failed to query attested height {rollup_height:?}"))?;
 
     let height = response.value;
     Ok(height)

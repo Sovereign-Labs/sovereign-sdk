@@ -242,11 +242,18 @@ pub(crate) async fn send_tx_and_wait_for_status(
     Ok(res.number)
 }
 
-#[allow(dead_code)]
+/// Single place for configuring test rollup.
+/// Applies all necessary configuration changes to make it work with the tests.
+/// Starts it and ensures it is ready to accept transactions.
 pub async fn start_test_rollup(
     test_case: &TestCase,
     operating_mode: OperatingMode,
 ) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
+    let prover_config = match &operating_mode {
+        OperatingMode::Optimistic | OperatingMode::Operator => None,
+        OperatingMode::Zk => Some(RollupProverConfig::Skip),
+    };
+
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(operating_mode),
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
@@ -255,7 +262,7 @@ pub async fn start_test_rollup(
     .with_zkvm_host_args(mock_da_risc0_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 16777216;
-        c.rollup_prover_config = Some(RollupProverConfig::Skip);
+        c.rollup_prover_config = prover_config;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = 3_600_000;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;

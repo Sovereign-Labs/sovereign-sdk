@@ -391,7 +391,7 @@ async fn sync_rollup_with_path(
     .context("Fully resyncing to the DA tip timed out")?;
     // We need to sleep because the sync status is based on the DA service updated by the node,
     // but the sequencer needs to run update_state() first.
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(3000)).await;
     tracing::info!("Synced!");
 
     // Ensure the rollup can still accept transactions
@@ -400,11 +400,8 @@ async fn sync_rollup_with_path(
     let tx = tx_set_value_for_check(tx_signer_key.clone(), CHECK_TRANSACTION_VALUE, nonce_to_use);
     let accept_tx = test_rollup
         .api_client()
-        .accept_tx(&sov_api_spec::types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+        .send_raw_tx_to_sequencer(&tx)
+        .await?;
     let tx_hash = accept_tx.id.clone();
     let hex_tx_hash = TxHash::from_str(tx_hash.as_str()).unwrap(); // I wonder if there's a better way
     let mut tx_subscription = test_rollup
