@@ -6,23 +6,17 @@ use anyhow::Context;
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::storable::service::StorableMockDaService;
-use sov_mock_da::BlockProducingConfig;
-use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::OperatingMode;
-use sov_test_utils::test_rollup::RollupBuilder;
+use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
-use crate::test_helpers::{test_genesis_source, DemoRollupSpec};
+use crate::test_helpers::DemoRollupSpec;
 
-const BLOCK_TIME_MS: u64 = 100;
-const ESTIMATED_BLOCK_PROCESSING_TIME: Duration = Duration::from_millis(BLOCK_TIME_MS);
-const BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
-    block_time_ms: BLOCK_TIME_MS,
-};
+const ESTIMATED_BLOCK_PROCESSING_TIME: Duration =
+    Duration::from_millis(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
@@ -33,23 +27,7 @@ async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
         finalization_blocks: 0,
     };
 
-    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Optimistic),
-        BLOCK_PRODUCING_CONFIG,
-        test_case.finalization_blocks,
-    )
-    .set_config(|c| c.max_concurrent_blobs = 16777216)
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .start()
-    .await?;
-
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(3)
-        .await
-        .unwrap();
-
-    test_rollup.wait_for_sequencer_ready().await?;
+    let test_rollup = start_test_rollup(&test_case, OperatingMode::Optimistic).await?;
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {

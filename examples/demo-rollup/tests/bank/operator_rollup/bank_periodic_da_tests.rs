@@ -2,6 +2,7 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
+use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use serde::Deserialize;
 use sov_address::MultiAddress;
 use sov_bank::derived_holder::DerivedHolder;
@@ -27,21 +28,7 @@ async fn flaky_bank_tx_tests_secured_by_operator() -> anyhow::Result<()> {
         finalization_blocks: 0,
     };
 
-    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Operator),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        test_case.finalization_blocks,
-    )
-    .set_config(|c| c.max_concurrent_blobs = 65536)
-    .disable_state_root_consistency_checks()
-    .start()
-    .await?;
-
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(3)
-        .await
-        .unwrap();
+    let test_rollup = start_test_rollup(&test_case, OperatingMode::Operator).await?;
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {

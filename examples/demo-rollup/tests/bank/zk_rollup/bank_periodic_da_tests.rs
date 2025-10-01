@@ -5,22 +5,17 @@ use sov_bank::event::Event as BankEvent;
 use sov_bank::utils::TokenHolder;
 use sov_bank::Coins;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
-use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{Amount, OperatingMode, SerializedAggregatedProof, Spec};
 use sov_rollup_interface::node::ledger_api::FinalityStatus;
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregateProofVerifier, AggregatedProofPublicData,
 };
-use sov_sequencer::SequencerKindConfig;
 use sov_state::Storage;
-use sov_test_utils::test_rollup::{RollupBuilder, RollupProverConfig};
-use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
-use crate::test_helpers::{test_genesis_source, DemoRollupSpec};
+use crate::test_helpers::DemoRollupSpec;
 
 type TestSpec = DemoRollupSpec;
 
@@ -42,31 +37,7 @@ async fn inner(finalization_blocks: u32) -> anyhow::Result<()> {
         finalization_blocks,
     };
 
-    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Zk),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        test_case.finalization_blocks,
-    )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = Some(RollupProverConfig::Skip);
-        // Since we've enabled the prover, we need to disable the state root consistency checks
-        // This is because proofs are not yet played in the sequencer, causing the state root to be incorrect
-        if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
-            sequencer_conf.disable_state_root_consistency_checks = true;
-        }
-    })
-    .start()
-    .await?;
-
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let test_rollup = start_test_rollup(&test_case, OperatingMode::Zk).await?;
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {

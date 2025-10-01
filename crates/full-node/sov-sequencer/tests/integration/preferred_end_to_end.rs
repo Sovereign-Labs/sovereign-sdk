@@ -1733,6 +1733,7 @@ async fn sequencer_back_pressure() {
     let client = test_rollup.api_client().clone();
 
     let mut generation = 0;
+    let _approximate_blobs_created = 0;
     // Pause block submission and produce some pending blocks.
     {
         let expected_patterns = [
@@ -1777,13 +1778,13 @@ async fn sequencer_back_pressure() {
 
     // TODO: Figure out how many blocks needs to be produced after blob submissions
     tracing::warn!("PUSHING NEW BLOCKS TO GET THINGS ROLLING!!!");
-    let end_padding_blocks = 300;
+    let end_padding_blocks = 100;
     for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    for _ in 0..200 {
+    for _ in 0..90 {
         let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
 

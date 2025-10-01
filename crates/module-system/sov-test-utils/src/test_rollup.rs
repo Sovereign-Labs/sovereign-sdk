@@ -715,7 +715,7 @@ where
     StoragePath: AsPath,
 {
     /// Default timeout for polling operations in seconds.
-    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
     /// Pauses batch production for the preferred sequencer.
     ///

@@ -3,6 +3,7 @@ use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::*;
 use anyhow::Context;
+use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
@@ -16,33 +17,15 @@ use std::sync::Arc;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_bank_tx_tests() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,sov_sequencer=debug");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "info,sov_sequencer=debug,sov_stf_runner=debug",
+    );
     let test_case = TestCase {
         wait_for_aggregated_proof: true,
         finalization_blocks: 0,
     };
 
-    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Optimistic),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        test_case.finalization_blocks,
-    )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .start()
-    .await?;
-
-    // We need a handful of blocks for the sequencer to be able to advance the
-    // visible slot number. Fewer blocks could possibly be enough as well, I
-    // haven't counted (@neysofu).
-    let warm_up_blocks = 3;
-    let mut slots = test_rollup.client.client.subscribe_slots().await?;
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(warm_up_blocks)
-        .await?;
-    for _ in 0..warm_up_blocks {
-        let _slot = slots.next().await;
-    }
+    let test_rollup = start_test_rollup(&test_case, OperatingMode::Optimistic).await?;
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
