@@ -1,12 +1,17 @@
 use std::time::Duration;
 
 use clap::Parser;
+use sov_bank::Bank;
 use sov_modules_api::prelude::tracing;
+use sov_modules_api::{EncodeCall, Runtime, Spec};
 use sov_soak_testing::{
-    run_generator_task_for_bank_and_synthetic_load, CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT,
-    MockDemoRollupSpec, TestRT, TxType, ValidityProfile,
+    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SoakTestRunner, TestRT,
+    ValidityProfile,
 };
+use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::TestSpec;
+use sov_transaction_generator::interface::MessageValidity;
+use sov_transaction_generator::Distribution;
 use tokio::signal::unix::SignalKind;
 use tokio::sync::watch::Receiver;
 use tokio::task::JoinSet;
@@ -48,6 +53,43 @@ struct Args {
     tx_type: TxType,
 }
 
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum TxType {
+    /// Only [`SyntheticLoad`] transactions - includes many heavy txs
+    SyntheticLoad,
+    /// Only [`Bank`] transactions
+    Bank,
+    /// Mixed [`SyntheticLoad`] and [`Bank`] transactions
+    Mixed,
+}
+
+/// Helper to create the Runner for any demo runtime.
+/// All the demo rollup runtimes only support Bank and SyntheticLoad.
+async fn run_soak_test_with_demo_runtime<R, S>(
+    client: sov_api_spec::Client,
+    rx: Receiver<bool>,
+    worker_id: u128,
+    num_workers: u32,
+    validity: Distribution<MessageValidity>,
+    tx_type: TxType,
+) -> anyhow::Result<()>
+where
+    R: Runtime<S> + EncodeCall<Bank<S>> + EncodeCall<SyntheticLoad<S>> + Clone,
+    S: Spec,
+{
+    let mut runner = SoakTestRunner::<R, S>::new();
+
+    runner = match tx_type {
+        TxType::Bank => runner.with_bank(),
+        TxType::SyntheticLoad => runner.with_synthetic_load(),
+        TxType::Mixed => runner.with_bank().with_synthetic_load(),
+    };
+
+    runner
+        .run(client, rx, worker_id, num_workers, validity)
+        .await
+}
+
 async fn worker_task(
     client: sov_api_spec::Client,
     rx: Receiver<bool>,
@@ -61,7 +103,7 @@ async fn worker_task(
 
     let result = match runtime {
         SelectedRuntime::Test => {
-            run_generator_task_for_bank_and_synthetic_load::<TestRT, TestSpec>(
+            run_soak_test_with_demo_runtime::<TestRT, TestSpec>(
                 client,
                 rx,
                 worker_id,
@@ -72,7 +114,7 @@ async fn worker_task(
             .await
         }
         SelectedRuntime::DemoCelestia => {
-            run_generator_task_for_bank_and_synthetic_load::<DemoCelestiaRT, CelestiaRollupSpec>(
+            run_soak_test_with_demo_runtime::<DemoCelestiaRT, CelestiaRollupSpec>(
                 client,
                 rx,
                 worker_id,
@@ -83,7 +125,7 @@ async fn worker_task(
             .await
         }
         SelectedRuntime::DemoMock => {
-            run_generator_task_for_bank_and_synthetic_load::<DemoMockRT, MockDemoRollupSpec>(
+            run_soak_test_with_demo_runtime::<DemoMockRT, MockDemoRollupSpec>(
                 client,
                 rx,
                 worker_id,
@@ -123,7 +165,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.num_workers,
             args.runtime,
             args.validity_profile,
-            args.tx_type,
+            args.tx_type.clone(),
         ));
     }
 
