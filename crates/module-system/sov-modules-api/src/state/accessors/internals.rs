@@ -91,7 +91,7 @@ impl<S: Storage> Delta<S> {
             accessory_writes,
             witness,
             #[cfg(feature = "native")]
-                uncomitted_changes,
+            uncomitted_changes,
         } = self;
 
         (
@@ -362,7 +362,6 @@ impl<S: Storage> AccessoryDelta<S> {
 }
 
 impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
-
     #[cfg(not(feature = "native"))]
     fn get_size(
         &mut self,
