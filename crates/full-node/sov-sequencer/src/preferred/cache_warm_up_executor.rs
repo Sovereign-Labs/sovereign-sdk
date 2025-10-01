@@ -85,6 +85,8 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     }
 
     pub(crate) fn send_tx(&self, tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+        // We need to update the `size` field before inserting the thx into tx_sender, otherwise the workers may see an outdated channel size.
+        let size = self.size.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
 
         // Skip update if consumer is too slow.
@@ -95,8 +97,6 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
 
         let maybe_receiver = match res {
             Ok(_) => {
-                let size = self.size.fetch_add(1, Ordering::Relaxed);
-
                 sov_metrics::track_metrics(|t| {
                     t.submit(CacheWarmUpMetrics {
                         tx_channel_size: size + 1,
@@ -106,11 +106,14 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 Some(receiver)
             }
             Err(flume::TrySendError::Full(_)) => {
-                let size = self.size.load(Ordering::Relaxed);
+                let size = self.size.fetch_sub(1, Ordering::Relaxed);
                 tracing::warn!(size, "The tx queue is full. You may want to increase the number of workers for cache warmup.");
                 None
             }
-            Err(flume::TrySendError::Disconnected(_)) => None,
+            Err(flume::TrySendError::Disconnected(_)) => {
+                self.size.fetch_sub(1, Ordering::Relaxed);
+                None
+            }
         };
 
         FullyBakedTxWithMaybeChangeSet {
