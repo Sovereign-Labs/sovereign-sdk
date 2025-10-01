@@ -1704,9 +1704,9 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
 /// Send transaction again and it should be accepted
 #[tokio::test(flavor = "multi_thread")]
 async fn sequencer_back_pressure() {
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
-    //     "info,sov_sequencer::preferred::inner=debug,sov_mock_da::storable::layer=debug,tower=off",
-    // );
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "info,sov_sequencer::preferred::inner=debug,tower=off",
+    );
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -1777,13 +1777,13 @@ async fn sequencer_back_pressure() {
 
     // TODO: Figure out how many blocks needs to be produced after blob submissions
     tracing::warn!("PUSHING NEW BLOCKS TO GET THINGS ROLLING!!!");
-    let end_padding_blocks = 200;
+    let end_padding_blocks = 300;
     for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
-    for _ in 0..100 {
+    for _ in 0..200 {
         let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
 
