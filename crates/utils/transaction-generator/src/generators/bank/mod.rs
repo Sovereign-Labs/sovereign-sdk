@@ -9,7 +9,7 @@ use sov_modules_api::prelude::arbitrary;
 use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::Spec;
 use strum::VariantArray;
-use tracing::warn;
+use tracing::{trace, warn};
 
 mod burn;
 mod freeze;
@@ -73,7 +73,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 {
                     Ok(transfer_result) => Ok(transfer_result?),
                     Err(e) => {
-                        warn!(
+                        trace!(
                             "Failed to generate transfer: {:?}. Generating mint instead",
                             e
                         );
@@ -100,7 +100,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 {
                     Ok(create_result) => Ok(create_result?),
                     Err(e) => {
-                        warn!("Failed to generate create token: {:?}", e);
+                        warn!("Failed to generate create token: {:?}. This is not expected. Generating an invalid transfer instead.", e);
 
                         // Fall back to generating an *invalid* transfer, which is always possible
                         self.do_generation_with_fallback(
@@ -119,7 +119,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 {
                     Ok(transfer_result) => Ok(transfer_result?),
                     Err(e) => {
-                        warn!("Failed to generate burn: {:?}", e);
+                        trace!("Failed to generate burn: {:?}. Creating token instead.", e);
                         self.do_generation_with_fallback(
                             CallMessageDiscriminants::CreateToken,
                             u,
@@ -139,7 +139,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 {
                     Ok(transfer_result) => Ok(transfer_result?),
                     Err(e) => {
-                        warn!("Failed to generate mint: {:?}", e);
+                        trace!("Failed to generate mint: {:?}. Creating token instead.", e);
                         self.do_generation_with_fallback(
                             CallMessageDiscriminants::CreateToken,
                             u,
@@ -159,7 +159,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 {
                     Ok(transfer_result) => Ok(transfer_result?),
                     Err(e) => {
-                        warn!("Failed to generate freeze: {:?}", e);
+                        trace!("Failed to generate freeze: {:?}", e);
                         self.do_generation_with_fallback(
                             CallMessageDiscriminants::CreateToken,
                             u,
