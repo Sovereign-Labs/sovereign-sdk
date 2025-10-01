@@ -1,3 +1,6 @@
+# 2025-10-01
+- #1791 Re-enable EVM gas estimation while bumping the margins.
+
 # 2025-09-29
 - #1770 **Breaking change** introduces a required `buffer_raw_txs` field to `EthRpcConfig`. This change is only breaking for EVM rollups.
 - #1783 Adds `da.tx_priority` optional field for celestia adapter. Possible values are `Low`, `Medium` or `High`. It can be used to improve blob inclusion.
