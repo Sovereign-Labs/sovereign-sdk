@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
 
     // Run uniswap soak test
     let test = UniSoakTest::new(client.rpc_client.alloy_client, signer).await?;
-    test.run().await?;
+    test.run(100).await?;
 
     // If you want to run simple storage test instead:
     // simple_storage::run(client).await?;

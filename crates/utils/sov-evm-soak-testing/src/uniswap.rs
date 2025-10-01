@@ -36,7 +36,7 @@ where
         })
     }
 
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self, count: usize) -> Result<()> {
         // Larger pool for load testing - 10k WETH : 20k USDC
         println!("💧 Adding liquidity: 10,000 WETH + 20,000 USDC");
         let weth_liquidity = parse_ether("10000")?;
@@ -44,8 +44,8 @@ where
         self.add_initial_liquidity(weth_liquidity, usdc_liquidity)
             .await?;
 
-        println!("🔄 Starting load test: 100 random swaps...");
-        self.execute_random_swaps(100).await?;
+        println!("🔄 Starting load test: {count} random swaps...");
+        self.execute_random_swaps(count).await?;
 
         println!("✅ Load test completed successfully!");
         Ok(())
