@@ -58,6 +58,18 @@ pub struct StateConsistency<S: Spec> {
     /// The latest state root stored by the begin slot hook
     #[state]
     pub latest_state_root: StateValue<<<S as Spec>::Storage as Storage>::Root>,
+
+    /// The latest visible slot number stored by the begin rollup block hook
+    #[state]
+    pub latest_visible_slot_number: StateValue<u64>,
+
+    /// The latest rollup height stored by the begin rollup block hook
+    #[state]
+    pub latest_rollup_height: StateValue<u64>,
+
+    /// The count of successful state assertions
+    #[state]
+    pub successful_assertions_count: StateValue<u64>,
 }
 
 impl<S: Spec> Module for StateConsistency<S> {

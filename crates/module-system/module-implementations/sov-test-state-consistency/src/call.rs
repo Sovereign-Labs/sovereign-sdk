@@ -92,45 +92,65 @@ impl<S: Spec> StateConsistency<S> {
     }
 
     pub(crate) fn assert_block_state(
-        &self,
+        &mut self,
         expected_visible_slot_number: u64,
         expected_rollup_height: u64,
         expected_state_root: Vec<u8>,
         _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        let visible_slot_number = state.current_visible_slot_number();
+        let rollup_height = state.rollup_height_to_access().get();
+        // Sanity check
+        let saved_rollup_height = self.latest_rollup_height.get(state)?.unwrap_or(0);
+        assert_eq!(rollup_height, saved_rollup_height, "Mismatch between rollup height saved from begin_rollup_block_hook: {saved_rollup_height} and the one read from TxState: {rollup_height}");
         anyhow::ensure!(
-            visible_slot_number.get() == expected_visible_slot_number,
-            "Visible slot number is not as expected. Expected {}, but got {}",
-            expected_visible_slot_number,
-            visible_slot_number.get()
-        );
-
-        let rollup_height = state.rollup_height_to_access();
-        anyhow::ensure!(
-            rollup_height.get() == expected_rollup_height,
+            rollup_height == expected_rollup_height,
             "Rollup height is not as expected. Expected {}, but got {}",
             expected_rollup_height,
-            rollup_height.get()
+            rollup_height
         );
 
-        let max_slot_number = state.max_allowed_slot_number_to_access();
+        let visible_slot_number = state.current_visible_slot_number().get();
+        // Sanity check
+        let saved_visible_slot_number = self.latest_visible_slot_number.get(state)?.unwrap_or(0);
+        assert_eq!(visible_slot_number, saved_visible_slot_number, "Mismatch between visible slot number saved from begin_rollup_block_hook: {saved_visible_slot_number} and the one read from TxState: {visible_slot_number}");
+        // Then actual tx assert - transactions should use values from the sequencer; this will
+        // expose any mismatch in the kernel state when the node process it afterwards
         anyhow::ensure!(
-            max_slot_number.get() == expected_visible_slot_number,
-            "Max slot number is not as expected. Expected {} (equal to visible_slot_number), but got {}",
+            visible_slot_number == expected_visible_slot_number,
+            "Visible slot number is not as expected at rollup height {}. Expected {}, but got {}",
+            rollup_height,
             expected_visible_slot_number,
-            max_slot_number.get()
+            visible_slot_number
+        );
+
+        let max_slot_number = state.max_allowed_slot_number_to_access().get();
+        // If we're here then we already checked expected_visible_slot_number matches
+        // saved_visible_slot_number and state.visible_slot_number, so no need for sanity check
+        anyhow::ensure!(
+            max_slot_number == expected_visible_slot_number,
+            "Max slot number is not as expected at rollup height {}. Expected {} (equal to visible_slot_number), but got {}",
+            rollup_height,
+            expected_visible_slot_number,
+            max_slot_number
         );
 
         let state_root = self.latest_state_root.get_or_err(state)??;
         anyhow::ensure!(
             expected_state_root == state_root.as_ref(),
-            "State root is not as expected for height {}. Expected {}, but got {}",
-            state.rollup_height_to_access(),
+            "State root is not as expected at rollup height {}. Expected {}, but got {}",
+            rollup_height,
             hex::encode(expected_state_root),
             state_root
         );
+
+        // Increment successful assertions count
+        let current_count = self.successful_assertions_count.get(state)?.unwrap_or(0);
+        let new_count = current_count
+            .checked_add(1)
+            .expect("Overflow when incremeting u64 counter");
+        self.successful_assertions_count.set(&new_count, state)?;
+
         Ok(())
     }
 }
