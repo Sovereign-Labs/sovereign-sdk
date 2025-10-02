@@ -1,7 +1,7 @@
 use crate::{
     db::commit::FallibleDatabaseCommit,
     get_spec_id,
-    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
+    sov_evm::{SovEvm, StorageAccessInspector},
     EvmRuntimeConfig,
 };
 use revm::context::TxEnv;
@@ -81,8 +81,8 @@ where
     I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
 {
     let context = context(db, block_env, cfg);
-    let unmetered_storage_inspector = UnmeteredStorageAccessInspector::new();
-    let mut evm = SovEvm::new(context, (inspector, unmetered_storage_inspector));
+    let storage_inspector = StorageAccessInspector::new();
+    let mut evm = SovEvm::new(context, (inspector, storage_inspector));
     evm.inspect_tx(tx)
 }
 
@@ -94,7 +94,7 @@ pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = context(db, block_env, cfg);
-    let mut evm = SovEvm::new(context, UnmeteredStorageAccessInspector::new());
+    let mut evm = SovEvm::new(context, StorageAccessInspector::new());
     evm.inspect_tx(tx)
 }
 
