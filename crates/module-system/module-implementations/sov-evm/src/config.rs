@@ -76,7 +76,7 @@ impl Default for EvmRuntimeConfig {
     }
 }
 
-#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub(crate) enum GasMeteringMode {
     /// EVM doesn't charge for storage access and initial cost.
     /// Sequencer charges the initial cost and state access.

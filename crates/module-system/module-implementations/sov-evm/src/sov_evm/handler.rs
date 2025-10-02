@@ -17,6 +17,8 @@ use revm::{
     Database,
 };
 
+use crate::{gas_metering_mode, GasMeteringMode};
+
 #[derive(Debug)]
 pub struct SovHandler<EVM>(core::marker::PhantomData<EVM>);
 
@@ -45,8 +47,10 @@ where
     #[inline]
     fn validate(&self, evm: &mut Self::Evm) -> Result<InitialAndFloorGas, Self::Error> {
         self.validate_env(evm)?;
-        // We disable charging initial gas
-        Ok(InitialAndFloorGas::new(0, 0))
+        match gas_metering_mode() {
+            GasMeteringMode::Rollup => Ok(InitialAndFloorGas::new(0, 0)), // We disable charging initial gas
+            GasMeteringMode::EVM => self.validate_initial_tx_gas(evm),
+        }
     }
 
     fn validate_against_state_and_deduct_caller(
