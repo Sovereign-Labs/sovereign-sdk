@@ -110,12 +110,12 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
-        let signed_transaction = convert_to_tx_signed(raw_tx.clone())
+        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
+        let signed_transaction = convert_to_tx_signed(raw_tx)
             // TODO: Fix this later
             .map_err(|_err| ErrorCode::ServerError(500))?;
 
         let tx_hash = signed_transaction.hash();
-        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
 
         Ok((*tx_hash, message))
     }
