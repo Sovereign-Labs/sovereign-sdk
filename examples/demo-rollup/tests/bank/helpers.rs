@@ -264,7 +264,7 @@ pub async fn start_test_rollup(
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
-            sequencer_config.batch_execution_time_limit_millis = 3_600_000;
+            sequencer_config.batch_execution_time_limit_millis = 3_000;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
         }
     })

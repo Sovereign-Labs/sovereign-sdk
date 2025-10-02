@@ -16,10 +16,8 @@ use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use std::sync::Arc;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_bank_tx_tests() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "info,sov_sequencer=debug,sov_stf_runner=debug",
-    );
+async fn bank_tx_tests() -> anyhow::Result<()> {
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter("info,sov_sequencer=debug");
     let test_case = TestCase {
         wait_for_aggregated_proof: true,
         finalization_blocks: 0,
@@ -30,7 +28,7 @@ async fn flaky_bank_tx_tests() -> anyhow::Result<()> {
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
         err = test_rollup.rollup_task => err?,
-        res = send_test_bank_txs(test_case, &test_rollup.client, test_rollup.da_service.clone()) => Ok(res?),
+        res = tokio::time::timeout(std::time::Duration::from_secs(120), send_test_bank_txs(test_case, &test_rollup.client, test_rollup.da_service.clone())) => Ok(res??),
     }?;
 
     Ok(())
@@ -46,6 +44,7 @@ async fn send_test_bank_txs(
         .get_token_id::<DemoRollupSpec>(TOKEN_NAME, Some(TOKEN_DECIMALS), &user_address)
         .await?;
 
+    tracing::info!("A =========");
     const NUM_TRANSFERS: u64 = 5;
 
     assert_eq!(token_id, token_id_response);
@@ -54,10 +53,14 @@ async fn send_test_bank_txs(
     let initial_balance = 1000;
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
+    let mut slots_subscription = client.client.subscribe_slots().await?;
     let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
 
-    // Will cause a batch to be produced.
-    da_service.produce_n_blocks_now(1).await?;
+    let mut processed_slot = slots_subscription.next().await.unwrap()?;
+    while processed_slot.number < slot_number {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
+    tracing::info!("B =========");
 
     assert_slot_finality(client, slot_number, test_case.expected_head_finality()).await;
     assert_balance(client, initial_balance, token_id, user_address, None).await?;
@@ -79,19 +82,23 @@ async fn send_test_bank_txs(
         .await?;
 
         tracing::info!(slot_number, "Tx has been published in slot");
+        while processed_slot.number < slot_number {
+            processed_slot = slots_subscription.next().await.unwrap()?;
+        }
+        tracing::info!("C {nonce} =========");
         tracing::info!("------------------------");
 
         let mut max_attested_height = get_max_attested_height(client).await?;
         tracing::info!(max_attested_height, "Starting max attested height");
         while max_attested_height < slot_number {
             // In some cases, the attestation may not be ready just yet. Let's try again in a bit.
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             max_attested_height = get_max_attested_height(client)
                 .await
                 .with_context(|| format!("Final part of the test: failed to get max attested height for {slot_number}, only have {max_attested_height}"))?;
+            tracing::info!("D {nonce} =========: {max_attested_height}");
+            slots_subscription.next().await.unwrap()?;
         }
-
-        da_service.produce_n_blocks_now(1).await?;
+        // da_service.produce_block_now().await?;
     }
 
     Ok(())

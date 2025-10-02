@@ -1704,14 +1704,15 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
 /// Send transaction again and it should be accepted
 #[tokio::test(flavor = "multi_thread")]
 async fn sequencer_back_pressure() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "info,sov_sequencer::preferred::inner=debug,tower=off",
-    );
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
+    //     "info,sov_sequencer::preferred::inner=debug,tower=off",
+    // );
+    let max_batch_execution_time_millis = 1_000;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        max_batch_execution_time_millis,
     )
     .await;
 
