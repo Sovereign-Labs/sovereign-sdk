@@ -70,7 +70,7 @@ fn create_auth_tx_and_hash<S: Spec>(
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
-    let gas_limit = tx.gas_limit();
+    let gas_limit = tx.gas_limit().saturating_mul(100);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
     let max_fee = gas_limit
         .checked_value(gas_price)
