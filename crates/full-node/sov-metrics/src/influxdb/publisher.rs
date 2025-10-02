@@ -2,11 +2,15 @@
 
 use std::net::SocketAddr;
 
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::io::AsyncWriteExt;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
+use crate::influxdb::tracker::DroppedMetrics;
 use crate::influxdb::SerializableMetric;
-use crate::TelegrafSocketConfig;
+use crate::{Metric, TelegrafSocketConfig};
+
+const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
 
 enum PublisherTransport {
     Tcp(tokio::net::TcpStream),
@@ -77,8 +81,9 @@ impl MetricsPublisher {
 }
 
 pub(crate) async fn metrics_publisher_task(
-    mut receiver: tokio::sync::mpsc::Receiver<SerializableMetric>,
+    mut metrics_receiver: tokio::sync::mpsc::Receiver<SerializableMetric>,
     config: &MonitoringConfig,
+    shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) {
     tracing::trace!(?config, "Starting metrics publisher task");
     let max_buffer_size = config.get_max_datagram_size() as usize;
@@ -113,33 +118,68 @@ pub(crate) async fn metrics_publisher_task(
         }
     };
 
-    while let Some(measurement) = receiver.recv().await {
-        #[cfg(feature = "gas-constant-estimation")]
-        if let Err(err) = measurement.write_to_csv(csv_writers) {
-            tracing::warn!(?err, "Failed to write metrics to CSV file");
-        }
-        tracing::trace!(?measurement, "Received measurement");
-        if !buffer.is_empty() {
-            buffer.push(b'\n');
-        }
-        if let Err(error) = measurement.serialize_for_telegraf(&mut buffer) {
-            tracing::warn!(?error, "Failed to format measurement, skipping");
-        };
-        // We know that telegraf format is string based, so for debugging we can print strings:
-        tracing::trace!(buffer = ?String::from_utf8_lossy(&buffer), "Serialized measurement into buffer");
+    let mut dropped_metrics_check_interval =
+        tokio::time::interval(std::time::Duration::from_secs(10));
+    dropped_metrics_check_interval.tick().await; // Skip first immediate tick
 
-        // Exceed max size, need to submit the packet first.
-        if buffer.len() > max_buffer_size {
-            if let Err(e) = publisher.publish(&buffer).await {
-                tracing::warn!(?e, "Failed to publish metrics");
+    loop {
+        tokio::select! {
+            _ = dropped_metrics_check_interval.tick() => {
+                let dropped_count = crate::influxdb::DROPPED_METRICS_COUNT.swap(0, std::sync::atomic::Ordering::Relaxed);
+                    let metric = DroppedMetrics { dropped_metrics: dropped_count };
+                    // We don't technically need to allocate here, but it's easier than fixing `process_measurement` to work with both `dyn` and generics
+                    process_measurement(&mut buffer, metric, &mut publisher, max_buffer_size)
+                                .await;
+
             }
+            result = future_or_shutdown(metrics_receiver.recv(), &shutdown_receiver) => {
+                match result {
+                    FutureOrShutdownOutput::Output(Some(measurement)) => {
+                        #[cfg(feature = "gas-constant-estimation")]
+                        if let Err(err) = measurement.write_to_csv(csv_writers) {
+                            tracing::warn!(?err, "Failed to write metrics to CSV file");
+                        }
+                        tracing::trace!(?measurement, "Received measurement");
+                        process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
+                            .await;
+                    }
+                    FutureOrShutdownOutput::Shutdown | FutureOrShutdownOutput::Output(None) => {
+                        // Drain all remaining measurements from the channel
+                        let mut drained_count = 0;
+                        let start = std::time::Instant::now();
+                        while let Ok(remaining) = metrics_receiver.try_recv() {
+                            drained_count += 1;
+                            process_measurement(&mut buffer, remaining, &mut publisher, max_buffer_size)
+                                .await;
+                            if start.elapsed() > SHUTDOWN_DRAINING_LIMIT {
+                                break;
+                            }
+                        }
 
-            // Clearing even in case of error, otherwise the packet can grow too much.
-            buffer.clear();
+                        if drained_count > 0 {
+                            tracing::info!(
+                                drained_metrics = drained_count,
+                                "Drained remaining metrics from channel during shutdown"
+                            );
+                        }
+                        tracing::info!(
+                            remaining_buffer_size = buffer.len(),
+                            "Metrics task is going to shutdown, send remaining metrics"
+                        );
+                        if !buffer.is_empty() {
+                            tracing::trace!("Some metrics remain in the buffer, publish before exit");
+                            if let Err(e) = publisher.publish(&buffer).await {
+                                tracing::warn!(?e, "Failed to publish metrics during shutdown");
+                            }
+                            buffer.clear();
+                        }
+                        break;
+                    }
+                }
+            }
         }
     }
-
-    tracing::debug!("Metrics publishing task has been completed");
+    tracing::info!("Metrics publishing task has been completed");
 }
 
 /// Listens on UDP port and converts all received metrics to strings and sends back to a channel.
@@ -166,6 +206,39 @@ pub(crate) fn spawn_metrics_udp_receiver(
     });
 }
 
+async fn process_measurement(
+    buffer: &mut Vec<u8>,
+    measurement: impl Metric,
+    publisher: &mut MetricsPublisher,
+    max_buffer_size: usize,
+) {
+    if !buffer.is_empty() {
+        buffer.push(b'\n');
+    }
+    if let Err(error) = measurement.serialize_for_telegraf(buffer) {
+        tracing::warn!(
+            ?error,
+            ?measurement,
+            "Failed to format measurement, skipping"
+        );
+    } else {
+        // We know that telegraf format is string-based, so for debugging we can print strings:
+        tracing::trace!(buffer = ?String::from_utf8_lossy(buffer), "Serialized measurement into buffer");
+    };
+    // Exceed max size, need to submit the packet first.
+    if buffer.len() > max_buffer_size {
+        if let Err(error) = publisher.publish(buffer).await {
+            tracing::warn!(
+                ?error,
+                dropped_metrics = %String::from_utf8_lossy(buffer),
+                "Failed to publish metrics");
+        }
+
+        // Clearing even in case of error, otherwise the packet can grow too much.
+        buffer.clear();
+    }
+}
+
 #[cfg(test)]
 pub(crate) async fn receive_with_timeout(
     receiver: &mut tokio::sync::mpsc::Receiver<String>,
@@ -178,11 +251,11 @@ pub(crate) async fn receive_with_timeout(
 
 #[cfg(test)]
 mod tests {
-    use tokio::io::AsyncReadExt;
-
     use super::*;
     use crate::influxdb::config::TelegrafSocketConfig;
     use crate::influxdb::Metric;
+    use tokio::io::AsyncReadExt;
+    use tokio::sync::watch;
 
     #[derive(Clone, Debug)]
     struct SampleMetric(Vec<u8>);
@@ -206,6 +279,8 @@ mod tests {
         let first_chunk = 2;
         let second_chunk = 3;
         let max_udp_size = sample_metric.0.len() * (first_chunk + second_chunk);
+        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
+        shutdown_receiver.mark_unchanged();
 
         let total_send = first_chunk + second_chunk;
 
@@ -218,7 +293,7 @@ mod tests {
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config).await;
+            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
         });
 
         for _ in 0..first_chunk {
@@ -307,12 +382,14 @@ mod tests {
             max_pending_metrics: None,
         };
 
+        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
+        shutdown_receiver.mark_unchanged();
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(1);
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config).await;
+            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
         });
 
         sender.send(Box::new(sample_metric)).await?;

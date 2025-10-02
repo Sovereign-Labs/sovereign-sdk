@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
@@ -8,13 +9,33 @@ use sov_modules_api::Spec;
 use sov_modules_api::StateCheckpoint;
 use sov_modules_api::StateUpdateInfo;
 use sov_modules_api::Storage;
+use sov_modules_api::TxChangeSet;
 use sov_modules_api::{FullyBakedTx, Runtime};
 use std::collections::BTreeMap;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 // We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
 // Even if it does, the sender uses a non-blocking method, meaning a few updates may simply be skipped.
 const TX_CHANNEL_SIZE: usize = 16;
+
+/// A transaction with a way to retrieve the corresponding state changes it may produce.
+pub struct FullyBakedTxWithMaybeChangeSet {
+    /// The original transaction.
+    pub tx: FullyBakedTx,
+    /// The worker executor will race against the main executor, attempting to compute  
+    /// the changeset before the main executor processes the transaction.  
+    /// Then, the worker will send the computed changeset through this channel,  
+    /// allowing the main sequencer executor to reuse these values before executing the transaction.
+    pub receiver: Option<oneshot::Receiver<TxChangeSet>>,
+}
+
+impl FullyBakedTxWithMaybeChangeSet {
+    /// Creates new `FullyBakedTxWithMaybeChangeSet`
+    pub fn new(tx: FullyBakedTx) -> Self {
+        Self { tx, receiver: None }
+    }
+}
 
 pub(crate) struct StartBlockNotification<S: Spec> {
     pub(crate) data: StartBlockData<S>,
@@ -34,10 +55,15 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
     }
 }
 
+struct FullyBakedTxWithTxChangeSetSender {
+    tx: FullyBakedTx,
+    sender: oneshot::Sender<TxChangeSet>,
+}
+
 #[derive(Clone)]
 pub(crate) struct CacheWarmUpExecutor<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
-    tx_sender: flume::Sender<FullyBakedTx>,
+    tx_sender: flume::Sender<FullyBakedTxWithTxChangeSetSender>,
 }
 
 impl<S: Spec> CacheWarmUpExecutor<S> {
@@ -46,9 +72,23 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         let _ = self.start_block_notification_sender.send(Some(data));
     }
 
-    pub(crate) fn send_tx(&self, tx: FullyBakedTx) {
+    pub(crate) fn send_tx(&self, tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+        let (sender, receiver) = oneshot::channel();
+
         // Skip update if consumer is too slow.
-        let _ = self.tx_sender.try_send(tx);
+        let res = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
+            tx: tx.clone(),
+            sender,
+        });
+
+        if res.is_err() {
+            FullyBakedTxWithMaybeChangeSet { tx, receiver: None }
+        } else {
+            FullyBakedTxWithMaybeChangeSet {
+                tx,
+                receiver: Some(receiver),
+            }
+        }
     }
 
     pub(crate) async fn spawn_execution_task<Rt: Runtime<S>>(
@@ -90,15 +130,19 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-        tx_receiver: flume::Receiver<FullyBakedTx>,
+        tx_receiver: flume::Receiver<FullyBakedTxWithTxChangeSetSender>,
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
         >,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut shutdown_receiver = exec_config.shutdown_receiver.clone();
-            let mut executor =
-                RollupBlockExecutor::<_, Rt>::new(&info, exec_config, seq_config.clone());
+            let mut executor = RollupBlockExecutor::<_, Rt>::new(
+                &info,
+                exec_config,
+                seq_config.clone(),
+                Default::default(),
+            );
 
             let mut is_started = false;
             loop {
@@ -114,7 +158,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                     }
 
                     tx = tx_receiver.recv_async() => {
-                        let baked_tx = match tx {
+                        let tx_with_sender = match tx {
                              Ok(tx) => tx,
                              Err(flume::RecvError::Disconnected) => {
                                 // Quit if channel closed.
@@ -122,13 +166,17 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             },
                         };
                         if is_started {
-                            let res = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                            let baked_tx = FullyBakedTxWithMaybeChangeSet::new(tx_with_sender.tx);
+                            let res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
                             match res{
-                                Ok((_, _tx_change_set)) => {
-                                    // TODO
+                                Ok((_, tx_change_set)) => {
+                                    // It ok safe to ignore the error if the receiver was dropped.
+                                    // This can happen if the transaction on the main executor has already finished.
+                                    let _ = tx_with_sender.sender.send(tx_change_set);
                                 },
-                                Err(_) => {
+                                Err(err) => {
+                                    tracing::trace!(%err, "WarmUp worker task failed to execute transaction.");
                                     continue;
                                 }
                             }

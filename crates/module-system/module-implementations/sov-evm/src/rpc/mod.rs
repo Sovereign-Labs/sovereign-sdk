@@ -238,7 +238,7 @@ where
             .map(|code| code.bytecode().clone())
             .unwrap_or_default();
 
-        Ok(code.clone())
+        Ok(code)
     }
 
     /// Handler for: `eth_feeHistory`
@@ -330,6 +330,7 @@ where
     /// Handler for: `eth_blockNumber`
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+        debug!("EVM module JSON-RPC request to `eth_blockNumber`");
         let block_number_range = self
             .block_numbers
             .get(state)
@@ -372,6 +373,7 @@ where
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
+        debug!("EVM module JSON-RPC request to `debug_traceTransaction`");
         // Get transaction and block data
         let index = self
             .get_tx_index_by_hash(&tx_hash, state)
@@ -408,7 +410,7 @@ where
 
             // Skip the transaction we're tracing
             if *tx.signed_transaction.hash() == tx_hash {
-                continue;
+                break;
             }
 
             transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())

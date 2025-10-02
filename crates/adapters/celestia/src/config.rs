@@ -27,6 +27,8 @@ pub struct CelestiaConfig {
     /// Set it only to ensure that the target node runs with correct credentials.
     pub signer_address: Option<CelestiaAddress>,
 
+    /// Default is medium.
+    pub tx_priority: Option<TxPriority>,
     /// Minimal time to wait before reattempting to request to celestia node.
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_min_delay_ms")]
@@ -43,6 +45,24 @@ pub struct CelestiaConfig {
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_factor")]
     pub backoff_factor: f32,
+}
+
+/// Custom type matching [`celestia_rpc::TxPriority`] but with `JsonSchema` support.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+pub enum TxPriority {
+    Low,
+    Medium,
+    High,
+}
+
+impl From<TxPriority> for celestia_rpc::TxPriority {
+    fn from(value: TxPriority) -> Self {
+        match value {
+            TxPriority::Low => celestia_rpc::TxPriority::Low,
+            TxPriority::Medium => celestia_rpc::TxPriority::Medium,
+            TxPriority::High => celestia_rpc::TxPriority::High,
+        }
+    }
 }
 
 impl CelestiaConfig {
@@ -66,6 +86,7 @@ impl CelestiaConfig {
             celestia_rpc_timeout_seconds: NonZero::new(120).unwrap(),
             safe_lead_time_ms: 500,
             signer_address: None,
+            tx_priority: None,
             backoff_min_delay_ms: 50,
             backoff_max_delay_ms: 100,
             backoff_max_times: 3,

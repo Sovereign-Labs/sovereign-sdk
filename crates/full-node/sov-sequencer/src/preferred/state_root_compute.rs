@@ -1,10 +1,13 @@
 //! Defines the logic for computing state roots for the preferred sequencer.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::{CryptoSpec, Runtime};
 use sov_modules_api::{Spec, Storage};
 use sov_rollup_interface::common::SlotNumber;
+use sov_state::sequencer_state::{RawStateChanges, SequencerStateChanges};
 use sov_state::{NativeStorage, SlotKey, SlotValue, StateAccesses, StateRoot};
 use tokio::sync::{mpsc, oneshot};
 
@@ -14,8 +17,10 @@ const MEMORY_LIMIT_FOR_STATE_ROOT_COMPUTATION: usize = 100_000_000; // 100MB
 const MAX_STATE_ROOTS_TO_CACHE: usize = 100;
 const NUM_STATE_ROOT_COMPUTE_REQUESTS: usize = 50;
 
+type Hasher<S> = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
 pub(crate) struct StateRootComputeRequest<S: Spec> {
-    pub state_accesses: StateAccesses,
+    pub raw_state_changes: Arc<RawStateChanges>,
+    pub uncommitted_changes: SequencerStateChanges<Hasher<S>>,
     pub storage: S::Storage,
     pub rollup_height: RollupHeight,
     pub max_slot_number: SlotNumber,
@@ -36,7 +41,7 @@ fn user_roots_match<S: StateRoot>(old_root: &S, new_root: &S) -> bool {
 
 impl<S: Spec> StateRootCacheEntry<S> {
     // Assert that the state root is consistent with the write set.
-    async fn assert_consistency(
+    async fn assert_consistency<Rt: Runtime<S>>(
         &self,
         state_accesses: StateAccesses,
         storage: S::Storage,
@@ -45,16 +50,20 @@ impl<S: Spec> StateRootCacheEntry<S> {
     ) -> (RollupHeight, <S::Storage as Storage>::Root) {
         let new_writes = state_accesses.user.ordered_writes.clone();
         // Optimistically compute new root hash
-        let new_root =
-            compute_state_root::<S>(state_accesses, storage.clone(), rollup_height, slot_number)
-                .await;
+        let new_root = compute_state_root::<S, Rt>(
+            state_accesses,
+            storage.clone(),
+            rollup_height,
+            slot_number,
+        )
+        .await;
         if user_roots_match(&self.root, &new_root) {
             tracing::trace!(%rollup_height, %slot_number, "User state root is consistent");
             return (rollup_height, new_root);
         }
         tracing::debug!("User roots don't match, verify if storage became stale");
         // Another possible case is that storage became stale while computing the state root took place.
-        if let Some(fetched_root) = fetch_root_hash_if_stale::<S>(&storage, slot_number) {
+        if let Some(fetched_root) = fetch_root_hash_if_stale::<S, Rt>(&storage, rollup_height) {
             if user_roots_match(&self.root, &fetched_root) {
                 return (rollup_height, fetched_root);
             }
@@ -65,7 +74,7 @@ impl<S: Spec> StateRootCacheEntry<S> {
             %slot_number,
             initial_root = %self.root,
             new_root = %new_root,
-            "User state root has changed. This is a bug. Write mismatch fill follow");
+            "User state root has changed. This is a bug. Write mismatch will follow");
         Self::describe_mismatch(&new_writes, &self.writes);
 
         panic!("User state root has changed at rollup_height={rollup_height} and slot_number={slot_number}. This is a bug.");
@@ -79,12 +88,12 @@ impl<S: Spec> StateRootCacheEntry<S> {
             tracing::error!("No old write set to describe mismatch against. This is a bug.");
             return;
         };
-        let old_write_set: std::collections::HashMap<SlotKey, Option<SlotValue>> =
+        let mut old_write_set: std::collections::HashMap<SlotKey, Option<SlotValue>> =
             old_write_set.iter().cloned().collect();
 
         for (new_key, new_value) in new_write_set {
-            if let Some(old_value) = old_write_set.get(new_key) {
-                if old_value != new_value {
+            if let Some(old_value) = old_write_set.remove(new_key) {
+                if &old_value != new_value {
                     tracing::error!(
                         slot_key = %new_key,
                         new_value = %SlotValue::debug_show(new_value.as_ref()),
@@ -95,6 +104,11 @@ impl<S: Spec> StateRootCacheEntry<S> {
                 tracing::error!(slot_key = %new_key, "New key not found in old write set");
             }
         }
+        for (old_key, _) in old_write_set {
+            tracing::error!(slot_key = %old_key, "Old key not found in new write set");
+        }
+
+        tracing::error!("----------- Finished describing mismatch -------------");
     }
 }
 
@@ -104,24 +118,56 @@ pub(super) struct StateRootBackgroundTaskState<S: Spec> {
 
 // If storage has not reached the passed slot number, it will return None.
 // If storage is stale on this slot number, it will fetch the existing root hash for the passed slot number.
-fn fetch_root_hash_if_stale<S: Spec>(
+fn fetch_root_hash_if_stale<S: Spec, Rt: Runtime<S>>(
     storage: &S::Storage,
-    slot_number: SlotNumber,
+    rollup_height: RollupHeight,
 ) -> Option<<S::Storage as Storage>::Root> {
-    let latest_unbound = storage.latest_version_unbound();
-    tracing::trace!(%latest_unbound, %slot_number, "Latest unbound slot number");
+    let runtime = Rt::default();
+    let kernel = runtime.kernel_with_slot_mapping();
+    let latest_rollup_height_in_storage = kernel.get_latest_rollup_height(storage);
+
+    tracing::trace!(%latest_rollup_height_in_storage, %rollup_height, "Latest unbound rollup height");
     // If the latest version is equal, it means this state root has already been computed.
-    if latest_unbound >= slot_number {
-        let root = storage
-            .get_root_hash_unbound(slot_number)
-            .expect("Failed to get root hash");
-        Some(root)
+    if latest_rollup_height_in_storage >= rollup_height {
+        let runtime = Rt::default();
+        let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
+        // There are two cases here:
+        // If the underlying storage is ahead of the requested state by *more than one* rollup block, then the `kernel` will have its `true_slot_number_history` populated for the requested height.
+        // In this case, we can retrieve the slot number which goes with the requested height and fetch its state root
+        // Otherwise, the map will be empty. If the map is empty, we *know* that we're in this case - which means we can just return the latest root hash.
+        if let Some(slot_number_for_height) =
+            kernel_with_slot_mapping.get_true_slot_number_for_height_unbound(rollup_height, storage)
+        {
+            let root = storage
+                .get_root_hash_unbound(slot_number_for_height)
+                .expect("Failed to get root hash");
+            Some(root)
+        } else {
+            let latest_root = Some(
+                storage
+                    .get_latest_root_hash_unbound()
+                    .expect("Failed to get latest root hash"),
+            );
+
+            // There's an edge case here: If there was a commit *while* we were loading the latest root, we could have gotten the wrong value.
+            // In that case the new commit will have made the slot number available, so we can fetch the correct hash by number.
+            if let Some(slot_number_for_height) = kernel_with_slot_mapping
+                .get_true_slot_number_for_height_unbound(rollup_height, storage)
+            {
+                let root = storage
+                    .get_root_hash_unbound(slot_number_for_height)
+                    .expect("Failed to get root hash");
+                Some(root)
+            } else {
+                latest_root
+            }
+        }
     } else {
         None
     }
 }
 
-async fn compute_state_root<S: Spec>(
+async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
     state_accesses: StateAccesses,
     storage: S::Storage,
     rollup_height: RollupHeight,
@@ -135,7 +181,7 @@ async fn compute_state_root<S: Spec>(
                     .expect("Failed to get prev root hash");
 
                 // First, check if storage is stale from the point of view of the caller.
-                if let Some(root) = fetch_root_hash_if_stale::<S>(&storage, slot_number) {
+                if let Some(root) = fetch_root_hash_if_stale::<S, Rt>(&storage, rollup_height) {
                     return root;
                 }
 
@@ -144,14 +190,17 @@ async fn compute_state_root<S: Spec>(
                     .expect("Failed to compute state update").0
             })
     });
-    handle.await.unwrap()
+    let res = handle.await.unwrap();
+    res
 }
 
 impl<S: Spec> StateRootBackgroundTaskState<S> {
-    pub(super) fn create(
+    pub(super) fn create<Rt: Runtime<S>>(
         mut block_excutors_shutdown_receiver: mpsc::Receiver<()>,
         check_state_roots: bool,
     ) -> (tokio::task::JoinHandle<()>, StateRootBackgroundTaskState<S>) {
+        let span = tracing::span!(tracing::Level::DEBUG, "state_root_compute_background_task");
+        let _enter = span.enter();
         tracing::info!("Starting sequencer state root computation background task");
         let (request_sender, mut request_receiver) = mpsc::channel(NUM_STATE_ROOT_COMPUTE_REQUESTS);
 
@@ -180,21 +229,23 @@ impl<S: Spec> StateRootBackgroundTaskState<S> {
                 };
                 // Wait for a new request, or shutdown.
                 let StateRootComputeRequest::<S> {
-                    state_accesses,
+                    raw_state_changes,
+                    mut uncommitted_changes,
                     storage,
                     rollup_height,
                     max_slot_number,
                     response_channel,
                     ..
                 } = request;
-
+                uncommitted_changes.push_front(raw_state_changes);
+                let state_accesses = uncommitted_changes.to_state_accesses();
                 // If the entry is in cache, check that the state root is consistent and return early
                 if let Some(cached_entry) = cached_results.get(&rollup_height) {
                     tracing::trace!(%rollup_height, "Known state root");
                     // If we're checking that the state roots are equal, we have some work to do.
                     let result = if check_state_roots {
                         cached_entry
-                            .assert_consistency(
+                            .assert_consistency::<Rt>(
                                 state_accesses,
                                 storage,
                                 rollup_height,
@@ -229,7 +280,7 @@ impl<S: Spec> StateRootBackgroundTaskState<S> {
                 };
 
                 // Compute the new root
-                let mut root = compute_state_root::<S>(
+                let mut root = compute_state_root::<S, Rt>(
                     state_accesses,
                     storage.clone(),
                     rollup_height,
@@ -238,7 +289,8 @@ impl<S: Spec> StateRootBackgroundTaskState<S> {
                 .await;
                 // Verify, that storage didn't become obsolete while computing state root.
                 // If so, use historical state root from the node as canonical one.
-                if let Some(fetched_root) = fetch_root_hash_if_stale::<S>(&storage, max_slot_number)
+                if let Some(fetched_root) =
+                    fetch_root_hash_if_stale::<S, Rt>(&storage, rollup_height)
                 {
                     if !user_roots_match(&root, &fetched_root) {
                         root = fetched_root;
@@ -288,87 +340,168 @@ impl<S: Spec> StateRootBackgroundTaskState<S> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, VecDeque};
-
-    use arbitrary::{Arbitrary, Unstructured};
-    use rand::rngs::StdRng;
-    use rand::{RngCore, SeedableRng};
+    use sov_db::config::RollupDbConfig;
     use sov_db::storage_manager::NomtStorageManager;
-    use sov_state::{OrderedReadsAndWrites, SlotKey};
+    use sov_mock_da::MockBlockHeader;
+    use sov_mock_da::MockDaSpec;
+    use sov_modules_api::capabilities::ChainState;
+    use sov_modules_api::StateCheckpoint;
+    use sov_modules_api::{KernelStateAccessor, VisibleSlotNumber};
+    use sov_rollup_interface::storage::HierarchicalStorageManager;
+    use sov_state::SlotKey;
+    use sov_state::StateUpdate;
     use sov_test_utils::storage::{
-        CommitingStorageManager, ForklessStorageManager, NonCommitingStorageManager,
-        SimpleNomtStorageManager, SimpleStorageManager,
+        ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
     };
-    use sov_test_utils::{MockDaSpec, TestHasher, TestNomtSpec, TestSpec, TestStorageSpec};
+    use sov_test_utils::{
+        generate_optimistic_runtime, TestHasher, TestNomtSpec, TestSpec, TestStorageSpec,
+    };
     use tokio::task::JoinHandle;
+
+    generate_optimistic_runtime!(TestRuntime <=);
 
     use super::*;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestSpec, _>(storage_manager).await;
+        new_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
+            storage_manager,
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestSpec, _>(storage_manager).await;
+        known_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
+            storage_manager,
+        )
+        .await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _>(storage_manager).await;
+        new_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager).await;
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_known_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _>(storage_manager).await;
+        known_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager).await;
     }
 
     // Helpers go below
-    fn writes_only_kernel() -> StateAccesses {
-        StateAccesses {
-            user: Default::default(),
-            kernel: OrderedReadsAndWrites {
-                ordered_reads: Vec::new(),
-                ordered_writes: vec![(
-                    SlotKey::from_slice(&b"kernel_key"[..]),
-                    Some(SlotValue::from(b"value_1".to_vec())),
-                )],
-            },
-        }
+    fn writes_only_kernel<S: Spec<Da = MockDaSpec>, Rt: Runtime<S>>(
+        storage: &S::Storage,
+    ) -> StateAccesses {
+        writes_only_kernel_with_height::<S, Rt>(
+            storage,
+            &MockBlockHeader::from_height(0),
+            &<S::Storage as Storage>::PRE_GENESIS_ROOT,
+        )
+        .to_state_accesses_for_sequencer_state_root_computation()
     }
 
-    fn sample_batch() -> StateAccesses {
-        StateAccesses {
-            user: OrderedReadsAndWrites {
-                ordered_reads: Vec::new(),
-                ordered_writes: vec![(
-                    SlotKey::from_slice(&b"user_key"[..]),
-                    Some(SlotValue::from(b"value_a".to_vec())),
-                )],
-            },
-            kernel: OrderedReadsAndWrites {
-                ordered_reads: Vec::new(),
-                ordered_writes: vec![(
-                    SlotKey::from_slice(&b"kernel_key"[..]),
-                    Some(SlotValue::from(b"value_2".to_vec())),
-                )],
-            },
+    fn writes_only_kernel_with_height<S: Spec<Da = MockDaSpec>, Rt: Runtime<S>>(
+        storage: &S::Storage,
+        header: &MockBlockHeader,
+        pre_state_root: &<S::Storage as Storage>::Root,
+    ) -> Arc<RawStateChanges> {
+        let mut rt = Rt::default();
+        let mut kernel = rt.kernel();
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
+        let mut state_with_partially_stale_heights =
+            KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
+        let height = header.height;
+        // Now that our state root computation relies on rollup heights and true slot numbers, we have to properly call the "synchronize_chain" method on each slot
+        if height == 0 {
+            kernel.test_only_set_rollup_height_for_genesis(&mut state_with_partially_stale_heights);
+        } else {
+            // Increment the rollup height so that our storage height tracking works correctly. This is required because we now rely on rollup heights rather than slot numbers.
+            kernel.synchronize_chain(
+                header,
+                pre_state_root,
+                &mut state_with_partially_stale_heights,
+            );
         }
+
+        let mut changes = checkpoint.to_raw_state_changes();
+        changes.kernel.set(
+            &SlotKey::from_slice(format!("kernel_key_{height}").as_bytes()),
+            SlotValue::from(b"value_1_{height}".to_vec()),
+        );
+        changes.kernel.set(
+            &SlotKey::from_slice(b"kernel_key_static"),
+            SlotValue::from(b"value_kernel_{height}".to_vec()),
+        );
+        changes.kernel.commit_revertable_storage_cache();
+        Arc::new(changes)
     }
 
-    fn start_background_task<S: Spec>() -> (
+    fn sample_batch<S: Spec<Da = MockDaSpec>, Rt: Runtime<S>>(
+        storage: &S::Storage,
+        pre_state_root: &<S::Storage as Storage>::Root,
+    ) -> Arc<RawStateChanges> {
+        let header = MockBlockHeader::from_height(1);
+        sample_batch_with_height::<S, Rt>(storage, &header, pre_state_root)
+    }
+
+    fn sample_batch_with_height<S: Spec<Da = MockDaSpec>, Rt: Runtime<S>>(
+        storage: &S::Storage,
+        header: &MockBlockHeader,
+        pre_state_root: &<S::Storage as Storage>::Root,
+    ) -> Arc<RawStateChanges> {
+        let mut rt = Rt::default();
+        let mut kernel = rt.kernel();
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
+        let mut state_with_partially_stale_heights =
+            KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
+        let height = header.height;
+        // Synchronize the slot number and rollup height so that our storage height tracking works correctly. This is required because we now rely on rollup heights rather than slot numbers.
+        kernel.synchronize_chain(
+            header,
+            pre_state_root,
+            &mut state_with_partially_stale_heights,
+        );
+        kernel.increment_rollup_height(
+            &mut state_with_partially_stale_heights,
+            VisibleSlotNumber::new_dangerous(1),
+        );
+        checkpoint.commit_revertable_storage_cache();
+        let mut changes = checkpoint.to_raw_state_changes();
+        changes.user.set(
+            &SlotKey::from_slice(b"user_key_static"),
+            SlotValue::from(b"value_user_{height}".to_vec()),
+        );
+        changes.user.set(
+            &SlotKey::from_slice(format!("user_key_{height}").as_bytes()),
+            SlotValue::from(b"value_a_{height}".to_vec()),
+        );
+        changes.kernel.set(
+            &SlotKey::from_slice(format!("kernel_key_{height}").as_bytes()),
+            SlotValue::from(b"value_2_{height}".to_vec()),
+        );
+        changes.user.set(
+            &SlotKey::from_slice(b"kernel_key_static"),
+            SlotValue::from(b"value_kernel_{height}".to_vec()),
+        );
+        changes.user.commit_revertable_storage_cache();
+        changes.kernel.commit_revertable_storage_cache();
+
+        Arc::new(changes)
+    }
+
+    fn start_background_task<S: Spec, Rt: Runtime<S>>() -> (
         StateRootBackgroundTaskState<S>,
         JoinHandle<()>,
         mpsc::Sender<()>,
     ) {
         let (shutdown_sender, shutdown_receiver) = mpsc::channel(1);
 
-        let (handle, task) = StateRootBackgroundTaskState::<S>::create(shutdown_receiver, true);
+        let (handle, task) =
+            StateRootBackgroundTaskState::<S>::create::<Rt>(shutdown_receiver, true);
 
         (task, handle, shutdown_sender)
     }
@@ -376,14 +509,16 @@ mod tests {
     async fn get_root_from_background_task<S: Spec>(
         task: &StateRootBackgroundTaskState<S>,
         storage: S::Storage,
-        state_accesses: StateAccesses,
+        raw_state_changes: Arc<RawStateChanges>,
+        uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         rollup_height: RollupHeight,
         slot_number: SlotNumber,
     ) -> <S::Storage as Storage>::Root {
         let (response_channel, response_receiver) = oneshot::channel();
         task.request_sender
             .send(StateRootComputeRequest {
-                state_accesses,
+                raw_state_changes,
+                uncommitted_changes,
                 storage,
                 rollup_height,
                 max_slot_number: slot_number,
@@ -403,18 +538,19 @@ mod tests {
     }
 
     // Start a background task, sender compute request, shutdown, return root computed.
-    async fn one_off_check_state_root_computation<S: Spec>(
+    async fn one_off_check_state_root_computation<S: Spec, Rt: Runtime<S>>(
         storage: S::Storage,
-        state_accesses: StateAccesses,
+        state_accesses: Arc<RawStateChanges>,
         rollup_height: RollupHeight,
         slot_number: SlotNumber,
     ) -> <S::Storage as Storage>::Root {
-        let (task, handle, shutdown_sender) = start_background_task::<S>();
+        let (task, handle, shutdown_sender) = start_background_task::<S, Rt>();
 
         let received_root = get_root_from_background_task::<S>(
             &task,
             storage,
             state_accesses,
+            SequencerStateChanges::default(),
             rollup_height,
             slot_number,
         )
@@ -425,14 +561,14 @@ mod tests {
         received_root
     }
 
-    fn genesis<S, Sm>(storage_manager: &mut Sm)
+    fn genesis<S, Sm, Rt: Runtime<S>>(storage_manager: &mut Sm)
     where
-        S: Spec,
+        S: Spec<Da = MockDaSpec>,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,
     {
         let node_storage = storage_manager.create_prover_storage();
-        let writes_on_the_node = writes_only_kernel();
+        let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
         let prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
         let (node_new_root, changes) = node_storage
             .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
@@ -440,32 +576,40 @@ mod tests {
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
     }
 
-    async fn new_rollup_height_state_root_on_stale_storage<S, Sm>(mut storage_manager: Sm)
-    where
-        S: Spec,
+    async fn new_rollup_height_state_root_on_stale_storage<S, Sm, Rt: Runtime<S>>(
+        mut storage_manager: Sm,
+    ) where
+        S: Spec<Da = MockDaSpec>,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,
         <S::Storage as Storage>::Root: Copy,
     {
-        genesis::<S, Sm>(&mut storage_manager);
+        genesis::<S, Sm, Rt>(&mut storage_manager);
 
         let node_storage = storage_manager.create_prover_storage();
-        let writes_on_the_node = sample_batch();
+        let prev_root = node_storage
+            .get_root_hash(node_storage.latest_version())
+            .unwrap();
+        let writes_on_the_node = sample_batch::<S, Rt>(&node_storage, &prev_root);
 
         let prev_root = node_storage
             .get_root_hash(node_storage.latest_version())
             .unwrap();
         let (node_new_root, changes) = node_storage
-            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
+            .compute_state_update(
+                writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
+                &Default::default(),
+                prev_root,
+            )
             .unwrap();
 
         // Important detail: storage for the background task is created before node changes are committed.
         let storage_for_background = storage_manager.create_prover_storage();
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
 
-        let task_new_root = one_off_check_state_root_computation::<S>(
+        let task_new_root = one_off_check_state_root_computation::<S, Rt>(
             storage_for_background,
-            sample_batch(),
+            writes_on_the_node,
             RollupHeight::new(1),
             SlotNumber::new(1),
         )
@@ -474,314 +618,262 @@ mod tests {
         assert_eq!(node_new_root, task_new_root);
     }
 
-    async fn known_rollup_height_state_root_on_stale_storage<S, Sm>(mut storage_manager: Sm)
-    where
-        S: Spec,
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_nomt_known_rollup_height_state_root_on_stale_storage_with_deep_jumps() {
+        let path = tempfile::tempdir().unwrap();
+        let storage_manager = NomtStorageManager::<MockDaSpec, TestHasher, _>::new(
+            RollupDbConfig::default_in_path(path.path().to_path_buf()),
+        )
+        .unwrap();
+        known_rollup_height_state_root_on_stale_storage_with_deep_jumps::<
+            TestNomtSpec,
+            _,
+            TestRuntime<TestNomtSpec>,
+        >(storage_manager)
+        .await;
+    }
+
+    struct BlockInfo<S: Spec> {
+        header: MockBlockHeader,
+        raw_state_changes: Arc<RawStateChanges>,
+        // materialized_changes: Option<<S::Storage as Storage>::ChangeSet>,
+        state_root: <S::Storage as Storage>::Root,
+        sequencer_storages: Vec<S::Storage>,
+        uncommitted_changes: SequencerStateChanges<Hasher<S>>,
+        rollup_height: RollupHeight,
+        slot_number: SlotNumber,
+    }
+
+    /// This test checks that the state root computation is correct even when the storage becomes very stale.
+    ///
+    /// It does this by creating a sequence of 10 slots, where half contain rollup blocks and half are empty.
+    /// It then commits the first block and computes the state root for each of the sequencer storages.
+    /// It then commits the next block and computes the state root for each of the sequencer storages.
+    /// It repeats this process until all of the blocks have been committed.
+    ///
+    /// This checks that stale storage is handled correctly, even when it becomes *very* stale. (For example, the storage we created for block 1 should still compute the correct root after block 10 has been written to disk.)
+    async fn known_rollup_height_state_root_on_stale_storage_with_deep_jumps<
+        S,
+        Sm,
+        Rt: Runtime<S>,
+    >(
+        mut storage_manager: Sm,
+    ) where
+        S: Spec<Da = MockDaSpec>,
+        Sm: HierarchicalStorageManager<
+            MockDaSpec,
+            StfState = S::Storage,
+            StfChangeSet = <S::Storage as Storage>::ChangeSet,
+        >,
+        Sm::LedgerChangeSet: Default,
+        S::Storage: NativeStorage,
+        <S::Storage as Storage>::Root: Copy,
+    {
+        sov_test_utils::initialize_logging();
+        use sov_mock_da::MockBlockHeader;
+        use sov_state::ProvableNamespace;
+        // Run a mock genesis block:
+        let block_header = MockBlockHeader::from_height(0);
+        let (node_storage, _) = storage_manager.create_state_for(&block_header).unwrap();
+        let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
+        let mut prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
+        let (node_new_root, changes) = node_storage
+            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
+            .unwrap();
+        prev_root = node_new_root;
+        let to_commit = node_storage.materialize_changes(changes);
+        storage_manager
+            .save_change_set(&block_header, to_commit, Default::default())
+            .unwrap();
+        storage_manager.finalize(&block_header).unwrap();
+
+        let (task, _handle, _shutdown_sender) = start_background_task::<S, Rt>();
+
+        // Create a sequence of 10 slots, where half contain rollup blocks and half are empty:
+        let mut block_infos = Vec::new();
+        let mut uncommitted_changes = SequencerStateChanges::<Hasher<S>>::default();
+        for idx in 1..10 {
+            let header = MockBlockHeader::from_height(idx as u64);
+            let (storage, _) = storage_manager.create_state_for(&header).unwrap();
+
+            let raw_state_changes = if idx % 2 == 1 {
+                let changes = sample_batch_with_height::<S, Rt>(&storage, &header, &prev_root);
+                if idx != 1 {
+                    uncommitted_changes.push_front(changes.clone());
+                }
+                changes
+            } else {
+                writes_only_kernel_with_height::<S, Rt>(&storage, &header, &prev_root)
+            };
+            println!(
+                "Computing next update (version {}, rollup height {}). Passing prev root: {:?}",
+                idx,
+                RollupHeight::new(((idx + 1) / 2) as u64),
+                prev_root
+            );
+            let (state_root, mut changes) = storage
+                .compute_state_update(
+                    raw_state_changes.to_state_accesses_for_sequencer_state_root_computation(),
+                    &Default::default(),
+                    prev_root,
+                )
+                .unwrap();
+            changes.add_accessory_items(
+                raw_state_changes
+                    .accessory
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.value.clone()))
+                    .collect(),
+            );
+            let materialized_changes = storage.materialize_changes(changes);
+
+            storage_manager
+                .save_change_set(&header, materialized_changes, Default::default())
+                .unwrap();
+            prev_root = state_root;
+
+            block_infos.push(BlockInfo::<S> {
+                header,
+                raw_state_changes,
+                state_root,
+                sequencer_storages: Vec::new(),
+                uncommitted_changes: uncommitted_changes.clone(),
+                rollup_height: RollupHeight::new(((idx + 1) / 2) as u64),
+                slot_number: SlotNumber::new_dangerous(idx as u64),
+            });
+        }
+
+        for block_info in block_infos.iter_mut() {
+            for _ in 0..10 {
+                block_info.sequencer_storages.push(
+                    storage_manager
+                        .create_state_after(&block_info.header)
+                        .unwrap()
+                        .0,
+                );
+            }
+        }
+
+        // Iterate over the block infos and do an initial state root computation for each block info using the first sequencer storage and the uncommitted changes
+        for block_info in block_infos.iter_mut() {
+            let received_root: <S::Storage as Storage>::Root = get_root_from_background_task::<S>(
+                &task,
+                block_info.sequencer_storages.pop().unwrap(),
+                block_info.raw_state_changes.clone(),
+                block_info.uncommitted_changes.clone(),
+                block_info.rollup_height,
+                block_info.slot_number,
+            )
+            .await;
+            // For some reason type inferece fails if we use `assert_eq!` here
+            if received_root.namespace_root(ProvableNamespace::User)
+                != block_info
+                    .state_root
+                    .namespace_root(ProvableNamespace::User)
+            {
+                panic!("State root mismatch at rollup height {} and slot number {}. Node root: {}, Received root: {}", block_info.rollup_height, block_info.slot_number, block_info.state_root, received_root);
+            }
+        }
+
+        // Now we'll run a loop of...
+        // - Commit the next block info, making one more set of sequencer storages become stale.
+        // - Iterate over all of the seqeuncer storages and compute the state root for each one. Make sure that they get the correct value
+        //
+        // This checks that stale storage is handled correctly, even when it becomes *very* stale. (For example, the storage we created for block 1 should still compute the correct root after block 10 has been written to disk.)
+        for i in 0..block_infos.len() {
+            storage_manager.finalize(&block_infos[i].header).unwrap();
+
+            for block_info in block_infos.iter_mut() {
+                let mut uncommitted_changes = block_info.uncommitted_changes.clone();
+                uncommitted_changes.prune_changes_through(1);
+
+                let received_root: <S::Storage as Storage>::Root =
+                    get_root_from_background_task::<S>(
+                        &task,
+                        block_info.sequencer_storages.pop().unwrap(),
+                        block_info.raw_state_changes.clone(),
+                        block_info.uncommitted_changes.clone(),
+                        block_info.rollup_height,
+                        block_info.slot_number,
+                    )
+                    .await;
+                // For some reason type inference fails if we use `assert_eq!` here
+                if received_root.namespace_root(ProvableNamespace::User)
+                    != block_info
+                        .state_root
+                        .namespace_root(ProvableNamespace::User)
+                {
+                    panic!("State root mismatch at rollup height {} and slot number {}. Node root: {}, Received root: {}", block_info.rollup_height, block_info.slot_number, block_info.state_root, received_root);
+                }
+            }
+        }
+    }
+
+    async fn known_rollup_height_state_root_on_stale_storage<S, Sm, Rt: Runtime<S>>(
+        mut storage_manager: Sm,
+    ) where
+        S: Spec<Da = MockDaSpec>,
         Sm: ForklessStorageManager<Storage = S::Storage>,
         S::Storage: NativeStorage,
         <S::Storage as Storage>::Root: Copy,
     {
         // Genesis
-        genesis::<S, Sm>(&mut storage_manager);
+        genesis::<S, Sm, Rt>(&mut storage_manager);
 
         // Starting background task
-        let (task, handle, shutdown_sender) = start_background_task::<S>();
+        let (task, handle, shutdown_sender) = start_background_task::<S, Rt>();
 
         let node_storage = storage_manager.create_prover_storage();
-        let writes_on_the_node = sample_batch();
-        let rollup_height = RollupHeight::new(1);
-        let slot_number = SlotNumber::new(1);
         let prev_root = node_storage
             .get_root_hash(node_storage.latest_version())
             .unwrap();
+        let writes_on_the_node = sample_batch::<S, Rt>(&node_storage, &prev_root);
+        let rollup_height = RollupHeight::new(1);
+        let slot_number = SlotNumber::new(1);
+        tracing::info!(%rollup_height, %slot_number, "Computing node state root");
         let (node_new_root, changes) = node_storage
-            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
+            .compute_state_update(
+                writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
+                &Default::default(),
+                prev_root,
+            )
             .unwrap();
 
         let storage_for_background_1 = storage_manager.create_prover_storage();
         let storage_for_background_2 = storage_manager.create_prover_storage();
 
+        tracing::info!(%rollup_height, %slot_number, "Computing state root from background task 1");
         // Normal, not stalled
         let received_root_1 = get_root_from_background_task::<S>(
             &task,
             storage_for_background_1,
-            sample_batch(),
+            writes_on_the_node.clone(),
+            Default::default(),
             rollup_height,
             slot_number,
         )
         .await;
 
+        tracing::info!(%rollup_height, %slot_number, "Committing state update");
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
+        tracing::info!(%rollup_height, %slot_number, "Committed state update");
 
-        let received_root_2 = get_root_from_background_task::<S>(
-            &task,
-            storage_for_background_2,
-            sample_batch(),
-            rollup_height,
-            slot_number,
-        )
-        .await;
+        tracing::info!(%rollup_height, %slot_number, "Computing state root from background task 2");
+        let received_root_2: <<S as Spec>::Storage as Storage>::Root =
+            get_root_from_background_task::<S>(
+                &task,
+                storage_for_background_2,
+                writes_on_the_node.clone(),
+                Default::default(),
+                rollup_height,
+                slot_number,
+            )
+            .await;
 
         assert_eq!(node_new_root, received_root_1);
         assert_eq!(received_root_1, received_root_2);
 
         shutdown_sender.try_send(()).unwrap();
         handle.await.unwrap();
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_state_compute_competing_storages_repro() {
-        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
-        test_compute_competing_storages::<TestSpec, _>(storage_manager, 3).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_nomt_state_compute_competing_storages_repro() {
-        let mut storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
-        storage_manager.set_strict_mode(false);
-        test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 3).await;
-
-        let mut storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
-        storage_manager.set_strict_mode(false);
-        test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 1).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_nomt_state_compute_competing_storages_repro_real_storage_manager() {
-        sov_test_utils::logging::initialize_or_change_logging_with_filter("error,sov_sequencer::preferred=trace,sov_db::state_db_nomt=trace,sov_state::nomt::prover_storage=debug");
-        let storage_manager =
-            CommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-        test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 3).await;
-        let storage_manager =
-            CommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-        test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 1).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "Fails because of https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/3030"]
-    async fn test_nomt_state_compute_competing_storages_repro_real_storage_manager_non_commiting() {
-        let storage_manager =
-            NonCommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-        test_compute_competing_storages::<TestNomtSpec, _>(storage_manager, 3).await;
-    }
-
-    /// Test is an isolated scenario of sequencer and node interaction, where only 2 pieces are real:
-    /// 1. Storage.
-    /// 2. Background task for computing state update
-    ///
-    /// Scenario:
-    ///    The test generates a number of batches, where each batch contains state writes in both namespaces.
-    ///    The background task then re-executes each batch multiple times:
-    ///    first individually, and then as part of larger batches where writes from consecutive batches are merged together.
-    ///
-    /// This tests the consistency of state root computation when the same logical state changes
-    /// are applied in different batch configurations, which can happen when a sequencer runs ahead
-    /// of the node's committed state or the node runs ahead.
-    async fn test_compute_competing_storages<S, Sm>(mut storage_manager: Sm, seq_ahead_by: usize)
-    where
-        S: Spec,
-        Sm: ForklessStorageManager<Storage = S::Storage>,
-        S::Storage: NativeStorage,
-        <S::Storage as Storage>::Root: Copy,
-    {
-        assert!(seq_ahead_by > 0, "Test only works with seq_ahead_by > 0");
-        let _ahead_by_span =
-            tracing::debug_span!("competing_storages", seq_ahead_by = seq_ahead_by).entered();
-        genesis::<S, Sm>(&mut storage_manager);
-        let preparation_start = std::time::Instant::now();
-        let (task, handle, shutdown_sender) = start_background_task::<S>();
-        // Double it to fill the channel
-        const BLOCKS: usize = NUM_STATE_ROOT_COMPUTE_REQUESTS * 2;
-
-        let mut receivers = Vec::with_capacity(BLOCKS);
-        // First, build some "batches", which just writes only StateAccesses.
-        // Those batches are going to be consumed by the node
-        let batches = generate_test_batches(BLOCKS);
-        let mut canonical_root_hashes = Vec::with_capacity(BLOCKS);
-        let mut sequencer_cumulative_accesses = Vec::with_capacity(BLOCKS);
-
-        // Then building cumulative batches for sequencer.
-        // Each iteration(block) contains `seq_ahead_by` number of cumulative batches.
-        // The first cumulative batch has only data from `block - seq_ahead_by`,
-        // The second contains data from the first + data from the next, etc.
-        for seq_idx in 0..BLOCKS {
-            let start = seq_idx.saturating_sub(seq_ahead_by);
-            let end = seq_idx;
-
-            let range = start..end;
-            let cumulative_accesses = cumulative_accesses_between_batches(&batches[range.clone()]);
-            sequencer_cumulative_accesses.push(cumulative_accesses);
-        }
-        let mut batches: VecDeque<StateAccesses> = batches.into();
-        tracing::info!(time = ?preparation_start.elapsed(), "Preparation is completed");
-
-        //
-        for (seq_idx, seq_batches) in sequencer_cumulative_accesses.into_iter().enumerate() {
-            // Sequencer has received data and wants to compute state roots
-            let start = seq_idx.saturating_sub(seq_ahead_by);
-            let end = seq_idx;
-            let range = start..end;
-            let sequencer_storage = storage_manager.create_api_storage();
-            let mut sent = 0;
-            for (idx, cumulative_batch) in range.zip(seq_batches.into_iter()) {
-                let rollup_height = RollupHeight::new(idx as u64 + 1);
-                let slot_number = SlotNumber::new(idx as u64 + 1);
-                tracing::info!(%rollup_height, "sequencer iteration");
-
-                let (response_channel, response_receiver) = oneshot::channel();
-                task.request_sender
-                    .send(StateRootComputeRequest {
-                        state_accesses: cumulative_batch,
-                        storage: sequencer_storage.clone(),
-                        rollup_height,
-                        max_slot_number: slot_number,
-                        response_channel,
-                    })
-                    .await
-                    .unwrap();
-                tracing::info!("sent state root compute request");
-                sent += 1;
-                receivers.push(response_receiver);
-            }
-            tracing::info!(%seq_idx, %sent, "All state root compute requests this iteration has been sent");
-            // Emulates part where node receives something from the DA layer, executes it and commits
-            if let Some(idx_for_node) = seq_idx.checked_sub(seq_ahead_by) {
-                let start = std::time::Instant::now();
-                let rollup_height = idx_for_node + 1;
-                let _node_state_compute_span = tracing::debug_span!(
-                    "compute_state_update",
-                    scope = "node-like",
-                    rollup_height,
-                )
-                .entered();
-                let node_batch = batches.pop_front().unwrap();
-                let node_storage = storage_manager.create_prover_storage();
-                let prev_root = node_storage
-                    .get_root_hash(node_storage.latest_version())
-                    .unwrap();
-                let (node_new_root, changes) = node_storage
-                    .compute_state_update(node_batch, &Default::default(), prev_root)
-                    .unwrap();
-                canonical_root_hashes.push(node_new_root);
-                storage_manager.commit_state_update(node_storage, changes, node_new_root);
-                tracing::info!(
-                    root_hash = %node_new_root,
-                    %rollup_height,
-                    time = ?start.elapsed(),
-                    "commited state update");
-            }
-        }
-
-        // Validating the results
-        let mut results = BTreeMap::<RollupHeight, <S::Storage as Storage>::Root>::new();
-        for receiver in receivers {
-            let (height, root_hash) = receiver.await.unwrap();
-            if let Some(previous) = results.insert(height, root_hash) {
-                assert!(
-                    user_roots_match(&previous, &root_hash),
-                    "Received different user roots for the same height {height}"
-                );
-            };
-        }
-
-        let received_keys = results.keys().cloned().collect::<Vec<_>>();
-        // The first block is empty, thus 1 less root hash
-        let expected_keys = (1..BLOCKS)
-            .map(|i| RollupHeight::new(i as u64))
-            .collect::<Vec<_>>();
-        assert_eq!(received_keys, expected_keys);
-
-        for ((rollup_height, received_root_hash), canonical_root_hash) in
-            results.iter().zip(canonical_root_hashes.iter())
-        {
-            assert!(
-                user_roots_match(received_root_hash, canonical_root_hash),
-                "Received different user roots for the same height {rollup_height}"
-            );
-        }
-
-        shutdown_sender.try_send(()).unwrap();
-        handle.await.unwrap();
-    }
-
-    fn generate_test_batches(number: usize) -> Vec<StateAccesses> {
-        let mut batches = Vec::with_capacity(number);
-        let mut rng_seed = [11u8; 32];
-        for _ in 0..number {
-            let rng = &mut StdRng::from_seed(rng_seed);
-            let mut unstructured_seed = [0u8; 500_000];
-            rng.fill_bytes(&mut unstructured_seed);
-            let mut u = Unstructured::new(&unstructured_seed);
-
-            let batch = StateAccesses::arbitrary(&mut u).unwrap();
-            batches.push(batch);
-
-            rng_seed = unstructured_seed[0..32].try_into().unwrap();
-        }
-
-        batches
-    }
-
-    /// Assembles separate batches into cumulative state accesses.
-    /// Let's say batches have accesses A, B, C.
-    /// Resulting vector will have, A, A+B, A+B+C.
-    /// In the case of identical keys, keys from last accesses are used.
-    fn cumulative_accesses_between_batches(batches: &[StateAccesses]) -> Vec<StateAccesses> {
-        let mut cumulative_user_writes: HashMap<SlotKey, Option<SlotValue>> = HashMap::new();
-        let mut cumulative_kernel_writes: HashMap<SlotKey, Option<SlotValue>> = HashMap::new();
-
-        let mut result = Vec::new();
-
-        for batch in batches {
-            let StateAccesses { user, kernel } = batch.clone();
-            for (user_key, user_value) in user.ordered_writes {
-                cumulative_user_writes.insert(user_key, user_value);
-            }
-            for (kernel_key, kernel_value) in kernel.ordered_writes {
-                cumulative_kernel_writes.insert(kernel_key, kernel_value);
-            }
-
-            let cumulative_accesses = state_accesses_from_cumulative_writes(
-                &cumulative_user_writes,
-                &cumulative_kernel_writes,
-            );
-            result.push(cumulative_accesses);
-        }
-
-        result
-    }
-
-    fn state_accesses_from_cumulative_writes(
-        cumulative_user_writes: &HashMap<SlotKey, Option<SlotValue>>,
-        cumulative_kernel_writes: &HashMap<SlotKey, Option<SlotValue>>,
-    ) -> StateAccesses {
-        let mut cumulative_accesses = StateAccesses {
-            user: OrderedReadsAndWrites {
-                ordered_reads: Vec::new(),
-                ordered_writes: cumulative_user_writes
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
-            },
-            kernel: OrderedReadsAndWrites {
-                ordered_reads: Vec::new(),
-                ordered_writes: cumulative_kernel_writes
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
-            },
-        };
-
-        // Sort them for better readability.
-        cumulative_accesses
-            .user
-            .ordered_writes
-            .sort_by_key(|(k, _v)| k.clone());
-        cumulative_accesses
-            .kernel
-            .ordered_writes
-            .sort_by_key(|(k, _v)| k.clone());
-
-        cumulative_accesses
     }
 }

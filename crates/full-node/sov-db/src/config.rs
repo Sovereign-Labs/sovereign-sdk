@@ -145,9 +145,8 @@ impl RollupDbConfig {
         opts
     }
 
-    pub(crate) fn get_pruner_interval(&self) -> u64 {
+    pub(crate) fn get_pruner_interval(&self) -> Option<u64> {
         self.pruner_block_interval
-            .expect("`pruner_block_interval` must be set")
     }
 
     pub(crate) fn get_pruner_versions_to_keep(&self) -> usize {

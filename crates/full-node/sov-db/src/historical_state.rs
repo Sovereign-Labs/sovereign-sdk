@@ -158,6 +158,22 @@ impl HistoricalStateReader {
         Ok(self.user.get_latest_borrowed(key)?.flatten())
     }
 
+    /// Get the very latest version of the given key from the database.
+    pub fn get_user_value_option_by_key_unbound(
+        &self,
+        key: &SchemaKey,
+    ) -> anyhow::Result<Option<SchemaValue>> {
+        Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
+    }
+
+    /// Get the very latest version of the given key from the database.
+    pub fn get_kernel_value_option_by_key_unbound(
+        &self,
+        key: &SchemaKey,
+    ) -> anyhow::Result<Option<SchemaValue>> {
+        Ok(self.kernel.get_latest_borrowed_unbound(key)?.flatten())
+    }
+
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_user_value_option_by_key_historical(
         &self,

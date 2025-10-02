@@ -147,4 +147,11 @@ pub trait ChainState {
         &self,
         state: &mut impl AccessoryStateReaderAndWriter,
     ) -> Option<<<Self::Spec as Spec>::Storage as Storage>::Root>;
+
+    /// This method is used for testing only. It sets the rollup height to zero.
+    #[cfg(feature = "native")]
+    fn test_only_set_rollup_height_for_genesis(
+        &mut self,
+        state: &mut KernelStateAccessor<'_, Self::Spec>,
+    );
 }

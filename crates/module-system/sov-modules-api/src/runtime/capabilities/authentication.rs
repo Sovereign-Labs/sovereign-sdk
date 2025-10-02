@@ -44,7 +44,7 @@ pub struct BatchFromUnregisteredSequencer {
 /// Typically, the authentication will require checking the signature of the transaction.
 pub trait TransactionAuthenticator<S: Spec> {
     /// The "message" that is extracted from the transaction and passed to the runtime for execution.
-    type Decodable;
+    type Decodable: Send;
 
     /// The input to the authenticator
     type Input: BorshDeserialize + BorshSerialize + Clone + std::fmt::Debug + Send + Sync + 'static;

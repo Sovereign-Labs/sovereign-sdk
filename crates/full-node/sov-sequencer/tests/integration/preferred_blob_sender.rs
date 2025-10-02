@@ -111,6 +111,7 @@ async fn test_discard_oversized_blobs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_blobs_are_send_after_rollup_resync() {
+    sov_test_utils::initialize_logging();
     let (test_rollup, _) = create_test_rollup().await;
     let da = test_rollup.da_service.clone();
     let mut header_subscrition = da.subscribe_finalized_header().await.unwrap();

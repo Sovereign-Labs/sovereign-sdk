@@ -22,6 +22,9 @@ pub use tracker::{
 
 pub(crate) type SerializableMetric = Box<dyn Metric>;
 
+/// Count of metrics that have been dropped.
+pub(crate) static DROPPED_METRICS_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 /// Struct for tracking Sovereign metrics.
 ///
 /// Hides underlying monitoring system implementation.
@@ -43,6 +46,21 @@ pub trait Metric: Send + Sync + std::fmt::Debug {
     #[cfg(feature = "gas-constant-estimation")]
     fn write_to_csv(&self, _writers: &mut csv_helper::CsvWriters) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+impl Metric for Box<dyn Metric> {
+    fn measurement_name(&self) -> &'static str {
+        self.as_ref().measurement_name()
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        self.as_ref().serialize_for_telegraf(buffer)
+    }
+
+    #[cfg(feature = "gas-constant-estimation")]
+    fn write_to_csv(&self, writers: &mut csv_helper::CsvWriters) -> std::io::Result<()> {
+        self.as_ref().write_to_csv(writers)
     }
 }
 
@@ -85,15 +103,15 @@ pub fn safe_telegraf_string(string: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-    use std::str::FromStr;
-
     use super::*;
     use crate::influxdb::config::TelegrafSocketConfig;
     use crate::influxdb::publisher::{
         metrics_publisher_task, receive_with_timeout, spawn_metrics_udp_receiver,
     };
     use crate::influxdb::tracker::timestamp;
+    use std::io::Write;
+    use std::str::FromStr;
+    use tokio::sync::watch;
 
     /// Starts publisher tasks and checks that tracker pushes all required metrics
     #[tokio::test(flavor = "multi_thread")]
@@ -107,11 +125,13 @@ mod tests {
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
+        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
+        shutdown_receiver.mark_unchanged();
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config).await;
+            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
         });
 
         let tracker = MetricsTracker { sender };
@@ -201,10 +221,12 @@ mod tests {
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
+        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
+        shutdown_receiver.mark_unchanged();
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config).await;
+            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
         });
 
         let tracker = MetricsTracker { sender };

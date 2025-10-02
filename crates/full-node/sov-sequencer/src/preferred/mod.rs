@@ -76,7 +76,7 @@ use crate::{
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
 
-// Big infodump for the user that wouldmake the code hard to read if it were inline.
+// Big info dump for the user that would make the code hard to read if it were inline.
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
 
 /// A [`Sequencer`] with instant transaction confirmation.
@@ -101,7 +101,6 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
-    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -131,6 +130,7 @@ where
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
         let da_address = da.get_signer().await;
+
         debug!(
             ?latest_state_update,
             %da_address,
@@ -191,7 +191,7 @@ where
         }
 
         let (state_root_compute_handle, state_root_compute_task) =
-            StateRootBackgroundTaskState::create(
+            StateRootBackgroundTaskState::create::<Rt>(
                 block_executors_shutdown_rx,
                 !config
                     .sequencer_kind_config
@@ -280,7 +280,6 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
-            cache_warm_up_executor,
         });
 
         // Launch replica sync task only for replicas
@@ -851,7 +850,6 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
-        self.cache_warm_up_executor.send_tx(baked_tx.clone());
 
         let res = self
             .synchronized_state_updator
@@ -862,7 +860,7 @@ where
             Ok(rx) => rx.await.map_err(database_error_500),
             Err(e) => match e {
                 AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503());
+                    return Err(sequencer_overloaded_503("Other"));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))
@@ -872,7 +870,7 @@ where
                     nb_of_concurrent_blob_submissions,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
-                        return Err(sequencer_overloaded_503());
+                        return Err(sequencer_overloaded_503("No finalized slots available"));
                     }
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
@@ -1089,15 +1087,28 @@ fn err_cant_fit_tx(current_batch_size: usize, max_batch_size: usize, tx_len: usi
     }
 }
 
-pub(crate) async fn exit_rollup(shutdown_sender: &watch::Sender<()>) {
+#[track_caller]
+pub(crate) fn exit_rollup(
+    shutdown_sender: &watch::Sender<()>,
+) -> impl std::future::Future<Output = ()> {
+    let location = std::panic::Location::caller();
+    exit_rollup_inner(shutdown_sender.clone(), location)
+}
+
+async fn exit_rollup_inner(
+    shutdown_sender: watch::Sender<()>,
+    location: &'static std::panic::Location<'static>,
+) {
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
     if shutdown_sender.send(()).is_err() {
-        tracing::error!("Failed to send shutdown signal");
+        tracing::error!("Failed to send shutdown signal: {location}");
     }
     sleep(Duration::from_secs(5)).await;
-    tracing::info!("Calling std::process::exit(1).");
+    let msg = format!("Calling std::process::exit(1): {location}");
+    tracing::error!(msg);
+    println!("{msg}");
     std::process::exit(1);
 }
 
@@ -1111,9 +1122,9 @@ pub enum BatchCreationError {
     #[error("Internal database error; batch could not be created. Error: {0}")]
     DatabaseError(anyhow::Error),
     /// The sequencer was not able to start a batch because it has consumed its whole buffer of finalized slots.
-    #[error("The sequencer is temporarily overloaded. Try again in a few seconds")]
+    #[error("The sequencer is temporarily overloaded (No finalized slots available). Try again in a few seconds")]
     NoFinalizedSlotAvailable,
-    /// The prefered sequencer has reached the stop height and is no longer creating new batches.
+    /// The preferred sequencer has reached the stop height and is no longer creating new batches.
     #[error(
         "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}"
     )]

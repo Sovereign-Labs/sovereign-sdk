@@ -433,7 +433,9 @@ where
 
     let mut clean_scratchpad = checkpoint.to_tx_scratchpad();
 
-    for (idx, (raw_tx, injected_control_flow)) in batch_with_id.enumerate() {
+    for (idx, (raw_tx, mut injected_control_flow)) in batch_with_id.enumerate() {
+        injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
+
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.
         // The caller is responsible for maintaining the global gas limit.
         let AuthAndProcessOutput {

@@ -266,13 +266,15 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
 
     for _ in 0..sov_blob_sender::MAX_NB_OF_BLOB_SUBMISSION_RETRIES {
         let (_, log) = records.remove(0);
-        assert!(log.contains(
-            "BlobSender: elapsed time for blob submission exceeded the resubmit interval."
-        ));
+        assert!(log.contains("BlobSender: elapsed time for blob processing exceeded the timeout."));
     }
 
     let (_, log) = records.remove(0);
-    assert!(log.contains("Shutting down the rollup. Blob submission failed."));
+    let pattern = "Shutting down the rollup. Blob processing wasn't completed on time.";
+    assert!(
+        log.contains(pattern),
+        "Pattern '{pattern}' not found in '{log}'"
+    );
     Ok(())
 }
 
