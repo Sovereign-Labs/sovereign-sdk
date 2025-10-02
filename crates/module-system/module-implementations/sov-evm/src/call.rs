@@ -221,7 +221,7 @@ where
         let gas_used = result.gas_used()
             + match gas_metering_mode() {
                 GasMeteringMode::Rollup => self.sequencer_gas_used(state),
-                GasMeteringMode::EVM => 0,
+                GasMeteringMode::Evm => 0,
             };
         let logs = result.into_logs();
         let transaction_hash = *tx.signed_transaction.hash();

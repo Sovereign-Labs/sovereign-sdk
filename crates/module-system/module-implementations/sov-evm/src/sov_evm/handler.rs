@@ -49,7 +49,7 @@ where
         self.validate_env(evm)?;
         match gas_metering_mode() {
             GasMeteringMode::Rollup => Ok(InitialAndFloorGas::new(0, 0)), // We disable charging initial gas
-            GasMeteringMode::EVM => self.validate_initial_tx_gas(evm),
+            GasMeteringMode::Evm => self.validate_initial_tx_gas(evm),
         }
     }
 

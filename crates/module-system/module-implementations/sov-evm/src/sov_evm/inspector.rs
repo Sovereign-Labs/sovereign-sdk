@@ -29,7 +29,7 @@ where
             GasMeteringMode::Rollup => {
                 self.last_gas_remaining = Some(interp.gas.remaining());
             }
-            GasMeteringMode::EVM => (),
+            GasMeteringMode::Evm => (),
         }
     }
 
@@ -48,7 +48,7 @@ where
                     interp.gas.erase_cost(gas_cost);
                 }
             }
-            GasMeteringMode::EVM => (),
+            GasMeteringMode::Evm => (),
         }
     }
 }
