@@ -47,6 +47,11 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
 {
+    println!("");
+    println!("");
+    println!("");
+    println!("");
+    dbg!("====START=====");
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
@@ -76,12 +81,13 @@ where
         0
     };
     let start = std::time::Instant::now();
-    for _ in 0..retries {
+    for i in 0..retries {
         match uniqueness {
             UniquenessData::Nonce(nonce) => {
                 let expected_nonce = sov_uniqueness::Uniqueness::<S>::default()
                     .nonce(&credential_id, &mut state)?
                     .unwrap_or_default();
+
                 if nonce == expected_nonce {
                     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
                         to_jsonrpsee_error_object(
@@ -89,6 +95,7 @@ where
                             ETH_RPC_ERROR,
                         )
                     })?;
+                    //dbg!(i, start.elapsed().as_micros(), nonce, expected_nonce);
 
                     return on_success(tx_hash, ethereum);
                 } else if nonce < expected_nonce {

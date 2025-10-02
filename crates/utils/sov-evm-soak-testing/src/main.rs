@@ -16,7 +16,7 @@ mod uniswap;
 #[command(about = "EVM soak testing tool", long_about = None)]
 struct Args {
     /// RPC address
-    #[arg(short, long, default_value = "127.0.0.1:12346")]
+    #[arg(short, long, default_value = "127.0.0.1:12348")]
     rpc_addr: SocketAddr,
 
     /// Private key for signing transactions

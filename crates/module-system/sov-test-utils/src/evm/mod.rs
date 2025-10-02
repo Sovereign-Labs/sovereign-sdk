@@ -32,7 +32,7 @@ where
 {
     async fn submit(self) -> Result<()> {
         let _ = self.send().await?;
-        // let receipt = self.send().await?.get_receipt().await?;
+        //let receipt = self.send().await?.get_receipt().await?;
         // println!("{} {}", receipt.status(), receipt.gas_used());
         Ok(())
     }

@@ -827,6 +827,8 @@ where
         &self,
         baked_tx: FullyBakedTx,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        let start_accept_tx = std::time::Instant::now();
+
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down_error());
@@ -875,6 +877,9 @@ where
                 ));
             }
         };
+
+        let accept_tx_time = start_accept_tx.elapsed().as_micros();
+        dbg!(accept_tx_time);
 
         match res {
             Ok(rx) => rx.await.map_err(database_error_500),

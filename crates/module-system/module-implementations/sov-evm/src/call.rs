@@ -109,7 +109,7 @@ where
         #[cfg(feature = "native")]
         {
             sov_metrics::track_metrics(|t| {
-                t.submit(dbg!(db.metrics()));
+                t.submit(db.metrics());
             });
         }
 
@@ -146,6 +146,7 @@ where
         };
 
         save_elapsed!(total_time SINCE total);
+        dbg!(total_time);
         #[cfg(feature = "native")]
         {
             let metrics = EvmTxMetrics {
@@ -159,7 +160,7 @@ where
                 set_accessory_state_time,
             };
             sov_metrics::track_metrics(|t| {
-                t.submit(dbg!(metrics));
+                t.submit(metrics);
             });
         }
 

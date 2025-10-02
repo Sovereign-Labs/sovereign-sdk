@@ -30,6 +30,7 @@ where
     RT: Runtime<S>,
     I: StateProvider<S>,
 {
+    let apply_tx = std::time::Instant::now();
     let tx_result = attempt_tx(tx, message, ctx, runtime, &mut working_set);
     let (tx_scratchpad, receipt, transaction_consumption) = match tx_result {
         Ok(_) => {
@@ -81,6 +82,7 @@ where
         }
     };
 
+    dbg!(apply_tx.elapsed().as_micros());
     (
         ApplyTxResult::<S> {
             transaction_consumption,

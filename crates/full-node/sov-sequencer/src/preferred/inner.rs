@@ -1607,6 +1607,7 @@ where
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
+        let process_accept_tx = std::time::Instant::now();
 
         // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
         // we've effectively jumped the line
@@ -1624,6 +1625,7 @@ where
             .await
             .map_err(AcceptTxError::NotFullySynced)?;
 
+        dbg!(process_accept_tx.elapsed().as_micros());
         if let Err(batch_creation_error) = inner
             .try_to_create_and_start_batch_if_none_in_progress(false)
             .await
@@ -1639,6 +1641,8 @@ where
             });
         };
 
+        //dbg!(process_accept_tx.elapsed().as_micros());
+
         if inner.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(AcceptTxError::Shutdown);
@@ -1650,6 +1654,8 @@ where
                 &inner.executor.checkpoint, inner.latest_info
             );
         }
+
+        //dbg!(process_accept_tx.elapsed().as_micros());
 
         let sequence_number = inner.current_sequence_number();
         let Inner {
@@ -1669,7 +1675,13 @@ where
         }
 
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
+
+        //dbg!(process_accept_tx.elapsed().as_micros());
+        println!("apply_tx_to_in_progress_batch START");
+        let apply_tx_to_in_progress_batch = std::time::Instant::now();
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+        println!("apply_tx_to_in_progress_batch END");
+        dbg!(apply_tx_to_in_progress_batch.elapsed().as_micros());
 
         let (
             AcceptedTxWithBudgetInfo {
@@ -1697,7 +1709,11 @@ where
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
 
+        let close_batch = std::time::Instant::now();
+
         inner.close_batch_if_nearly_full(&remaining_slot_gas).await;
+        dbg!(close_batch.elapsed().as_micros());
+        dbg!(process_accept_tx.elapsed().as_micros());
 
         Ok(rx)
     }

@@ -85,8 +85,8 @@ async fn main() {
 
 async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
-    prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
-        .context("Prometheus exporter start failed")?;
+    //prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
+    //    .context("Prometheus exporter start failed")?;
 
     let rollup_config_path = args.rollup_config_path.as_str();
 
