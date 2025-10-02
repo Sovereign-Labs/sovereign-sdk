@@ -64,7 +64,13 @@ impl NodeClient {
     /// the required functionality.
     pub fn new_unchecked(api_url: &str) -> Self {
         let base_url = api_url.to_string();
-        let http_client = reqwest::Client::new();
+        // Configure HTTP client with explicit timeouts to avoid indefinite hangs and improve resiliency.
+        let http_client = reqwest::ClientBuilder::new()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(30))
+            .pool_idle_timeout(Duration::from_secs(30))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         let client = sov_api_spec::Client::new(api_url);
 
         NodeClient {
