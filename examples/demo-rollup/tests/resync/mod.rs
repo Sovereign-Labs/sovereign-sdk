@@ -119,8 +119,6 @@ async fn start_rollup(
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
             }
         })
-        // TODO: Remove this, seems like duplication
-        .set_persistent_da()
         .start(),
     )
     .await

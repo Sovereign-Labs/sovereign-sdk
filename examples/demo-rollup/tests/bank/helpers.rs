@@ -256,6 +256,10 @@ pub async fn start_test_rollup(
         OperatingMode::Operator => None,
         OperatingMode::Zk | OperatingMode::Optimistic => Some(RollupProverConfig::Skip),
     };
+    let disable_state_root_consistency_check = match &operating_mode {
+        OperatingMode::Operator => false,
+        OperatingMode::Zk | OperatingMode::Optimistic => true,
+    };
 
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(operating_mode),
@@ -268,13 +272,13 @@ pub async fn start_test_rollup(
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
-            sequencer_config.batch_execution_time_limit_millis =
-                TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * test_case.finalization_blocks as u64;
+            sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
+                * std::cmp::max(1, test_case.finalization_blocks as u64);
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
+            sequencer_config.disable_state_root_consistency_checks =
+                disable_state_root_consistency_check;
         }
     })
-    // TODO: Parametrize this, so operator rollup has it.
-    .disable_state_root_consistency_checks()
     .start()
     .await?;
 
