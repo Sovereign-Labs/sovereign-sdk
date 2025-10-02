@@ -85,14 +85,14 @@ pub(crate) enum GasMeteringMode {
     Rollup,
     /// EVM gas costs are resembling those on the mainnet.
     /// Useful to compute metrics like MGas/s.
-    EVM,
+    Evm,
 }
 
 impl From<&str> for GasMeteringMode {
     fn from(s: &str) -> Self {
         match s {
             "Rollup" => GasMeteringMode::Rollup,
-            "EVM" => GasMeteringMode::EVM,
+            "EVM" => GasMeteringMode::Evm,
             _ => panic!("Invalid EVM_GAS_METERING_MODE"),
         }
     }
