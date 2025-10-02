@@ -1,6 +1,11 @@
 use std::path::PathBuf;
 
-use alloy::{contract::SolCallBuilder, network::Network, providers::Provider, sol_types::SolCall};
+use alloy::{
+    contract::SolCallBuilder,
+    network::{Network, ReceiptResponse},
+    providers::Provider,
+    sol_types::SolCall,
+};
 use anyhow::Result;
 use ethers::contract::BaseContract;
 use ethers::core::abi::Abi;
@@ -27,6 +32,8 @@ where
 {
     async fn submit(self) -> Result<()> {
         let _ = self.send().await?;
+        // let receipt = self.send().await?.get_receipt().await?;
+        // println!("{} {}", receipt.status(), receipt.gas_used());
         Ok(())
     }
 }
