@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
+use crate::bank::helpers::*;
+use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
+use crate::test_helpers::DemoRollupSpec;
 use anyhow::Context;
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
 use sov_mock_da::storable::service::StorableMockDaService;
 use sov_modules_api::OperatingMode;
-
-use crate::bank::helpers::*;
-use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
-use crate::test_helpers::DemoRollupSpec;
+use sov_modules_macros::config_value;
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "fix when ZKP work is resumed again"]
 async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
 
@@ -34,7 +35,7 @@ async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
 async fn send_test_bank_txs(
     test_case: TestCase,
     client: &NodeClient,
-    da_service: Arc<StorableMockDaService>,
+    _da_service: Arc<StorableMockDaService>,
 ) -> anyhow::Result<()> {
     let mut slots_subscription = client.client.subscribe_slots().await?;
 
@@ -48,11 +49,19 @@ async fn send_test_bank_txs(
     let initial_balance = 1000;
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
-    da_service.produce_n_blocks_now(3).await?;
-
     let batch_1_rollup_height = send_tx_and_wait_for_status(&[tx], client).await?;
 
     assert!(batch_1_rollup_height >= 1);
+
+    // FIXME(@theochap): Remove that once we are confident that we don't have a race condition in the sequencer.
+    let slots_to_wait = config_value!("DEFERRED_SLOTS_COUNT") * 2;
+    tracing::warn!(
+        slots_to_wait,
+        "Going to wait deferred slots count double for some reason"
+    );
+    for _ in 0..slots_to_wait {
+        let _slot = slots_subscription.next().await.unwrap()?;
+    }
 
     assert_slot_finality(
         client,

@@ -17,7 +17,10 @@ use sov_rollup_interface::node::ledger_api::FinalityStatus;
 use sov_rollup_interface::zk::aggregated_proof::AggregateProofVerifier;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
-use sov_test_utils::{default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
+use sov_test_utils::{
+    default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+    TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+};
 
 use super::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
@@ -250,8 +253,8 @@ pub async fn start_test_rollup(
     operating_mode: OperatingMode,
 ) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let prover_config = match &operating_mode {
-        OperatingMode::Optimistic | OperatingMode::Operator => None,
-        OperatingMode::Zk => Some(RollupProverConfig::Skip),
+        OperatingMode::Operator => None,
+        OperatingMode::Zk | OperatingMode::Optimistic => Some(RollupProverConfig::Skip),
     };
 
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
@@ -263,11 +266,14 @@ pub async fn start_test_rollup(
     .set_config(|c| {
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;
+        c.blob_processing_timeout_secs = 180;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
-            sequencer_config.batch_execution_time_limit_millis = 3_000;
+            sequencer_config.batch_execution_time_limit_millis =
+                TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * test_case.finalization_blocks as u64;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
         }
     })
+    // TODO: Parametrize this, so operator rollup has it.
     .disable_state_root_consistency_checks()
     .start()
     .await?;

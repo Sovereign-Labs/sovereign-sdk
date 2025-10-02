@@ -1,6 +1,11 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
+use crate::utils::{
+    generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
+    tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
+    MAX_BATCH_EXECUTION_TIME_MILLIS,
+};
 use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
@@ -22,6 +27,7 @@ use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::execution_mode::Native;
+use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
 use sov_sequencer::StateUpdateNotification;
 use sov_test_modules::hooks_count::HooksCount;
@@ -43,12 +49,6 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
-
-use crate::utils::{
-    generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
-    tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
-    MAX_BATCH_EXECUTION_TIME_MILLIS,
-};
 const DELAYED_TX_DELAY_MS: u64 = 500;
 
 generate_optimistic_runtime_with_kernel!(
@@ -1727,14 +1727,14 @@ async fn sequencer_back_pressure() {
         .produce_n_blocks_now(warm_up_blocks)
         .await
         .unwrap();
-    for _ in 0..2 {
+    for _ in 0..warm_up_blocks {
         let _slot = slot_subscription.next().await.unwrap();
     }
 
     let client = test_rollup.api_client().clone();
 
     let mut generation = 0;
-    let _approximate_blobs_created = 0;
+    print_blobs_at_head(&test_rollup.da_service).await;
     // Pause block submission and produce some pending blocks.
     {
         let expected_patterns = [
@@ -1776,28 +1776,39 @@ async fn sequencer_back_pressure() {
         tracing::warn!("BACKPRESSURE GOT, RESUMING BLOB SUBMISSION AFTER {generation} txs send");
         test_rollup.da_service.resume_blob_submission().await;
     }
+    print_blobs_at_head(&test_rollup.da_service).await;
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    print_blobs_at_head(&test_rollup.da_service).await;
 
-    // TODO: Figure out how many blocks needs to be produced after blob submissions
-    tracing::warn!("PUSHING NEW BLOCKS TO GET THINGS ROLLING!!!");
-    let end_padding_blocks = 500;
+    // Choose this number arbitrarily.
+    let end_padding_blocks = 30;
     for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        print_blobs_at_head(&test_rollup.da_service).await;
     }
 
-    for _ in 0..450 {
+    for _ in 0..(end_padding_blocks - 10) {
         let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
 
-    tracing::warn!("WAITING FOR SEQUENCER TO BECOME READY");
+    test_rollup.wait_for_node_synced().await.unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    // /rollup/sync-status:
     let tx = tx_set_value(&admin.private_key, generation + 1, 9);
     client
         .send_raw_tx_to_sequencer(&tx)
         .await
         .expect("Sequencer failed to accept tx after recovery");
+}
+
+async fn print_blobs_at_head(da_service: &StorableMockDaService) {
+    let height = da_service.get_head_block_header().await.unwrap().height;
+    let block = da_service.get_block_at(height).await.unwrap();
+
+    let batches = block.batch_blobs.len();
+    let proofs = block.batch_blobs.len();
+    println!("H={height}; BATCHES={batches} PROOFS={proofs}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
