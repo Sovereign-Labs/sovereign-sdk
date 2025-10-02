@@ -1,6 +1,7 @@
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
+use sov_modules_api::macros::config_value;
 
 use crate::AccountData;
 
@@ -73,6 +74,32 @@ impl Default for EvmRuntimeConfig {
             hardforks,
         }
     }
+}
+
+#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub(crate) enum GasMeteringMode {
+    /// EVM doesn't charge for storage access and initial cost.
+    /// Sequencer charges the initial cost and state access.
+    /// Later adds to the receipt amount.
+    #[default]
+    Rollup,
+    /// EVM gas costs are resembling those on the mainnet.
+    /// Useful to compute metrics like MGas/s.
+    EVM,
+}
+
+impl From<&str> for GasMeteringMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "Rollup" => GasMeteringMode::Rollup,
+            "EVM" => GasMeteringMode::EVM,
+            _ => panic!("Invalid EVM_GAS_METERING_MODE"),
+        }
+    }
+}
+
+pub(crate) fn gas_metering_mode() -> GasMeteringMode {
+    config_value!("EVM_GAS_METERING_MODE").into()
 }
 
 #[cfg(test)]
