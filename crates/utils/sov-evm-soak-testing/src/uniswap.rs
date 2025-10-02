@@ -44,6 +44,12 @@ where
         self.add_initial_liquidity(weth_liquidity, usdc_liquidity)
             .await?;
 
+        // Pre-mint large token balances and approve infinite allowance
+        println!("🪙 Pre-minting tokens and approving router...");
+        let large_amount = parse_ether("1000000000")?; // 1 billion tokens
+        self.mint_and_approve(&self.weth, large_amount).await?;
+        self.mint_and_approve(&self.usdc, large_amount).await?;
+
         println!("🔄 Starting load test: {count} random swaps...");
         self.execute_random_swaps(count).await?;
 
@@ -91,13 +97,6 @@ where
             .call()
             .await?[1];
 
-        let from_token = if path[0] == *self.usdc.address() {
-            &self.usdc
-        } else {
-            &self.weth
-        };
-
-        self.mint_and_approve(from_token, amount_in).await?;
         self.router
             .swapExactTokensForTokens(amount_in, expected_out, path, self.signer)
             .submit()
