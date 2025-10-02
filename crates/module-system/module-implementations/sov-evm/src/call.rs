@@ -82,9 +82,7 @@ where
         start_timer!(fetch_state);
         let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
-        start_timer!(get_db);
         let db = self.get_db(state);
-        save_elapsed!(get_db_time SINCE get_db);
         let mut db = MetricsDb::new(db);
 
         start_timer!(execution);
@@ -105,13 +103,8 @@ where
         if !result.is_success() {
             return on_revert(*tx.signed_transaction.hash(), result);
         }
-
-        #[cfg(feature = "native")]
-        {
-            sov_metrics::track_metrics(|t| {
-                t.submit(db.metrics());
-            });
-        }
+        let db_metrics = db.metrics();
+        drop(db); // To release the state
 
         let gas_used = result.gas_used();
         start_timer!(receipt_t);
@@ -127,6 +120,7 @@ where
         self.pending_transactions.push(&pending_tx, state)?;
         save_elapsed!(set_state_time SINCE set_state);
 
+        start_timer!(get_head_t);
         // Fetch `head` and `pending_len` before the `native` code block.
         // This ensures consistent gas charges between native and non-native execution.
         #[allow(unused_variables)]
@@ -135,6 +129,7 @@ where
             .get(state)?
             // Justified, we set it at `genesis` and leter only override it.
             .expect("Impossible happened: Head must be set.");
+        save_elapsed!(get_head_time SINCE get_head_t);
 
         #[cfg(feature = "native")]
         let set_accessory_state_time = {
@@ -151,15 +146,18 @@ where
             let metrics = EvmTxMetrics {
                 total_time,
                 fetch_state_time,
-                get_db_time,
                 execution_time,
                 state_commit_time,
                 receipt_time,
                 set_state_time,
+                get_head_time,
                 set_accessory_state_time,
             };
             sov_metrics::track_metrics(|t| {
                 t.submit(metrics);
+            });
+            sov_metrics::track_metrics(|t| {
+                t.submit(db_metrics);
             });
         }
 
