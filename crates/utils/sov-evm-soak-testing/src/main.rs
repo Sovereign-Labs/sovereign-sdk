@@ -15,7 +15,7 @@ mod uniswap;
 #[command(about = "EVM soak testing tool", long_about = None)]
 struct Args {
     /// RPC address
-    #[arg(short, long, default_value = "127.0.0.1:12346")]
+    #[arg(short, long, default_value = "127.0.0.1:12347")]
     rpc_addr: SocketAddr,
 
     /// Private key for signing transactions
@@ -35,7 +35,7 @@ enum TestType {
     /// Run Uniswap soak test
     Uniswap {
         /// Number of iterations
-        #[arg(short, long, default_value = "100")]
+        #[arg(short, long, default_value = "1009")]
         count: usize,
     },
     /// Run SimpleStorage soak test

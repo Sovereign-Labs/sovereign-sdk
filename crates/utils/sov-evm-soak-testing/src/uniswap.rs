@@ -142,10 +142,12 @@ where
         let get_amounts_out_time = get_amounts_out.elapsed();
 
         let swap_execution = Instant::now();
-        self.router
+        let x = self
+            .router
             .swapExactTokensForTokens(amount_in, expected_out, path, self.signer)
             .submit()
             .await?;
+
         let swap_execution_time = swap_execution.elapsed();
 
         let swap_total_time = swap_total.elapsed();

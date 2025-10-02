@@ -47,6 +47,8 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
 {
+    println!("Start");
+    dbg!("XXXX 1");
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
@@ -76,6 +78,7 @@ where
         0
     };
     let start = std::time::Instant::now();
+
     for _ in 0..retries {
         match uniqueness {
             UniquenessData::Nonce(nonce) => {
@@ -83,12 +86,17 @@ where
                     .nonce(&credential_id, &mut state)?
                     .unwrap_or_default();
                 if nonce == expected_nonce {
+                    let start_exec = std::time::Instant::now();
                     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
                         to_jsonrpsee_error_object(
                             format!("{} - '{}' ({:?})", e.status, e.message, e.details),
                             ETH_RPC_ERROR,
                         )
                     })?;
+
+                    let time = start.elapsed().as_micros();
+                    let exec_time = start_exec.elapsed().as_micros();
+                    dbg!("TX:", time, exec_time, retries);
 
                     return on_success(tx_hash, ethereum);
                 } else if nonce < expected_nonce {
@@ -112,8 +120,9 @@ where
                 ));
             }
         }
+
         // tokio::time::sleep can have unreliable timing under load, so if the total time we've been retrying is too large we'll break the loop early.
-        if start.elapsed().as_millis() > MAX_BUFFER_DURATION_MS {
+        if dbg!(start.elapsed().as_millis()) > MAX_BUFFER_DURATION_MS {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(SLEEP_DURATION_MS)).await;
