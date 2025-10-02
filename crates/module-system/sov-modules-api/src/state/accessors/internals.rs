@@ -71,6 +71,8 @@ impl<S: Storage> Delta<S> {
     pub(super) fn take_accessory_delta(&mut self) -> AccessoryDelta<S> {
         AccessoryDelta {
             writes: std::mem::take(&mut self.accessory_writes),
+            #[cfg(feature = "native")]
+            uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
             storage: self.inner.clone(),
             metrics: StateMetrics::default(),
         }
@@ -89,7 +91,7 @@ impl<S: Storage> Delta<S> {
             accessory_writes,
             witness,
             #[cfg(feature = "native")]
-                uncomitted_changes: _,
+            uncomitted_changes,
         } = self;
 
         (
@@ -100,6 +102,8 @@ impl<S: Storage> Delta<S> {
             AccessoryDelta {
                 writes: accessory_writes,
                 storage: inner.clone(),
+                #[cfg(feature = "native")]
+                uncomitted_changes,
                 metrics: StateMetrics::default(),
             },
             witness,
@@ -338,6 +342,8 @@ impl<S: Storage> fmt::Debug for Delta<S> {
 /// A delta containing *only* the accessory state.
 pub struct AccessoryDelta<S: Storage> {
     writes: HashMap<SlotKey, AccessoryWrite>,
+    #[cfg(feature = "native")]
+    uncomitted_changes: Option<Box<dyn StateGetter>>,
     storage: S,
     metrics: StateMetrics,
 }
@@ -356,6 +362,7 @@ impl<S: Storage> AccessoryDelta<S> {
 }
 
 impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
+    #[cfg(not(feature = "native"))]
     fn get_size(
         &mut self,
         _namespace: Namespace,
@@ -371,6 +378,7 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
         val.map(|v| v.size())
     }
 
+    #[cfg(not(feature = "native"))]
     fn get_value(
         &mut self,
         _namespace: Namespace,
@@ -382,6 +390,51 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
         }
 
         let val = self.storage.get_accessory(key);
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+        val
+    }
+
+    #[cfg(feature = "native")]
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        if let Some(write) = self.writes.get(key) {
+            return write.value.as_ref().map(|v| v.size());
+        }
+
+        let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
+            uncomitted_changes
+                .get(namespace, key)
+                .or_else(|| self.storage.get_accessory(key))
+        } else {
+            self.storage.get_accessory(key)
+        };
+
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+        val.map(|v| v.size())
+    }
+
+    #[cfg(feature = "native")]
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        if let Some(write) = self.writes.get(key) {
+            return write.value.clone();
+        }
+
+        let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
+            uncomitted_changes
+                .get(namespace, key)
+                .or_else(|| self.storage.get_accessory(key))
+        } else {
+            self.storage.get_accessory(key)
+        };
         metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
         val
     }

@@ -5,7 +5,7 @@ use crate::evm::evm_test_helper::setup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use ethereum_types::H256;
 use ethers::types::U256;
-use sov_eth_client::TestClient;
+use sov_eth_client::SimpleStorageClient;
 use sov_mock_da::storable::service::StorableMockDaService;
 use tokio::time::sleep;
 
@@ -31,7 +31,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn sanity_checks(test_client: &TestClient) {
+async fn sanity_checks(test_client: &SimpleStorageClient) {
     let etc_accounts = test_client.eth_accounts().await;
     assert_eq!(vec![test_client.address()], etc_accounts);
 
@@ -69,7 +69,7 @@ async fn sanity_checks(test_client: &TestClient) {
 }
 
 async fn execute_evm_tests(
-    client: &TestClient,
+    client: &SimpleStorageClient,
     da_service: &StorableMockDaService,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let initial_block_number = client

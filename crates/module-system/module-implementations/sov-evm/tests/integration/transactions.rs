@@ -9,7 +9,7 @@ use revm::Database;
 use sov_evm::Evm;
 use sov_modules_api::GasArray;
 use sov_test_utils::TransactionType;
-use sov_test_utils::{BatchTestCase, SimpleStorageContract};
+use sov_test_utils::{BatchTestCase, SimpleStorage};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
@@ -44,7 +44,7 @@ fn test_evm_gas_usage() {
     );
     let gas_used_with_evm_metering = {
         let (mut runner, from, _) = setup();
-        let contract = SimpleStorageContract::default();
+        let contract = SimpleStorage::default();
         let contract_addr = from.address().create(0);
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
         let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
@@ -57,7 +57,7 @@ fn test_evm_gas_usage() {
     );
     let gas_used_without_evm_metering = {
         let (mut runner, from, _) = setup();
-        let contract = SimpleStorageContract::default();
+        let contract = SimpleStorage::default();
         let contract_addr = from.address().create(0);
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
         let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
@@ -76,7 +76,7 @@ fn test_evm_gas_usage() {
 #[test]
 fn test_executing_eth_transactions() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = SimpleStorage::default();
     let contract_addr = account.address().create(0);
 
     let address = account.address();
@@ -189,7 +189,7 @@ fn test_executing_eth_transactions_several_blocks() {
 #[test]
 fn test_failed_tx_doesnt_update_evm_module_state() {
     let (mut runner, _, no_balance_account) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = SimpleStorage::default();
     let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account).tx;
 
     runner.execute_batch(BatchTestCase {
@@ -238,7 +238,7 @@ fn test_account_nonce() {
 #[test]
 fn test_deploy_many_contracts() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = SimpleStorage::default();
     let contract_addr_1 = account.address().create(0);
 
     let create_contract_tx_1 = create_deploy_tx(0, &contract, &account).tx;
@@ -291,7 +291,7 @@ fn test_deploy_many_contracts() {
 #[test]
 fn test_evm_logs() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = SimpleStorage::default();
     let contract_addr = account.address().create(0);
     let address_bytes: [u8; 32] = account.address().into_word().into();
 

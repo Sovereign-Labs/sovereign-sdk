@@ -5,6 +5,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use backon::ExponentialBuilder;
 use celestia_rpc::prelude::*;
+use celestia_rpc::TxPriority;
 use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::Address;
@@ -22,7 +23,8 @@ use tracing::{debug, info, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
 use crate::metrics::{
-    BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace,
+    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
+    NamespaceDataMetrics, RollupNamespace,
 };
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
@@ -47,6 +49,7 @@ pub struct CelestiaService {
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
     request_timeout: Duration,
+    tx_priority: Option<TxPriority>,
 }
 
 impl CelestiaService {
@@ -58,6 +61,7 @@ impl CelestiaService {
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
         request_timeout: Duration,
+        tx_priority: Option<TxPriority>,
     ) -> Self {
         Self {
             submit_client: Arc::new(Mutex::new(client.clone())),
@@ -68,6 +72,7 @@ impl CelestiaService {
             safe_lead_time,
             backoff_policy,
             request_timeout,
+            tx_priority,
         }
     }
 
@@ -104,7 +109,10 @@ impl CelestiaService {
             "Submitting a blob"
         );
 
-        let tx_config = celestia_rpc::TxConfig::default();
+        let mut tx_config = celestia_rpc::TxConfig::default();
+        if let Some(priority) = self.tx_priority.as_ref() {
+            tx_config = tx_config.with_priority(*priority);
+        }
         let start_lock = std::time::Instant::now();
         let submit_client = self.submit_client.lock().await;
         let lock_acquisition = start_lock.elapsed();
@@ -216,6 +224,7 @@ impl CelestiaService {
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
+            config.tx_priority.map(Into::into),
         )
     }
 }
@@ -228,12 +237,22 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        let start = std::time::Instant::now();
         let client = &self.read_client;
-        let extended_header =
-            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
-                .await
-                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-                .map_err(into_transient_with_context)?;
+        let result =
+            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height)).await;
+        let is_success = matches!(result, Ok(Ok(_)));
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(GetBlockHeaderMeasurement {
+                height,
+                fetch_header_time: start.elapsed(),
+                is_success,
+            });
+        });
+
+        let extended_header = result
+            .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+            .map_err(into_transient_with_context)?;
 
         Ok(extended_header.into())
     }
@@ -304,11 +323,21 @@ impl CelestiaService {
     async fn get_head_block_header_inner(
         &self,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
-        let header = self
-            .read_client
-            .header_network_head()
-            .await
+        let start = std::time::Instant::now();
+        let result =
+            tokio::time::timeout(self.request_timeout, self.read_client.header_network_head())
+                .await;
+        let is_success = matches!(result, Ok(Ok(_)));
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(GetChainHeadMeasurement {
+                fetch_header_time: start.elapsed(),
+                is_success,
+            });
+        });
+        let header = result
+            .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
             .map_err(into_transient_with_context)?;
+
         Ok(CelestiaHeader::from(header))
     }
 
@@ -328,7 +357,6 @@ impl CelestiaService {
         &self,
         aggregated_proof: &[u8],
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!("Submitting aggregated proof to Celestia");
         self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
             .await
             .map_err(into_transient_with_context)
@@ -474,6 +502,7 @@ impl DaService for CelestiaService {
             "send_proof",
         )
         .await;
+        // UNWRAP: Not possible, because receiver is in the scope still
         tx.send(res).unwrap();
         rx
     }

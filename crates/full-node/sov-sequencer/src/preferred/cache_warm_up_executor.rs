@@ -1,20 +1,46 @@
+#![allow(dead_code)]
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
 use crate::RollupHeight;
 use crate::SequencerConfig;
+use sov_metrics::Metric;
 use sov_modules_api::Spec;
 use sov_modules_api::StateCheckpoint;
 use sov_modules_api::StateUpdateInfo;
 use sov_modules_api::Storage;
+use sov_modules_api::TxChangeSet;
 use sov_modules_api::{FullyBakedTx, Runtime};
 use std::collections::BTreeMap;
+use std::io::Write;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 // We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
 // Even if it does, the sender uses a non-blocking method, meaning a few updates may simply be skipped.
 const TX_CHANNEL_SIZE: usize = 16;
+
+/// A transaction with a way to retrieve the corresponding state changes it may produce.
+pub struct FullyBakedTxWithMaybeChangeSet {
+    /// The original transaction.
+    pub tx: FullyBakedTx,
+    /// The worker executor will race against the main executor, attempting to compute  
+    /// the changeset before the main executor processes the transaction.  
+    /// Then, the worker will send the computed changeset through this channel,  
+    /// allowing the main sequencer executor to reuse these values before executing the transaction.
+    pub receiver: Option<oneshot::Receiver<TxChangeSet>>,
+}
+
+impl FullyBakedTxWithMaybeChangeSet {
+    /// Creates new `FullyBakedTxWithMaybeChangeSet`
+    pub fn new(tx: FullyBakedTx) -> Self {
+        Self { tx, receiver: None }
+    }
+}
 
 pub(crate) struct StartBlockNotification<S: Spec> {
     pub(crate) data: StartBlockData<S>,
@@ -34,10 +60,22 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
     }
 }
 
+struct FullyBakedTxWithTxChangeSetSender {
+    tx: FullyBakedTx,
+    sender: oneshot::Sender<TxChangeSet>,
+}
+
+#[derive(Clone)]
+struct TxReceiver {
+    size: Arc<AtomicU64>,
+    receiver: flume::Receiver<FullyBakedTxWithTxChangeSetSender>,
+}
+
 #[derive(Clone)]
 pub(crate) struct CacheWarmUpExecutor<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
-    tx_sender: flume::Sender<FullyBakedTx>,
+    tx_sender: flume::Sender<FullyBakedTxWithTxChangeSetSender>,
+    size: Arc<AtomicU64>,
 }
 
 impl<S: Spec> CacheWarmUpExecutor<S> {
@@ -46,9 +84,42 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         let _ = self.start_block_notification_sender.send(Some(data));
     }
 
-    pub(crate) fn send_tx(&self, tx: FullyBakedTx) {
+    pub(crate) fn send_tx(&self, tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+        // We need to update the `size` field before inserting the thx into tx_sender, otherwise the workers may see an outdated channel size.
+        let size = self.size.fetch_add(1, Ordering::Relaxed);
+        let (sender, receiver) = oneshot::channel();
+
         // Skip update if consumer is too slow.
-        let _ = self.tx_sender.try_send(tx);
+        let res = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
+            tx: tx.clone(),
+            sender,
+        });
+
+        let maybe_receiver = match res {
+            Ok(_) => {
+                sov_metrics::track_metrics(|t| {
+                    t.submit(CacheWarmUpMetrics {
+                        tx_channel_size: size + 1,
+                    });
+                });
+
+                Some(receiver)
+            }
+            Err(flume::TrySendError::Full(_)) => {
+                let size = self.size.fetch_sub(1, Ordering::Relaxed);
+                tracing::warn!(size, "The tx queue is full. You may want to increase the number of workers for cache warmup.");
+                None
+            }
+            Err(flume::TrySendError::Disconnected(_)) => {
+                self.size.fetch_sub(1, Ordering::Relaxed);
+                None
+            }
+        };
+
+        FullyBakedTxWithMaybeChangeSet {
+            tx,
+            receiver: maybe_receiver,
+        }
     }
 
     pub(crate) async fn spawn_execution_task<Rt: Runtime<S>>(
@@ -57,6 +128,11 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
+        let size = Arc::new(AtomicU64::new(0));
+        let tx_receiver = TxReceiver {
+            size: size.clone(),
+            receiver: tx_receiver,
+        };
 
         // Option<StartBlockNotification<S>> is niche-optimized, so keeping it instead of using
         // StartBlockNotification directly in the channel does not introduce any overhead.
@@ -81,6 +157,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
             Self {
                 tx_sender,
                 start_block_notification_sender,
+                size,
             },
             handles,
         )
@@ -90,7 +167,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-        tx_receiver: flume::Receiver<FullyBakedTx>,
+        tx_receiver: TxReceiver,
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
         >,
@@ -117,22 +194,31 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                         }
                     }
 
-                    tx = tx_receiver.recv_async() => {
-                        let baked_tx = match tx {
-                             Ok(tx) => tx,
+                    tx = tx_receiver.receiver.recv_async() => {
+                        let tx_with_sender = match tx {
+                             Ok(tx) =>
+                             {
+                                tx_receiver.size.fetch_sub(1, Ordering::Relaxed);
+                                tx
+                             },
                              Err(flume::RecvError::Disconnected) => {
                                 // Quit if channel closed.
                                 return
                             },
                         };
+
                         if is_started {
-                            let res = executor.apply_tx_to_in_progress_batch(&baked_tx).await;
+                            let baked_tx = FullyBakedTxWithMaybeChangeSet::new(tx_with_sender.tx);
+                            let res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
                             match res{
-                                Ok((_, _tx_change_set)) => {
-                                    // TODO
+                                Ok((_, tx_change_set)) => {
+                                    // It ok safe to ignore the error if the receiver was dropped.
+                                    // This can happen if the transaction on the main executor has already finished.
+                                    let _ = tx_with_sender.sender.send(tx_change_set);
                                 },
-                                Err(_) => {
+                                Err(err) => {
+                                    tracing::trace!(%err, "WarmUp worker task failed to execute transaction.");
                                     continue;
                                 }
                             }
@@ -159,5 +245,25 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 notify.state_roots,
             )
             .await;
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CacheWarmUpMetrics {
+    tx_channel_size: u64,
+}
+
+impl Metric for CacheWarmUpMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_sequencer_cache_warmup_metrics"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} tx_channel_size={}",
+            self.measurement_name(),
+            self.tx_channel_size,
+        )
     }
 }

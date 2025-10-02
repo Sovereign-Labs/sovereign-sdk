@@ -440,8 +440,9 @@ pub enum PendingOrBlock {
     Invalid(String),
 }
 
-const ABSOLUTE_MARGIN: u64 = 100_000;
-/// gas * 1.5 + 100_000
+// HACK: This should be much lower but because gas estimation doesn't work now - we temporarily set it to a large value.
+const ABSOLUTE_MARGIN: u64 = 1_000_000;
+/// gas * 1.5 + 1_000_000
 fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
         .checked_mul(3)

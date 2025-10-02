@@ -9,7 +9,7 @@ use alloy_primitives::B256;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::Filter;
 use sov_demo_rollup::MockDemoRollup;
-use sov_eth_client::TestClient;
+use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
 use tokio::sync::broadcast;
@@ -289,7 +289,7 @@ impl LogCollector {
 async fn send_txs_and_pause(
     range: Range<u32>,
     contract_address: Address,
-    evm_client: &TestClient,
+    evm_client: &SimpleStorageClient,
     test_rollup: &TestRollup<MockDemoRollup<Native>>,
 ) -> Vec<TxHash> {
     let mut tx_hashes = Vec::new();
@@ -308,7 +308,7 @@ async fn send_txs_and_pause(
 
 async fn fetch_logs(
     tx_hashes: Vec<TxHash>,
-    evm_client: &TestClient,
+    evm_client: &SimpleStorageClient,
 ) -> Vec<alloy_rpc_types_eth::Log> {
     let mut logs = Vec::new();
 
@@ -327,7 +327,7 @@ async fn get_filtered_logs(
     nb_of_logs: u32,
     filter: &Filter,
     contract_address: Address,
-    evm_client: &TestClient,
+    evm_client: &SimpleStorageClient,
     test_rollup: &TestRollup<MockDemoRollup<Native>>,
 ) -> Vec<alloy_rpc_types_eth::Log> {
     let mut log_collector = LogCollector::new();

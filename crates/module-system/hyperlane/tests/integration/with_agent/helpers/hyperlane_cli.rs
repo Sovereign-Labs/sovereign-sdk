@@ -11,7 +11,6 @@ use testcontainers::{ContainerRequest, GenericImage, ImageExt};
 
 const IMAGE: &str = "ghcr.io/sovereign-labs/hyperlane-cli";
 const TAG: &str = "sov-integration-3";
-const REGISTRY_REPO: &str = "https://github.com/citizen-stig/hyperlane-registry";
 
 pub struct HyperlaneCliRunner {
     data: tempfile::TempDir,
@@ -64,9 +63,8 @@ impl HyperlaneCliRunner {
             "core",
             "deploy",
             "--registry",
-            REGISTRY_REPO,
-            "--registry",
             "/root/.hyperlane",
+            "--disableProxy",
             "--config",
             "/root/configs/core-config.yaml",
             "--chain",
@@ -109,9 +107,8 @@ impl HyperlaneCliRunner {
             "warp",
             "deploy",
             "--registry",
-            REGISTRY_REPO,
-            "--registry",
             "/root/.hyperlane",
+            "--disableProxy",
             "--config",
             "/root/configs/warp-route-deployment.yaml",
             "--yes",
@@ -179,7 +176,8 @@ async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericI
         .is_running()
         .await
         .expect("failed to get running status");
-    for _ in 0..300 {
+    // 600 * 100ms = 60_000ms = 60s
+    for _ in 0..600 {
         is_running = container.is_running().await.unwrap();
         if !is_running {
             break;

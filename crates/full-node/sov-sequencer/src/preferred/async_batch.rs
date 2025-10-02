@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use sov_modules_api::state::TxScratchpad;
 use sov_modules_api::{
     ChangeSet, Context, DispatchCall, FullyBakedTx, GasArray, IncrementalBatch,
@@ -22,7 +23,7 @@ use crate::common::sender_is_allowed;
 pub enum MaybeAsyncBatch<S: Spec> {
     /// The batch is streamed from a channel.
     Async {
-        txs_receiver: Receiver<FullyBakedTx>,
+        txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
         responder: AsyncBatchResponder<S>,
         setup_sender: Option<oneshot::Sender<ChangeSet>>,
         address: S::Address,
@@ -36,7 +37,7 @@ pub enum MaybeAsyncBatch<S: Spec> {
 impl<S: Spec> MaybeAsyncBatch<S> {
     /// Create a new batch with a receiver for transactions.
     pub fn new_async(
-        txs_receiver: Receiver<FullyBakedTx>,
+        txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
         setup_sender: oneshot::Sender<ChangeSet>,
         result_channel: Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
         tx_profit_threshold: u128,
@@ -66,11 +67,28 @@ impl<S: Spec> MaybeAsyncBatch<S> {
 /// The control flow injector for an async batch.
 #[derive(Debug)]
 pub enum MaybeAsyncBatchControlFlow<S: Spec> {
-    Async(AsyncBatchResponder<S>),
+    Async {
+        responder: AsyncBatchResponder<S>,
+        // If this is the main sequencer executor, it may benefit from using a precomputed
+        // transaction change set from the worker warm-up executor.
+        maybe_tx_change_set: Option<oneshot::Receiver<TxChangeSet>>,
+    },
     Sync,
 }
 
 impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
+    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {
+        match self {
+            MaybeAsyncBatchControlFlow::Async {
+                responder: _,
+                maybe_tx_change_set,
+            } => {
+                let _maybe_tx_change_set = maybe_tx_change_set.take();
+            }
+            MaybeAsyncBatchControlFlow::Sync => {}
+        }
+    }
+
     fn post_tx(
         &self,
         provisional_outcome: ProvisionalSequencerOutcome<S>,
@@ -79,7 +97,10 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         gas_used: &<S as Spec>::Gas,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match self {
-            Self::Async(responder) => responder.post_tx(
+            Self::Async {
+                responder,
+                maybe_tx_change_set: _,
+            } => responder.post_tx(
                 provisional_outcome,
                 dirty_scratchpad,
                 slot_gas_meter_before_tx,
@@ -102,7 +123,10 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         call: &<RT as DispatchCall>::Decodable,
     ) -> TxControlFlow<()> {
         match self {
-            Self::Async(responder) => responder.pre_flight(runtime, context, call),
+            Self::Async {
+                responder,
+                maybe_tx_change_set: _,
+            } => responder.pre_flight(runtime, context, call),
             Self::Sync => <NoOpControlFlow as InjectedControlFlow<S>>::pre_flight(
                 &NoOpControlFlow,
                 runtime,
@@ -289,12 +313,17 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 txs_receiver,
                 responder,
                 ..
-            } => Handle::current().block_on(txs_receiver.recv()).map(|item| {
-                (
-                    item,
-                    MaybeAsyncBatchControlFlow::Async(responder.clone_for_tx()),
-                )
-            }),
+            } => Handle::current()
+                .block_on(txs_receiver.recv())
+                .map(|mut item| {
+                    (
+                        item.tx,
+                        MaybeAsyncBatchControlFlow::Async {
+                            responder: responder.clone_for_tx(),
+                            maybe_tx_change_set: item.receiver.take(),
+                        },
+                    )
+                }),
             MaybeAsyncBatch::Sync { batch } => batch
                 .next()
                 .map(|(item, _)| (item, MaybeAsyncBatchControlFlow::Sync)),

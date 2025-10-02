@@ -1,4 +1,6 @@
+use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Bytes;
+use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_pubsub::Subscription;
@@ -21,6 +23,7 @@ pub struct RpcClient {
     pub client: ethers::middleware::SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
     pub ws: jsonrpsee::ws_client::WsClient,
     pub pub_sub: alloy_provider::RootProvider,
+    pub alloy_client: DynProvider,
 }
 
 impl RpcClient {
@@ -38,7 +41,16 @@ impl RpcClient {
             .await
             .unwrap();
 
+        let alloy_client = {
+            let signer: PrivateKeySigner = private_key.parse().unwrap();
+            ProviderBuilder::new()
+                .wallet(signer)
+                .connect_http(http_conn_str.parse().unwrap())
+                .erased()
+        };
+
         Self {
+            alloy_client,
             client,
             ws,
             pub_sub,

@@ -9,6 +9,12 @@ max_celestia_response_body_size = 104_857_600
 # Default: 60 seconds
 # We set it to allow skipping 3 blocks on mocha testnet
 celestia_rpc_timeout_seconds = 18
+
+# Options are "Low", "Medium" and "High"
+# Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
+# Default: Medium
+#tx_priority = "High"
+
 # Exponential backoff configuration for retrying failed requests to Celestia node
 # Minimal time to wait before reattempting to request to celestia node.
 # Default: 100 milliseconds
@@ -22,6 +28,7 @@ backoff_max_times = 10
 # Exponential factor for reattempting failed requests
 # Default: 2.0
 # backoff_factor = 2.0
+
 
 # WITH CURRENT UNCOMMENTED VALUES:
 # Timeout per request: 18 seconds

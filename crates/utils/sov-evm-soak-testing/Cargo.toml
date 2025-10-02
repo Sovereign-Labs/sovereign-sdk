@@ -9,13 +9,14 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
-sov-node-client = { workspace = true }
 sov-eth-client = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
-ethers = { workspace = true }
+alloy = { workspace = true }
 alloy-primitives = { workspace = true }
 sov-test-utils = { workspace = true }
+rand = { workspace = true }
+clap = { workspace = true }
 
 [lints]
 workspace = true

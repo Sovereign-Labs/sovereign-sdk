@@ -2,7 +2,7 @@ use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use ethereum_types::Address;
-use sov_eth_client::TestClient;
+use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_test_utils::test_rollup::read_private_key;
@@ -24,7 +24,11 @@ async fn test_evm_account_abstraction() {
     test_rollup.rollup_task.abort();
 }
 
-async fn send_insert_credentials(test_client: &TestClient, from_addr: Address, chain_id: u64) {
+async fn send_insert_credentials(
+    test_client: &SimpleStorageClient,
+    from_addr: Address,
+    chain_id: u64,
+) {
     let tx = vec![create_insert_credentials(from_addr, chain_id)];
     test_client
         .send_transactions_and_wait_slot(&tx)
@@ -64,7 +68,7 @@ fn create_insert_credentials(
     )
 }
 
-async fn execute_evm_tests(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> {
+async fn execute_evm_tests(client: &SimpleStorageClient) -> Result<(), Box<dyn std::error::Error>> {
     let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(0, nonce);
 

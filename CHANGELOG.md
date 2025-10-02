@@ -1,9 +1,14 @@
+# 2025-10-01
+- #1791 Re-enable EVM gas estimation while bumping the margins.
+
 # 2025-09-29
 - #1770 **Breaking change** introduces a required `buffer_raw_txs` field to `EthRpcConfig`. This change is only breaking for EVM rollups.
+- #1783 Adds `da.tx_priority` optional field for celestia adapter. Possible values are `Low`, `Medium` or `High`. It can be used to improve blob inclusion.
 
 # 2025-09-25
 - #1758 A new config value in rollup.toml: `runner.da_total_timeout_secs`. It should be larger than the total time da service attempts to fetch data. Default value is 10 minutes.
 - #1771 Added new logging warning about metrics, which triggers demo-rollup test.
+- #1772 Added custom Uniswap soak testing infrastructure for EVM load testing.
 
 # 2025-09-21
 - #1729 Adds optional `num_cache_warmup_workers` to `xxx_rollup_config.toml`. This field specifies the number of workers responsible for warming up the executor cache in the preferred sequencer.

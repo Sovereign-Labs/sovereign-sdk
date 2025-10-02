@@ -98,7 +98,10 @@ async fn stream_logs<S, Seq>(
                 match evm.get_maybe_sealed_block(receipt.block_number, state) {
                     Some(b) => block = b,
                     None => {
-                        tracing::error!(start_block, "Block does not exist");
+                        tracing::error!(
+                            block_number = receipt.block_number,
+                            "Block does not exist"
+                        );
                         return;
                     }
                 }

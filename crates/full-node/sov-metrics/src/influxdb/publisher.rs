@@ -6,8 +6,9 @@ use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::io::AsyncWriteExt;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
+use crate::influxdb::tracker::DroppedMetrics;
 use crate::influxdb::SerializableMetric;
-use crate::TelegrafSocketConfig;
+use crate::{Metric, TelegrafSocketConfig};
 
 const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
 
@@ -117,48 +118,64 @@ pub(crate) async fn metrics_publisher_task(
         }
     };
 
+    let mut dropped_metrics_check_interval =
+        tokio::time::interval(std::time::Duration::from_secs(10));
+    dropped_metrics_check_interval.tick().await; // Skip first immediate tick
+
     loop {
-        match future_or_shutdown(metrics_receiver.recv(), &shutdown_receiver).await {
-            FutureOrShutdownOutput::Output(Some(measurement)) => {
-                #[cfg(feature = "gas-constant-estimation")]
-                if let Err(err) = measurement.write_to_csv(csv_writers) {
-                    tracing::warn!(?err, "Failed to write metrics to CSV file");
-                }
-                tracing::trace!(?measurement, "Received measurement");
-                process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
-                    .await;
+        tokio::select! {
+            _ = dropped_metrics_check_interval.tick() => {
+                let dropped_count = crate::influxdb::DROPPED_METRICS_COUNT.swap(0, std::sync::atomic::Ordering::Relaxed);
+                    let metric = DroppedMetrics { dropped_metrics: dropped_count };
+                    // We don't technically need to allocate here, but it's easier than fixing `process_measurement` to work with both `dyn` and generics
+                    process_measurement(&mut buffer, metric, &mut publisher, max_buffer_size)
+                                .await;
+
             }
-            FutureOrShutdownOutput::Shutdown | FutureOrShutdownOutput::Output(None) => {
-                // Drain all remaining measurements from the channel
-                let mut drained_count = 0;
-                let start = std::time::Instant::now();
-                while let Ok(remaining) = metrics_receiver.try_recv() {
-                    drained_count += 1;
-                    process_measurement(&mut buffer, remaining, &mut publisher, max_buffer_size)
-                        .await;
-                    if start.elapsed() > SHUTDOWN_DRAINING_LIMIT {
+            result = future_or_shutdown(metrics_receiver.recv(), &shutdown_receiver) => {
+                match result {
+                    FutureOrShutdownOutput::Output(Some(measurement)) => {
+                        #[cfg(feature = "gas-constant-estimation")]
+                        if let Err(err) = measurement.write_to_csv(csv_writers) {
+                            tracing::warn!(?err, "Failed to write metrics to CSV file");
+                        }
+                        tracing::trace!(?measurement, "Received measurement");
+                        process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
+                            .await;
+                    }
+                    FutureOrShutdownOutput::Shutdown | FutureOrShutdownOutput::Output(None) => {
+                        // Drain all remaining measurements from the channel
+                        let mut drained_count = 0;
+                        let start = std::time::Instant::now();
+                        while let Ok(remaining) = metrics_receiver.try_recv() {
+                            drained_count += 1;
+                            process_measurement(&mut buffer, remaining, &mut publisher, max_buffer_size)
+                                .await;
+                            if start.elapsed() > SHUTDOWN_DRAINING_LIMIT {
+                                break;
+                            }
+                        }
+
+                        if drained_count > 0 {
+                            tracing::info!(
+                                drained_metrics = drained_count,
+                                "Drained remaining metrics from channel during shutdown"
+                            );
+                        }
+                        tracing::info!(
+                            remaining_buffer_size = buffer.len(),
+                            "Metrics task is going to shutdown, send remaining metrics"
+                        );
+                        if !buffer.is_empty() {
+                            tracing::trace!("Some metrics remain in the buffer, publish before exit");
+                            if let Err(e) = publisher.publish(&buffer).await {
+                                tracing::warn!(?e, "Failed to publish metrics during shutdown");
+                            }
+                            buffer.clear();
+                        }
                         break;
                     }
                 }
-
-                if drained_count > 0 {
-                    tracing::info!(
-                        drained_metrics = drained_count,
-                        "Drained remaining metrics from channel during shutdown"
-                    );
-                }
-                tracing::info!(
-                    remaining_buffer_size = buffer.len(),
-                    "Metrics task is going to shutdown, send remaining metrics"
-                );
-                if !buffer.is_empty() {
-                    tracing::trace!("Some metrics remain in the buffer, publish before exit");
-                    if let Err(e) = publisher.publish(&buffer).await {
-                        tracing::warn!(?e, "Failed to publish metrics during shutdown");
-                    }
-                    buffer.clear();
-                }
-                break;
             }
         }
     }
@@ -191,7 +208,7 @@ pub(crate) fn spawn_metrics_udp_receiver(
 
 async fn process_measurement(
     buffer: &mut Vec<u8>,
-    measurement: SerializableMetric,
+    measurement: impl Metric,
     publisher: &mut MetricsPublisher,
     max_buffer_size: usize,
 ) {

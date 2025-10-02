@@ -26,9 +26,9 @@ use crate::storage_manager::{update_ledger_finalized_height, InitializableNative
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;
 
-// 3 million keys * 32 bytes is about 100 MB. This should be a large enough batch size to keep up with state growth,
+// 300 thousand keys * 32 bytes is about 10 MB. This should be a large enough batch size to keep up with state growth,
 // without consuming excessive memory.
-pub(crate) const MAX_INDIVIDUAL_PRUNING_BATCH_SIZE: usize = 3_000_000;
+pub(crate) const MAX_INDIVIDUAL_PRUNING_BATCH_SIZE: usize = 300_000;
 
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,

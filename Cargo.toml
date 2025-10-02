@@ -282,6 +282,7 @@ flume = { version = "0.11.1", features = ["async"]}
 ethereum-types = "0.14.1"
 ethers = { version = "=2.0.14" }
 
+alloy = { version = "1.0.30" }
 alloy-serde = { version = "1.0.30" }
 alloy-chains = { version = "0.2.9", default-features = false }
 alloy-primitives = { version = "1.3.1", default-features = false }
@@ -289,6 +290,7 @@ alloy-sol-types = { version = "1.3.1", default-features = false }
 alloy-eips = { version = "1.0.25", default-features = false }
 alloy-evm = { version = "0.21.0", default-features = false }
 alloy-consensus = { version = "1.0.30", default-features = false }
+alloy-contract = { version = "1.0.30", default-features = false }
 alloy-transport = { version = "1.0.30", default-features = false }
 alloy-rpc-types = { version = "1.0.30", features = [
     "eth",
