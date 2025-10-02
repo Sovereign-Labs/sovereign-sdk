@@ -929,7 +929,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
 
-        let mut worker_scratchpad = create_srtatchpad::<TestSpec>(storage.clone());
+        let mut worker_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
 
         // Key and values.
         let init_reads = vec![(10, 1), (11, 2), (12, 3)];
@@ -951,7 +951,7 @@ mod tests {
 
         // Retrieve the changeset from the worker, then apply it to the main scratchpad.
         let changeset_from_worker = worker_scratchpad.tx_changes(ExecutionContext::SequencerWarmUp);
-        let mut main_scratchpad = create_srtatchpad::<TestSpec>(storage.clone());
+        let mut main_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
 
         // After receiving the changeset from the worker, the main scratchpad can see all its values.
         {
@@ -970,8 +970,8 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
 
-        let mut worker_scratchpad = create_srtatchpad::<TestSpec>(storage.clone());
-        let mut main_scratchpad = create_srtatchpad::<TestSpec>(storage.clone());
+        let mut worker_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
+        let mut main_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
 
         // Initialize the main_scratchpad cache with reads
         let main_reads = vec![(10, 1), (11, 2), (12, 3)];
