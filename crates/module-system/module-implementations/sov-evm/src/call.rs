@@ -103,6 +103,7 @@ where
         if !result.is_success() {
             return on_revert(*tx.signed_transaction.hash(), result);
         }
+        #[cfg(feature = "native")]
         let db_metrics = db.metrics();
         drop(db); // To release the state
 
