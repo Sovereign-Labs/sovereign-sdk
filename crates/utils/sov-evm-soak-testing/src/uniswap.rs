@@ -3,12 +3,41 @@ use alloy_primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
 use rand::Rng;
 use sov_test_utils::{Erc20, Router, Submit};
+use std::time::{Duration, Instant};
+
+#[derive(Debug, Default)]
+pub struct SwapMetrics {
+    pub total_swaps: usize,
+    pub total_time: Duration,
+    pub get_amounts_out_time: Duration,
+    pub swap_execution_time: Duration,
+}
+
+impl SwapMetrics {
+    pub fn print_summary(&self) {
+        if self.total_swaps == 0 {
+            return;
+        }
+
+        println!("\n📊 Swap Metrics Summary");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Total swaps:              {}", self.total_swaps);
+        println!("Total time:               {:?}", self.total_time);
+        println!("Average per swap:         {:?}", self.total_time / self.total_swaps as u32);
+        println!("Get amounts out (total):  {:?}", self.get_amounts_out_time);
+        println!("Get amounts out (avg):    {:?}", self.get_amounts_out_time / self.total_swaps as u32);
+        println!("Swap execution (total):   {:?}", self.swap_execution_time);
+        println!("Swap execution (avg):     {:?}", self.swap_execution_time / self.total_swaps as u32);
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    }
+}
 
 pub struct UniSoakTest<P, N> {
     weth: Erc20::Erc20Instance<P, N>,
     usdc: Erc20::Erc20Instance<P, N>,
     router: Router::RouterInstance<P, N>,
     signer: Address,
+    metrics: SwapMetrics,
 }
 
 impl<P, N> UniSoakTest<P, N>
@@ -33,10 +62,11 @@ where
             weth,
             usdc,
             router,
+            metrics: SwapMetrics::default(),
         })
     }
 
-    pub async fn run(&self, count: usize) -> Result<()> {
+    pub async fn run(mut self, count: usize) -> Result<()> {
         // Larger pool for load testing - 10k WETH : 20k USDC
         println!("💧 Adding liquidity: 10,000 WETH + 20,000 USDC");
         let weth_liquidity = parse_ether("10000")?;
@@ -54,10 +84,11 @@ where
         self.execute_random_swaps(count).await?;
 
         println!("✅ Load test completed successfully!");
+        self.metrics.print_summary();
         Ok(())
     }
 
-    async fn execute_random_swaps(&self, count: usize) -> Result<()> {
+    async fn execute_random_swaps(&mut self, count: usize) -> Result<()> {
         let mut rng = rand::thread_rng();
 
         for i in 1..=count {
@@ -90,17 +121,30 @@ where
         Ok(())
     }
 
-    async fn execute_swap(&self, amount_in: U256, path: Vec<Address>) -> Result<()> {
+    async fn execute_swap(&mut self, amount_in: U256, path: Vec<Address>) -> Result<()> {
+        let swap_total = Instant::now();
+
+        let get_amounts_out = Instant::now();
         let expected_out = self
             .router
             .getAmountsOut(amount_in, path.clone())
             .call()
             .await?[1];
+        let get_amounts_out_time = get_amounts_out.elapsed();
 
+        let swap_execution = Instant::now();
         self.router
             .swapExactTokensForTokens(amount_in, expected_out, path, self.signer)
             .submit()
             .await?;
+        let swap_execution_time = swap_execution.elapsed();
+
+        let swap_total_time = swap_total.elapsed();
+
+        self.metrics.total_swaps += 1;
+        self.metrics.total_time += swap_total_time;
+        self.metrics.get_amounts_out_time += get_amounts_out_time;
+        self.metrics.swap_execution_time += swap_execution_time;
 
         Ok(())
     }
