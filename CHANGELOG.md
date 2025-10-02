@@ -1,4 +1,5 @@
 # 2025-10-01
+- #1796 Adds `EVM_GAS_METERING_MODE` configuration to switch between "Rollup" and "EVM" gas metering modes. Rollup mode (default) keeps existing behavior where EVM doesn't charge for storage access and initial cost. EVM mode enables mainnet-like gas costs useful for computing metrics like MGas/s.
 - #1791 Re-enable EVM gas estimation while bumping the margins.
 
 # 2025-09-29
