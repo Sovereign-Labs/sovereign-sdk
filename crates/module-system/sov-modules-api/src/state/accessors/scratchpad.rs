@@ -1009,7 +1009,7 @@ mod tests {
         assert_scratchpad_contains_data(&[(101, 111), (102, 112)], &mut main_scratchpad, namespace);
     }
 
-    fn create_srtatchpad<S: Spec>(stotage: S::Storage) -> TxScratchpad<S, StateCheckpoint<S>> {
+    fn create_srcratchpad<S: Spec>(storage: S::Storage) -> TxScratchpad<S, StateCheckpoint<S>> {
         let checkpoint = StateCheckpoint::new(stotage, &MockKernel::new(4, 1));
         checkpoint.to_tx_scratchpad()
     }
