@@ -23,11 +23,20 @@ impl SwapMetrics {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("Total swaps:              {}", self.total_swaps);
         println!("Total time:               {:?}", self.total_time);
-        println!("Average per swap:         {:?}", self.total_time / self.total_swaps as u32);
+        println!(
+            "Average per swap:         {:?}",
+            self.total_time / self.total_swaps as u32
+        );
         println!("Get amounts out (total):  {:?}", self.get_amounts_out_time);
-        println!("Get amounts out (avg):    {:?}", self.get_amounts_out_time / self.total_swaps as u32);
+        println!(
+            "Get amounts out (avg):    {:?}",
+            self.get_amounts_out_time / self.total_swaps as u32
+        );
         println!("Swap execution (total):   {:?}", self.swap_execution_time);
-        println!("Swap execution (avg):     {:?}", self.swap_execution_time / self.total_swaps as u32);
+        println!(
+            "Swap execution (avg):     {:?}",
+            self.swap_execution_time / self.total_swaps as u32
+        );
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 }
