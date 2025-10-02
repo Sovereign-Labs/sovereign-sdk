@@ -99,16 +99,21 @@ impl<S: Spec> StateConsistency<S> {
         _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
+        let mut mismatches = Vec::<String>::new();
+
         let rollup_height = state.rollup_height_to_access().get();
         // Sanity check
         let saved_rollup_height = self.latest_rollup_height.get(state)?.unwrap_or(0);
         assert_eq!(rollup_height, saved_rollup_height, "Mismatch between rollup height saved from begin_rollup_block_hook: {saved_rollup_height} and the one read from TxState: {rollup_height}");
-        anyhow::ensure!(
-            rollup_height == expected_rollup_height,
-            "Rollup height is not as expected. Expected {}, but got {}",
-            expected_rollup_height,
-            rollup_height
-        );
+        if rollup_height != expected_rollup_height {
+            mismatches.push(
+                format!(
+                    "Rollup height mismatch. Transaction expected {}, but actual state is {} (sanity check: saved state from begin block hook is {})",
+                    expected_rollup_height,
+                    rollup_height,
+                    saved_rollup_height
+                ));
+        };
 
         let visible_slot_number = state.current_visible_slot_number().get();
         // Sanity check
@@ -116,35 +121,44 @@ impl<S: Spec> StateConsistency<S> {
         assert_eq!(visible_slot_number, saved_visible_slot_number, "Mismatch between visible slot number saved from begin_rollup_block_hook: {saved_visible_slot_number} and the one read from TxState: {visible_slot_number}");
         // Then actual tx assert - transactions should use values from the sequencer; this will
         // expose any mismatch in the kernel state when the node process it afterwards
-        anyhow::ensure!(
-            visible_slot_number == expected_visible_slot_number,
-            "Visible slot number is not as expected at rollup height {}. Expected {}, but got {}",
-            rollup_height,
+        if visible_slot_number != expected_visible_slot_number {
+            mismatches.push(format!(
+            "Visible slot number mismatch. Transaction expected {}, but actual state is {} (sanity check: saved from hook is {})",
             expected_visible_slot_number,
-            visible_slot_number
-        );
+            visible_slot_number,
+            saved_rollup_height
+        ))
+        };
 
         let max_slot_number = state.max_allowed_slot_number_to_access().get();
         // If we're here then we already checked expected_visible_slot_number matches
         // saved_visible_slot_number and state.visible_slot_number, so no need for sanity check
-        anyhow::ensure!(
-            max_slot_number == expected_visible_slot_number,
-            "Max slot number is not as expected at rollup height {}. Expected {} (equal to visible_slot_number), but got {}",
-            rollup_height,
+        if !max_slot_number == expected_visible_slot_number {
+            mismatches.push(format!(
+            "Max slot number mismatch. Transaction expected {} (equal to visible_slot_number), but actual state is {}",
             expected_visible_slot_number,
             max_slot_number
-        );
+        ))
+        };
 
         let state_root = self.latest_state_root.get_or_err(state)??;
-        anyhow::ensure!(
-            expected_state_root == state_root.as_ref(),
-            "State root is not as expected at rollup height {}. Expected {}, but got {}",
-            rollup_height,
+        if expected_state_root != state_root.as_ref() {
+            mismatches.push(format!(
+            "State root mismatch. Transaction expected {}, but actual root (saved in begin_rollup_block_hook, from previous slot) is {}",
             hex::encode(expected_state_root),
             state_root
-        );
+        ))
+        };
 
-        // Increment successful assertions count
+        if !mismatches.is_empty() {
+            anyhow::bail!(
+                "Block state assertion failed at rollup height {}. List of mismatches: {:?}",
+                rollup_height,
+                mismatches
+            )
+        }
+
+        // Else, if successful, ncrement successful assertions count
         let current_count = self.successful_assertions_count.get(state)?.unwrap_or(0);
         let new_count = current_count
             .checked_add(1)
