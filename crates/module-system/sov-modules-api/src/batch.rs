@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::ExecutionContext;
 use crate::{
     Amount, Context, DispatchCall, Gas, Runtime, SlotGasMeter, Spec, StateCheckpoint,
     TransactionReceipt, TxScratchpad,
@@ -346,6 +347,7 @@ pub trait InjectedControlFlow<S: Spec> {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
         gas_used: &<S as Spec>::Gas,
+        exec_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>);
 }
 
@@ -384,6 +386,7 @@ impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
         _gas_used: &<S as Spec>::Gas,
+        _execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match provisional_outcome.execution_status {
             MaybeExecuted::Executed(receipt) => (

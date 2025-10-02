@@ -1022,6 +1022,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
         _gas_used: &<S as Spec>::Gas,
+        execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let ProvisionalSequencerOutcome {
             execution_status, ..
@@ -1031,7 +1032,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         };
 
         if !receipt.receipt.is_successful() {
-            let _ = dirty_scratchpad.tx_changes();
+            let _ = dirty_scratchpad.tx_changes(execution_context);
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 

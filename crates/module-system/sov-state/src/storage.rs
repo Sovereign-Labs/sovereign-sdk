@@ -302,6 +302,14 @@ impl NodeLeafAndMaybeValue {
     pub fn size(&self) -> u32 {
         self.leaf.size
     }
+
+    /// Create a new NodeLeafAndMaybeValue withReadType::Read.
+    pub fn new_read<H: Digest<OutputSize = typenum::U32>>(value: SlotValue) -> Self {
+        Self {
+            leaf: NodeLeaf::make_leaf::<H>(&value),
+            value: ReadType::Read(value),
+        }
+    }
 }
 
 /// Size and hash of a value saved in the state.
@@ -319,9 +327,9 @@ impl NodeLeafAndMaybeValue {
 )]
 pub struct NodeLeaf {
     /// The size of the value.
-    pub(crate) size: u32,
+    pub size: u32,
     /// The hash of the value.
-    pub(crate) val_hash: [u8; 32],
+    pub val_hash: [u8; 32],
 }
 
 impl NodeLeaf {

@@ -214,14 +214,13 @@ pub(crate) mod internal {
 use internal::CacheLog;
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
-/// from an external source represented by the `ValueReader` trait. On following reads,
-/// the cache checks if the value we read was inserted before.
+/// from an external. On following reads, the cache checks if the value we read was inserted before.
 #[derive(Default, Debug)]
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
     pub(crate) cache: CacheLog,
     // Reads that were retrieved from storage for the first time but can still be reverted.
-    revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+    revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
     // Ordered reads and writes.
     ordered_db_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     phantom: core::marker::PhantomData<N>,
@@ -293,14 +292,18 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 // value, but in ZK execution, arbitrary large values cannot be stored as hints in the witness.
 impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     /// Returns `revertable_ordered_reads`
-    pub fn revertable_ordered_reads(&self) -> &Vec<(SlotKey, Option<NodeLeaf>)> {
+    pub fn revertable_ordered_reads(&self) -> &Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)> {
         &self.revertable_ordered_reads
     }
 
     /// Commit the revertable part of the `ProvableStorageCache`.
     pub fn commit_revertable_storage_cache(&mut self) {
         let revertable_ordered_reads = mem::take(&mut self.revertable_ordered_reads);
-        self.ordered_db_reads.extend(revertable_ordered_reads);
+        self.ordered_db_reads.extend(
+            revertable_ordered_reads
+                .into_iter()
+                .map(|(key, node)| (key, node.map(|n| n.leaf))),
+        );
         self.cache.commit_revertable_log();
     }
 
@@ -488,7 +491,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
     fn get_or_fetch_with_fn<S: Storage, F, Args, E>(
         cache: &mut CacheLog,
-        revertable_ordered_reads: &mut Vec<(SlotKey, Option<NodeLeaf>)>,
+        revertable_ordered_reads: &mut Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
         key: &SlotKey,
         storage: &S,
         witness: &S::Witness,
@@ -579,12 +582,31 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     fn add_read(
         key: SlotKey,
         node: Option<NodeLeafAndMaybeValue>,
-        revertable_ordered_reads: &mut Vec<(SlotKey, Option<NodeLeaf>)>,
+        revertable_ordered_reads: &mut Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
         cache: &mut CacheLog,
     ) {
-        revertable_ordered_reads.push((key.clone(), node.as_ref().map(|n| n.leaf)));
+        revertable_ordered_reads.push((key.clone(), node.clone()));
 
         cache.add_read(key, node);
+    }
+
+    /// Adds only the reads whose keys are not already in the cache.
+    pub fn add_read_if_not_present_in_cache(
+        &mut self,
+        reads: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
+    ) {
+        for (key, node) in reads {
+            if self.cache.get(&key).is_some() {
+                continue;
+            }
+
+            Self::add_read(
+                key,
+                node,
+                &mut self.revertable_ordered_reads,
+                &mut self.cache,
+            );
+        }
     }
 }
 

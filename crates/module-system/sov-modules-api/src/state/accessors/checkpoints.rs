@@ -256,6 +256,11 @@ impl<S: Spec> StateCheckpoint<S> {
         self.delta.changes()
     }
 
+    /// Warms up the cache with reads whose keys are not already present.
+    pub fn add_read_if_not_present(&mut self, reads: FirstTimeReads) {
+        self.delta.add_read_if_not_present(reads);
+    }
+
     /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
     /// during normal execution, since changes should happen through `StateValue` types which
     /// use the UniversalStateAccessor API. It is primarily intended for use in the sequencer, which has to manage

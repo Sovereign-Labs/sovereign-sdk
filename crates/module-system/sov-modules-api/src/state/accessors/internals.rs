@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use crate::state::accessors::StateMetricsProvider;
 use crate::{Spec, StateCheckpoint, TxChangeSet};
 use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_rollup_interface::stf::ExecutionContext;
 pub(crate) use sov_state::AccessoryWrite;
+use sov_state::NodeLeafAndMaybeValue;
 #[cfg(feature = "native")]
 use sov_state::StateGetter;
 use sov_state::{
@@ -17,7 +19,6 @@ use super::checkpoints::ChangeSet;
 use super::temp_cache::{CacheLookup, TempCache};
 use super::UniversalStateAccessor;
 use crate::state::traits::PerBlockCache;
-use sov_state::NodeLeaf;
 
 /// A [`Delta`] is a diff over an underlying [`Storage`] instance. When queried, it first checks
 /// whether the value is in its local cache and, if so, returns it. Otherwise, it queries the
@@ -133,16 +134,16 @@ impl<S: Storage> Delta<S> {
 #[derive(Debug, Clone, Default)]
 pub struct FirstTimeReads {
     /// User space reads.
-    pub user_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+    pub user: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
     /// Kernel space reads.
-    pub kernel_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
+    pub kernel: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
 }
 
 impl<S: Storage> Delta<S> {
     pub fn first_reads(&self) -> FirstTimeReads {
         FirstTimeReads {
-            user_reads: self.user_cache.revertable_ordered_reads().clone(),
-            kernel_reads: self.kernel_cache.revertable_ordered_reads().clone(),
+            user: self.user_cache.revertable_ordered_reads().clone(),
+            kernel: self.kernel_cache.revertable_ordered_reads().clone(),
         }
     }
 
@@ -327,6 +328,12 @@ impl<S: Storage> Delta<S> {
             }
         }
     }
+
+    pub fn add_read_if_not_present(&mut self, reads: FirstTimeReads) {
+        self.user_cache.add_read_if_not_present_in_cache(reads.user);
+        self.kernel_cache
+            .add_read_if_not_present_in_cache(reads.kernel);
+    }
 }
 
 impl<S: Storage> fmt::Debug for Delta<S> {
@@ -398,7 +405,7 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
 
 pub(super) struct RevertableWriter<T> {
     pub(super) inner: T,
-    writes: HashMap<(SlotKey, Namespace), Option<SlotValue>>,
+    pub(crate) writes: HashMap<(SlotKey, Namespace), Option<SlotValue>>,
     pub(crate) cache_writes: TempCache,
 }
 
@@ -450,14 +457,21 @@ impl<T> RevertableWriter<T> {
 
 impl<S: Spec> RevertableWriter<StateCheckpoint<S>> {
     /// Change set resulting from transaction execution.
-    pub fn changes(&self) -> TxChangeSet {
+    pub fn changes(&self, execution_context: ExecutionContext) -> TxChangeSet {
+        // Only the WarmUp executors warm up the reads.
+        let reads = if matches!(execution_context, ExecutionContext::SequencerWarmUp) {
+            Some(self.inner.first_reads().clone())
+        } else {
+            None
+        };
+
         TxChangeSet {
             writes: self
                 .writes
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
-            reads: self.inner.first_reads().clone(),
+            reads,
         }
     }
 }

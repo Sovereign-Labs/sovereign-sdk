@@ -505,6 +505,7 @@ where
             dirty_scratchpad,
             slot_gas_meter,
             &gas_used,
+            execution_context,
         );
         match outcome {
             TxControlFlow::ContinueProcessing(receipt) => {

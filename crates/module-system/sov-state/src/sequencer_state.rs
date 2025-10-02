@@ -235,6 +235,11 @@ pub enum MaybePresentValue<T = SlotValue> {
 }
 
 impl<T> MaybePresentValue<T> {
+    /// Check if the enum variant is `MaybePresentValue::Present`
+    pub fn is_present(&self) -> bool {
+        matches!(self, MaybePresentValue::Present(_))
+    }
+
     /// Map the value if it is present.
     pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> MaybePresentValue<U> {
         match self {
