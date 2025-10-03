@@ -515,7 +515,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        executor::call(evm_db, &block_env, tx_env, cfg_env)
+        executor::transact(evm_db, &block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 

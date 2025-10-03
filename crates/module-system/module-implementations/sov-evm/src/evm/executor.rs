@@ -6,8 +6,6 @@ use crate::{
 };
 use revm::context::TxEnv;
 use revm::InspectEvm;
-#[cfg(feature = "native")]
-use revm::{context::result::ResultAndState, interpreter::interpreter::EthInterpreter, Inspector};
 use revm::{
     context::{
         result::{EVMError, ExecResultAndState, ExecutionResult},
@@ -15,6 +13,8 @@ use revm::{
     },
     Database, MainContext,
 };
+#[cfg(feature = "native")]
+use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
@@ -56,16 +56,6 @@ pub fn transact_commit<
     // We don't use transact_commit as it does not support returning an error
     db.commit(state)?;
     Ok(result)
-}
-
-#[cfg(feature = "native")]
-pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
-    db: DB,
-    block_env: &BlockEnv,
-    tx: TxEnv,
-    cfg: CfgEnv,
-) -> Result<ResultAndState, EVMError<E>> {
-    Ok(transact(db, block_env, tx, cfg)?)
 }
 
 #[cfg(feature = "native")]
