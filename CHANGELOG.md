@@ -1,4 +1,5 @@
 # 2025-10-03
+- #1806 Fix EVM gas estimation by accounting for sequencer gas in `ApiStateAccessor`. This ensures gas estimates properly include the sequencer gas overhead.
 - #1803 Skip prover build scripts execution when `SKIP_GUEST_BUILD=1`. This helps cargo mark the subtree as clean and avoid recompilation. Reduces incremental compilation time of demo-rollup. It used to re-run whenever OUT_DIR has changed and it changes each compilation.
 
 # 2025-10-01
