@@ -6,6 +6,8 @@ use crate::{
 };
 use revm::context::TxEnv;
 use revm::InspectEvm;
+#[cfg(feature = "native")]
+use revm::{context::result::ResultAndState, interpreter::interpreter::EthInterpreter, Inspector};
 use revm::{
     context::{
         result::{EVMError, ExecResultAndState, ExecutionResult},
@@ -13,8 +15,6 @@ use revm::{
     },
     Database, MainContext,
 };
-#[cfg(feature = "native")]
-use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
@@ -64,8 +64,8 @@ pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
-) -> Result<ExecutionResult, EVMError<E>> {
-    Ok(transact(db, block_env, tx, cfg)?.result)
+) -> Result<ResultAndState, EVMError<E>> {
+    Ok(transact(db, block_env, tx, cfg)?)
 }
 
 #[cfg(feature = "native")]
