@@ -374,6 +374,21 @@ impl<S: Spec> GasMeter for ApiStateAccessor<S> {
     fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
         Some(&mut self.gas_meter)
     }
+
+    fn charge_gas(
+        &mut self,
+        amount: &<Self::Spec as Spec>::Gas,
+    ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        self.gas_meter.charge_gas(amount)
+    }
+
+    fn charge_linear_gas(
+        &mut self,
+        amount: &<Self::Spec as Spec>::Gas,
+        parameter: u32,
+    ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        self.gas_meter.charge_linear_gas(amount, parameter)
+    }
 }
 
 impl<S: Spec> GetGasPrice for ApiStateAccessor<S> {
