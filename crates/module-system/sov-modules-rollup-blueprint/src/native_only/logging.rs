@@ -20,9 +20,18 @@ where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
 {
     fn enabled(&self, _meta: &tracing::Metadata<'_>, ctx: &Context<'_, S>) -> bool {
-        if let Some(current) = ctx.lookup_current() {
-            if current.name() == self.0 {
-                return false;
+        // Check if any span in the current context matches the ignored span name
+        if let Some(mut current) = ctx.lookup_current() {
+            loop {
+                if current.name() == self.0 {
+                    return false;
+                }
+
+                // Traverse up the parent chain
+                match current.parent() {
+                    Some(parent) => current = parent,
+                    None => break,
+                }
             }
         }
         true
