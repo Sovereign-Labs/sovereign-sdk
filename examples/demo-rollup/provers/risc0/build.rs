@@ -4,10 +4,11 @@ use sov_zkvm_utils::should_skip_guest_build;
 
 fn main() {
     println!("cargo::rerun-if-env-changed=SKIP_GUEST_BUILD");
-    println!("cargo::rerun-if-env-changed=OUT_DIR");
 
     if should_skip_guest_build("risc0") {
         println!("cargo:warning=Skipping risc0 guest build");
+        // When skipping, only rerun if build.rs changes
+        println!("cargo::rerun-if-changed=build.rs");
         let out_dir = std::env::var_os("OUT_DIR").unwrap();
         let out_dir = std::path::Path::new(&out_dir);
         let methods_path = out_dir.join("methods.rs");
@@ -21,6 +22,8 @@ fn main() {
 
         std::fs::write(methods_path, elf).expect("Failed to write mock rollup elf");
     } else {
+        // When building guests, track OUT_DIR to detect guest dependency changes
+        println!("cargo::rerun-if-env-changed=OUT_DIR");
         let guest_pkg_to_options = get_guest_options();
         risc0_build::embed_methods_with_options(guest_pkg_to_options);
     }
