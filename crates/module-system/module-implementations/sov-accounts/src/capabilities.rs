@@ -13,16 +13,25 @@ impl<S: Spec> Accounts<S> {
         credential_id: &CredentialId,
         state: &mut ST,
     ) -> Result<S::Address, <ST as StateWriter<User>>::Error> {
+        //let resolve_sender_address = std::time::Instant::now();
         let maybe_address = self.accounts.get(credential_id, state)?.map(|a| a.addr);
 
         match maybe_address {
-            Some(address) => Ok(address),
+            Some(address) => {
+                //let resolve_sender_address = resolve_sender_address.elapsed();
+                //dbg!("X1", resolve_sender_address);
+
+                Ok(address)
+            }
             None => {
                 // 1. Add the credential -> account mapping
                 let new_account = Account {
                     addr: default_address.clone(),
                 };
                 self.accounts.set(credential_id, &new_account, state)?;
+
+                //let resolve_sender_address = resolve_sender_address.elapsed();
+                //dbg!("X2", resolve_sender_address);
 
                 Ok(default_address.clone())
             }

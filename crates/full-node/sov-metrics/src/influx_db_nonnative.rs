@@ -294,13 +294,19 @@ impl Metric for AuthAndProcessMetrics {
             ("reward_prover_time_us", t.reward_prover_timer),
         ];
 
-        write!(buffer, "{metric_name} ")?;
+        write!(
+            buffer,
+            "{metric_name},context={:?} ",
+            self.timings.execution_context
+        )?;
         for (i, (field, timer)) in fields.iter().enumerate() {
             if i > 0 {
                 write!(buffer, ",")?;
             }
             write!(buffer, "{field}={}", timer.elapsed().as_micros())?;
         }
+        //write!(buffer, ",")?;
+        //write!(buffer, "context={:?}", self.timings.execution_context)?;
 
         summarize(&t.attempt_tx_access_metrics, "attempt_tx", buffer)?;
         Ok(())

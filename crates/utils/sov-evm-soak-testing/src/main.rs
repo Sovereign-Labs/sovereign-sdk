@@ -39,7 +39,7 @@ enum TestType {
     /// Run Uniswap soak test
     Uniswap {
         /// Number of iterations
-        #[arg(short, long, default_value = "100")]
+        #[arg(short, long, default_value = "1000")]
         count: usize,
     },
     /// Run SimpleStorage soak test

@@ -146,7 +146,7 @@ where
         };
 
         save_elapsed!(total_time SINCE total);
-        dbg!(total_time);
+        //dbg!(total_time);
         #[cfg(feature = "native")]
         {
             let metrics = EvmTxMetrics {

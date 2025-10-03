@@ -107,7 +107,9 @@ where
                 .map(|_| y_rng.gen_range(min_percent..=max_percent))
                 .collect::<Vec<_>>()
         };
+
         for (idx, percent) in percents.iter().enumerate() {
+            //tokio::time::sleep(Duration::from_secs(10)).await;
             let i = idx + 1;
             // Alternate between USDC→WETH and WETH→USDC to keep pool balanced
             let is_usdc_to_weth = i % 2 == 1;

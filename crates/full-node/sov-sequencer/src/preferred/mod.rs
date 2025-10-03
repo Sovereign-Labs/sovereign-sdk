@@ -878,9 +878,6 @@ where
             }
         };
 
-        let accept_tx_time = start_accept_tx.elapsed().as_micros();
-        dbg!(accept_tx_time);
-
         match res {
             Ok(rx) => rx.await.map_err(database_error_500),
             Err(e) => match e {

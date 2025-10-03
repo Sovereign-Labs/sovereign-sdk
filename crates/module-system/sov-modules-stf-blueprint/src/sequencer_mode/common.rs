@@ -82,7 +82,7 @@ where
         }
     };
 
-    dbg!(apply_tx.elapsed().as_micros());
+    //dbg!(apply_tx.elapsed().as_micros());
     (
         ApplyTxResult::<S> {
             transaction_consumption,
@@ -101,7 +101,9 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 ) -> Result<(), Error> {
     runtime.pre_dispatch_tx_hook(tx, state)?;
 
+    let dispatch_call = std::time::Instant::now();
     runtime.dispatch_call(message, state, ctx)?;
+    //dbg!(dispatch_call.elapsed().as_micros());
 
     runtime.post_dispatch_tx_hook(tx, ctx, state)?;
 

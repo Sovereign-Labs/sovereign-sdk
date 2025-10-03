@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{
     AuthenticationError, ChainState, GasEnforcer, SequencerAuthorization, TransactionAuthenticator,
@@ -163,6 +165,9 @@ where
     C: InjectedControlFlow<S>,
 {
     let process_tx_and_reward_prover = std::time::Instant::now();
+
+    //;
+
     let (auth_tx, auth_data, message) = validated_output;
 
     let raw_tx_hash = auth_tx.raw_tx_hash;
@@ -178,6 +183,7 @@ where
         &mut pre_exec_working_set,
     );
     metrics.timings.resolve_context_timer.end();
+
     metrics.timings.resolve_context_access_metrics = pre_exec_working_set.metrics().take();
 
     let mut ctx = match maybe_ctx {
@@ -194,9 +200,8 @@ where
             );
         }
     };
-    // ======
-    //dbg!(process_tx_and_reward_prover.elapsed().as_micros());
 
+    let pre_flight = std::time::Instant::now();
     match injected_control_flow.pre_flight(runtime, &ctx, &message) {
         TxControlFlow::ContinueProcessing(_) => {}
         TxControlFlow::IgnoreTx => {
@@ -208,8 +213,6 @@ where
             );
         }
     }
-    // ======
-    //dbg!(process_tx_and_reward_prover.elapsed().as_micros());
 
     // Check that the transaction isn't a duplicate
     metrics.timings.check_uniqueness_timer.start();
@@ -230,11 +233,10 @@ where
         );
     }
     // ======
-    //dbg!(process_tx_and_reward_prover.elapsed().as_micros());
 
     metrics.timings.check_uniqueness_timer.end();
-    metrics.timings.check_uniqueness_access_metrics = pre_exec_working_set.metrics().take();
 
+    metrics.timings.check_uniqueness_access_metrics = pre_exec_working_set.metrics().take();
     metrics.timings.mark_tx_attempted_timer.start();
     if let Err(err) = runtime.transaction_authorizer().mark_tx_attempted(
         &auth_data,
@@ -252,9 +254,8 @@ where
         );
     }
     // ======
-    //dbg!(process_tx_and_reward_prover.elapsed().as_micros());
-
     metrics.timings.mark_tx_attempted_timer.end();
+
     metrics.timings.mark_tx_attempted_access_metrics = pre_exec_working_set.metrics().take();
 
     metrics.timings.reserve_gas_timer.start();
@@ -273,10 +274,6 @@ where
     }
     // ======
     metrics.timings.reserve_gas_timer.end();
-    //dbg!(
-    //    process_tx_and_reward_prover.elapsed().as_micros(),
-    //    &metrics.timings.reserve_gas_timer
-    //);
 
     metrics.timings.reserve_gas_access_metrics = pre_exec_working_set.metrics().take();
 
@@ -305,6 +302,7 @@ where
             pre_exec_gas_meter,
         );
     }
+
     assert_eq!(
         working_set.metrics().len(),
         0,
@@ -316,9 +314,9 @@ where
         apply_tx(runtime, &ctx, tx, raw_tx_hash, raw_tx, message, working_set);
 
     // ======
-    //dbg!(process_tx_and_reward_prover.elapsed().as_micros());
 
     metrics.timings.attempt_tx_timer.end();
+
     metrics.timings.attempt_tx_access_metrics = scratchpad.metrics().take();
 
     let transaction_consumption = &apply_tx.transaction_consumption;
@@ -330,6 +328,7 @@ where
         &mut scratchpad,
     );
     metrics.timings.refund_remaining_gas_timer.end();
+
     metrics.timings.refund_remaining_gas_access_metrics = scratchpad.metrics().take();
 
     metrics.timings.reward_prover_timer.start();
@@ -339,10 +338,17 @@ where
         &mut scratchpad,
     );
     metrics.timings.reward_prover_timer.end();
+
     metrics.timings.reward_prover_access_metrics = scratchpad.metrics().take();
 
-    // ======
-    dbg!(process_tx_and_reward_prover.elapsed().as_micros());
+    //dbg!(metrics.timings.resolve_context_timer.elapsed());
+    //dbg!(metrics.timings.check_uniqueness_timer.elapsed());
+    //dbg!(metrics.timings.mark_tx_attempted_timer.elapsed());
+    //dbg!(metrics.timings.reserve_gas_timer.elapsed());
+    //dbg!(metrics.timings.attempt_tx_timer.elapsed());
+    //dbg!(metrics.timings.refund_remaining_gas_timer.elapsed());
+    //dbg!(metrics.timings.reward_prover_timer.elapsed());
+    //dbg!(process_tx_and_reward_prover);
 
     (Ok(apply_tx), scratchpad, pre_exec_gas_meter)
 }
@@ -594,7 +600,6 @@ where
                 // In that case, we need to undo the accounting for penalization of the sequencer.
             }
         }
-        //dbg!(execution_context, start_tx.elapsed().as_micros());
 
         clean_scratchpad = new_checkpoint.to_tx_scratchpad();
     }
@@ -763,8 +768,6 @@ where
         deserialize_and_authenticate::<S, RT, I>(&raw_tx, &mut pre_exec_working_set);
     timings.auth.end();
 
-    //dbg!(timings.auth);
-
     let validated_output = match authentication_result {
         Ok(auth_output) => auth_output,
         Err(pre_exec_error) => {
@@ -828,8 +831,6 @@ where
 
     let metrics = AuthAndProcessMetrics::new(raw_tx_hash, timings);
 
-    let aut_and_px = std::time::Instant::now();
-    //   dbg!(aut_and_px.elapsed().as_micros());
     // Process the transaction and reward the sequencer if everything went well. Responsibility for
     // penalizing the sequencer if the transaction cannot be executed due to sequencer error is with the caller.
     let process_tx_result = process_tx_and_reward_prover(
@@ -848,7 +849,6 @@ where
 
     span.exit();
 
-    dbg!(aut_and_px.elapsed().as_micros());
     let (tx_result, mut scratchpad, pre_exec_gas_meter) = process_tx_result;
 
     match tx_result {
