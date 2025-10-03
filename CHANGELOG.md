@@ -1,3 +1,6 @@
+# 2025-10-03
+- #1803 Skip prover build scripts execution when `SKIP_GUEST_BUILD=1`. This helps cargo mark the subtree as clean and avoid recompilation. Reduces incremental compilation time of demo-rollup. It used to re-run whenever OUT_DIR has changed and it changes each compilation.
+
 # 2025-10-01
 - #1796 Adds `EVM_GAS_METERING_MODE` configuration to switch between "Rollup" and "EVM" gas metering modes. Rollup mode (default) keeps existing behavior where EVM doesn't charge for storage access and initial cost. EVM mode enables mainnet-like gas costs useful for computing metrics like MGas/s.
 - #1791 Re-enable EVM gas estimation while bumping the margins.
