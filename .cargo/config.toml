@@ -3,13 +3,6 @@
 # But right now it seems to work.
 incremental = true
 
-# Use mold linker for faster linking times.
-# Reduces incremental build time by ~40% (e.g., 1m47s -> 1m3s for demo-rollup).
-# Requires mold to be installed: https://github.com/rui314/mold
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-
 [alias]
 switcheroo = "run --manifest-path scripts/switcheroo/Cargo.toml --"
 

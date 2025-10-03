@@ -322,7 +322,7 @@ jobs:
           fail_ci_if_error: false
 
   cargo-deny-check-licenses:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
