@@ -42,6 +42,7 @@ serde = { workspace = true, default-features = false, features = [
     "derive",
 ] }
 serde_json = { workspace = true, features = ["alloc"] }
+reqwest = { workspace = true, optional = true }
 
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["sync"] }
@@ -88,6 +89,7 @@ native = [
     "dep:tower",
     "sov-modules-macros?/native",
     "dep:rand",
+    "dep:reqwest",
 ]
 bench = [
     "dep:sov-metrics",

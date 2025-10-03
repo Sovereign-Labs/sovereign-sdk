@@ -10,6 +10,8 @@ mod metrics;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;
+#[cfg(feature = "native")]
+mod twinkle;
 pub mod types;
 pub mod verifier;
 

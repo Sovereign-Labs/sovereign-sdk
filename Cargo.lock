@@ -11666,6 +11666,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "reltester",
+ "reqwest 0.12.23",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "schemars 0.8.22",
