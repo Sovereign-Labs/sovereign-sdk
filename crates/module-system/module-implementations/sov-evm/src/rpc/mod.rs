@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use crate::db::commit::FallibleDatabaseCommit;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_primitives::{Address, BlockHash, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
@@ -13,7 +14,7 @@ use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerTyp
 use error::ensure_success;
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use revm::context::result::{EVMError, ExecutionResult, InvalidHeader};
+use revm::context::result::{EVMError, InvalidHeader, ResultAndState};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::Database;
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
@@ -323,7 +324,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
-        let result = self.call(request, block_number, state)?;
+        let result = self.call(request, block_number, state)?.result;
         ensure_success(result).map_err(eth_api_into_rpc_error)
     }
 
@@ -351,7 +352,13 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
         debug!("EVM module JSON-RPC request to `eth_estimateGas`");
-        let result = self.call(request, block_number, state)?;
+        let ResultAndState {
+            result,
+            state: changes,
+        } = self.call(request, block_number, state)?;
+        self.get_db(state)
+            .commit(changes)
+            .expect("Impossible as gas meter is initialized with INF");
         let gas_used = result.gas_used();
         let gas_meter = state.try_as_basic_gas_meter().unwrap();
         gas_meter
@@ -441,8 +448,8 @@ pub enum PendingOrBlock {
 }
 
 // HACK: This should be much lower but because gas estimation doesn't work now - we temporarily set it to a large value.
-const ABSOLUTE_MARGIN: u64 = 10_000_000;
-/// gas * 1.5 + 10_000_000
+const ABSOLUTE_MARGIN: u64 = 100_000;
+/// gas * 1.5 + 100_000
 fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
         .checked_mul(3)
@@ -500,7 +507,7 @@ where
         request: TransactionRequest,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<ExecutionResult> {
+    ) -> RpcResult<ResultAndState> {
         let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env =
             prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
@@ -508,7 +515,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        executor::call(evm_db, &block_env, tx_env, cfg_env)
+        executor::transact(evm_db, &block_env, tx_env, cfg_env)
             .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
     }
 

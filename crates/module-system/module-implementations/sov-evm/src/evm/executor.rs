@@ -59,16 +59,6 @@ pub fn transact_commit<
 }
 
 #[cfg(feature = "native")]
-pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
-    db: DB,
-    block_env: &BlockEnv,
-    tx: TxEnv,
-    cfg: CfgEnv,
-) -> Result<ExecutionResult, EVMError<E>> {
-    Ok(transact(db, block_env, tx, cfg)?.result)
-}
-
-#[cfg(feature = "native")]
 #[allow(dead_code)]
 pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
     db: DB,
