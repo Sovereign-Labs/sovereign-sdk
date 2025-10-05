@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use super::{Prefix, StateItemInfo};
-use crate::{ModuleId, ModuleInfo};
+use crate::{DispatchCall, ModuleId, ModuleInfo};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case", untagged)]
@@ -20,7 +20,7 @@ pub struct ModuleObject {
     pub id: ModuleId,
     pub name: String,
     pub description: Option<String>,
-    pub prefix: Prefix,
+    // pub prefix: Prefix,
     pub state_items: HashMap<String, StateItemInfo>,
 }
 
@@ -34,7 +34,8 @@ impl ModuleObject {
             id: *module.id(),
             description,
             name: module.prefix().module_name().to_owned(),
-            prefix: Prefix(module.prefix().into()),
+            // prefix: module.prefix(),
+            // prefix_str: PrefixStr(module.prefix().to_string()),
             state_items,
         }
     }

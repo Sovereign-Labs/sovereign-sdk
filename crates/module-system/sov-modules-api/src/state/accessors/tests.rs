@@ -40,7 +40,7 @@ fn create_storage_manager(
                 ordered_writes: initial_values
                     .into_iter()
                     .map(|(k, v)| {
-                        let state_value = StateValue::<u64>::with_codec(Prefix::new(k), BorshCodec);
+                        let state_value = StateValue::<u64>::with_codec(Prefix::new(k[0], 0), BorshCodec);
                         (state_value.slot_key(), Some(state_value.slot_value(&v)))
                     })
                     .collect(),
@@ -95,7 +95,7 @@ fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
     let mut metric = StateAccessMetric::new_size(std::sync::Arc::new(vec![]), None);
     {
         let mut state_value =
-            StateValue::<u64>::with_codec(Prefix::new(vec![VAL_ID_1]), BorshCodec);
+            StateValue::<u64>::with_codec(Prefix::new(VAL_ID_1, 0), BorshCodec);
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::No);
 
@@ -119,7 +119,7 @@ fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
     // Test overriding pre-set value.
     {
         let mut state_value =
-            StateValue::<u64>::with_codec(Prefix::new(vec![PRE_SET_VAL_ID_1]), BorshCodec);
+            StateValue::<u64>::with_codec(Prefix::new(PRE_SET_VAL_ID_1, 0), BorshCodec);
 
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::No);
@@ -142,7 +142,7 @@ fn test_values<S: Spec>(state: &mut StateCheckpoint<S>) {
     // Test scenario where we read first and then get the size.
     {
         let state_value =
-            StateValue::<u64>::with_codec(Prefix::new(vec![PRE_SET_VAL_ID_2]), BorshCodec);
+            StateValue::<u64>::with_codec(Prefix::new(PRE_SET_VAL_ID_2, 0), BorshCodec);
 
         let is_cached = state.is_value_cached(NAMESPACE, &state_value.slot_key());
         assert_eq!(is_cached, IsValueCached::No);
@@ -167,10 +167,10 @@ fn test_discard_tx_cache() {
     let storage = manager.create_storage();
 
     let state_value_to_read =
-        StateValue::<u64>::with_codec(Prefix::new(vec![PRE_SET_VAL_ID_1]), BorshCodec);
+        StateValue::<u64>::with_codec(Prefix::new(PRE_SET_VAL_ID_1, PRE_SET_VAL_ID_1), BorshCodec);
 
     let mut state_value_to_set =
-        StateValue::<u64>::with_codec(Prefix::new(vec![VAL_ID_1]), BorshCodec);
+        StateValue::<u64>::with_codec(Prefix::new(VAL_ID_1, VAL_ID_1), BorshCodec);
 
     // Not discarded values are present after the freeze.
     {

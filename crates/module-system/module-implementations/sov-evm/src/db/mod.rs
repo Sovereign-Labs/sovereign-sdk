@@ -9,7 +9,6 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{BorshSerializedSize, TxState};
 use sov_modules_api::{Spec, StateAccessor, StateMap, StateReader};
 use sov_state::codec::BcsCodec;
-use sov_state::SlotKey;
 use sov_state::User;
 use std::fmt::{self, Debug};
 
@@ -83,7 +82,7 @@ where
     }
 
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
-        let key = SlotKey::from(code_hash.to_vec());
+        let key = self.code.slot_key(&code_hash);
 
         if let Some(code) = self.state.get_cached::<CachedByteCode>(Some(key.clone())) {
             return Ok(code.code.clone());

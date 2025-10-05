@@ -377,12 +377,7 @@ where {
         );
 
         let (complete_key, value) = <<S as crate::Spec>::Storage>::open_proof(state_root, proof)?;
-        let complete_key_bytes = complete_key.key();
-        let item_key = complete_key_bytes
-            .strip_prefix(self.prefix().as_ref())
-            .ok_or_else(|| {
-                anyhow::anyhow!("The key in the proof did not match the expected key. Expected key with prefix: {:?}, found key: {:?}", self.prefix(), complete_key.key())
-            })?;
+        let item_key = complete_key.without_prefix();
 
         let item_key = self
             .codec()

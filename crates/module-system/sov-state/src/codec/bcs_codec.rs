@@ -1,4 +1,5 @@
 use sov_rollup_interface::common::HexString;
+use std::io::Write;
 
 use super::{EncodeLike, StateCodec, StateItemDecoder, StateItemEncoder};
 
@@ -10,8 +11,8 @@ impl<V> StateItemEncoder<V> for BcsCodec
 where
     V: serde::Serialize,
 {
-    fn encode(&self, value: &V) -> Vec<u8> {
-        bcs::to_bytes(value).expect("Failed to serialize value")
+    fn encode(&self, value: &V, writer: &mut impl Write) {
+        bcs::serialize_into( writer, value).expect("Failed to serialize value")
     }
 }
 
@@ -42,13 +43,13 @@ impl StateCodec for BcsCodec {
 // [`bcs`] serializes slices and vectors the same way, i.e. by calling
 // [`serde::Serializer::collect_seq`] under the hood.
 impl<T: serde::Serialize> EncodeLike<[T], Vec<T>> for BcsCodec {
-    fn encode_like(&self, borrowed: &[T]) -> Vec<u8> {
-        bcs::to_bytes(borrowed).expect("Bcs serialization to vec is infallible")
+    fn encode_like(&self, borrowed: &[T], writer: &mut impl Write) {
+        bcs::serialize_into(writer, borrowed).expect("Bcs serialization to vec is infallible")
     }
 }
 
 impl EncodeLike<[u8], HexString> for BcsCodec {
-    fn encode_like(&self, borrowed: &[u8]) -> Vec<u8> {
-        bcs::to_bytes(borrowed).expect("Bcs serialization to vec is infallible")
+    fn encode_like(&self, borrowed: &[u8], writer: &mut impl Write) {
+        bcs::serialize_into(writer, borrowed).expect("Bcs serialization to vec is infallible")
     }
 }

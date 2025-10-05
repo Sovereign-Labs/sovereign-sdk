@@ -913,6 +913,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_out_of_gas_for_pre_checks() {
+    sov_test_utils::initialize_logging();
     let mut genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let max_exec_gas_per_tx = GasUnit::from(config_value!("MAX_SEQUENCER_EXEC_GAS_PER_TX"));

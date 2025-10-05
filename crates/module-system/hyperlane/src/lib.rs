@@ -4,7 +4,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
-use sov_modules_api::rest::HasRestApi;
+use sov_modules_api::rest::{HasRestApi};
 use sov_modules_api::{
     Base58Address, Context, DaSpec, GenesisState, HexHash, HexString, Module, ModuleId, ModuleInfo,
     ModuleRestApi, Spec, StateMap, StateReader, StateValue, TxState,
@@ -271,7 +271,7 @@ impl HyperlaneAddress for sov_address::EthereumAddress {
 /// This module may be a "wrapper" module, which internally dispatches to several
 /// other recipients.
 pub trait Recipient<S: Spec>:
-    Module + Clone + std::default::Default + ModuleInfo + HasNativeRestApi<S> + Send + Sync + 'static
+    Module + Clone + ModuleInfo + Default + HasNativeRestApi<S> + Send + Sync + 'static
 {
     /// Get the [`ISM`](Ism) for a given recipient address.
     fn ism(&self, recipient: &HexHash, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>>;

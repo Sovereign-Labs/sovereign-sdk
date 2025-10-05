@@ -61,7 +61,7 @@ where
     type Error = Infallible;
 
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
-        let mut metric = StateAccessMetric::new_read(key.key(), key.display_fn());
+        let mut metric = StateAccessMetric::new_read(Default::default(), None);
         let result = self.inner.get_value(N::NAMESPACE, key, &mut metric);
         self.inner.metrics().push(metric);
         Ok(result)
@@ -86,8 +86,8 @@ where
             {
                 let deserialization_duration = deserialization_start.elapsed();
                 self.inner.metrics().add_deserialize_metric(
-                    storage_key.key(),
-                    storage_key.display_fn(),
+                    Default::default(),
+                    None,
                     storage_value.size(),
                     deserialization_duration,
                 );

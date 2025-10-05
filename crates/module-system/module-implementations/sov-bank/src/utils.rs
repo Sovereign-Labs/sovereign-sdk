@@ -280,19 +280,21 @@ impl<'a, S: Spec> From<&'a DerivedHolder> for TokenHolderRef<'a, S> {
 // and [`TokenHolder`] can be serialized identically for all of our supported
 // codecs.
 mod encode_like {
+    use std::io::Write;
+
     use sov_state::StateItemEncoder;
 
     use super::*;
 
     impl<S: Spec> EncodeLike<TokenHolderRef<'_, S>, TokenHolder<S>> for BcsCodec {
-        fn encode_like(&self, borrowed: &TokenHolderRef<'_, S>) -> Vec<u8> {
-            self.encode(borrowed)
+        fn encode_like(&self, borrowed: &TokenHolderRef<'_, S>, writer: &mut impl Write) {
+            self.encode(borrowed, writer)
         }
     }
 
     impl<S: Spec> EncodeLike<TokenHolderRef<'_, S>, TokenHolder<S>> for BorshCodec {
-        fn encode_like(&self, borrowed: &TokenHolderRef<'_, S>) -> Vec<u8> {
-            self.encode(borrowed)
+        fn encode_like(&self, borrowed: &TokenHolderRef<'_, S>, writer: &mut impl Write) {
+            self.encode(borrowed, writer)
         }
     }
 }

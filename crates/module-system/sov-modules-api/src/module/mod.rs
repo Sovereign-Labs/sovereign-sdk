@@ -145,6 +145,9 @@ pub trait ModuleInfo {
     /// Returns the prefix of the module.
     fn prefix(&self) -> ModulePrefix;
 
+    /// Returns the discriminant of the module.
+    fn discriminant(&self) -> u8;
+
     /// Returns addresses of all the other modules this module is dependent on
     fn dependencies(&self) -> Vec<&ModuleId>;
 

@@ -653,6 +653,8 @@ pub struct StateAccesses {
 
 #[cfg(test)]
 mod tests {
+    use crate::Prefix;
+
     // Testing `ProvableStorageCache` requires higher-level types from `sov-modules-api`.
     // While adding `sov-modules-api` as a dev-dependency is an option, we chose to place the relevant tests directly in `sov-modules-api` for the following reasons:
     // 1. The tests rely on concepts and types that are more closely related to `sov-modules-api`.
@@ -660,7 +662,9 @@ mod tests {
     use super::*;
 
     pub fn create_key(key: u8) -> SlotKey {
-        SlotKey::from(vec![key])
+        SlotKey {
+            key: [key; 82],
+        }
     }
 
     pub fn create_value(v: u8) -> Option<SlotValue> {

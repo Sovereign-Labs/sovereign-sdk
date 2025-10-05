@@ -438,8 +438,8 @@ fn burn_unknown_token_fails() {
 
                     // Note, no token ID in the root cause the message.
                     let expected_error_part =
-                        "Value not found for prefix: \"sov_bank/Bank/tokens/\" and storage key:";
-                    assert!(message_3.starts_with(expected_error_part));
+                        "Value not found for prefix:";
+                    assert!(message_3.starts_with(expected_error_part), "The third message is incorrect. Expected a message: {expected_error_part}, Got: {message_3}");
                 }
                 _ => {
                     panic!("The transaction does not have the expected outcome.")

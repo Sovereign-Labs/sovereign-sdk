@@ -714,7 +714,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         let _test_query_result = state.get_value(
             namespaces::User::NAMESPACE,
             &test_key,
-            &mut StateAccessMetric::new_read(test_key.key(), None), // We throw away the metric from this test query because it should almost always be cached and wasn't requested by the user
+            &mut StateAccessMetric::new_read(Default::default(), None), // We throw away the metric from this test query because it should almost always be cached and wasn't requested by the user
         );
         if state.encountered_pruning_error.is_some() {
             return Err(ApiStateAccessorError::HeightNotAccessible);

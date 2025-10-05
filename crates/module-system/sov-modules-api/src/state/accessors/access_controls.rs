@@ -59,8 +59,8 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
                 {
                     let deserialization_duration = deserialization_start.elapsed();
                     self.metrics().add_deserialize_metric(
-                        storage_key.key(),
-                        storage_key.display_fn(),
+                        Default::default(),
+                        None,
                         storage_value.size(),
                         deserialization_duration,
                     );
@@ -195,7 +195,7 @@ impl<S: Spec> StateReader<Accessory> for AccessoryStateCheckpoint<'_, S> {
     type Error = Infallible;
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
         use sov_metrics::StateAccessMetric;
-        let mut metric = StateAccessMetric::new_read(key.key(), key.display_fn());
+        let mut metric = StateAccessMetric::new_read(Default::default(), None);
         let res = Ok(self.checkpoint.delta.get(
             <Accessory as sov_state::CompileTimeNamespace>::NAMESPACE,
             key,
@@ -225,8 +225,8 @@ impl<S: Spec> StateReader<Accessory> for AccessoryStateCheckpoint<'_, S> {
             {
                 let deserialization_duration = deserialization_start.elapsed();
                 self.checkpoint.metrics.add_deserialize_metric(
-                    storage_key.key(),
-                    storage_key.display_fn(),
+                    Default::default(),
+                    None,
                     storage_value.size(),
                     deserialization_duration,
                 );

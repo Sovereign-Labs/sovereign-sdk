@@ -15,12 +15,13 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
     let state_fields = ParsedStateField::parse(&module_struct_def, &rest_api_input);
 
     let state_item_exprs = state_fields
-        .iter()
-        .map(|f| {
+        .iter().enumerate()
+        .map(|(i, f)| {
             let ident = &f.ident;
             let ty = &f.ty;
             let state_name = format!("{ident}");
             let description = description_code(&f.rest_api_field.doc, &f.rest_api_field.attrs)?;
+            let item_discriminant: u8 = i.try_into().map_err(|_| syn::Error::new(proc_macro2::Span::call_site(), "Modules may not have more than 255 fields"))?;
 
             Ok(quote! {
                 StateItemInfo {
@@ -28,7 +29,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                     name: #state_name.to_string(),
                     description: #description,
                     namespace: <#ty as GetStateItemInfo>::NAMESPACE.into(),
-                    prefix: Prefix(self.#ident.prefix().clone()),
+                    item_discriminant: #item_discriminant,
                 }
             })
         })
@@ -60,6 +61,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                     let state_impl = StateItemRestApiImpl::<Self, #ty> {
                         api_state: api_state.clone(),
                         state_item_info: #state_item_expr,
+                        module_discriminant: Self::default().discriminant(),
                         phantom: PhantomData::<#ty>::default(),
                     };
 
@@ -147,7 +149,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
             fn rest_api(&self, api_state: ApiState<<Self as ModuleInfo>::Spec>) -> axum::Router<()> {
                 let mut state_item_routers: Vec<axum::Router<()>> = vec![];
                 let base_impl = ModuleRestApiBaseImpl::<Self> {
-                    module: Arc::new(Self::default()),
+                    module: Arc::new(self.clone()),
                     description: #description,
                     state_items: #map_of_state_item_exprs,
                 };

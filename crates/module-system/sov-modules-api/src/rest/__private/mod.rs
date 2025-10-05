@@ -4,6 +4,7 @@ mod types;
 
 use sov_rest_utils::ApiResult;
 use sov_state::Namespace;
+use sov_state::Prefix;
 
 use self::state::StateItemKind;
 use self::types::ModuleObject;
@@ -21,7 +22,7 @@ pub struct StateItemInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub namespace: Namespace,
-    pub prefix: Prefix,
+    pub item_discriminant: u8,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -37,15 +38,14 @@ pub struct ModuleOverview {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Prefix(pub sov_state::Prefix);
+pub struct PrefixStr(String);
 
-impl Serialize for Prefix {
+impl Serialize for PrefixStr {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let s = format!("0x{}", hex::encode(&self.0));
-        serializer.serialize_str(&s)
+        serializer.serialize_str(&self.0)
     }
 }
 

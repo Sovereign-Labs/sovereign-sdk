@@ -15,11 +15,12 @@ pub(crate) fn derive_module_info(input: &DeriveInput) -> syn::Result<proc_macro:
     let impl_prefix_functions = impl_prefix_functions(&struct_def);
     let impl_new = impl_module_info(&struct_def)?;
 
-    Ok(quote::quote! {
+    let out = quote::quote! {
         #impl_prefix_functions
 
         #impl_new
-    }
+    };
+    Ok(out
     .into())
 }
 
@@ -49,6 +50,8 @@ fn impl_prefix_functions(struct_def: &StructDef) -> proc_macro2::TokenStream {
 
 // Implements the `ModuleInfo` trait.
 fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStream> {
+    use convert_case::Casing;
+    use convert_case::Case;
     let module_id = struct_def.module_id();
 
     let StructDef {
@@ -64,14 +67,26 @@ fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStr
     let mut impl_self_init = Vec::default();
     let mut impl_self_body = Vec::default();
     let mut modules = Vec::default();
+    let discriminant = ident.to_string().to_case(Case::ScreamingSnake);
+    let key = format!("{discriminant}_DISCRIMINANT");
 
-    for field in fields {
+    impl_self_init.push(quote::quote! {
+        let discriminant = ::sov_modules_api::macros::config_value!(#key);
+    });
+
+    let mut state_field_id = 0;
+    for field in fields.iter() {
+        if state_field_id > 127 {
+            return Err(syn::Error::new(Span::call_site(), "Modules may not have more than 127 state fields"));
+        }
         match &field.attr {
             ModuleFieldAttribute::State { codec_builder } => {
                 impl_self_init.push(make_init_state(
                     field,
                     &codec_builder.clone().unwrap_or_else(default_codec_builder),
+                    state_field_id.try_into().map_err(|_| syn::Error::new(Span::call_site(), "Modules may not have more than 255 fields"))?,
                 )?);
+                state_field_id += 1;
                 impl_self_body.push(&field.ident);
             }
             ModuleFieldAttribute::Module => {
@@ -98,6 +113,7 @@ fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStr
     let fn_dependencies = make_fn_dependencies(&modules);
     let fn_prefix = make_module_prefix_fn(ident);
     let fn_is_safe_for_sequencer = make_sequencer_safety_fn(sequencer_safety_fn);
+    let fn_discriminant = make_fn_discriminant(&ident);
 
     Ok(quote::quote! {
         impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
@@ -116,6 +132,8 @@ fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStr
             #fn_prefix
 
             #fn_id
+
+            #fn_discriminant
 
             #fn_is_safe_for_sequencer
 
@@ -161,6 +179,19 @@ fn make_fn_id(id_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
     }
 }
 
+
+fn make_fn_discriminant(ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+    use convert_case::Casing;
+    use convert_case::Case;
+    let discriminant = ident.to_string().to_case(Case::ScreamingSnake);
+    let key = format!("{discriminant}_DISCRIMINANT");
+    quote::quote! {
+        fn discriminant(&self) -> u8 {
+            ::sov_modules_api::macros::config_value!(#key)
+        }
+    }
+}
+
 fn make_fn_dependencies(modules: &[&proc_macro2::Ident]) -> proc_macro2::TokenStream {
     let address_tokens = modules.iter().map(|ident| {
         quote::quote! {
@@ -177,8 +208,8 @@ fn make_fn_dependencies(modules: &[&proc_macro2::Ident]) -> proc_macro2::TokenSt
 fn make_init_state(
     field: &ModuleField,
     encoding_constructor: &syn::Path,
+    item_discriminant: u8,
 ) -> syn::Result<proc_macro2::TokenStream> {
-    let prefix_fun = prefix_func_ident(&field.ident);
     let field_ident = &field.ident;
     let ty = &field.ty;
 
@@ -207,7 +238,7 @@ fn make_init_state(
     //  let state_prefix = Self::_prefix_field_ident().into();
     //  let field_ident = path::StateType::new(state_prefix);
     Ok(quote::quote! {
-        let state_prefix = Self::#prefix_fun().into();
+        let state_prefix = ::sov_modules_api::Prefix::new(discriminant, #item_discriminant);
         let #field_ident = #ty::with_codec(state_prefix, #encoding_constructor());
     })
 }

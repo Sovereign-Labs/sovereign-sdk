@@ -65,7 +65,9 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         key: &SlotKey,
         version: SlotNumber,
     ) -> Option<SlotValue> {
-        match self.db.get_value_option_by_key::<N>(version, key.as_ref()) {
+        // TODO: Skip the useless to_vec here. Needs schema/rockbound changes
+        let key_vec = key.as_ref().to_vec();
+        match self.db.get_value_option_by_key::<N>(version, &key_vec) {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
@@ -131,6 +133,8 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         version: Option<SlotNumber>,
     ) -> Option<SlotValue> {
         let version_to_use = self.get_version_to_use(version)?;
+        // TODO: Skip the useless to_vec here. Needs schema/rockbound changes
+        let key_vec = key.as_ref().to_vec();
 
         match N::NAMESPACE {
             Namespace::User => self.read_value_namespace::<DBUserNamespace>(key, version_to_use),
@@ -139,7 +143,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             }
             Namespace::Accessory => self
                 .accessory_db
-                .get_value_option(key.as_ref(), version_to_use)
+                .get_value_option(&key_vec, version_to_use)
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
@@ -177,7 +181,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
                 );
                 // For each value that's been read from the tree, read it from the logged JMT to populate hints
                 for (key, read_node_leaf) in &state_accesses.ordered_reads {
-                    let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+                    let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
                     // This TODO is for performance enhancement, not a security concern.
                     // TODO: Switch to the batch read API once it becomes available
                     let (value_from_proof, proof) =
@@ -216,7 +220,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
-                let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+                let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
                 key_preimages.push((key_hash, key.clone()));
 
                 // Here we preserve the original wrtes that will be stored in the db.
@@ -253,11 +257,12 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         accessory_writes: &OrderedReadsAndWrites,
     ) -> sov_db::schema::SchemaBatch {
         let next_version = self.db.get_next_version();
+        // TODO: Skip the useless to_vec here. Needs schema/rockbound changes
         AccessoryDb::materialize_values(
             accessory_writes
                 .ordered_writes
                 .iter()
-                .map(|(k, v_opt)| (k.key().to_vec(), v_opt.as_ref().map(|v| v.value().to_vec()))),
+                .map(|(k, v_opt)| (k.as_ref().to_vec(), v_opt.as_ref().map(|v| v.value().to_vec()))),
             next_version,
         )
         .expect("accessory db materialization must succeed")
@@ -401,12 +406,12 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 .kernel
                 .key_preimages
                 .iter()
-                .map(|(key_hash, key)| (*key_hash, key.key_ref())),
+                .map(|(key_hash, key)| (*key_hash, key)),
             state_update
                 .user
                 .key_preimages
                 .iter()
-                .map(|(key_hash, key)| (*key_hash, key.key_ref())),
+                .map(|(key_hash, key)| (*key_hash, key)),
         )
         .expect("collecting preimages must succeed");
 
@@ -528,7 +533,8 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             }
             Namespace::Accessory => self
                 .accessory_db
-                .get_value_option(key.as_ref(), SlotNumber::MAX)
+                // TODO: Skip the useless to_vec here. Needs schema/rockbound changes
+                .get_value_option(&key.as_ref().to_vec(), SlotNumber::MAX)
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }

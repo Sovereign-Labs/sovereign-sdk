@@ -148,7 +148,7 @@ mod tests {
         let kernel = MockKernel::<TestSpec>::new(4, 1);
         let mut state = StateCheckpoint::new(storage, &kernel);
 
-        let prefix = Prefix::new(b"test".to_vec());
+        let prefix = Prefix::new(1, 1);
         let mut value = VersionedStateValue::<RollupHeight>::with_codec(prefix.clone(), BorshCodec);
 
         // Initialize a value in the kernel state during slot 4
@@ -182,7 +182,7 @@ mod tests {
         let kernel = MockKernel::<TestSpec>::new(4, 1);
         let mut state = StateCheckpoint::new(storage, &kernel);
 
-        let prefix = Prefix::new(b"test".to_vec());
+        let prefix = Prefix::new(1, 1);
         let mut value = VersionedStateValue::<RollupHeight>::with_codec(prefix.clone(), BorshCodec);
 
         // Initialize a versioned value in the kernel state to be available starting at slot 2

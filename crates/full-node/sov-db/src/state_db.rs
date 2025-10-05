@@ -89,11 +89,12 @@ impl StateDb {
     }
 
     fn materialize_preimages_namespace<'a, N: Namespace>(
-        items: impl IntoIterator<Item = (KeyHash, &'a SchemaKey)>,
+        items: impl IntoIterator<Item = (KeyHash, impl AsRef<[u8]>)>,
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
         for (key_hash, key) in items.into_iter() {
-            batch.put::<KeyHashToKey<N>>(&key_hash.0, key)?;
+            // TODO: Skip the useless to_vec here. Needs schema/rockbound changes
+            batch.put::<KeyHashToKey<N>>(&key_hash.0, &key.as_ref().to_vec())?;
         }
         Ok(batch)
     }
@@ -102,8 +103,8 @@ impl StateDb {
     /// Note that the preimage is not checked for correctness,
     /// since the [`StateDb`] is unaware of the hash function used by the JMT.
     pub fn materialize_preimages<'a>(
-        kernel_items: impl IntoIterator<Item = (KeyHash, &'a SchemaKey)>,
-        user_items: impl IntoIterator<Item = (KeyHash, &'a SchemaKey)>,
+        kernel_items: impl IntoIterator<Item = (KeyHash, impl AsRef<[u8]>)>,
+        user_items: impl IntoIterator<Item = (KeyHash, impl AsRef<[u8]>)>,
     ) -> anyhow::Result<SchemaBatch> {
         let mut kernel_batch =
             Self::materialize_preimages_namespace::<KernelNamespace>(kernel_items)?;

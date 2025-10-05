@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::HexString;
@@ -14,7 +16,11 @@ impl<V> StateItemEncoder<V> for BorshCodec
 where
     V: BorshSerialize + ?Sized,
 {
-    fn encode(&self, value: &V) -> Vec<u8> {
+    fn encode(&self, value: &V, writer: &mut impl Write) {
+        borsh::to_writer(writer, value).expect("Failed to serialize value")
+    }
+
+    fn encode_vec(&self, value: &V) -> Vec<u8> {
         borsh::to_vec(value).expect("Failed to serialize value")
     }
 }
@@ -49,15 +55,15 @@ impl<T> EncodeLike<[T], Vec<T>> for BorshCodec
 where
     T: BorshSerialize,
 {
-    fn encode_like(&self, borrowed: &[T]) -> Vec<u8> {
-        borsh::to_vec(borrowed).expect("Borsh serialization to vec is infallible")
+    fn encode_like(&self, borrowed: &[T], writer: &mut impl Write) {
+        borsh::to_writer(writer, borrowed).expect("Borsh serialization to vec is infallible")
     }
 }
 
 // Since `HexString` is serialized
 // exactly like `Vec<u8>`, we can just reuse the standard impl
 impl EncodeLike<[u8], HexString> for BorshCodec {
-    fn encode_like(&self, borrowed: &[u8]) -> Vec<u8> {
-        borsh::to_vec(borrowed).expect("Borsh serialization to vec is infallible")
+    fn encode_like(&self, borrowed: &[u8], writer: &mut impl Write) {
+        borsh::to_writer(writer, borrowed).expect("Borsh serialization to vec is infallible")
     }
 }

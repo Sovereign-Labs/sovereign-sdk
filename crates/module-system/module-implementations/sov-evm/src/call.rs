@@ -158,6 +158,7 @@ where
                 t.submit(metrics);
             });
             sov_metrics::track_metrics(|t| {
+                tracing::debug!("Evm db metrics: {:?}", db_metrics);
                 t.submit(db_metrics);
             });
         }

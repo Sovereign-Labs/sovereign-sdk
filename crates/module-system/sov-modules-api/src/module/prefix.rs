@@ -15,6 +15,16 @@ pub struct ModulePrefix {
     storage_name: Option<&'static str>,
 }
 
+impl std::fmt::Display for ModulePrefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(storage_name) = self.storage_name {
+            write!(f, "{}/{}/{}", self.module_path, self.module_name, storage_name)
+        } else {
+            write!(f, "{}/{}", self.module_path, self.module_name)
+        }
+    }
+}
+
 impl ModulePrefix {
     /// Creates a new instance of a module prefix with the provided static definitions.
     #[must_use]
@@ -81,9 +91,9 @@ impl ModulePrefix {
     }
 }
 
-impl From<ModulePrefix> for Prefix {
-    fn from(module_prefix: ModulePrefix) -> Self {
-        let combined_prefix = module_prefix.combine_prefix();
-        Prefix::new(combined_prefix)
-    }
-}
+// impl From<ModulePrefix> for Prefix {
+//     fn from(module_prefix: ModulePrefix) -> Self {
+//         let combined_prefix = module_prefix.combine_prefix();
+//         Prefix::new(combined_prefix)
+//     }
+// }

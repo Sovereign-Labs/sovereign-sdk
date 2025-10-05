@@ -13,6 +13,7 @@ use serde::Serialize;
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use serde_with::{Bytes, serde_as};
 
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
@@ -25,48 +26,39 @@ use crate::{
     MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
 };
 
-type ArcFormatFn =
-    Arc<dyn (Fn(&[u8], &mut fmt::Formatter<'_>) -> fmt::Result) + Send + Sync + 'static>;
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.
+#[serde_as]
 #[derive(
     Derivative, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize, UniversalWallet,
 )]
 #[derivative(Clone, PartialEq, Eq, Debug, Hash, Ord)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary, proptest_derive::Arbitrary))]
 pub struct SlotKey {
-    #[sov_wallet(hidden)]
-    key: Arc<Vec<u8>>,
-    #[borsh(skip)]
-    #[serde(skip)]
-    #[derivative(
-        Debug = "ignore",
-        PartialEq = "ignore",
-        Hash = "ignore",
-        Ord = "ignore"
-    )]
-    #[sov_wallet(skip)]
-    display_fn: Option<ArcFormatFn>,
+    // // TODO: Handle extra long keys
+    // pub(crate) prefix: Prefix,
+    #[serde_as(as = "Bytes")]
+    pub(crate) key: [u8; 82],
 }
 
-#[cfg(feature = "arbitrary")]
-impl<'a> arbitrary::Arbitrary<'a> for SlotKey {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        const MIN_LEN: usize = 10;
-        const MAX_LEN: usize = 512;
-        // Will include some non alhpanumeric characters, but that's fine.
-        const ASCII_SELECTED: std::ops::RangeInclusive<u8> = b'0'..=b'z';
+// impl<'a> arbitrary::Arbitrary<'a> for SlotKey {
+//     fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+//         const MIN_LEN: usize = 10;
+//         const MAX_LEN: usize = 512;
+//         // Will include some non alhpanumeric characters, but that's fine.
+//         const ASCII_SELECTED: std::ops::RangeInclusive<u8> = b'0'..=b'z';
 
-        let len = u.int_in_range(MIN_LEN..=MAX_LEN)?;
+//         let len = u.int_in_range(MIN_LEN..=MAX_LEN)?;
 
-        let key: arbitrary::Result<Vec<u8>> =
-            std::iter::repeat_with(|| u.int_in_range(ASCII_SELECTED.clone()))
-                .take(len)
-                .collect();
+//         let key: arbitrary::Result<Vec<u8>> =
+//             std::iter::repeat_with(|| u.int_in_range(ASCII_SELECTED.clone()))
+//                 .take(len)
+//                 .collect();
 
-        Ok(SlotKey::from(key?))
-    }
-}
+//         Ok(SlotKey::from(key?))
+//     }
+// }
 
 // Manually implement PartialOrd to satisfy clippy
 impl PartialOrd for SlotKey {
@@ -75,50 +67,67 @@ impl PartialOrd for SlotKey {
     }
 }
 
-impl From<Vec<u8>> for SlotKey {
-    fn from(key: Vec<u8>) -> Self {
-        Self {
-            key: Arc::new(key),
-            display_fn: None,
-        }
-    }
-}
-
 impl SlotKey {
     /// Returns a new [`Arc`] reference to the bytes of this key.
-    pub fn key(&self) -> Arc<Vec<u8>> {
-        self.key.clone()
+    pub fn without_prefix(&self) -> &[u8] {
+        &self.key[2..]
     }
 
-    /// Returns a new [`Arc`] reference to the bytes of this key.
-    pub fn key_ref(&self) -> &Vec<u8> {
-        self.key.as_ref()
-    }
-
-    /// Returns the size of the key.
-    pub fn size(&self) -> usize {
+    /// Returns the length of the key.
+    pub fn len(&self) -> usize {
         self.key.len()
     }
 
-    /// Returns the display function for this key.
-    pub fn display_fn(&self) -> Option<ArcFormatFn> {
-        self.display_fn.clone()
+    /// Craetes a test key with the given byte.
+    pub fn test_key(byte: u8) -> Self {
+        Self {
+            key: [byte; 82],
+        }
     }
 }
 
-impl AsRef<Vec<u8>> for SlotKey {
-    fn as_ref(&self) -> &Vec<u8> {
-        &self.key
-    }
-}
+// impl SlotKey {
+//     /// Returns a new [`Arc`] reference to the bytes of this key.
+//     pub fn key(&self) -> Arc<Vec<u8>> {
+//         self.key.clone()
+//     }
+
+//     /// Returns a new [`Arc`] reference to the bytes of this key.
+//     pub fn key_ref(&self) -> &Vec<u8> {
+//         self.key.as_ref()
+//     }
+
+//     /// Returns the size of the key.
+//     pub fn size(&self) -> usize {
+//         self.key.len()
+//     }
+
+//     /// Returns the display function for this key.
+//     pub fn display_fn(&self) -> Option<ArcFormatFn> {
+//         self.display_fn.clone()
+//     }
+// }
+
+// impl AsRef<Vec<u8>> for SlotKey {
+//     fn as_ref(&self) -> &Vec<u8> {
+//         &self.key
+//     }
+// }
 
 impl fmt::Display for SlotKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(display_fn) = &self.display_fn {
-            display_fn(self.key.as_ref(), f)
-        } else {
-            write!(f, "{}", String::from_utf8_lossy(self.key().as_ref()))
-        }
+        // if let Some(display_fn) = &self.display_fn {
+        //     display_fn(self.key.as_ref(), f)
+        // } else {
+        //     write!(f, "{}", String::from_utf8_lossy(self.key().as_ref()))
+        // }
+        write!(f, "{}/{}", self.key[0], hex::encode(&self.key[1..]))
+    }
+}
+
+impl AsRef<[u8]> for SlotKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.key
     }
 }
 
@@ -130,51 +139,63 @@ impl SlotKey {
         K: fmt::Display,
         Q: ?Sized,
     {
-        let encoded_key = codec.encode_like(key);
-
-        let mut full_key = Vec::<u8>::with_capacity(prefix.len().saturating_add(encoded_key.len()));
-        full_key.extend(prefix.as_ref());
-        full_key.extend(&encoded_key);
-        let prefix_len = prefix.len();
-        let codec = codec.clone();
-        let display_fn: Option<ArcFormatFn> = Some(Arc::new(
-            move |key_bytes: &[u8], formatter: &mut fmt::Formatter<'_>| {
-                if key_bytes.len() < prefix_len {
-                    return Err(std::fmt::Error);
-                }
-                let prefix = &key_bytes[..prefix_len];
-                let key = &key_bytes[prefix_len..];
-                let key = KC::try_decode(&codec, key).map_err(|_| std::fmt::Error)?;
-                let prefix_str = std::str::from_utf8(prefix).map_err(|_e| std::fmt::Error)?;
-                write!(formatter, "{prefix_str}{key}")
-            },
-        ));
+        let mut encoded = [0u8; 82];
+        encoded[0] = prefix.module;
+        encoded[1] = prefix.item;
+        let mut cursor = std::io::Cursor::new(&mut encoded[2..]);
+        codec.encode_like(key, &mut cursor);
         Self {
-            key: Arc::new(full_key),
-            display_fn,
+            key: encoded,
         }
+        // let encoded_key = codec.encode_like(key);
+        // wt
+
+        // let mut full_key = Vec::<u8>::with_capacity(prefix.len().saturating_add(encoded_key.len()));
+        // full_key.extend(prefix.as_ref());
+        // full_key.extend(&encoded_key);
+        // let prefix_len = prefix.len();
+        // let codec = codec.clone();
+        // let display_fn: Option<ArcFormatFn> = Some(Arc::new(
+        //     move |key_bytes: &[u8], formatter: &mut fmt::Formatter<'_>| {
+        //         if key_bytes.len() < prefix_len {
+        //             return Err(std::fmt::Error);
+        //         }
+        //         let prefix = &key_bytes[..prefix_len];
+        //         let key = &key_bytes[prefix_len..];
+        //         let key = KC::try_decode(&codec, key).map_err(|_| std::fmt::Error)?;
+        //         let prefix_str = std::str::from_utf8(prefix).map_err(|_e| std::fmt::Error)?;
+        //         write!(formatter, "{prefix_str}{key}")
+        //     },
+        // ));
+        // Self {
+        //     key: Arc::new(full_key),
+        //     display_fn,
+        // }
     }
 
     /// Used only in tests.
     /// Builds a storage key from a byte slice
     pub fn from_slice(key: &[u8]) -> Self {
+        if key.len() > 82 {
+            panic!("Key length must be less than 82");
+        }
+        let mut output = [0u8; 82];
+        for (out_byte, k) in output.iter_mut().zip(key.iter()) {
+            *out_byte = *k;
+        }
         Self {
-            key: Arc::new(key.to_vec()),
-            display_fn: None,
+           key: output,
         }
     }
 
     /// Creates a new [`SlotKey`] from a prefix.
     pub fn singleton(prefix: &Prefix) -> Self {
+        let mut encoded = [0u8; 82];
+        encoded[0] = prefix.module;
+        encoded[1] = prefix.item;
         Self {
-            key: Arc::new(prefix.as_ref().to_vec()),
-            display_fn: Some(Arc::new(
-                move |key_bytes: &[u8], formatter: &mut fmt::Formatter<'_>| {
-                    let prefix_str =
-                        std::str::from_utf8(key_bytes).map_err(|_e| std::fmt::Error)?;
-                    formatter.write_str(prefix_str)
-                },
-            )),
+            key: encoded,
+           
         }
     }
 }
@@ -233,7 +254,7 @@ impl SlotValue {
         Vq: ?Sized,
         VC: EncodeLike<Vq, V>,
     {
-        let encoded_value = codec.encode_like(value);
+        let encoded_value = codec.encode_like_vec(value);
         Self {
             value: Arc::new(encoded_value),
         }
@@ -621,7 +642,8 @@ pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(
         proof,
         namespace,
     } = state_proof;
-    let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+    let key_bytes = borsh::to_vec(&key).unwrap();
+    let key_hash = KeyHash::with::<S::Hasher>(key_bytes.as_slice());
 
     // The proof leaves contain hash(combine(val_hash, val_len)).
     // The outer hashing is handled by the verify method, so we need to pass combine(val_hash, val_len).

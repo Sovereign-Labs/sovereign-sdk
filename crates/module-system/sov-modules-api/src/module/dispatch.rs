@@ -53,7 +53,7 @@ impl<'a> InnerEnumVariant<'a> {
 }
 
 /// A trait that needs to be implemented for any call message.
-pub trait DispatchCall: Send + Sync {
+pub trait DispatchCall: Send + Sync +'static {
     /// The context of the call
     type Spec: Spec;
 
