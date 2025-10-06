@@ -482,7 +482,7 @@ where
                     create_tx_receipt(
                         SkippedTxContents {
                             error,
-                            gas_used: gas_used,
+                            gas_used,
                         },
                         tx_hash,
                         tx_body.data,

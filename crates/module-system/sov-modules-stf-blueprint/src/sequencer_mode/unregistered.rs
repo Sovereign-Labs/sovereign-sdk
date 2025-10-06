@@ -220,7 +220,7 @@ where
 
         let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
             ignored: IgnoredTxContents {
-                gas_used: gas_used,
+                gas_used,
                 index: 0,
             },
         };
@@ -255,7 +255,7 @@ where
                     warn!(error = ?err_str);
                     let skipped = SkippedTxContents {
                         error: TxProcessingError::AuthenticationFailed(err_str),
-                        gas_used: gas_used,
+                        gas_used,
                     };
 
                     return (
@@ -276,7 +276,7 @@ where
             }
             let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
                 ignored: IgnoredTxContents {
-                    gas_used: gas_used,
+                    gas_used,
                     index: 0,
                 },
             };
@@ -313,7 +313,7 @@ where
             gas_used = pre_exec_gas_meter.gas_info().gas_used;
             let skipped = SkippedTxContents {
                 error,
-                gas_used: gas_used,
+                gas_used,
             };
 
             let tx_receipt = create_tx_receipt(skipped, raw_tx_hash, batch.tx.data.clone());
@@ -343,7 +343,7 @@ where
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
             gas_price: *gas_price,
-            gas_used: gas_used,
+            gas_used,
 
             outcome: BatchSequencerOutcome {
                 rewards: Rewards {
