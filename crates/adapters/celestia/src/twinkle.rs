@@ -88,17 +88,15 @@ pub enum BlobStatus {
     Included,
 }
 
-// #[serde_as]
+#[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct BlobStatusResponse {
     // Always set,
     status: BlobStatus,
-    // #[serde_as(as = "Option<serde_with::base64::Base64>")]
-    // commitment: Option<Vec<u8>>,
-    commitment: Option<String>,
+    #[serde_as(as = "Option<serde_with::base64::Base64>")]
+    commitment: Option<Vec<u8>>,
     #[serde(rename = "txId")]
-    // transaction_id: Option<TmHash>,
-    transaction_id: Option<String>,
+    transaction_id: Option<HexHash>,
     height: Option<u64>,
 }
 
@@ -180,16 +178,18 @@ impl TwinkleClient {
             .await
             .expect("Failed to decode submit lob ");
 
-        for _ in 0..150 {
+        for _ in 0..120 {
             let result = self.blob_status(&submit_response.twinkle_request_id).await;
             println!("RESULT: {:?}", result);
+            // TODO: Handle error
             if let Ok(response) = result {
-                println!("RESPONSE: {:?}", response);
                 if matches!(response.status, BlobStatus::Included) {
+                    println!("RESPONSE: {:?}", response);
                     let r = SubmitBlobReceipt {
-                        // blob_hash: HexHash::new(response.commitment.unwrap().try_into().unwrap()),
-                        blob_hash: HexHash::new([0u8; 32]),
-                        da_transaction_id: TmHash(tendermint::Hash::Sha256([0u8; 32])),
+                        blob_hash: HexHash::new(response.commitment.unwrap().try_into().unwrap()),
+                        da_transaction_id: TmHash(tendermint::Hash::Sha256(
+                            response.transaction_id.unwrap().0,
+                        )),
                     };
                     return Ok(r);
                 }
@@ -235,7 +235,6 @@ mod tests {
     use celestia_types::nmt::Namespace;
 
     const API_KEY: &str = "TEMP_SECRET";
-
 
     fn default_mocha_config() -> TwinkleConfig {
         TwinkleConfig {
