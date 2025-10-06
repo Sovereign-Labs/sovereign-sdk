@@ -297,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn try_charge_gas() {
+    fn test_charge_gas_with_funds_succeeds_and_tracks_usage() {
         {
             const REMAINING_FUNDS: u64 = 100;
             let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
@@ -325,34 +325,35 @@ mod tests {
             "There should be no more gas left in the meter, hence charging more gas should fail"
         );
         }
-
-        {
-            let remaining_gas = GasUnit::<2>::from([100; 2]);
-            let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
-
-            let mut gas_meter =
-                BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
-
-            assert!(
-                gas_meter.charge_gas(&remaining_gas.clone()).is_ok(),
-                "It should be possible to charge gas"
-            );
-            assert_eq!(
-                gas_meter.gas_info().gas_used,
-                remaining_gas,
-                "The gas used should be the same as the gas charged"
-            );
-            assert_eq!(gas_meter.gas_info().gas_price, gas_price);
-
-            assert!(
-                gas_meter.charge_gas(&GasUnit::<2>::from([1; 2])).is_err(),
-                "There should be no more gas left in the meter, hence charging more gas should fail"
-            );
-        }
     }
 
     #[test]
-    fn gas_meter_charge_gas_overflow_test() {
+    fn test_charge_gas_without_funds_succeeds_and_tracks_usage() {
+        let remaining_gas = GasUnit::<2>::from([100; 2]);
+        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+
+        let mut gas_meter =
+            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
+
+        assert!(
+            gas_meter.charge_gas(&remaining_gas.clone()).is_ok(),
+            "It should be possible to charge gas"
+        );
+        assert_eq!(
+            gas_meter.gas_info().gas_used,
+            remaining_gas,
+            "The gas used should be the same as the gas charged"
+        );
+        assert_eq!(gas_meter.gas_info().gas_price, gas_price);
+
+        assert!(
+            gas_meter.charge_gas(&GasUnit::<2>::from([1; 2])).is_err(),
+            "There should be no more gas left in the meter, hence charging more gas should fail"
+        );
+    }
+
+    #[test]
+    fn test_charge_gas_prevents_value_overflow() {
         let remaining_gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
         let gas_price = GasPrice::<2>::from([Amount::MAX; 2]);
 
@@ -386,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn gas_meter_charge_atomic_update() {
+    fn test_charge_gas_atomic_update_on_failure() {
         let remaining_gas = GasUnit::<2>::from([5, 5]);
         let remaining_funds = Amount::new(1000000);
         let gas_price = GasPrice::<2>::from([Amount::new(10); 2]);
