@@ -91,12 +91,13 @@ pub enum BlobStatus {
 #[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct BlobStatusResponse {
-    // Always set,
     status: BlobStatus,
-    #[serde_as(as = "Option<serde_with::base64::Base64>")]
-    commitment: Option<Vec<u8>>,
+    #[serde_as(as = "serde_with::base64::Base64")]
+    commitment: Vec<u8>,
+    // Only set for [`BlobStatus::Included`]
     #[serde(rename = "txId")]
     transaction_id: Option<HexHash>,
+    // Only set for [`BlobStatus::Included`]
     height: Option<u64>,
 }
 
@@ -106,6 +107,7 @@ pub struct TwinkleClient {
     network: Network,
     // Interval for pulling blob status after submission
     pull_interval: std::time::Duration,
+    total_timeout: std::time::Duration,
     backoff_policy: ExponentialBuilder,
 }
 
@@ -133,25 +135,23 @@ impl TwinkleClient {
             client,
             network: config.network,
             pull_interval: std::time::Duration::from_millis(config.pull_interval_millis),
+            total_timeout: std::time::Duration::from_secs(config.total_timeout_secs),
             backoff_policy,
         })
     }
 
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
-        println!("Twinkle request id: {}", twinkle_request_id);
+        tracing::trace!(%twinkle_request_id, "Checking blob status");
 
-        let response = (|| async {
+        (|| async {
             let mut request = self.client.get(BLOB_STATUS);
             request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
-            request.send().await
+            let response = request.send().await?;
+            decode_on_success(response).await
         })
         .retry(&self.backoff_policy)
         .await
-        .context("Blob status")?;
-
-        Ok(decode_on_success(response)
-            .await
-            .expect("Failed to decode blob status"))
+        .with_context(|| format!("Blob status check of req {twinkle_request_id}"))
     }
 
     async fn submit_blob_to_namespace_and_pull(
@@ -159,6 +159,10 @@ impl TwinkleClient {
         blob: String,
         namespace: Namespace,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
+        let timeout = tokio::time::sleep(self.total_timeout);
+        tokio::pin!(timeout);
+
+        let start = std::time::Instant::now();
         let namespace = hex::encode(namespace.id_v0().expect("Namespace should be v0"));
         let request = SubmitBlobRequest {
             namespace,
@@ -167,39 +171,56 @@ impl TwinkleClient {
             network: self.network.to_string(),
         };
 
-        let response = (|| async {
-            self.client
-                .post(SUBMIT_BLOB_URL)
-                .json(&request)
-                .send()
+        let submit_start = std::time::Instant::now();
+        let submit_response: SubmitBlobAsyncResponse = tokio::select! {
+            result = async {
+                (|| async {
+                    let response = self
+                        .client
+                        .post(SUBMIT_BLOB_URL)
+                        .json(&request)
+                        .send()
+                        .await?;
+                    decode_on_success(response).await
+                })
+                .retry(&self.backoff_policy)
                 .await
-        })
-        .retry(&self.backoff_policy)
-        .await?;
-        let submit_response: SubmitBlobAsyncResponse = decode_on_success(response)
-            .await
-            .expect("Failed to decode submit blob");
-
-        // TODO: Parametrize this
-        for _ in 0..120 {
-            let result = self.blob_status(&submit_response.twinkle_request_id).await;
-            println!("RESULT: {:?}", result);
-            // TODO: Handle error
-            if let Ok(response) = result {
-                if matches!(response.status, BlobStatus::Included) {
-                    println!("RESPONSE: {:?}", response);
-                    let r = SubmitBlobReceipt {
-                        blob_hash: HexHash::new(response.commitment.unwrap().try_into().unwrap()),
-                        da_transaction_id: TmHash(tendermint::Hash::Sha256(
-                            response.transaction_id.unwrap().0,
-                        )),
-                    };
-                    return Ok(r);
-                }
+            } => result?,
+            _ = &mut timeout => {
+                return Err(anyhow::anyhow!("Timeout during blob submission after {:?}", self.total_timeout));
             }
-            tokio::time::sleep(self.pull_interval).await;
+        };
+        let submit_time = submit_start.elapsed();
+        let pull_start = std::time::Instant::now();
+
+        tokio::select! {
+            result = async {
+                loop {
+                    // Returning error here, as network errors will be retried inside
+                    let response = self
+                        .blob_status(&submit_response.twinkle_request_id)
+                        .await?;
+                    if matches!(response.status, BlobStatus::Included) {
+                        let r = SubmitBlobReceipt {
+                            blob_hash: HexHash::new(response.commitment.try_into().expect("Wrong commitment size, should 32 bytes.")),
+                            da_transaction_id: TmHash(tendermint::Hash::Sha256(
+                                response.transaction_id.unwrap().0,
+                            )),
+                        };
+                        tracing::debug!(
+                            ?submit_time,
+                            pull_time = ?pull_start.elapsed(),
+                            total_time = ?start.elapsed(),
+                            "Blob has been included");
+                        return Ok(r);
+                    }
+                    tokio::time::sleep(self.pull_interval).await;
+                }
+            } => result,
+            _ = timeout => {
+                Err(anyhow::anyhow!("Timeout waiting for blob inclusion after {:?}", self.total_timeout))
+            }
         }
-        Err(anyhow::anyhow!("Failed to submit in 30"))
     }
 
     async fn submit_blob_to_namespace(
@@ -229,7 +250,7 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
         let text = response.text().await?;
         anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
     }
-    response.json().await.map_err(Into::into)
+    Ok(response.json().await.expect("Failed to decode response"))
 }
 
 #[cfg(test)]
@@ -253,6 +274,9 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn async_blob_submit() -> anyhow::Result<()> {
+        sov_test_utils::logging::initialize_or_change_logging_with_filter(
+            "debug,hyper=info,sov_celestia_adapter=trace",
+        );
         let backoff_policy = ExponentialBuilder::default();
         let twinkle_client = TwinkleClient::from_config(&default_mocha_config(), backoff_policy)?;
 
