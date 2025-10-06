@@ -3,6 +3,7 @@
 
 use std::marker::PhantomData;
 
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
 use serde::{Deserialize, Serialize};
@@ -287,13 +288,21 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
+
+    //let ver_time = Instant::now();
     tx.verify(chain_hash, meter).map_err(|e| match e {
         TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
         _ => AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(e.to_string()),
             raw_tx_hash,
         ),
-    })
+    })?;
+
+    //let ver_time = ver_time.elapsed();
+    //dbg!(ver_time);
+
+
+    Ok(())
 }
 
 /// Extracts authorization data from a verified transaction.
@@ -357,6 +366,8 @@ pub fn authenticate<
     chain_hash: &[u8; 32],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    ////let sov_time = Instant::now();
+
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
@@ -377,7 +388,11 @@ pub fn authenticate<
             }
         };
 
-    verify_and_decode_tx::<S, D>(raw_tx_hash, tx, chain_hash, state)
+    let x = verify_and_decode_tx::<S, D>(raw_tx_hash, tx, chain_hash, state);
+
+    //let sov_time = sov_time.elapsed();
+    //dbg!(sov_time);
+    x
 }
 
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.

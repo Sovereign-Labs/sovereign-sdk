@@ -47,6 +47,9 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
 {
+    // TOTAL
+    let total = std::time::Instant::now();
+
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
@@ -54,15 +57,28 @@ where
 
     // Authenticate the transaction so that we can get the credential ID and nonce.
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+
+    let t1 = total.elapsed();
+
+    let api_state_time = std::time::Instant::now();
     let mut state = ethereum
         .sequencer
         .api_state()
         .default_api_state_accessor()
         .to_provable_reader();
+
+    // SIG
+    let t2 = api_state_time.elapsed();
+    let sig = std::time::Instant::now();
+
     let (_decoded_tx, auth_data, _call) =
         <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
             to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
         })?;
+    let sig = sig.elapsed();
+
+    let total_ver = total.elapsed();
+
     let mut state = state.api_state_accessor;
     let AuthorizationData {
         credential_id,
@@ -75,14 +91,21 @@ where
     } else {
         0
     };
+
     let start = std::time::Instant::now();
-    for _ in 0..retries {
+    for i in 0..retries {
         match uniqueness {
             UniquenessData::Nonce(nonce) => {
                 let expected_nonce = sov_uniqueness::Uniqueness::<S>::default()
                     .nonce(&credential_id, &mut state)?
                     .unwrap_or_default();
                 if nonce == expected_nonce {
+                    let total = total.elapsed();
+                    dbg!(total, total_ver, sig);
+                    dbg!(t1, t2);
+
+                    dbg!();
+
                     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
                         to_jsonrpsee_error_object(
                             format!("{} - '{}' ({:?})", e.status, e.message, e.details),

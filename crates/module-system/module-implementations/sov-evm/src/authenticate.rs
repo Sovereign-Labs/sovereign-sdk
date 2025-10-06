@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 #[cfg(feature = "native")]
 use std::sync::LazyLock;
+//use std::time::Instant;
 
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::Decodable2718;
@@ -153,6 +154,7 @@ where
 {
     // TODO: Charge gas for deserialization & signature check.
 
+    //let evm_start = Instant::now();
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
@@ -165,6 +167,9 @@ where
     let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
     let call = CallMessage { rlp };
+
+    //let evm_time = evm_start.elapsed();
+    //dbg!(evm_time);
 
     Ok((tx_and_raw_hash, auth_data, call))
 }

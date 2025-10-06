@@ -1,9 +1,11 @@
+#![allow(dead_code)]
+use alloy::signers::Signer;
 use alloy_primitives::Address;
 use anyhow::Result;
 use clap::Parser;
 use sov_eth_client::{RpcClient, SimpleStorageClient};
 use sov_test_utils::SimpleStorage;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 
 use crate::uniswap::UniSoakTest;
 
@@ -15,7 +17,7 @@ mod uniswap;
 #[command(about = "EVM soak testing tool", long_about = None)]
 struct Args {
     /// RPC address
-    #[arg(short, long, default_value = "127.0.0.1:12346")]
+    #[arg(short, long, default_value = "127.0.0.1:12348")]
     rpc_addr: SocketAddr,
 
     /// Private key for signing transactions

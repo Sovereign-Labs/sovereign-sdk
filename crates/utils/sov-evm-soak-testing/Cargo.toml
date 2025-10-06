@@ -9,6 +9,8 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+reqwest = { workspace = true }
+axum = { workspace = true }
 sov-eth-client = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }

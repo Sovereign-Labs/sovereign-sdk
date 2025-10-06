@@ -23,7 +23,7 @@ enum SelectedRuntime {
 
 #[derive(Parser)]
 struct Args {
-    #[arg(short, long, default_value = "http://localhost:12346")]
+    #[arg(short, long, default_value = "http://localhost:12348")]
     /// The URL of the rollup node to connect to. Defaults to http://localhost:12346.
     api_url: String,
 
@@ -31,7 +31,7 @@ struct Args {
     /// The number of workers to spawn - this controls the number of concurrent transactions. Defaults to 5.
     num_workers: u32,
 
-    #[arg(short, long, default_value = "test")]
+    #[arg(short, long, default_value = "demo-mock")]
     runtime: SelectedRuntime,
 
     #[arg(short, long, default_value = "0")]
@@ -43,7 +43,7 @@ struct Args {
     /// The distribution of valid/invalid transactions to generate.
     validity_profile: ValidityProfile,
 
-    #[arg(short, long, default_value = "mixed")]
+    #[arg(short, long, default_value = "bank")]
     /// The distribution of token transfers vs. synthetic load transactions to generate.
     tx_type: TxType,
 }

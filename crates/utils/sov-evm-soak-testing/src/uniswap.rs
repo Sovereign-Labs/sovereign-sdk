@@ -147,6 +147,7 @@ where
             .submit()
             .await?;
         let swap_execution_time = swap_execution.elapsed();
+        dbg!(swap_execution_time);
 
         let swap_total_time = swap_total.elapsed();
 
