@@ -877,6 +877,7 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
                     "Unable to charge gas. The product of {amount} to {parameter} is overflowing"
                 ))
             })?;
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%total_amount, parameter, gas_before = %self.remaining_gas, funds_before = ?self.remaining_funds, "Charging linear gas");
         self.charge_gas_inner(&total_amount)?;
 

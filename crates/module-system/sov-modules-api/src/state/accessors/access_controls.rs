@@ -26,15 +26,19 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
         type Error = Infallible;
 
         fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Infallible> {
-            use crate::state::accessors::StateMetricsProvider;
+            // #[cfg_attr(not(feature = "expensive-observability"), allow(unused_variables))]
             let (val, size_metric, read_metric) = get_inner(
                 self,
                 <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                 key,
             )
             .expect("We should never fail to charge gas for infallible accessor. This is a bug!");
-            self.metrics().push(size_metric);
-            self.metrics().push(read_metric);
+            // #[cfg(feature = "expensive-observability")] 
+            {
+                use crate::state::accessors::StateMetricsProvider;
+                self.metrics().push(size_metric);
+                self.metrics().push(read_metric);
+            }
 
             Ok(val)
         }
@@ -48,14 +52,14 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
             Codec: StateCodec,
             Codec::ValueCodec: StateItemCodec<V>,
         {
-            #[cfg(feature = "native")]
+            #[cfg(feature = "expensive-observability")]
             use crate::state::accessors::StateMetricsProvider;
             let storage_value = <Self as StateReader<$namespace>>::get(self, storage_key)?;
             Ok(storage_value.map(|storage_value| {
-                #[cfg(feature = "native")]
+                #[cfg(feature = "expensive-observability")]
                 let deserialization_start = std::time::Instant::now();
                 let value = codec.value_codec().decode_unwrap(storage_value.value());
-                #[cfg(feature = "native")]
+                #[cfg(feature = "expensive-observability")]
                 {
                     let deserialization_duration = deserialization_start.elapsed();
                     self.metrics().add_deserialize_metric(
