@@ -260,16 +260,39 @@ mod tests {
 
     type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
+    fn assert_charge_succeeds(meter: &mut BasicGasMeter<S>, gas: &GasUnit<2>) {
+        assert!(
+            meter.charge_gas(gas).is_ok(),
+            "It should be possible to charge gas"
+        );
+    }
+
+    fn assert_charge_fails(meter: &mut BasicGasMeter<S>, gas: &GasUnit<2>) {
+        assert!(
+            meter.charge_gas(gas).is_err(),
+            "The gas meter should not be able to charge gas if there is not enough gas reserved"
+        );
+    }
+
+    fn assert_gas_used_equals(meter: &BasicGasMeter<S>, expected: GasUnit<2>) {
+        assert_eq!(
+            meter.gas_info().gas_used,
+            expected,
+            "The gas used should be the same as the gas charged"
+        );
+    }
+
+    fn assert_gas_price_equals(meter: &BasicGasMeter<S>, expected: GasPrice<2>) {
+        assert_eq!(meter.gas_info().gas_price, expected);
+    }
+
     #[test]
     fn test_charge_gas_fails_with_zeroed_gas() {
         let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
         let mut gas_meter =
             BasicGasMeter::<S>::new_with_gas(GasUnit::<2>::ZEROED, gas_price.clone());
 
-        assert!(
-            gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
-            "The gas meter should not be able to charge gas if there is not enough gas reserved"
-        );
+        assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([100; 2]));
     }
 
     #[test]
@@ -278,10 +301,7 @@ mod tests {
         let gas = GasUnit::<2>::from([0, 0]);
         let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
 
-        assert!(
-            gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
-            "The gas meter should not be able to charge gas if there is not enough gas reserved"
-        );
+        assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([100; 2]));
     }
 
     #[test]
@@ -290,10 +310,7 @@ mod tests {
         let gas = GasUnit::<2>::from([1000, 99]);
         let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
 
-        assert!(
-            gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
-            "The gas meter should not be able to charge gas if there is not enough gas reserved"
-        );
+        assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([100; 2]));
     }
 
     #[test]
@@ -307,23 +324,14 @@ mod tests {
                 GasUnit::<2>::MAX,
                 gas_price.clone(),
             );
-            assert!(
-                gas_meter
-                    .charge_gas(&GasUnit::<2>::from([REMAINING_FUNDS / 2; 2]))
-                    .is_ok(),
-                "It should be possible to charge gas"
+            assert_charge_succeeds(
+                &mut gas_meter,
+                &GasUnit::<2>::from([REMAINING_FUNDS / 2; 2]),
             );
-            assert_eq!(
-                gas_meter.gas_info().gas_used,
-                GasUnit::from([REMAINING_FUNDS / 2; 2]),
-                "The gas used should be the same as the gas charged"
-            );
-            assert_eq!(gas_meter.gas_info().gas_price, gas_price);
+            assert_gas_used_equals(&gas_meter, GasUnit::from([REMAINING_FUNDS / 2; 2]));
+            assert_gas_price_equals(&gas_meter, gas_price);
 
-            assert!(
-            gas_meter.charge_gas(&GasUnit::<2>::from([1; 2])).is_err(),
-            "There should be no more gas left in the meter, hence charging more gas should fail"
-        );
+            assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([1; 2]));
         }
     }
 
@@ -335,21 +343,11 @@ mod tests {
         let mut gas_meter =
             BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
 
-        assert!(
-            gas_meter.charge_gas(&remaining_gas.clone()).is_ok(),
-            "It should be possible to charge gas"
-        );
-        assert_eq!(
-            gas_meter.gas_info().gas_used,
-            remaining_gas,
-            "The gas used should be the same as the gas charged"
-        );
-        assert_eq!(gas_meter.gas_info().gas_price, gas_price);
+        assert_charge_succeeds(&mut gas_meter, &remaining_gas);
+        assert_gas_used_equals(&gas_meter, remaining_gas);
+        assert_gas_price_equals(&gas_meter, gas_price);
 
-        assert!(
-            gas_meter.charge_gas(&GasUnit::<2>::from([1; 2])).is_err(),
-            "There should be no more gas left in the meter, hence charging more gas should fail"
-        );
+        assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([1; 2]));
     }
 
     #[test]
