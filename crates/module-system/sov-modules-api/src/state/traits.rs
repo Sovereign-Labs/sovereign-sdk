@@ -308,24 +308,16 @@ pub trait ProvableStateReader<N: ProvableCompileTimeNamespace>:
 
 #[cfg(feature = "expensive-observability")]
 macro_rules! maybe_trace_span {
-    ($span_name: expr, $item:expr) => {
-        {
-            tracing::trace_span!(
-                $span_name,
-            ).in_scope(|| {
-                $item
-            })
-        }
-    };
+    ($span_name: expr, $item:expr) => {{
+        tracing::trace_span!($span_name,).in_scope(|| $item)
+    }};
 }
 
 #[cfg(not(feature = "expensive-observability"))]
 macro_rules! maybe_trace_span {
-    ($span_name: expr, $item:expr) => {
-        {
-            $item
-        }
-    };
+    ($span_name: expr, $item:expr) => {{
+        $item
+    }};
 }
 
 macro_rules! blanket_impl_metered_state_reader {
@@ -365,15 +357,15 @@ macro_rules! blanket_impl_metered_state_reader {
                     // We need to charge for the cost to deserialize the value
                     maybe_trace_span!("all_accesses::charge_per_byte_borsh_deserialization", {
                         self.charge_linear_gas(
-                            &<T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(
-                            ),
+                            &<T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(),
                             storage_value.size(),
-                        ).map_err(|e| StateAccessorError::Decode {
+                        )
+                        .map_err(|e| StateAccessorError::Decode {
                             key: storage_key.clone(),
                             inner: e,
                             namespace: <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
-                        })?
-                    });
+                        })
+                    })?;
 
                     #[cfg(feature = "expensive-observability")]
                     let deserialization_start = std::time::Instant::now();
@@ -404,7 +396,6 @@ impl<T: ProvableStateReader<User> + StateMetricsProvider> StateReader<User> for 
     blanket_impl_metered_state_reader!(User);
 }
 
-
 #[cfg(feature = "expensive-observability")]
 fn state_access_metric_read(key: &SlotKey) -> StateAccessMetric {
     StateAccessMetric::new_read(key.key(), key.display_fn())
@@ -424,7 +415,6 @@ fn state_access_metric_size(key: &SlotKey) -> StateAccessMetric {
 fn state_access_metric_size(_key: &SlotKey) -> StateAccessMetric {
     StateAccessMetric::new_size(Default::default(), None)
 }
-
 
 impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for T {
     type Error = Infallible;
@@ -652,7 +642,6 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
             })?;
 
             maybe_trace_span!("access::charge_per_byte_hash_update", {
-           
                 accessor.charge_linear_gas(
                     &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
                     value_size,
@@ -737,7 +726,7 @@ pub(crate) fn delete_inner<Accessor: UniversalStateAccessor + GasMeter>(
     charge_write(accessor, namespace, key, 0)?;
 
     // avoid an extra size calculation
-    let metric =  {
+    let metric = {
         #[cfg(feature = "expensive-observability")]
         if enabled!(Level::TRACE) {
             let mut metric = state_access_metric_size(key);
@@ -746,14 +735,14 @@ pub(crate) fn delete_inner<Accessor: UniversalStateAccessor + GasMeter>(
             Some(metric)
         } else {
             None
-        };
+        }
 
-        #[cfg(not(feature = "expensive-observability"))] {
-        None
-
+        #[cfg(not(feature = "expensive-observability"))]
+        {
+            None
         }
     };
-   
+
     accessor.delete_value(namespace, key);
 
     Ok(metric)

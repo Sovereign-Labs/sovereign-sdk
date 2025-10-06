@@ -26,14 +26,12 @@ macro_rules! inner_impl_charge_gas_state_infallible_reader {
         type Error = Infallible;
 
         fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Infallible> {
-            // #[cfg_attr(not(feature = "expensive-observability"), allow(unused_variables))]
             let (val, size_metric, read_metric) = get_inner(
                 self,
                 <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                 key,
             )
             .expect("We should never fail to charge gas for infallible accessor. This is a bug!");
-            // #[cfg(feature = "expensive-observability")] 
             {
                 use crate::state::accessors::StateMetricsProvider;
                 self.metrics().push(size_metric);
