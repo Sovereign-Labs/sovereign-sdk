@@ -36,12 +36,12 @@ da_polling_interval_ms = 50
 
 [runner.http_config]
 bind_host = "127.0.0.1"
-bind_port = 12346
+bind_port = 12349
 # In case of the arollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
 
 [monitoring]
-telegraf_address = "udp://127.0.0.1:8094"
+telegraf_address = "udp://127.0.0.1:9096"
 # Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
 # It is expected from the rollup node to produce metrics all the time,
 # so measurements are buffered by size and not sent by time.
