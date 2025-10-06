@@ -335,9 +335,7 @@ mod tests {
     #[test]
     fn test_charge_gas_without_funds_succeeds_and_tracks_usage() {
         let remaining_gas = GasUnit::<2>::from([100; 2]);
-
-        let mut gas_meter =
-            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), STANDARD_GAS_PRICE);
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(remaining_gas, STANDARD_GAS_PRICE);
 
         assert_charge_succeeds(&mut gas_meter, &remaining_gas);
         assert_gas_used_equals(&gas_meter, remaining_gas);
