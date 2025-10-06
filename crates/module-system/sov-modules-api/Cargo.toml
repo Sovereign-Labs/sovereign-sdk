@@ -64,7 +64,6 @@ utoipa = { workspace = true, optional = true }
 utoipa-swagger-ui = { workspace = true, optional = true }
 unwrap-infallible = { workspace = true }
 nearly-linear = { workspace = true }
-arrayvec = { workspace = true, features = ["serde", "borsh"] }
 
 [dev-dependencies]
 sov-state = { workspace = true, features = ["native", "test-utils"] }

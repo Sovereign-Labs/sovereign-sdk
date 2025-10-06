@@ -12227,7 +12227,6 @@ dependencies = [
  "alloy-sol-types",
  "anyhow",
  "arbitrary",
- "arrayvec",
  "async-trait",
  "axum 0.7.9",
  "bech32 0.11.0",
