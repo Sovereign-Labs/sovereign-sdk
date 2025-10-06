@@ -25,6 +25,8 @@ const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 //  - Logging
 //  - Metrics
 //  - Unit tests with mockserver
+// ---------
+//  - Log URLs and timestamps (debug only)
 
 #[derive(Clone, Debug, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -244,7 +246,7 @@ impl TwinkleClient {
         }
     }
 
-    async fn submit_blob_to_namespace(
+    pub async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
         namespace: Namespace,
@@ -263,6 +265,22 @@ impl TwinkleClient {
         });
         rx
     }
+
+    pub async fn get_head_block_header(&self) -> anyhow::Result<BlockHeader> {
+        tracing::trace!("Getting head block header");
+
+        let header_response: HeaderResponse = (|| async {
+            let mut request = self.client.get(HEADER_URL);
+            request = request.query(&[("network", self.network.to_string())]);
+            let response = request.send().await?;
+            decode_on_success(response).await
+        })
+        .retry(&self.backoff_policy)
+        .await
+        .context("Head block header")?;
+
+        Ok(header_response.header)
+    }
 }
 
 async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> anyhow::Result<T> {
@@ -272,6 +290,58 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
         anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
     }
     Ok(response.json().await.expect("Failed to decode response"))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HeaderResponse {
+    pub header: BlockHeader,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BlockHeader {
+    pub version: Version,
+    #[serde(rename = "chainId")]
+    pub chain_id: String,
+    pub height: String,
+    pub time: String,
+    #[serde(rename = "lastBlockId")]
+    pub last_block_id: BlockId,
+    #[serde(rename = "lastCommitHash")]
+    pub last_commit_hash: String,
+    #[serde(rename = "dataHash")]
+    pub data_hash: String,
+    #[serde(rename = "validatorsHash")]
+    pub validators_hash: String,
+    #[serde(rename = "nextValidatorsHash")]
+    pub next_validators_hash: String,
+    #[serde(rename = "consensusHash")]
+    pub consensus_hash: String,
+    #[serde(rename = "appHash")]
+    pub app_hash: String,
+    #[serde(rename = "lastResultsHash")]
+    pub last_results_hash: String,
+    #[serde(rename = "evidenceHash")]
+    pub evidence_hash: String,
+    #[serde(rename = "proposerAddress")]
+    pub proposer_address: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Version {
+    pub block: String,
+    pub app: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BlockId {
+    pub hash: String,
+    pub parts: PartSetHeader,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PartSetHeader {
+    pub total: u32,
+    pub hash: String,
 }
 
 #[cfg(test)]
