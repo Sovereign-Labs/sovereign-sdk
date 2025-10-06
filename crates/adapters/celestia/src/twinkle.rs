@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 use crate::types::TmHash;
+use anyhow::Context;
+use backon::{ExponentialBuilder, Retryable};
 use celestia_types::nmt::Namespace;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -24,6 +26,7 @@ const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 // Other
 //  - Get block and header compatible with return types of celestia sender
 //  - Logging
+//  - Metrics
 //  - Retry logic and params
 
 #[derive(Clone, Debug, Copy)]
@@ -43,10 +46,14 @@ impl Display for Network {
 }
 
 pub struct TwinkleConfig {
+    /// If not set, will be taken from the environment variable ` SOV_TWINKLE_API_KEY `
     api_key: Option<String>,
     network: Network,
     pull_interval_millis: u64,
-    // TODO: Timeouts
+    /// Timeout for individual HTTP requests in seconds
+    request_timeout_secs: u64,
+    /// Timeout for the entire request including retries in seconds
+    total_timeout_secs: u64,
 }
 
 impl TwinkleConfig {
@@ -58,13 +65,6 @@ impl TwinkleConfig {
             Some(set) => set.clone(),
         }
     }
-}
-
-#[derive(Clone)]
-pub struct TwinkleClient {
-    client: reqwest::Client,
-    network: Network,
-    pull_interval: std::time::Duration,
 }
 
 #[derive(Debug, Serialize)]
@@ -100,8 +100,20 @@ pub struct BlobStatusResponse {
     height: Option<u64>,
 }
 
+#[derive(Clone)]
+pub struct TwinkleClient {
+    client: reqwest::Client,
+    network: Network,
+    // Interval for pulling blob status after submission
+    pull_interval: std::time::Duration,
+    backoff_policy: ExponentialBuilder,
+}
+
 impl TwinkleClient {
-    pub fn from_config(config: &TwinkleConfig) -> anyhow::Result<Self> {
+    pub fn from_config(
+        config: &TwinkleConfig,
+        backoff_policy: ExponentialBuilder,
+    ) -> anyhow::Result<Self> {
         let mut headers = reqwest::header::HeaderMap::new();
         let mut auth_value =
             reqwest::header::HeaderValue::from_str(&format!("Bearer {}", config.api_key()))?;
@@ -114,44 +126,32 @@ impl TwinkleClient {
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
+            .timeout(std::time::Duration::from_secs(config.request_timeout_secs))
             .build()?;
 
         Ok(Self {
             client,
             network: config.network,
             pull_interval: std::time::Duration::from_millis(config.pull_interval_millis),
+            backoff_policy,
         })
-    }
-
-    pub async fn submit_blob(
-        &self,
-        namespace: String,
-        data: &[u8],
-        network: &str,
-    ) -> anyhow::Result<SubmitBlobAsyncResponse> {
-        let request = SubmitBlobRequest {
-            namespace,
-            data: hex::encode(data),
-            asynchronous: true,
-            network: network.to_string(),
-        };
-
-        let response = self
-            .client
-            .post(SUBMIT_BLOB_URL)
-            .json(&request)
-            .send()
-            .await?;
-
-        decode_on_success(response).await
     }
 
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
         println!("Twinkle request id: {}", twinkle_request_id);
-        let mut request = self.client.get(BLOB_STATUS);
-        request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
-        let response = request.send().await?;
-        decode_on_success(response).await
+
+        let response = (|| async {
+            let mut request = self.client.get(BLOB_STATUS);
+            request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
+            request.send().await
+        })
+        .retry(&self.backoff_policy)
+        .await
+        .context("Blob status")?;
+
+        Ok(decode_on_success(response)
+            .await
+            .expect("Failed to decode blob status"))
     }
 
     async fn submit_blob_to_namespace_and_pull(
@@ -167,17 +167,20 @@ impl TwinkleClient {
             network: self.network.to_string(),
         };
 
-        // TODO: Retries
-        let response = self
-            .client
-            .post(SUBMIT_BLOB_URL)
-            .json(&request)
-            .send()
-            .await?;
+        let response = (|| async {
+            self.client
+                .post(SUBMIT_BLOB_URL)
+                .json(&request)
+                .send()
+                .await
+        })
+        .retry(&self.backoff_policy)
+        .await?;
         let submit_response: SubmitBlobAsyncResponse = decode_on_success(response)
             .await
-            .expect("Failed to decode submit lob ");
+            .expect("Failed to decode submit blob");
 
+        // TODO: Parametrize this
         for _ in 0..120 {
             let result = self.blob_status(&submit_response.twinkle_request_id).await;
             println!("RESULT: {:?}", result);
@@ -214,7 +217,7 @@ impl TwinkleClient {
                     .submit_blob_to_namespace_and_pull(blob, namespace)
                     .await,
             )
-            .expect("Failed to send blob result");
+            .expect("Failed to propagate blob submission result into a channel");
         });
         rx
     }
@@ -224,7 +227,7 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
     let status = response.status();
     if !status.is_success() {
         let text = response.text().await?;
-        anyhow::bail!("Failed to query blob status: {status:?}: {text}")
+        anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
     }
     response.json().await.map_err(Into::into)
 }
@@ -234,13 +237,15 @@ mod tests {
     use super::*;
     use celestia_types::nmt::Namespace;
 
-    const API_KEY: &str = "TEMP_SECRET";
+    // const API_KEY: &str = "TEMP_SECRET";
 
     fn default_mocha_config() -> TwinkleConfig {
         TwinkleConfig {
             api_key: Some(API_KEY.to_string()),
             network: Network::Mocha,
             pull_interval_millis: 100,
+            request_timeout_secs: 30,
+            total_timeout_secs: 300,
         }
     }
 
@@ -248,7 +253,8 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn async_blob_submit() -> anyhow::Result<()> {
-        let twinkle_client = TwinkleClient::from_config(&default_mocha_config())?;
+        let backoff_policy = ExponentialBuilder::default();
+        let twinkle_client = TwinkleClient::from_config(&default_mocha_config(), backoff_policy)?;
 
         let blob: Vec<u8> = b"hello-from-sov-rust".to_vec();
 
