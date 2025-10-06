@@ -1,0 +1,394 @@
+use core::fmt::Debug;
+
+use anyhow::Result;
+
+use crate::{Amount, Gas, GasArray, GasInfo, GasMeter, GasMeteringError, GetGasPrice, Spec};
+
+/// A struct that keeps track of the gas used.
+/// The gas meter continues running until it either depletes its funds or runs out of gas, depending on its configuration.
+/// It also ensures that the gas used will not overflow when multiplied by the gas price.
+#[derive(Clone, Debug)]
+pub struct BasicGasMeter<S: Spec> {
+    /// Amount of gas available at the moment of the gas meter initialization
+    pub initial_gas: S::Gas,
+    /// Amount of gas remaining
+    pub remaining_gas: S::Gas,
+    /// Amount of funds available
+    pub remaining_funds: Option<Amount>,
+    /// Gas price
+    pub gas_price: <S::Gas as Gas>::Price,
+}
+
+impl<S: Spec> BasicGasMeter<S> {
+    /// Get gas info from the `BasicGasMeter`
+    pub fn gas_info(&self) -> GasInfo<S::Gas> {
+        let gas_used = self
+            .initial_gas
+            .checked_sub(&self.remaining_gas)
+            .expect("The remaining gas can't be greater than the initial gas");
+
+        let gas_value = gas_used
+            .checked_value(&self.gas_price)
+            // SAFETY: This is impossible becouse we check for oveflows in `BasicGasMeter::charge_gas_inner`.
+            .expect("BasicGasMeter error. The gas value should be possible to compute");
+
+        GasInfo {
+            gas_value,
+            gas_used,
+            gas_price: self.gas_price.clone(),
+        }
+    }
+
+    /// Creates a new `BasicGasMeter`.
+    pub fn new_with_funds_and_gas(
+        remaining_funds: Amount,
+        remaining_gas: S::Gas,
+        gas_price: <S::Gas as Gas>::Price,
+    ) -> Self {
+        Self {
+            initial_gas: remaining_gas.clone(),
+            remaining_gas,
+            remaining_funds: Some(remaining_funds),
+            gas_price,
+        }
+    }
+
+    /// Creates a new `BasicGasMeter`
+    pub fn new_with_gas(remaining_gas: S::Gas, gas_price: <S::Gas as Gas>::Price) -> Self {
+        Self {
+            initial_gas: remaining_gas.clone(),
+            remaining_gas,
+            remaining_funds: None,
+            gas_price,
+        }
+    }
+
+    fn compute_remaining_funds(
+        &self,
+        remaining_funds: Amount,
+        amount: &S::Gas,
+    ) -> Result<Amount, GasMeteringError<S::Gas>> {
+        let amount_value = amount.checked_value(&self.gas_price).ok_or_else(|| {
+            GasMeteringError::Overflow(
+                "Charge Funds: Unable to charge gas, because the calculation overflows".to_string(),
+            )
+        })?;
+
+        remaining_funds.checked_sub(amount_value).ok_or_else(|| {
+            tracing::warn!(%remaining_funds, amount_to_charge = %amount_value, "Out of gas during `compute_remaining_funds`");
+            GasMeteringError::OutOfFunds {
+                amount_to_charge: amount_value,
+                remaining_funds,
+                gas_price: self.gas_price.clone(),
+            }
+        })
+    }
+
+    fn compute_remaining_gas(
+        &self,
+        remaining_gas: &S::Gas,
+        amount: &S::Gas,
+    ) -> Result<S::Gas, GasMeteringError<S::Gas>> {
+        remaining_gas.checked_sub(amount).ok_or_else(|| {
+            tracing::warn!(?remaining_gas, amount_to_charge = ?amount, "Out of gas during `compute_remaining_gas`");
+            GasMeteringError::OutOfGas {
+                gas_to_charge: amount.clone(),
+                gas_price: self.gas_price.clone(),
+                initial_gas: self.initial_gas.clone(),
+                remaining_gas: self.remaining_gas.clone(),
+            }
+        })
+    }
+
+    fn charge_gas_inner(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+        let mut new_remaining_funds = None;
+
+        if let Some(remaining_funds) = self.remaining_funds {
+            new_remaining_funds = Some(self.compute_remaining_funds(remaining_funds, amount)?);
+        }
+
+        let new_remaining_gas = self.compute_remaining_gas(&self.remaining_gas, amount)?;
+        // Here we check that the current gas_used won't overflow when multiplied by the price.
+        // This ensures that after execution, it is always safe to convert the total gas used to a token value.
+        {
+            let gas_used = self
+                .initial_gas
+                .checked_sub(&new_remaining_gas)
+                .expect("The remaining gas can't be greater than the initial gas");
+
+            gas_used.checked_value(&self.gas_price).ok_or_else(|| {
+                GasMeteringError::Overflow(
+                    "Charge Gas: Unable to charge gas, because the calculation overflows"
+                        .to_string(),
+                )
+            })?;
+        }
+
+        self.remaining_funds = new_remaining_funds;
+        self.remaining_gas = new_remaining_gas;
+
+        Ok(())
+    }
+}
+
+impl<S: Spec> GasMeter for BasicGasMeter<S> {
+    type Spec = S;
+    fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+        tracing::trace!(%amount, gas_before = %self.remaining_gas, funds_before = ?self.remaining_funds, "Charging gas");
+        self.charge_gas_inner(amount)?;
+
+        #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
+        if let Some(name) = amount.name() {
+            if sov_metrics::GAS_CONSTANTS
+                .try_with(|var| {
+                    let mut var = var.borrow_mut();
+
+                    if let Some(const_count) = var.get_mut(name) {
+                        *const_count = const_count.checked_add(1).unwrap();
+                    } else {
+                        var.insert(name.clone(), 1);
+                    }
+                })
+                .is_err()
+            {
+                tracing::trace!(
+                    "Trying to gather gas constants without metrics collection enabled"
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn charge_linear_gas(
+        &mut self,
+        amount: &S::Gas,
+        parameter: u32,
+    ) -> Result<(), GasMeteringError<<S as Spec>::Gas>> {
+        let total_amount = amount
+            .checked_scalar_product(parameter as u64)
+            .ok_or_else(|| {
+                GasMeteringError::Overflow(format!(
+                    "Unable to charge gas. The product of {amount} to {parameter} is overflowing"
+                ))
+            })?;
+        tracing::trace!(%total_amount, parameter, gas_before = %self.remaining_gas, funds_before = ?self.remaining_funds, "Charging linear gas");
+        self.charge_gas_inner(&total_amount)?;
+
+        #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
+        if let Some(name) = amount.name() {
+            if parameter > 0
+                && sov_metrics::GAS_CONSTANTS
+                    .try_with(|var| {
+                        let param_i64 = parameter.into();
+
+                        let mut var = var.borrow_mut();
+
+                        if let Some(const_count) = var.get_mut(name) {
+                            *const_count = const_count.checked_add(param_i64).unwrap();
+                        } else {
+                            var.insert(name.clone(), param_i64);
+                        }
+                    })
+                    .is_err()
+            {
+                tracing::trace!(
+                    "Trying to gather gas constants without metrics collection enabled"
+                );
+            };
+        }
+
+        Ok(())
+    }
+
+    fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
+        Some(self)
+    }
+
+    #[cfg(all(feature = "gas-constant-estimation", feature = "native"))]
+    fn remove_gas_pattern(&mut self, amount: &<Self::Spec as Spec>::Gas, parameter: u32) {
+        if let Some(name) = amount.name() {
+            if parameter > 0
+                && sov_metrics::GAS_CONSTANTS
+                    .try_with(|var| {
+                        let param_i64 = parameter.into();
+
+                        let mut var = var.borrow_mut();
+
+                        if let Some(const_count) = var.get_mut(name) {
+                            *const_count = const_count.checked_sub(param_i64).unwrap();
+                        } else {
+                            var.insert(name.clone(), -param_i64);
+                        }
+                    })
+                    .is_err()
+            {
+                tracing::trace!(
+                    "Trying to gather gas constants without metrics collection enabled"
+                );
+            };
+        }
+    }
+}
+
+impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
+    type Spec = S;
+    fn gas_price(&self) -> &<<Self::Spec as Spec>::Gas as Gas>::Price {
+        &self.gas_price
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_mock_da::MockDaSpec;
+    use sov_mock_zkvm::MockZkvm;
+    use sov_rollup_interface::execution_mode::Native;
+
+    use crate::{default_spec::DefaultSpec, GasPrice, GasUnit};
+
+    use super::*;
+
+    type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+
+    #[test]
+    fn charge_gas_should_fail_if_not_enough_funds() {
+        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+
+        {
+            let mut gas_meter =
+                BasicGasMeter::<S>::new_with_gas(GasUnit::<2>::ZEROED, gas_price.clone());
+            assert!(
+                gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
+                "The gas meter should not be able to charge gas if there is not enough funds"
+            );
+        }
+
+        {
+            let gas = GasUnit::<2>::from([0, 0]);
+            let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
+
+            assert!(
+                gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
+                "The gas meter should not be able to charge gas if there is not enough gas reserved"
+            );
+
+            let gas = GasUnit::<2>::from([1000, 99]);
+            let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
+
+            assert!(
+                gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
+                "The gas meter should not be able to charge gas if there is not enough gas reserved"
+            );
+        }
+    }
+
+    #[test]
+    fn try_charge_gas() {
+        {
+            const REMAINING_FUNDS: u64 = 100;
+            let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+
+            let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
+                Amount::from(REMAINING_FUNDS),
+                GasUnit::<2>::MAX,
+                gas_price.clone(),
+            );
+            assert!(
+                gas_meter
+                    .charge_gas(&GasUnit::<2>::from([REMAINING_FUNDS / 2; 2]))
+                    .is_ok(),
+                "It should be possible to charge gas"
+            );
+            assert_eq!(
+                gas_meter.gas_info().gas_used,
+                GasUnit::from([REMAINING_FUNDS / 2; 2]),
+                "The gas used should be the same as the gas charged"
+            );
+            assert_eq!(gas_meter.gas_info().gas_price, gas_price);
+
+            assert!(
+            gas_meter.charge_gas(&GasUnit::<2>::from([1; 2])).is_err(),
+            "There should be no more gas left in the meter, hence charging more gas should fail"
+        );
+        }
+
+        {
+            let remaining_gas = GasUnit::<2>::from([100; 2]);
+            let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+
+            let mut gas_meter =
+                BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
+
+            assert!(
+                gas_meter.charge_gas(&remaining_gas.clone()).is_ok(),
+                "It should be possible to charge gas"
+            );
+            assert_eq!(
+                gas_meter.gas_info().gas_used,
+                remaining_gas,
+                "The gas used should be the same as the gas charged"
+            );
+            assert_eq!(gas_meter.gas_info().gas_price, gas_price);
+
+            assert!(
+                gas_meter.charge_gas(&GasUnit::<2>::from([1; 2])).is_err(),
+                "There should be no more gas left in the meter, hence charging more gas should fail"
+            );
+        }
+    }
+
+    #[test]
+    fn gas_meter_charge_gas_overflow_test() {
+        let remaining_gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
+        let gas_price = GasPrice::<2>::from([Amount::MAX; 2]);
+
+        let mut gas_meter =
+            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
+
+        let gas = GasUnit::<2>::from([2; 2]);
+        let res = gas_meter.charge_gas(&gas.clone());
+
+        assert_eq!(
+            res,
+            Err(GasMeteringError::Overflow(
+                "Charge Gas: Unable to charge gas, because the calculation overflows".to_string()
+            ))
+        );
+
+        let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
+            Amount::new(u64::MAX as u128),
+            remaining_gas.clone(),
+            gas_price.clone(),
+        );
+
+        let res = gas_meter.charge_gas(&gas);
+
+        assert_eq!(
+            res,
+            Err(GasMeteringError::Overflow(
+                "Charge Funds: Unable to charge gas, because the calculation overflows".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn gas_meter_charge_atomic_update() {
+        let remaining_gas = GasUnit::<2>::from([5, 5]);
+        let remaining_funds = Amount::new(1000000);
+        let gas_price = GasPrice::<2>::from([Amount::new(10); 2]);
+
+        let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
+            remaining_funds,
+            remaining_gas.clone(),
+            gas_price.clone(),
+        );
+
+        let gas = GasUnit::<2>::from([10; 2]);
+        let res = gas_meter.charge_gas(&gas.clone());
+
+        // We have enough funds to charge but not enough gas.
+        assert!(res.is_err());
+        assert_eq!(gas_meter.remaining_funds, Some(remaining_funds));
+        assert_eq!(gas_meter.remaining_gas, remaining_gas);
+    }
+}
