@@ -34,7 +34,7 @@ borsh = { workspace = true }
 backon = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 tokio = { workspace = true }
-tokio-tungstenite = "0.23"
+tokio-tungstenite = "0.26"
 tracing = { workspace = true }
 
 [dev-dependencies]
