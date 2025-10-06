@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use anyhow::Result;
 
-use crate::{Amount, Gas, GasArray, GasInfo, GasMeter, GasMeteringError, GetGasPrice, Spec};
+use crate::{Amount, Gas, GasArray, GasMeter, GasMeteringError, GetGasPrice, Spec};
 
 /// A struct that keeps track of the gas used.
 /// The gas meter continues running until it either depletes its funds or runs out of gas, depending on its configuration.
@@ -17,6 +17,16 @@ pub struct BasicGasMeter<S: Spec> {
     pub remaining_funds: Option<Amount>,
     /// Gas price
     pub gas_price: <S::Gas as Gas>::Price,
+}
+
+/// Contain information about the gas usage of a gas.
+pub struct GasInfo<GU: Gas> {
+    /// The gas value.
+    pub gas_value: Amount,
+    /// The current gas used accumulated by the stake meter.
+    pub gas_used: GU,
+    /// The current gas price
+    pub gas_price: GU::Price,
 }
 
 impl<S: Spec> BasicGasMeter<S> {

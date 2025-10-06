@@ -8,8 +8,8 @@ use sov_rollup_interface::crypto::{CredentialId, SigVerificationError, Signature
 use sov_rollup_interface::zk::CryptoSpec;
 use thiserror::Error;
 
-use crate::gas::traits::{Gas, GasMeter, GasMeteringError};
-use crate::{as_u32_or_panic, GasSpec, PublicKey, Spec};
+use crate::gas::traits::{Gas, GasMeter};
+use crate::{as_u32_or_panic, GasMeteringError, GasSpec, PublicKey, Spec};
 
 /// A metered hasher that charges gas for each operation.
 /// This data structure should be used in the module system to charge gas when hashing data.
