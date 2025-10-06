@@ -260,6 +260,9 @@ mod tests {
 
     type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
+    const STANDARD_GAS_PRICE: GasPrice<2> = GasPrice::from([Amount::new(1); 2]);
+    const MAX_GAS_PRICE: GasPrice<2> = GasPrice::from([Amount::MAX; 2]);
+
     fn assert_charge_succeeds(meter: &mut BasicGasMeter<S>, gas: &GasUnit<2>) {
         assert!(
             meter.charge_gas(gas).is_ok(),
@@ -288,64 +291,57 @@ mod tests {
 
     #[test]
     fn test_charge_gas_fails_with_zeroed_gas() {
-        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
         let mut gas_meter =
-            BasicGasMeter::<S>::new_with_gas(GasUnit::<2>::ZEROED, gas_price.clone());
+            BasicGasMeter::<S>::new_with_gas(GasUnit::<2>::ZEROED, STANDARD_GAS_PRICE);
 
         assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([100; 2]));
     }
 
     #[test]
     fn test_charge_gas_fails_with_zero_gas() {
-        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
         let gas = GasUnit::<2>::from([0, 0]);
-        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, STANDARD_GAS_PRICE);
 
         assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([100; 2]));
     }
 
     #[test]
     fn test_charge_gas_fails_when_partial_gas_insufficient() {
-        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
         let gas = GasUnit::<2>::from([1000, 99]);
-        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, STANDARD_GAS_PRICE);
 
         assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([100; 2]));
     }
 
     #[test]
     fn test_charge_gas_with_funds_succeeds_and_tracks_usage() {
-        {
-            const REMAINING_FUNDS: u64 = 100;
-            let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+        const REMAINING_FUNDS: u64 = 100;
 
-            let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
-                Amount::from(REMAINING_FUNDS),
-                GasUnit::<2>::MAX,
-                gas_price.clone(),
-            );
-            assert_charge_succeeds(
-                &mut gas_meter,
-                &GasUnit::<2>::from([REMAINING_FUNDS / 2; 2]),
-            );
-            assert_gas_used_equals(&gas_meter, GasUnit::from([REMAINING_FUNDS / 2; 2]));
-            assert_gas_price_equals(&gas_meter, gas_price);
+        let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
+            Amount::from(REMAINING_FUNDS),
+            GasUnit::<2>::MAX,
+            STANDARD_GAS_PRICE,
+        );
+        assert_charge_succeeds(
+            &mut gas_meter,
+            &GasUnit::<2>::from([REMAINING_FUNDS / 2; 2]),
+        );
+        assert_gas_used_equals(&gas_meter, GasUnit::from([REMAINING_FUNDS / 2; 2]));
+        assert_gas_price_equals(&gas_meter, STANDARD_GAS_PRICE);
 
-            assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([1; 2]));
-        }
+        assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([1; 2]));
     }
 
     #[test]
     fn test_charge_gas_without_funds_succeeds_and_tracks_usage() {
         let remaining_gas = GasUnit::<2>::from([100; 2]);
-        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
 
         let mut gas_meter =
-            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
+            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), STANDARD_GAS_PRICE);
 
         assert_charge_succeeds(&mut gas_meter, &remaining_gas);
         assert_gas_used_equals(&gas_meter, remaining_gas);
-        assert_gas_price_equals(&gas_meter, gas_price);
+        assert_gas_price_equals(&gas_meter, STANDARD_GAS_PRICE);
 
         assert_charge_fails(&mut gas_meter, &GasUnit::<2>::from([1; 2]));
     }
@@ -353,13 +349,12 @@ mod tests {
     #[test]
     fn test_charge_gas_prevents_value_overflow() {
         let remaining_gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-        let gas_price = GasPrice::<2>::from([Amount::MAX; 2]);
 
         let mut gas_meter =
-            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), gas_price.clone());
+            BasicGasMeter::<S>::new_with_gas(remaining_gas, MAX_GAS_PRICE);
 
         let gas = GasUnit::<2>::from([2; 2]);
-        let res = gas_meter.charge_gas(&gas.clone());
+        let res = gas_meter.charge_gas(&gas);
 
         assert_eq!(
             res,
@@ -370,8 +365,8 @@ mod tests {
 
         let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
             Amount::new(u64::MAX as u128),
-            remaining_gas.clone(),
-            gas_price.clone(),
+            remaining_gas,
+            MAX_GAS_PRICE,
         );
 
         let res = gas_meter.charge_gas(&gas);
@@ -390,14 +385,11 @@ mod tests {
         let remaining_funds = Amount::new(1000000);
         let gas_price = GasPrice::<2>::from([Amount::new(10); 2]);
 
-        let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
-            remaining_funds,
-            remaining_gas.clone(),
-            gas_price.clone(),
-        );
+        let mut gas_meter =
+            BasicGasMeter::<S>::new_with_funds_and_gas(remaining_funds, remaining_gas, gas_price);
 
         let gas = GasUnit::<2>::from([10; 2]);
-        let res = gas_meter.charge_gas(&gas.clone());
+        let res = gas_meter.charge_gas(&gas);
 
         // We have enough funds to charge but not enough gas.
         assert!(res.is_err());
