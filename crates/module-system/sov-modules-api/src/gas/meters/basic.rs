@@ -347,11 +347,9 @@ mod tests {
     }
 
     #[test]
-    fn test_charge_gas_prevents_value_overflow() {
+    fn test_charge_gas_prevents_gas_value_overflow() {
         let remaining_gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-
-        let mut gas_meter =
-            BasicGasMeter::<S>::new_with_gas(remaining_gas, MAX_GAS_PRICE);
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(remaining_gas, MAX_GAS_PRICE);
 
         let gas = GasUnit::<2>::from([2; 2]);
         let res = gas_meter.charge_gas(&gas);
@@ -362,13 +360,18 @@ mod tests {
                 "Charge Gas: Unable to charge gas, because the calculation overflows".to_string()
             ))
         );
+    }
 
+    #[test]
+    fn test_charge_gas_prevents_funds_value_overflow() {
+        let remaining_gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
         let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
             Amount::new(u64::MAX as u128),
             remaining_gas,
             MAX_GAS_PRICE,
         );
 
+        let gas = GasUnit::<2>::from([2; 2]);
         let res = gas_meter.charge_gas(&gas);
 
         assert_eq!(
