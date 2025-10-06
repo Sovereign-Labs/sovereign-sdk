@@ -160,17 +160,17 @@ impl<S: Spec> MinimalZkGenesisConfig<S> {
                 },
                 // unused in zk mode
                 attester_incentives: AttesterIncentivesConfig {
-                    minimum_attester_bond: default_user_stake.clone(),
-                    minimum_challenger_bond: default_user_stake.clone(),
+                    minimum_attester_bond: default_user_stake,
+                    minimum_challenger_bond: default_user_stake,
                     initial_attesters: vec![(placeholder.address().clone(), placeholder.balance())],
                     rollup_finality_period: SlotNumber::GENESIS,
                     maximum_attested_height: SlotNumber::GENESIS,
                     light_client_finalized_height: SlotNumber::GENESIS,
                 },
                 prover_incentives: ProverIncentivesConfig {
-                    minimum_bond: default_user_stake.clone(),
+                    minimum_bond: default_user_stake,
                     proving_penalty: {
-                        let mut proving_penalty = default_user_stake.clone();
+                        let mut proving_penalty = default_user_stake;
                         proving_penalty.scalar_division(2);
                         proving_penalty
                     },

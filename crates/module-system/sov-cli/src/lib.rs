@@ -85,7 +85,7 @@ where
             self.details.max_priority_fee_bips,
             self.details.max_fee,
             UniquenessData::Generation(generation),
-            self.details.gas_limit.clone(),
+            self.details.gas_limit,
         )
     }
 }

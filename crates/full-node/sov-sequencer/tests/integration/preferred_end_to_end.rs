@@ -468,7 +468,7 @@ async fn sequencer_filled_up_block() {
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let max_exec_gas_per_tx = GasUnit::from(config_value!("MAX_SEQUENCER_EXEC_GAS_PER_TX"));
 
-    let gas_limit = max_exec_gas_per_tx.clone();
+    let gas_limit = max_exec_gas_per_tx;
     let gas_limit = gas_limit.checked_scalar_product(100).unwrap();
     // The sequencer only gets 90% of the overall gas limit, so we need to set the slot gas limit to 10/9ths of what we
     // want the sequencer to have.
@@ -535,11 +535,10 @@ async fn sequencer_filled_up_block() {
     let client = test_rollup.api_client().clone();
 
     {
-        let gas_to_charge = gas_limit
+        let gas_to_charge = *gas_limit
             .checked_scalar_product(9)
             .unwrap()
-            .scalar_division(10)
-            .clone();
+            .scalar_division(10);
 
         // Produce a transaction that uses 90% of the slot gas limit.
         // This should be accepted.
@@ -547,7 +546,7 @@ async fn sequencer_filled_up_block() {
             &admin.private_key,
             0,
             7,
-            Some(gas_to_charge.clone()),
+            Some(gas_to_charge),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
 
@@ -566,7 +565,7 @@ async fn sequencer_filled_up_block() {
             &admin.private_key,
             1,
             7,
-            Some(gas_to_charge.clone()),
+            Some(gas_to_charge),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
 
@@ -584,12 +583,12 @@ async fn sequencer_filled_up_block() {
 
         // Produce a third transaction that uses 5% of the gas limit.
         // This should be accepted and will cause the sequencer to close out its current batch since usage should now pass 95%.
-        let small_gas_amount = gas_limit.clone().scalar_division(20).clone();
+        let small_gas_amount = *gas_limit.clone().scalar_division(20);
         let tx_3 = tx_set_value_with_gas::<TestRuntime<TestSpec>>(
             &admin.private_key,
             1,
             7,
-            Some(small_gas_amount.clone()),
+            Some(small_gas_amount),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
         client
@@ -605,7 +604,7 @@ async fn sequencer_filled_up_block() {
             &admin.private_key,
             1,
             7,
-            Some(gas_to_charge.clone()),
+            Some(gas_to_charge),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
         client
@@ -918,7 +917,7 @@ async fn seq_out_of_gas_for_pre_checks() {
     let max_exec_gas_per_tx = GasUnit::from(config_value!("MAX_SEQUENCER_EXEC_GAS_PER_TX"));
 
     // We want to set the initial gas limit to be 3/2 of the max exec gas per tx.
-    let gas_limit = max_exec_gas_per_tx.clone();
+    let gas_limit = max_exec_gas_per_tx;
     let mut gas_limit = gas_limit.checked_scalar_product(3).unwrap();
     gas_limit.scalar_division(2);
     let gas_limit_array = gas_limit.as_ref();

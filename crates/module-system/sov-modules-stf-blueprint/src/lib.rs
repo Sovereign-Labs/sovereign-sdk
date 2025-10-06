@@ -648,8 +648,7 @@ where
         // The slot gas meter differentiates gas usage between preferred and standard transaction batches/proofs.
         // It ensures that preferred transactions cannot consume the entire slot gas limit, preventing the preferred sequencer
         // from censoring other types of transactions, such as standard transactions or emergency registrations.
-        let mut slot_gas_meter =
-            SlotGasMeter::<S>::new(block_gas_limit.clone(), preferred_sequencer);
+        let mut slot_gas_meter = SlotGasMeter::<S>::new(block_gas_limit, preferred_sequencer);
 
         trace!(
             blob_count = blob_selector_output.selected_blobs.len(),

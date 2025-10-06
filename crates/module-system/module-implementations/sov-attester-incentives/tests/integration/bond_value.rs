@@ -53,7 +53,7 @@ impl TestRole {
 /// by modifying the runtime manually.
 fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
     let mut gas_limit = <<S as Spec>::Gas>::from(config_value!("INITIAL_GAS_LIMIT"));
-    let gas_target = gas_limit.scalar_division(2).clone();
+    let gas_target = *gas_limit.scalar_division(2);
 
     let runtime = Default::default();
     let (mut runner, _, _, user) = setup_with_custom_runtime(runtime);
@@ -62,12 +62,12 @@ fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
 
     let additional_user_bond = role.minimal_bond(&runner);
 
-    let initial_gas_price = runner.query_visible_state(|state| state.gas_price().clone());
+    let initial_gas_price = runner.query_visible_state(|state| *state.gas_price());
 
     let bank_signed = user
         .create_plain_message::<RT, ValueSetter<S>>(sov_value_setter::CallMessage::SetValue {
             value: 1,
-            gas: Some(gas_target.clone()),
+            gas: Some(gas_target),
         })
         .with_max_fee(
             user.available_gas_balance

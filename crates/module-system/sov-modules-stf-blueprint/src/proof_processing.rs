@@ -173,7 +173,7 @@ where
                 &mut checkpoint,
             );
 
-            let gas_used = transaction_consumption.base_fee().clone();
+            let gas_used = *transaction_consumption.base_fee();
             (
                 ProcessProofOutput {
                     proof_receipt: ProofReceipt {
@@ -334,8 +334,7 @@ where
             );
         }
 
-        let pre_exec_gas_meter =
-            BasicGasMeter::<S>::new_with_gas(max_tx_check_costs, gas_price.clone());
+        let pre_exec_gas_meter = BasicGasMeter::<S>::new_with_gas(max_tx_check_costs, *gas_price);
 
         let mut pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(pre_exec_gas_meter);
 

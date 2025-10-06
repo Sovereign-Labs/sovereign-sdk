@@ -221,7 +221,7 @@ where
         let tx_scratchpad = ctx.state_checkpoint.to_tx_scratchpad();
 
         let (tx_scratchpad, output_res) =
-            tx_auth::<S, Rt, _>(tx_scratchpad, ctx.gas_price.clone(), &mempool_tx.tx);
+            tx_auth::<S, Rt, _>(tx_scratchpad, ctx.gas_price, &mempool_tx.tx);
 
         let (auth_output, gas_meter) = match output_res {
             Ok(ok) => ok,

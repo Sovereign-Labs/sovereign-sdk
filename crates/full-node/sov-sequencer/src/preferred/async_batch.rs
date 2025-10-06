@@ -235,9 +235,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),
-                remaining_slot_gas: slot_gas_meter_before_tx
-                    .remaining_preferred_slot_gas()
-                    .clone(), // Since we ignore this tx, the remaining gas limit is unchanged
+                remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
                 execution_time_micros: execution_time,
             };
 

@@ -247,7 +247,7 @@ where
     metrics.timings.mark_tx_attempted_access_metrics = pre_exec_working_set.metrics().take();
 
     metrics.timings.reserve_gas_timer.start();
-    let gas_price = pre_exec_working_set.gas_price().clone();
+    let gas_price = *pre_exec_working_set.gas_price();
     if let Err(err) =
         runtime
             .gas_enforcer()
@@ -482,7 +482,7 @@ where
                     create_tx_receipt(
                         SkippedTxContents {
                             error,
-                            gas_used: gas_used.clone(),
+                            gas_used: gas_used,
                         },
                         tx_hash,
                         tx_body.data,
@@ -587,7 +587,7 @@ where
         ignored_tx_receipts,
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
-            gas_price: gas_price.clone(),
+            gas_price: *gas_price,
             gas_used: total_gas_used_in_batch,
             outcome: BatchSequencerOutcome {
                 rewards: rewards.clone(),
@@ -709,7 +709,7 @@ where
             outcome: AuthAndProcessOutcome::IllegalSequencer {
                 reason: OutOfFundsReason::SlotGasLimitExhausted {
                     max_tx_check_gas: max_tx_check_costs,
-                    remaining_slot_gas: slot_gas.clone(),
+                    remaining_slot_gas: *slot_gas,
                 },
             },
             scratchpad,
@@ -719,7 +719,7 @@ where
 
     // In the conditions above, we ensured that both the sequencer bond and the remaining gas in the slot gas meter exceed `max_tx_check_costs`.
     // Initialize `pre_exec_gas_meter` with `max_tx_check_costs` gas.
-    let pre_exec_gas_meter = BasicGasMeter::new_with_gas(max_tx_check_costs, gas_price.clone());
+    let pre_exec_gas_meter = BasicGasMeter::new_with_gas(max_tx_check_costs, *gas_price);
 
     let mut pre_exec_working_set: PreExecWorkingSet<S, _> =
         scratchpad.to_pre_exec_working_set(pre_exec_gas_meter);

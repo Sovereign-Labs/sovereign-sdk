@@ -59,7 +59,7 @@ fn setup_dynamic_gas_update_tests() -> (TestData<S>, TestRunner<TestChainStateRu
 
     (
         TestData {
-            gas_target: gas_target.clone(),
+            gas_target: *gas_target,
             token_name,
             user,
         },
@@ -80,7 +80,7 @@ fn test_gas_price_increases_if_gas_used_exceeds_gas_target() {
         input: user
             .create_plain_message::<RT, ValueSetter<S>>(sov_value_setter::CallMessage::SetValue {
                 value: 1,
-                gas: Some(gas_target.clone()),
+                gas: Some(gas_target),
             })
             .with_max_fee(Amount::from(u64::MAX / 2)),
         assert: Box::new(move |result, _| {
@@ -101,7 +101,7 @@ fn test_gas_price_increases_if_gas_used_exceeds_gas_target() {
     ));
 
     assert_eq!(result.0.batch_receipts.len(), 1);
-    let gas_price = result.0.batch_receipts[0].inner.gas_price.clone();
+    let gas_price = result.0.batch_receipts[0].inner.gas_price;
 
     let initial_gas_price = S::initial_base_fee_per_gas();
 
@@ -149,7 +149,7 @@ fn test_gas_price_decreases_if_gas_used_is_below_gas_target() {
     ));
 
     assert_eq!(result.0.batch_receipts.len(), 1);
-    let gas_price = result.0.batch_receipts[0].inner.gas_price.clone();
+    let gas_price = result.0.batch_receipts[0].inner.gas_price;
 
     let initial_gas_price = S::initial_base_fee_per_gas();
 

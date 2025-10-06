@@ -74,7 +74,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
         );
     }
 
-    let gas_price = pre_exec_working_set.gas_price().clone();
+    let gas_price = *pre_exec_working_set.gas_price();
     // After this check, we are confident that the transaction sender can cover the costs of transaction processing.
     if let Err(err) =
         runtime
@@ -200,7 +200,7 @@ where
                 ignored_tx_receipts,
                 inner: BatchSequencerReceipt {
                     da_address: sequencer_da_address.clone(),
-                    gas_price: gas_price.clone(),
+                    gas_price: *gas_price,
                     gas_used,
                     outcome: BatchSequencerOutcome {
                         rewards: Rewards {
@@ -220,7 +220,7 @@ where
 
         let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
             ignored: IgnoredTxContents {
-                gas_used: gas_used.clone(),
+                gas_used: gas_used,
                 index: 0,
             },
         };
@@ -235,7 +235,7 @@ where
     // A malicious actor could exploit this mechanism to attack the rollup, for instance, by sending large transactions that are costly to deserialize from an address with no funds on the rollup.
     // To mitigate this, we initialize the gas meter with just enough gas to process a valid transaction. If the transaction is too big, we quickly run out of gas.
     // Additionally, we rate-limit (during blob selection) the number of forced registrations to further reduce the effectiveness of such attacks.
-    let meter = BasicGasMeter::new_with_gas(max_unregistered_tx_check_costs, gas_price.clone());
+    let meter = BasicGasMeter::new_with_gas(max_unregistered_tx_check_costs, *gas_price);
 
     let mut pre_exec_working_set = scratchpad.to_pre_exec_working_set(meter);
     let authentication_result =
@@ -255,7 +255,7 @@ where
                     warn!(error = ?err_str);
                     let skipped = SkippedTxContents {
                         error: TxProcessingError::AuthenticationFailed(err_str),
-                        gas_used: gas_used.clone(),
+                        gas_used: gas_used,
                     };
 
                     return (
@@ -276,7 +276,7 @@ where
             }
             let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
                 ignored: IgnoredTxContents {
-                    gas_used: gas_used.clone(),
+                    gas_used: gas_used,
                     index: 0,
                 },
             };
@@ -313,7 +313,7 @@ where
             gas_used = pre_exec_gas_meter.gas_info().gas_used;
             let skipped = SkippedTxContents {
                 error,
-                gas_used: gas_used.clone(),
+                gas_used: gas_used,
             };
 
             let tx_receipt = create_tx_receipt(skipped, raw_tx_hash, batch.tx.data.clone());
@@ -342,8 +342,8 @@ where
         ignored_tx_receipts: vec![],
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
-            gas_price: gas_price.clone(),
-            gas_used: gas_used.clone(),
+            gas_price: *gas_price,
+            gas_used: gas_used,
 
             outcome: BatchSequencerOutcome {
                 rewards: Rewards {

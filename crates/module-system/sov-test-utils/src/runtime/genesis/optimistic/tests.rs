@@ -152,8 +152,8 @@ fn create_test_rt_genesis_config<S: Spec>(
             reward_address: prover_placeholder.address(),
         },
         attester_incentives: AttesterIncentivesConfig {
-            minimum_attester_bond: user_stake.clone(),
-            minimum_challenger_bond: user_stake.clone(),
+            minimum_attester_bond: user_stake,
+            minimum_challenger_bond: user_stake,
             initial_attesters: vec![(
                 admin.clone(),
                 user_stake.value(&S::initial_base_fee_per_gas()),
@@ -163,9 +163,9 @@ fn create_test_rt_genesis_config<S: Spec>(
             light_client_finalized_height: TEST_LIGHT_CLIENT_FINALIZED_HEIGHT,
         },
         prover_incentives: ProverIncentivesConfig {
-            minimum_bond: user_stake.clone(),
+            minimum_bond: user_stake,
             proving_penalty: {
-                let mut proving_penalty = user_stake.clone();
+                let mut proving_penalty = user_stake;
                 proving_penalty.scalar_division(2);
                 proving_penalty
             },

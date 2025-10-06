@@ -649,7 +649,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
             gas_meter: BasicGasMeter::new_with_funds_and_gas(
                 remaining_funds,
                 <S::Gas as crate::Gas>::max(),
-                price.clone(),
+                *price,
             ),
             max_fee: Amount::ZERO,
             max_priority_fee_bips: PriorityFeeBips::ZERO,

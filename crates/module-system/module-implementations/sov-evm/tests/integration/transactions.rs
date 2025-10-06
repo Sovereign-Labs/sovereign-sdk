@@ -49,7 +49,7 @@ fn test_evm_gas_usage() {
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
         let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
-        receipt.last_batch_receipt().inner.gas_used.clone()
+        receipt.last_batch_receipt().inner.gas_used
     };
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
@@ -62,7 +62,7 @@ fn test_evm_gas_usage() {
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
         let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
         let (receipt, _) = runner.execute(transfer);
-        receipt.last_batch_receipt().inner.gas_used.clone()
+        receipt.last_batch_receipt().inner.gas_used
     };
     assert_eq!(
         gas_used_with_evm_metering

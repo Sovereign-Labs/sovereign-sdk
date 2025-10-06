@@ -273,7 +273,7 @@ impl<S: Spec> MessageGenerator for BankMessageGenerator<S> {
                 chain_id,
                 max_priority_fee_bips,
                 max_fee,
-                gas_usage.clone(),
+                gas_usage,
                 generation,
             ));
             generation += 1;

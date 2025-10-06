@@ -110,7 +110,7 @@ impl<S: Spec> MessageGenerator for SequencerRegistryMessageGenerator<S> {
                 chain_id,
                 max_priority_fee_bips,
                 max_fee,
-                estimated_gas_usage.clone(),
+                estimated_gas_usage,
                 nonce,
             ));
             nonce += 1;
@@ -127,7 +127,7 @@ impl<S: Spec> MessageGenerator for SequencerRegistryMessageGenerator<S> {
                 chain_id,
                 max_priority_fee_bips,
                 max_fee,
-                estimated_gas_usage.clone(),
+                estimated_gas_usage,
                 nonce,
             ));
             nonce += 1;

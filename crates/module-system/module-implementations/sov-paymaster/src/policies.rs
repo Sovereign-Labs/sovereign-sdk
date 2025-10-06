@@ -163,14 +163,14 @@ impl<S: Spec> PayeePolicy<S> {
 
     fn max_gas_price(&self) -> Option<<S::Gas as Gas>::Price> {
         match self {
-            PayeePolicy::Allow { max_gas_price, .. } => max_gas_price.clone(),
+            PayeePolicy::Allow { max_gas_price, .. } => *max_gas_price,
             PayeePolicy::Deny => None,
         }
     }
 
     fn max_gas_limit(&self) -> Option<S::Gas> {
         match self {
-            PayeePolicy::Allow { gas_limit, .. } => gas_limit.clone(),
+            PayeePolicy::Allow { gas_limit, .. } => *gas_limit,
             PayeePolicy::Deny => None,
         }
     }

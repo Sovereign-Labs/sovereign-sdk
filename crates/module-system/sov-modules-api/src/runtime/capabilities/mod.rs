@@ -238,7 +238,7 @@ pub mod mocks {
             _height: super::RollupHeight,
             state: &mut crate::state::ApiStateAccessor<S>,
         ) -> Option<<<S as Spec>::Gas as crate::Gas>::Price> {
-            Some(state.gas_price().clone())
+            Some(*state.gas_price())
         }
 
         fn true_slot_number_to_rollup_height(

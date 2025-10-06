@@ -18,7 +18,7 @@ fn test_helper(gas_used: &<TestSpec as Spec>::Gas) -> <<TestSpec as Spec>::Gas a
         INITIAL_BASE_FEE_PER_GAS.into(),
     );
 
-    parent_gas_info.update_gas_used(gas_used.clone());
+    parent_gas_info.update_gas_used(*gas_used);
 
     ChainState::<TestSpec>::compute_base_fee_per_gas(parent_gas_info, 1)
 }
@@ -43,7 +43,7 @@ fn test_base_fee_increases_if_above_target() {
         / (gas_target.as_ref().len() as u64)
         / GAS_DELTA_FRACTION;
 
-    let mut gas_used = gas_target.clone();
+    let mut gas_used = gas_target;
     gas_used.scalar_add(gas_increase_amount);
 
     let computed_base_fee_per_gas = test_helper(&gas_used);
@@ -73,7 +73,7 @@ fn test_base_fee_decreases_if_below_target() {
         / (gas_target.as_ref().len() as u64)
         / GAS_DELTA_FRACTION;
 
-    let mut gas_used = gas_target.clone();
+    let mut gas_used = gas_target;
     gas_used.scalar_sub(gas_decrease_amount);
 
     let computed_base_fee_per_gas = test_helper(&gas_used);
@@ -95,7 +95,7 @@ fn test_base_fee_varies_accross_each_dimension() {
         / (gas_target.as_ref().len() as u64)
         / GAS_DELTA_FRACTION;
 
-    let mut gas_used = gas_target.clone();
+    let mut gas_used = gas_target;
 
     gas_used.as_mut().iter_mut().enumerate().for_each(|(i, g)| {
         if i % 2 == 0 {

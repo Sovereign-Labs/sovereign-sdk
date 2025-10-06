@@ -62,8 +62,7 @@ async fn test_get_base_fee_per_gas_latest_with_updates() {
         .unwrap()
         .last_batch_receipt()
         .inner
-        .gas_price
-        .clone();
+        .gas_price;
 
     let initial_gas_price = S::initial_base_fee_per_gas();
 

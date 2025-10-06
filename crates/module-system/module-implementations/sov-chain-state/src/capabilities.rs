@@ -328,7 +328,7 @@ impl<S: Spec> ChainState<S> {
             .unwrap_infallible()
             .expect("There should always be a transition in progress");
 
-        in_progress_slot.gas_info.update_gas_used(gas_used.clone());
+        in_progress_slot.gas_info.update_gas_used(*gas_used);
 
         self.slots
             .set_true_current(&in_progress_slot, state)
@@ -426,7 +426,7 @@ impl<S: Spec> ChainState<S> {
 
         Ok(self
             .historical_gas_info_at(height, state)?
-            .map(|gas_info| gas_info.base_fee_per_gas().clone()))
+            .map(|gas_info| *gas_info.base_fee_per_gas()))
     }
 
     /// Returns the slot gas limit at the specified slot height for this state accessor.
@@ -456,7 +456,7 @@ impl<S: Spec> ChainState<S> {
 
         Ok(self
             .historical_gas_info_at(height, state)?
-            .map(|gas_info| gas_info.gas_limit().clone()))
+            .map(|gas_info| *gas_info.gas_limit()))
     }
 
     /// Returns the base fee per gas accessible at the current slot accessible from the version reader.
