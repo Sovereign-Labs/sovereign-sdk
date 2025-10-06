@@ -36,6 +36,7 @@ pub(crate) fn get_cfg_env(
             .limit_contract_code_size
             .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
     );
+    cfg_env.tx_chain_id_check = false;
     cfg_env.disable_block_gas_limit = true;
     cfg_env.disable_balance_check = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
@@ -130,6 +131,7 @@ mod tests {
 
         let mut expected_cfg_env = CfgEnv::default();
         expected_cfg_env.chain_id = config_value!("CHAIN_ID");
+        expected_cfg_env.tx_chain_id_check = false;
         expected_cfg_env.disable_base_fee = true;
         expected_cfg_env.disable_balance_check = true;
         expected_cfg_env.disable_block_gas_limit = true;
