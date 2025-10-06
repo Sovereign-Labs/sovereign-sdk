@@ -98,17 +98,9 @@ where
     }
 
     async fn execute_random_swaps(&mut self, count: usize) -> Result<()> {
-        // Random amount between 0.1% and 5% of pool reserves
-        let min_percent = 0.001; // 0.1%
-        let max_percent = 0.05; // 5%
-        let percents = {
-            let mut y_rng = rand::thread_rng();
-            (1..=count)
-                .map(|_| y_rng.gen_range(min_percent..=max_percent))
-                .collect::<Vec<_>>()
-        };
-        for (idx, percent) in percents.iter().enumerate() {
-            let i = idx + 1;
+        let mut rng = rand::thread_rng();
+
+        for i in 1..=count {
             // Alternate between USDC→WETH and WETH→USDC to keep pool balanced
             let is_usdc_to_weth = i % 2 == 1;
 
@@ -118,9 +110,14 @@ where
                 (vec![*self.weth.address(), *self.usdc.address()], "10000") // Max 10k WETH
             };
 
+            // Random amount between 0.1% and 5% of pool reserves
+            let min_percent = 0.001; // 0.1%
+            let max_percent = 0.05; // 5%
+            let random_percent = rng.gen_range(min_percent..=max_percent);
+
             let base_value = base_amount.parse::<f64>()?;
             #[allow(clippy::float_arithmetic)] // This is a soak test and not guest code
-            let scaled_amount = format!("{:.6}", percent * base_value);
+            let scaled_amount = format!("{:.6}", random_percent * base_value);
             let amount = parse_ether(&scaled_amount)?;
 
             self.execute_swap(amount, path).await?;
