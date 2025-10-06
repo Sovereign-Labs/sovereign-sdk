@@ -240,12 +240,17 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for TxScratchpad<S, I>
         key: &SlotKey,
         metrics: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        <RevertableWriter<I> as UniversalStateAccessor>::get_value(
+        //let time = std::time::Instant::now();
+
+        let v = <RevertableWriter<I> as UniversalStateAccessor>::get_value(
             &mut self.inner,
             namespace,
             key,
             metrics,
-        )
+        );
+        //let time = time.elapsed();
+        //dbg!(time);
+        v
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -725,7 +730,12 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for WorkingSet<S, I> {
         key: &SlotKey,
         metrics: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        self.delta.get_value(namespace, key, metrics)
+        let ws_time = std::time::Instant::now();
+
+        let v = self.delta.get_value(namespace, key, metrics);
+        let ws_time = ws_time.elapsed();
+        //dbg!(ws_time);
+        v
     }
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
         self.delta.set_value(namespace, key, value);
@@ -789,8 +799,8 @@ mod tests {
     use sov_rollup_interface::stf::ExecutionContext;
     use sov_state::codec::BcsCodec;
     use sov_state::namespaces::User;
-    use sov_state::Namespace;
     use sov_state::{Kernel, NodeLeafAndMaybeValue, SlotKey, SlotValue};
+    use sov_state::{Namespace, Prefix};
     use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::TestHasher;
     use sov_test_utils::{MockDaSpec, MockZkvm};
@@ -801,8 +811,8 @@ mod tests {
     use crate::state::accessors::internals::FirstTimeReads;
     use crate::state::accessors::seal::UniversalStateAccessor;
     use crate::{
-        BasicGasMeter, GasArray, Spec, StateAccessor, StateCheckpoint, StateProvider, StateReader,
-        StateWriter, TxChangeSet, TxScratchpad, WorkingSet,
+        BasicGasMeter, GasArray, RejectReason, Spec, StateAccessor, StateCheckpoint, StateProvider,
+        StateReader, StateWriter, TxChangeSet, TxScratchpad, WorkingSet,
     };
 
     type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
@@ -1009,9 +1019,68 @@ mod tests {
         assert_scratchpad_contains_data(&[(101, 111), (102, 112)], &mut main_scratchpad, namespace);
     }
 
+    #[test]
+    fn test_bench_cache_warmup_overrides() {
+        let nb = 10_000;
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
+
+        let prefix = Prefix::new([0; 128].to_vec());
+        let mut keys = vec![];
+        for i in 0..nb {
+            let key = SlotKey::new(&prefix, &i, &BcsCodec {});
+            keys.push(key);
+        }
+
+        let changeset = create_key_and_values(keys.clone(), 1000);
+
+        let app_time = std::time::Instant::now();
+        scratchpad.apply_change_set(changeset.clone());
+        let app_time = app_time.elapsed();
+
+        let app_time_2 = std::time::Instant::now();
+        scratchpad.apply_change_set(changeset.clone());
+        let app_time_2 = app_time_2.elapsed();
+
+        let mut metric = StateAccessMetric::placeholder();
+
+        let mut scratchpad = scratchpad.commit().to_tx_scratchpad();
+
+        let get_time = std::time::Instant::now();
+        for k in keys {
+            let get_value = scratchpad
+                .get_value(Namespace::User, &k, &mut metric)
+                .unwrap();
+        }
+        let get_time = get_time.elapsed();
+
+        dbg!(app_time / nb, app_time_2 / nb, get_time / nb);
+    }
+
     fn create_srcratchpad<S: Spec>(storage: S::Storage) -> TxScratchpad<S, StateCheckpoint<S>> {
         let checkpoint = StateCheckpoint::new(storage, &MockKernel::new(4, 1));
         checkpoint.to_tx_scratchpad()
+    }
+
+    fn create_key_and_values(keys: Vec<SlotKey>, value_size: usize) -> TxChangeSet {
+        let mut user = Vec::with_capacity(keys.len());
+        for key in keys {
+            let v = vec![0; value_size];
+            let value = SlotValue::new(&v, &BcsCodec {});
+            let value = Some(NodeLeafAndMaybeValue::new_read::<TestHasher>(value));
+
+            user.push((key, value));
+        }
+
+        TxChangeSet {
+            writes: vec![],
+            reads: Some(FirstTimeReads {
+                user,
+                kernel: vec![],
+            }),
+        }
     }
 
     fn key(k: u8) -> SlotKey {

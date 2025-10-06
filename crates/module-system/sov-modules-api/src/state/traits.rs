@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::convert::Infallible;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
@@ -335,10 +336,16 @@ macro_rules! blanket_impl_metered_state_reader {
             Codec: StateCodec,
             Codec::ValueCodec: StateItemCodec<V>,
         {
+            //let get_dec_time = std::time::Instant::now();
+            //let get_dec_time_1 = std::time::Instant::now();
+
             let storage_value = <Self as StateReader<$namespace>>::get(self, storage_key)?;
 
-            storage_value
+            //let get_dec_time_1 = get_dec_time_1.elapsed();
+
+            let v = storage_value
                 .map(|storage_value| {
+                    /*
                     // We need to charge for the cost to deserialize the value
                     tracing::trace_span!("all_accesses::charge_per_byte_borsh_deserialization",)
                         .in_scope(|| {
@@ -353,10 +360,13 @@ macro_rules! blanket_impl_metered_state_reader {
                             inner: e,
                             namespace: <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
                         })?;
+                    */
 
                     #[cfg(feature = "native")]
                     let deserialization_start = std::time::Instant::now();
                     let value = codec.value_codec().decode_unwrap(storage_value.value());
+
+                    /*
                     #[cfg(feature = "native")]
                     {
                         let deserialization_duration = deserialization_start.elapsed();
@@ -366,11 +376,15 @@ macro_rules! blanket_impl_metered_state_reader {
                             storage_value.size(),
                             deserialization_duration,
                         );
-                    }
+                    }*/
 
                     Ok(value)
                 })
-                .transpose()
+                .transpose();
+            //let get_dec_time = get_dec_time.elapsed();
+            //dbg!(get_dec_time, get_dec_time_1);
+
+            v
         }
     };
 }
@@ -586,14 +600,24 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<StateAccessMetric, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    charge_storage_access(accessor, key)?;
+    //let charge_read_time = std::time::Instant::now();
 
+    //let charge_storage_time = std::time::Instant::now();
+    charge_storage_access(accessor, key)?;
+    //let charge_storage_time = charge_storage_time.elapsed();
+
+    //let charge_gas_time = std::time::Instant::now();
     tracing::trace_span!("access::charge_bias_for_read",).in_scope(|| {
         accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
     })?;
 
+    //let charge_gas_time = charge_gas_time.elapsed();
+
     let mut metric = StateAccessMetric::new_size(key.key(), key.display_fn());
+
+    //let get_size_time = std::time::Instant::now();
     let value_size = accessor.get_size(namespace, key, &mut metric);
+    //let get_size_time = get_size_time.elapsed();
 
     match value_size {
         Some(0) | None => {}
@@ -621,6 +645,11 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
             })?;
         }
     }
+
+   // let charge_read_time = charge_read_time.elapsed();
+   // dbg!(charge_read_time, charge_storage_time, charge_gas_time, get_size_time);
+
+    
 
     Ok(metric)
 }
@@ -658,15 +687,33 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    let size_metric = charge_read(accessor, namespace, key)?;
-    let mut read_metric = StateAccessMetric::new_read(key.key(), key.display_fn());
+    
 
+    
+    let size_metric = charge_read(accessor, namespace, key)?;
+    
+
+    
+    let mut read_metric = StateAccessMetric::new_read(key.key(), key.display_fn());
+    
+
+    
     let value = accessor.get_value(namespace, key, &mut read_metric);
+    
 
     if enabled!(Level::TRACE) {
         let size = value.as_ref().map(SlotValue::size).unwrap_or(0);
         Span::current().record("value_size_bytes", size);
     }
+
+    /* 
+    let get_inner_time = get_inner_time.elapsed();
+    dbg!(
+        get_inner_time,
+        get_inner_time_2,
+        get_inner_charge,
+        read_metric_time
+    );*/
 
     Ok((value, size_metric, read_metric))
 }

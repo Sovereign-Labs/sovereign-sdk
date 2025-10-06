@@ -385,18 +385,45 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         witness: &S::Witness,
         metric: &mut StateAccessMetric,
     ) -> Option<u32> {
-        match self.cache.get(key) {
-            Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
-            Some(Access::Write { modified, .. }) => modified.as_ref().map(SlotValue::size),
+
+        let get_size_or_fetch_time = std::time::Instant::now();
+        let v =match self.cache.get(key) {
+            Some(Access::Read { original }) => {
+                let v = original.as_ref().map(|node| node.leaf.size);
+                let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                //dbg!("1", get_size_or_fetch_time);
+                v
+            },
+            Some(Access::Write { modified, .. }) => {
+                let v = modified.as_ref().map(SlotValue::size);
+                let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                //dbg!("2", get_size_or_fetch_time);
+                v
+            }
+
             None => {
                 let maybe_leaf = match uncomitted_changes {
-                    Some(uncomitted_changes) => uncomitted_changes
+                    Some(uncomitted_changes) => 
+                    {
+                        let v = uncomitted_changes
                         .get_leaf(N::PROVABLE_NAMESPACE, key)
-                        .or_else(|| storage.get_leaf::<N>(key, witness)),
-                    None => storage.get_leaf::<N>(key, witness),
+                        .or_else(|| storage.get_leaf::<N>(key, witness));
+                        
+                        let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                        //dbg!("3", get_size_or_fetch_time);
+                        v
+                    }
+                    None => {
+                        let v = storage.get_leaf::<N>(key, witness);
+                        let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                         //dbg!("4", get_size_or_fetch_time);
+                         v
+                    }
                 };
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
                 metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                
+                
                 Self::add_read(
                     key.clone(),
                     maybe_leaf,
@@ -405,7 +432,9 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 );
                 size
             }
-        }
+        };
+       
+        v
     }
 
     /// Get the size of the value.
