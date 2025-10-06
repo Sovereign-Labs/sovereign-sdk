@@ -77,6 +77,7 @@ pub trait GasArray:
     fn dim_is_less_or_eq(self, rhs: Self) -> bool;
 
     /// Calculates the minimum gas values between two gas arrays along each dimension.
+    #[must_use = "this returns the computed minimum without modifying either value"]
     fn calculate_min(lhs: Self, rhs: Self) -> Self;
 
     /// Division of gas units by a scalar.
