@@ -693,7 +693,7 @@ where
                         blob_idx,
                         &sender,
                         sequencer_bond,
-                        &gas_price,
+                        gas_price,
                         execution_context,
                     );
 
@@ -755,7 +755,7 @@ where
                         &sender,
                         &sequencer_address,
                         sequencer_bond,
-                        &gas_price,
+                        gas_price,
                         proof,
                         state,
                     );

@@ -165,7 +165,7 @@ pub trait GetGasPrice {
     type Spec: Spec;
 
     /// Returns gas price.
-    fn gas_price(&self) -> &<<Self::Spec as Spec>::Gas as Gas>::Price;
+    fn gas_price(&self) -> <<Self::Spec as Spec>::Gas as Gas>::Price;
 }
 
 /// Represents a mathematical fraction with a numerator and a denominator.

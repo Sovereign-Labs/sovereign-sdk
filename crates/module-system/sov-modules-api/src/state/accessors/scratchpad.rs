@@ -429,7 +429,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
 
 impl<S: Spec, I: StateProvider<S>> GetGasPrice for PreExecWorkingSet<S, I> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
         self.gas_meter.gas_price()
     }
 }
@@ -704,7 +704,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
 
 impl<S: Spec, I: StateProvider<S>> GetGasPrice for WorkingSet<S, I> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
         self.gas_meter.gas_price()
     }
 }

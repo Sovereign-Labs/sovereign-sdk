@@ -247,11 +247,11 @@ where
     metrics.timings.mark_tx_attempted_access_metrics = pre_exec_working_set.metrics().take();
 
     metrics.timings.reserve_gas_timer.start();
-    let gas_price = *pre_exec_working_set.gas_price();
+    let gas_price = pre_exec_working_set.gas_price();
     if let Err(err) =
         runtime
             .gas_enforcer()
-            .try_reserve_gas(tx, &gas_price, &mut ctx, &mut pre_exec_working_set)
+            .try_reserve_gas(tx, gas_price, &mut ctx, &mut pre_exec_working_set)
     {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
         return (
@@ -268,7 +268,7 @@ where
     // The transaction will execute until one of the following conditions is met:
     // 1. It consumes more funds than `tx.max_fee`.
     // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-    let working_set_gas_meter = tx.gas_meter(&pre_exec_gas_meter.gas_info().gas_price, slot_gas);
+    let working_set_gas_meter = tx.gas_meter(pre_exec_gas_meter.gas_info().gas_price, slot_gas);
     let mut working_set = WorkingSet::create_working_set(scratchpad, tx, working_set_gas_meter);
 
     // Recover the authentication cost from the user.
@@ -364,7 +364,7 @@ pub(crate) fn apply_batch<S, RT, B>(
     blob_idx: usize,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_bond: Amount,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     execution_context: ExecutionContext,
 ) -> (IncrementalBatchReceipt<S>, StateCheckpoint<S>)
 where
@@ -464,7 +464,7 @@ where
                 ProvisionalSequencerOutcome::out_of_funds(
                     // SAFETY: `gas_used` is either Zero or comes from `BasicGasMeter`, which ensures overflow protection.
                     gas_used
-                        .checked_value(*gas_price)
+                        .checked_value(gas_price)
                         .expect("gas_used value overflowed"),
                     reason,
                 )
@@ -477,7 +477,7 @@ where
                 ProvisionalSequencerOutcome::penalize(
                     // SAFETY: `gas_used`  comes from `BasicGasMeter`, which ensures overflow protection.
                     gas_used
-                        .checked_value(*gas_price)
+                        .checked_value(gas_price)
                         .expect("gas_used value overflowed"),
                     create_tx_receipt(SkippedTxContents { error, gas_used }, tx_hash, tx_body.data),
                 )
@@ -540,7 +540,7 @@ where
                         sequencer_bond_per_tx = SequencerBondForTx::Preferred(
                             sequencer_bond_per_tx
                                 .amount()
-                                .saturating_sub(gas_used.checked_value(*gas_price).unwrap()),
+                                .saturating_sub(gas_used.checked_value(gas_price).unwrap()),
                         );
                     }
 
@@ -580,7 +580,7 @@ where
         ignored_tx_receipts,
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
-            gas_price: *gas_price,
+            gas_price: gas_price,
             gas_used: total_gas_used_in_batch,
             outcome: BatchSequencerOutcome {
                 rewards: rewards.clone(),
@@ -652,7 +652,7 @@ fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_rollup_address: S::Address,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     execution_context: ExecutionContext,
     sequencer_bond: SequencerBondForTx,
     idx: usize,
@@ -670,7 +670,7 @@ where
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
     let max_tx_check_costs = <S as GasSpec>::max_tx_check_costs();
-    let max_tx_check_value = match max_tx_check_costs.checked_value(*gas_price) {
+    let max_tx_check_value = match max_tx_check_costs.checked_value(gas_price) {
         Some(v) => v,
         None => {
             return AuthAndProcessOutput {
@@ -712,7 +712,7 @@ where
 
     // In the conditions above, we ensured that both the sequencer bond and the remaining gas in the slot gas meter exceed `max_tx_check_costs`.
     // Initialize `pre_exec_gas_meter` with `max_tx_check_costs` gas.
-    let pre_exec_gas_meter = BasicGasMeter::new_with_gas(max_tx_check_costs, *gas_price);
+    let pre_exec_gas_meter = BasicGasMeter::new_with_gas(max_tx_check_costs, gas_price);
 
     let mut pre_exec_working_set: PreExecWorkingSet<S, _> =
         scratchpad.to_pre_exec_working_set(pre_exec_gas_meter);

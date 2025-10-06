@@ -38,7 +38,7 @@ impl<S: Spec> BlobStorage<S> {
         blob: BlobDataWithId<S, BatchWithId<S>>,
         sender: <<S as Spec>::Da as DaSpec>::Address,
         available_balance: Amount,
-        gas_price_for_new_block: &<S::Gas as Gas>::Price,
+        gas_price_for_new_block: <S::Gas as Gas>::Price,
         account_for_deferral: bool,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Option<ValidatedBlob<S, BatchWithId<S>>> {
@@ -63,7 +63,7 @@ impl<S: Spec> BlobStorage<S> {
         let gas_needed_for_pre_exec_checks = <S as GasSpec>::max_tx_check_costs()
             .checked_scalar_product(num_pre_exec_checks_needed as u64)?;
         funds_needed = funds_needed
-            .checked_add(gas_needed_for_pre_exec_checks.checked_value(*gas_price_for_new_block)?)?;
+            .checked_add(gas_needed_for_pre_exec_checks.checked_value(gas_price_for_new_block)?)?;
         if funds_needed > available_balance {
             tracing::debug!(%funds_needed, %sender, %available_balance, "Failed to escrow funds for deferred blob.");
             return None;
@@ -119,8 +119,7 @@ impl<S: Spec> BlobStorage<S> {
         let best_gas_price_estimate = self.get_new_gas_price(visible_height_increase, state);
 
         let gas_needed_for_pre_exec_checks = <S as GasSpec>::max_tx_check_costs();
-        let funds_needed =
-            gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?;
+        let funds_needed = gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?;
         if funds_needed > available_balance {
             return None;
         }
@@ -163,7 +162,7 @@ impl<S: Spec> BlobStorage<S> {
         &self,
         blob: &BlobDataWithId<S, BatchWithId<S>>,
         sender: &<<S as Spec>::Da as DaSpec>::Address,
-        current_gas_price: &<<S as Spec>::Gas as Gas>::Price,
+        current_gas_price: <<S as Spec>::Gas as Gas>::Price,
     ) -> Option<Amount> {
         const WORST_CASE_GAS_PRICE_INCREASE: u32 = 2;
 
@@ -178,7 +177,7 @@ impl<S: Spec> BlobStorage<S> {
         let worst_case_increase_in_pre_exec_checks_gas = <S as GasSpec>::max_tx_check_costs()
             .checked_scalar_product(num_pre_exec_checks_needed as u64)?;
         let worst_case_increase_in_pre_exec_checks_tokens =
-            worst_case_increase_in_pre_exec_checks_gas.checked_value(*current_gas_price)?;
+            worst_case_increase_in_pre_exec_checks_gas.checked_value(current_gas_price)?;
 
         // We'll store the blob now, so we'll pay at the current gas price
         let fixed_cost_of_storing = <S as GasSpec>::bias_to_charge_for_access()
@@ -187,12 +186,12 @@ impl<S: Spec> BlobStorage<S> {
                 // We need to multiply by 2 because we are hashing the key and the value separately
                 &<S as GasSpec>::gas_to_charge_hash_update().checked_scalar_product(2)?,
             )?
-            .checked_value(*current_gas_price)?;
+            .checked_value(current_gas_price)?;
 
         let variable_cost_of_storing = <S as GasSpec>::gas_to_charge_per_byte_storage_update()
             .checked_combine(&<S as GasSpec>::gas_to_charge_per_byte_hash_update())?
             .checked_scalar_product(estimated_bytes_with_key_size)?
-            .checked_value(*current_gas_price)?;
+            .checked_value(current_gas_price)?;
         let tokens_needed_for_storage =
             fixed_cost_of_storing.checked_add(variable_cost_of_storing)?;
 
@@ -205,7 +204,7 @@ impl<S: Spec> BlobStorage<S> {
                 &<S as GasSpec>::gas_to_charge_hash_update().checked_scalar_product(2)?,
             )?
             .checked_scalar_product(WORST_CASE_GAS_PRICE_INCREASE.into())?
-            .checked_value(*current_gas_price)?;
+            .checked_value(current_gas_price)?;
         let variable_cost_of_retrieval = <S as GasSpec>::gas_to_charge_per_byte_read()
             .checked_combine(
                 &<S as GasSpec>::gas_to_charge_per_byte_hash_update().checked_scalar_product(
@@ -219,7 +218,7 @@ impl<S: Spec> BlobStorage<S> {
                         WORST_CASE_GAS_PRICE_INCREASE as u64 * (estimated_bytes_to_store as u64),
                     )?,
             )?
-            .checked_value(*current_gas_price)?;
+            .checked_value(current_gas_price)?;
         let tokens_needed_for_retrieval =
             fixed_cost_of_retrieval.checked_add(variable_cost_of_retrieval)?;
 
@@ -227,7 +226,7 @@ impl<S: Spec> BlobStorage<S> {
         // We only have to pay for the price to update the storage.
         let delete_cost = <S as GasSpec>::bias_to_charge_storage_update()
             .checked_scalar_product(WORST_CASE_GAS_PRICE_INCREASE.into())?;
-        let tokens_needed_for_deletion = delete_cost.checked_value(*current_gas_price)?;
+        let tokens_needed_for_deletion = delete_cost.checked_value(current_gas_price)?;
 
         tokens_needed_for_storage
             .checked_add(tokens_needed_for_retrieval)?

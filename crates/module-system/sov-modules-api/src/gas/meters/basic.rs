@@ -241,8 +241,8 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
 
 impl<S: Spec> GetGasPrice for BasicGasMeter<S> {
     type Spec = S;
-    fn gas_price(&self) -> &<<Self::Spec as Spec>::Gas as Gas>::Price {
-        &self.gas_price
+    fn gas_price(&self) -> <<Self::Spec as Spec>::Gas as Gas>::Price {
+        self.gas_price
     }
 }
 

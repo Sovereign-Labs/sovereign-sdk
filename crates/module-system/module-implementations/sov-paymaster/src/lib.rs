@@ -213,7 +213,7 @@ impl<S: Spec> Paymaster<S> {
     pub fn try_reserve_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> Result<(), ReserveGasError> {
@@ -236,7 +236,7 @@ impl<S: Spec> Paymaster<S> {
     fn gas_from_paymaster(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &Context<S>,
         state: &mut impl StateAccessor,
     ) -> Result<Option<S::Address>, ReserveGasError> {
@@ -285,7 +285,7 @@ impl<S: Spec> Paymaster<S> {
     fn try_purchase_paymaster_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         payer: &S::Address,
         policy: &PayeePolicy<S>,
         state: &mut impl StateAccessor,

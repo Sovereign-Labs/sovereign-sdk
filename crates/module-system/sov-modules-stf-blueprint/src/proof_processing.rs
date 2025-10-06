@@ -28,7 +28,7 @@ pub(crate) fn process_proof<S, RT>(
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_rollup_address: &S::Address,
     sequencer_bond: Amount,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     raw_proof: Vec<u8>,
     state: StateCheckpoint<S>,
 ) -> (ProcessProofOutput<S>, StateCheckpoint<S>)
@@ -82,7 +82,7 @@ where
 
                     let gas_value = out
                         .gas_used
-                        .checked_value(*gas_price)
+                        .checked_value(gas_price)
                         // SAFETY: Unwrapping is safe here because `gas_used` comes from `BasicGasMeter``, which ensures overflow does not occur.
                         .expect("The gas value can't overflow");
 
@@ -200,7 +200,7 @@ where
 
             // SAFETY: We compute this value at the beginning of the function when we create the `pre_exec_working_set`. If that failed, we'll never reach this point.
             let max_tx_check_value = <S as GasSpec>::max_tx_check_costs()
-                .checked_value(*gas_price)
+                .checked_value(gas_price)
                 .unwrap();
 
             let mut checkpoint = state.commit();
@@ -278,13 +278,13 @@ where
         &self,
         slot_gas: &S::Gas,
         sequencer_bond: Amount,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         tx_scratchpad: TxScratchpad<S, I>,
     ) -> PreExecWorkingSetResult<S, I> {
         // CHECKS:
         // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
         let max_tx_check_costs = <S as GasSpec>::max_tx_check_costs();
-        let max_tx_check_value = match <S as GasSpec>::max_tx_check_costs().checked_value(*gas_price)
+        let max_tx_check_value = match <S as GasSpec>::max_tx_check_costs().checked_value(gas_price)
         {
             Some(v) => v,
             None => {
@@ -334,7 +334,7 @@ where
             );
         }
 
-        let pre_exec_gas_meter = BasicGasMeter::<S>::new_with_gas(max_tx_check_costs, *gas_price);
+        let pre_exec_gas_meter = BasicGasMeter::<S>::new_with_gas(max_tx_check_costs, gas_price);
 
         let mut pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(pre_exec_gas_meter);
 
@@ -354,7 +354,7 @@ where
         &mut self,
         slot_gas: &S::Gas,
         sequencer_rollup_address: &S::Address,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         auth_tx: AuthenticatedTransactionData<S>,
         mut pre_exec_working_set: PreExecWorkingSet<S, I>,
     ) -> WorkflowResult<WorkingSet<S, I>, S, I> {

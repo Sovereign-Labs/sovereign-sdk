@@ -56,8 +56,8 @@ impl<GU: Gas> TransactionConsumption<GU> {
     }
 
     /// The gas price used during the transaction.
-    pub fn gas_price(&self) -> &GU::Price {
-        &self.gas_price
+    pub fn gas_price(&self) -> GU::Price {
+        self.gas_price
     }
 
     /// The base fee reward of the transaction expressed as a gas token amount.

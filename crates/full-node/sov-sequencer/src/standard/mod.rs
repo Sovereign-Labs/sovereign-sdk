@@ -628,7 +628,7 @@ where
             let gas_info = gas_meter.gas_info();
             let tx = auth_output.0.authenticated_tx;
 
-            let working_set_gas_meter = tx.gas_meter(&gas_info.gas_price.clone(), &<S::Gas>::MAX);
+            let working_set_gas_meter = tx.gas_meter(gas_info.gas_price.clone(), &<S::Gas>::MAX);
 
             let mut working_set =
                 WorkingSet::create_working_set(tx_scratchpad, &tx, working_set_gas_meter);

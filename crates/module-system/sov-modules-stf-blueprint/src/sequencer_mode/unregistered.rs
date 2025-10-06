@@ -74,12 +74,12 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
         );
     }
 
-    let gas_price = *pre_exec_working_set.gas_price();
+    let gas_price = pre_exec_working_set.gas_price();
     // After this check, we are confident that the transaction sender can cover the costs of transaction processing.
     if let Err(err) =
         runtime
             .gas_enforcer()
-            .try_reserve_gas(tx, &gas_price, &mut ctx, &mut pre_exec_working_set)
+            .try_reserve_gas(tx, gas_price, &mut ctx, &mut pre_exec_working_set)
     {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
         return (
@@ -95,7 +95,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     // The transaction will execute until one of the following conditions is met:
     // 1. It consumes more funds than `tx.max_fee`.
     // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-    let working_set_gas_meter = tx.gas_meter(&gas_info.gas_price, slot_gas);
+    let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, slot_gas);
 
     let mut working_set = WorkingSet::create_working_set(scratchpad, tx, working_set_gas_meter);
 

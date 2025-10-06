@@ -393,8 +393,8 @@ impl<S: Spec> GasMeter for ApiStateAccessor<S> {
 
 impl<S: Spec> GetGasPrice for ApiStateAccessor<S> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
-        &self.gas_meter.gas_price
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
+        self.gas_meter.gas_price
     }
 }
 
@@ -832,7 +832,7 @@ impl<S: Spec> ProvableStateReader<namespaces::Kernel> for MeteredApiStateAccesso
 
 impl<S: Spec> GetGasPrice for MeteredApiStateAccessor<S> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
-        &self.api_state_accessor.gas_meter.gas_price
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
+        self.api_state_accessor.gas_meter.gas_price
     }
 }

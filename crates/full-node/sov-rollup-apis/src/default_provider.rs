@@ -87,7 +87,7 @@ where
             &mut scratchpad,
         )?;
 
-        let working_set_gas_meter = tx_data.gas_meter(&gas_price.clone(), &<S::Gas>::MAX);
+        let working_set_gas_meter = tx_data.gas_meter(gas_price.clone(), &<S::Gas>::MAX);
 
         let working_set =
             WorkingSet::create_working_set(scratchpad, &tx_data, working_set_gas_meter);
