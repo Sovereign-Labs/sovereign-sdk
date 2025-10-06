@@ -54,22 +54,27 @@ pub trait GasArray:
     type Scalar;
 
     /// Returns the sum of the two gas units or None if the result overflows.
-    fn checked_combine(&self, rhs: Self) -> Option<Self>;
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_combine(self, rhs: Self) -> Option<Self>;
 
     /// Out-of-place substraction of gas units.
     ///
     /// # Output
     /// Returns [`None`] if the substraction in any gas dimension underflows.
-    fn checked_sub(&self, rhs: Self) -> Option<Self>;
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_sub(self, rhs: Self) -> Option<Self>;
 
     /// Returns the product of the scalar and the gas units or None if the result overflows.
-    fn checked_scalar_product(&self, scalar: Self::Scalar) -> Option<Self>;
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn checked_scalar_product(self, scalar: Self::Scalar) -> Option<Self>;
 
     /// Checks if the gas is less than the provided gas in each dimension of the gas array.
-    fn dim_is_less_than(&self, rhs: Self) -> bool;
+    #[must_use = "comparisons are pure and do not modify either value"]
+    fn dim_is_less_than(self, rhs: Self) -> bool;
 
     /// Checks if the gas is less or equal to the provided gas in each dimension of the gas array.
-    fn dim_is_less_or_eq(&self, rhs: Self) -> bool;
+    #[must_use = "comparisons are pure and do not modify either value"]
+    fn dim_is_less_or_eq(self, rhs: Self) -> bool;
 
     /// Calculates the minimum gas values between two gas arrays along each dimension.
     fn calculate_min(lhs: Self, rhs: Self) -> Self;

@@ -8,7 +8,7 @@ macro_rules! impl_gas_array {
 
             const MAX: Self = Self::from_primitive([<$u>::MAX; $n]);
 
-            fn checked_sub(&self, rhs: Self) -> Option<Self> {
+            fn checked_sub(self, rhs: Self) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
                 for (i, (l, r)) in self.value.iter().zip(rhs.value.as_slice()).enumerate() {
@@ -22,7 +22,7 @@ macro_rules! impl_gas_array {
                 Some(Self::from(output))
             }
 
-            fn checked_scalar_product(&self, scalar: $u) -> Option<Self> {
+            fn checked_scalar_product(self, scalar: $u) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
                 for (i, v) in self.value.iter().enumerate() {
@@ -36,7 +36,7 @@ macro_rules! impl_gas_array {
                 Some(Self::from(output))
             }
 
-            fn dim_is_less_than(&self, rhs: Self) -> bool {
+            fn dim_is_less_than(self, rhs: Self) -> bool {
                 for (l, r) in self.value.iter().zip(rhs.value.as_slice()) {
                     if l >= r {
                         return false;
@@ -45,7 +45,7 @@ macro_rules! impl_gas_array {
                 true
             }
 
-            fn dim_is_less_or_eq(&self, rhs: Self) -> bool {
+            fn dim_is_less_or_eq(self, rhs: Self) -> bool {
                 for (l, r) in self.value.iter().zip(rhs.value.as_slice()) {
                     if l > r {
                         return false;
@@ -86,7 +86,7 @@ macro_rules! impl_gas_array {
                 self
             }
 
-            fn checked_combine(&self, rhs: Self) -> Option<Self> {
+            fn checked_combine(self, rhs: Self) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
                 for (i, (l, r)) in self.value.iter().zip(rhs.value.iter()).enumerate() {
