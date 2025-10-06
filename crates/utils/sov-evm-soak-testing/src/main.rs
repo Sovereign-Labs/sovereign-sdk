@@ -65,10 +65,9 @@ async fn main() -> Result<()> {
                     key_bytes[0] = key_bytes[0].wrapping_add(i as u8);
                     hex::encode(key_bytes)
                 };
-                let addr: SocketAddr = args.rpc_addr.clone(); // Clone the RPC address to avoid lifetime issues
-                                                              // Spawn a new task for each worker
+                // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
-                    let client = RpcClient::new(&key, addr).await;
+                    let client = RpcClient::new(&key, args.rpc_addr).await;
                     let signer = Address::from_slice(&client.address().0);
                     match UniSoakTest::new(client.alloy_client, signer).await {
                         Ok(test) => {
