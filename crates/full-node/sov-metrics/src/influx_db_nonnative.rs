@@ -302,6 +302,13 @@ impl Metric for AuthAndProcessMetrics {
             write!(buffer, "{field}={}", timer.elapsed().as_micros())?;
         }
 
+        let fields = [ ("resolve_context_state_access_time_us", t.resolve_context_access_metrics.total_read_timing.as_micros()),
+            ("resolve_context_total_reads", t.resolve_context_access_metrics.total_reads as u128)];
+
+        for  (field, amount) in fields.iter() {
+            write!(buffer, ",{field}={}", amount)?;
+        }
+
         summarize(&t.attempt_tx_access_metrics, "attempt_tx", buffer)?;
         Ok(())
     }
