@@ -61,7 +61,7 @@ mod tests {
     }
 
     fn min(a: &GasUnit<2>, b: &GasUnit<2>) -> GasUnit<2> {
-        GasUnit::calculate_min(a, b)
+        GasUnit::calculate_min(*a, *b)
     }
 
     const TEST_GAS: GasUnit<2> = GasUnit {
@@ -81,7 +81,7 @@ mod tests {
             (gas!(10, 30), gas!(20, 30), false),
         ];
         for (a, b, expected) in cases {
-            assert_eq!(a.dim_is_less_than(&b), expected);
+            assert_eq!(a.dim_is_less_than(b), expected);
         }
     }
 
@@ -97,7 +97,7 @@ mod tests {
             (gas!(40, 40), gas!(20, 50), false),
         ];
         for (a, b, expected) in cases {
-            assert_eq!(a.dim_is_less_or_eq(&b), expected);
+            assert_eq!(a.dim_is_less_or_eq(b), expected);
         }
     }
 
@@ -139,7 +139,7 @@ mod tests {
             (gas!(u64::MAX, u64::MAX), gas!(u64::MAX, u64::MAX), None),
         ];
         for (a, b, expected) in cases {
-            assert_eq!(a.checked_combine(&b), expected);
+            assert_eq!(a.checked_combine(b), expected);
         }
     }
 

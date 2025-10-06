@@ -112,7 +112,7 @@ fn test_honest_reserve_gas_capability_does_not_charge_priority_fee() {
     )
     .unwrap();
 
-    let gas_used_value_simulation = gas_used_simulation.value(&gas_price_simulation);
+    let gas_used_value_simulation = gas_used_simulation.value(gas_price_simulation);
 
     // Since the max fee is exactly the gas used by the transaction following the simulation, we expect the priority fee *not* to be charged.
     runner.execute_transaction(TransactionTestCase {

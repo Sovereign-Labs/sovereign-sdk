@@ -311,7 +311,7 @@ fn test_batch_gas_used() {
         for receipt in receipts {
             match &receipt.receipt {
                 sov_modules_api::TxEffect::Successful(tx_contents) => {
-                    gas_in_batch = gas_in_batch.checked_combine(&tx_contents.gas_used).unwrap();
+                    gas_in_batch = gas_in_batch.checked_combine(tx_contents.gas_used).unwrap();
                 }
                 _ => panic!("Transactions should succeed"),
             }

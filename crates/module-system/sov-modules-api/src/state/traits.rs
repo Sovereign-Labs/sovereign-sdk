@@ -343,7 +343,7 @@ macro_rules! blanket_impl_metered_state_reader {
                     tracing::trace_span!("all_accesses::charge_per_byte_borsh_deserialization",)
                         .in_scope(|| {
                             self.charge_linear_gas(
-                                &<T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(
+                                <T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(
                                 ),
                                 storage_value.size(),
                             )
@@ -557,11 +557,11 @@ fn charge_storage_access<Accessor: UniversalStateAccessor + GasMeter>(
     // - fixed hashing cost
     // - hashing cost of the key length
     tracing::trace_span!("access::charge_bias_for_access",).in_scope(|| {
-        accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_access())
+        accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_for_access())
     })?;
 
     tracing::trace_span!("access::charge_hash_update",).in_scope(|| {
-        accessor.charge_gas(&<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())
+        accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())
     })?;
 
     let key_size: u32 = key
@@ -572,7 +572,7 @@ fn charge_storage_access<Accessor: UniversalStateAccessor + GasMeter>(
     if key_size > 0 {
         tracing::trace_span!("access::charge_per_byte_hash_update").in_scope(|| {
             accessor.charge_linear_gas(
-                &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
                 key_size,
             )
         })?;
@@ -588,9 +588,8 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
 ) -> Result<StateAccessMetric, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     charge_storage_access(accessor, key)?;
 
-    tracing::trace_span!("access::charge_bias_for_read",).in_scope(|| {
-        accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
-    })?;
+    tracing::trace_span!("access::charge_bias_for_read",)
+        .in_scope(|| accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_for_read()))?;
 
     let mut metric = StateAccessMetric::new_size(key.key(), key.display_fn());
     let value_size = accessor.get_size(namespace, key, &mut metric);
@@ -600,13 +599,13 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
         Some(value_size) => {
             tracing::trace_span!("access::charge_per_byte_read").in_scope(|| {
                 accessor.charge_linear_gas(
-                    &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
                     value_size,
                 )
             })?;
 
             tracing::trace_span!("access::charge_hash_update", value_size = value_size).in_scope(
-                || accessor.charge_gas(&<Accessor::Spec as GasSpec>::gas_to_charge_hash_update()),
+                || accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update()),
             )?;
 
             tracing::trace_span!(
@@ -615,7 +614,7 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
             )
             .in_scope(|| {
                 accessor.charge_linear_gas(
-                    &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
                     value_size,
                 )
             })?;
@@ -633,16 +632,16 @@ fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
 ) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     charge_storage_access(accessor, key)?;
 
-    accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_storage_update())?;
+    accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_storage_update())?;
     accessor.charge_linear_gas(
-        &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_storage_update(),
+        <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_storage_update(),
         value_size,
     )?;
 
-    accessor.charge_gas(&<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())?;
+    accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())?;
 
     accessor.charge_linear_gas(
-        &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+        <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
         value_size,
     )?;
 

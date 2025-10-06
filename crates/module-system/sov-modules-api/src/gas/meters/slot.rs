@@ -21,9 +21,8 @@ impl<S: Spec> SlotGasMeter<S> {
         remaining_slot_gas: S::Gas,
         preferred_sequencer: Option<<S::Da as DaSpec>::Address>,
     ) -> Self {
-        let mut remaining_preferred_slot_gas = remaining_slot_gas;
-        remaining_preferred_slot_gas.scalar_division(PREFERRED_DATA_FRACTION.denominator.into());
-        remaining_preferred_slot_gas = remaining_preferred_slot_gas
+        let remaining_preferred_slot_gas = remaining_slot_gas
+            .scalar_division(PREFERRED_DATA_FRACTION.denominator.into())
             .checked_scalar_product(PREFERRED_DATA_FRACTION.numerator.into())
             // This cannot overflow because the PREFERRED_DATA_FRACTION must be less than 1.
             .unwrap();
@@ -37,11 +36,11 @@ impl<S: Spec> SlotGasMeter<S> {
     }
 
     /// Get the remaining slot gas.
-    pub fn remaining_slot_gas(&self, sequencer: &<S::Da as DaSpec>::Address) -> &S::Gas {
+    pub fn remaining_slot_gas(&self, sequencer: &<S::Da as DaSpec>::Address) -> S::Gas {
         if Some(sequencer) == self.preferred_sequencer.as_ref() {
-            &self.remaining_preferred_slot_gas
+            self.remaining_preferred_slot_gas
         } else {
-            &self.remaining_total_slot_gas
+            self.remaining_total_slot_gas
         }
     }
 
@@ -56,7 +55,7 @@ impl<S: Spec> SlotGasMeter<S> {
     /// Raises an error if the gas to charge is greater than the funds available
     pub fn charge_gas(
         &mut self,
-        gas: &S::Gas,
+        gas: S::Gas,
         sequencer: &<S::Da as DaSpec>::Address,
     ) -> Result<(), GasMeteringError<S::Gas>> {
         // Preferred transactions reduce both the "preferred" gas and the "total" gas,
@@ -69,13 +68,13 @@ impl<S: Spec> SlotGasMeter<S> {
             self.remaining_preferred_slot_gas = self
                 .remaining_preferred_slot_gas
                 .checked_sub(gas)
-                .ok_or(self.gas_error(*gas, true))?;
+                .ok_or(self.gas_error(gas, true))?;
         }
 
         self.remaining_total_slot_gas = self
             .remaining_total_slot_gas
             .checked_sub(gas)
-            .ok_or(self.gas_error(*gas, false))?;
+            .ok_or(self.gas_error(gas, false))?;
 
         Ok(())
     }
@@ -83,7 +82,7 @@ impl<S: Spec> SlotGasMeter<S> {
     /// Total gas used in the slot.
     pub fn total_gas_used(&self) -> S::Gas {
         self.initial_slot_gas
-            .checked_sub(&self.remaining_total_slot_gas)
+            .checked_sub(self.remaining_total_slot_gas)
             .expect("The remaining_slot_gas can't be greater than the initial_slot_gas")
     }
 
@@ -112,7 +111,7 @@ mod tests {
 
     fn assert_charge_succeeds(
         meter: &mut SlotGasMeter<S>,
-        gas: &GasUnit<2>,
+        gas: GasUnit<2>,
         sequencer: &MockAddress,
     ) {
         assert!(
@@ -124,7 +123,7 @@ mod tests {
     fn assert_remaining_gas_equals(
         meter: &SlotGasMeter<S>,
         sequencer: &MockAddress,
-        expected: &GasUnit<2>,
+        expected: GasUnit<2>,
     ) {
         assert_eq!(meter.remaining_slot_gas(sequencer), expected);
     }
@@ -135,8 +134,8 @@ mod tests {
         let sequencer = MockAddress::new([10; 32]);
 
         let gas = GasUnit::<2>::from([10, 20]);
-        assert_charge_succeeds(&mut slot_gas_meter, &gas, &sequencer);
-        assert_remaining_gas_equals(&slot_gas_meter, &sequencer, &GasUnit::<2>::from([90, 180]));
+        assert_charge_succeeds(&mut slot_gas_meter, gas, &sequencer);
+        assert_remaining_gas_equals(&slot_gas_meter, &sequencer, GasUnit::<2>::from([90, 180]));
     }
 
     #[test]
@@ -146,13 +145,13 @@ mod tests {
             SlotGasMeter::<S>::new(GasUnit::<2>::from([100, 200]), Some(preferred_sequencer));
 
         let gas = GasUnit::<2>::from([10, 20]);
-        assert_charge_succeeds(&mut slot_gas_meter, &gas, &preferred_sequencer);
+        assert_charge_succeeds(&mut slot_gas_meter, gas, &preferred_sequencer);
 
         let expected_preferred_gas = GasUnit::<2>::from([80, 160]);
         assert_remaining_gas_equals(
             &slot_gas_meter,
             &preferred_sequencer,
-            &expected_preferred_gas,
+            expected_preferred_gas,
         );
         assert_eq!(
             slot_gas_meter.remaining_preferred_slot_gas(),
@@ -172,13 +171,13 @@ mod tests {
         // Charge from non-preferred sequencer
         let other_sequencer = MockAddress::new([33; 32]);
         let gas = GasUnit::<2>::from([20, 30]);
-        assert_charge_succeeds(&mut slot_gas_meter, &gas, &other_sequencer);
+        assert_charge_succeeds(&mut slot_gas_meter, gas, &other_sequencer);
 
         // Total gas should be reduced
         assert_remaining_gas_equals(
             &slot_gas_meter,
             &other_sequencer,
-            &GasUnit::<2>::from([80, 170]),
+            GasUnit::<2>::from([80, 170]),
         );
 
         // Preferred gas should remain unchanged

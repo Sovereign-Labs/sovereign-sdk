@@ -95,12 +95,12 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     // The transaction will execute until one of the following conditions is met:
     // 1. It consumes more funds than `tx.max_fee`.
     // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-    let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, slot_gas);
+    let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, *slot_gas);
 
     let mut working_set = WorkingSet::create_working_set(scratchpad, tx, working_set_gas_meter);
 
     // Here we charge the gas for the transaction sig & pre-execution checks.
-    if let Err(err) = working_set.charge_gas(&gas_info.gas_used) {
+    if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
         let (mut scratchpad, transaction_consumption) = working_set.revert();
 
         // Refund the remaining gas to the sender.
@@ -214,7 +214,7 @@ where
 
     // Check: The slot gas is higher than the gas needed to validate the transaction.
     let max_unregistered_tx_check_costs = <S as GasSpec>::max_unregistered_tx_check_costs();
-    if slot_gas.dim_is_less_or_eq(&max_unregistered_tx_check_costs) {
+    if slot_gas.dim_is_less_or_eq(max_unregistered_tx_check_costs) {
         // We don't consume gas for failed authentication of unregistered sequencer.
         let gas_used = S::Gas::zero();
 

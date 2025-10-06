@@ -100,7 +100,7 @@ impl<S: Spec> PayeePolicy<S> {
         match self {
             PayeePolicy::Allow { max_gas_price, .. } => {
                 if let Some(max_gas_price) = max_gas_price {
-                    current_gas_price.dim_is_less_or_eq(max_gas_price)
+                    current_gas_price.dim_is_less_or_eq(*max_gas_price)
                 } else {
                     true
                 }
@@ -119,7 +119,7 @@ impl<S: Spec> PayeePolicy<S> {
                     let Some(tx_gas_limit) = tx_gas_limit else {
                         return false;
                     };
-                    tx_gas_limit.dim_is_less_or_eq(policy_gas_limit)
+                    tx_gas_limit.dim_is_less_or_eq(*policy_gas_limit)
                 } else {
                     true
                 }

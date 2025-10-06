@@ -54,36 +54,39 @@ pub trait GasArray:
     type Scalar;
 
     /// Returns the sum of the two gas units or None if the result overflows.
-    fn checked_combine(&self, rhs: &Self) -> Option<Self>;
+    fn checked_combine(&self, rhs: Self) -> Option<Self>;
 
     /// Out-of-place substraction of gas units.
     ///
     /// # Output
     /// Returns [`None`] if the substraction in any gas dimension underflows.
-    fn checked_sub(&self, rhs: &Self) -> Option<Self>;
+    fn checked_sub(&self, rhs: Self) -> Option<Self>;
 
     /// Returns the product of the scalar and the gas units or None if the result overflows.
     fn checked_scalar_product(&self, scalar: Self::Scalar) -> Option<Self>;
 
     /// Checks if the gas is less than the provided gas in each dimension of the gas array.
-    fn dim_is_less_than(&self, rhs: &Self) -> bool;
+    fn dim_is_less_than(&self, rhs: Self) -> bool;
 
     /// Checks if the gas is less or equal to the provided gas in each dimension of the gas array.
-    fn dim_is_less_or_eq(&self, rhs: &Self) -> bool;
+    fn dim_is_less_or_eq(&self, rhs: Self) -> bool;
 
     /// Calculates the minimum gas values between two gas arrays along each dimension.
-    fn calculate_min(lhs: &Self, rhs: &Self) -> Self;
+    fn calculate_min(lhs: Self, rhs: Self) -> Self;
 
-    /// In-place division of gas units.
-    fn scalar_division(&mut self, scalar: Self::Scalar) -> &mut Self;
-
-    #[cfg(feature = "test-utils")]
-    /// In-place addition of gas units with a scalar.
-    fn scalar_add(&mut self, scalar: Self::Scalar) -> &mut Self;
+    /// Division of gas units by a scalar.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn scalar_division(self, scalar: Self::Scalar) -> Self;
 
     #[cfg(feature = "test-utils")]
-    /// In-place substraction of gas units with a scalar.
-    fn scalar_sub(&mut self, scalar: Self::Scalar) -> &mut Self;
+    /// Addition of gas units with a scalar.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn scalar_add(self, scalar: Self::Scalar) -> Self;
+
+    #[cfg(feature = "test-utils")]
+    /// Substraction of gas units with a scalar.
+    #[must_use = "this returns the result of the operation, without modifying the original"]
+    fn scalar_sub(self, scalar: Self::Scalar) -> Self;
 }
 
 /// A unit of gas
@@ -130,7 +133,7 @@ pub trait GasMeter {
     /// calculating the price of the gas overflows
     fn charge_gas(
         &mut self,
-        _amount: &<Self::Spec as Spec>::Gas,
+        _amount: <Self::Spec as Spec>::Gas,
     ) -> Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         Ok(())
     }
@@ -142,7 +145,7 @@ pub trait GasMeter {
     /// calculating the price of the gas overflows
     fn charge_linear_gas(
         &mut self,
-        _amount: &<Self::Spec as Spec>::Gas,
+        _amount: <Self::Spec as Spec>::Gas,
         _parameter: u32,
     ) -> Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         Ok(())

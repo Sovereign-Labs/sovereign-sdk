@@ -8,7 +8,7 @@ macro_rules! impl_gas_array {
 
             const MAX: Self = Self::from_primitive([<$u>::MAX; $n]);
 
-            fn checked_sub(&self, rhs: &Self) -> Option<Self> {
+            fn checked_sub(&self, rhs: Self) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
                 for (i, (l, r)) in self.value.iter().zip(rhs.value.as_slice()).enumerate() {
@@ -36,7 +36,7 @@ macro_rules! impl_gas_array {
                 Some(Self::from(output))
             }
 
-            fn dim_is_less_than(&self, rhs: &Self) -> bool {
+            fn dim_is_less_than(&self, rhs: Self) -> bool {
                 for (l, r) in self.value.iter().zip(rhs.value.as_slice()) {
                     if l >= r {
                         return false;
@@ -45,7 +45,7 @@ macro_rules! impl_gas_array {
                 true
             }
 
-            fn dim_is_less_or_eq(&self, rhs: &Self) -> bool {
+            fn dim_is_less_or_eq(&self, rhs: Self) -> bool {
                 for (l, r) in self.value.iter().zip(rhs.value.as_slice()) {
                     if l > r {
                         return false;
@@ -54,7 +54,7 @@ macro_rules! impl_gas_array {
                 true
             }
 
-            fn calculate_min(lhs: &Self, rhs: &Self) -> Self {
+            fn calculate_min(lhs: Self, rhs: Self) -> Self {
                 let mut output = [<$u>::from(0u64); $n];
 
                 for (i, (l, r)) in lhs.value.iter().zip(rhs.value.iter()).enumerate() {
@@ -63,7 +63,7 @@ macro_rules! impl_gas_array {
                 Self::from_primitive(output)
             }
 
-            fn scalar_division(&mut self, scalar: $u) -> &mut Self {
+            fn scalar_division(mut self, scalar: $u) -> Self {
                 self.value
                     .iter_mut()
                     .for_each(|s| *s = s.checked_div(scalar).unwrap_or(<$u>::from(0u64)));
@@ -71,7 +71,7 @@ macro_rules! impl_gas_array {
             }
 
             #[cfg(feature = "test-utils")]
-            fn scalar_add(&mut self, scalar: $u) -> &mut Self {
+            fn scalar_add(mut self, scalar: $u) -> Self {
                 self.value
                     .iter_mut()
                     .for_each(|s| *s = s.saturating_add(scalar));
@@ -79,14 +79,14 @@ macro_rules! impl_gas_array {
             }
 
             #[cfg(feature = "test-utils")]
-            fn scalar_sub(&mut self, scalar: $u) -> &mut Self {
+            fn scalar_sub(mut self, scalar: $u) -> Self {
                 self.value
                     .iter_mut()
                     .for_each(|s| *s = s.saturating_sub(scalar));
                 self
             }
 
-            fn checked_combine(&self, rhs: &Self) -> Option<Self> {
+            fn checked_combine(&self, rhs: Self) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
                 for (i, (l, r)) in self.value.iter().zip(rhs.value.iter()).enumerate() {

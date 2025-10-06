@@ -111,10 +111,7 @@ where
         start_timer!(receipt_t);
         let receipt = self.get_receipt(&tx, pending_len, result, state)?;
         save_elapsed!(receipt_time SINCE receipt_t);
-        state.charge_linear_gas(
-            &<S as GasSpec>::gas_to_charge_per_evm_gas(),
-            gas_used as u32,
-        )?;
+        state.charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)?;
 
         start_timer!(set_state);
         let pending_tx = PendingTransaction::new(tx, receipt);

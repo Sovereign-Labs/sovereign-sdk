@@ -93,16 +93,13 @@ impl<S: Spec> ChainState<S> {
 
     /// Computes the gas target for the provided gas limit.
     /// Basically, divides each dimension of the gas limit by the [`ChainState::config_elasticity_multiplier`].
-    pub fn gas_target(gas_limit: &S::Gas) -> S::Gas {
-        let mut gas_target = *gas_limit;
-        gas_target.scalar_division(Self::config_elasticity_multiplier().into());
-
-        gas_target
+    pub fn gas_target(gas_limit: S::Gas) -> S::Gas {
+        gas_limit.scalar_division(Self::config_elasticity_multiplier().into())
     }
 
     /// Computes the initial gas target (genesis block) by calling [`ChainState::gas_target`] on the initial gas limit.
     pub fn initial_gas_target() -> S::Gas {
-        Self::gas_target(&<S as GasSpec>::initial_gas_limit())
+        Self::gas_target(<S as GasSpec>::initial_gas_limit())
     }
 }
 

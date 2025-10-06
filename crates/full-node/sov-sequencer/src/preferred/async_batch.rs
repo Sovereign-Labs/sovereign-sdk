@@ -254,7 +254,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         let remaining_slot_gas = slot_gas_meter_before_tx
             .remaining_preferred_slot_gas()
             .clone()
-            .checked_sub(gas_used)
+            .checked_sub(*gas_used)
             // SAFETY: We always enforce that the gas used is less than the remaining slot gas limit
             .expect("Impossible happened: SlotGasMeter underflow when charging gas.");
 

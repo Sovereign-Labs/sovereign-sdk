@@ -144,11 +144,7 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
                 // unused in operator mode
                 prover_incentives: ProverIncentivesConfig {
                     minimum_bond: default_user_stake,
-                    proving_penalty: {
-                        let mut user_stake = default_user_stake;
-                        user_stake.scalar_division(2);
-                        user_stake
-                    },
+                    proving_penalty: { default_user_stake.scalar_division(2) },
                     initial_provers: vec![(placeholder.address().clone(), placeholder.balance())],
                 },
 

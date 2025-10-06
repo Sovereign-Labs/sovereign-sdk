@@ -119,12 +119,12 @@ pub enum GasLimitOutcome {
 }
 
 impl GasLimitOutcome {
-    fn set_gas_limit<S: Spec>(&self, mut gas_used: S::Gas, details: &mut TxDetails<S>) {
+    fn set_gas_limit<S: Spec>(&self, gas_used: S::Gas, details: &mut TxDetails<S>) {
         let gas_limit = match self {
             GasLimitOutcome::Insufficient => gas_used.scalar_sub(2000),
             GasLimitOutcome::Excess => gas_used.scalar_add(2000),
         };
-        details.gas_limit = Some(*gas_limit);
+        details.gas_limit = Some(gas_limit);
     }
 }
 

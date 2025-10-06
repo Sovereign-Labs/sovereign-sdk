@@ -171,7 +171,7 @@ where
     for tx_receipt in tx_receipts {
         match &tx_receipt.receipt {
             TxEffect::Successful(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 gas_value_charged_to_user =
                     gas_value_charged_to_user.checked_add(gas_value).unwrap();
@@ -180,13 +180,13 @@ where
                     .unwrap();
             }
             TxEffect::Skipped(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 // Sequencer doesn't get the fee and is penalized
                 seq_penalty = seq_penalty.checked_add(gas_value).unwrap();
             }
             TxEffect::Reverted(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 // From gas usage point of view the `Successful & Reverted` cases are the same.
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 gas_value_charged_to_user =
@@ -200,7 +200,7 @@ where
 
     for ignored_tx_receipt in ignored_tx_receipts {
         let ignored = &ignored_tx_receipt.ignored;
-        let gas_used = &ignored.gas_used;
+        let gas_used = ignored.gas_used;
         total_gas = total_gas.checked_combine(gas_used).unwrap();
         let gas_value = gas_used.value(gas_price);
         seq_penalty = seq_penalty.checked_add(gas_value).unwrap();

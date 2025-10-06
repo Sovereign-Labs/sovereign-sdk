@@ -103,7 +103,7 @@ pub trait Module: Clone {
     fn charge_gas(
         &self,
         state: &mut impl TxState<Self::Spec>,
-        gas: &<Self::Spec as Spec>::Gas,
+        gas: <Self::Spec as Spec>::Gas,
     ) -> anyhow::Result<()> {
         Ok(state.charge_gas(gas)?)
     }

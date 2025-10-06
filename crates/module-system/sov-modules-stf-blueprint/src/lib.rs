@@ -278,7 +278,7 @@ where
         let mut runtime = RT::default();
         // Sanity checks.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
-            .dim_is_less_than(&<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
+            .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
         let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel());
 
         let mut genesis_accessor =
@@ -422,7 +422,7 @@ where
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
-            .dim_is_less_than(&<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
+            .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
 
         start_timer!(start_slot);
 
@@ -722,7 +722,7 @@ where
                     let (batch_receipt, next_checkpoint) = unregistered::apply_batch::<S, RT>(
                         runtime,
                         state,
-                        slot_gas,
+                        &slot_gas,
                         BatchFromUnregisteredSequencer { tx, id },
                         blob_idx,
                         &sender,
@@ -734,7 +734,7 @@ where
 
                     // SAFETY: Within `unregistered::apply_batch`, we always ensure tx gas meter is initialized with less than the remaining gas in the slot gas meter.
                     slot_gas_meter
-                        .charge_gas(gas_used, &sender)
+                        .charge_gas(*gas_used, &sender)
                         .expect("The slot gas meter should be able to charge the gas");
 
                     batch_receipts.push(batch_receipt);
@@ -751,7 +751,7 @@ where
                     let (receipt, next_checkpoint, gas_used) = self.process_proof(
                         runtime,
                         id,
-                        slot_gas,
+                        &slot_gas,
                         &sender,
                         &sequencer_address,
                         sequencer_bond,
@@ -762,7 +762,7 @@ where
 
                     // SAFETY: Within `process_proof`, we always ensure the pre execution and tx gas meters are initialized with less than the remaining gas in the slot gas meter.
                     slot_gas_meter
-                        .charge_gas(&gas_used, &sender)
+                        .charge_gas(gas_used, &sender)
                         .expect("The slot gas meter should be able to charge the gas");
 
                     state = next_checkpoint;

@@ -169,11 +169,7 @@ impl<S: Spec> MinimalZkGenesisConfig<S> {
                 },
                 prover_incentives: ProverIncentivesConfig {
                     minimum_bond: default_user_stake,
-                    proving_penalty: {
-                        let mut proving_penalty = default_user_stake;
-                        proving_penalty.scalar_division(2);
-                        proving_penalty
-                    },
+                    proving_penalty: { default_user_stake.scalar_division(2) },
                     initial_provers: vec![(
                         initial_prover.as_user().address().clone(),
                         initial_prover.bond,

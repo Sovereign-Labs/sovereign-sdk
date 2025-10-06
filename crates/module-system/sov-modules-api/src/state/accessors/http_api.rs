@@ -377,14 +377,14 @@ impl<S: Spec> GasMeter for ApiStateAccessor<S> {
 
     fn charge_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.charge_gas(amount)
     }
 
     fn charge_linear_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.charge_linear_gas(amount, parameter)
@@ -796,7 +796,7 @@ pub struct MeteredApiStateAccessor<S: Spec> {
 
 impl<S: Spec> GasMeter for MeteredApiStateAccessor<S> {
     type Spec = S;
-    fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+    fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.api_state_accessor.gas_meter.charge_gas(amount)
     }
 }

@@ -66,7 +66,7 @@ fn test_evm_gas_usage() {
     };
     assert_eq!(
         gas_used_with_evm_metering
-            .checked_sub(&gas_used_without_evm_metering)
+            .checked_sub(gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
         &[5_251, 0]

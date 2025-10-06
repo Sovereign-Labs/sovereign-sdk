@@ -52,9 +52,9 @@ impl<'a, Meter: GasMeter, Hasher: Digest<OutputSize = U32>> MeteredHasher<'a, Me
     /// # Errors
     /// Returns an error if charging gas for the update operation fails.
     pub fn update(&mut self, data: &[u8]) -> Result<(), MeteringError<Meter>> {
-        self.meter.charge_gas(&self.gas_to_charge_for_hash_update)?;
+        self.meter.charge_gas(self.gas_to_charge_for_hash_update)?;
         self.meter.charge_linear_gas(
-            &self.gas_to_charge_per_byte_for_hash_update,
+            self.gas_to_charge_per_byte_for_hash_update,
             data.len()
                 .try_into()
                 .map_err(|e: TryFromIntError| MeteringError::<Meter>::Overflow(e.to_string()))?,
@@ -149,23 +149,23 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         meter: &mut Meter,
     ) -> Result<(), MeteredSigVerificationError<GU>> {
         meter
-            .charge_gas(&self.fixed_gas_to_charge_per_verification)
+            .charge_gas(self.fixed_gas_to_charge_per_verification)
             .map_err(MeteredSigVerificationError::GasError)?;
 
         meter
             .charge_linear_gas(
-                &self.gas_to_charge_per_byte_for_verification,
+                self.gas_to_charge_per_byte_for_verification,
                 as_u32_or_panic(msg.len()),
             )
             .map_err(MeteredSigVerificationError::GasError)?;
 
         meter
-            .charge_gas(&<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
+            .charge_gas(<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
             .map_err(MeteredSigVerificationError::GasError)?;
 
         meter
             .charge_linear_gas(
-                &<Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
                 msg.len().try_into().map_err(|e: TryFromIntError| {
                     MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
                         e.to_string(),
@@ -213,23 +213,23 @@ pub trait MeteredBorshDeserialize<S: Spec>: Sized {
 
         // Custom gas costs to deserialize this data structure.
         meter
-            .charge_gas(&Self::bias_borsh_deserialization())
+            .charge_gas(Self::bias_borsh_deserialization())
             .map_err(MeteredBorshDeserializeError::GasError)?;
 
         meter
             .charge_linear_gas(
-                &Self::gas_to_charge_per_byte_borsh_deserialization(),
+                Self::gas_to_charge_per_byte_borsh_deserialization(),
                 buf_len,
             )
             .map_err(MeteredBorshDeserializeError::GasError)?;
 
         // Common gas costs to deserialize this data structure.
         meter
-            .charge_gas(&S::bias_borsh_deserialization())
+            .charge_gas(S::bias_borsh_deserialization())
             .map_err(MeteredBorshDeserializeError::GasError)?;
 
         meter
-            .charge_linear_gas(&S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
+            .charge_linear_gas(S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
             .map_err(MeteredBorshDeserializeError::GasError)
     }
 
@@ -260,12 +260,9 @@ pub fn charge_gas_to_deserialize_json<S: Spec>(
     let buf_len: u32 = as_u32_or_panic(buf.len());
 
     // Custom gas costs to deserialize this data structure.
-    meter.charge_gas(&S::tx_bias_json_deserialization())?;
+    meter.charge_gas(S::tx_bias_json_deserialization())?;
 
-    meter.charge_linear_gas(
-        &S::tx_gas_to_charge_per_byte_json_deserialization(),
-        buf_len,
-    )?;
+    meter.charge_linear_gas(S::tx_gas_to_charge_per_byte_json_deserialization(), buf_len)?;
 
     // Since JSON is not used often, no common cost to JSON deserialization is defined to
     // simplify the set of constants.
@@ -279,6 +276,6 @@ pub fn metered_credential<S: Spec>(
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<CredentialId, GasMeteringError<S::Gas>> {
     let cost = S::gas_to_charge_for_credential();
-    meter.charge_gas(&cost)?;
+    meter.charge_gas(cost)?;
     Ok(pub_key.credential_id())
 }
