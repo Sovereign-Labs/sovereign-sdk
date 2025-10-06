@@ -261,35 +261,39 @@ mod tests {
     type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
-    fn charge_gas_should_fail_if_not_enough_funds() {
+    fn test_charge_gas_fails_with_zeroed_gas() {
         let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+        let mut gas_meter =
+            BasicGasMeter::<S>::new_with_gas(GasUnit::<2>::ZEROED, gas_price.clone());
 
-        {
-            let mut gas_meter =
-                BasicGasMeter::<S>::new_with_gas(GasUnit::<2>::ZEROED, gas_price.clone());
-            assert!(
-                gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
-                "The gas meter should not be able to charge gas if there is not enough funds"
-            );
-        }
+        assert!(
+            gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
+            "The gas meter should not be able to charge gas if there is not enough gas reserved"
+        );
+    }
 
-        {
-            let gas = GasUnit::<2>::from([0, 0]);
-            let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
+    #[test]
+    fn test_charge_gas_fails_with_zero_gas() {
+        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+        let gas = GasUnit::<2>::from([0, 0]);
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
 
-            assert!(
-                gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
-                "The gas meter should not be able to charge gas if there is not enough gas reserved"
-            );
+        assert!(
+            gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
+            "The gas meter should not be able to charge gas if there is not enough gas reserved"
+        );
+    }
 
-            let gas = GasUnit::<2>::from([1000, 99]);
-            let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
+    #[test]
+    fn test_charge_gas_fails_when_partial_gas_insufficient() {
+        let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+        let gas = GasUnit::<2>::from([1000, 99]);
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(gas, gas_price.clone());
 
-            assert!(
-                gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
-                "The gas meter should not be able to charge gas if there is not enough gas reserved"
-            );
-        }
+        assert!(
+            gas_meter.charge_gas(&GasUnit::<2>::from([100; 2])).is_err(),
+            "The gas meter should not be able to charge gas if there is not enough gas reserved"
+        );
     }
 
     #[test]
