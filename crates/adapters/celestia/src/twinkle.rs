@@ -21,13 +21,14 @@ const AGENT: &str = "sov-celestia-adapter";
 const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 
 // TODO:
-//  ~ Submit async with channel
-//  - Config struct: network + env
+//  + Submit async with channel
+//  + Config struct: network + env
+//  + Retry logic and params
 // Other
 //  - Get block and header compatible with return types of celestia sender
 //  - Logging
 //  - Metrics
-//  - Retry logic and params
+//  - Unit tests with mockserver
 
 #[derive(Clone, Debug, Copy)]
 pub enum Network {
@@ -101,6 +102,27 @@ pub struct BlobStatusResponse {
     height: Option<u64>,
 }
 
+impl TryFrom<BlobStatusResponse> for SubmitBlobReceipt<TmHash> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: BlobStatusResponse) -> Result<Self, Self::Error> {
+        // TODO:
+        let blob_hash = value.commitment.try_into().map_err(|e: Vec<u8>| {
+            anyhow::anyhow!(
+                "Wrong commitment size, should 32 bytes, but was {}",
+                e.len(),
+            )
+        })?;
+        let Some(transaction_id) = value.transaction_id else {
+            anyhow::bail!("Transaction Id is not present, is status `Included`?");
+        };
+        Ok(SubmitBlobReceipt {
+            blob_hash: HexHash::new(blob_hash),
+            da_transaction_id: TmHash(tendermint::Hash::Sha256(transaction_id.0)),
+        })
+    }
+}
+
 #[derive(Clone)]
 pub struct TwinkleClient {
     client: reqwest::Client,
@@ -151,7 +173,7 @@ impl TwinkleClient {
         })
         .retry(&self.backoff_policy)
         .await
-        .with_context(|| format!("Blob status check of req {twinkle_request_id}"))
+        .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
 
     async fn submit_blob_to_namespace_and_pull(
@@ -201,18 +223,15 @@ impl TwinkleClient {
                         .blob_status(&submit_response.twinkle_request_id)
                         .await?;
                     if matches!(response.status, BlobStatus::Included) {
-                        let r = SubmitBlobReceipt {
-                            blob_hash: HexHash::new(response.commitment.try_into().expect("Wrong commitment size, should 32 bytes.")),
-                            da_transaction_id: TmHash(tendermint::Hash::Sha256(
-                                response.transaction_id.unwrap().0,
-                            )),
-                        };
+                        let height = response.height;
+                        let receipt = SubmitBlobReceipt::try_from(response)?;
                         tracing::debug!(
                             ?submit_time,
                             pull_time = ?pull_start.elapsed(),
                             total_time = ?start.elapsed(),
+                            height = ?height,
                             "Blob has been included");
-                        return Ok(r);
+                        return Ok(receipt);
                     }
                     tokio::time::sleep(self.pull_interval).await;
                 }
@@ -258,7 +277,7 @@ mod tests {
     use super::*;
     use celestia_types::nmt::Namespace;
 
-    // const API_KEY: &str = "TEMP_SECRET";
+    const API_KEY: &str = "TEMP_SECRET";
 
     fn default_mocha_config() -> TwinkleConfig {
         TwinkleConfig {
