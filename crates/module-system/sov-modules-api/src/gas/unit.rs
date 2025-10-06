@@ -1,14 +1,20 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::Debug;
+use derive_more::{AsMut, AsRef, Display, Into};
 use sov_universal_wallet::{
     schema::{Container, IndexLinking, Item, Link, Schema, UniversalWallet},
     ty::{Tuple, UnnamedField},
 };
 
 /// A multi-dimensional gas unit.
-#[derive(Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, derive_more::Display)]
+#[derive(
+    Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, Display, AsRef, AsMut, Into,
+)]
 #[display("GasUnit{:?}", self.value)]
 pub struct GasUnit<const N: usize> {
+    #[as_ref]
+    #[as_mut]
+    #[into]
     pub(crate) value: [u64; N],
     #[cfg(feature = "gas-constant-estimation")]
     #[borsh(skip)]

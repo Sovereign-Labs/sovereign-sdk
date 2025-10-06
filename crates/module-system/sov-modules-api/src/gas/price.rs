@@ -1,6 +1,8 @@
 use crate::Amount;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use derive_more::{AsMut, AsRef, Display, Into};
+use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use std::fmt::Debug;
 
 /// A gas price for multi-dimensional gas.
@@ -11,8 +13,11 @@ use std::fmt::Debug;
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    sov_rollup_interface::sov_universal_wallet::UniversalWallet,
-    derive_more::Display,
+    UniversalWallet,
+    Display,
+    AsRef,
+    AsMut,
+    Into,
 )]
 #[sov_wallet()]
 #[display("GasPrice{:?}", self.value)]

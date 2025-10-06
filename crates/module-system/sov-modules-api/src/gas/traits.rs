@@ -146,12 +146,6 @@ macro_rules! impl_gas_dimensions {
             }
         }
 
-        impl From<$t> for [$u; $n] {
-            fn from(gas: $t) -> [$u; $n] {
-                gas.value
-            }
-        }
-
         impl TryFrom<Vec<$u>> for $t {
             type Error = anyhow::Error;
 
@@ -164,18 +158,6 @@ macro_rules! impl_gas_dimensions {
                 output.copy_from_slice(&value);
 
                 Ok(Self::from(output))
-            }
-        }
-
-        impl AsRef<[$u; $n]> for $t {
-            fn as_ref(&self) -> &[$u; $n] {
-                &self.value
-            }
-        }
-
-        impl AsMut<[$u; $n]> for $t {
-            fn as_mut(&mut self) -> &mut [$u; $n] {
-                &mut self.value
             }
         }
     };
