@@ -931,7 +931,7 @@ async fn seq_out_of_gas_for_pre_checks() {
         Amount::from(price_array[1] as u64),
     ]);
 
-    let max_amount_limit = gas_limit.value(&gas_price);
+    let max_amount_limit = gas_limit.value(gas_price);
 
     // Set very high initial balance for the admin.
     genesis_config.additional_accounts_mut()[0].available_gas_balance =

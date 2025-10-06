@@ -246,7 +246,7 @@ fn test_archival_state_updates_gas_price() {
         let gas_price = state.gas_price();
 
         assert_eq!(
-            gas_price, &current_gas_price,
+            gas_price, current_gas_price,
             "The gas price stored in the accessor should be the same as the current gas price"
         );
 
@@ -254,7 +254,7 @@ fn test_archival_state_updates_gas_price() {
 
         assert_eq!(
             archival_state.gas_price(),
-            &initial_base_fee_per_gas,
+            initial_base_fee_per_gas,
             "The gas price stored in the archival state should be the same as the initial gas price"
         );
     });

@@ -55,7 +55,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
         let result = runner.execute::<RelevantBlobs<MockBlob>>(unregistered_blobs);
 
         let batch_receipt = &result.0.batch_receipts[0];
-        let gas_price = &batch_receipt.inner.gas_price;
+        let gas_price = batch_receipt.inner.gas_price;
 
         let tx_receipt = &batch_receipt.tx_receipts[0];
 

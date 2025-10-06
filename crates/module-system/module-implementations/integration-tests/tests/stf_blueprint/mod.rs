@@ -156,7 +156,7 @@ where
     let result = runner.execute::<RelevantBlobs<MockBlob>>(blobs);
     let batch_receipt = result.0.batch_receipts[0].clone();
 
-    let gas_price = &batch_receipt.inner.gas_price;
+    let gas_price = batch_receipt.inner.gas_price;
     let tx_receipts = &batch_receipt.tx_receipts;
     let ignored_tx_receipts = &batch_receipt.ignored_tx_receipts;
 
