@@ -31,7 +31,6 @@ alloy-consensus = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-eips = { workspace = true }
-reth-primitives = { workspace = true }
 sov-rpc-eth-types = { workspace = true }
 
 tokio = { workspace = true, features = ["sync"] }
