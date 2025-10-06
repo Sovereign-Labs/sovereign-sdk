@@ -513,15 +513,10 @@ where
     /// Closes the current batch if it is nearly full (by gas limit) or has reached the target batch execution time.
     async fn close_batch_if_nearly_full(&mut self, remaining_slot_gas: &<S as GasSpec>::Gas) {
         // Check if we're close to the gas limit and close the batch if we are.
-        let comfortable_gas_limit = <S as GasSpec>::initial_gas_limit();
-        comfortable_gas_limit
-            .scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR)
-            .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Cannot overflow after dividing by {COMFORTABLE_GAS_LIMIT_DIVISOR} and multiplying by {COMFORTABLE_GAS_LIMIT_MULTIPLIER}",
-                )
-            });
+        // We want to close when remaining gas is at most 5% of the initial gas limit,
+        // which means we've used at least 95% of the gas.
+        let comfortable_gas_limit =
+            <S as GasSpec>::initial_gas_limit().scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR);
         let close_to_gas_limit = remaining_slot_gas.dim_is_less_or_eq(comfortable_gas_limit);
         if close_to_gas_limit {
             tracing::debug!(%comfortable_gas_limit, %remaining_slot_gas, "Closing and publishing current batch because we're close to the gas limit");
