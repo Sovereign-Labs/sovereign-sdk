@@ -82,7 +82,7 @@ where
     ) -> Result<Option<Amount>, <ST as sov_modules_api::StateWriter<sov_state::User>>::Error> {
         self.minimum_bond
             .get(state)
-            .map(|maybe_bond| maybe_bond.map(|bond| bond.value(state.gas_price())))
+            .map(|maybe_bond| maybe_bond.map(|bond| bond.value(*state.gas_price())))
     }
 
     fn get_allowed_staker<ST: StateAccessor>(

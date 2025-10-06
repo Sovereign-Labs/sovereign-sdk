@@ -82,7 +82,7 @@ where
 
                     let gas_value = out
                         .gas_used
-                        .checked_value(gas_price)
+                        .checked_value(*gas_price)
                         // SAFETY: Unwrapping is safe here because `gas_used` comes from `BasicGasMeter``, which ensures overflow does not occur.
                         .expect("The gas value can't overflow");
 
@@ -200,7 +200,7 @@ where
 
             // SAFETY: We compute this value at the beginning of the function when we create the `pre_exec_working_set`. If that failed, we'll never reach this point.
             let max_tx_check_value = <S as GasSpec>::max_tx_check_costs()
-                .checked_value(gas_price)
+                .checked_value(*gas_price)
                 .unwrap();
 
             let mut checkpoint = state.commit();
@@ -284,7 +284,7 @@ where
         // CHECKS:
         // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
         let max_tx_check_costs = <S as GasSpec>::max_tx_check_costs();
-        let max_tx_check_value = match <S as GasSpec>::max_tx_check_costs().checked_value(gas_price)
+        let max_tx_check_value = match <S as GasSpec>::max_tx_check_costs().checked_value(*gas_price)
         {
             Some(v) => v,
             None => {

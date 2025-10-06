@@ -758,7 +758,7 @@ where
         let ctx = TransactionAssertContext::from_receipt::<MockDaSpec>(
             tx_receipt,
             blob_info,
-            gas_used.value(&gas_price),
+            gas_used.value(gas_price),
         );
         (transaction_test.assert)(ctx, &mut self.visible_state());
         self
@@ -839,7 +839,7 @@ where
                         )
                 );
 
-            gas_used.value(&gas_price)
+            gas_used.value(gas_price)
         } else {
             Amount::ZERO
         };

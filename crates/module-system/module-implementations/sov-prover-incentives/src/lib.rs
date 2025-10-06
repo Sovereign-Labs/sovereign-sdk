@@ -119,6 +119,6 @@ impl<S: Spec> ProverIncentives<S> {
     ) -> Result<Option<Amount>, <State as StateReader<User>>::Error> {
         self.proving_penalty
             .get(state)
-            .map(|maybe_penalty| maybe_penalty.map(|penalty| penalty.value(state.gas_price())))
+            .map(|maybe_penalty| maybe_penalty.map(|penalty| penalty.value(*state.gas_price())))
     }
 }

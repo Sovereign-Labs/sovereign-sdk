@@ -41,8 +41,8 @@ fn test_metered_hasher_happy_path() {
     let remaining_funds = hash_update_gas
         .checked_scalar_product(TEST_DATA.len() as u64)
         .unwrap()
-        .value(&gas_price)
-        .checked_add(hash_finalize_gas.value(&gas_price))
+        .value(gas_price)
+        .checked_add(hash_finalize_gas.value(gas_price))
         .unwrap();
 
     let mut ws = create_working_set(remaining_funds, &gas_price);
@@ -66,7 +66,7 @@ fn test_metered_hasher_not_enough_gas_to_update() {
     let remaining_funds = hash_update_gas
         .checked_scalar_product(TEST_DATA.len() as u64 - 1)
         .unwrap()
-        .value(&gas_price);
+        .value(gas_price);
 
     let mut ws = create_working_set(remaining_funds, &gas_price);
 
@@ -109,7 +109,7 @@ fn test_metered_signature() {
                 .unwrap(),
         )
         .unwrap()
-        .value(&gas_price);
+        .value(gas_price);
 
     let mut ws = create_working_set(remaining_funds, &gas_price);
 
@@ -140,7 +140,7 @@ fn test_metered_signature_not_enough_gas() {
                 .unwrap(),
         )
         .unwrap()
-        .value(&gas_price);
+        .value(gas_price);
 
     let mut ws = create_working_set(remaining_funds, &gas_price);
 
@@ -190,7 +190,7 @@ fn test_metered_deserializer() {
     let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
     let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
 
-    let remaining_funds = gas_to_charge.value(&gas_price);
+    let remaining_funds = gas_to_charge.value(gas_price);
     let mut ws = create_working_set(remaining_funds, &gas_price);
 
     let deserialized_data = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
@@ -210,7 +210,7 @@ fn test_metered_deserializer_not_enough_gas() {
     let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
 
     let remaining_funds = gas_to_charge
-        .value(&gas_price)
+        .value(gas_price)
         .checked_sub(Amount::new(1))
         .unwrap();
     let mut ws = create_working_set(remaining_funds, &gas_price);
@@ -233,7 +233,7 @@ fn test_metered_deserializer_invalid_data() {
     let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
     let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
 
-    let remaining_funds = gas_to_charge.value(&gas_price);
+    let remaining_funds = gas_to_charge.value(gas_price);
     let mut ws = create_working_set(remaining_funds, &gas_price);
 
     let result = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(

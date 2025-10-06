@@ -270,7 +270,7 @@ where
                 .map_err(Into::<anyhow::Error>::into)?
                 .expect("The transition should exist. The check has been done above");
 
-            let reward = transition.gas_used().value(transition.gas_price());
+            let reward = transition.gas_used().value(*transition.gas_price());
 
             // Update the maximum attested height
             self.maximum_attested_height
@@ -319,7 +319,7 @@ where
             .map_err(Into::<anyhow::Error>::into)?
             .expect("Should be set at genesis");
 
-        if old_balance < minimum_bond.value(state.gas_price()) {
+        if old_balance < minimum_bond.value(*state.gas_price()) {
             return Err(ProcessChallengeErrors::ChallengerNotBonded);
         }
 

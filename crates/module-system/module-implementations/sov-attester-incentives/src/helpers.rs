@@ -180,7 +180,7 @@ where
             .expect("The minimum bond should be set at genesis");
 
         // We then have to check that the bond was greater than the minimum bond
-        if bond < minimum_bond.value(state.gas_price()) {
+        if bond < minimum_bond.value(*state.gas_price()) {
             return Err(ProcessAttestationErrors::AttesterNotBonded);
         }
 

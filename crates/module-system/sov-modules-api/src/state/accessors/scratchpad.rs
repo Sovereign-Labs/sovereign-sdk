@@ -561,7 +561,7 @@ impl<S: Spec, I: StateProvider<S>> WorkingSet<S, I> {
 
         transaction_consumption_helper::<S>(
             &base_fee,
-            &gas_price,
+            gas_price,
             self.max_fee,
             self.max_priority_fee_bips,
         )

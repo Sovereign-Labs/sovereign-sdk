@@ -38,7 +38,7 @@ impl<S: Spec> BasicGasMeter<S> {
             .expect("The remaining gas can't be greater than the initial gas");
 
         let gas_value = gas_used
-            .checked_value(&self.gas_price)
+            .checked_value(self.gas_price)
             // SAFETY: This is impossible because we check for oveflows in `BasicGasMeter::charge_gas_inner`.
             .expect("BasicGasMeter error. The gas value should be possible to compute");
 
@@ -78,7 +78,7 @@ impl<S: Spec> BasicGasMeter<S> {
         remaining_funds: Amount,
         amount: &S::Gas,
     ) -> Result<Amount, GasMeteringError<S::Gas>> {
-        let amount_value = amount.checked_value(&self.gas_price).ok_or_else(|| {
+        let amount_value = amount.checked_value(self.gas_price).ok_or_else(|| {
             GasMeteringError::Overflow(
                 "Charge Funds: Unable to charge gas, because the calculation overflows".to_string(),
             )
@@ -126,7 +126,7 @@ impl<S: Spec> BasicGasMeter<S> {
                 .checked_sub(&new_remaining_gas)
                 .expect("The remaining gas can't be greater than the initial gas");
 
-            gas_used.checked_value(&self.gas_price).ok_or_else(|| {
+            gas_used.checked_value(self.gas_price).ok_or_else(|| {
                 GasMeteringError::Overflow(
                     "Charge Gas: Unable to charge gas, because the calculation overflows"
                         .to_string(),

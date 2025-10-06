@@ -87,7 +87,7 @@ fn test_gas_price_increases_if_gas_used_exceeds_gas_target() {
             assert!(result.tx_receipt.is_successful());
 
             assert!(
-                result.gas_value_used > gas_target.value(&S::initial_base_fee_per_gas()).0,
+                result.gas_value_used > gas_target.value(S::initial_base_fee_per_gas()).0,
                 "The gas used should be greater than the gas target"
             );
         }),
@@ -135,7 +135,7 @@ fn test_gas_price_decreases_if_gas_used_is_below_gas_target() {
             assert!(result.tx_receipt.is_successful());
 
             assert!(
-                result.gas_value_used < gas_target.value(&S::initial_base_fee_per_gas()).0,
+                result.gas_value_used < gas_target.value(S::initial_base_fee_per_gas()).0,
                 "The gas used should be lower than the gas target"
             );
         }),

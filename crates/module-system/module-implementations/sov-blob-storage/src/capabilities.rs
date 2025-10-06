@@ -787,7 +787,7 @@ impl<S: Spec> BlobStorage<S> {
         };
         if let Some(gas_needed_for_pre_exec_checks) = <S as GasSpec>::max_tx_check_costs()
             .checked_scalar_product(Self::num_pre_exec_checks_needed(&batch.blob) as u64)
-            .and_then(|gas_needed| gas_needed.checked_value(gas_price_for_new_block))
+            .and_then(|gas_needed| gas_needed.checked_value(*gas_price_for_new_block))
         {
             let retrieval_result = self.sequencer_registry.retrieve_funds_from_escrow(
                 escrow,
@@ -1041,7 +1041,7 @@ impl<S: Spec> BlobStorage<S> {
             let funds_for_deserialization =
                 <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
                     .checked_scalar_product(blob.total_len() as u64)?
-                    .checked_value(gas_price_for_new_block)?;
+                    .checked_value(*gas_price_for_new_block)?;
             if registered_sender.balance < funds_for_deserialization {
                 return None;
             }

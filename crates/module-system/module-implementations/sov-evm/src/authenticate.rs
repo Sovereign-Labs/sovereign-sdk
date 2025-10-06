@@ -73,7 +73,7 @@ fn create_auth_tx_and_hash<S: Spec>(
     let gas_limit = tx.gas_limit();
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
     let max_fee = gas_limit
-        .checked_value(gas_price)
+        .checked_value(*gas_price)
         .ok_or(AuthenticationError::FatalError(
             FatalError::Other("Amount overflow".into()),
             tx_hash,

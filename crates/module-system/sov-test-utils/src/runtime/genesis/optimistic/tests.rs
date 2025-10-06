@@ -87,7 +87,7 @@ fn run_value_setter_txs_with_assertions(
         sequencer_rollup_addr,
         SEQUENCER_DA_ADDR.into(),
         <TestSpec as Spec>::Gas::from(TEST_DEFAULT_USER_STAKE)
-            .value(&TestSpec::initial_base_fee_per_gas()),
+            .value(TestSpec::initial_base_fee_per_gas()),
         "SovereignToken".to_string(),
         TEST_DEFAULT_USER_BALANCE,
         Default::default(),
@@ -156,7 +156,7 @@ fn create_test_rt_genesis_config<S: Spec>(
             minimum_challenger_bond: user_stake,
             initial_attesters: vec![(
                 admin.clone(),
-                user_stake.value(&S::initial_base_fee_per_gas()),
+                user_stake.value(S::initial_base_fee_per_gas()),
             )],
             rollup_finality_period: SlotNumber::new_dangerous(TEST_ROLLUP_FINALITY_PERIOD),
             maximum_attested_height: TEST_MAX_ATTESTED_HEIGHT,

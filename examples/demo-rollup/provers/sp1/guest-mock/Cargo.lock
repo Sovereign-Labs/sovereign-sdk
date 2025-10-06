@@ -5713,6 +5713,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
  "anyhow",
+ "arrayvec",
  "bech32",
  "borsh",
  "bs58",

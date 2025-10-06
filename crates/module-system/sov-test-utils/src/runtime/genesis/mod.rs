@@ -293,7 +293,7 @@ where
     <S::Da as DaSpec>::Address: From<[u8; 32]>,
 {
     let user_stake_value = <S as Spec>::Gas::from(TEST_DEFAULT_USER_STAKE)
-        .value(&S::initial_base_fee_per_gas())
+        .value(S::initial_base_fee_per_gas())
         .saturating_mul(Amount::new(10));
 
     let prover_sequencer = TestUser::generate(

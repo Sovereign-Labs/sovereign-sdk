@@ -219,7 +219,7 @@ impl<S: Spec> ProverIncentives<S> {
             {
                 // SAFETY: this cannot overflow, because that would require more than the entire token supply to be spent on gas
                 // *before* the prover claimed their reward, but gas fees are locked until the prover claims them.
-                let curr_reward = transition.gas_used().value(transition.gas_price());
+                let curr_reward = transition.gas_used().value(*transition.gas_price());
                 total_reward = total_reward
                     .checked_add(curr_reward)
                     .expect("Gas token Overflow");

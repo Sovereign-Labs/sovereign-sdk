@@ -183,7 +183,7 @@ where
         let tx_receipt = &simulated.batch_receipts[0].tx_receipts[0].clone();
         let gas_used = get_gas_used(tx_receipt);
         let gas_price = batch_receipt.inner.gas_price;
-        let gas_used_value = gas_used.value(&gas_price);
+        let gas_used_value = gas_used.value(gas_price);
         let tx_details = self.tx.details_mut().unwrap();
 
         match &*self.outcome {

@@ -464,7 +464,7 @@ where
                 ProvisionalSequencerOutcome::out_of_funds(
                     // SAFETY: `gas_used` is either Zero or comes from `BasicGasMeter`, which ensures overflow protection.
                     gas_used
-                        .checked_value(gas_price)
+                        .checked_value(*gas_price)
                         .expect("gas_used value overflowed"),
                     reason,
                 )
@@ -477,7 +477,7 @@ where
                 ProvisionalSequencerOutcome::penalize(
                     // SAFETY: `gas_used`  comes from `BasicGasMeter`, which ensures overflow protection.
                     gas_used
-                        .checked_value(gas_price)
+                        .checked_value(*gas_price)
                         .expect("gas_used value overflowed"),
                     create_tx_receipt(SkippedTxContents { error, gas_used }, tx_hash, tx_body.data),
                 )
@@ -540,7 +540,7 @@ where
                         sequencer_bond_per_tx = SequencerBondForTx::Preferred(
                             sequencer_bond_per_tx
                                 .amount()
-                                .saturating_sub(gas_used.checked_value(gas_price).unwrap()),
+                                .saturating_sub(gas_used.checked_value(*gas_price).unwrap()),
                         );
                     }
 
@@ -670,7 +670,7 @@ where
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
     let max_tx_check_costs = <S as GasSpec>::max_tx_check_costs();
-    let max_tx_check_value = match max_tx_check_costs.checked_value(gas_price) {
+    let max_tx_check_value = match max_tx_check_costs.checked_value(*gas_price) {
         Some(v) => v,
         None => {
             return AuthAndProcessOutput {

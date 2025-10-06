@@ -92,10 +92,10 @@ pub trait Gas: GasArray<Scalar = u64> + TryFrom<Vec<u64>> + From<[u64; GAS_DIMEN
     type Price: GasArray<Scalar = Amount>;
 
     /// Calculates the value of the given amount of gas at the given price or returns None if the result overflows.
-    fn checked_value(&self, price: &Self::Price) -> Option<Amount>;
+    fn checked_value(&self, price: Self::Price) -> Option<Amount>;
 
     /// Calculates the value of the given amount of gas at the given price.
-    fn value(&self, price: &Self::Price) -> Amount;
+    fn value(&self, price: Self::Price) -> Amount;
 
     /// Returns a gas unit which is zero in all dimensions.
     #[must_use]
@@ -200,13 +200,13 @@ mod tests {
         let gas = GasUnit::<2>::from([10, 20]);
         let gas_price = GasPrice::<2>::from([Amount::new(3), Amount::new(5)]);
 
-        let value = gas.checked_value(&gas_price).unwrap();
+        let value = gas.checked_value(gas_price).unwrap();
         assert_eq!(value, 130);
 
         let gas = GasUnit::<2>::from([u64::MAX, 20]);
         let gas_price = GasPrice::<2>::from([Amount::new(3), Amount::new(5)]);
 
-        let value = gas.checked_value(&gas_price);
+        let value = gas.checked_value(gas_price);
         assert_eq!(value.unwrap(), (u64::MAX as u128) * 3 + 100);
 
         let gas = GasUnit::<2>::from([u64::MAX, 20]);
@@ -217,18 +217,18 @@ mod tests {
             Amount::new(5),
         ]);
 
-        let value = gas.checked_value(&gas_price);
+        let value = gas.checked_value(gas_price);
         assert!(value.is_none());
 
         let gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
         let gas_price = GasPrice::<2>::from([Amount::from(u64::MAX); 2]);
-        let value = gas.checked_value(&gas_price);
+        let value = gas.checked_value(gas_price);
         assert!(value.is_none());
 
         let gas = GasUnit::<2>::from([0, 10]);
         let gas_price = GasPrice::<2>::from([Amount::MAX, Amount::new(20)]);
 
-        let value = gas.checked_value(&gas_price).unwrap();
+        let value = gas.checked_value(gas_price).unwrap();
         assert_eq!(value, 200);
     }
 }

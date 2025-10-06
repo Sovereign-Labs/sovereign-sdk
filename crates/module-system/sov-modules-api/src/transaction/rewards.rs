@@ -65,7 +65,7 @@ impl<GU: Gas> TransactionConsumption<GU> {
     pub fn base_fee_value(&self) -> ProverReward {
         ProverReward(
             self.base_fee
-                .checked_value(&self.gas_price)
+                .checked_value(self.gas_price)
                 // SAFETY: `base_fee` comes from `BasicGasMeter`, which ensures overflow protection.
                 .expect("Base fee value overflowed"),
         )
@@ -124,7 +124,7 @@ impl SequencerReward {
 /// This function is only used by the [`crate::WorkingSet`] to build a [`TransactionConsumption`] at the end of a transaction execution.
 pub(crate) fn transaction_consumption_helper<S: Spec>(
     base_fee: &S::Gas,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     max_fee: Amount,
     max_priority_fee_bips: PriorityFeeBips,
 ) -> TransactionConsumption<S::Gas> {
@@ -154,6 +154,6 @@ pub(crate) fn transaction_consumption_helper<S: Spec>(
         remaining_funds,
         base_fee: *base_fee,
         priority_fee,
-        gas_price: *gas_price,
+        gas_price,
     }
 }

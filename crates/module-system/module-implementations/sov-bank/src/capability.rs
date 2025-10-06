@@ -62,7 +62,7 @@ impl<S: Spec> Bank<S> {
 
         if let Some(gas_limit) = &tx.0.gas_limit {
             let gas_value = gas_limit
-                .checked_value(gas_price)
+                .checked_value(*gas_price)
                 .ok_or(ReserveGasError::CurrentGasPriceTooHigh)?;
 
             // We need to check the gas price in case the user has provided a gas limit.
