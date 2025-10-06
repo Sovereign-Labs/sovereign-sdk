@@ -267,6 +267,29 @@ macro_rules! impl_gas_array {
     };
 }
 
+macro_rules! impl_serde {
+    ($id: ident, $n:expr, $t: ty) => {
+        impl ::serde::Serialize for $id<$n> {
+            fn serialize<__S>(&self, serializer: __S) -> Result<__S::Ok, __S::Error>
+            where
+                __S: serde::Serializer,
+            {
+                <[$t; $n] as serde::Serialize>::serialize(&self.value, serializer)
+            }
+        }
+
+        impl<'de> serde::Deserialize<'de> for $id<$n> {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let array = <[$t; $n] as serde::Deserialize>::deserialize(deserializer)?;
+                Ok(Self::from(array))
+            }
+        }
+    };
+}
+
 macro_rules! impl_gas_unit {
     ($n:expr) => {
         impl Gas for GasUnit<$n> {
@@ -332,44 +355,8 @@ macro_rules! impl_gas_unit {
             }
         }
 
-        impl ::serde::Serialize for GasUnit<$n> {
-            fn serialize<__S>(&self, serializer: __S) -> Result<__S::Ok, __S::Error>
-            where
-                __S: serde::Serializer,
-            {
-                <[u64; $n] as serde::Serialize>::serialize(&self.value, serializer)
-            }
-        }
-
-        impl<'de> serde::Deserialize<'de> for GasUnit<$n> {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                let array = <[u64; $n] as serde::Deserialize>::deserialize(deserializer)?;
-                Ok(Self::from(array))
-            }
-        }
-
-        impl ::serde::Serialize for GasPrice<$n> {
-            fn serialize<__S>(&self, serializer: __S) -> Result<__S::Ok, __S::Error>
-            where
-                __S: serde::Serializer,
-            {
-                <[Amount; $n] as serde::Serialize>::serialize(&self.value, serializer)
-            }
-        }
-
-        impl<'de> serde::Deserialize<'de> for GasPrice<$n> {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: serde::Deserializer<'de>,
-            {
-                let array = <[Amount; $n] as serde::Deserialize>::deserialize(deserializer)?;
-                Ok(Self::from(array))
-            }
-        }
-
+        impl_serde!(GasUnit, $n, u64);
+        impl_serde!(GasPrice, $n, Amount);
         impl_gas_array!(GasUnit<$n>, $n, u64);
         impl_gas_array!(GasPrice<$n>, $n, Amount);
         impl_gas_dimensions!(GasUnit<$n>, "GasUnit", $n, u64);
