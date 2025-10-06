@@ -580,7 +580,7 @@ where
         ignored_tx_receipts,
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
-            gas_price: gas_price,
+            gas_price,
             gas_used: total_gas_used_in_batch,
             outcome: BatchSequencerOutcome {
                 rewards: rewards.clone(),
