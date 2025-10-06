@@ -190,7 +190,7 @@ macro_rules! impl_gas_unit {
                 }
             }
 
-            fn checked_value(&self, price: Self::Price) -> Option<Amount> {
+            fn checked_value(self, price: Self::Price) -> Option<Amount> {
                 let mut value: Amount = Amount::ZERO;
                 for (g, p) in self.value.iter().zip(price.as_ref().iter().copied()) {
                     let v = Amount::new(*g as u128).checked_mul(p)?;
@@ -200,7 +200,7 @@ macro_rules! impl_gas_unit {
                 Some(value)
             }
 
-            fn value(&self, price: Self::Price) -> Amount {
+            fn value(self, price: Self::Price) -> Amount {
                 self.value
                     .iter()
                     .zip(price.as_ref().iter().copied())

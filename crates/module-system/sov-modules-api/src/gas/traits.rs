@@ -100,10 +100,12 @@ pub trait Gas: GasArray<Scalar = u64> + TryFrom<Vec<u64>> + From<[u64; GAS_DIMEN
     type Price: GasArray<Scalar = Amount>;
 
     /// Calculates the value of the given amount of gas at the given price or returns None if the result overflows.
-    fn checked_value(&self, price: Self::Price) -> Option<Amount>;
+    #[must_use = "this returns the computed value without modifying the original"]
+    fn checked_value(self, price: Self::Price) -> Option<Amount>;
 
     /// Calculates the value of the given amount of gas at the given price.
-    fn value(&self, price: Self::Price) -> Amount;
+    #[must_use = "this returns the computed value without modifying the original"]
+    fn value(self, price: Self::Price) -> Amount;
 
     /// Returns a gas unit which is zero in all dimensions.
     #[must_use]
