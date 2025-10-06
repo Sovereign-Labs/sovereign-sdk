@@ -219,10 +219,7 @@ where
         let gas_used = S::Gas::zero();
 
         let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
-            ignored: IgnoredTxContents {
-                gas_used,
-                index: 0,
-            },
+            ignored: IgnoredTxContents { gas_used, index: 0 },
         };
 
         return (
@@ -275,10 +272,7 @@ where
                 }
             }
             let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
-                ignored: IgnoredTxContents {
-                    gas_used,
-                    index: 0,
-                },
+                ignored: IgnoredTxContents { gas_used, index: 0 },
             };
 
             return (
@@ -311,10 +305,7 @@ where
             // There is no one to charge for the pre-execution gas because the sequencer was not registered at the time of the error.
             // However, we deduct the gas from the slot gas meter.
             gas_used = pre_exec_gas_meter.gas_info().gas_used;
-            let skipped = SkippedTxContents {
-                error,
-                gas_used,
-            };
+            let skipped = SkippedTxContents { error, gas_used };
 
             let tx_receipt = create_tx_receipt(skipped, raw_tx_hash, batch.tx.data.clone());
             tx_receipts.push(tx_receipt);

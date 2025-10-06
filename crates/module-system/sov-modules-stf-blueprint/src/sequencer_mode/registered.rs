@@ -479,14 +479,7 @@ where
                     gas_used
                         .checked_value(gas_price)
                         .expect("gas_used value overflowed"),
-                    create_tx_receipt(
-                        SkippedTxContents {
-                            error,
-                            gas_used,
-                        },
-                        tx_hash,
-                        tx_body.data,
-                    ),
+                    create_tx_receipt(SkippedTxContents { error, gas_used }, tx_hash, tx_body.data),
                 )
             }
             AuthAndProcessOutcome::Applied {
