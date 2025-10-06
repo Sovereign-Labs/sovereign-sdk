@@ -152,8 +152,8 @@ pub(crate) fn transaction_consumption_helper<S: Spec>(
 
     TransactionConsumption {
         remaining_funds,
-        base_fee: base_fee.clone(),
+        base_fee: *base_fee,
         priority_fee,
-        gas_price: gas_price.clone(),
+        gas_price: *gas_price,
     }
 }

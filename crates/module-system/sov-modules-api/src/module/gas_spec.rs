@@ -13,7 +13,7 @@ macro_rules! new_constant {
     ($name: literal, $gas: ty) => {{
         #[cfg(feature = "gas-constant-estimation")]
         {
-            <$gas>::from(config_value_private!($name)).with_name($name.to_string())
+            <$gas>::from(config_value_private!($name)).with_name($name)
         }
         #[cfg(not(feature = "gas-constant-estimation"))]
         {

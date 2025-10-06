@@ -7,7 +7,7 @@ use crate::{Amount, Gas, GasArray, GasMeter, GasMeteringError, GetGasPrice, Spec
 /// A struct that keeps track of the gas used.
 /// The gas meter continues running until it either depletes its funds or runs out of gas, depending on its configuration.
 /// It also ensures that the gas used will not overflow when multiplied by the gas price.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct BasicGasMeter<S: Spec> {
     /// Amount of gas available at the moment of the gas meter initialization
     pub initial_gas: S::Gas,
@@ -39,13 +39,13 @@ impl<S: Spec> BasicGasMeter<S> {
 
         let gas_value = gas_used
             .checked_value(&self.gas_price)
-            // SAFETY: This is impossible becouse we check for oveflows in `BasicGasMeter::charge_gas_inner`.
+            // SAFETY: This is impossible because we check for oveflows in `BasicGasMeter::charge_gas_inner`.
             .expect("BasicGasMeter error. The gas value should be possible to compute");
 
         GasInfo {
             gas_value,
             gas_used,
-            gas_price: self.gas_price.clone(),
+            gas_price: self.gas_price,
         }
     }
 
@@ -56,7 +56,7 @@ impl<S: Spec> BasicGasMeter<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Self {
         Self {
-            initial_gas: remaining_gas.clone(),
+            initial_gas: remaining_gas,
             remaining_gas,
             remaining_funds: Some(remaining_funds),
             gas_price,
@@ -66,7 +66,7 @@ impl<S: Spec> BasicGasMeter<S> {
     /// Creates a new `BasicGasMeter`
     pub fn new_with_gas(remaining_gas: S::Gas, gas_price: <S::Gas as Gas>::Price) -> Self {
         Self {
-            initial_gas: remaining_gas.clone(),
+            initial_gas: remaining_gas,
             remaining_gas,
             remaining_funds: None,
             gas_price,
@@ -89,7 +89,7 @@ impl<S: Spec> BasicGasMeter<S> {
             GasMeteringError::OutOfFunds {
                 amount_to_charge: amount_value,
                 remaining_funds,
-                gas_price: self.gas_price.clone(),
+                gas_price: self.gas_price,
             }
         })
     }
@@ -102,10 +102,10 @@ impl<S: Spec> BasicGasMeter<S> {
         remaining_gas.checked_sub(amount).ok_or_else(|| {
             tracing::warn!(?remaining_gas, amount_to_charge = ?amount, "Out of gas during `compute_remaining_gas`");
             GasMeteringError::OutOfGas {
-                gas_to_charge: amount.clone(),
-                gas_price: self.gas_price.clone(),
-                initial_gas: self.initial_gas.clone(),
-                remaining_gas: self.remaining_gas.clone(),
+                gas_to_charge: *amount,
+                gas_price: self.gas_price,
+                initial_gas: self.initial_gas,
+                remaining_gas: self.remaining_gas,
             }
         })
     }
@@ -156,7 +156,7 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
                     if let Some(const_count) = var.get_mut(name) {
                         *const_count = const_count.checked_add(1).unwrap();
                     } else {
-                        var.insert(name.clone(), 1);
+                        var.insert(name.to_string(), 1);
                     }
                 })
                 .is_err()
@@ -191,13 +191,12 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
                 && sov_metrics::GAS_CONSTANTS
                     .try_with(|var| {
                         let param_i64 = parameter.into();
-
                         let mut var = var.borrow_mut();
 
                         if let Some(const_count) = var.get_mut(name) {
                             *const_count = const_count.checked_add(param_i64).unwrap();
                         } else {
-                            var.insert(name.clone(), param_i64);
+                            var.insert(name.to_string(), param_i64);
                         }
                     })
                     .is_err()
@@ -222,13 +221,12 @@ impl<S: Spec> GasMeter for BasicGasMeter<S> {
                 && sov_metrics::GAS_CONSTANTS
                     .try_with(|var| {
                         let param_i64 = parameter.into();
-
                         let mut var = var.borrow_mut();
 
                         if let Some(const_count) = var.get_mut(name) {
                             *const_count = const_count.checked_sub(param_i64).unwrap();
                         } else {
-                            var.insert(name.clone(), -param_i64);
+                            var.insert(name.to_string(), -param_i64);
                         }
                     })
                     .is_err()
@@ -339,8 +337,7 @@ mod tests {
     #[test]
     fn test_charge_without_funds_tracks_usage() {
         let remaining_gas = GasUnit::<2>::from([100; 2]);
-        let mut gas_meter =
-            BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), STANDARD_GAS_PRICE);
+        let mut gas_meter = BasicGasMeter::<S>::new_with_gas(remaining_gas, STANDARD_GAS_PRICE);
 
         assert_charge_succeeds(&mut gas_meter, &remaining_gas);
         assert_gas_used_equals(&gas_meter, remaining_gas);
@@ -391,11 +388,8 @@ mod tests {
         let remaining_funds = Amount::new(1000000);
         let gas_price = GasPrice::<2>::from([Amount::new(10); 2]);
 
-        let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
-            remaining_funds,
-            remaining_gas.clone(),
-            gas_price,
-        );
+        let mut gas_meter =
+            BasicGasMeter::<S>::new_with_funds_and_gas(remaining_funds, remaining_gas, gas_price);
 
         let gas = GasUnit::<2>::from([10; 2]);
         let res = gas_meter.charge_gas(&gas);

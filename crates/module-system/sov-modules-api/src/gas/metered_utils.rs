@@ -208,7 +208,7 @@ pub trait MeteredBorshDeserialize<S: Spec>: Sized {
         buf: &[u8],
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        // This is safe to cast here. We won't have data bigger thane 4GB.
+        // This is safe to cast here. We won't have data bigger than 4GB.
         let buf_len: u32 = as_u32_or_panic(buf.len());
 
         // Custom gas costs to deserialize this data structure.
@@ -256,7 +256,7 @@ pub fn charge_gas_to_deserialize_json<S: Spec>(
     buf: &[u8],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), GasMeteringError<<S as GasSpec>::Gas>> {
-    // This is safe to cast here. We won't have data bigger thane 4GB.
+    // This is safe to cast here. We won't have data bigger than 4GB.
     let buf_len: u32 = as_u32_or_panic(buf.len());
 
     // Custom gas costs to deserialize this data structure.

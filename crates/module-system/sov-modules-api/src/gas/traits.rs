@@ -25,6 +25,7 @@ pub trait GasArray:
     + fmt::Debug
     + Display
     + Clone
+    + Copy
     + Send
     + Sync
     + Unpin
@@ -110,11 +111,11 @@ pub trait Gas: GasArray<Scalar = u64> + TryFrom<Vec<u64>> + From<[u64; GAS_DIMEN
 
     #[cfg(feature = "gas-constant-estimation")]
     /// Returns an optional name of the gas unit.
-    fn name(&self) -> &Option<String>;
+    fn name(&self) -> Option<&'static str>;
 
     #[cfg(feature = "gas-constant-estimation")]
     /// Names the gas unit.
-    fn with_name(self, name: String) -> Self;
+    fn with_name(self, name: &'static str) -> Self;
 }
 
 /// A type-safe trait that should track the gas consumed by a finite ressource over time.

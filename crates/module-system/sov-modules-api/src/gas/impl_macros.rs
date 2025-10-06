@@ -3,7 +3,7 @@ macro_rules! impl_gas_array {
     ($t: ty, $n:expr, $u:ty) => {
         impl GasArray for $t {
             type Scalar = $u;
-            // u64::ZERO would be better, but we have const and don't want thirdr party crate.
+            // u64::ZERO would be better, but we have const and don't want third party crate.
             const ZEROED: Self = Self::from_primitive([<$u>::MIN; $n]);
 
             const MAX: Self = Self::from_primitive([<$u>::MAX; $n]);
@@ -177,13 +177,13 @@ macro_rules! impl_gas_unit {
             type Price = GasPrice<$n>;
 
             #[cfg(feature = "gas-constant-estimation")]
-            fn name(&self) -> &Option<String> {
-                &self.name
+            fn name(&self) -> Option<&'static str> {
+                self.name
             }
 
             /// Adds a name tag to the gas constant.
             #[cfg(feature = "gas-constant-estimation")]
-            fn with_name(self, name: String) -> Self {
+            fn with_name(self, name: &'static str) -> Self {
                 Self {
                     name: Some(name),
                     ..self
