@@ -1,6 +1,8 @@
 mod metered_utils;
 mod meters;
+mod price;
 mod traits;
+mod unit;
 
 #[cfg(test)]
 mod tests;
@@ -10,4 +12,6 @@ pub use metered_utils::{
     MeteredBorshDeserializeError, MeteredHasher, MeteredSigVerificationError, MeteredSignature,
 };
 pub use meters::*;
+pub use price::*;
 pub use traits::*;
+pub use unit::*;

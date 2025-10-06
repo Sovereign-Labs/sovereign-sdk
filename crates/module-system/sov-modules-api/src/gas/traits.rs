@@ -9,11 +9,10 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_macros::config_value_private;
-use sov_universal_wallet::schema::{Container, IndexLinking, Item, Link, Schema, UniversalWallet};
-use sov_universal_wallet::ty::{Tuple, UnnamedField};
+use sov_universal_wallet::schema::UniversalWallet;
 use thiserror::Error;
 
-use crate::{Amount, BasicGasMeter, Spec};
+use crate::{Amount, BasicGasMeter, GasPrice, GasUnit, Spec};
 
 pub(crate) const GAS_DIMENSIONS: usize = config_value_private!(
     "GAS_DIMENSIONS",
@@ -116,67 +115,6 @@ pub trait Gas: GasArray<Scalar = u64> + TryFrom<Vec<u64>> + From<[u64; GAS_DIMEN
     #[cfg(feature = "gas-constant-estimation")]
     /// Names the gas unit.
     fn with_name(self, name: String) -> Self;
-}
-
-/// A multi-dimensional gas unit.
-#[derive(Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize, derive_more::Display)]
-#[display("GasUnit{:?}", self.value)]
-pub struct GasUnit<const N: usize> {
-    value: [u64; N],
-    #[cfg(feature = "gas-constant-estimation")]
-    #[borsh(skip)]
-    name: Option<String>,
-}
-
-impl<const N: usize> UniversalWallet for GasUnit<N>
-where
-    Self: 'static,
-    [u64; N]: UniversalWallet,
-{
-    fn scaffold() -> Item<IndexLinking> {
-        Item::Container(Container::Tuple(Tuple {
-            template: None,
-            peekable: false,
-            fields: vec![UnnamedField {
-                value: Link::Placeholder,
-                silent: false,
-                doc: String::new(),
-            }],
-        }))
-    }
-
-    fn get_child_links(schema: &mut Schema) -> Vec<Link> {
-        vec![<[u64; N]>::make_linkable(schema)]
-    }
-}
-
-impl<const N: usize> Debug for GasUnit<N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
-    }
-}
-
-/// A gas price for multi-dimensional gas.
-#[derive(
-    Clone,
-    PartialEq,
-    Eq,
-    Hash,
-    BorshSerialize,
-    BorshDeserialize,
-    sov_rollup_interface::sov_universal_wallet::UniversalWallet,
-    derive_more::Display,
-)]
-#[sov_wallet()]
-#[display("GasPrice{:?}", self.value)]
-pub struct GasPrice<const N: usize> {
-    value: [Amount; N],
-}
-
-impl<const N: usize> Debug for GasPrice<N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
-    }
 }
 
 // Implement basic traits for wrappers around [$u; $n] (example: GasPrice is [u128; 2])
@@ -525,21 +463,6 @@ pub struct GasInfo<GU: Gas> {
     pub gas_price: GU::Price,
 }
 
-#[macro_export]
-/// Defines a constant gas value.
-macro_rules! new_constant {
-    ($name: literal, $gas: ty) => {{
-        #[cfg(feature = "gas-constant-estimation")]
-        {
-            <$gas>::from(config_value_private!($name)).with_name($name.to_string())
-        }
-        #[cfg(not(feature = "gas-constant-estimation"))]
-        {
-            <$gas>::from(config_value_private!($name))
-        }
-    }};
-}
-
 /// A type-safe trait that should track the gas consumed by a finite ressource over time.
 pub trait GasMeter {
     /// The spec used by this gas meter.
@@ -618,148 +541,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn is_less_than_test() {
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-        assert!(gas_1.dim_is_less_than(&gas_2));
-        assert!(gas_1.dim_is_less_or_eq(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([20, 30]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-        assert!(gas_1.dim_is_less_or_eq(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([10, 40]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-        assert!(!gas_1.dim_is_less_than(&gas_2));
-        assert!(!gas_1.dim_is_less_or_eq(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([40, 40]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-        assert!(!gas_1.dim_is_less_than(&gas_2));
-        assert!(!gas_1.dim_is_less_or_eq(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([40, 40]);
-        let gas_2 = GasUnit::<2>::from([20, 50]);
-        assert!(!gas_1.dim_is_less_than(&gas_2));
-        assert!(!gas_1.dim_is_less_or_eq(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([10, 30]);
-        assert!(!gas_1.dim_is_less_than(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([10, 30]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-        assert!(!gas_1.dim_is_less_than(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([10, 30]);
-        assert!(gas_1.dim_is_less_or_eq(&gas_2));
-
-        let gas_1 = GasUnit::<2>::from([10, 30]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-        assert!(gas_1.dim_is_less_or_eq(&gas_2));
-    }
-
-    #[test]
-    fn calculate_min_test() {
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([20, 30]);
-
-        assert_eq!(
-            GasUnit::<2>::from([10, 20]),
-            GasUnit::calculate_min(&gas_1, &gas_2)
-        );
-
-        let gas_1 = GasUnit::<2>::from([20, 30]);
-        let gas_2 = GasUnit::<2>::from([10, 20]);
-
-        assert_eq!(
-            GasUnit::<2>::from([10, 20]),
-            GasUnit::calculate_min(&gas_1, &gas_2)
-        );
-
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([10, 5]);
-
-        assert_eq!(
-            GasUnit::<2>::from([10, 5]),
-            GasUnit::calculate_min(&gas_1, &gas_2)
-        );
-
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([5, 30]);
-
-        assert_eq!(
-            GasUnit::<2>::from([5, 20]),
-            GasUnit::calculate_min(&gas_1, &gas_2)
-        );
-
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([10, 20]);
-
-        assert_eq!(
-            GasUnit::<2>::from([10, 20]),
-            GasUnit::calculate_min(&gas_1, &gas_2)
-        );
-    }
-
-    #[test]
-    fn checked_scalar_product_test() {
-        let gas = GasUnit::<2>::from([10, 20]);
-        assert_eq!(
-            gas.checked_scalar_product(10).unwrap(),
-            GasUnit::<2>::from([100, 200]),
-        );
-
-        let gas = GasUnit::<2>::from([u64::MAX, 20]);
-        assert!(gas.checked_scalar_product(10).is_none());
-
-        let gas = GasUnit::<2>::from([10, u64::MAX]);
-        assert!(gas.checked_scalar_product(10).is_none());
-
-        let gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-        assert!(gas.checked_scalar_product(10).is_none());
-
-        let gas = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-        assert_eq!(
-            gas.checked_scalar_product(0).unwrap(),
-            GasUnit::<2>::from([0, 0]),
-        );
-    }
-
-    #[test]
-    fn checked_combine_test() {
-        let gas_1 = GasUnit::<2>::from([10, 20]);
-        let gas_2 = GasUnit::<2>::from([10, 20]);
-
-        assert_eq!(
-            gas_1.checked_combine(&gas_2).unwrap(),
-            GasUnit::<2>::from([20, 40]),
-            "The gas unit should be combined correctly"
-        );
-
-        let gas_1 = GasUnit::<2>::from([u64::MAX, 20]);
-        let gas_2 = GasUnit::<2>::from([10, 20]);
-
-        assert!(gas_1.checked_combine(&gas_2).is_none());
-
-        let gas_1 = GasUnit::<2>::from([20, 20]);
-        let gas_2 = GasUnit::<2>::from([10, u64::MAX]);
-
-        assert!(gas_1.checked_combine(&gas_2).is_none());
-
-        let gas_1 = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-        let gas_2 = GasUnit::<2>::from([10, 20]);
-
-        assert!(gas_1.checked_combine(&gas_2).is_none());
-
-        let gas_1 = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-        let gas_2 = GasUnit::<2>::from([u64::MAX, u64::MAX]);
-
-        assert!(gas_1.checked_combine(&gas_2).is_none());
-    }
-
-    #[test]
     fn checked_value_test() {
         let gas = GasUnit::<2>::from([10, 20]);
         let gas_price = GasPrice::<2>::from([Amount::new(3), Amount::new(5)]);
@@ -794,23 +575,5 @@ mod tests {
 
         let value = gas.checked_value(&gas_price).unwrap();
         assert_eq!(value, 200);
-    }
-
-    #[test]
-    fn test_gas_price_serde_json() {
-        let gas_price = GasPrice::<2>::from([Amount::new(10); 2]);
-        let serialized = serde_json::to_string(&gas_price).unwrap();
-        assert_eq!(serialized, r#"["10","10"]"#);
-
-        let deserialized: GasPrice<2> = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(deserialized, gas_price);
-    }
-
-    #[test]
-    fn test_gas_price_serde_bincode() {
-        let gas_price = GasPrice::<2>::from([Amount::new(10); 2]);
-        let serialized = bincode::serialize(&gas_price).unwrap();
-        let deserialized: GasPrice<2> = bincode::deserialize(&serialized).unwrap();
-        assert_eq!(deserialized, gas_price);
     }
 }
