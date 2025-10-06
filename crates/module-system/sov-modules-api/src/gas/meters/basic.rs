@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn test_charge_gas_with_funds_succeeds_and_tracks_usage() {
+    fn test_charge_with_funds_tracks_usage() {
         const REMAINING_FUNDS: u64 = 100;
 
         let mut gas_meter = BasicGasMeter::<S>::new_with_funds_and_gas(
@@ -337,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn test_charge_gas_without_funds_succeeds_and_tracks_usage() {
+    fn test_charge_without_funds_tracks_usage() {
         let remaining_gas = GasUnit::<2>::from([100; 2]);
         let mut gas_meter =
             BasicGasMeter::<S>::new_with_gas(remaining_gas.clone(), STANDARD_GAS_PRICE);
