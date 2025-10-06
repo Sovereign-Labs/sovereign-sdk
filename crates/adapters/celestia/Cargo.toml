@@ -42,6 +42,7 @@ serde = { workspace = true, default-features = false, features = [
     "derive",
 ] }
 serde_json = { workspace = true, features = ["alloc"] }
+serde_with = { workspace = true, features = ["base64"], optional = true }
 reqwest = { workspace = true, optional = true }
 
 thiserror = { workspace = true }
@@ -90,6 +91,7 @@ native = [
     "sov-modules-macros?/native",
     "dep:rand",
     "dep:reqwest",
+    "dep:serde_with"
 ]
 bench = [
     "dep:sov-metrics",
