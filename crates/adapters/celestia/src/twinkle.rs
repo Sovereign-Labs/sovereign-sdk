@@ -20,17 +20,14 @@ const BLOB_STATUS: &str = "https://t.tech/v0/blob/status";
 const AGENT: &str = "sov-celestia-adapter";
 const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 
-// TODO:
-//  + Submit async with channel
-//  + Config struct: network + env
-//  + Retry logic and params
-// Other
+// TODO for later:
 //  - Get block and header compatible with return types of celestia sender
 //  - Logging
 //  - Metrics
 //  - Unit tests with mockserver
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Network {
     Mocha,
     Mainnet,
@@ -46,15 +43,20 @@ impl Display for Network {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
 pub struct TwinkleConfig {
     /// If not set, will be taken from the environment variable ` SOV_TWINKLE_API_KEY `
     api_key: Option<String>,
     network: Network,
     pull_interval_millis: u64,
     /// Timeout for individual HTTP requests in seconds
+    /// TODO: Sensible default value
     request_timeout_secs: u64,
     /// Timeout for the entire request including retries in seconds
+    /// TODO: Sensible default value
     total_timeout_secs: u64,
+    // TODO: Connect timeout: smaller
+    // TODO: Pool idle timeout
 }
 
 impl TwinkleConfig {
@@ -106,7 +108,6 @@ impl TryFrom<BlobStatusResponse> for SubmitBlobReceipt<TmHash> {
     type Error = anyhow::Error;
 
     fn try_from(value: BlobStatusResponse) -> Result<Self, Self::Error> {
-        // TODO:
         let blob_hash = value.commitment.try_into().map_err(|e: Vec<u8>| {
             anyhow::anyhow!(
                 "Wrong commitment size, should 32 bytes, but was {}",
@@ -129,6 +130,7 @@ pub struct TwinkleClient {
     network: Network,
     // Interval for pulling blob status after submission
     pull_interval: std::time::Duration,
+    // Total timeout for a method to complete.
     total_timeout: std::time::Duration,
     backoff_policy: ExponentialBuilder,
 }

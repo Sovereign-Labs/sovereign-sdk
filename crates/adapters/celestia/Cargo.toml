@@ -31,6 +31,7 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, features = ["derive"], optional = true }
 async-trait = { workspace = true }
 backon = { workspace = true, optional = true }
+clap = { workspace = true, features = ["derive"], optional = true }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 futures = { workspace = true, default-features = false, optional = true }
 hex = { workspace = true, features = ["serde"] }
@@ -43,7 +44,8 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 serde_json = { workspace = true, features = ["alloc"] }
 serde_with = { workspace = true, features = ["base64"], optional = true }
-reqwest = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["json"] }
+toml = { workspace = true, optional = true }
 
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["sync"] }
@@ -80,9 +82,11 @@ native = [
     "backon",
     "tendermint/default",
     "dep:celestia-rpc",
+    "dep:clap",
     "dep:futures",
     "dep:jsonrpsee",
     "dep:tokio",
+    "dep:toml",
     "sov-celestia-adapter/native",
     "sov-rollup-interface/native",
     "dep:sov-metrics",
@@ -106,3 +110,7 @@ arbitrary = [
     "sov-test-utils/arbitrary",
     "sov-modules-macros?/arbitrary"
 ]
+
+[[bin]]
+name = "submit_measure"
+required-features = ["native"]

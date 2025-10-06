@@ -17,5 +17,7 @@ pub mod verifier;
 
 #[cfg(feature = "native")]
 pub use da_service::{CelestiaConfig, CelestiaService};
+#[cfg(feature = "native")]
+pub use twinkle::{Network, TwinkleClient, TwinkleConfig};
 
 pub use crate::celestia::*;
