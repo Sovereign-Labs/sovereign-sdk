@@ -193,14 +193,17 @@ mod private {
         assert_eq!(key.item_tag(), 0);
         assert_eq!(key.0[..9], [6, 0, 0, 1, 2, 3, 4, 5, 6]);
 
-        assert!(key.try_extend(&[1; 74]).is_err());
+        // We've written 6 bytes so far, so we have `REMAINING_BYTES` of space left inline.
+        const REMAINING_BYTES: usize = MAX_INLINE_KEY_LEN - 6;
+
+        assert!(key.try_extend(&[1; (REMAINING_BYTES + 1)]).is_err());
         assert_eq!(key.len_excluding_prefix(), 6);
         assert_eq!(key.0[..9], [6, 0, 0, 1, 2, 3, 4, 5, 6]);
 
-        assert!(key.try_extend(&[1; 73]).is_ok());
+        assert!(key.try_extend(&[1; REMAINING_BYTES]).is_ok());
         assert_eq!(key.len_excluding_prefix(), 79);
         assert_eq!(key.0[..9], [79, 0, 0, 1, 2, 3, 4, 5, 6]);
-        assert_eq!(&key.without_prefix()[6..], &[1; 73]);
+        assert_eq!(&key.without_prefix()[6..], &[1; REMAINING_BYTES]);
     }
 }
 
