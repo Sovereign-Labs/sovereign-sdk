@@ -60,10 +60,9 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
 
     let latest_hash = by_number(&client, Latest).await?.unwrap().hash;
-    assert_eq!(
-        by_hash(&client, latest_hash).await?.unwrap().hash,
-        latest_hash
-    );
+    let latest = by_hash(&client, latest_hash).await?.unwrap();
+    assert_eq!(latest.hash, latest_hash);
+    assert_eq!(latest.number, 1);
 
     let pending_hash = by_number(&client, Pending).await?.unwrap().hash;
     assert_eq!(pending_hash, BlockHash::ZERO);
