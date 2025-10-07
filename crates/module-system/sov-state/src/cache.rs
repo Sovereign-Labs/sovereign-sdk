@@ -126,7 +126,11 @@ pub(crate) mod internal {
         }
 
         pub(crate) fn get(&self, key: &SlotKey) -> Option<&Access> {
-            self.revertable_log.get(key).or_else(|| self.log.get(key))
+            let get_time = std::time::Instant::now();
+            let v = self.revertable_log.get(key).or_else(|| self.log.get(key));
+            let get_time = get_time.elapsed();
+            dbg!(get_time);
+            v
         }
 
         pub(crate) fn get_mut(&mut self, key: &SlotKey) -> Option<&mut Access> {
@@ -254,7 +258,8 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         &self,
         key: &SlotKey,
     ) -> MaybePresentValue<NodeLeafAndMaybeValue> {
-        match self.cache.get(key) {
+       //let get_leaf_from_cache_time = std::time::Instant::now();
+       let v = match self.cache.get(key) {
             // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
             Some(Access::Read { .. }) | None => MaybePresentValue::Absent,
             // Correctness: We only use the no-op hasher when the value is in intermediate state. This can happen in one of two cases:
@@ -267,7 +272,12 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                     value: ReadType::Read(v.clone()),
                 }))
             }
-        }
+        };
+
+        //let get_leaf_from_cache_time = get_leaf_from_cache_time.elapsed();
+        //dbg!(get_leaf_from_cache_time);
+
+        v
     }
 }
 
@@ -390,13 +400,13 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         let v =match self.cache.get(key) {
             Some(Access::Read { original }) => {
                 let v = original.as_ref().map(|node| node.leaf.size);
-                let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                //let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
                 //dbg!("1", get_size_or_fetch_time);
                 v
             },
             Some(Access::Write { modified, .. }) => {
                 let v = modified.as_ref().map(SlotValue::size);
-                let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                //let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
                 //dbg!("2", get_size_or_fetch_time);
                 v
             }
@@ -405,19 +415,27 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 let maybe_leaf = match uncomitted_changes {
                     Some(uncomitted_changes) => 
                     {
-                        let v = uncomitted_changes
-                        .get_leaf(N::PROVABLE_NAMESPACE, key)
-                        .or_else(|| storage.get_leaf::<N>(key, witness));
-                        
-                        let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
-                        //dbg!("3", get_size_or_fetch_time);
+                        let v = uncomitted_changes.get_leaf(N::PROVABLE_NAMESPACE, key);
+                        let v = match v {
+                            MaybePresentValue::Present(v) => {
+                                let get_size_or_fetch_time_present = get_size_or_fetch_time.elapsed();
+                                dbg!(get_size_or_fetch_time_present);
+                                v
+                            },
+                            MaybePresentValue::Absent => {
+                                 let v = storage.get_leaf::<N>(key, witness);
+                                let get_size_or_fetch_absent = get_size_or_fetch_time.elapsed();
+                                dbg!(get_size_or_fetch_absent);
+                                v
+                            }
+                        };
                         v
                     }
                     None => {
                         let v = storage.get_leaf::<N>(key, witness);
-                        let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
-                         //dbg!("4", get_size_or_fetch_time);
-                         v
+                        //let get_size_or_fetch_time = get_size_or_fetch_time.elapsed();
+                        //dbg!("4", get_size_or_fetch_time);
+                        v
                     }
                 };
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);

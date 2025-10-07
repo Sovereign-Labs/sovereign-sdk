@@ -543,11 +543,11 @@ impl<S: Spec> Bank<S> {
         state: &mut Accessor,
     ) -> Result<Option<Amount>, <Accessor as StateReader<User>>::Error> {
         let user_address = user_address.as_token_holder();
-        //let bank_time = std::time::Instant::now();
+        let bank_time = std::time::Instant::now();
 
         let v = self.balances.get(&(user_address, &token_id), state);
-        //let bank_time = bank_time.elapsed();
-        //dbg!(bank_time);
+        let bank_time = bank_time.elapsed();
+        dbg!(bank_time);
         v
     }
 
