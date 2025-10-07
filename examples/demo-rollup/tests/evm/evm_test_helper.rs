@@ -137,7 +137,7 @@ pub async fn setup_test_rollup(
     start_node(config, finalization_blocks, Some(extension)).await
 }
 
-pub async fn setup(
+pub async fn setup_with_simple_storage(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {

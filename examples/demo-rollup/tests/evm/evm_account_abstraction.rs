@@ -9,12 +9,12 @@ use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 type TestSpec = DemoRollupSpec;
 
-use crate::evm::evm_test_helper::{setup, EVM_EXTENSION};
+use crate::evm::evm_test_helper::{setup_with_simple_storage, EVM_EXTENSION};
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Account abstraction for the EVM is disabled"]
 async fn test_evm_account_abstraction() {
-    let (test_rollup, test_client, chain_id) = setup(0, EVM_EXTENSION).await;
+    let (test_rollup, test_client, chain_id) = setup_with_simple_storage(0, EVM_EXTENSION).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
     send_insert_credentials(&test_client, test_client.address(), chain_id).await;
