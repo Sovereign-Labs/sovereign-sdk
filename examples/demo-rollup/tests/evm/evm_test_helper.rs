@@ -2,8 +2,12 @@ use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
 
+use alloy_provider::DynProvider;
+use alloy_provider::Provider as _;
+use alloy_provider::ProviderBuilder;
 use ethers::core::abi::Address;
 use futures::future::join_all;
+use reqwest::Url;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::SimpleStorageClient;
@@ -58,6 +62,11 @@ pub(crate) async fn create_simple_storage_client(
 ) -> SimpleStorageClient {
     let contract = SimpleStorage::default();
     SimpleStorageClient::new(private_key, contract, rest_port).await
+}
+
+pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
+    let url = Url::parse(&format!("http://{socket}")).unwrap();
+    ProviderBuilder::new().connect_http(url).erased()
 }
 
 /// Deploys a test contract on the test rollup.
