@@ -1,11 +1,12 @@
 use super::*;
-use crate::test_helper::ROLLUP_PROOF_NAMESPACE;
+use crate::test_helper::{ADDR_1, ROLLUP_PROOF_NAMESPACE};
 use crate::verifier::RollupParams;
 use crate::CelestiaConfig;
 use crate::CelestiaService;
 use celestia_types::nmt::Namespace;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
+use std::str::FromStr;
 
 const API_KEY: &str = "TEMP_SECRET";
 
@@ -22,18 +23,25 @@ fn default_mocha_config() -> TwinkleConfig {
 const BATCH_NAMESPACE: Namespace = Namespace::const_v0(*b"sov-twinkl");
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn async_blob_submit() -> anyhow::Result<()> {
     sov_test_utils::logging::initialize_or_change_logging_with_filter(
         "debug,hyper=info,sov_celestia_adapter=trace",
     );
     let backoff_policy = ExponentialBuilder::default();
-    let twinkle_client = TwinkleClient::from_config(&default_mocha_config(), backoff_policy)?;
+    let twinkle_client = TwinkleClient::new(&default_mocha_config(), backoff_policy)?;
+    let celestia_address = CelestiaAddress::from_str(ADDR_1)?;
 
     let blob: Vec<u8> = b"hello-from-sov-rust".to_vec();
 
     let start = std::time::Instant::now();
     let rx = twinkle_client
-        .submit_blob_to_namespace_inner(&blob, BATCH_NAMESPACE)
+        .submit_blob_to_namespace_inner(
+            &blob,
+            BATCH_NAMESPACE,
+            RollupNamespace::Batch,
+            &celestia_address,
+        )
         .await;
     println!("A: {:?}", start.elapsed());
     let res = rx.await?;
@@ -45,6 +53,7 @@ async fn async_blob_submit() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn get_head_block_header() -> anyhow::Result<()> {
     let config = CelestiaConfig::dev_config("http://127.0.0.1:26658");
     let params = RollupParams {
@@ -55,7 +64,7 @@ async fn get_head_block_header() -> anyhow::Result<()> {
     let vanilla_client = CelestiaService::new(config, params).await;
 
     let backoff_policy = ExponentialBuilder::default();
-    let twinkle_client = TwinkleClient::from_config(&default_mocha_config(), backoff_policy)?;
+    let twinkle_client = TwinkleClient::new(&default_mocha_config(), backoff_policy)?;
 
     let twinkle_header = twinkle_client.get_head_block_header().await?;
     println!("Twinkle Header {twinkle_header:?}");

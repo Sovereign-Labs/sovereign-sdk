@@ -5,7 +5,7 @@ use std::fmt::Formatter;
 use std::io::Write;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum RollupNamespace {
+pub enum RollupNamespace {
     Batch,
     Proof,
 }
@@ -89,11 +89,12 @@ pub(crate) struct BlobSubmitMeasurement {
     pub success_metrics: Option<SuccessfulSubmitMeasurement>,
     pub lock_acquisition_time: std::time::Duration,
     pub submit_time: std::time::Duration,
+    pub pull_time: std::time::Duration,
     pub total_time: std::time::Duration,
 }
 
 impl BlobSubmitMeasurement {
-    pub fn new(
+    pub fn new_for_vanilla(
         namespace: RollupNamespace,
         result: &Result<RawTxResponse, jsonrpsee::core::ClientError>,
         bytes: usize,
@@ -116,6 +117,31 @@ impl BlobSubmitMeasurement {
             success_metrics,
             lock_acquisition_time,
             submit_time,
+            pull_time: Default::default(),
+            total_time,
+        }
+    }
+
+    pub fn new_for_twinkle(
+        namespace: RollupNamespace,
+        bytes: usize,
+        pull_time: std::time::Duration,
+        submit_time: std::time::Duration,
+        total_time: std::time::Duration,
+        included_height: Option<u64>,
+    ) -> Self {
+        let success_metrics = included_height.map(|h| SuccessfulSubmitMeasurement {
+            da_height: h as i64,
+            gas_used: 0,
+            response_code: 0,
+        });
+        Self {
+            namespace,
+            bytes,
+            success_metrics,
+            lock_acquisition_time: Default::default(),
+            submit_time,
+            pull_time,
             total_time,
         }
     }

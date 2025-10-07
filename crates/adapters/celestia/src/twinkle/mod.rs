@@ -5,11 +5,13 @@ mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
+use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
 pub use crate::twinkle::types::Network;
 use crate::twinkle::types::{
     BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
 };
 use crate::types::TmHash;
+use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
@@ -75,10 +77,7 @@ pub struct TwinkleClient {
 }
 
 impl TwinkleClient {
-    pub fn from_config(
-        config: &TwinkleConfig,
-        backoff_policy: ExponentialBuilder,
-    ) -> anyhow::Result<Self> {
+    pub fn new(config: &TwinkleConfig, backoff_policy: ExponentialBuilder) -> anyhow::Result<Self> {
         let mut headers = reqwest::header::HeaderMap::new();
         let mut auth_value =
             reqwest::header::HeaderValue::from_str(&format!("Bearer {}", config.api_key()))?;
@@ -120,15 +119,21 @@ impl TwinkleClient {
     async fn submit_blob_to_namespace_and_pull(
         &self,
         blob: String,
-        namespace: Namespace,
+        namespace_id: Namespace,
+        namespace: RollupNamespace,
+        _signer: CelestiaAddress,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
+        let start = std::time::Instant::now();
+        let bytes = blob.len();
+
         let timeout = tokio::time::sleep(self.total_timeout);
         tokio::pin!(timeout);
 
-        let start = std::time::Instant::now();
-        let namespace = hex::encode(namespace.id_v0().expect("Namespace should be v0"));
+        tracing::debug!(?namespace, bytes, "Submitting a blob");
+
+        let namespace_id = hex::encode(namespace_id.id_v0().expect("Namespace should be v0"));
         let request = SubmitBlobRequest {
-            namespace,
+            namespace: namespace_id,
             data: blob,
             asynchronous: true,
             network: self.network.to_string(),
@@ -148,8 +153,34 @@ impl TwinkleClient {
                 })
                 .retry(&self.backoff_policy)
                 .await
-            } => result?,
+            } => {
+                if result.is_err() {
+                    let measurement = BlobSubmitMeasurement::new_for_twinkle(
+                        namespace,
+                        bytes,
+                        submit_start.elapsed(),
+                        Default::default(),
+                        start.elapsed(),
+                        None,
+                    );
+                    sov_metrics::track_metrics(|tracker| {
+                        tracker.submit(measurement);
+                    });
+                }
+                result?
+            },
             _ = &mut timeout => {
+                let measurement = BlobSubmitMeasurement::new_for_twinkle(
+                    namespace,
+                    bytes,
+                    submit_start.elapsed(),
+                    Default::default(),
+                    start.elapsed(),
+                    None,
+                );
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(measurement);
+                });
                 return Err(anyhow::anyhow!("Timeout during blob submission after {:?}", self.total_timeout));
             }
         };
@@ -169,15 +200,26 @@ impl TwinkleClient {
                             continue;
                         }
                         BlobStatus::Included => {
-                                      let height = response.height;
-                        let receipt = SubmitBlobReceipt::try_from(response)?;
-                        tracing::debug!(
-                            ?submit_time,
-                            pull_time = ?pull_start.elapsed(),
-                            total_time = ?start.elapsed(),
-                            height = ?height,
-                            "Blob has been included");
-                        return Ok(receipt);
+                            let height = response.height.expect("Height should be set for included blob");
+                            let receipt = SubmitBlobReceipt::try_from(response)?;
+                            tracing::debug!(
+                                ?submit_time,
+                                pull_time = ?pull_start.elapsed(),
+                                total_time = ?start.elapsed(),
+                                %height,
+                                "Blob has been included");
+                            let measurement = BlobSubmitMeasurement::new_for_twinkle(
+                                namespace,
+                                bytes,
+                                submit_start.elapsed(),
+                                pull_start.elapsed(),
+                                start.elapsed(),
+                                Some(height),
+                            );
+                            sov_metrics::track_metrics(|tracker| {
+                                tracker.submit(measurement);
+                            });
+                            return Ok(receipt);
                         }
                         BlobStatus::Rejected => {
                             tracing::debug!(
@@ -185,30 +227,56 @@ impl TwinkleClient {
                                 pull_time = ?pull_start.elapsed(),
                                 total_time = ?start.elapsed(),
                                 "Blob has been rejected");
+                            let measurement = BlobSubmitMeasurement::new_for_twinkle(
+                                namespace,
+                                bytes,
+                                submit_start.elapsed(),
+                                pull_start.elapsed(),
+                                start.elapsed(),
+                                None,
+                            );
+                            sov_metrics::track_metrics(|tracker| {
+                                tracker.submit(measurement);
+                            });
                             anyhow::bail!("Blob has been rejected");
                         }
                     };
                 }
             } => result,
             _ = timeout => {
+                let measurement = BlobSubmitMeasurement::new_for_twinkle(
+                    namespace,
+                    bytes,
+                    submit_start.elapsed(),
+                    pull_start.elapsed(),
+                    start.elapsed(),
+                    None,
+                );
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(measurement);
+                });
                 Err(anyhow::anyhow!("Timeout waiting for blob inclusion after {:?}", self.total_timeout))
             }
         }
     }
 
+    // #[instrument(skip_all)]
     pub async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
-        namespace: Namespace,
+        namespace_id: Namespace,
+        namespace: RollupNamespace,
+        signer: &CelestiaAddress,
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         let (tx, rx) = oneshot::channel();
         let client = self.clone();
         let blob = hex::encode(blob);
+        let signer = signer.clone();
 
-        tokio::task::spawn(async move {
+        let _join_handle = tokio::task::spawn(async move {
             tx.send(
                 client
-                    .submit_blob_to_namespace_and_pull(blob, namespace)
+                    .submit_blob_to_namespace_and_pull(blob, namespace_id, namespace, signer)
                     .await,
             )
             .expect("Failed to propagate blob submission result into a channel");

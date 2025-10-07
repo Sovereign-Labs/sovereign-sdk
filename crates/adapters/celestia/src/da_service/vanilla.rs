@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::{oneshot, Mutex};
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 
 #[derive(Debug, Clone)]
 pub struct VanillaClient {
@@ -29,7 +29,7 @@ pub struct VanillaClient {
 }
 
 impl VanillaClient {
-    pub fn new(config: CelestiaConfig) -> Self {
+    pub fn new(config: &CelestiaConfig) -> Self {
         let client = config.construct_rpc_client();
 
         Self {
@@ -39,17 +39,19 @@ impl VanillaClient {
         }
     }
 
+    #[instrument(skip_all)]
     async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
-        namespace: Namespace,
+        namespace_id: Namespace,
+        namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
         let start = std::time::Instant::now();
         let bytes = blob.len();
 
         let blob = JsonBlob::new(
-            namespace,
+            namespace_id,
             blob.to_vec(),
             Some(signer.0.clone()),
             APP_VERSION,
@@ -58,10 +60,9 @@ impl VanillaClient {
 
         let blob_hash = HexHash::new(*blob.commitment.hash());
         debug!(
-            // namespace = ?ns,
+            ?namespace,
             commitment = %blob_hash,
             bytes,
-            data_bytes = blob.data.len(),
             "Submitting a blob"
         );
 
@@ -79,9 +80,8 @@ impl VanillaClient {
 
         let submit_time = start_submit.elapsed();
         let total_time = start.elapsed();
-        let measurement = BlobSubmitMeasurement::new(
-            // TODO: Fix this:
-            RollupNamespace::Batch,
+        let measurement = BlobSubmitMeasurement::new_for_vanilla(
+            namespace,
             &tx_result,
             bytes,
             lock_acquisition,
@@ -104,7 +104,7 @@ impl VanillaClient {
             blob_hash = %blob_hash,
             gas_used = %tx_response.gas_used,
             bytes,
-            // namespace = ?ns,
+            ?namespace,
             ?lock_acquisition,
             ?submit_time,
             ?total_time,
@@ -120,13 +120,14 @@ impl VanillaClient {
     pub async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
-        namespace: Namespace,
+        namespace_id: Namespace,
+        namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         let (tx, rx) = oneshot::channel();
         let res = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
-            || self.submit_blob_to_namespace_inner(blob, namespace, signer),
+            || self.submit_blob_to_namespace_inner(blob, namespace_id, namespace, signer),
             "send_transaction",
         )
         .await;

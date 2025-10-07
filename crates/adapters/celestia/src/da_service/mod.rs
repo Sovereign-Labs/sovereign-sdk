@@ -4,36 +4,30 @@ mod tests;
 mod vanilla;
 
 use std::fmt::Debug;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use backon::ExponentialBuilder;
 use celestia_rpc::prelude::*;
-use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::Address;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use jsonrpsee::http_client::HttpClient;
-use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::oneshot;
 use tokio::time::Instant;
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
 use crate::da_service::vanilla::VanillaClient;
-use crate::metrics::{
-    BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace,
-};
+use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace};
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
-    APP_VERSION,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
@@ -50,18 +44,19 @@ impl CelestiaClient {
     async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
-        namespace: Namespace,
+        namespace_id: Namespace,
+        namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         match self {
             CelestiaClient::Vanilla(vanilla_client) => {
                 vanilla_client
-                    .submit_blob_to_namespace(blob, namespace, signer)
+                    .submit_blob_to_namespace(blob, namespace_id, namespace, signer)
                     .await
             }
             CelestiaClient::Twinkle(twinkle_client) => {
                 twinkle_client
-                    .submit_blob_to_namespace_inner(blob, namespace)
+                    .submit_blob_to_namespace_inner(blob, namespace_id, namespace, signer)
                     .await
             }
         }
@@ -73,7 +68,7 @@ type BoxError = anyhow::Error;
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     // Client is used for a submission request, where we want to have consistent ordering.
-    submit_client: Arc<Mutex<HttpClient>>,
+    submit_client: CelestiaClient,
     // Client used for queries, where it is not important to have ordering
     read_client: Arc<HttpClient>,
     rollup_batch_namespace: Namespace,
@@ -86,7 +81,8 @@ pub struct CelestiaService {
 
 impl CelestiaService {
     fn with_client(
-        client: HttpClient,
+        submit_client: CelestiaClient,
+        read_client: HttpClient,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
         signer_address: CelestiaAddress,
@@ -95,8 +91,8 @@ impl CelestiaService {
         request_timeout: Duration,
     ) -> Self {
         Self {
-            submit_client: Arc::new(Mutex::new(client.clone())),
-            read_client: Arc::new(client),
+            submit_client,
+            read_client: Arc::new(read_client),
             rollup_batch_namespace,
             rollup_proof_namespace,
             signer_address,
@@ -105,100 +101,28 @@ impl CelestiaService {
             request_timeout,
         }
     }
-
-    #[instrument(skip(self, blob, namespace))]
-    async fn submit_blob_to_namespace(
-        &self,
-        blob: &[u8],
-        namespace: Namespace,
-    ) -> Result<SubmitBlobReceipt<TmHash>, jsonrpsee::core::client::Error> {
-        let start = std::time::Instant::now();
-        let bytes = blob.len();
-        let ns = if namespace == self.rollup_batch_namespace {
-            RollupNamespace::Batch
-        } else if namespace == self.rollup_proof_namespace {
-            RollupNamespace::Proof
-        } else {
-            panic!("Attempt to submit to non batch/proof namespace: {namespace:?}")
-        };
-        debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
-
-        let blob = JsonBlob::new(
-            namespace,
-            blob.to_vec(),
-            Some(self.signer_address.0.clone()),
-            APP_VERSION,
-        )
-        .expect("Bug in CelestiaAdapter");
-        let blob_hash = HexHash::new(*blob.commitment.hash());
-        debug!(
-            namespace = ?ns,
-            commitment = %blob_hash,
-            bytes,
-            data_bytes = blob.data.len(),
-            "Submitting a blob"
-        );
-
-        let tx_config = celestia_rpc::TxConfig::default();
-        let start_lock = std::time::Instant::now();
-        let submit_client = self.submit_client.lock().await;
-        let lock_acquisition = start_lock.elapsed();
-        let start_submit = std::time::Instant::now();
-        let tx_result = submit_client
-            .state_submit_pay_for_blob(&[blob.into()], tx_config)
-            .await;
-        drop(submit_client);
-
-        let submit_time = start_submit.elapsed();
-        let total_time = start.elapsed();
-        let measurement = BlobSubmitMeasurement::new(
-            ns,
-            &tx_result,
-            bytes,
-            lock_acquisition,
-            submit_time,
-            total_time,
-        );
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(measurement);
-        });
-
-        let tx_response = tx_result?;
-        let tx_hash = TmHash(
-            tendermint::Hash::from_str(&tx_response.txhash)
-                .expect("Failed to decode hash from `TxResponse`"),
-        );
-        info!(
-            da_height = tx_response.height,
-            tx_hash = %tx_hash,
-            code = %tx_response.code,
-            blob_hash = %blob_hash,
-            gas_used = %tx_response.gas_used,
-            bytes,
-            namespace = ?ns,
-            ?lock_acquisition,
-            ?submit_time,
-            ?total_time,
-            "Blob has been submitted to Celestia"
-        );
-
-        Ok(SubmitBlobReceipt {
-            blob_hash,
-            da_transaction_id: tx_hash,
-        })
-    }
 }
 
 impl CelestiaService {
     pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
         let request_timeout = Duration::from_secs(config.celestia_rpc_timeout_seconds.get());
-        let client = config.construct_rpc_client();
-
         let backoff_policy = config.get_backoff_policy();
+
+        let submit_client = if let Some(twinkle_config) = &config.twinkle_config {
+            let twinkle_client = TwinkleClient::new(twinkle_config, backoff_policy)
+                .expect("Failed to initialize TwinkleClient");
+            CelestiaClient::Twinkle(twinkle_client)
+        } else {
+            let vanilla_client = VanillaClient::new(&config);
+            CelestiaClient::Vanilla(vanilla_client)
+        };
+
+        let read_client = config.construct_rpc_client();
+
         let fetched_address = run_maybe_retryable_async_fn_with_retries(
             backoff_policy,
             || async {
-                client
+                read_client
                     .state_account_address()
                     .await
                     .map_err(into_transient_with_context)
@@ -228,7 +152,8 @@ impl CelestiaService {
         }
 
         Self::with_client(
-            client,
+            submit_client,
+            read_client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
             fetched_signer,
@@ -329,28 +254,6 @@ impl CelestiaService {
             .await
             .map_err(into_transient_with_context)?;
         Ok(CelestiaHeader::from(header))
-    }
-
-    #[instrument(skip(self, blob), err)]
-    async fn send_transaction_inner(
-        &self,
-        blob: &[u8],
-    ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!("Submitting batch of transactions to Celestia");
-        self.submit_blob_to_namespace(blob, self.rollup_batch_namespace)
-            .await
-            .map_err(into_transient_with_context)
-    }
-
-    #[instrument(skip(self, aggregated_proof), err)]
-    async fn send_proof_inner(
-        &self,
-        aggregated_proof: &[u8],
-    ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!("Submitting aggregated proof to Celestia");
-        self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
-            .await
-            .map_err(into_transient_with_context)
     }
 
     async fn get_proofs_at_inner(
@@ -469,15 +372,14 @@ impl DaService for CelestiaService {
     ) -> oneshot::Receiver<
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
-        let (tx, rx) = oneshot::channel();
-        let res = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.send_transaction_inner(blob),
-            "send_transaction",
-        )
-        .await;
-        tx.send(res).unwrap();
-        rx
+        self.submit_client
+            .submit_blob_to_namespace(
+                blob,
+                self.rollup_batch_namespace,
+                RollupNamespace::Batch,
+                &self.signer_address,
+            )
+            .await
     }
 
     async fn send_proof(
@@ -486,15 +388,14 @@ impl DaService for CelestiaService {
     ) -> oneshot::Receiver<
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
-        let (tx, rx) = oneshot::channel();
-        let res = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.send_proof_inner(aggregated_proof),
-            "send_proof",
-        )
-        .await;
-        tx.send(res).unwrap();
-        rx
+        self.submit_client
+            .submit_blob_to_namespace(
+                aggregated_proof,
+                self.rollup_proof_namespace,
+                RollupNamespace::Proof,
+                &self.signer_address,
+            )
+            .await
     }
 
     #[instrument(err)]

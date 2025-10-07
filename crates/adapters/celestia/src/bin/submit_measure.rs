@@ -4,11 +4,14 @@ use celestia_types::nmt::Namespace;
 use clap::{Parser, ValueEnum};
 use rand::Rng;
 use serde::Deserialize;
+use sov_celestia_adapter::metrics::RollupNamespace;
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::{CelestiaConfig, CelestiaService, TwinkleClient, TwinkleConfig};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -95,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
 
             // Initialize TwinkleClient
             let backoff_policy = ExponentialBuilder::default();
-            let client = TwinkleClient::from_config(&config.da, backoff_policy)?;
+            let client = TwinkleClient::new(&config.da, backoff_policy)?;
 
             // Run measurement for 5 minutes
             let measurement_duration = Duration::from_secs(5 * 60);
@@ -219,6 +222,9 @@ async fn measure_throughput_twinkle(
     );
     println!("Rate limiting: minimum {min_interval:?} between submission attempts");
 
+    let celestia_address =
+        CelestiaAddress::from_str("celestia1a68m2l85zn5xh0l07clk4rfvnezhywc53g8x7s")?;
+
     while start.elapsed() < duration {
         // Rate limiting: ensure at least 300ms between submission attempts
         let elapsed_since_last = last_submission.elapsed();
@@ -237,11 +243,17 @@ async fn measure_throughput_twinkle(
         let mut rng = rand::thread_rng();
         let blob: Vec<u8> = (0..blob_size).map(|_| rng.gen::<u8>()).collect();
         let blob_bytes = blob.len();
+        let celestia_address = celestia_address.clone();
 
         tokio::spawn(async move {
             // Submit blob (using internal method that TwinkleClient has)
             let rx = client
-                .submit_blob_to_namespace_inner(&blob, namespace)
+                .submit_blob_to_namespace_inner(
+                    &blob,
+                    namespace,
+                    RollupNamespace::Batch,
+                    &celestia_address,
+                )
                 .await;
             match rx.await {
                 Ok(Ok(_receipt)) => {
