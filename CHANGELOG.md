@@ -1,3 +1,6 @@
+# 2025-10-07
+- #1825 **Breaking change** modifies the way that state keys are computed. This improves performance but *requires a complete wipe of your database and resync*. 
+
 # 2025-10-06
 - #1818 feature gates much of the state access observability behind the `expensive-observability` feature flag on `sov-modules-api`. Without this flag, deserialization timing is no longer available and `trace` level logs on state access are removed.
 - #1809 Upgrade RETH 1.7.0 -> 1.8.2.
