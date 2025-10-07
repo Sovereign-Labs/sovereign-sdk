@@ -1,3 +1,4 @@
+#![allow(clippy::float_arithmetic)]
 use backon::ExponentialBuilder;
 use celestia_types::nmt::Namespace;
 use clap::{Parser, ValueEnum};
@@ -60,20 +61,11 @@ enum Adapter {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    println!("Processing config from: {}", args.path.display());
-    println!("Using adapter: {:?}", args.adapter);
-
     let config_str = std::fs::read_to_string(&args.path)?;
 
     let result = match args.adapter {
         Adapter::Vanilla => {
             let config: VanillaConfig = toml::from_str(&config_str)?;
-
-            println!("Loaded CelestiaConfig");
-            println!(
-                "Payload: max_batch_size_bytes={}, max_concurrent_blobs={}",
-                config.payload.max_batch_size_bytes, config.payload.max_concurrent_blobs
-            );
 
             let rollup_params = RollupParams {
                 rollup_batch_namespace: Namespace::const_v0(
@@ -84,9 +76,6 @@ async fn main() -> anyhow::Result<()> {
                 ),
             };
             let service = CelestiaService::new(config.da, rollup_params).await;
-
-            let head = service.get_head_block_header().await?;
-            println!("Connected to Celestia. Current head height: {}", head.height());
 
             // Run measurement for 5 minutes
             let measurement_duration = Duration::from_secs(5 * 60);
@@ -101,21 +90,12 @@ async fn main() -> anyhow::Result<()> {
         Adapter::Twinkle => {
             let config: TwinkleConfigWrapper = toml::from_str(&config_str)?;
 
-            println!("Loaded TwinkleConfig");
-            println!(
-                "Payload: max_batch_size_bytes={}, max_concurrent_blobs={}",
-                config.payload.max_batch_size_bytes, config.payload.max_concurrent_blobs
-            );
-
-            let namespace = Namespace::const_v0(
-                config.payload.batch_namespace.as_bytes().try_into()?,
-            );
+            let namespace =
+                Namespace::const_v0(config.payload.batch_namespace.as_bytes().try_into()?);
 
             // Initialize TwinkleClient
             let backoff_policy = ExponentialBuilder::default();
             let client = TwinkleClient::from_config(&config.da, backoff_policy)?;
-
-            println!("Initialized TwinkleClient");
 
             // Run measurement for 5 minutes
             let measurement_duration = Duration::from_secs(5 * 60);
@@ -149,14 +129,12 @@ async fn measure_throughput_vanilla(
     // Get starting block height
     let start_header = service.get_head_block_header().await?;
     let start_height = start_header.height();
-    println!("Starting height: {}", start_height);
-
-    let start = Instant::now();
 
     println!(
-        "Starting measurement: blob_size={} bytes, max_concurrent={}, duration={:?}",
-        blob_size, max_concurrent, duration
+        "Starting measurement (blob_size={blob_size} bytes, max_concurrent={max_concurrent}, duration={duration:?})..."
     );
+
+    let start = Instant::now();
 
     while start.elapsed() < duration {
         let permit = semaphore.clone().acquire_owned().await?;
@@ -171,7 +149,6 @@ async fn measure_throughput_vanilla(
         let blob_bytes = blob.len();
 
         tokio::spawn(async move {
-
             // Submit blob
             let rx = service.send_transaction(&blob).await;
             match rx.await {
@@ -180,11 +157,11 @@ async fn measure_throughput_vanilla(
                     total_bytes.fetch_add(blob_bytes, Ordering::Relaxed);
                 }
                 Ok(Err(e)) => {
-                    eprintln!("Blob submission failed: {:?}", e);
+                    eprintln!("Blob submission failed: {e:?}");
                     failed_blobs.fetch_add(1, Ordering::Relaxed);
                 }
                 Err(e) => {
-                    eprintln!("Failed to receive submission result: {:?}", e);
+                    eprintln!("Failed to receive submission result: {e:?}");
                     failed_blobs.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -198,7 +175,7 @@ async fn measure_throughput_vanilla(
     // Get ending block height
     let end_header = service.get_head_block_header().await?;
     let end_height = end_header.height();
-    println!("Ending height: {}", end_height);
+    println!("Ending height: {end_height}");
 
     let elapsed = start.elapsed();
     let blobs_count = total_blobs.load(Ordering::Relaxed);
@@ -230,16 +207,15 @@ async fn measure_throughput_twinkle(
 
     // Get starting block height
     let start_header = client.get_head_block_header().await?;
-    let start_height: u64 = start_header.height.parse()?;
-    println!("Starting height: {}", start_height);
+    let start_height: u64 = start_header.height.value();
+    println!("Starting height: {start_height}");
 
     let start = Instant::now();
     let min_interval = Duration::from_millis(4000);
     let mut last_submission = Instant::now();
 
     println!(
-        "Starting measurement: blob_size={} bytes, max_concurrent={}, duration={:?}",
-        blob_size, max_concurrent, duration
+        "Starting measurement: blob_size={blob_size} bytes, max_concurrent={max_concurrent}, duration={duration:?}"
     );
     println!("Rate limiting: minimum {min_interval:?} between submission attempts");
 
@@ -263,7 +239,6 @@ async fn measure_throughput_twinkle(
         let blob_bytes = blob.len();
 
         tokio::spawn(async move {
-
             // Submit blob (using internal method that TwinkleClient has)
             let rx = client.submit_blob_to_namespace(&blob, namespace).await;
             match rx.await {
@@ -272,11 +247,11 @@ async fn measure_throughput_twinkle(
                     total_bytes.fetch_add(blob_bytes, Ordering::Relaxed);
                 }
                 Ok(Err(e)) => {
-                    eprintln!("Blob submission failed: {:?}", e);
+                    eprintln!("Blob submission failed: {e:?}");
                     failed_blobs.fetch_add(1, Ordering::Relaxed);
                 }
                 Err(e) => {
-                    eprintln!("Failed to receive submission result: {:?}", e);
+                    eprintln!("Failed to receive submission result: {e:?}");
                     failed_blobs.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -289,8 +264,8 @@ async fn measure_throughput_twinkle(
 
     // Get ending block height
     let end_header = client.get_head_block_header().await?;
-    let end_height: u64 = end_header.height.parse()?;
-    println!("Ending height: {}", end_height);
+    let end_height: u64 = end_header.height.value();
+    println!("Ending height: {end_height}");
 
     let elapsed = start.elapsed();
     let blobs_count = total_blobs.load(Ordering::Relaxed);
@@ -337,19 +312,19 @@ impl MeasurementResult {
 
         println!("\n=== Measurement Results ===");
         println!("Adapter: {:?}", self.adapter);
-        println!("Duration: {:.2}s", duration_secs);
+        println!("Duration: {duration_secs:.2}s");
         println!("Start height: {}", self.start_height);
         println!("End height: {}", self.end_height);
-        println!("Blocks produced: {}", blocks_produced);
+        println!("Blocks produced: {blocks_produced}");
         println!();
-        println!("Submission attempts: {}", total_attempts);
+        println!("Submission attempts: {total_attempts}");
         println!("Successful submissions: {}", self.total_blobs);
         println!("Failed submissions: {}", self.failed_blobs);
-        println!("Success rate: {:.2}%", success_rate);
+        println!("Success rate: {success_rate:.2}%");
         println!();
-        println!("Blob landing ratio: {:.2}% (blobs per block)", landing_ratio);
+        println!("Blob landing ratio: {landing_ratio:.2}% (blobs per block)");
         println!("Total bytes submitted: {} bytes", self.total_bytes);
-        println!("Throughput: {:.2} KiB/s", throughput_kibs);
+        println!("Throughput: {throughput_kibs:.2} KiB/s");
         if self.total_blobs > 0 {
             println!(
                 "Average blob size: {} bytes",

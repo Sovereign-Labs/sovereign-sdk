@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use crate::celestia::{CompactHeader, ProtobufHash};
+use crate::celestia_tm_version;
 use crate::types::TmHash;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
@@ -10,6 +12,9 @@ use serde_with::serde_as;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use std::fmt::Display;
+use tendermint::block::Header as TendermintHeader;
+use tendermint::Hash;
+use tendermint_proto::Protobuf;
 use tokio::sync::oneshot;
 
 const HEADER_URL: &str = "https://t.tech/v0/header";
@@ -266,7 +271,7 @@ impl TwinkleClient {
         rx
     }
 
-    pub async fn get_head_block_header(&self) -> anyhow::Result<BlockHeader> {
+    pub async fn get_head_block_header(&self) -> anyhow::Result<TwinkleBlockHeader> {
         tracing::trace!("Getting head block header");
 
         let header_response: HeaderResponse = (|| async {
@@ -294,60 +299,164 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
 
 #[derive(Debug, Deserialize)]
 pub struct HeaderResponse {
-    pub header: BlockHeader,
+    pub header: TwinkleBlockHeader,
 }
 
+#[serde_as]
 #[derive(Debug, Deserialize)]
-pub struct BlockHeader {
+pub struct TwinkleBlockHeader {
+    // ~~
     pub version: Version,
     #[serde(rename = "chainId")]
-    pub chain_id: String,
-    pub height: String,
-    pub time: String,
+    // +
+    pub chain_id: tendermint::chain::Id,
+    // +
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub height: tendermint::block::Height,
+    //
+    pub time: tendermint::Time,
+    // TODO: Can it be null/empty string? Should we implement default similar to `block::Id`?
     #[serde(rename = "lastBlockId")]
     pub last_block_id: BlockId,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "lastCommitHash")]
-    pub last_commit_hash: String,
+    pub last_commit_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "dataHash")]
-    pub data_hash: String,
+    pub data_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "validatorsHash")]
-    pub validators_hash: String,
+    pub validators_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "nextValidatorsHash")]
-    pub next_validators_hash: String,
+    pub next_validators_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "consensusHash")]
-    pub consensus_hash: String,
+    pub consensus_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "appHash")]
-    pub app_hash: String,
+    pub app_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "lastResultsHash")]
-    pub last_results_hash: String,
+    pub last_results_hash: tendermint::Hash,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "evidenceHash")]
-    pub evidence_hash: String,
+    pub evidence_hash: tendermint::Hash,
     #[serde(rename = "proposerAddress")]
-    pub proposer_address: String,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub proposer_address: tendermint::account::Id,
 }
 
+impl From<TwinkleBlockHeader> for TendermintHeader {
+    fn from(_value: TwinkleBlockHeader) -> Self {
+        todo!()
+    }
+}
+
+impl From<Version> for tendermint::block::header::Version {
+    fn from(value: Version) -> Self {
+        Self {
+            block: value.block,
+            app: value.app,
+        }
+    }
+}
+
+impl From<PartSetHeader> for tendermint::block::parts::Header {
+    fn from(value: PartSetHeader) -> Self {
+        Self::new(value.total, value.hash).expect("Invalid TwinklePartSetHeader")
+    }
+}
+
+impl From<BlockId> for tendermint::block::Id {
+    fn from(value: BlockId) -> Self {
+        Self {
+            hash: value.hash,
+            part_set_header: value.parts.into(),
+        }
+    }
+}
+
+impl From<TwinkleBlockHeader> for CompactHeader {
+    fn from(value: TwinkleBlockHeader) -> Self {
+        let TwinkleBlockHeader {
+            version,
+            chain_id,
+            height,
+            time,
+            last_block_id,
+            last_commit_hash,
+            data_hash,
+            validators_hash,
+            next_validators_hash,
+            consensus_hash,
+            app_hash,
+            last_results_hash,
+            evidence_hash,
+            proposer_address,
+        } = value;
+
+        let data_hash = match data_hash {
+            Hash::Sha256(value) => Some(ProtobufHash(value)),
+            Hash::None => None,
+        };
+        CompactHeader {
+            version: Protobuf::<celestia_tm_version::version::Consensus>::encode_vec(
+                tendermint::block::header::Version::from(version),
+            ),
+            chain_id: chain_id.encode_vec(),
+            height: height.encode_vec(),
+            time: time.encode_vec(),
+            last_block_id: Protobuf::<celestia_tm_version::types::BlockId>::encode_vec(
+                tendermint::block::Id::from(last_block_id),
+            ),
+            last_commit_hash: last_commit_hash.encode_vec(),
+            data_hash,
+            validators_hash: validators_hash.encode_vec(),
+            next_validators_hash: next_validators_hash.encode_vec(),
+            consensus_hash: consensus_hash.encode_vec(),
+            app_hash: app_hash.encode_vec(),
+            last_results_hash: last_results_hash.encode_vec(),
+            evidence_hash: evidence_hash.encode_vec(),
+            proposer_address: proposer_address.encode_vec(),
+        }
+    }
+}
+
+#[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct Version {
-    pub block: String,
-    pub app: String,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub block: u64,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub app: u64,
 }
 
+#[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct BlockId {
-    pub hash: String,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub hash: tendermint::Hash,
     pub parts: PartSetHeader,
 }
 
+#[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct PartSetHeader {
     pub total: u32,
-    pub hash: String,
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    pub hash: tendermint::Hash,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_helper::ROLLUP_PROOF_NAMESPACE;
+    use crate::verifier::RollupParams;
+    use crate::CelestiaConfig;
+    use crate::CelestiaService;
     use celestia_types::nmt::Namespace;
+    use sov_rollup_interface::node::da::DaService;
 
     const API_KEY: &str = "TEMP_SECRET";
 
@@ -382,6 +491,33 @@ mod tests {
         println!("B: {:?}", start.elapsed());
         let receipt = res?;
         println!("RECEIPT: {receipt:?}");
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn get_head_block_header() -> anyhow::Result<()> {
+        let config = CelestiaConfig::dev_config("http://127.0.0.1:26658");
+        let params = RollupParams {
+            rollup_batch_namespace: BATCH_NAMESPACE,
+            rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
+        };
+
+        let vanilla_client = CelestiaService::new(config, params).await;
+
+        let backoff_policy = ExponentialBuilder::default();
+        let twinkle_client = TwinkleClient::from_config(&default_mocha_config(), backoff_policy)?;
+
+        let twinkle_header = twinkle_client.get_head_block_header().await?;
+        println!("Twinkle Header {twinkle_header:?}");
+        let height = twinkle_header.height.value();
+        let compact_header_twinkle = CompactHeader::from(twinkle_header);
+
+        let vanilla_header = vanilla_client.get_block_header_at(height).await?;
+
+        let compact_header_vanilla = vanilla_header.header;
+
+        assert_eq!(compact_header_twinkle, compact_header_vanilla);
 
         Ok(())
     }
