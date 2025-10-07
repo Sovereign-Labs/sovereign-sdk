@@ -202,7 +202,10 @@ mod private {
 
         assert!(key.try_extend(&[1; REMAINING_BYTES]).is_ok());
         assert_eq!(key.len_excluding_prefix(), MAX_INLINE_KEY_LEN);
-        assert_eq!(key.0[..9], [MAX_INLINE_KEY_LEN as u8, 0, 0, 1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            key.0[..9],
+            [MAX_INLINE_KEY_LEN as u8, 0, 0, 1, 2, 3, 4, 5, 6]
+        );
         assert_eq!(&key.without_prefix()[6..], &[1; REMAINING_BYTES]);
     }
 }
