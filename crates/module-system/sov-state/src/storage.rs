@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use jmt::KeyHash;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
@@ -25,46 +25,178 @@ use crate::{
     MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
 };
 
-type ArcFormatFn =
-    Arc<dyn (Fn(&[u8], &mut fmt::Formatter<'_>) -> fmt::Result) + Send + Sync + 'static>;
-
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable.
 #[derive(
     Derivative, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize, UniversalWallet,
 )]
 #[derivative(Clone, PartialEq, Eq, Debug, Hash, Ord)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct SlotKey {
-    #[sov_wallet(hidden)]
-    key: Arc<Vec<u8>>,
-    #[borsh(skip)]
-    #[serde(skip)]
-    #[derivative(
-        Debug = "ignore",
-        PartialEq = "ignore",
-        Hash = "ignore",
-        Ord = "ignore"
-    )]
-    #[sov_wallet(skip)]
-    display_fn: Option<ArcFormatFn>,
+    // // TODO: Handle extra long keys
+    // pub(crate) prefix: Prefix,
+    key: KeyContents,
 }
 
-#[cfg(feature = "arbitrary")]
-impl<'a> arbitrary::Arbitrary<'a> for SlotKey {
-    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
-        const MIN_LEN: usize = 10;
-        const MAX_LEN: usize = 512;
-        // Will include some non alhpanumeric characters, but that's fine.
-        const ASCII_SELECTED: std::ops::RangeInclusive<u8> = b'0'..=b'z';
+/// A logical key consists of [module_tag, item_tag, serialized_key]
+/// We have two different *physical* representations of the key in memory.
+///    If serialized_key length is less than 79 bytes, we store the key inline.
+///    With the representation length_bytes || module_tag || item_tag || serialized_key.
+///       AsRef<[u8]> returns module_tag || item_tag || serialized_key
+///
+///    If the serialized_key length is greater than 79 bytes, we store the key as Vec<u8> containing [module_tag, item_tag, serialized_key].
+///
+/// When we store a slot key on disk, we store the physical representation
+#[derive(
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    UniversalWallet,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Ord,
+    PartialOrd,
+    Clone,
+)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+enum KeyContents {
+    /// A key layed out as follows:
+    /// [len_byte, module_tag, item_tag, key_bytes]
+    Inline(private::InlineKey),
+    /// A key layed out as follows:
+    Reference(Arc<Vec<u8>>),
+}
 
-        let len = u.int_in_range(MIN_LEN..=MAX_LEN)?;
+mod private {
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use serde::{Deserialize, Serialize};
+    use serde_with::{serde_as, Bytes};
+    use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
-        let key: arbitrary::Result<Vec<u8>> =
-            std::iter::repeat_with(|| u.int_in_range(ASCII_SELECTED.clone()))
-                .take(len)
-                .collect();
+    use crate::Prefix;
 
-        Ok(SlotKey::from(key?))
+    /// The total number of bytes in an inline key
+    const INLINE_KEY_BYTES: usize = 82;
+    /// The number of bytes in the metadata of an inline key
+    const INLINE_KEY_METADATA_BYTES: usize = 3;
+    /// The maximum length of key material (excluding prefix) that can be stored in an inline key
+    const MAX_INLINE_KEY_LEN: usize = INLINE_KEY_BYTES - INLINE_KEY_METADATA_BYTES;
+
+    const MODULE_TAG_OFFSET: usize = 1;
+    const ITEM_TAG_OFFSET: usize = 2;
+
+    #[serde_as]
+    #[derive(
+        Serialize,
+        Deserialize,
+        BorshSerialize,
+        BorshDeserialize,
+        Clone,
+        PartialEq,
+        Eq,
+        Debug,
+        Hash,
+        Ord,
+        PartialOrd,
+        UniversalWallet,
+    )]
+    pub(super) struct InlineKey(
+        #[serde_as(as = "Bytes")]
+        /// Layout: [len_byte, module_tag, item_tag, key_bytes]
+        [u8; INLINE_KEY_BYTES],
+    );
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub(super) struct ErrOutOfSpace;
+
+    fn offset(idx: usize) -> usize {
+        3 + idx
+    }
+
+    impl InlineKey {
+        /// By definition, the length of the key is the first byte
+        pub(super) fn len_excluding_prefix(&self) -> usize {
+            self.0[0] as usize
+        }
+
+        #[cfg(test)]
+        pub(super) fn module_tag(&self) -> u8 {
+            self.0[MODULE_TAG_OFFSET]
+        }
+
+        #[cfg(test)]
+        pub(super) fn item_tag(&self) -> u8 {
+            self.0[ITEM_TAG_OFFSET]
+        }
+
+        pub(super) fn without_prefix(&self) -> &[u8] {
+            &self.0[offset(0)..offset(self.len_excluding_prefix())]
+        }
+
+        pub(super) fn with_prefix(&self) -> &[u8] {
+            &self.0[1..offset(self.len_excluding_prefix())]
+        }
+
+        pub fn try_extend(&mut self, other: &[u8]) -> Result<(), ErrOutOfSpace> {
+            let original_len = self.len_excluding_prefix();
+            let new_len = original_len.checked_add(other.len()).ok_or(ErrOutOfSpace)?;
+            if new_len > MAX_INLINE_KEY_LEN {
+                return Err(ErrOutOfSpace);
+            }
+            self.0[0] = new_len.try_into().expect("Overflow checking length - this should be unreachable since we've already checked the length");
+            self.0[offset(original_len)..offset(new_len)].copy_from_slice(other);
+            Ok(())
+        }
+
+        pub fn try_from_prefix_and_key(prefix: Prefix, key: &[u8]) -> Result<Self, ErrOutOfSpace> {
+            if key.len() > MAX_INLINE_KEY_LEN {
+                return Err(ErrOutOfSpace);
+            }
+            let mut output = Self([0u8; INLINE_KEY_BYTES]);
+            output.0[MODULE_TAG_OFFSET] = prefix.module;
+            output.0[ITEM_TAG_OFFSET] = prefix.item;
+            output.try_extend(key)?;
+            Ok(output)
+        }
+    }
+
+    #[cfg(feature = "arbitrary")]
+    impl arbitrary::Arbitrary<'_> for InlineKey {
+        fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Self> {
+            let len = u.int_in_range(0..=MAX_INLINE_KEY_LEN)?;
+            let key = u.bytes(len)?;
+            Ok(Self::try_from_prefix_and_key(Prefix::new(0, 0), key).unwrap())
+        }
+    }
+
+    #[test]
+    fn test_inline_key_extend() {
+        let mut key = InlineKey([0u8; INLINE_KEY_BYTES]);
+        key.try_extend(&[1, 2, 3]).unwrap();
+        assert_eq!(key.len_excluding_prefix(), 3);
+        assert_eq!(key.without_prefix(), &[1, 2, 3]);
+        assert_eq!(key.module_tag(), 0);
+        assert_eq!(key.item_tag(), 0);
+        assert_eq!(key.0[..6], [3, 0, 0, 1, 2, 3]);
+
+        key.try_extend(&[4, 5, 6]).unwrap();
+        assert_eq!(key.len_excluding_prefix(), 6);
+        assert_eq!(key.without_prefix(), &[1, 2, 3, 4, 5, 6]);
+        assert_eq!(key.module_tag(), 0);
+        assert_eq!(key.item_tag(), 0);
+        assert_eq!(key.0[..9], [6, 0, 0, 1, 2, 3, 4, 5, 6]);
+
+        assert!(key.try_extend(&[1; 74]).is_err());
+        assert_eq!(key.len_excluding_prefix(), 6);
+        assert_eq!(key.0[..9], [6, 0, 0, 1, 2, 3, 4, 5, 6]);
+
+        assert!(key.try_extend(&[1; 73]).is_ok());
+        assert_eq!(key.len_excluding_prefix(), 79);
+        assert_eq!(key.0[..9], [79, 0, 0, 1, 2, 3, 4, 5, 6]);
+        assert_eq!(&key.without_prefix()[6..], &[1; 73]);
     }
 }
 
@@ -75,50 +207,102 @@ impl PartialOrd for SlotKey {
     }
 }
 
-impl From<Vec<u8>> for SlotKey {
-    fn from(key: Vec<u8>) -> Self {
-        Self {
-            key: Arc::new(key),
-            display_fn: None,
+impl SlotKey {
+    /// Returns a new [`Arc`] reference to the bytes of this key excluding the prefix.
+    pub fn without_prefix(&self) -> &[u8] {
+        match &self.key {
+            KeyContents::Inline(key) => key.without_prefix(),
+            KeyContents::Reference(key) => &key.as_ref()[2..],
         }
     }
-}
 
-impl SlotKey {
-    /// Returns a new [`Arc`] reference to the bytes of this key.
-    pub fn key(&self) -> Arc<Vec<u8>> {
-        self.key.clone()
+    /// Returns a new [`Arc`] reference to the bytes of this key including the prefix
+    pub fn with_prefix(&self) -> &[u8] {
+        match &self.key {
+            KeyContents::Inline(key) => key.with_prefix(),
+            KeyContents::Reference(key) => &key.as_ref()[..],
+        }
     }
 
-    /// Returns a new [`Arc`] reference to the bytes of this key.
-    pub fn key_ref(&self) -> &Vec<u8> {
-        self.key.as_ref()
+    /// Returns the length of the key including the prefix.
+    // Is empty would always return false because of the prefix, so we don't provide it.
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> usize {
+        match &self.key {
+            KeyContents::Inline(key) => key.len_excluding_prefix() + 2,
+            KeyContents::Reference(key) => key.len(),
+        }
     }
 
-    /// Returns the size of the key.
-    pub fn size(&self) -> usize {
-        self.key.len()
-    }
-
-    /// Returns the display function for this key.
-    pub fn display_fn(&self) -> Option<ArcFormatFn> {
-        self.display_fn.clone()
-    }
-}
-
-impl AsRef<Vec<u8>> for SlotKey {
-    fn as_ref(&self) -> &Vec<u8> {
-        &self.key
+    /// Craetes a test key with the given byte.
+    pub fn test_key(byte: u8) -> Self {
+        Self {
+            key: KeyContents::Inline(
+                private::InlineKey::try_from_prefix_and_key(Prefix::new(byte, byte), &[byte])
+                    .unwrap(),
+            ),
+        }
     }
 }
 
 impl fmt::Display for SlotKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(display_fn) = &self.display_fn {
-            display_fn(self.key.as_ref(), f)
-        } else {
-            write!(f, "{}", String::from_utf8_lossy(self.key().as_ref()))
+        let key: &[u8] = self.as_ref();
+        write!(f, "{}", hex::encode(key))
+    }
+}
+
+impl AsRef<[u8]> for SlotKey {
+    fn as_ref(&self) -> &[u8] {
+        match &self.key {
+            KeyContents::Inline(key) => key.with_prefix(),
+            KeyContents::Reference(key) => key.as_ref(),
         }
+    }
+}
+
+enum SlotKeyBuilder {
+    Inline(private::InlineKey),
+    Reference(Vec<u8>),
+}
+
+impl From<SlotKeyBuilder> for KeyContents {
+    fn from(builder: SlotKeyBuilder) -> Self {
+        match builder {
+            SlotKeyBuilder::Inline(key) => KeyContents::Inline(key),
+            SlotKeyBuilder::Reference(key) => KeyContents::Reference(Arc::new(key)),
+        }
+    }
+}
+
+impl SlotKeyBuilder {
+    pub fn with_prefix(prefix: Prefix) -> Self {
+        Self::Inline(private::InlineKey::try_from_prefix_and_key(prefix, &[]).unwrap())
+    }
+}
+
+impl std::io::Write for SlotKeyBuilder {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            SlotKeyBuilder::Inline(key) => {
+                if key.try_extend(buf).is_err() {
+                    let mut new_key =
+                        Vec::with_capacity(key.len_excluding_prefix() + buf.len() + 2);
+                    new_key.extend(key.with_prefix());
+                    new_key.extend(buf);
+                    *self = SlotKeyBuilder::Reference(new_key);
+                }
+            }
+            SlotKeyBuilder::Reference(key) => {
+                key.write(buf)?;
+            }
+        };
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
@@ -130,52 +314,28 @@ impl SlotKey {
         K: fmt::Display,
         Q: ?Sized,
     {
-        let encoded_key = codec.encode_like(key);
-
-        let mut full_key = Vec::<u8>::with_capacity(prefix.len().saturating_add(encoded_key.len()));
-        full_key.extend(prefix.as_ref());
-        full_key.extend(&encoded_key);
-        let prefix_len = prefix.len();
-        let codec = codec.clone();
-        let display_fn: Option<ArcFormatFn> = Some(Arc::new(
-            move |key_bytes: &[u8], formatter: &mut fmt::Formatter<'_>| {
-                if key_bytes.len() < prefix_len {
-                    return Err(std::fmt::Error);
-                }
-                let prefix = &key_bytes[..prefix_len];
-                let key = &key_bytes[prefix_len..];
-                let key = KC::try_decode(&codec, key).map_err(|_| std::fmt::Error)?;
-                let prefix_str = std::str::from_utf8(prefix).map_err(|_e| std::fmt::Error)?;
-                write!(formatter, "{prefix_str}{key}")
-            },
-        ));
+        let mut builder = SlotKeyBuilder::with_prefix(*prefix);
+        codec.encode_like(key, &mut builder);
         Self {
-            key: Arc::new(full_key),
-            display_fn,
+            key: builder.into(),
         }
     }
 
     /// Used only in tests.
     /// Builds a storage key from a byte slice
     pub fn from_slice(key: &[u8]) -> Self {
+        use std::io::Write;
+        let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(0, 0));
+        builder.write_all(key).unwrap();
         Self {
-            key: Arc::new(key.to_vec()),
-            display_fn: None,
+            key: builder.into(),
         }
     }
 
     /// Creates a new [`SlotKey`] from a prefix.
     pub fn singleton(prefix: &Prefix) -> Self {
-        Self {
-            key: Arc::new(prefix.as_ref().to_vec()),
-            display_fn: Some(Arc::new(
-                move |key_bytes: &[u8], formatter: &mut fmt::Formatter<'_>| {
-                    let prefix_str =
-                        std::str::from_utf8(key_bytes).map_err(|_e| std::fmt::Error)?;
-                    formatter.write_str(prefix_str)
-                },
-            )),
-        }
+        let builder = SlotKeyBuilder::with_prefix(*prefix).into();
+        Self { key: builder }
     }
 }
 
@@ -233,7 +393,7 @@ impl SlotValue {
         Vq: ?Sized,
         VC: EncodeLike<Vq, V>,
     {
-        let encoded_value = codec.encode_like(value);
+        let encoded_value = codec.encode_to_vec_like(value);
         Self {
             value: Arc::new(encoded_value),
         }

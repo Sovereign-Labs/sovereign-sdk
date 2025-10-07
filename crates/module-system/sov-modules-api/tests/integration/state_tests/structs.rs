@@ -33,7 +33,7 @@ impl StateThing for StateValueSet {
     type Value = u32;
 
     fn create(state: &mut impl InfallibleStateAccessor) -> Self {
-        let mut state_value = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+        let mut state_value = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
         state_value.set(&10, state).unwrap_infallible();
         StateValueSet(state_value)
     }
@@ -58,7 +58,7 @@ impl StateThing for StateVecSet {
     type Value = Vec<u32>;
 
     fn create(state: &mut impl InfallibleStateAccessor) -> Self {
-        let mut state_vec = StateVec::with_codec(Prefix::new(vec![0]), BorshCodec);
+        let mut state_vec = StateVec::with_codec(Prefix::new(0, 0), BorshCodec);
         state_vec
             .set_all(vec![10, 20, 30, 40, 50, 60], state)
             .unwrap_infallible();
@@ -84,7 +84,7 @@ impl StateThing for StateVecPush {
     type Value = Vec<u32>;
 
     fn create(state: &mut impl InfallibleStateAccessor) -> Self {
-        let mut state_vec = StateVec::with_codec(Prefix::new(vec![0]), BorshCodec);
+        let mut state_vec = StateVec::with_codec(Prefix::new(0, 0), BorshCodec);
         state_vec.set_all(vec![10], state).unwrap_infallible();
         StateVecPush(state_vec)
     }
@@ -109,7 +109,7 @@ impl StateThing for StateVecRemove {
     type Value = Vec<u32>;
 
     fn create(state: &mut impl InfallibleStateAccessor) -> Self {
-        let mut state_vec = StateVec::with_codec(Prefix::new(vec![0]), BorshCodec);
+        let mut state_vec = StateVec::with_codec(Prefix::new(0, 0), BorshCodec);
         state_vec
             .set_all(vec![3u32; 100], state)
             .unwrap_infallible();
@@ -218,7 +218,7 @@ fn test_state_vec_remove() {
 fn test_witness_round_trip() -> Result<(), Infallible> {
     let mut storage_manager = SimpleStorageManager::<StorageSpec>::new();
 
-    let mut state_value = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     // Native execution
     let (witness, root) = {
@@ -276,7 +276,7 @@ fn test_borrow_and_get_state_value() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
-    let mut state_value = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_value.borrow(&mut state).unwrap_infallible();
     assert!(val.is_none());
@@ -300,7 +300,7 @@ fn test_borrow_and_save_state_value() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
-    let mut state_value = StateValue::<i32>::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = StateValue::<i32>::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_value.borrow_mut(&mut state).unwrap_infallible();
     assert!(val.is_none());
@@ -339,7 +339,7 @@ fn test_borrow_and_get_state_map() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
-    let mut state_map = StateMap::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_map.borrow(&0, &mut state).unwrap_infallible();
     assert!(val.is_none());
@@ -369,7 +369,7 @@ fn test_borrow_and_save_state_map() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
-    let mut state_map = StateMap::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_map.borrow(&0, &mut state).unwrap_infallible();
     assert!(val.is_none());

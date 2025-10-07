@@ -61,7 +61,8 @@ fn setup_storage_manager(
             let key_hash = KeyHash::with::<sha2::Sha256>(&key);
             (key_hash, key)
         });
-        let materialized_preimages = StateDb::materialize_preimages(Vec::new(), preimages).unwrap();
+        let materialized_preimages =
+            StateDb::materialize_preimages(Vec::<(_, Vec<u8>)>::new(), preimages).unwrap();
 
         old_keys.extend(new_keys.into_iter());
 

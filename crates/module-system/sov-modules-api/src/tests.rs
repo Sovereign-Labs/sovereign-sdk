@@ -58,6 +58,10 @@ impl crate::ModuleInfo for Module {
         &self.id
     }
 
+    fn discriminant(&self) -> u8 {
+        0
+    }
+
     fn prefix(&self) -> crate::ModulePrefix {
         crate::ModulePrefix::new_module(module_path!(), "Module")
     }

@@ -147,7 +147,7 @@ where
     ) -> Result<ValueOrError<V, N>, Reader::Error> {
         Ok(self
             .get(state)?
-            .ok_or_else(|| StateValueError::<N>::MissingValue(self.prefix().clone(), PhantomData)))
+            .ok_or_else(|| StateValueError::<N>::MissingValue(*self.prefix(), PhantomData)))
     }
 
     /// Removes the value from state, returning the value (or None if the key is absent).
@@ -168,7 +168,7 @@ where
     ) -> Result<ValueOrError<V, N>, <ReaderAndWriter as StateWriter<N>>::Error> {
         Ok(self
             .remove(state)?
-            .ok_or_else(|| StateValueError::<N>::MissingValue(self.prefix().clone(), PhantomData)))
+            .ok_or_else(|| StateValueError::<N>::MissingValue(*self.prefix(), PhantomData)))
     }
 
     /// Deletes a value from state.

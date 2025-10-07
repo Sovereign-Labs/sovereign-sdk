@@ -12861,6 +12861,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "serde",
  "serde-big-array",
+ "serde_with",
  "sha2 0.10.9",
  "sov-db",
  "sov-metrics",

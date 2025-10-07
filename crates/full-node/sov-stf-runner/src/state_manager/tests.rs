@@ -1064,7 +1064,7 @@ fn produce_synthetic_changes<Da: DaSpec>(
     accesses
         .user
         .ordered_writes
-        .push((SlotKey::from(data.clone()), Some(SlotValue::from(data))));
+        .push((SlotKey::from_slice(&data), Some(SlotValue::from(data))));
     let (state_root, state_update) = prover_storage
         .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root)
         .unwrap();

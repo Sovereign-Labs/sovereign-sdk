@@ -4,6 +4,7 @@ mod bcs_codec;
 mod borsh_codec;
 
 use core::fmt;
+use std::io::Write;
 
 pub use bcs_codec::BcsCodec;
 pub use borsh_codec::BorshCodec;
@@ -18,7 +19,17 @@ pub trait StateItemEncoder<V: ?Sized> {
     ///
     /// This method **must** not panic as all instances of the value type are
     /// supposed to be serializable.
-    fn encode(&self, value: &V) -> Vec<u8>;
+    fn encode(&self, value: &V, writer: &mut impl Write);
+
+    /// Serializes a value into a bytes vector.
+    ///
+    /// This method **must** not panic as all instances of the value type are
+    /// supposed to be serializable.
+    fn encode_to_vec(&self, value: &V) -> Vec<u8> {
+        let mut out = vec![];
+        self.encode(value, &mut out);
+        out
+    }
 }
 
 /// A trait for types that can deserialize values from storage.
@@ -81,7 +92,14 @@ pub trait StateCodec: Default + Clone + Send + Sync + 'static {
 /// encodings by default.
 pub trait EncodeLike<Ref: ?Sized, Target>: StateItemEncoder<Target> {
     /// Encodes a reference to `Ref` as if it were a reference to `Target`.
-    fn encode_like(&self, borrowed: &Ref) -> Vec<u8>;
+    fn encode_like(&self, borrowed: &Ref, writer: &mut impl Write);
+
+    /// Encodes a reference to `Ref` as if it were a reference to `Target` and returns a `Vec<u8>`.
+    fn encode_to_vec_like(&self, borrowed: &Ref) -> Vec<u8> {
+        let mut writer = vec![];
+        self.encode_like(borrowed, &mut writer);
+        writer
+    }
 }
 
 /// All items can be encoded like themselves by all codecs.
@@ -89,8 +107,8 @@ impl<C, T> EncodeLike<T, T> for C
 where
     C: StateItemCodec<T>,
 {
-    fn encode_like(&self, borrowed: &T) -> Vec<u8> {
-        self.encode(borrowed)
+    fn encode_like(&self, borrowed: &T, writer: &mut impl Write) {
+        self.encode(borrowed, writer);
     }
 }
 #[cfg(test)]
@@ -108,9 +126,10 @@ mod tests {
     #[test_strategy::proptest]
     fn test_borsh_slice_encode_alike(#[strategy(arb_vec_i32())] vec: Vec<i32>) {
         let codec = BorshCodec;
-        assert_eq!(
-            <BorshCodec as EncodeLike<[i32], Vec<i32>>>::encode_like(&codec, &vec[..]),
-            codec.encode(&vec)
-        );
+        let mut left = vec![];
+        let mut right = vec![];
+        <BorshCodec as EncodeLike<[i32], Vec<i32>>>::encode_like(&codec, &vec[..], &mut left);
+        codec.encode(&vec, &mut right);
+        assert_eq!(left, right);
     }
 }

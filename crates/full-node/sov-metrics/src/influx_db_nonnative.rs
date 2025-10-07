@@ -15,9 +15,6 @@ type ArcFormatFn =
 /// Metrics for a single state access.
 #[derive(Debug)]
 pub struct StateAccessMetric {
-    /// The key being accessed
-    #[cfg_attr(not(feature = "native"), allow(dead_code))]
-    key: MetricSlotKey,
     #[allow(missing_docs)]
     pub storage_read_size: Option<u32>,
     #[allow(missing_docs)]
@@ -72,9 +69,8 @@ impl std::fmt::Debug for MetricSlotKey {
 
 impl StateAccessMetric {
     /// Creates a new state access metric.
-    pub fn new_size(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
+    pub fn new_size() -> Self {
         Self {
-            key: MetricSlotKey::new(Some(key), display_fn),
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetSize,
@@ -82,9 +78,8 @@ impl StateAccessMetric {
     }
 
     /// Creates a new state access metric.
-    pub fn new_read(key: Arc<Vec<u8>>, display_fn: Option<ArcFormatFn>) -> Self {
+    pub fn new_read() -> Self {
         Self {
-            key: MetricSlotKey::new(Some(key), display_fn),
             storage_read_size: None,
             duration: MaybeTimer::started(),
             access_type: StateAccessType::GetValue,
@@ -94,7 +89,6 @@ impl StateAccessMetric {
     /// Returns a serializable placeholder metric.
     pub fn placeholder() -> Self {
         Self {
-            key: Default::default(),
             storage_read_size: None,
             duration: MaybeTimer::Completed(Duration::from_secs(0)),
             access_type: StateAccessType::GetSize,
@@ -119,13 +113,6 @@ fn summarize(metrics: &StateMetrics, prefix: &str, target: &mut Vec<u8>) -> std:
         ",{prefix}_total_reads={total_reads},{prefix}_total_read_duration_us={total_read_timing},{prefix}_cache_misses={cache_misses},{prefix}_cache_miss_bytes={cache_miss_bytes},{prefix}_total_deserialize_bytes={total_deserialize_bytes},{prefix}_total_deserialize_duration_us={total_deserialize_duration}",
     )?;
     write!(target, ",{prefix}_slowest_read={},{prefix}_slowest_read_storage_read_size={slowest_read_storage_read_size}", slowest_read.as_micros())?;
-    if metrics.slowest_access.key.display_fn.is_some() {
-        write!(
-            target,
-            ",{prefix}_slowest_read_key=\"{}\"",
-            metrics.slowest_access.key
-        )?;
-    }
     write!(target, ",{prefix}_slowest_deserialization_bytes={slowest_deserialization_bytes},{prefix}_slowest_deserialization_duration_us={slowest_deserialization_duration}")?;
     if metrics.slowest_deserialize.key.display_fn.is_some() {
         write!(
