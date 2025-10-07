@@ -108,10 +108,7 @@ impl<S: Spec> StateConsistency<S> {
         if rollup_height != expected_rollup_height {
             mismatches.push(
                 format!(
-                    "Rollup height mismatch. Transaction expected {}, but actual state is {} (sanity check: saved state from begin block hook is {})",
-                    expected_rollup_height,
-                    rollup_height,
-                    saved_rollup_height
+                    "Rollup height mismatch. Transaction expected {expected_rollup_height}, but actual state is {rollup_height}",
                 ));
         };
 
@@ -123,11 +120,8 @@ impl<S: Spec> StateConsistency<S> {
         // expose any mismatch in the kernel state when the node process it afterwards
         if visible_slot_number != expected_visible_slot_number {
             mismatches.push(format!(
-            "Visible slot number mismatch. Transaction expected {}, but actual state is {} (sanity check: saved from hook is {})",
-            expected_visible_slot_number,
-            visible_slot_number,
-            saved_rollup_height
-        ))
+            "Visible slot number mismatch. Transaction expected {expected_visible_slot_number}, but actual state is {visible_slot_number}",
+        ));
         };
 
         let max_slot_number = state.max_allowed_slot_number_to_access().get();
@@ -135,10 +129,8 @@ impl<S: Spec> StateConsistency<S> {
         // saved_visible_slot_number and state.visible_slot_number, so no need for sanity check
         if !max_slot_number == expected_visible_slot_number {
             mismatches.push(format!(
-            "Max slot number mismatch. Transaction expected {} (equal to visible_slot_number), but actual state is {}",
-            expected_visible_slot_number,
-            max_slot_number
-        ))
+            "Max slot number mismatch. Transaction expected {expected_visible_slot_number} (equal to visible_slot_number), but actual state is {max_slot_number}",
+        ));
         };
 
         let state_root = self.latest_state_root.get_or_err(state)??;
@@ -147,7 +139,7 @@ impl<S: Spec> StateConsistency<S> {
             "State root mismatch. Transaction expected {}, but actual root (saved in begin_rollup_block_hook, from previous slot) is {}",
             hex::encode(expected_state_root),
             state_root
-        ))
+        ));
         };
 
         if !mismatches.is_empty() {
