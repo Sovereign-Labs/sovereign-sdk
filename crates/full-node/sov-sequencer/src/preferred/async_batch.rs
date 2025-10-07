@@ -87,10 +87,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
                     // If the worker executor provides cache values in time, we apply them to the main executor.
                     // Otherwise, we proceed without waiting and let the main executor continue.
                     if let Ok(change_set) = rec.try_recv() {
-                        let app_t = std::time::Instant::now();
                         scratchpad.apply_change_set(change_set);
-                        let app_t = app_t.elapsed();
-                        dbg!(app_t);
                     }
                 }
             }

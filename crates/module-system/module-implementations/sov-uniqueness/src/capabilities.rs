@@ -26,7 +26,7 @@ impl<S: Spec> Uniqueness<S> {
                 ExecutionContext::SequencerWarmUp => {
                     self.check_nonce_uniqueness_allow_nonconsecutive(credential_id, nonce, state)
                 }
-                _ => self.check_nonce_uniqueness(credential_id, nonce, state),
+                _ => self.check_nonce_uniqueness(credential_id, nonce, state, execution_context),
             },
             UniquenessData::Generation(generation) => {
                 self.check_generation_uniqueness(credential_id, generation, transaction_hash, state)

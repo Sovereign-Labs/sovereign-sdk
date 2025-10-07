@@ -1,4 +1,4 @@
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader};
+use sov_modules_api::{CredentialId, ExecutionContext, Spec, StateAccessor, StateReader};
 use sov_state::User;
 
 use crate::Uniqueness;
@@ -8,11 +8,14 @@ impl<S: Spec> Uniqueness<S> {
         credential_id: &CredentialId,
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
+        execution_context: &ExecutionContext,
     ) -> anyhow::Result<()> {
         let time = std::time::Instant::now();
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
         let u0 = time.elapsed();
-        dbg!(u0);
+        if execution_context == &ExecutionContext::Sequencer {
+            //dbg!(u0);
+        }
 
         anyhow::ensure!(
             nonce == transaction_nonce,
@@ -31,7 +34,7 @@ impl<S: Spec> Uniqueness<S> {
         let time = std::time::Instant::now();
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
         let u1 = time.elapsed();
-        dbg!(u1);
+        //dbg!(u1);
 
         anyhow::ensure!(
             nonce <= transaction_nonce,

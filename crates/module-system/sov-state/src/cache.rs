@@ -97,7 +97,7 @@ pub(crate) mod internal {
     /// changed temporarily and then reset to its original value
     #[derive(Default, Debug, Clone)]
     pub(crate) struct CacheLog {
-        revertable_log: std::collections::HashMap<SlotKey, Access>,
+        pub(crate) revertable_log: std::collections::HashMap<SlotKey, Access>,
         log: std::collections::HashMap<SlotKey, Access>,
     }
 
@@ -586,7 +586,6 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         cache: &mut CacheLog,
     ) {
         revertable_ordered_reads.push((key.clone(), node.clone()));
-
         cache.add_read(key, node);
     }
 
@@ -595,17 +594,25 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         &mut self,
         reads: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
     ) {
+        //self.revertable_ordered_reads.reserve(reads.len());
+        //self.cache.revertable_log.reserve(reads.len());
         for (key, node) in reads {
             if self.cache.get(&key).is_some() {
                 continue;
             }
 
+            //let add_t = std::time::Instant::now();
+
+            //let len = self.cache.revertable_log.len();
+            //let cap = self.cache.revertable_log.capacity();
             Self::add_read(
                 key,
                 node,
                 &mut self.revertable_ordered_reads,
                 &mut self.cache,
             );
+            //let add_t = add_t.elapsed();
+            //dbg!(add_t, len, cap);
         }
     }
 }

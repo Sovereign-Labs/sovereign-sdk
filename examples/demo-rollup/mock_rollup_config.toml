@@ -41,7 +41,7 @@ bind_port = 12346
 # public_address = "http://rollup.sovereign.xyz"
 
 [monitoring]
-telegraf_address = "udp://127.0.0.1:8094"
+telegraf_address = "udp://127.0.0.1:9094"
 # Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
 # It is expected from the rollup node to produce metrics all the time,
 # so measurements are buffered by size and not sent by time.

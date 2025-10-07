@@ -1672,7 +1672,7 @@ where
         }
 
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
-        tokio::time::sleep(Duration::from_millis(3000)).await;
+        //tokio::time::sleep(Duration::from_millis(3000)).await;
 
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
