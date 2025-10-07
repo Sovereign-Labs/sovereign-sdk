@@ -75,7 +75,7 @@ fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStr
 
     let mut state_field_id = 0;
     for field in fields.iter() {
-        // We limit the number of state fields to 127 to avoid overflows when we generate an item discriminant for the length field of namespaced state maps. 
+        // We limit the number of state fields to 127 to avoid overflows when we generate an item discriminant for the length field of namespaced state maps.
         // See the `NamespacedStateMap` SlotKey definition for more details.
         if state_field_id > 127 {
             return Err(syn::Error::new(
