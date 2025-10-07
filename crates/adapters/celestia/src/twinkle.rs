@@ -1,11 +1,12 @@
 #![allow(dead_code)]
 
 use crate::celestia::{CompactHeader, ProtobufHash};
-use crate::celestia_tm_version;
 use crate::types::TmHash;
+use crate::{celestia_tm_version, CelestiaHeader};
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
 use celestia_types::nmt::Namespace;
+use celestia_types::DataAvailabilityHeader;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -96,6 +97,7 @@ pub struct SubmitBlobAsyncResponse {
 pub enum BlobStatus {
     Pending,
     Included,
+    Rejected,
 }
 
 #[serde_as]
@@ -227,12 +229,17 @@ impl TwinkleClient {
         tokio::select! {
             result = async {
                 loop {
+                    tokio::time::sleep(self.pull_interval).await;
                     // Returning error here, as network errors will be retried inside
                     let response = self
                         .blob_status(&submit_response.twinkle_request_id)
                         .await?;
-                    if matches!(response.status, BlobStatus::Included) {
-                        let height = response.height;
+                    match response.status {
+                        BlobStatus::Pending => {
+                            continue;
+                        }
+                        BlobStatus::Included => {
+                                      let height = response.height;
                         let receipt = SubmitBlobReceipt::try_from(response)?;
                         tracing::debug!(
                             ?submit_time,
@@ -241,8 +248,16 @@ impl TwinkleClient {
                             height = ?height,
                             "Blob has been included");
                         return Ok(receipt);
-                    }
-                    tokio::time::sleep(self.pull_interval).await;
+                        }
+                        BlobStatus::Rejected => {
+                            tracing::debug!(
+                                ?submit_time,
+                                pull_time = ?pull_start.elapsed(),
+                                total_time = ?start.elapsed(),
+                                "Blob has been rejected");
+                            anyhow::bail!("Blob has been rejected");
+                        }
+                    };
                 }
             } => result,
             _ = timeout => {
@@ -271,12 +286,15 @@ impl TwinkleClient {
         rx
     }
 
-    pub async fn get_head_block_header(&self) -> anyhow::Result<TwinkleBlockHeader> {
+    async fn query_header(&self, height: Option<u64>) -> anyhow::Result<CelestiaHeader> {
         tracing::trace!("Getting head block header");
 
         let header_response: HeaderResponse = (|| async {
             let mut request = self.client.get(HEADER_URL);
             request = request.query(&[("network", self.network.to_string())]);
+            if let Some(height) = height {
+                request = request.query(&[("height", height)]);
+            }
             let response = request.send().await?;
             decode_on_success(response).await
         })
@@ -284,7 +302,20 @@ impl TwinkleClient {
         .await
         .context("Head block header")?;
 
-        Ok(header_response.header)
+        let compact_header = CompactHeader::from(header_response.header);
+        let empty_dah = DataAvailabilityHeader::new_unchecked(Vec::new(), Vec::new());
+
+        let celestia_header = CelestiaHeader::new(empty_dah, compact_header);
+
+        Ok(celestia_header)
+    }
+
+    pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
+        self.query_header(None).await
+    }
+
+    pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
+        self.query_header(Some(height)).await
     }
 }
 
@@ -299,52 +330,47 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
 
 #[derive(Debug, Deserialize)]
 pub struct HeaderResponse {
-    pub header: TwinkleBlockHeader,
+    header: TwinkleBlockHeader,
 }
 
 #[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct TwinkleBlockHeader {
-    // ~~
-    pub version: Version,
+    version: Version,
     #[serde(rename = "chainId")]
-    // +
-    pub chain_id: tendermint::chain::Id,
-    // +
+    chain_id: tendermint::chain::Id,
     #[serde_as(as = "serde_with::DisplayFromStr")]
-    pub height: tendermint::block::Height,
-    //
-    pub time: tendermint::Time,
-    // TODO: Can it be null/empty string? Should we implement default similar to `block::Id`?
+    height: tendermint::block::Height,
+    time: tendermint::Time,
     #[serde(rename = "lastBlockId")]
-    pub last_block_id: BlockId,
+    last_block_id: BlockId,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "lastCommitHash")]
-    pub last_commit_hash: tendermint::Hash,
+    last_commit_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "dataHash")]
-    pub data_hash: tendermint::Hash,
+    data_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "validatorsHash")]
-    pub validators_hash: tendermint::Hash,
+    validators_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "nextValidatorsHash")]
-    pub next_validators_hash: tendermint::Hash,
+    next_validators_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "consensusHash")]
-    pub consensus_hash: tendermint::Hash,
+    consensus_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "appHash")]
-    pub app_hash: tendermint::Hash,
+    app_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "lastResultsHash")]
-    pub last_results_hash: tendermint::Hash,
+    last_results_hash: tendermint::Hash,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     #[serde(rename = "evidenceHash")]
-    pub evidence_hash: tendermint::Hash,
+    evidence_hash: tendermint::Hash,
     #[serde(rename = "proposerAddress")]
     #[serde_as(as = "serde_with::DisplayFromStr")]
-    pub proposer_address: tendermint::account::Id,
+    proposer_address: tendermint::account::Id,
 }
 
 impl From<TwinkleBlockHeader> for TendermintHeader {
@@ -456,6 +482,7 @@ mod tests {
     use crate::CelestiaConfig;
     use crate::CelestiaService;
     use celestia_types::nmt::Namespace;
+    use sov_rollup_interface::da::BlockHeaderTrait;
     use sov_rollup_interface::node::da::DaService;
 
     const API_KEY: &str = "TEMP_SECRET";
@@ -510,14 +537,12 @@ mod tests {
 
         let twinkle_header = twinkle_client.get_head_block_header().await?;
         println!("Twinkle Header {twinkle_header:?}");
-        let height = twinkle_header.height.value();
-        let compact_header_twinkle = CompactHeader::from(twinkle_header);
+
+        let height = twinkle_header.height();
 
         let vanilla_header = vanilla_client.get_block_header_at(height).await?;
 
-        let compact_header_vanilla = vanilla_header.header;
-
-        assert_eq!(compact_header_twinkle, compact_header_vanilla);
+        assert_eq!(twinkle_header.header, vanilla_header.header);
 
         Ok(())
     }

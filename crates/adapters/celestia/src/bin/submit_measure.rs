@@ -207,7 +207,7 @@ async fn measure_throughput_twinkle(
 
     // Get starting block height
     let start_header = client.get_head_block_header().await?;
-    let start_height: u64 = start_header.height.value();
+    let start_height: u64 = start_header.height();
     println!("Starting height: {start_height}");
 
     let start = Instant::now();
@@ -264,7 +264,7 @@ async fn measure_throughput_twinkle(
 
     // Get ending block height
     let end_header = client.get_head_block_header().await?;
-    let end_height: u64 = end_header.height.value();
+    let end_height: u64 = end_header.height();
     println!("Ending height: {end_height}");
 
     let elapsed = start.elapsed();
