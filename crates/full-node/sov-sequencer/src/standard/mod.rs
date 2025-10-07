@@ -221,7 +221,7 @@ where
         let tx_scratchpad = ctx.state_checkpoint.to_tx_scratchpad();
 
         let (tx_scratchpad, output_res) =
-            tx_auth::<S, Rt, _>(tx_scratchpad, ctx.gas_price.clone(), &mempool_tx.tx);
+            tx_auth::<S, Rt, _>(tx_scratchpad, ctx.gas_price, &mempool_tx.tx);
 
         let (auth_output, gas_meter) = match output_res {
             Ok(ok) => ok,
@@ -261,7 +261,7 @@ where
             &mut runtime,
             pre_exec_working_set,
             // Currently the sequencer doesn't take into account the slot gas limit.
-            &<S::Gas>::MAX,
+            <S::Gas>::MAX,
             auth_output,
             mempool_tx.tx.clone(),
             &self.da_address,
@@ -628,12 +628,12 @@ where
             let gas_info = gas_meter.gas_info();
             let tx = auth_output.0.authenticated_tx;
 
-            let working_set_gas_meter = tx.gas_meter(&gas_info.gas_price.clone(), &<S::Gas>::MAX);
+            let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, <S::Gas>::MAX);
 
             let mut working_set =
                 WorkingSet::create_working_set(tx_scratchpad, &tx, working_set_gas_meter);
 
-            if let Err(err) = working_set.charge_gas(&gas_info.gas_used) {
+            if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
                 let (scratchpad, _) = working_set.revert();
 
                 return (

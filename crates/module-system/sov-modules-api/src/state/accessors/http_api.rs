@@ -377,14 +377,14 @@ impl<S: Spec> GasMeter for ApiStateAccessor<S> {
 
     fn charge_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.charge_gas(amount)
     }
 
     fn charge_linear_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.charge_linear_gas(amount, parameter)
@@ -393,8 +393,8 @@ impl<S: Spec> GasMeter for ApiStateAccessor<S> {
 
 impl<S: Spec> GetGasPrice for ApiStateAccessor<S> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
-        &self.gas_meter.gas_price
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
+        self.gas_meter.gas_price
     }
 }
 
@@ -796,7 +796,7 @@ pub struct MeteredApiStateAccessor<S: Spec> {
 
 impl<S: Spec> GasMeter for MeteredApiStateAccessor<S> {
     type Spec = S;
-    fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+    fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.api_state_accessor.gas_meter.charge_gas(amount)
     }
 }
@@ -832,7 +832,7 @@ impl<S: Spec> ProvableStateReader<namespaces::Kernel> for MeteredApiStateAccesso
 
 impl<S: Spec> GetGasPrice for MeteredApiStateAccessor<S> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
-        &self.api_state_accessor.gas_meter.gas_price
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
+        self.api_state_accessor.gas_meter.gas_price
     }
 }

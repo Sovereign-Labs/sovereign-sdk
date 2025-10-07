@@ -93,16 +93,13 @@ impl<S: Spec> ChainState<S> {
 
     /// Computes the gas target for the provided gas limit.
     /// Basically, divides each dimension of the gas limit by the [`ChainState::config_elasticity_multiplier`].
-    pub fn gas_target(gas_limit: &S::Gas) -> S::Gas {
-        let mut gas_target = gas_limit.clone();
-        gas_target.scalar_division(Self::config_elasticity_multiplier().into());
-
-        gas_target
+    pub fn gas_target(gas_limit: S::Gas) -> S::Gas {
+        gas_limit.scalar_division(Self::config_elasticity_multiplier().into())
     }
 
     /// Computes the initial gas target (genesis block) by calling [`ChainState::gas_target`] on the initial gas limit.
     pub fn initial_gas_target() -> S::Gas {
-        Self::gas_target(&<S as GasSpec>::initial_gas_limit())
+        Self::gas_target(<S as GasSpec>::initial_gas_limit())
     }
 }
 
@@ -215,13 +212,13 @@ impl<S: Spec> ChainState<S> {
             // the work of the prover to follow high level industry trends of the costs to compute zk-proofs.
             parent_gas_info = BlockGasInfo::new(S::initial_gas_limit(), next_base_price);
         }
-        parent_gas_info.base_fee_per_gas().clone()
+        *parent_gas_info.base_fee_per_gas()
     }
 
     fn compute_base_fee_update_for_slot(
         parent_gas_info: &BlockGasInfo<S::Gas>,
     ) -> <S::Gas as Gas>::Price {
-        let mut output = parent_gas_info.base_fee_per_gas().clone();
+        let mut output = *parent_gas_info.base_fee_per_gas();
         output
             .as_mut()
             .iter_mut()

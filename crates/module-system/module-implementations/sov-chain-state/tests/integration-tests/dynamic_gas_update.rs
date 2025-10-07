@@ -50,7 +50,7 @@ fn setup_dynamic_gas_update_tests() -> (TestData<S>, TestRunner<TestChainStateRu
         },
     );
 
-    let mut gas_limit = <S as Spec>::Gas::from(config_value!("INITIAL_GAS_LIMIT"));
+    let gas_limit = <S as Spec>::Gas::from(config_value!("INITIAL_GAS_LIMIT"));
     let gas_target = gas_limit.scalar_division(2);
 
     let runtime = TestChainStateRuntime::<S>::default();
@@ -59,7 +59,7 @@ fn setup_dynamic_gas_update_tests() -> (TestData<S>, TestRunner<TestChainStateRu
 
     (
         TestData {
-            gas_target: gas_target.clone(),
+            gas_target,
             token_name,
             user,
         },
@@ -80,14 +80,14 @@ fn test_gas_price_increases_if_gas_used_exceeds_gas_target() {
         input: user
             .create_plain_message::<RT, ValueSetter<S>>(sov_value_setter::CallMessage::SetValue {
                 value: 1,
-                gas: Some(gas_target.clone()),
+                gas: Some(gas_target),
             })
             .with_max_fee(Amount::from(u64::MAX / 2)),
         assert: Box::new(move |result, _| {
             assert!(result.tx_receipt.is_successful());
 
             assert!(
-                result.gas_value_used > gas_target.value(&S::initial_base_fee_per_gas()).0,
+                result.gas_value_used > gas_target.value(S::initial_base_fee_per_gas()).0,
                 "The gas used should be greater than the gas target"
             );
         }),
@@ -101,12 +101,12 @@ fn test_gas_price_increases_if_gas_used_exceeds_gas_target() {
     ));
 
     assert_eq!(result.0.batch_receipts.len(), 1);
-    let gas_price = result.0.batch_receipts[0].inner.gas_price.clone();
+    let gas_price = result.0.batch_receipts[0].inner.gas_price;
 
     let initial_gas_price = S::initial_base_fee_per_gas();
 
     assert!(
-        initial_gas_price.dim_is_less_than(&gas_price),
+        initial_gas_price.dim_is_less_than(gas_price),
         "The gas price should have increased, current gas price: {gas_price:?}, initial gas price: {initial_gas_price:?}"
     );
 }
@@ -135,7 +135,7 @@ fn test_gas_price_decreases_if_gas_used_is_below_gas_target() {
             assert!(result.tx_receipt.is_successful());
 
             assert!(
-                result.gas_value_used < gas_target.value(&S::initial_base_fee_per_gas()).0,
+                result.gas_value_used < gas_target.value(S::initial_base_fee_per_gas()).0,
                 "The gas used should be lower than the gas target"
             );
         }),
@@ -149,12 +149,12 @@ fn test_gas_price_decreases_if_gas_used_is_below_gas_target() {
     ));
 
     assert_eq!(result.0.batch_receipts.len(), 1);
-    let gas_price = result.0.batch_receipts[0].inner.gas_price.clone();
+    let gas_price = result.0.batch_receipts[0].inner.gas_price;
 
     let initial_gas_price = S::initial_base_fee_per_gas();
 
     assert!(
-        gas_price.dim_is_less_than(&initial_gas_price),
+        gas_price.dim_is_less_than(initial_gas_price),
         "The gas price should have decreased, current gas price: {gas_price:?}, initial gas price: {initial_gas_price:?}"
     );
 }

@@ -58,7 +58,7 @@ where
         sender: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: &S::Address,
         sequencer_bond: Amount,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         raw_proof: Vec<u8>,
         checkpoint: StateCheckpoint<S>,
     ) -> (

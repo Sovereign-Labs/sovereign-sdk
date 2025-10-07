@@ -17,6 +17,15 @@ use crate::{
 };
 type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
+const TEST_DATA: [u8; 32] = [1; 32];
+const TEST_BORSH_STRUCT: BorshTestStruct = BorshTestStruct {
+    field1: 1,
+    field2: 2,
+};
+const TEST_GAS_PRICE: GasPrice<2> = GasPrice {
+    value: [Amount::new(1); 2],
+};
+
 fn create_working_set(
     remaining_funds: Amount,
     gas_price: &<<S as Spec>::Gas as Gas>::Price,
@@ -28,154 +37,119 @@ fn create_working_set(
 
 #[test]
 fn test_metered_hasher_happy_path() {
-    let gas_to_charge_for_hash_update = GasUnit::<2>::from([5, 5]);
-    let gas_to_charge_for_hash_finalize = GasUnit::<2>::from([2, 2]);
+    let hash_update_gas = GasUnit::<2>::from([5, 5]);
+    let hash_finalize_gas = GasUnit::<2>::from([2, 2]);
 
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
-
-    let data = [1_u8; 32];
-
-    let remaining_funds = gas_to_charge_for_hash_update
-        .clone()
-        .checked_scalar_product(data.len() as u64)
+    let remaining_funds = hash_update_gas
+        .checked_scalar_product(TEST_DATA.len() as u64)
         .unwrap()
-        .value(&gas_price)
-        .checked_add(gas_to_charge_for_hash_finalize.value(&gas_price))
+        .value(TEST_GAS_PRICE)
+        .checked_add(hash_finalize_gas.value(TEST_GAS_PRICE))
         .unwrap();
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
     let mut hasher = MeteredHasher::<_, Sha256>::new_with_custom_price(
         &mut ws,
-        gas_to_charge_for_hash_update,
-        gas_to_charge_for_hash_finalize,
+        hash_update_gas,
+        hash_finalize_gas,
     );
 
-    assert!(
-        hasher.update(&data).is_ok(),
-        "Hasher should be able to update"
-    );
-    assert!(
-        hasher.finalize().is_ok(),
-        "Hasher should be able to finalize"
-    );
+    assert!(hasher.update(&TEST_DATA).is_ok());
+    assert!(hasher.finalize().is_ok());
 }
 
 #[test]
 fn test_metered_hasher_not_enough_gas_to_update() {
-    let gas_to_charge_per_byte_for_hash_update = GasUnit::<2>::from([5, 5]);
-    let gas_to_charge_for_hash_update = GasUnit::<2>::from([2, 2]);
+    let hash_update_gas = GasUnit::<2>::from([5, 5]);
+    let hash_finalize_gas = GasUnit::<2>::from([2, 2]);
 
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
-
-    let data = [1_u8; 32];
-
-    let remaining_funds = gas_to_charge_per_byte_for_hash_update
-        .clone()
-        .checked_scalar_product(data.len() as u64 - 1)
+    let remaining_funds = hash_update_gas
+        .checked_scalar_product(TEST_DATA.len() as u64 - 1)
         .unwrap()
-        .value(&gas_price);
+        .value(TEST_GAS_PRICE);
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
     let mut hasher = MeteredHasher::<_, Sha256>::new_with_custom_price(
         &mut ws,
-        gas_to_charge_for_hash_update,
-        gas_to_charge_per_byte_for_hash_update,
+        hash_finalize_gas,
+        hash_update_gas,
     );
 
-    assert!(
-        hasher.update(&data).is_err(),
-        "Hasher should be not able to update because it should not have enough gas"
-    );
+    assert!(hasher.update(&TEST_DATA).is_err());
 }
 
 #[test]
 fn test_metered_signature() {
-    let gas_to_charge_for_signature = GasUnit::<2>::from([5, 5]);
-    let fixed_cost = GasUnit::<2>::from([1000, 1000]);
-
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
-
-    let data = [1_u8; 32];
+    let sig_per_byte_gas = GasUnit::<2>::from([5, 5]);
+    let sig_fixed_cost = GasUnit::<2>::from([1000, 1000]);
 
     let ed25519 = Ed25519PrivateKey::generate();
-    let signature = ed25519.sign(&data);
+    let signature = ed25519.sign(&TEST_DATA);
 
     let metered_signature = MeteredSignature::<_, Ed25519Signature>::new_with_price(
         signature,
-        fixed_cost.clone(),
-        gas_to_charge_for_signature.clone(),
+        sig_fixed_cost,
+        sig_per_byte_gas,
     );
 
-    let remaining_funds = fixed_cost
+    let remaining_funds = sig_fixed_cost
         .checked_combine(
-            &gas_to_charge_for_signature
-                .clone()
-                .checked_scalar_product(data.len() as u64)
+            sig_per_byte_gas
+                .checked_scalar_product(TEST_DATA.len() as u64)
                 .unwrap(),
         )
         .unwrap()
-        .checked_combine(&S::gas_to_charge_hash_update())
+        .checked_combine(S::gas_to_charge_hash_update())
         .unwrap()
         .checked_combine(
-            &S::gas_to_charge_per_byte_hash_update()
-                .checked_scalar_product(data.len() as u64)
+            S::gas_to_charge_per_byte_hash_update()
+                .checked_scalar_product(TEST_DATA.len() as u64)
                 .unwrap(),
         )
         .unwrap()
-        .value(&gas_price);
+        .value(TEST_GAS_PRICE);
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    assert!(
-            metered_signature
-                .verify(&ed25519.pub_key(), &data, &mut ws)
-                .is_ok(),
-            "Signature should be valid and there should be enough gas available in the metered working set"
-        );
+    assert!(metered_signature
+        .verify(&ed25519.pub_key(), &TEST_DATA, &mut ws)
+        .is_ok());
 }
 
 #[test]
 fn test_metered_signature_not_enough_gas() {
-    let gas_to_charge_for_signature = GasUnit::<2>::from([5, 5]);
-    let fixed_cost = GasUnit::<2>::from([1000, 1000]);
-
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
-
-    let data = [1_u8; 32];
+    let sig_per_byte_gas = GasUnit::<2>::from([5, 5]);
+    let sig_fixed_cost = GasUnit::<2>::from([1000, 1000]);
 
     let ed25519 = Ed25519PrivateKey::generate();
-    let signature = ed25519.sign(&data);
+    let signature = ed25519.sign(&TEST_DATA);
 
     let metered_signature = MeteredSignature::<_, Ed25519Signature>::new_with_price(
         signature,
-        fixed_cost.clone(),
-        gas_to_charge_for_signature.clone(),
+        sig_fixed_cost,
+        sig_per_byte_gas,
     );
 
-    let remaining_funds = fixed_cost
+    let remaining_funds = sig_fixed_cost
         .checked_combine(
-            &gas_to_charge_for_signature
-                .clone()
-                .checked_scalar_product(data.len() as u64 - 1)
+            sig_per_byte_gas
+                .checked_scalar_product(TEST_DATA.len() as u64 - 1)
                 .unwrap(),
         )
         .unwrap()
-        .value(&gas_price);
+        .value(TEST_GAS_PRICE);
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    assert!(
-        matches!(
-            metered_signature.verify(&ed25519.pub_key(), &data, &mut ws),
-            Err(MeteredSigVerificationError::GasError(..))
-        ),
-        "There should not be enough gas available in the metered working set"
-    );
+    assert!(matches!(
+        metered_signature.verify(&ed25519.pub_key(), &TEST_DATA, &mut ws),
+        Err(MeteredSigVerificationError::GasError(..))
+    ));
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
 pub struct BorshTestStruct {
     pub field1: u32,
     pub field2: u32,
@@ -210,93 +184,79 @@ impl MeteredBorshDeserialize<S> for BorshTestStruct {
 
 #[test]
 fn test_metered_deserializer() {
-    let data = BorshTestStruct {
-        field1: 1,
-        field2: 2,
-    };
+    let data = TEST_BORSH_STRUCT;
     let serialized_data = borsh::to_vec(&data).unwrap();
-    let gas_to_charge_for_deserialization = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+    let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
 
-    let remaining_funds = gas_to_charge_for_deserialization.value(&gas_price);
+    let remaining_funds = gas_to_charge.value(TEST_GAS_PRICE);
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
+    let deserialized_data = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
+        &mut serialized_data.as_slice(),
+        &mut ws,
+    )
+    .unwrap();
 
-    let deserialized_data =
-            <BorshTestStruct as MeteredBorshDeserialize::<S>>::deserialize(
-                &mut serialized_data.as_slice(),
-                &mut ws,
-            )
-            .expect("Deserialization should succeed because there should be enough gas available in the gas meter");
-
-    assert_eq!(
-        deserialized_data, data,
-        "The deserialized data should match the original data"
-    );
+    assert_eq!(deserialized_data, data);
 }
 
 #[test]
 fn test_metered_deserializer_not_enough_gas() {
-    let data = BorshTestStruct {
-        field1: 1,
-        field2: 2,
-    };
+    let data = TEST_BORSH_STRUCT;
     let serialized_data = borsh::to_vec(&data).unwrap();
-    let gas_to_charge_for_deserialization = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+    let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
 
-    let remaining_funds = gas_to_charge_for_deserialization
-        .value(&gas_price)
+    let remaining_funds = gas_to_charge
+        .value(TEST_GAS_PRICE)
         .checked_sub(Amount::new(1))
         .unwrap();
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
-
-    let deserialized_err =
-            <BorshTestStruct as MeteredBorshDeserialize::<S>>::deserialize(
-                &mut serialized_data.as_slice(),
-                &mut ws,
-            )
-            .expect_err("Deserialization should fail because there should not be enough gas available in the gas meter");
-
-    assert!(
-        matches!(deserialized_err, MeteredBorshDeserializeError::GasError(..)),
-        "The deserialized error should be a gas error"
+    let result = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
+        &mut serialized_data.as_slice(),
+        &mut ws,
     );
+
+    assert!(matches!(
+        result,
+        Err(MeteredBorshDeserializeError::GasError(..))
+    ));
 }
 
 #[test]
 fn test_metered_deserializer_invalid_data() {
-    let data = BorshTestStruct {
-        field1: 1,
-        field2: 2,
-    };
+    let data = TEST_BORSH_STRUCT;
     let serialized_data = borsh::to_vec(&data).unwrap();
-    let gas_to_charge_for_deserialization = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
-    let gas_price = GasPrice::<2>::from([Amount::new(1); 2]);
+    let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
 
-    let remaining_funds = gas_to_charge_for_deserialization.value(&gas_price);
+    let remaining_funds = gas_to_charge.value(TEST_GAS_PRICE);
+    let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let mut ws = create_working_set(remaining_funds, &gas_price);
-
-    let deserialize_err = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
+    let result = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
         &mut &serialized_data[1..],
         &mut ws,
-    )
-    .expect_err("Deserialization should fail because the data is invalid");
-
-    assert!(
-        matches!(deserialize_err, MeteredBorshDeserializeError::IOError(..)),
-        "The deserialized error should be a borsh deserialize error"
     );
+
+    assert!(matches!(
+        result,
+        Err(MeteredBorshDeserializeError::IOError(..))
+    ));
 }
 
 #[test]
 fn test_total_deserialization_cost() {
-    assert!(total_deserialization_cost::<S>(GasUnit::<2>::from([1; 2]), 22).is_ok());
-    assert!(total_deserialization_cost::<S>(GasUnit::<2>::from([1; 2]), u64::MAX).is_err());
-    assert!(total_deserialization_cost::<S>(GasUnit::<2>::from([1, 2]), u64::MAX).is_err());
-    assert!(total_deserialization_cost::<S>(GasUnit::<2>::from([2; 2]), u64::MAX).is_err());
+    let cases = [
+        (GasUnit::<2>::from([1; 2]), 22, true),
+        (GasUnit::<2>::from([1; 2]), u64::MAX, false),
+        (GasUnit::<2>::from([1, 2]), u64::MAX, false),
+        (GasUnit::<2>::from([2; 2]), u64::MAX, false),
+    ];
+    for (gas, buf_len, should_succeed) in cases {
+        assert_eq!(
+            total_deserialization_cost::<S>(gas, buf_len).is_ok(),
+            should_succeed
+        );
+    }
 }
 
 use crate::{GasMeteringError, GasSpec};
@@ -311,7 +271,7 @@ fn total_deserialization_cost<S: Spec>(
                 "Deserialization cost overflows `u64::MAX` value".to_string(),
             ),
         ))?
-        .checked_combine(&S::bias_borsh_deserialization())
+        .checked_combine(S::bias_borsh_deserialization())
         .ok_or(MeteredBorshDeserializeError::GasError(
             GasMeteringError::Overflow(
                 "Deserialization cost overflows `u64::MAX` value".to_string(),

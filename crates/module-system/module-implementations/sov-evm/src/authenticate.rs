@@ -66,7 +66,7 @@ fn recover_evm_signer(
 /// Creates the transaction details and tx hash for an EVM transaction.
 fn create_auth_tx_and_hash<S: Spec>(
     tx: &TransactionSigned,
-    gas_price: &<<S as Spec>::Gas as Gas>::Price,
+    gas_price: <<S as Spec>::Gas as Gas>::Price,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;

@@ -70,7 +70,7 @@ fn test_chain_state_update_gas_used() {
                 .tx_receipts
                 .iter()
                 .fold(<<S as Spec>::Gas as Gas>::zero(), |acc, tx_receipt| {
-                    acc.checked_combine(&get_gas_used(tx_receipt)).unwrap()
+                    acc.checked_combine(get_gas_used(tx_receipt)).unwrap()
                 });
 
             let in_progress_tx = ChainState::<S>::default()

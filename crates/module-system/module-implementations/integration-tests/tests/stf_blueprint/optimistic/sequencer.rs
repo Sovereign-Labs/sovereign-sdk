@@ -116,13 +116,13 @@ fn get_gas_from_txs(receipts: &[TransactionReceipt<S>]) -> <S as Spec>::Gas {
     for receipt in receipts {
         match &receipt.receipt {
             sov_modules_api::TxEffect::Successful(tx_contents) => {
-                gas_in_batch = gas_in_batch.checked_combine(&tx_contents.gas_used).unwrap();
+                gas_in_batch = gas_in_batch.checked_combine(tx_contents.gas_used).unwrap();
             }
             sov_modules_api::TxEffect::Reverted(tx_contents) => {
-                gas_in_batch = gas_in_batch.checked_combine(&tx_contents.gas_used).unwrap();
+                gas_in_batch = gas_in_batch.checked_combine(tx_contents.gas_used).unwrap();
             }
             sov_modules_api::TxEffect::Skipped(tx_contents) => {
-                gas_in_batch = gas_in_batch.checked_combine(&tx_contents.gas_used).unwrap();
+                gas_in_batch = gas_in_batch.checked_combine(tx_contents.gas_used).unwrap();
             }
         }
     }

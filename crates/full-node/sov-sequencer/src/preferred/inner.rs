@@ -511,20 +511,23 @@ where
     }
 
     /// Closes the current batch if it is nearly full (by gas limit) or has reached the target batch execution time.
-    async fn close_batch_if_nearly_full(&mut self, remaining_slot_gas: &<S as GasSpec>::Gas) {
+    async fn close_batch_if_nearly_full(&mut self, remaining_slot_gas: <S as GasSpec>::Gas) {
         // Check if we're close to the gas limit and close the batch if we are.
-        let mut comfortable_gas_limit = <S as GasSpec>::initial_gas_limit();
-        comfortable_gas_limit
+        // We want to close when gas used is at least 95% of the initial gas limit.
+        let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
+        let gas_used = initial_gas_limit
+            .checked_sub(remaining_slot_gas)
+            .expect("remaining_lot_gas is always smaller than initial_gas_limit");
+        let comfortable_gas_limit = initial_gas_limit
             .scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR)
-            .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER)
-            .unwrap_or_else(|| {
+            .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER).unwrap_or_else(|| {
                 panic!(
                     "Cannot overflow after dividing by {COMFORTABLE_GAS_LIMIT_DIVISOR} and multiplying by {COMFORTABLE_GAS_LIMIT_MULTIPLIER}",
                 )
             });
-        let close_to_gas_limit = remaining_slot_gas.dim_is_less_or_eq(&comfortable_gas_limit);
+        let close_to_gas_limit = comfortable_gas_limit.dim_is_less_or_eq(gas_used);
         if close_to_gas_limit {
-            tracing::debug!(%comfortable_gas_limit, %remaining_slot_gas, "Closing and publishing current batch because we're close to the gas limit");
+            tracing::debug!(%comfortable_gas_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
             self.close_current_batch().await;
         }
 
@@ -1697,7 +1700,7 @@ where
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
 
-        inner.close_batch_if_nearly_full(&remaining_slot_gas).await;
+        inner.close_batch_if_nearly_full(remaining_slot_gas).await;
 
         Ok(rx)
     }

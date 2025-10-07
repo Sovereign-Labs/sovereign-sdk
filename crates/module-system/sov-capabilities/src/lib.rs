@@ -61,7 +61,7 @@ trait HasGasPayer<S: Spec> {
     fn try_reserve_gas_from_payer(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()>;
@@ -72,7 +72,7 @@ impl<S: Spec> HasGasPayer<S> for StandardProvenRollupCapabilities<'_, S> {
     fn try_reserve_gas_from_payer(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -89,7 +89,7 @@ impl<'a, S: Spec> HasGasPayer<S>
     fn try_reserve_gas_from_payer(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -114,7 +114,7 @@ where
     fn try_reserve_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -124,7 +124,7 @@ where
     fn try_reserve_gas_for_proof(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         sender: &S::Address,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {

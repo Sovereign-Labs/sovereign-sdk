@@ -94,8 +94,8 @@ impl<S: Spec> SlotInformation<S> {
     }
 
     /// Returns the gas price of the transition.
-    pub const fn gas_price(&self) -> &<S::Gas as Gas>::Price {
-        self.gas_info.base_fee_per_gas()
+    pub fn gas_price(&self) -> <S::Gas as Gas>::Price {
+        *self.gas_info.base_fee_per_gas()
     }
 
     /// Returns the total gas used of the transition.

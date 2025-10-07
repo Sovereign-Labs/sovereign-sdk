@@ -55,7 +55,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
         let result = runner.execute::<RelevantBlobs<MockBlob>>(unregistered_blobs);
 
         let batch_receipt = &result.0.batch_receipts[0];
-        let gas_price = &batch_receipt.inner.gas_price;
+        let gas_price = batch_receipt.inner.gas_price;
 
         let tx_receipt = &batch_receipt.tx_receipts[0];
 
@@ -66,7 +66,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
 
         match &tx_receipt.receipt {
             TxEffect::Successful(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 gas_value_charged_to_user = gas_value;
                 seq_fee = priority_fee_bips.apply(gas_value).unwrap();
@@ -74,7 +74,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
                 valid_tx_count += 1;
             }
             TxEffect::Skipped(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 // The sequencer is not bonded so we can't penalize them for skipped transactions.
                 // In this case no one is charged for the failed transaction.
                 gas_value_charged_to_user = Amount::ZERO;
@@ -83,7 +83,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
                 skipped_tx_count += 1;
             }
             TxEffect::Reverted(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 gas_value_charged_to_user = gas_value;
                 seq_fee = Amount::ZERO;
@@ -137,7 +137,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
 
         assert_eq!(batch_receipt.inner.gas_used, total_gas);
         // Ensure that a transaction, including a failed one, still incurs gas costs.
-        assert!(<<S as Spec>::Gas>::zero().dim_is_less_than(&total_gas));
+        assert!(<<S as Spec>::Gas>::zero().dim_is_less_than(total_gas));
     }
 
     assert_eq!(nb_of_valid_txs, valid_tx_count);

@@ -18,7 +18,7 @@ fn test_helper(gas_used: &<TestSpec as Spec>::Gas) -> <<TestSpec as Spec>::Gas a
         INITIAL_BASE_FEE_PER_GAS.into(),
     );
 
-    parent_gas_info.update_gas_used(gas_used.clone());
+    parent_gas_info.update_gas_used(*gas_used);
 
     ChainState::<TestSpec>::compute_base_fee_per_gas(parent_gas_info, 1)
 }
@@ -43,24 +43,23 @@ fn test_base_fee_increases_if_above_target() {
         / (gas_target.as_ref().len() as u64)
         / GAS_DELTA_FRACTION;
 
-    let mut gas_used = gas_target.clone();
-    gas_used.scalar_add(gas_increase_amount);
+    let gas_used = gas_target.scalar_add(gas_increase_amount);
 
     let computed_base_fee_per_gas = test_helper(&gas_used);
 
     // The base fee per gas should increase above the initial base fee per gas.
     assert!(
         Into::<GasPrice<2>>::into(INITIAL_BASE_FEE_PER_GAS)
-            .dim_is_less_than(&computed_base_fee_per_gas),
+            .dim_is_less_than(computed_base_fee_per_gas),
         "The base fee per gas should increase when the gas used is above the gas target"
     );
 
     let delta_base_fee_per_gas = computed_base_fee_per_gas
-        .checked_sub(&GasPrice::from(INITIAL_BASE_FEE_PER_GAS))
+        .checked_sub(GasPrice::from(INITIAL_BASE_FEE_PER_GAS))
         .expect("The computed base fee per gas should be above the INITIAL_BASE_FEE_PER_GAS");
 
     assert!(
-        GasPrice::from([Amount::new(1); 2]).dim_is_less_than(&delta_base_fee_per_gas),
+        GasPrice::from([Amount::new(1); 2]).dim_is_less_than(delta_base_fee_per_gas),
         "The base fee per gas delta should increase by more than 1, actual value {delta_base_fee_per_gas:?}"
     );
 }
@@ -73,15 +72,14 @@ fn test_base_fee_decreases_if_below_target() {
         / (gas_target.as_ref().len() as u64)
         / GAS_DELTA_FRACTION;
 
-    let mut gas_used = gas_target.clone();
-    gas_used.scalar_sub(gas_decrease_amount);
+    let gas_used = gas_target.scalar_sub(gas_decrease_amount);
 
     let computed_base_fee_per_gas = test_helper(&gas_used);
 
     // The base fee per gas should decrease below the initial base fee per gas. The decrease amount should be high enough for the computed base fee per gas to be strictly
     // below the initial base fee per gas.
     assert!(
-        computed_base_fee_per_gas.dim_is_less_than(&INITIAL_BASE_FEE_PER_GAS.into()),
+        computed_base_fee_per_gas.dim_is_less_than(INITIAL_BASE_FEE_PER_GAS.into()),
         "The base fee per gas should decrease when the gas used is below the gas target"
     );
 }
@@ -95,7 +93,7 @@ fn test_base_fee_varies_accross_each_dimension() {
         / (gas_target.as_ref().len() as u64)
         / GAS_DELTA_FRACTION;
 
-    let mut gas_used = gas_target.clone();
+    let mut gas_used = gas_target;
 
     gas_used.as_mut().iter_mut().enumerate().for_each(|(i, g)| {
         if i % 2 == 0 {

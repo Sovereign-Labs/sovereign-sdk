@@ -5,7 +5,22 @@ use sov_modules_macros::config_value_private;
 
 use super::Spec;
 use crate::gas::GAS_DIMENSIONS;
-use crate::{new_constant, Amount, Gas};
+use crate::{Amount, Gas};
+
+#[macro_export]
+/// Defines a constant gas value.
+macro_rules! new_constant {
+    ($name: literal, $gas: ty) => {{
+        #[cfg(feature = "gas-constant-estimation")]
+        {
+            <$gas>::from(config_value_private!($name)).with_name($name)
+        }
+        #[cfg(not(feature = "gas-constant-estimation"))]
+        {
+            <$gas>::from(config_value_private!($name))
+        }
+    }};
+}
 
 /// The trait that defines the gas specification for the rollup.
 pub trait GasSpec:

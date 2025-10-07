@@ -32,7 +32,7 @@ pub fn setup_basic_kernel() -> (TestData<S>, TestRunner<BasicRT>) {
     let regular_sequencer_da_address = MockAddress::new([42; 32]);
 
     let user_stake = <S as Spec>::Gas::from(TEST_DEFAULT_USER_STAKE);
-    let user_stake_value = user_stake.value(&S::initial_base_fee_per_gas());
+    let user_stake_value = user_stake.value(S::initial_base_fee_per_gas());
 
     let regular_sequencer = TestSequencer {
         user_info: regular_sequencer,

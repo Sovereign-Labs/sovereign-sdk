@@ -62,13 +62,12 @@ async fn test_get_base_fee_per_gas_latest_with_updates() {
         .unwrap()
         .last_batch_receipt()
         .inner
-        .gas_price
-        .clone();
+        .gas_price;
 
     let initial_gas_price = S::initial_base_fee_per_gas();
 
     assert!(
-        current_gas_price.dim_is_less_than(&initial_gas_price),
+        current_gas_price.dim_is_less_than(initial_gas_price),
         "The gas price in the runner should have decreased! Current gas price {current_gas_price}, initial gas price {initial_gas_price}"
     );
 
@@ -105,7 +104,7 @@ async fn test_get_base_fee_per_gas_latest_with_updates() {
 
     // The gas price should decrease because the slot doesn't have enough gas
     assert!(
-        api_current_gas_price.dim_is_less_than(&api_initial_gas_price),
+        api_current_gas_price.dim_is_less_than(api_initial_gas_price),
         "The gas price should have decreased, but it didn't: current gas price {api_current_gas_price}, initial gas price {api_initial_gas_price}"
     );
 

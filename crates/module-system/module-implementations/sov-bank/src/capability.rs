@@ -38,7 +38,7 @@ impl<S: Spec> Bank<S> {
     pub fn reserve_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         payer: &S::Address,
         state: &mut impl StateAccessor,
     ) -> Result<(), ReserveGasError> {

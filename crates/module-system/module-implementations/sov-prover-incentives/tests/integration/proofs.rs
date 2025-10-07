@@ -169,7 +169,7 @@ fn test_valid_proof_penalized_if_reward_already_claimed() {
                 .unwrap();
             assert_eq!(
                 bonded_amount,
-                prover.bond.checked_sub(penalty.value(&gas_price)).unwrap()
+                prover.bond.checked_sub(penalty.value(gas_price)).unwrap()
             );
         }),
     });
