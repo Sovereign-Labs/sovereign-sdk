@@ -141,7 +141,8 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
             tokio::sync::watch::channel(None);
 
         let mut handles = Vec::new();
-        for _ in 0..seq_config.sequencer_kind_config.num_cache_warmup_workers {
+        for _ in 0..1 {
+            //seq_config.sequencer_kind_config.num_cache_warmup_workers {
             let worker = Self::spawn_worker::<Rt>(
                 info.clone(),
                 exec_config.clone(),

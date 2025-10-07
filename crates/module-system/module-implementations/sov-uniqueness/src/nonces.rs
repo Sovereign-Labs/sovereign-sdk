@@ -9,7 +9,10 @@ impl<S: Spec> Uniqueness<S> {
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
+        let time = std::time::Instant::now();
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+        let u0 = time.elapsed();
+        dbg!(u0);
 
         anyhow::ensure!(
             nonce == transaction_nonce,
@@ -25,7 +28,10 @@ impl<S: Spec> Uniqueness<S> {
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
+        let time = std::time::Instant::now();
         let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+        let u1 = time.elapsed();
+        dbg!(u1);
 
         anyhow::ensure!(
             nonce <= transaction_nonce,
