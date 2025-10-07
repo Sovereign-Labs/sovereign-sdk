@@ -155,39 +155,3 @@ pub async fn setup_with_simple_storage(
     let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
     (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }
-
-// TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
-// /// Checks evm gas evolution.
-// pub(crate) async fn gas_check(
-//     client: &TestClient,
-//     da_service: &StorableMockDaService,
-//     contract_address: Address,
-// ) -> Result<(), Box<dyn std::error::Error>> {
-//     // get initial gas price
-//     let initial_base_fee_per_gas = client.eth_gas_price().await;
-//
-//     // send 10 "set" transactions with high gas fee in 5 batches to increase gas price
-//     for _ in 0..5 {
-//         let values: Vec<u32> = (0..10).collect();
-//         let requests = client
-//             .set_values(contract_address, values, Some(200u64), Some(210u128))
-//             .await;
-//
-//         let receipts: Vec<Result<Option<_>, ProviderError>> = join_all(requests).await;
-//         assert!(receipts
-//             .into_iter()
-//             .all(|x| x.is_ok() && x.unwrap().is_some()));
-//     }
-//     // get gas price
-//     let latest_gas_price = client.eth_gas_price().await;
-//
-//     // assert gas price is higher
-//     // TODO: emulate gas price oracle here to have exact value
-//     assert!(
-//         latest_gas_price > initial_base_fee_per_gas,
-//         "Failed gas check initial={:?} latest={:?}",
-//         initial_base_fee_per_gas,
-//         latest_gas_price,
-//     );
-//     Ok(())
-// }
