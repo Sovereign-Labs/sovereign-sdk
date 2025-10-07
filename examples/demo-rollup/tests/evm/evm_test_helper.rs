@@ -51,8 +51,8 @@ pub(crate) async fn start_node(
     .unwrap()
 }
 
-/// Creates a test client to communicate with the rollup node.
-pub(crate) async fn create_test_client(
+/// Creates a test simple storage client to communicate with the rollup node & SimpleStorage contract.
+pub(crate) async fn create_simple_storage_client(
     rest_port: SocketAddr,
     private_key: &str,
 ) -> SimpleStorageClient {
@@ -143,8 +143,8 @@ pub async fn setup(
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
     let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
     test_rollup.wait_for_next_blocks(10).await;
-    let evm_client = create_test_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
-    (test_rollup, evm_client, config_value!("CHAIN_ID"))
+    let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }
 
 // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
