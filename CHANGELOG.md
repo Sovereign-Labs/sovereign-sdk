@@ -1,4 +1,5 @@
 # 2025-10-06
+- #1818 feature gates much of the state access observability behind the `expensive-observability` feature flag on `sov-modules-api`. Without this flag, deserialization timing is no longer available and `trace` level logs on state access are removed.
 - #1809 Upgrade RETH 1.7.0 -> 1.8.2.
 
 # 2025-10-03

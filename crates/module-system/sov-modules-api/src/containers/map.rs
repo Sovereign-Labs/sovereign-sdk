@@ -157,6 +157,7 @@ where
         Writer: StateWriter<N>,
     {
         let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Setting map value");
         state.set(&key, self.slot_value(value))
     }
@@ -225,6 +226,7 @@ where
         Reader: StateReader<N>,
     {
         let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Getting map value");
         state.get_decoded(&key, self.codec())
     }
@@ -241,6 +243,7 @@ where
         Reader: StateReader<N>,
     {
         let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Borrowing map value");
         let val = state.get_decoded(&key, self.codec())?;
         Ok(Borrowed::new(val, self))
@@ -258,6 +261,7 @@ where
         Reader: StateReader<N>,
     {
         let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Borrowing map value");
         let val = state.get_decoded(&key, self.codec())?;
         Ok(BorrowedMut::new(key, val, self))
@@ -297,6 +301,7 @@ where
         ReaderAndWriter: StateReaderAndWriter<N>,
     {
         let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Removing map value");
         state.remove_decoded(&key, self.codec())
     }
@@ -336,6 +341,7 @@ where
         Writer: StateWriter<N>,
     {
         let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Deleting map value");
         state.delete(&key)
     }
