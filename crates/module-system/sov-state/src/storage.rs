@@ -78,8 +78,12 @@ mod private {
 
     use crate::Prefix;
 
-    /// The total number of bytes in an inline key
-    const INLINE_KEY_BYTES: usize = 82;
+    /// The total number of bytes in an inline key.
+    /// 
+    /// Choose this value to be long enough for a balance key
+    /// This is long enough to fit a token balance key (which consists of a 32 byte address and a 32 byte amount, each with an associated tag byte) pluse
+    /// 2 bytes of prefix and one byte of metadata. That gives 69 bytes; round up to 70 in case we forgot anything.
+    const INLINE_KEY_BYTES: usize = 70;
     /// The number of bytes in the metadata of an inline key
     const INLINE_KEY_METADATA_BYTES: usize = 3;
     /// The maximum length of key material (excluding prefix) that can be stored in an inline key
