@@ -79,7 +79,7 @@ mod private {
     use crate::Prefix;
 
     /// The total number of bytes in an inline key.
-    /// 
+    ///
     /// Choose this value to be long enough for a balance key
     /// This is long enough to fit a token balance key (which consists of a 32 byte address and a 32 byte amount, each with an associated tag byte) pluse
     /// 2 bytes of prefix and one byte of metadata. That gives 69 bytes; round up to 70 in case we forgot anything.
