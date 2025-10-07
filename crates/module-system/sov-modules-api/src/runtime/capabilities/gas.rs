@@ -31,7 +31,7 @@ pub trait GasEnforcer<S: Spec> {
     fn try_reserve_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         ctx: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()>;
@@ -49,7 +49,7 @@ pub trait GasEnforcer<S: Spec> {
     fn try_reserve_gas_for_proof(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         sender: &S::Address,
         scratchpad: &mut impl StateAccessor,
     ) -> anyhow::Result<()>;

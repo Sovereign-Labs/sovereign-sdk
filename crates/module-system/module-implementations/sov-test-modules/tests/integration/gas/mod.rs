@@ -101,7 +101,7 @@ fn gas_price_constants_are_charged_correctly() {
                 );
 
                 assert_eq!(
-                gas_consumed_without_price_ref_1.get().checked_add(gas_charge_for_set_value.value(&bank_initial_gas_price)).unwrap(),
+                gas_consumed_without_price_ref_1.get().checked_add(gas_charge_for_set_value.value(bank_initial_gas_price)).unwrap(),
                 result.gas_value_used,
                 "The gas used should be the sum of the gas cost of the call and the inner gas cost"
             );
@@ -168,7 +168,7 @@ fn config_constants_are_charged_correctly() {
                 );
 
                 assert_eq!(
-                    gas_consumed_without_price_ref_1.get().checked_sub(create_token_config_cost.value(&bank_initial_gas_price)).unwrap(),
+                    gas_consumed_without_price_ref_1.get().checked_sub(create_token_config_cost.value(bank_initial_gas_price)).unwrap(),
                     result.gas_value_used,
                     "The gas used should be the same as the gas consumed from the first call, minus the custom charge for the operation that we've removed"
                 );

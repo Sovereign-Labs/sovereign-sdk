@@ -166,7 +166,7 @@ impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S,
 
 impl<S: Spec, I: TxState<S>> GasMeter for RevertableTxState<'_, S, I> {
     type Spec = S;
-    fn charge_gas(&mut self, amount: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+    fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.inner.charge_gas(amount)
     }
     fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
@@ -175,7 +175,7 @@ impl<S: Spec, I: TxState<S>> GasMeter for RevertableTxState<'_, S, I> {
 
     fn charge_linear_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.inner.charge_linear_gas(amount, parameter)
@@ -407,7 +407,7 @@ impl<S: Spec, I: StateProvider<S>> PreExecWorkingSet<S, I> {
 
 impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
     type Spec = S;
-    fn charge_gas(&mut self, amount: &S::Gas) -> anyhow::Result<(), GasMeteringError<S::Gas>> {
+    fn charge_gas(&mut self, amount: S::Gas) -> anyhow::Result<(), GasMeteringError<S::Gas>> {
         self.gas_meter.charge_gas(amount)
     }
     fn try_as_basic_gas_meter(&mut self) -> Option<&mut BasicGasMeter<Self::Spec>> {
@@ -415,7 +415,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
     }
     fn charge_linear_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.charge_linear_gas(amount, parameter)
@@ -429,7 +429,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for PreExecWorkingSet<S, I> {
 
 impl<S: Spec, I: StateProvider<S>> GetGasPrice for PreExecWorkingSet<S, I> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
         self.gas_meter.gas_price()
     }
 }
@@ -561,7 +561,7 @@ impl<S: Spec, I: StateProvider<S>> WorkingSet<S, I> {
 
         transaction_consumption_helper::<S>(
             &base_fee,
-            &gas_price,
+            gas_price,
             self.max_fee,
             self.max_priority_fee_bips,
         )
@@ -649,7 +649,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
             gas_meter: BasicGasMeter::new_with_funds_and_gas(
                 remaining_funds,
                 <S::Gas as crate::Gas>::max(),
-                price.clone(),
+                *price,
             ),
             max_fee: Amount::ZERO,
             max_priority_fee_bips: PriorityFeeBips::ZERO,
@@ -680,7 +680,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
 impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
     type Spec = S;
 
-    fn charge_gas(&mut self, gas: &S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+    fn charge_gas(&mut self, gas: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.gas_meter.charge_gas(gas)
     }
 
@@ -690,7 +690,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
 
     fn charge_linear_gas(
         &mut self,
-        amount: &<Self::Spec as Spec>::Gas,
+        amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
         self.gas_meter.charge_linear_gas(amount, parameter)
@@ -704,7 +704,7 @@ impl<S: Spec, I: StateProvider<S>> GasMeter for WorkingSet<S, I> {
 
 impl<S: Spec, I: StateProvider<S>> GetGasPrice for WorkingSet<S, I> {
     type Spec = S;
-    fn gas_price(&self) -> &<S::Gas as Gas>::Price {
+    fn gas_price(&self) -> <S::Gas as Gas>::Price {
         self.gas_meter.gas_price()
     }
 }

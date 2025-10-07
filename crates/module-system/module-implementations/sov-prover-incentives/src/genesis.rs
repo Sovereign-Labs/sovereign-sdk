@@ -42,9 +42,7 @@ impl<S: Spec> ProverIncentives<S> {
         );
 
         anyhow::ensure!(
-            config
-                .proving_penalty
-                .dim_is_less_than(&config.minimum_bond),
+            config.proving_penalty.dim_is_less_than(config.minimum_bond),
             "The penalty should be less than the minimum bond"
         );
 

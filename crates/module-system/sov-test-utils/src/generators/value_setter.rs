@@ -63,7 +63,7 @@ impl<S: Spec> MessageGenerator for ValueSetterMessages<S> {
                     chain_id,
                     max_priority_fee_bips,
                     max_fee,
-                    gas_usage.clone(),
+                    gas_usage,
                     value_setter_admin_nonce.try_into().unwrap(),
                 ));
             }

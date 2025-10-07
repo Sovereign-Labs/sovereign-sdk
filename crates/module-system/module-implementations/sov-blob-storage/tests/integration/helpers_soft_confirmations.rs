@@ -34,7 +34,7 @@ pub fn setup_soft_confirmation_kernel() -> (TestData<S>, TestRunner<SoftConfRT>)
 
     let user_stake = <S as Spec>::Gas::from(TEST_DEFAULT_USER_STAKE);
     let user_stake_value = user_stake
-        .checked_value(&S::initial_base_fee_per_gas())
+        .checked_value(S::initial_base_fee_per_gas())
         .unwrap();
 
     let regular_sequencer = TestSequencer {

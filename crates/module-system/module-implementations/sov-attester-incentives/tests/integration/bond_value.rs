@@ -52,8 +52,8 @@ impl TestRole {
 /// Currently, the easiest way to do this is to artificially change the gas cost of some operation in the bank module. We do that
 /// by modifying the runtime manually.
 fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
-    let mut gas_limit = <<S as Spec>::Gas>::from(config_value!("INITIAL_GAS_LIMIT"));
-    let gas_target = gas_limit.scalar_division(2).clone();
+    let gas_limit = <<S as Spec>::Gas>::from(config_value!("INITIAL_GAS_LIMIT"));
+    let gas_target = gas_limit.scalar_division(2);
 
     let runtime = Default::default();
     let (mut runner, _, _, user) = setup_with_custom_runtime(runtime);
@@ -62,12 +62,12 @@ fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
 
     let additional_user_bond = role.minimal_bond(&runner);
 
-    let initial_gas_price = runner.query_visible_state(|state| state.gas_price().clone());
+    let initial_gas_price = runner.query_visible_state(|state| state.gas_price());
 
     let bank_signed = user
         .create_plain_message::<RT, ValueSetter<S>>(sov_value_setter::CallMessage::SetValue {
             value: 1,
-            gas: Some(gas_target.clone()),
+            gas: Some(gas_target),
         })
         .with_max_fee(
             user.available_gas_balance
@@ -97,7 +97,7 @@ fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
                 match &tx_receipt.receipt {
                     TxEffect::Successful(tx_contents) => {
                         total_gas_used = total_gas_used
-                            .checked_combine(&tx_contents.gas_used)
+                            .checked_combine(tx_contents.gas_used)
                             .unwrap();
                     }
                     _ => {
@@ -107,7 +107,7 @@ fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
             }
 
             assert!(
-                gas_target.dim_is_less_than(&total_gas_used),
+                gas_target.dim_is_less_than(total_gas_used),
                 "The total gas used should be higher than the initial gas used"
             );
         }),

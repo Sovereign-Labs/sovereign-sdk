@@ -80,7 +80,7 @@ fn transaction_is_serialized_correctly() {
         <Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
         max_priority_fee_bips,
         max_fee,
-        gas_limit.clone(),
+        gas_limit,
     );
 
     wallet_state.unsent_transactions.push(unsigned_tx);
@@ -103,7 +103,7 @@ fn transaction_is_serialized_correctly() {
                 max_priority_fee_bips,
                 max_fee,
                 UniquenessData::Generation(initial_nonce + i as u64),
-                gas_limit.clone(),
+                gas_limit,
             ),
         );
 

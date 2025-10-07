@@ -19,9 +19,9 @@ fn test_metrics(input: &mut u64) {
 
     *input *= 10;
 
-    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test".to_string());
+    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test");
 
-    meter.charge_gas(&constant).unwrap();
+    meter.charge_gas(constant).unwrap();
 
     assert_eq!(
         sov_metrics::GAS_CONSTANTS
@@ -81,9 +81,9 @@ fn test_metrics_without_input() {
         S::initial_base_fee_per_gas(),
     );
 
-    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test".to_string());
+    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test");
 
-    meter.charge_gas(&constant).unwrap();
+    meter.charge_gas(constant).unwrap();
 
     assert_eq!(
         sov_metrics::GAS_CONSTANTS

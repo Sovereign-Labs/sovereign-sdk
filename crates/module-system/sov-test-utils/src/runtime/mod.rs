@@ -753,12 +753,12 @@ where
         let blob_info = blob_metadata.batch_blobs[0].clone();
         let tx_receipt = batch_receipt.tx_receipts[0].clone();
         let gas_used = get_gas_used(&tx_receipt);
-        let gas_price = batch_receipt.inner.gas_price.clone();
+        let gas_price = batch_receipt.inner.gas_price;
 
         let ctx = TransactionAssertContext::from_receipt::<MockDaSpec>(
             tx_receipt,
             blob_info,
-            gas_used.value(&gas_price),
+            gas_used.value(gas_price),
         );
         (transaction_test.assert)(ctx, &mut self.visible_state());
         self
@@ -839,7 +839,7 @@ where
                         )
                 );
 
-            gas_used.value(&gas_price)
+            gas_used.value(gas_price)
         } else {
             Amount::ZERO
         };

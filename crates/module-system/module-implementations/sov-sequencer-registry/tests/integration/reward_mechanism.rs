@@ -52,7 +52,7 @@ fn reward_mechanism_test_setup() -> (TestRoles, Amount, TestRunner<RT, S>) {
 
     (
         test_roles,
-        gas_consumed_last_tx.value(&initial_gas_price),
+        gas_consumed_last_tx.value(initial_gas_price),
         runner,
     )
 }

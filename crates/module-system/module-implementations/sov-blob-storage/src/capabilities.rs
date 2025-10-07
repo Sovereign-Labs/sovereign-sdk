@@ -742,7 +742,7 @@ impl<S: Spec> BlobStorage<S> {
                 let balance_store = &batch.balance_store;
                 match balance_store {
                     Escrow::DerivedHolder(reserved_balance) => {
-                        if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(&batch, reserved_balance, gas_price_for_new_block, state) {
+                        if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(&batch, reserved_balance, *gas_price_for_new_block, state) {
                             let _ = std::mem::replace(&mut batch.balance_store, Escrow::Direct(retrieved_token_amount));
                         } else {
                             Self::discard(
@@ -777,7 +777,7 @@ impl<S: Spec> BlobStorage<S> {
         &mut self,
         batch: &ValidatedBlob<S, BatchWithId<S>>,
         escrow: &DerivedHolder,
-        gas_price_for_new_block: &<S::Gas as Gas>::Price,
+        gas_price_for_new_block: <S::Gas as Gas>::Price,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Result<Amount, anyhow::Error> {
         let refund_recipient = match &batch.blob {
@@ -902,7 +902,7 @@ impl<S: Spec> BlobStorage<S> {
 
         let proof = self.deserialize_or_try_slash_sender::<Vec<u8>>(
             blob,
-            Some((&sequencer, &gas_price_for_new_block)),
+            Some((&sequencer, gas_price_for_new_block)),
             true,
             state,
         )?;
@@ -917,7 +917,7 @@ impl<S: Spec> BlobStorage<S> {
             BlobData::Proof((proof, sequencer.address)).with_id(blob.hash().into()),
             blob.sender(),
             available_balance,
-            &gas_price_for_new_block,
+            gas_price_for_new_block,
             account_for_deferral,
             state,
         )
@@ -936,7 +936,7 @@ impl<S: Spec> BlobStorage<S> {
         // Defense in depth.
         let batch = self.deserialize_or_try_slash_sender::<Vec<FullyBakedTx>>(
             blob,
-            Some((&sequencer, gas_price_for_new_block)),
+            Some((&sequencer, *gas_price_for_new_block)),
             true,
             state,
         )?;
@@ -951,7 +951,7 @@ impl<S: Spec> BlobStorage<S> {
             BlobData::Batch((Arc::new(batch), sequencer.address)).with_id(blob.hash().into()),
             blob.sender(),
             available_balance,
-            gas_price_for_new_block,
+            *gas_price_for_new_block,
             account_for_deferral,
             state,
         )
@@ -1033,7 +1033,7 @@ impl<S: Spec> BlobStorage<S> {
     fn deserialize_or_try_slash_sender<B: BorshDeserialize>(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
-        charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
+        charge_for_deserialization: Option<(&AllowedSequencer<S>, <S::Gas as Gas>::Price)>,
         slash_on_failure: bool,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Option<B> {

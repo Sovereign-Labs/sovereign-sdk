@@ -77,7 +77,7 @@ impl<S: Spec> Module for GasTester<S> {
             CallMessage::SetValue { value } => {
                 self.charge_gas(
                     state,
-                    &S::Gas::from(config_value!("EXAMPLE_CUSTOM_GAS_PRICE")),
+                    S::Gas::from(config_value!("EXAMPLE_CUSTOM_GAS_PRICE")),
                 )?;
 
                 self.value.set(&value, state)?;

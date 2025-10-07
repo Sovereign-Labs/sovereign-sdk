@@ -43,7 +43,7 @@ where
                     body_to_save: Some(raw_tx.data),
                     events: convert_to_runtime_events::<S, RT>(events, raw_tx_hash.into()),
                     receipt: TxEffect::Successful(SuccessfulTxContents {
-                        gas_used: gas_used.clone(),
+                        gas_used: *gas_used,
                         // TODO: Add additional fields here for...
                         // - sender
                         // - authorizer_id (i.e. Ethereum or Solana)
@@ -72,7 +72,7 @@ where
                 body_to_save: Some(raw_tx.data),
                 events: vec![], // As in Ethereum, reverted transactions don't emit events
                 receipt: TxEffect::Reverted(RevertedTxContents {
-                    gas_used: transaction_consumption.base_fee().clone(),
+                    gas_used: *transaction_consumption.base_fee(),
                     reason: error,
                 }),
             };
@@ -127,9 +127,9 @@ pub type BatchReceipt<S> =
 /// Returns the gas used by a transaction from its receipt.
 pub fn get_gas_used<S: Spec>(receipt: &TransactionReceipt<S>) -> S::Gas {
     match &receipt.receipt {
-        TxEffect::Successful(ref successful) => successful.gas_used.clone(),
-        TxEffect::Reverted(ref reverted) => reverted.gas_used.clone(),
-        TxEffect::Skipped(skipped) => skipped.gas_used.clone(),
+        TxEffect::Successful(ref successful) => successful.gas_used,
+        TxEffect::Reverted(ref reverted) => reverted.gas_used,
+        TxEffect::Skipped(skipped) => skipped.gas_used,
     }
 }
 

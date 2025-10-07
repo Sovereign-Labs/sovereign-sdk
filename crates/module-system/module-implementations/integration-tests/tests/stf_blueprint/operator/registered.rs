@@ -52,7 +52,7 @@ fn check_txs(tx_statuses: Vec<TxStatus>) {
         total_gas,
     } = do_check_txs(blobs, txs_len, priority_fee_bips, &mut runner);
 
-    let gas_price = &batch_receipt.inner.gas_price;
+    let gas_price = batch_receipt.inner.gas_price;
     let seq_bond_end = runner
         .query_visible_state(|state| get_seq_bond(&sequencer_account.da_address, state))
         .unwrap();
