@@ -65,7 +65,7 @@ pub(crate) async fn create_simple_storage_client(
 }
 
 pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
-    let url = Url::parse(&format!("http://{socket}")).unwrap();
+    let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
     ProviderBuilder::new().connect_http(url).erased()
 }
 

@@ -2,6 +2,7 @@ mod evm_account_abstraction;
 mod evm_balances;
 mod evm_gas_estimation;
 mod evm_logs;
+mod evm_rpc;
 mod evm_soft_conf;
 mod evm_subscribe;
 mod evm_test_helper;
