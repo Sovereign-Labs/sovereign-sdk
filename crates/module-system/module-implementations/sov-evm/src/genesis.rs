@@ -93,6 +93,7 @@ where
         Ok(())
     }
 
+    // `BlockEnv`` will be overridden in begin_rollup_block_hook.
     fn env_from_block(&self, block: &Block) -> BlockEnv {
         BlockEnv {
             number: U256::from(block.header.number),
