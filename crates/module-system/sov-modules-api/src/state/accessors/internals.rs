@@ -6,13 +6,13 @@ use crate::{Spec, StateCheckpoint, TxChangeSet};
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::stf::ExecutionContext;
 pub(crate) use sov_state::AccessoryWrite;
-use sov_state::NodeLeafAndMaybeValue;
 #[cfg(feature = "native")]
 use sov_state::StateGetter;
 use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
     StateAccesses, Storage,
 };
+use sov_state::{NodeLeafAndMaybeValue, DEFAULT_CACHE_CAPACITY};
 
 #[cfg(feature = "native")]
 use super::checkpoints::ChangeSet;
@@ -64,14 +64,17 @@ impl<S: Storage> Delta<S> {
             uncomitted_changes: None,
             user_cache: Default::default(),
             kernel_cache: Default::default(),
-            accessory_writes: Default::default(),
+            accessory_writes: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
         }
     }
 
     #[cfg(feature = "native")]
     pub(super) fn take_accessory_delta(&mut self) -> AccessoryDelta<S> {
         AccessoryDelta {
-            writes: std::mem::take(&mut self.accessory_writes),
+            writes: std::mem::replace(
+                &mut self.accessory_writes,
+                HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+            ),
             #[cfg(feature = "native")]
             uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
             storage: self.inner.clone(),
@@ -474,7 +477,7 @@ impl<T> RevertableWriter<T> {
     pub(super) fn new(inner: T) -> Self {
         Self {
             inner,
-            writes: HashMap::default(),
+            writes: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
             cache_writes: TempCache::new(),
         }
     }

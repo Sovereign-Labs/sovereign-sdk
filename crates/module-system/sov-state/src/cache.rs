@@ -93,31 +93,29 @@ impl Access {
 pub(crate) mod internal {
     use std::collections::HashMap;
 
+    use crate::DEFAULT_CACHE_CAPACITY;
+
     use super::*;
+
     /// [`CacheLog`] keeps track of the original and current values of each key accessed.
     /// By tracking original values, we can detect and eliminate write patterns where a key is
     /// changed temporarily and then reset to its original value
     #[derive(Debug, Clone)]
     pub(crate) struct CacheLog {
-        revertable_log: std::collections::HashMap<SlotKey, Access>,
-        log: std::collections::HashMap<SlotKey, Access>,
+        revertable_log: HashMap<SlotKey, Access>,
+        log: HashMap<SlotKey, Access>,
     }
 
     impl Default for CacheLog {
         fn default() -> Self {
             Self {
-                revertable_log: HashMap::with_capacity(100),
-                log: HashMap::with_capacity(100),
+                revertable_log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+                log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
             }
         }
     }
 
     impl CacheLog {
-        pub(crate) fn reserve(&mut self, additional_cap: usize) {
-            self.revertable_log.reserve(additional_cap);
-            self.log.reserve(additional_cap);
-        }
-
         // This method is used to get all the changeset from the cache. The `revertable_log`
         // shoule be either merged or discarded before calling this method.
         pub(crate) fn iter(&self) -> impl Iterator<Item = (&SlotKey, &Access)> {
@@ -316,7 +314,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     pub fn commit_revertable_storage_cache(&mut self) {
         let cap = self.revertable_ordered_reads.capacity();
         let revertable_ordered_reads =
-            mem::replace(&mut self.revertable_ordered_reads, Vec::with_capacity(cap)); //mem::take(&mut self.revertable_ordered_reads);
+            mem::replace(&mut self.revertable_ordered_reads, Vec::with_capacity(cap));
         self.ordered_db_reads.extend(
             revertable_ordered_reads
                 .into_iter()
@@ -613,14 +611,6 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         &mut self,
         reads: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
     ) {
-        if reads.len()
-            > self.revertable_ordered_reads.capacity() - self.revertable_ordered_reads.len()
-        {
-            let s = reads.len() - self.revertable_ordered_reads.capacity();
-            self.revertable_ordered_reads.reserve(s);
-            self.cache.reserve(s);
-        }
-
         for (key, node) in reads {
             if self.cache.get(&key).is_some() {
                 continue;

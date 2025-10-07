@@ -39,6 +39,9 @@ pub use crate::namespaces::*;
 pub use crate::storage::*;
 pub use crate::witness::{ArrayWitness, Witness};
 
+/// The initial capacity set for the various caches.
+pub const DEFAULT_CACHE_CAPACITY: usize = 32;
+
 /// A trait specifying the hash function and format of the witness used in
 /// merkle proofs for storage access
 pub trait MerkleProofSpec: Send + Sync {
