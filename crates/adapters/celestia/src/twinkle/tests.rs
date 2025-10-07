@@ -33,7 +33,7 @@ async fn async_blob_submit() -> anyhow::Result<()> {
 
     let start = std::time::Instant::now();
     let rx = twinkle_client
-        .submit_blob_to_namespace(&blob, BATCH_NAMESPACE)
+        .submit_blob_to_namespace_inner(&blob, BATCH_NAMESPACE)
         .await;
     println!("A: {:?}", start.elapsed());
     let res = rx.await?;

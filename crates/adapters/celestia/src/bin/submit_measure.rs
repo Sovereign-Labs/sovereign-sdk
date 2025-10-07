@@ -240,7 +240,9 @@ async fn measure_throughput_twinkle(
 
         tokio::spawn(async move {
             // Submit blob (using internal method that TwinkleClient has)
-            let rx = client.submit_blob_to_namespace(&blob, namespace).await;
+            let rx = client
+                .submit_blob_to_namespace_inner(&blob, namespace)
+                .await;
             match rx.await {
                 Ok(Ok(_receipt)) => {
                     total_blobs.fetch_add(1, Ordering::Relaxed);

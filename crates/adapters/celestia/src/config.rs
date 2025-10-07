@@ -1,9 +1,9 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
-use std::num::NonZero;
-
-use schemars::JsonSchema;
-
 use crate::verifier::address::CelestiaAddress;
+use jsonrpsee::http_client::{HeaderMap, HttpClientBuilder};
+use schemars::JsonSchema;
+use std::num::NonZero;
+use std::time::Duration;
 
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
@@ -92,6 +92,30 @@ impl CelestiaConfig {
             backoff_max_times: 3,
             backoff_factor: default_factor(),
         }
+    }
+
+    pub(crate) fn request_timeout(&self) -> std::time::Duration {
+        Duration::from_secs(self.celestia_rpc_timeout_seconds.get())
+    }
+
+    pub(crate) fn construct_rpc_client(&self) -> jsonrpsee::http_client::HttpClient {
+        {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", self.celestia_rpc_auth_token)
+                    .parse()
+                    .unwrap(),
+            );
+
+            HttpClientBuilder::default()
+                .set_headers(headers)
+                .max_response_size(self.max_celestia_response_body_size.get())
+                .max_request_size(self.max_celestia_response_body_size.get())
+                .request_timeout(self.request_timeout())
+                .build(&self.celestia_rpc_address)
+        }
+        .expect("HttpClient initialization is valid")
     }
 }
 

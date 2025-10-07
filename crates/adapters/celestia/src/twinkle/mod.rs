@@ -5,11 +5,13 @@ mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
+use crate::da_service::CelestiaClient;
 pub use crate::twinkle::types::Network;
 use crate::twinkle::types::{
     BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
 };
 use crate::types::TmHash;
+use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
@@ -19,6 +21,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
+use tokio::sync::oneshot::Receiver;
 
 const HEADER_URL: &str = "https://t.tech/v0/header";
 const SUBMIT_BLOB_URL: &str = "https://t.tech/v0/blob";
@@ -63,7 +66,7 @@ impl TwinkleConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TwinkleClient {
     client: reqwest::Client,
     network: Network,
@@ -196,7 +199,7 @@ impl TwinkleClient {
         }
     }
 
-    pub async fn submit_blob_to_namespace(
+    pub async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
         namespace: Namespace,
@@ -256,4 +259,15 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
         anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
     }
     Ok(response.json().await.expect("Failed to decode response"))
+}
+
+impl CelestiaClient for TwinkleClient {
+    async fn submit_blob_to_namespace(
+        &self,
+        blob: &[u8],
+        namespace: Namespace,
+        _signer: &CelestiaAddress,
+    ) -> Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
+        self.submit_blob_to_namespace_inner(blob, namespace).await
+    }
 }
