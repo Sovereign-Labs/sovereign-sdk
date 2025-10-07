@@ -128,22 +128,23 @@ pub(crate) async fn set_multiple_values_check(
     Ok(())
 }
 
+pub async fn setup_test_rollup(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+) -> TestRollup<MockDemoRollup<Native>> {
+    let host_args = mock_da_risc0_host_args();
+    let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
+    start_node(config, finalization_blocks, Some(extension)).await
+}
+
 pub async fn setup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
-    let rollup_prover_config =
-        get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
-
-    let chain_id = config_value!("CHAIN_ID");
-    let test_rollup: TestRollup<MockDemoRollup<Native>> =
-        start_node(rollup_prover_config, finalization_blocks, Some(extension)).await;
-
-    let evm_client = create_test_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
-
+    let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
     test_rollup.wait_for_next_blocks(10).await;
-
-    (test_rollup, evm_client, chain_id)
+    let evm_client = create_test_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    (test_rollup, evm_client, config_value!("CHAIN_ID"))
 }
 
 // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
