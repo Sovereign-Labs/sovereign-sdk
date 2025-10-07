@@ -1,5 +1,6 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
 use crate::verifier::address::CelestiaAddress;
+use crate::TwinkleConfig;
 use jsonrpsee::http_client::{HeaderMap, HttpClientBuilder};
 use schemars::JsonSchema;
 use std::num::NonZero;
@@ -45,6 +46,7 @@ pub struct CelestiaConfig {
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_factor")]
     pub backoff_factor: f32,
+    pub twinkle_config: Option<TwinkleConfig>,
 }
 
 /// Custom type matching [`celestia_rpc::TxPriority`] but with `JsonSchema` support.
@@ -91,6 +93,7 @@ impl CelestiaConfig {
             backoff_max_delay_ms: 100,
             backoff_max_times: 3,
             backoff_factor: default_factor(),
+            twinkle_config: None,
         }
     }
 

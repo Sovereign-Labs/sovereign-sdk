@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::da_service::{into_transient_with_context, CelestiaClient};
+use crate::da_service::into_transient_with_context;
 use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
 use crate::types::{TmHash, APP_VERSION};
 use crate::verifier::address::CelestiaAddress;
@@ -116,10 +116,8 @@ impl VanillaClient {
             da_transaction_id: tx_hash,
         })
     }
-}
 
-impl CelestiaClient for VanillaClient {
-    async fn submit_blob_to_namespace(
+    pub async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
         namespace: Namespace,

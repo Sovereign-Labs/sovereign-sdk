@@ -27,6 +27,7 @@ use tokio::time::Instant;
 use tracing::{debug, info, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
+use crate::da_service::vanilla::VanillaClient;
 use crate::metrics::{
     BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace,
 };
@@ -37,16 +38,34 @@ use crate::types::{
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
-use crate::CelestiaHeader;
+use crate::{CelestiaHeader, TwinkleClient};
 
-pub(crate) trait CelestiaClient: Debug + Clone {
-    // Implementation is responsible for appropriate retrial of network calls
+#[derive(Debug, Clone)]
+pub enum CelestiaClient {
+    Vanilla(VanillaClient),
+    Twinkle(TwinkleClient),
+}
+
+impl CelestiaClient {
     async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
         namespace: Namespace,
         signer: &CelestiaAddress,
-    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>>;
+    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
+        match self {
+            CelestiaClient::Vanilla(vanilla_client) => {
+                vanilla_client
+                    .submit_blob_to_namespace(blob, namespace, signer)
+                    .await
+            }
+            CelestiaClient::Twinkle(twinkle_client) => {
+                twinkle_client
+                    .submit_blob_to_namespace_inner(blob, namespace)
+                    .await
+            }
+        }
+    }
 }
 
 type BoxError = anyhow::Error;

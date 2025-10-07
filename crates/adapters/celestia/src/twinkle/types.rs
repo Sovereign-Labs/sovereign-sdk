@@ -2,13 +2,14 @@ use crate::celestia::{CompactHeader, ProtobufHash};
 use crate::types::TmHash;
 use crate::{celestia_tm_version, TendermintHeader};
 use jsonrpsee::core::Serialize;
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_with::serde_as;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tendermint_proto::Protobuf;
 
-#[derive(Clone, Debug, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Network {
     Mocha,

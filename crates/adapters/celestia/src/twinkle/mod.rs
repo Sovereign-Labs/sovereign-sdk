@@ -5,23 +5,20 @@ mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
-use crate::da_service::CelestiaClient;
 pub use crate::twinkle::types::Network;
 use crate::twinkle::types::{
     BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
 };
 use crate::types::TmHash;
-use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
 use celestia_types::nmt::Namespace;
 use celestia_types::DataAvailabilityHeader;
+use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
-use tokio::sync::oneshot::Receiver;
 
 const HEADER_URL: &str = "https://t.tech/v0/header";
 const SUBMIT_BLOB_URL: &str = "https://t.tech/v0/blob";
@@ -39,7 +36,7 @@ const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 // ---------
 //  - Log URLs and timestamps (debug only)
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct TwinkleConfig {
     /// If not set, will be taken from the environment variable ` SOV_TWINKLE_API_KEY `
     api_key: Option<String>,
@@ -259,15 +256,4 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
         anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
     }
     Ok(response.json().await.expect("Failed to decode response"))
-}
-
-impl CelestiaClient for TwinkleClient {
-    async fn submit_blob_to_namespace(
-        &self,
-        blob: &[u8],
-        namespace: Namespace,
-        _signer: &CelestiaAddress,
-    ) -> Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
-        self.submit_blob_to_namespace_inner(blob, namespace).await
-    }
 }
