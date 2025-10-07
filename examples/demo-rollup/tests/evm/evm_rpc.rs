@@ -28,6 +28,7 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     assert_eq!(by_number(&client, 2.into()).await?, None);
 
     rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
 
     assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
     assert_eq!(by_number(&client, Latest).await?.unwrap().number, 1);
@@ -58,6 +59,7 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
 
     rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
 
     let latest_hash = by_number(&client, Latest).await?.unwrap().hash;
     let latest = by_hash(&client, latest_hash).await?.unwrap();
