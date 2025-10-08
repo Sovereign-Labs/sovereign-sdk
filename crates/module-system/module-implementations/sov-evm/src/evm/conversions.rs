@@ -1,6 +1,6 @@
 use alloy_consensus::{transaction::Recovered, Transaction};
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{Address, Bytes, B256, U256};
 use reth_primitives_traits::SignedTransaction;
 use revm::{
     context::{BlockEnv, TransactionType, TxEnv},
@@ -18,19 +18,14 @@ use crate::{
 // BlockEnv from SealedBlock
 impl From<SealedBlock> for BlockEnv {
     fn from(block: SealedBlock) -> Self {
-        Self {
-            number: U256::from(block.header.number),
-            beneficiary: block.header.beneficiary,
-            timestamp: U256::from(block.header.timestamp),
-            prevrandao: Some(block.header.mix_hash),
-            gas_limit: block.header.gas_limit,
-            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
-                excess_blob_gas: EXCESS_BLOB_GAS,
-                blob_gasprice: BLOB_GAS_PRICE,
-            }),
-            basefee: block.base_fee(),
-            difficulty: Default::default(),
-        }
+        create_block_env(
+            block.base_fee(),
+            block.header.gas_limit,
+            block.header.timestamp,
+            block.header.beneficiary,
+            block.header.number,
+            Some(block.header.mix_hash),
+        )
     }
 }
 
@@ -105,6 +100,29 @@ impl TryFrom<RlpEvmTransaction> for Recovered<TransactionSigned> {
             .map_err(|_| RlpConversionError::InvalidSignature)?;
 
         Ok(tx)
+    }
+}
+
+pub(crate) fn create_block_env(
+    base_fee: u64,
+    gas_limit: u64,
+    timestamp: u64,
+    beneficiary: Address,
+    number: u64,
+    prevrandao: Option<B256>,
+) -> BlockEnv {
+    BlockEnv {
+        number: U256::from(number),
+        beneficiary,
+        timestamp: U256::from(timestamp),
+        prevrandao,
+        gas_limit,
+        basefee: base_fee,
+        blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
+            excess_blob_gas: EXCESS_BLOB_GAS,
+            blob_gasprice: BLOB_GAS_PRICE,
+        }),
+        ..Default::default()
     }
 }
 
