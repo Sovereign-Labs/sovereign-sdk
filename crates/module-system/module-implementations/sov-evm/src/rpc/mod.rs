@@ -300,16 +300,7 @@ where
             %hash,
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
         );
-
-        let mut maybe_receipt = || -> Option<TransactionReceipt> {
-            let number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-            let receipt = self.receipt(number, state)?;
-            Some(build_rpc_receipt(block, tx, number, receipt))
-        };
-
-        Ok(maybe_receipt())
+        Ok(self.get_receipt(hash, state))
     }
 
     /// Handler for: `eth_call`
@@ -458,6 +449,18 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    pub fn get_receipt(
+        &self,
+        hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt> {
+        let number = self.get_tx_index_by_hash(&hash, state)?;
+        let tx = self.transaction(number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let receipt = self.receipt(number, state)?;
+        Some(build_rpc_receipt(block, tx, number, receipt))
+    }
+
     fn trace_transaction(
         &self,
         block_env: BlockEnv,
