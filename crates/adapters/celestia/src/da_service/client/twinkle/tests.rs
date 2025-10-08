@@ -8,16 +8,8 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use std::str::FromStr;
 
-const API_KEY: &str = "TEMP_SECRET";
-
 fn default_mocha_config() -> TwinkleConfig {
-    TwinkleConfig {
-        api_key: Some(API_KEY.to_string()),
-        network: Network::Mocha,
-        pull_interval_millis: 100,
-        request_timeout_secs: 30,
-        total_timeout_secs: 300,
-    }
+    TwinkleConfig::test()
 }
 
 const BATCH_NAMESPACE: Namespace = Namespace::const_v0(*b"sov-twinkl");

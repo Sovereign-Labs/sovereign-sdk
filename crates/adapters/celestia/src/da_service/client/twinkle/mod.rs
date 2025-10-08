@@ -1,8 +1,10 @@
+mod config;
 #[cfg(test)]
 mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
+pub use crate::da_service::client::twinkle::config::TwinkleConfig;
 use crate::da_service::client::twinkle::types::{
     BlobStatus, BlobStatusResponse, HeaderResponse, Network, SubmitBlobAsyncResponse,
     SubmitBlobRequest,
@@ -14,7 +16,6 @@ use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
 use celestia_types::DataAvailabilityHeader;
-use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
@@ -31,38 +32,11 @@ const AGENT: &str = "sov-celestia-adapter";
 //     + Header: Compact header
 //     - Header: DAH
 //     - Block: Namespace data
-//  ~ Metrics: can be verified with actual rolluip
+//  ~ Metrics: can be verified with actual rollup
 //  - Unit tests with mockserver
 //  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
 //  - Config defaults
 // ---------
-
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
-pub struct TwinkleConfig {
-    /// If not set, will be taken from the environment variable ` SOV_TWINKLE_API_KEY `
-    api_key: Option<String>,
-    network: Network,
-    pull_interval_millis: u64,
-    /// Timeout for individual HTTP requests in seconds
-    /// TODO: Sensible default value
-    request_timeout_secs: u64,
-    /// Timeout for the entire request including retries in seconds
-    /// TODO: Sensible default value
-    total_timeout_secs: u64,
-    // TODO: Connect timeout: smaller
-    // TODO: Pool idle timeout
-}
-
-impl TwinkleConfig {
-    fn api_key(&self) -> String {
-        match &self.api_key {
-            None => std::env::var("SOV_TWINKLE_API_KEY").expect(
-                "SOV_TWINKLE_API_KEY environment is not set, cannot initialize TwinkleClient",
-            ),
-            Some(set) => set.clone(),
-        }
-    }
-}
 
 /// Client for [Twinkle](https://t.tech/) service.
 /// Documentation: <https://t.tech/docs>.
@@ -79,20 +53,7 @@ pub struct TwinkleClient {
 
 impl TwinkleClient {
     pub fn new(config: &TwinkleConfig, backoff_policy: ExponentialBuilder) -> anyhow::Result<Self> {
-        let mut headers = reqwest::header::HeaderMap::new();
-        let mut auth_value =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", config.api_key()))?;
-        auth_value.set_sensitive(true);
-        headers.insert(reqwest::header::AUTHORIZATION, auth_value);
-        headers.insert(
-            reqwest::header::USER_AGENT,
-            reqwest::header::HeaderValue::from_static(AGENT),
-        );
-
-        let client = reqwest::Client::builder()
-            .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(config.request_timeout_secs))
-            .build()?;
+        let client = config.construct_reqwest_client()?;
 
         Ok(Self {
             client,
