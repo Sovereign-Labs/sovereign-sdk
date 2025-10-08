@@ -220,6 +220,20 @@ where
         Ok(transaction)
     }
 
+    /// Handler for: `eth_getBlockReceipts`
+    #[rpc_method(name = "eth_getBlockReceipts")]
+    pub fn get_block_receipts(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<Vec<TransactionReceipt>>> {
+        debug!(
+            block_number,
+            "EVM module JSON-RPC request to `eth_getBlockReceipts`"
+        );
+        Ok(self.get_receipts(block_number, state))
+    }
+
     /// Handler for: `eth_getTransactionReceipt`
     #[rpc_method(name = "eth_getTransactionReceipt")]
     pub fn get_transaction_receipt(
@@ -231,7 +245,7 @@ where
             %hash,
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
         );
-        Ok(self.get_receipt(hash, state))
+        Ok(self.get_receipt_by_hash(hash, state))
     }
 
     /// Handler for: `eth_call`
@@ -449,16 +463,37 @@ where
         Some(tx)
     }
 
-    fn get_receipt(
+    fn get_receipt_by_hash(
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<TransactionReceipt> {
         let number = self.get_tx_index_by_hash(&hash, state)?;
+        self.get_receipt_by_index(number, state)
+    }
+
+    fn get_receipt_by_index(
+        &self,
+        number: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt> {
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let receipt = self.receipt(number, state)?;
         Some(build_rpc_receipt(block, tx, number, receipt))
+    }
+
+    fn get_receipts(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Vec<TransactionReceipt>> {
+        let block = self.get_sealed_block_by_number(block_number, state)?;
+        let tx_range = block.transactions_start()..block.transactions_end();
+        let receipts = tx_range
+            .map(|index| self.get_receipt_by_index(index, state))
+            .collect::<Option<Vec<_>>>()?;
+        Some(receipts)
     }
 
     fn trace_transaction(
