@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use super::evm_test_helper;
-use crate::evm::evm_test_helper::setup;
+use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use ethereum_types::H256;
 use ethers::types::U256;
@@ -20,7 +20,8 @@ async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
 }
 
 async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
-    let (test_rollup, test_client, _) = setup(finalization_blocks, EVM_EXTENSION).await;
+    let (test_rollup, test_client, _) =
+        setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
 
     sanity_checks(&test_client).await;
     execute_evm_tests(&test_client, &test_rollup.da_service)
