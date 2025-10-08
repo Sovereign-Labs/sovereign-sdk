@@ -266,26 +266,12 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let mut maybe_tx = || -> Option<Transaction> {
-            let tx_number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-
-            Some(from_recovered_with_block_context(
-                tx.into(),
-                block.hash(),
-                block.number(),
-                U256::from(tx_number - block.transactions_start()),
-            ))
-        };
-
-        let transaction = maybe_tx();
+        let transaction = self.get_transaction(hash, state);
         debug!(
             %hash,
             ?transaction,
             "EVM module JSON-RPC request to `eth_getTransactionByHash`"
         );
-
         Ok(transaction)
     }
 
@@ -449,6 +435,21 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    /// Retrieves the transaction.
+    pub fn get_transaction(
+        &self,
+        hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Transaction> {
+        let tx_number = self.get_tx_index_by_hash(&hash, state)?;
+        let tx = self.transaction(tx_number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let index = U256::from(tx_number - block.transactions_start());
+        let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
+        Some(tx)
+    }
+
+    /// Retrieves the receipt.
     pub fn get_receipt(
         &self,
         hash: B256,
