@@ -89,14 +89,27 @@ impl GenesisMacro {
             }
         });
 
+        let discriminant_checks = fields.iter().map(|field| {
+            let ident = &field.ident;
+            quote::quote! {
+                // Ensure that the user didn't accidentally set the same discriminant for multiple modules
+                if !discriminants.insert(::sov_modules_api::ModuleInfo::discriminant(&self.#ident)) {
+                    return Err(::sov_modules_api::Error::ModuleError(::anyhow::Error::msg(format!("Duplicate module discriminant for {}. Update your constants.toml to give each module a unique discriminant", std::any::type_name_of_val(&self.#ident)))));
+                }
+            }
+        });
+
         quote::quote! {
+
                 let modules: ::std::vec::Vec<(&dyn ::sov_modules_api::ModuleInfo<Spec = <Self as sov_modules_api::Genesis>::Spec>, usize)> = ::std::vec![#(#idents),*];
                 let sorted_modules = ::sov_modules_api::sort_values_by_modules_dependencies(modules)?;
+                let mut discriminants = ::std::collections::HashSet::with_capacity(sorted_modules.len());
+                #(#discriminant_checks)*
                 for module in sorted_modules {
-                     match module {
-                         #(#matches)*
-                         _ => Err(::sov_modules_api::Error::ModuleError(::anyhow::Error::msg(format!("Module not found. Please verify that the module is included in the Runtime: {:?}", module)))),
-                     }?
+                    match module {
+                        #(#matches)*
+                        _ => Err(::sov_modules_api::Error::ModuleError(::anyhow::Error::msg(format!("Module not found. Please verify that the module is included in the Runtime: {:?}", module)))),
+                    }?
                 }
         }
     }
