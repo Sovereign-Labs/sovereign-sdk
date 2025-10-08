@@ -39,6 +39,16 @@ use crate::Evm;
 
 pub(crate) mod error;
 
+const EMPTY_FEE_HISTORY: FeeHistory = FeeHistory {
+    base_fee_per_gas: vec![],
+    gas_used_ratio: vec![],
+    oldest_block: 0,
+    reward: None,
+    blob_gas_used_ratio: vec![],
+    // EIP-4844 related
+    base_fee_per_blob_gas: vec![],
+};
+
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
 where
@@ -84,12 +94,10 @@ where
             .unwrap_infallible()
             .map(|number| hex::encode(number.to_be_bytes()));
 
-        match block_number_hex {
-            Some(block_number_hex) => {
-                self.get_block_by_number(Some(block_number_hex), details, state)
-            }
-            None => Ok(None),
-        }
+        Ok(match block_number_hex {
+            Some(block_number_hex) => self.get_block(Some(block_number_hex), details, state),
+            None => None,
+        })
     }
 
     /// Handler for: `eth_getBlockByNumber`
@@ -104,49 +112,7 @@ where
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
-
-        let maybe_block = || -> Option<Block> {
-            let block = self.get_sealed_block_by_number(block_number, state)?;
-
-            let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
-            let header = from_primitive_with_hash(block.header().clone(), block_hash);
-
-            let block_number = block.number();
-            let tx_range = block.transactions_start()..block.transactions_end();
-
-            let transactions = if Some(true) == details {
-                BlockTransactions::Full(
-                    tx_range
-                        .map(|index| {
-                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                            Some(from_recovered_with_block_context(
-                                tx.into(),
-                                Some(block_hash),
-                                block_number,
-                                U256::from(index - block.transactions_start()),
-                            ))
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                )
-            } else {
-                BlockTransactions::Hashes(
-                    tx_range
-                        .map(|index| {
-                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                            Some(*tx.signed_transaction.hash())
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                )
-            };
-
-            Some(Block {
-                header,
-                transactions,
-                ..Default::default()
-            })
-        };
-
-        Ok(maybe_block())
+        Ok(self.get_block(block_number, details, state))
     }
 
     /// Handler for: `eth_getBalance`
@@ -226,20 +192,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
-        let mut state = self.resolve_state(block_number, state)?;
-        let code = self
-            .accounts
-            .get(&address, state.deref_mut())
-            .unwrap_infallible()
-            .and_then(|account| {
-                self.code
-                    .get(&account.code_hash, state.deref_mut())
-                    .unwrap_infallible()
-            })
-            .map(|code| code.bytecode().clone())
-            .unwrap_or_default();
-
-        Ok(code)
+        let state = self.resolve_state(block_number, state)?;
+        Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
     /// Handler for: `eth_feeHistory`
@@ -247,16 +201,7 @@ where
     #[rpc_method(name = "eth_feeHistory")]
     pub fn fee_history(&self) -> RpcResult<FeeHistory> {
         debug!("EVM module JSON-RPC request to `eth_feeHistory`");
-
-        Ok(FeeHistory {
-            base_fee_per_gas: Default::default(),
-            gas_used_ratio: Default::default(),
-            oldest_block: Default::default(),
-            reward: Default::default(),
-            blob_gas_used_ratio: Default::default(),
-            // EIP-4844 related
-            base_fee_per_blob_gas: Default::default(),
-        })
+        Ok(EMPTY_FEE_HISTORY)
     }
 
     /// Handler for: `eth_getTransactionByHash`
@@ -266,27 +211,27 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let mut maybe_tx = || -> Option<Transaction> {
-            let tx_number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-
-            Some(from_recovered_with_block_context(
-                tx.into(),
-                block.hash(),
-                block.number(),
-                U256::from(tx_number - block.transactions_start()),
-            ))
-        };
-
-        let transaction = maybe_tx();
+        let transaction = self.get_transaction(hash, state);
         debug!(
             %hash,
             ?transaction,
             "EVM module JSON-RPC request to `eth_getTransactionByHash`"
         );
-
         Ok(transaction)
+    }
+
+    /// Handler for: `eth_getBlockReceipts`
+    #[rpc_method(name = "eth_getBlockReceipts")]
+    pub fn get_block_receipts(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<Vec<TransactionReceipt>>> {
+        debug!(
+            block_number,
+            "EVM module JSON-RPC request to `eth_getBlockReceipts`"
+        );
+        Ok(self.get_receipts(block_number, state))
     }
 
     /// Handler for: `eth_getTransactionReceipt`
@@ -300,16 +245,7 @@ where
             %hash,
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
         );
-
-        let mut maybe_receipt = || -> Option<TransactionReceipt> {
-            let number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-            let receipt = self.receipt(number, state)?;
-            Some(build_rpc_receipt(block, tx, number, receipt))
-        };
-
-        Ok(maybe_receipt())
+        Ok(self.get_receipt_by_hash(hash, state))
     }
 
     /// Handler for: `eth_call`
@@ -458,6 +394,108 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_block(
+        &self,
+        block_number: Option<String>,
+        details: Option<bool>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Block> {
+        let block = self.get_sealed_block_by_number(block_number, state)?;
+
+        let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
+        let header = from_primitive_with_hash(block.header().clone(), block_hash);
+
+        let block_number = block.number();
+        let tx_range = block.transactions_start()..block.transactions_end();
+
+        let transactions = if Some(true) == details {
+            let txs = tx_range
+                .map(|index| {
+                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                    Some(from_recovered_with_block_context(
+                        tx.into(),
+                        Some(block_hash),
+                        block_number,
+                        U256::from(index - block.transactions_start()),
+                    ))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            BlockTransactions::Full(txs)
+        } else {
+            let hashes = tx_range
+                .map(|index| {
+                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                    Some(*tx.signed_transaction.hash())
+                })
+                .collect::<Option<Vec<_>>>()?;
+            BlockTransactions::Hashes(hashes)
+        };
+
+        Some(Block {
+            header,
+            transactions,
+            ..Default::default()
+        })
+    }
+
+    fn get_contract_code(
+        &self,
+        address: Address,
+        mut state: MaybeArchivalState<'_, S>,
+    ) -> Option<Bytes> {
+        let account = self
+            .accounts
+            .get(&address, state.deref_mut())
+            .unwrap_infallible()?;
+        let code = self
+            .code
+            .get(&account.code_hash, state.deref_mut())
+            .unwrap_infallible()?;
+        Some(code.bytes())
+    }
+
+    fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
+        let tx_number = self.get_tx_index_by_hash(&hash, state)?;
+        let tx = self.transaction(tx_number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let index = U256::from(tx_number - block.transactions_start());
+        let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
+        Some(tx)
+    }
+
+    fn get_receipt_by_hash(
+        &self,
+        hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt> {
+        let number = self.get_tx_index_by_hash(&hash, state)?;
+        self.get_receipt_by_index(number, state)
+    }
+
+    fn get_receipt_by_index(
+        &self,
+        number: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt> {
+        let tx = self.transaction(number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let receipt = self.receipt(number, state)?;
+        Some(build_rpc_receipt(block, tx, number, receipt))
+    }
+
+    fn get_receipts(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Vec<TransactionReceipt>> {
+        let block = self.get_sealed_block_by_number(block_number, state)?;
+        let tx_range = block.transactions_start()..block.transactions_end();
+        let receipts = tx_range
+            .map(|index| self.get_receipt_by_index(index, state))
+            .collect::<Option<Vec<_>>>()?;
+        Some(receipts)
+    }
+
     fn trace_transaction(
         &self,
         block_env: BlockEnv,

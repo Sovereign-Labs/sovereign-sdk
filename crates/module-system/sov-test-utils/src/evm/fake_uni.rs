@@ -3,6 +3,7 @@ use alloy_sol_types::sol;
 sol!(
     #[sol(
         rpc,
+        all_derives = true,
         bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/evm/test-data/artifacts/", "ERC20.bin")))]
     Erc20,
     concat!(
@@ -15,6 +16,7 @@ sol!(
 sol!(
     #[sol(
         rpc,
+        all_derives = true,
         bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/evm/test-data/artifacts/", "Router.bin")))]
     Router,
     concat!(

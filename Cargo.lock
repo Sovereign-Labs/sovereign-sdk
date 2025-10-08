@@ -11778,6 +11778,7 @@ dependencies = [
 name = "sov-demo-rollup"
 version = "0.3.0"
 dependencies = [
+ "alloy",
  "alloy-primitives",
  "alloy-provider",
  "alloy-pubsub",
