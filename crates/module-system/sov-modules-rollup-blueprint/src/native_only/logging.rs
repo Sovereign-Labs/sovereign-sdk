@@ -93,6 +93,7 @@ pub fn default_rust_log_value() -> String {
         "risc0_zkvm=warn",
         "sqlx=warn",
         "tiny_http=warn",
+        "rustls=info",
         // "info", // <--- good option instead of default `debug` if you want most things to be quiet except for a handful of components
         // "sov_modules_api=trace",
         // "sov_modules_api::rest=trace", // <--- if you're not getting the data you'd expect out of REST APIs, or debugging `HasCustomRestApi` implementations

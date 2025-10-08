@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
+use tracing_subscriber::filter::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(name = "submit_measure")]
@@ -43,8 +44,20 @@ struct DaConfig {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    // Initialize tracing subscriber with env filter (defaults to debug)
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new(
+                "debug,tower=warn,hyper=warn,rustls=info,sov_metrics=error,reqwest=warn,",
+            )
+        }))
+        .init();
+
     let da_config_str = std::fs::read_to_string(&args.da_config_path)?;
     let da_config: DaConfig = toml::from_str(&da_config_str)?;
+
+    let with_twinkle = da_config.da.twinkle_config.is_some();
+    println!("With Twinkle: {with_twinkle}");
 
     let payload_config_str = std::fs::read_to_string(&args.payload_config_path)?;
     let payload_config: PayloadConfig = toml::from_str(&payload_config_str)?;

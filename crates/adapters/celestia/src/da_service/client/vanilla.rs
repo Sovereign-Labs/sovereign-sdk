@@ -40,7 +40,7 @@ impl VanillaClient {
         }
     }
 
-    #[instrument(skip_all)]
+    #[instrument(skip(self, blob, signer, namespace), fields(namespace = %namespace.ns_type()))]
     async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
@@ -60,7 +60,6 @@ impl VanillaClient {
 
         let blob_hash = HexHash::new(*blob.commitment.hash());
         debug!(
-            namespace = ?namespace.ns_type(),
             commitment = %blob_hash,
             bytes,
             "Submitting a blob"
@@ -107,7 +106,7 @@ impl VanillaClient {
             blob_hash = %blob_hash,
             gas_used = %tx_response.gas_used,
             bytes,
-            ?namespace,
+            namespace = ?namespace.ns_type(),
             ?lock_acquisition,
             ?submit_time,
             ?total_time,

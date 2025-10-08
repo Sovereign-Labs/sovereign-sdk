@@ -65,6 +65,7 @@ where
     serializer.serialize_str(&hex::encode(bytes))
 }
 
+/// Response from <https://t.tech/docs/v0/blob/POST>
 #[derive(Debug, Deserialize)]
 pub struct SubmitBlobAsyncResponse {
     #[serde(rename = "twinkleRequestId")]
@@ -73,7 +74,7 @@ pub struct SubmitBlobAsyncResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
-pub enum BlobStatusNice {
+pub enum BlobStatus {
     Pending,
     Included {
         height: u64,
@@ -84,11 +85,12 @@ pub enum BlobStatusNice {
     Rejected,
 }
 
+/// Response from <https://t.tech/docs/v0/blob/status/GET>
 #[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct BlobStatusResponse {
     #[serde(flatten)]
-    pub status: BlobStatusNice,
+    pub status: BlobStatus,
     #[serde_as(as = "serde_with::base64::Base64")]
     pub commitment: Vec<u8>,
 }
@@ -103,7 +105,7 @@ impl TryFrom<BlobStatusResponse> for SubmitBlobReceipt<TmHash> {
                 e.len(),
             )
         })?;
-        let BlobStatusNice::Included { transaction_id, .. } = value.status else {
+        let BlobStatus::Included { transaction_id, .. } = value.status else {
             anyhow::bail!("Transaction Id is not present, is status `Included`?");
         };
         Ok(SubmitBlobReceipt {

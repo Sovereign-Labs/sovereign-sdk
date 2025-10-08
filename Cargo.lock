@@ -11687,6 +11687,7 @@ dependencies = [
  "toml 0.8.23",
  "tower 0.5.2",
  "tracing",
+ "tracing-subscriber 0.3.20",
  "wiremock",
 ]
 

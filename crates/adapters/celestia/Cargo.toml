@@ -52,6 +52,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["sync"] }
 tower = { workspace = true, optional = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true, optional = true, features = ["env-filter"] }
 # Used by the checker.
 rand = { workspace = true, optional = true }
 
@@ -96,7 +97,8 @@ native = [
     "sov-modules-macros?/native",
     "dep:rand",
     "dep:reqwest",
-    "dep:serde_with"
+    "dep:serde_with",
+    "dep:tracing-subscriber",
 ]
 bench = [
     "dep:sov-metrics",

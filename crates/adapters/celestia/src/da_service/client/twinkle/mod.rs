@@ -4,7 +4,7 @@ mod types;
 
 use crate::celestia::CompactHeader;
 use crate::da_service::client::twinkle::types::{
-    BlobStatusNice, BlobStatusResponse, HeaderResponse, Network, SubmitBlobAsyncResponse,
+    BlobStatus, BlobStatusResponse, HeaderResponse, Network, SubmitBlobAsyncResponse,
     SubmitBlobRequest,
 };
 use crate::metrics::BlobSubmitMeasurement;
@@ -105,7 +105,7 @@ impl TwinkleClient {
 
     #[instrument(skip(self))]
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
-        tracing::trace!(%twinkle_request_id, "Checking blob status");
+        tracing::trace!("Checking blob status");
         (|| async {
             let mut request = self.client.get(BLOB_STATUS);
             request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
@@ -117,8 +117,8 @@ impl TwinkleClient {
         .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
 
-    #[instrument(skip(self, blob, _signer))]
-    async fn submit_blob_to_namespace_and_pull(
+    #[instrument(skip(self, blob, _signer, namespace), fields(namespace = %namespace.ns_type()))]
+    async fn submit_blob_waiting_inclusion(
         &self,
         blob: Vec<u8>,
         namespace: RollupNamespace,
@@ -131,7 +131,7 @@ impl TwinkleClient {
         let timeout = tokio::time::sleep(self.total_timeout);
         tokio::pin!(timeout);
 
-        tracing::debug!(?namespace, bytes, "Submitting a blob");
+        tracing::debug!(bytes, "Submitting a blob");
 
         let request = SubmitBlobRequest {
             namespace: namespace.id(),
@@ -182,12 +182,14 @@ impl TwinkleClient {
                 sov_metrics::track_metrics(|tracker| {
                     tracker.submit(measurement);
                 });
-                return Err(anyhow::anyhow!("Timeout during blob submission after {:?}", self.total_timeout));
+                return Err(anyhow::anyhow!("Timeout during blob submission to namespace={:?} after {:?}", namespace.ns_type(), self.total_timeout));
             }
         };
         let submit_time = submit_start.elapsed();
         let pull_start = std::time::Instant::now();
-        tracing::trace!(twinkle_request_id = %submit_response.twinkle_request_id, "Blob submit request has been accepted by Twinkle, waiting for blob inclusion");
+        tracing::trace!(
+            twinkle_request_id = %submit_response.twinkle_request_id,
+            "Blob submit request has been accepted by Twinkle, waiting for blob inclusion");
 
         tokio::select! {
             result = async {
@@ -198,21 +200,25 @@ impl TwinkleClient {
                         .blob_status(&submit_response.twinkle_request_id)
                         .await?;
                     match &response.status {
-                        BlobStatusNice::Pending => {
+                        BlobStatus::Pending => {
                             continue;
                         }
-                        BlobStatusNice::Included {
+                        BlobStatus::Included {
                             height,
                             ..
                         } => {
                             let height = *height;
                             let receipt = SubmitBlobReceipt::try_from(response)?;
                             tracing::debug!(
+                                da_height = %height,
+                                tx_hash = %receipt.da_transaction_id,
+                                blob_hash = %receipt.blob_hash,
+                                bytes,
+                                namespace = ?namespace.ns_type(),
                                 ?submit_time,
                                 pull_time = ?pull_start.elapsed(),
                                 total_time = ?start.elapsed(),
-                                %height,
-                                "Blob has been included");
+                                "Blob has been submitted to Celestia");
                             let measurement = BlobSubmitMeasurement::new_for_twinkle(
                                 namespace.ns_type(),
                                 bytes,
@@ -226,7 +232,7 @@ impl TwinkleClient {
                             });
                             return Ok(receipt);
                         }
-                        BlobStatusNice::Rejected => {
+                        BlobStatus::Rejected => {
                             tracing::debug!(
                                 ?submit_time,
                                 pull_time = ?pull_start.elapsed(),
@@ -279,7 +285,7 @@ impl TwinkleClient {
         let _join_handle = tokio::task::spawn(async move {
             tx.send(
                 client
-                    .submit_blob_to_namespace_and_pull(blob, namespace, signer)
+                    .submit_blob_waiting_inclusion(blob, namespace, signer)
                     .await,
             )
             .expect("Failed to propagate blob submission result into a channel");
