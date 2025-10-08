@@ -1,16 +1,15 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256, U256};
 use alloy_primitives::{BlockNumber, Bytes};
-use revm::context::BlockEnv;
-use revm::context_interface::block::BlobExcessGasAndPrice;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{GenesisState, Module, Spec};
 
+use crate::conversions::create_block_env;
 use crate::db::init::InitEvmDb;
 use crate::evm::primitive_types::Block;
-use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig, BLOB_GAS_PRICE, EXCESS_BLOB_GAS};
+use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig, EXCESS_BLOB_GAS};
 #[cfg(feature = "native")]
 use std::ops::RangeInclusive;
 
@@ -58,7 +57,14 @@ where
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
 
-        let block_env = self.env_from_block(&block);
+        let block_env = create_block_env(
+            self.base_fee(),
+            block.header.gas_limit,
+            block.header.timestamp,
+            block.header.beneficiary,
+            block.header.number,
+            None,
+        );
         self.block_env.set(&block_env, state)?;
 
         #[cfg(feature = "native")]
@@ -91,24 +97,6 @@ where
         };
 
         Ok(())
-    }
-
-    // `BlockEnv`` will be overridden in begin_rollup_block_hook.
-    fn env_from_block(&self, block: &Block) -> BlockEnv {
-        BlockEnv {
-            number: U256::from(block.header.number),
-            beneficiary: block.header.beneficiary,
-            timestamp: U256::from(block.header.timestamp),
-            prevrandao: None,
-            gas_limit: block.header.gas_limit,
-            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
-                excess_blob_gas: EXCESS_BLOB_GAS,
-                blob_gasprice: BLOB_GAS_PRICE,
-            }),
-
-            basefee: self.base_fee(),
-            ..Default::default()
-        }
     }
 }
 
