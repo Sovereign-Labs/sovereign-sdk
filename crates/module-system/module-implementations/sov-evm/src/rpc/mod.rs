@@ -94,12 +94,10 @@ where
             .unwrap_infallible()
             .map(|number| hex::encode(number.to_be_bytes()));
 
-        match block_number_hex {
-            Some(block_number_hex) => {
-                self.get_block_by_number(Some(block_number_hex), details, state)
-            }
-            None => Ok(None),
-        }
+        Ok(match block_number_hex {
+            Some(block_number_hex) => self.get_block(Some(block_number_hex), details, state),
+            None => None,
+        })
     }
 
     /// Handler for: `eth_getBlockByNumber`
@@ -114,49 +112,7 @@ where
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
-
-        let maybe_block = || -> Option<Block> {
-            let block = self.get_sealed_block_by_number(block_number, state)?;
-
-            let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
-            let header = from_primitive_with_hash(block.header().clone(), block_hash);
-
-            let block_number = block.number();
-            let tx_range = block.transactions_start()..block.transactions_end();
-
-            let transactions = if Some(true) == details {
-                BlockTransactions::Full(
-                    tx_range
-                        .map(|index| {
-                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                            Some(from_recovered_with_block_context(
-                                tx.into(),
-                                Some(block_hash),
-                                block_number,
-                                U256::from(index - block.transactions_start()),
-                            ))
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                )
-            } else {
-                BlockTransactions::Hashes(
-                    tx_range
-                        .map(|index| {
-                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                            Some(*tx.signed_transaction.hash())
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                )
-            };
-
-            Some(Block {
-                header,
-                transactions,
-                ..Default::default()
-            })
-        };
-
-        Ok(maybe_block())
+        Ok(self.get_block(block_number, details, state))
     }
 
     /// Handler for: `eth_getBalance`
@@ -424,6 +380,50 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_block(
+        &self,
+        block_number: Option<String>,
+        details: Option<bool>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Block> {
+        let block = self.get_sealed_block_by_number(block_number, state)?;
+
+        let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
+        let header = from_primitive_with_hash(block.header().clone(), block_hash);
+
+        let block_number = block.number();
+        let tx_range = block.transactions_start()..block.transactions_end();
+
+        let transactions = if Some(true) == details {
+            let txs = tx_range
+                .map(|index| {
+                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                    Some(from_recovered_with_block_context(
+                        tx.into(),
+                        Some(block_hash),
+                        block_number,
+                        U256::from(index - block.transactions_start()),
+                    ))
+                })
+                .collect::<Option<Vec<_>>>()?;
+            BlockTransactions::Full(txs)
+        } else {
+            let hashes = tx_range
+                .map(|index| {
+                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
+                    Some(*tx.signed_transaction.hash())
+                })
+                .collect::<Option<Vec<_>>>()?;
+            BlockTransactions::Hashes(hashes)
+        };
+
+        Some(Block {
+            header,
+            transactions,
+            ..Default::default()
+        })
+    }
+
     fn get_contract_code(
         &self,
         address: Address,
