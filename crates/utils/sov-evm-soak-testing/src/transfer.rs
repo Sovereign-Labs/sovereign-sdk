@@ -13,7 +13,7 @@ pub(crate) async fn run(
         .collect();
 
     // Send funds to all participants in the benchmark.
-    let foucet_client = RpcClient::new(&foucet_private_key, rpc_addr).await;
+    let foucet_client = RpcClient::new(foucet_private_key, rpc_addr).await;
     let block_number = foucet_client.block_number().await;
     for (addr, _) in priv_keys.iter() {
         foucet_client.alloy_send_eth(*addr, 2).await;
