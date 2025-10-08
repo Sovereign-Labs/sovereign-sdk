@@ -9,7 +9,6 @@ use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::FullyBakedTxWithMaybeChangeSet;
 use crate::preferred::RollupBlockExecutorConfig;
-use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
@@ -42,6 +41,8 @@ use crate::preferred::{
     PreferredSequencerReadBatch, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
+use anyhow::anyhow;
+use sov_modules_api::macros::config_value;
 
 /// These two constants are used to calculate the comfortable batch size limit.
 /// Currently, this is 99% of the hard limit. After the comfortable limit is reached,
@@ -54,6 +55,7 @@ const COMFORTABLE_SIZE_LIMIT_DIVISOR: u64 = 100;
 /// the sequencer will close and publish the current batch.
 const COMFORTABLE_GAS_LIMIT_MULTIPLIER: u64 = 19;
 const COMFORTABLE_GAS_LIMIT_DIVISOR: u64 = 20;
+const COMFORTABLE_IN_FLIGHT_BLOBS: usize = 5;
 
 const METRICS_BATCH_SIZE: usize = 32;
 
@@ -469,7 +471,7 @@ where
             .trigger_recovery(next_sequence_number_according_to_node, recovery_strategy)
             .await;
 
-        // Creates a new executor  for recovery. This must *not* be called to create executors
+        // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
         let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
             info,
@@ -573,6 +575,18 @@ where
                 .sequencer_kind_config
                 .ideal_lag_behind_finalized_slot,
         ) {
+            tracing::trace!(
+                "Skipping batch production due to lagging less than ideal slot number difference"
+            );
+            return;
+        }
+
+        let in_flight_blobs = self.in_flight_blobs.load(Ordering::Relaxed);
+        if in_flight_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS {
+            tracing::trace!(
+                current_in_flight = %in_flight_blobs,
+                max_comfortable = %COMFORTABLE_IN_FLIGHT_BLOBS,
+                "Skipping batch production due too many in flight blobs");
             return;
         }
 
@@ -1523,7 +1537,11 @@ where
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
             (false, true, false, _, _) => {
-                error!(slot_number_according_to_node=%info.slot_number, %current_visible_slot_number, "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
+                error!(
+                    slot_number_according_to_node=%info.slot_number,
+                    %current_visible_slot_number,
+                    deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
+                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
                 inner.trigger_recovery(info).await;
 
                 PreferredSeqOperation::RecoverAndCatchUp

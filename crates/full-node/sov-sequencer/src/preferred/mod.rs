@@ -78,7 +78,7 @@ use crate::{
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
 
-// Big infodump for the user that wouldmake the code hard to read if it were inline.
+// Big info dump for the user that would make the code hard to read if it were inline.
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
 
 /// A [`Sequencer`] with instant transaction confirmation.
@@ -886,7 +886,7 @@ where
             Ok(rx) => rx.await.map_err(database_error_500),
             Err(e) => match e {
                 AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503());
+                    return Err(sequencer_overloaded_503("Other"));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))
@@ -896,7 +896,7 @@ where
                     nb_of_concurrent_blob_submissions,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
-                        return Err(sequencer_overloaded_503());
+                        return Err(sequencer_overloaded_503("No finalized slots available"));
                     }
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
@@ -1143,9 +1143,9 @@ pub enum BatchCreationError {
     #[error("Internal database error; batch could not be created. Error: {0}")]
     DatabaseError(anyhow::Error),
     /// The sequencer was not able to start a batch because it has consumed its whole buffer of finalized slots.
-    #[error("The sequencer is temporarily overloaded. Try again in a few seconds")]
+    #[error("The sequencer is temporarily overloaded (No finalized slots available). Try again in a few seconds")]
     NoFinalizedSlotAvailable,
-    /// The prefered sequencer has reached the stop height and is no longer creating new batches.
+    /// The preferred sequencer has reached the stop height and is no longer creating new batches.
     #[error(
         "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}"
     )]

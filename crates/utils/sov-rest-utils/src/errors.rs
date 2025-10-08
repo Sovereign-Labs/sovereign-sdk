@@ -58,11 +58,11 @@ pub fn bad_request_400(message: &str, err: impl ToString) -> Response {
 }
 
 /// Returns a 503 error to be used when the sequencer is overloaded.
-pub fn sequencer_overloaded_503() -> ErrorObject {
+pub fn sequencer_overloaded_503(reason: &str) -> ErrorObject {
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,
         message: "The sequencer is temporarily overloaded. Try again in a few seconds".to_string(),
-        details: json_obj!({}),
+        details: json_obj!({"reason":  reason}),
     }
 }
 
