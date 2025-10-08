@@ -8,7 +8,7 @@ use crate::celestia::CompactHeader;
 use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
 pub use crate::twinkle::types::Network;
 use crate::twinkle::types::{
-    BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
+    BlobStatusNice, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
 };
 use crate::types::TmHash;
 use crate::verifier::address::CelestiaAddress;
@@ -31,12 +31,16 @@ const AGENT: &str = "sov-celestia-adapter";
 const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 
 // TODO for later:
-//  - Get block and header compatible with return types of celestia sender
+//  ~ Get block and header compatible with return types of celestia sender
+//     + Header: Compact header
+//     - Header: DAH
+//     - Block: Namespace data
 //  - Logging
 //  - Metrics
 //  - Unit tests with mockserver
+//  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
 // ---------
-//  - Log URLs and timestamps (debug only)
+//  - Mo
 
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct TwinkleConfig {
@@ -104,7 +108,6 @@ impl TwinkleClient {
 
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
         tracing::trace!(%twinkle_request_id, "Checking blob status");
-
         (|| async {
             let mut request = self.client.get(BLOB_STATUS);
             request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
@@ -136,7 +139,7 @@ impl TwinkleClient {
             namespace: namespace_id,
             data: blob,
             asynchronous: true,
-            network: self.network.to_string(),
+            network: self.network,
         };
 
         let submit_start = std::time::Instant::now();
@@ -195,12 +198,15 @@ impl TwinkleClient {
                     let response = self
                         .blob_status(&submit_response.twinkle_request_id)
                         .await?;
-                    match response.status {
-                        BlobStatus::Pending => {
+                    match &response.status {
+                        BlobStatusNice::Pending => {
                             continue;
                         }
-                        BlobStatus::Included => {
-                            let height = response.height.expect("Height should be set for included blob");
+                        BlobStatusNice::Included {
+                            height,
+                            ..
+                        } => {
+                            let height = *height;
                             let receipt = SubmitBlobReceipt::try_from(response)?;
                             tracing::debug!(
                                 ?submit_time,
@@ -221,7 +227,7 @@ impl TwinkleClient {
                             });
                             return Ok(receipt);
                         }
-                        BlobStatus::Rejected => {
+                        BlobStatusNice::Rejected => {
                             tracing::debug!(
                                 ?submit_time,
                                 pull_time = ?pull_start.elapsed(),

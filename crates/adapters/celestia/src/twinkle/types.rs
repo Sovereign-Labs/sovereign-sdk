@@ -3,26 +3,40 @@ use crate::types::TmHash;
 use crate::{celestia_tm_version, TendermintHeader};
 use jsonrpsee::core::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serializer};
 use serde_with::serde_as;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tendermint_proto::Protobuf;
 
-#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Network {
     Mocha,
     Mainnet,
 }
 
+impl Network {
+    fn as_str(&self) -> &str {
+        match self {
+            Network::Mocha => "mocha-4",
+            Network::Mainnet => "mainnet",
+        }
+    }
+}
+
 impl std::fmt::Display for Network {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            Network::Mocha => "mocha-4".to_string(),
-            Network::Mainnet => "mainnet".to_string(),
-        };
-        write!(f, "{str}")
+        f.write_str(self.as_str())
+    }
+}
+
+impl serde::Serialize for Network {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
     }
 }
 
@@ -33,7 +47,7 @@ pub struct SubmitBlobRequest {
     // Hex-encoded
     pub data: String,
     pub asynchronous: bool,
-    pub network: String,
+    pub network: Network,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,17 +64,25 @@ pub enum BlobStatus {
     Rejected,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(tag = "status", rename_all = "lowercase")]
+pub enum BlobStatusNice {
+    Pending,
+    Included {
+        height: u64,
+        #[serde(rename = "txId")]
+        transaction_id: HexHash,
+    },
+    Rejected,
+}
+
 #[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct BlobStatusResponse {
-    pub status: BlobStatus,
+    #[serde(flatten)]
+    pub status: BlobStatusNice,
     #[serde_as(as = "serde_with::base64::Base64")]
     pub commitment: Vec<u8>,
-    // Only set for [`BlobStatus::Included`]
-    #[serde(rename = "txId")]
-    pub transaction_id: Option<HexHash>,
-    // Only set for [`BlobStatus::Included`]
-    pub height: Option<u64>,
 }
 
 impl TryFrom<BlobStatusResponse> for SubmitBlobReceipt<TmHash> {
@@ -73,7 +95,7 @@ impl TryFrom<BlobStatusResponse> for SubmitBlobReceipt<TmHash> {
                 e.len(),
             )
         })?;
-        let Some(transaction_id) = value.transaction_id else {
+        let BlobStatusNice::Included { transaction_id, .. } = value.status else {
             anyhow::bail!("Transaction Id is not present, is status `Included`?");
         };
         Ok(SubmitBlobReceipt {
