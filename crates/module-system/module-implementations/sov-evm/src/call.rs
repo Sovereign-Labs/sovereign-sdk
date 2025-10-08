@@ -105,7 +105,6 @@ where
         }
         #[cfg(feature = "native")]
         let db_metrics = db.metrics();
-        drop(db); // To release the state
 
         let gas_used = result.gas_used();
         start_timer!(receipt_t);

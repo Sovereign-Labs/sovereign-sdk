@@ -813,7 +813,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
 
-        let prefix = sov_state::Prefix::new(vec![1, 2, 3]);
+        let prefix = sov_state::Prefix::new(1, 2);
         let storage_key = SlotKey::new::<HexString, _, _>(&prefix, [4, 5, 6].as_ref(), &codec);
         let storage_value = SlotValue::new(&vec![7, 8, 9], &codec);
 
@@ -831,7 +831,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
 
-        let prefix = sov_state::Prefix::new(vec![1, 2, 3]);
+        let prefix = sov_state::Prefix::new(1, 2);
         let storage_key = SlotKey::new::<HexString, _, _>(&prefix, [4, 5, 6].as_ref(), &codec);
         let storage_value = SlotValue::new(&vec![7, 8, 9], &codec);
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
@@ -868,7 +868,7 @@ mod tests {
         let mut scratchpad = checkpoint.to_tx_scratchpad();
 
         // Save some values in the scratchpad.
-        let storage_key_1 = SlotKey::from(vec![1]);
+        let storage_key_1 = SlotKey::test_key(1);
         let storage_value_1 = SlotValue::new(&vec![11], &codec);
         save_and_check_value(&storage_key_1, storage_value_1.clone(), &mut scratchpad);
 
@@ -885,7 +885,7 @@ mod tests {
         );
 
         // Save some values in the pre_exec_ws
-        let storage_key_2 = SlotKey::from(vec![2]);
+        let storage_key_2 = SlotKey::test_key(2);
         let storage_value_2 = SlotValue::new(&vec![22], &codec);
         save_and_check_value(&storage_key_2, storage_value_2.clone(), &mut pre_exec_ws);
 
@@ -893,7 +893,7 @@ mod tests {
         let mut pre_exec_ws = pre_exec_ws.commit();
 
         // Save some values in the pre_exec_ws
-        let storage_key_3 = SlotKey::from(vec![3]);
+        let storage_key_3 = SlotKey::test_key(3);
         let storage_value_3 = SlotValue::new(&vec![33], &codec);
         save_and_check_value(&storage_key_3, storage_value_3.clone(), &mut pre_exec_ws);
 
@@ -1015,7 +1015,7 @@ mod tests {
     }
 
     fn key(k: u8) -> SlotKey {
-        SlotKey::from(vec![k])
+        SlotKey::test_key(k)
     }
 
     fn value(v: u8) -> SlotValue {

@@ -6328,6 +6328,7 @@ dependencies = [
  "nomt-core",
  "serde",
  "serde-big-array",
+ "serde_with",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
