@@ -2,6 +2,7 @@
 
 mod mempool;
 
+use crate::preferred::FullyBakedTxWithMaybeChangeSet;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 pub use full_node_configs::sequencer::StdSequencerConfig;
@@ -690,6 +691,10 @@ where
         } else {
             Ok(TxStatus::Unknown)
         }
+    }
+
+    fn send_tx_to_warm_up_cache(&self, _baked_tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+        unimplemented!()
     }
 }
 

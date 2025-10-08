@@ -75,6 +75,8 @@ use crate::{
     ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxStatus, TxStatusManager,
 };
 
+pub use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
+
 type VisibleSlotNumberIncrease = NonZero<u8>;
 
 // Big infodump for the user that wouldmake the code hard to read if it were inline.
@@ -102,6 +104,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -281,6 +284,7 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
+            cache_warm_up_executor,
         });
 
         // Launch replica sync task only for replicas
@@ -712,6 +716,10 @@ where
     type Spec = S;
     type Rt = Rt;
     type Da = Da;
+
+    fn send_tx_to_warm_up_cache(&self, baked_tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+        self.cache_warm_up_executor.send_tx(baked_tx)
+    }
 
     async fn list_events(
         &self,

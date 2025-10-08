@@ -1,11 +1,6 @@
 //! Defines the [`Sequencer`] trait and related types.
 
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-
+use crate::preferred::FullyBakedTxWithMaybeChangeSet;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -20,6 +15,11 @@ use sov_rest_utils::{json_obj, to_json_object};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 use tokio::time::timeout;
@@ -136,6 +136,9 @@ pub trait Sequencer: Send + Sync + 'static {
     ) -> Option<tokio::sync::broadcast::Receiver<StateUpdateNotification>> {
         None
     }
+
+    /// TODO
+    fn send_tx_to_warm_up_cache(&self, baked_tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet;
 }
 
 /// A transaction that has been accepted by the batch builder.
