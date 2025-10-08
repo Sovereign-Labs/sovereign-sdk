@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
+use crate::preferred::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{

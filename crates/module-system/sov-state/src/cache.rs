@@ -14,7 +14,7 @@ use crate::storage::{SlotKey, SlotValue, Storage};
 use crate::Digest;
 #[cfg(feature = "native")]
 use crate::{NativeStorage, StateGetter};
-use crate::{NodeLeaf, NodeLeafAndMaybeValue, ReadType};
+use crate::{NodeLeaf, NodeLeafAndMaybeValue, ReadType, DEFAULT_CACHE_CAPACITY};
 use sov_metrics::StateAccessMetric;
 
 /// An enum that represents the temperature of a value in the storage.
@@ -229,7 +229,7 @@ use internal::CacheLog;
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external. On following reads, the cache checks if the value we read was inserted before.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
     pub(crate) cache: CacheLog,
@@ -238,6 +238,17 @@ pub struct ProvableStorageCache<N> {
     // Ordered reads and writes.
     ordered_db_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
     phantom: core::marker::PhantomData<N>,
+}
+
+impl<N: ProvableCompileTimeNamespace> Default for ProvableStorageCache<N> {
+    fn default() -> Self {
+        Self {
+            cache: CacheLog::default(),
+            revertable_ordered_reads: Vec::with_capacity(DEFAULT_CACHE_CAPACITY),
+            ordered_db_reads: Vec::with_capacity(DEFAULT_CACHE_CAPACITY),
+            phantom: core::marker::PhantomData,
+        }
+    }
 }
 
 impl<N: ProvableCompileTimeNamespace> Clone for ProvableStorageCache<N> {

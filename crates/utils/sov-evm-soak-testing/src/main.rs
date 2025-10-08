@@ -1,4 +1,3 @@
-use alloy::hex;
 use alloy_primitives::Address;
 use anyhow::Result;
 use clap::Parser;
@@ -8,7 +7,9 @@ use std::net::SocketAddr;
 
 use crate::uniswap::UniSoakTest;
 
+mod helpers;
 mod simple_storage;
+mod transfer;
 mod uniswap;
 
 #[derive(Parser, Debug)]
@@ -44,6 +45,12 @@ enum TestType {
     },
     /// Run SimpleStorage soak test
     SimpleStorage,
+    /// Runs eth transfers soak test.
+    Transfer {
+        /// Number of transfers.
+        #[arg(short, long, default_value = "100")]
+        count: usize,
+    },
 }
 
 #[tokio::main]
@@ -51,20 +58,16 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.test {
+        TestType::Transfer { count } => {
+            transfer::run(count, &args.private_key, args.rpc_addr).await?;
+        }
         TestType::Uniswap { count, num_workers } => {
-            if num_workers > 255 {
-                return Err(anyhow::anyhow!("num_workers must be less than 256 because of our private key tweaking. This is an easy fix, but we haven't done it yet."));
-            }
             let mut handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>> =
                 Vec::with_capacity(num_workers);
-            for i in 0..num_workers {
-                // Tweak the private key to avoid conflicts between workers
-                let key = {
-                    let mut key_bytes: [u8; 32] =
-                        hex::decode(&args.private_key).unwrap().try_into().unwrap();
-                    key_bytes[0] = key_bytes[0].wrapping_add(i as u8);
-                    hex::encode(key_bytes)
-                };
+
+            let priv_keys = helpers::generate_priv_keys(num_workers, &args.private_key)?;
+
+            for (i, key) in priv_keys.into_iter().enumerate() {
                 // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
                     let client = RpcClient::new(&key, args.rpc_addr).await;

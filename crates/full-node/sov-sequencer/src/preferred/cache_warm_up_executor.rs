@@ -40,6 +40,11 @@ impl FullyBakedTxWithMaybeChangeSet {
     pub fn new(tx: FullyBakedTx) -> Self {
         Self { tx, receiver: None }
     }
+
+    /// Transaction size in bytes.
+    pub fn size(&self) -> usize {
+        self.tx.data.len()
+    }
 }
 
 pub(crate) struct StartBlockNotification<S: Spec> {

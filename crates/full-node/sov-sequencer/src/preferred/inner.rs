@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
+use crate::preferred::FullyBakedTxWithMaybeChangeSet;
 use crate::preferred::RollupBlockExecutorConfig;
 use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
@@ -747,7 +748,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
 
     AcceptTx {
         resp: oneshot::Sender<AcceptTxRet<S, Rt>>,
-        baked_tx: FullyBakedTx,
+        baked_tx: FullyBakedTxWithMaybeChangeSet,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -1006,7 +1007,7 @@ where
 
     pub(crate) async fn accept_tx_msg(
         &self,
-        baked_tx: &FullyBakedTx,
+        baked_tx: FullyBakedTxWithMaybeChangeSet,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -1017,7 +1018,7 @@ where
         let (resp, recv) = oneshot::channel();
         self.send(Message::AcceptTx {
             resp,
-            baked_tx: baked_tx.clone(),
+            baked_tx: baked_tx,
             tx_hash,
             original_tx_queue_id,
             reason,
@@ -1604,7 +1605,7 @@ where
 
     async fn process_accept_tx(
         &mut self,
-        baked_tx: FullyBakedTx,
+        baked_tx: FullyBakedTxWithMaybeChangeSet,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
@@ -1659,19 +1660,17 @@ where
             executor,
             batch_size_tracker,
             executor_events_sender,
-            cache_warm_up_executor,
             ..
         } = &mut *inner;
 
-        let tx_len = baked_tx.data.len();
-        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
+        let tx_size = baked_tx.size();
+        if !batch_size_tracker.can_fit_tx_bytes(tx_size) {
             return Err(AcceptTxError::TxTooBig {
                 current_batch_size: batch_size_tracker.current_batch_size,
                 max_batch_size: batch_size_tracker.max_batch_size,
             });
         }
 
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
@@ -1695,7 +1694,7 @@ where
             }
         };
 
-        batch_size_tracker.add_tx(tx_len, execution_time_micros);
+        batch_size_tracker.add_tx(tx_size, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;

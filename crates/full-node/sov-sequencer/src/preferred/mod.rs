@@ -67,6 +67,7 @@ use crate::common::{
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
+pub use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -74,8 +75,6 @@ use crate::rest_api::ApiAcceptedTx;
 use crate::{
     ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxStatus, TxStatusManager,
 };
-
-pub use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
 
@@ -717,10 +716,6 @@ where
     type Rt = Rt;
     type Da = Da;
 
-    fn send_tx_to_warm_up_cache(&self, baked_tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
-        self.cache_warm_up_executor.send_tx(baked_tx)
-    }
-
     async fn list_events(
         &self,
         event_nums: std::ops::Range<u64>,
@@ -840,14 +835,17 @@ where
             return Err(shut_down_error());
         }
 
+        let tx_len = baked_tx.data.len();
+        let baked_tx = self.cache_warm_up_executor.send_tx(baked_tx);
+
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
-        let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
+        let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx.tx).map_err(generic_accept_tx_error)?;
         tracing::debug!(%tx_hash, "Executing accept_tx");
 
         // Check if this transaction has a configured delay
         let runtime = Rt::default();
-        let call = match Rt::Auth::decode_serialized_tx(&baked_tx) {
+        let call = match Rt::Auth::decode_serialized_tx(&baked_tx.tx) {
             Ok(call) => call,
             Err(_) => {
                 return Err(ErrorObject {
@@ -870,7 +868,7 @@ where
 
         let res = match self
             .synchronized_state_updator
-            .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
+            .accept_tx_msg(baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
             .await
         {
             Ok(inner_res) => inner_res,
@@ -926,13 +924,7 @@ where
                 AcceptTxError::TxTooBig {
                     current_batch_size,
                     max_batch_size,
-                } => {
-                    return Err(err_cant_fit_tx(
-                        current_batch_size,
-                        max_batch_size,
-                        baked_tx.data.len(),
-                    ))
-                }
+                } => return Err(err_cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                 AcceptTxError::ExecutorError(err) => {
                     return Err(RollupBlockExecutorError::into_http_error(err));
                 }

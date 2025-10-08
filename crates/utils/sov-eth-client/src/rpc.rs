@@ -24,6 +24,7 @@ pub struct RpcClient {
     pub ws: jsonrpsee::ws_client::WsClient,
     pub pub_sub: alloy_provider::RootProvider,
     pub alloy_client: DynProvider,
+    pub private_key: String,
 }
 
 impl RpcClient {
@@ -54,6 +55,7 @@ impl RpcClient {
             client,
             ws,
             pub_sub,
+            private_key: private_key.to_string(),
         }
     }
 
@@ -189,5 +191,30 @@ impl RpcClient {
 
     pub async fn get_logs(&self, filter: &Filter) -> Vec<Log> {
         self.pub_sub.get_logs(filter).await.unwrap()
+    }
+
+    pub fn alloy_address(private_key: &str) -> alloy_primitives::Address {
+        alloy_primitives::Address::from_slice(
+            &private_key.parse::<LocalWallet>().unwrap().address().0,
+        )
+    }
+
+    pub async fn alloy_send_eth(
+        &self,
+        addr: alloy_primitives::Address,
+        amount: u64,
+    ) -> alloy_primitives::TxHash {
+        let tx = alloy_rpc_types::TransactionRequest::default()
+            .from(Self::alloy_address(self.private_key.as_str()))
+            .to(addr)
+            .value(alloy_primitives::U256::from(amount));
+
+        self.alloy_client
+            .send_transaction(tx)
+            .await
+            .unwrap()
+            .watch()
+            .await
+            .unwrap()
     }
 }
