@@ -121,7 +121,7 @@ impl TwinkleClient {
 
     async fn submit_blob_to_namespace_and_pull(
         &self,
-        blob: String,
+        blob: Vec<u8>,
         namespace_id: Namespace,
         namespace: RollupNamespace,
         _signer: CelestiaAddress,
@@ -134,7 +134,6 @@ impl TwinkleClient {
 
         tracing::debug!(?namespace, bytes, "Submitting a blob");
 
-        let namespace_id = hex::encode(namespace_id.id_v0().expect("Namespace should be v0"));
         let request = SubmitBlobRequest {
             namespace: namespace_id,
             data: blob,
@@ -276,7 +275,7 @@ impl TwinkleClient {
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         let (tx, rx) = oneshot::channel();
         let client = self.clone();
-        let blob = hex::encode(blob);
+        let blob = blob.to_vec();
         let signer = signer.clone();
 
         let _join_handle = tokio::task::spawn(async move {

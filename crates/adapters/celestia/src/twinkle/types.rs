@@ -40,28 +40,35 @@ impl serde::Serialize for Network {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Serialize)]
 pub struct SubmitBlobRequest {
-    // Hex-encoded
-    pub namespace: String,
-    // Hex-encoded
-    pub data: String,
+    #[serde(serialize_with = "serialize_namespace_hex")]
+    pub namespace: celestia_types::nmt::Namespace,
+    #[serde_as(as = "serde_with::hex::Hex")]
+    pub data: Vec<u8>,
     pub asynchronous: bool,
     pub network: Network,
+}
+
+fn serialize_namespace_hex<S>(
+    namespace: &celestia_types::nmt::Namespace,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // TODO: Should we use `as_bytes()` ??
+    let bytes = namespace
+        .id_v0()
+        .ok_or_else(|| serde::ser::Error::custom("Namespace is not v0"))?;
+    serializer.serialize_str(&hex::encode(bytes))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SubmitBlobAsyncResponse {
     #[serde(rename = "twinkleRequestId")]
     pub twinkle_request_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum BlobStatus {
-    Pending,
-    Included,
-    Rejected,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +80,7 @@ pub enum BlobStatusNice {
         #[serde(rename = "txId")]
         transaction_id: HexHash,
     },
+    // TODO: is there some info that we can use?
     Rejected,
 }
 
