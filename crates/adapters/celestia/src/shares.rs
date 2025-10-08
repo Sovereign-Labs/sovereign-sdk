@@ -414,7 +414,7 @@ mod tests {
             // } else {
             //     0u8
             // };
-            let blob = celestia_types::Blob::new(namespace, payload.clone(), APP_VERSION).unwrap();
+            let blob = celestia_types::Blob::new(namespace, payload.clone(), None, APP_VERSION).unwrap();
             // blob.share_version = ;
             (blob, payload)
         }
