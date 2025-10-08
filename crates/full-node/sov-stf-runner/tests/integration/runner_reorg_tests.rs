@@ -182,9 +182,7 @@ async fn test_runner_with_background_da_service(
     let seen_da_height_boundary = target_height + finality as u64 + 30;
 
     while synced_da_height <= target_height {
-        let batch = vec![FullyBakedTx {
-            data: vec![1, 2, 3],
-        }];
+        let batch = vec![FullyBakedTx::new(vec![1, 2, 3])];
 
         let serialized_batch = borsh::to_vec(&batch)?;
         let _ = da_service.send_transaction(&serialized_batch).await.await?;
@@ -420,8 +418,5 @@ fn get_result_from_blocks(
 }
 
 fn batch(serialized_tx: Vec<u8>) -> Vec<u8> {
-    borsh::to_vec(&vec![FullyBakedTx {
-        data: serialized_tx,
-    }])
-    .unwrap()
+    borsh::to_vec(&vec![FullyBakedTx::new(serialized_tx)]).unwrap()
 }

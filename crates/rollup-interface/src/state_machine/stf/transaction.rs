@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use bytes::Bytes;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -28,7 +29,7 @@ pub struct TransactionReceipt<T: TxReceiptContents> {
     /// in the database.
     /// Skip serialization because it is unnecessary over the wire.
     #[serde(skip_serializing)]
-    pub body_to_save: Option<Vec<u8>>,
+    pub body_to_save: Option<Bytes>,
     /// The events output by this transaction
     pub events: Vec<StoredEvent>,
     /// Any additional structured data to be saved in the database and served over RPC

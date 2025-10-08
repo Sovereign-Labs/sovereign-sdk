@@ -96,9 +96,7 @@ mod tests {
             data.push(DbData::BatchStart(stored_batch.clone()));
 
             for i in 0..nb_of_txs {
-                data.push(DbData::Transaction(FullyBakedTx {
-                    data: vec![i as u8],
-                }));
+                data.push(DbData::Transaction(FullyBakedTx::new(vec![i as u8])));
             }
 
             data.push(DbData::BatchEnd(stored_batch));

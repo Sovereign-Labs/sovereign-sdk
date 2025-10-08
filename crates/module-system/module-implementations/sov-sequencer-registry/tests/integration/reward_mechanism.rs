@@ -235,7 +235,7 @@ fn produce_malformed_tx(
         )
         .to_serialized_authenticated_tx(&mut nonces);
 
-    tx.data.pop();
+    tx.data.truncate(tx.data.len() - 1);
     TransactionType::PreAuthenticated(tx)
 }
 

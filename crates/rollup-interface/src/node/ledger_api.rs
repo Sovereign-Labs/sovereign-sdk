@@ -2,6 +2,7 @@
 //! via an RPC interface.
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
+use bytes::Bytes;
 use derive_more::derive::Display;
 use futures::stream::BoxStream;
 use serde::de::DeserializeOwned;
@@ -244,7 +245,7 @@ pub struct TxResponse<Tx: TxReceiptContents, E> {
     pub event_range: core::ops::Range<u64>,
     /// The transaction body, if stored by the rollup.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<Vec<u8>>,
+    pub body: Option<Bytes>,
     /// The events emitted by this transaction, if the [`QueryMode`] of the request is not `Compact`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<Vec<E>>,

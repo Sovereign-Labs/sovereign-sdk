@@ -1,5 +1,6 @@
 //! Implements fuzzing strategies for structs in the stf module
 
+use bytes::Bytes;
 use digest::typenum::U32;
 use digest::Digest;
 use proptest::prelude::{any, Arbitrary};
@@ -139,7 +140,7 @@ where
                     };
                     Self {
                         tx_hash,
-                        body_to_save,
+                        body_to_save: body_to_save.map(Bytes::from_owner),
                         events,
                         receipt,
                     }
