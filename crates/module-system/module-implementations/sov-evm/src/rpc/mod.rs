@@ -39,6 +39,16 @@ use crate::Evm;
 
 pub(crate) mod error;
 
+const EMPTY_FEE_HISTORY: FeeHistory = FeeHistory {
+    base_fee_per_gas: vec![],
+    gas_used_ratio: vec![],
+    oldest_block: 0,
+    reward: None,
+    blob_gas_used_ratio: vec![],
+    // EIP-4844 related
+    base_fee_per_blob_gas: vec![],
+};
+
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
 where
@@ -235,16 +245,7 @@ where
     #[rpc_method(name = "eth_feeHistory")]
     pub fn fee_history(&self) -> RpcResult<FeeHistory> {
         debug!("EVM module JSON-RPC request to `eth_feeHistory`");
-
-        Ok(FeeHistory {
-            base_fee_per_gas: Default::default(),
-            gas_used_ratio: Default::default(),
-            oldest_block: Default::default(),
-            reward: Default::default(),
-            blob_gas_used_ratio: Default::default(),
-            // EIP-4844 related
-            base_fee_per_blob_gas: Default::default(),
-        })
+        Ok(EMPTY_FEE_HISTORY)
     }
 
     /// Handler for: `eth_getTransactionByHash`
