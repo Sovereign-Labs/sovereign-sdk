@@ -226,20 +226,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_getCode`");
-        let mut state = self.resolve_state(block_number, state)?;
-        let code = self
-            .accounts
-            .get(&address, state.deref_mut())
-            .unwrap_infallible()
-            .and_then(|account| {
-                self.code
-                    .get(&account.code_hash, state.deref_mut())
-                    .unwrap_infallible()
-            })
-            .map(|code| code.bytecode().clone())
-            .unwrap_or_default();
-
-        Ok(code)
+        let state = self.resolve_state(block_number, state)?;
+        Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
     /// Handler for: `eth_feeHistory`
@@ -435,6 +423,22 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_contract_code(
+        &self,
+        address: Address,
+        mut state: MaybeArchivalState<'_, S>,
+    ) -> Option<Bytes> {
+        let account = self
+            .accounts
+            .get(&address, state.deref_mut())
+            .unwrap_infallible()?;
+        let code = self
+            .code
+            .get(&account.code_hash, state.deref_mut())
+            .unwrap_infallible()?;
+        Some(code.bytes())
+    }
+
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
         let tx_number = self.get_tx_index_by_hash(&hash, state)?;
         let tx = self.transaction(tx_number, state)?;
