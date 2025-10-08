@@ -436,7 +436,7 @@ where
 /// Result of String => BlockNr conversion
 #[derive(Debug)]
 pub enum PendingOrBlock {
-    /// Pending blcock.
+    /// Pending block.
     Pending,
     /// Block number.
     Number(u64),
