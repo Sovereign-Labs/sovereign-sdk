@@ -1,6 +1,6 @@
+mod client;
 #[cfg(test)]
 mod tests;
-mod vanilla;
 
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -23,7 +23,9 @@ use tokio::time::Instant;
 use tracing::{debug, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
-use crate::da_service::vanilla::VanillaClient;
+use crate::da_service::client::twinkle::TwinkleClient;
+pub use crate::da_service::client::twinkle::TwinkleConfig;
+use crate::da_service::client::vanilla::VanillaClient;
 use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace};
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
@@ -31,7 +33,7 @@ use crate::types::{
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
-use crate::{CelestiaHeader, TwinkleClient};
+use crate::CelestiaHeader;
 
 #[derive(Debug, Clone)]
 pub enum CelestiaClient {

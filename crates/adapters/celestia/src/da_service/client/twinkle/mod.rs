@@ -3,11 +3,11 @@ mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
-use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
-pub use crate::twinkle::types::Network;
-use crate::twinkle::types::{
-    BlobStatusNice, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
+use crate::da_service::client::twinkle::types::{
+    BlobStatusNice, BlobStatusResponse, HeaderResponse, Network, SubmitBlobAsyncResponse,
+    SubmitBlobRequest,
 };
+use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
 use crate::types::TmHash;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;

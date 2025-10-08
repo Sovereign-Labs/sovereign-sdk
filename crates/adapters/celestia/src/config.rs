@@ -1,6 +1,6 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
+pub use crate::da_service::TwinkleConfig;
 use crate::verifier::address::CelestiaAddress;
-use crate::TwinkleConfig;
 use jsonrpsee::http_client::{HeaderMap, HttpClientBuilder};
 use schemars::JsonSchema;
 use std::num::NonZero;

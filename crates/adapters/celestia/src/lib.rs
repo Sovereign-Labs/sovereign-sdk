@@ -10,14 +10,10 @@ pub mod metrics;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;
-#[cfg(feature = "native")]
-mod twinkle;
 pub mod types;
 pub mod verifier;
 
 #[cfg(feature = "native")]
 pub use da_service::{CelestiaConfig, CelestiaService};
-#[cfg(feature = "native")]
-pub use twinkle::{Network, TwinkleClient, TwinkleConfig};
 
 pub use crate::celestia::*;
