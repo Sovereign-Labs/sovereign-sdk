@@ -116,7 +116,7 @@ pub(crate) fn create_block_env(
         beneficiary,
         timestamp: U256::from(timestamp),
         prevrandao,
-        gas_limit: gas_limit,
+        gas_limit,
         basefee: base_fee,
         blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
             excess_blob_gas: EXCESS_BLOB_GAS,
