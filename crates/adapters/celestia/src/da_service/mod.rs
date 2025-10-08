@@ -110,7 +110,7 @@ impl CelestiaService {
         let request_timeout = Duration::from_secs(config.celestia_rpc_timeout_seconds.get());
         let backoff_policy = config.get_backoff_policy();
 
-        let submit_client = if let Some(twinkle_config) = &config.twinkle_config {
+        let submit_client = if let Some(twinkle_config) = &config.twinkle {
             let twinkle_client = TwinkleClient::new(twinkle_config, backoff_policy)
                 .expect("Failed to initialize TwinkleClient");
             CelestiaClient::Twinkle(twinkle_client)

@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     let da_config_str = std::fs::read_to_string(&args.da_config_path)?;
     let da_config: DaConfig = toml::from_str(&da_config_str)?;
 
-    let with_twinkle = da_config.da.twinkle_config.is_some();
+    let with_twinkle = da_config.da.twinkle.is_some();
     println!("With Twinkle: {with_twinkle}");
 
     let payload_config_str = std::fs::read_to_string(&args.payload_config_path)?;

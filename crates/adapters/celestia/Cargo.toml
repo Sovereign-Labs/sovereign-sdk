@@ -42,7 +42,6 @@ serde = { workspace = true, default-features = false, features = [
     "alloc",
     "derive",
 ] }
-# Why non-native?
 serde_json = { workspace = true, features = ["alloc"] }
 serde_with = { workspace = true, optional = true, features = ["base64", "hex"] }
 reqwest = { workspace = true, optional = true, features = ["json"] }
