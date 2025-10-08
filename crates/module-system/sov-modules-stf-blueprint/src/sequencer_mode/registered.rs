@@ -659,7 +659,7 @@ fn penalize_sequencer<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 }
 
 /// Executes the authentication and processing of a transaction, and rewards/penalizes the sequencer
-#[cfg_attr(feature = "bench", sov_modules_api::cycsle_tracker)]
+#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 #[allow(clippy::too_many_arguments)]
 fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     runtime: &mut RT,
