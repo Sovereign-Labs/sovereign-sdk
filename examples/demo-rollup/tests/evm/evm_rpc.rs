@@ -1,5 +1,5 @@
 use alloy_primitives::utils::parse_ether;
-use alloy_primitives::{Address, BlockHash, Log};
+use alloy_primitives::{Address, BlockHash};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockId;
