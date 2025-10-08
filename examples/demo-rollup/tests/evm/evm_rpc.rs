@@ -20,6 +20,7 @@ async fn by_number(client: &DynProvider, tag: BlockNumberOrTag) -> anyhow::Resul
 async fn eth_get_block_by_number() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
+    rollup.pause_preferred_batches().await;
 
     assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
     assert_eq!(by_number(&client, Latest).await?.unwrap().number, 0);
@@ -27,6 +28,7 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     assert_eq!(by_number(&client, 1.into()).await?.unwrap().number, 1);
     assert_eq!(by_number(&client, 2.into()).await?, None);
 
+    rollup.resume_preferred_batches().await;
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
