@@ -8,6 +8,7 @@ use crate::{
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::Bytes;
 
 /// `FullyBakedTx` represents a serialized signed rollup transaction that has been encoded with
 /// authentication information and is ready to be placed on the DA layer.
@@ -24,7 +25,7 @@ use sov_rollup_interface::da::DaSpec;
 pub struct FullyBakedTx {
     /// Serialized transaction.
     #[as_ref(forward)]
-    pub data: Vec<u8>,
+    pub data: Bytes,
 }
 
 impl std::fmt::Debug for FullyBakedTx {
@@ -39,7 +40,9 @@ impl FullyBakedTx {
     /// Construct a `FullyBakedTx` containing the given data
     #[must_use]
     pub fn new(data: Vec<u8>) -> Self {
-        Self { data }
+        Self {
+            data: Bytes::from_owner(data),
+        }
     }
 }
 

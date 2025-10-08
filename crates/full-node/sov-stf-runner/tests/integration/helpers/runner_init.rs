@@ -69,9 +69,7 @@ pub struct TestNode {
 impl TestNode {
     /// Creates a DA block containing a transaction blob, optionally including an aggregated proof.
     pub async fn send_transaction(&self) -> anyhow::Result<MockHash> {
-        let batch = vec![FullyBakedTx {
-            data: vec![1, 2, 3],
-        }];
+        let batch = vec![FullyBakedTx::new(vec![1, 2, 3])];
 
         let serialized_batch = borsh::to_vec(&batch)?;
         self.da
@@ -83,7 +81,7 @@ impl TestNode {
 
     /// Creates a DA block containing an empty transaction blob, optionally including an aggregated proof.
     pub async fn try_send_aggregated_proof(&self) -> anyhow::Result<MockHash> {
-        let batch = vec![FullyBakedTx { data: vec![] }];
+        let batch = vec![FullyBakedTx::new(vec![])];
         let serialized_batch = borsh::to_vec(&batch)?;
         self.da
             .send_transaction(&serialized_batch)

@@ -243,7 +243,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         let event_types = vec!["transaction"; txs.len()];
         let tx_indexes = (start..end).collect::<Vec<_>>();
         let hashes = txs.iter().map(|(_, hash)| hash.0).collect::<Vec<_>>();
-        let txs = txs.iter().map(|(tx, _)| &tx.data).collect::<Vec<_>>();
+        let txs = txs
+            .iter()
+            .map(|(tx, _)| tx.data.as_ref())
+            .collect::<Vec<_>>();
         run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
@@ -276,7 +279,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             .bind(i64::try_from(sequence_number)?)
             .bind(i64::try_from(tx_index_within_batch)?)
             .bind::<&[u8]>(hash.as_ref())
-            .bind(&tx.data)
+            .bind(tx.data.as_ref())
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;

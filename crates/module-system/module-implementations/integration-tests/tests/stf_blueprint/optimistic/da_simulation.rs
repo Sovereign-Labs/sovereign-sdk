@@ -89,9 +89,9 @@ pub fn simulate_da_with_bad_serialization(key: TestPrivateKey) -> Vec<FullyBaked
         ),
     );
 
-    let mut serialized = encode_with_auth(tx);
-    serialized.data[0] = serialized.data[0].wrapping_add(20);
-    vec![serialized]
+    let mut serialized = encode_with_auth(tx).data.to_vec();
+    serialized[0] = serialized[0].wrapping_add(20);
+    vec![FullyBakedTx::new(serialized.to_vec())]
 }
 
 fn encode_with_auth(tx: Transaction<IntegTestRuntime<S>, S>) -> FullyBakedTx {

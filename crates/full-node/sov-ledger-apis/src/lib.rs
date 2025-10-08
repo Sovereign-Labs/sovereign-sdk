@@ -32,6 +32,7 @@ use sov_rollup_interface::node::ledger_api::{
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
 use sov_rollup_interface::stf::TxReceiptContents;
+use sov_rollup_interface::Bytes;
 use tokio::sync::watch;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
@@ -940,7 +941,7 @@ struct Transaction<TxReceipt: TxReceiptContents, E> {
     pub hash: HexHash,
     pub event_range: Range<u64>,
     #[serde_as(as = "serde_with::base64::Base64")]
-    pub body: Vec<u8>,
+    pub body: Bytes,
     pub receipt: TxEffect<TxReceipt>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<Vec<RuntimeEventResponse<E>>>,

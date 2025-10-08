@@ -28,7 +28,7 @@ type TxAndError = (TxProcessingError, FullyBakedTx);
 /// this method must return Ok(()) and handle any sequencer rewards internally.
 #[allow(clippy::result_large_err, clippy::too_many_arguments)]
 #[cfg_attr(feature = "native", tracing::instrument(skip_all, name = "StfBlueprint::process_tx", fields(context = ?execution_context)))]
-#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+// #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 pub fn process_tx_and_reward_prover<S, R, I, C>(
     runtime: &mut R,
     pre_exec_working_set: PreExecWorkingSet<S, I>,
@@ -323,7 +323,7 @@ where
     (Ok(apply_tx), scratchpad, pre_exec_gas_meter)
 }
 
-#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+// #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 #[cfg_attr(
     feature = "native",
     tracing::instrument(skip_all, name = "StfBlueprint::authenticate")
@@ -355,7 +355,7 @@ impl<S: Spec> IncrementalBatchReceipt<S> {
 
 #[tracing::instrument(skip_all, name = "StfBlueprint::apply_batch", fields(context = ?execution_context))]
 #[allow(clippy::too_many_arguments)]
-#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+// #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 pub(crate) fn apply_batch<S, RT, B>(
     runtime: &mut RT,
     mut checkpoint: StateCheckpoint<S>,
@@ -433,6 +433,22 @@ where
 
     let mut clean_scratchpad = checkpoint.to_tx_scratchpad();
 
+    // Optimistically execute each transaction in the batch.
+    // We need...
+    // - A pool of threads that can "run ahead" of the main thread
+    // - To periodically update the checkpoint that the worker threads are using
+    // - For each worker...
+    //   - Grab the next tx from the queue
+    //   - Update state from the broadcast channel
+    //   - Run the tx
+    //   - Send the result back to the main thread.
+    //
+    // For the main thread:
+    //   - For each tx...
+    //     - Check if optimistic results are available
+    //     - If so, do a consistency check (each read needs to match the latest value)
+    //        - If the check passes, apply the tx to the state
+    //        - If the check fails, discard the result and execute the tx on the main thread
     for (idx, (raw_tx, mut injected_control_flow)) in batch_with_id.enumerate() {
         injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
 
@@ -643,7 +659,7 @@ fn penalize_sequencer<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 }
 
 /// Executes the authentication and processing of a transaction, and rewards/penalizes the sequencer
-#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+// #[cfg_attr(feature = "bench", sov_modules_api::cycsle_tracker)]
 #[allow(clippy::too_many_arguments)]
 fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     runtime: &mut RT,
