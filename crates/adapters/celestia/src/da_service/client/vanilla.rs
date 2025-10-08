@@ -1,4 +1,3 @@
-use crate::da_service::into_transient_with_context;
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{RollupNamespace, TmHash, APP_VERSION};
 use crate::verifier::address::CelestiaAddress;
@@ -23,7 +22,6 @@ pub struct VanillaClient {
     client: Arc<Mutex<HttpClient>>,
     backoff_policy: ExponentialBuilder,
     // Separate request timeout, because jsonrpsee is sloppy about it.
-    #[allow(dead_code)]
     request_timeout: Duration,
     tx_priority: Option<TxPriority>,
 }
@@ -75,9 +73,18 @@ impl VanillaClient {
         let lock_acquisition = start_lock.elapsed();
 
         let start_submit = std::time::Instant::now();
-        let tx_result = submit_client
-            .state_submit_pay_for_blob(&[blob.into()], tx_config)
-            .await;
+        let tx_result = match tokio::time::timeout(
+            self.request_timeout,
+            submit_client.state_submit_pay_for_blob(&[blob.into()], tx_config),
+        )
+        .await
+        {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(e)) => Err(anyhow::anyhow!("Error from state.SubmitPayForBlob: {e:?}",)),
+            Err(_) => Err(anyhow::anyhow!(
+                "Timeout waiting for state.SubmitPayForBlob"
+            )),
+        };
         drop(submit_client);
 
         let submit_time = start_submit.elapsed();
@@ -94,7 +101,7 @@ impl VanillaClient {
             tracker.submit(measurement);
         });
 
-        let tx_response = tx_result.map_err(into_transient_with_context)?;
+        let tx_response = tx_result.map_err(MaybeRetryable::Transient)?;
         let tx_hash = TmHash(
             tendermint::Hash::from_str(&tx_response.txhash)
                 .expect("Failed to decode hash from `TxResponse`"),

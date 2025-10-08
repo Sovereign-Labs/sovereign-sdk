@@ -70,7 +70,6 @@ pub(crate) struct BlobSubmitMeasurement {
     pub success_metrics: Option<SuccessfulSubmitMeasurement>,
     pub lock_acquisition_time: std::time::Duration,
     pub submit_time: std::time::Duration,
-    #[allow(dead_code)]
     pub pull_time: std::time::Duration,
     pub total_time: std::time::Duration,
 }
@@ -78,7 +77,7 @@ pub(crate) struct BlobSubmitMeasurement {
 impl BlobSubmitMeasurement {
     pub fn new_for_vanilla(
         namespace: RollupNamespaceType,
-        result: &Result<RawTxResponse, jsonrpsee::core::ClientError>,
+        result: &anyhow::Result<RawTxResponse>,
         bytes: usize,
         lock_acquisition_time: std::time::Duration,
         submit_time: std::time::Duration,
@@ -138,13 +137,14 @@ impl Metric for BlobSubmitMeasurement {
         // success and namespace are tags, the rest are fields
         write!(
             buffer,
-            "{},is_success={},namespace={} bytes={},lock_acquisition_us={},submit_time_us={},total_time_us={}",
+            "{},is_success={},namespace={} bytes={},lock_acquisition_us={},submit_time_us={},pull_time_us={},total_time_us={}",
             self.measurement_name(),
             self.success_metrics.is_some() as u8,
             self.namespace,
             self.bytes,
             self.lock_acquisition_time.as_micros(),
             self.submit_time.as_micros(),
+            self.pull_time.as_micros(),
             self.total_time.as_micros(),
         )?;
         if let Some(success_metrics) = &self.success_metrics {

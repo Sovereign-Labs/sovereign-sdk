@@ -31,10 +31,10 @@ const AGENT: &str = "sov-celestia-adapter";
 //     + Header: Compact header
 //     - Header: DAH
 //     - Block: Namespace data
-//  ~ Logging
-//  ~ Metrics
+//  ~ Metrics: can be verified with actual rolluip
 //  - Unit tests with mockserver
 //  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
+//  - Config defaults
 // ---------
 
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
@@ -317,12 +317,14 @@ impl TwinkleClient {
         Ok(celestia_header)
     }
 
+    // Will be used later when neede data is implemented
     #[allow(dead_code)]
     #[instrument(skip(self))]
     pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
         self.query_header(None).await
     }
 
+    // Will be used later when needed data is implemented
     #[allow(dead_code)]
     #[instrument(skip(self))]
     pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
