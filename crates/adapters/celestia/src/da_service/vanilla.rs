@@ -1,11 +1,10 @@
-#![allow(dead_code)]
 use crate::da_service::into_transient_with_context;
 use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
 use crate::types::{TmHash, APP_VERSION};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaConfig;
 use backon::ExponentialBuilder;
-use celestia_rpc::StateClient;
+use celestia_rpc::{StateClient, TxPriority};
 use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::nmt::Namespace;
 use jsonrpsee::http_client::HttpClient;
@@ -25,7 +24,9 @@ pub struct VanillaClient {
     client: Arc<Mutex<HttpClient>>,
     backoff_policy: ExponentialBuilder,
     // Separate request timeout, because jsonrpsee is sloppy about it.
+    #[allow(dead_code)]
     request_timeout: Duration,
+    tx_priority: Option<TxPriority>,
 }
 
 impl VanillaClient {
@@ -36,6 +37,7 @@ impl VanillaClient {
             client: Arc::new(Mutex::new(client)),
             backoff_policy: config.get_backoff_policy(),
             request_timeout: config.request_timeout(),
+            tx_priority: config.tx_priority.clone().map(Into::into),
         }
     }
 
@@ -66,7 +68,10 @@ impl VanillaClient {
             "Submitting a blob"
         );
 
-        let tx_config = celestia_rpc::TxConfig::default();
+        let mut tx_config = celestia_rpc::TxConfig::default();
+        if let Some(priority) = self.tx_priority.as_ref() {
+            tx_config = tx_config.with_priority(*priority);
+        }
 
         let start_lock = std::time::Instant::now();
         let submit_client = self.client.lock().await;

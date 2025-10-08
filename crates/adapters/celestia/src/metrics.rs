@@ -89,6 +89,7 @@ pub(crate) struct BlobSubmitMeasurement {
     pub success_metrics: Option<SuccessfulSubmitMeasurement>,
     pub lock_acquisition_time: std::time::Duration,
     pub submit_time: std::time::Duration,
+    #[allow(dead_code)]
     pub pull_time: std::time::Duration,
     pub total_time: std::time::Duration,
 }
@@ -177,6 +178,7 @@ impl Metric for BlobSubmitMeasurement {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct GetBlockHeaderMeasurement {
     pub height: u64,
@@ -201,6 +203,7 @@ impl Metric for GetBlockHeaderMeasurement {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct GetChainHeadMeasurement {
     pub fetch_header_time: std::time::Duration,
