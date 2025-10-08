@@ -91,14 +91,23 @@ async fn measure_throughput(
     let start_header = service.get_head_block_header().await?;
     let start_height = start_header.height();
 
+    let min_interval = Duration::from_millis(4000);
+    let mut last_submission = Instant::now();
+
     println!(
-        "Starting measurement (blob_size={blob_size} bytes, max_concurrent={max_concurrent}, duration={duration:?})..."
+        "Starting measurement (blob_size={blob_size} bytes, max_concurrent={max_concurrent}, duration={duration:?}) at height={start_height}..."
     );
-    println!("Starting height: {start_height}");
+    println!("Rate limiting: minimum {min_interval:?} between submission attempts");
 
     let start = Instant::now();
-
     while start.elapsed() < duration {
+        // Rate limiting: ensure minimum interval between submission attempts
+        let elapsed_since_last = last_submission.elapsed();
+        if elapsed_since_last < min_interval {
+            tokio::time::sleep(min_interval - elapsed_since_last).await;
+        }
+        last_submission = Instant::now();
+
         let permit = semaphore.clone().acquire_owned().await?;
         let service = service.clone();
         let total_blobs = total_blobs.clone();
@@ -137,7 +146,6 @@ async fn measure_throughput(
     // Get ending block height
     let end_header = service.get_head_block_header().await?;
     let end_height: u64 = end_header.height();
-    println!("Ending height: {end_height}");
 
     let elapsed = start.elapsed();
     let blobs_count = total_blobs.load(Ordering::Relaxed);
@@ -182,15 +190,16 @@ impl MeasurementResult {
 
         println!("\n=== Measurement Results ===");
         println!("Duration: {duration_secs:.2}s");
-        println!("Start height: {}", self.start_height);
-        println!("End height: {}", self.end_height);
-        println!("Blocks produced: {blocks_produced}");
+        println!(
+            "Produced {blocks_produced} blocks from {} to {}",
+            self.start_height, self.end_height
+        );
         println!();
-        println!("Submission attempts: {total_attempts}");
-        println!("Successful submissions: {}", self.total_blobs);
-        println!("Failed submissions: {}", self.failed_blobs);
+        println!(
+            "Submission: successful {}; failed {} out of {total_attempts}",
+            self.total_blobs, self.failed_blobs
+        );
         println!("Success rate: {success_rate:.2}%");
-        println!();
         println!("Blob landing ratio: {landing_ratio:.2}% (blobs per block)");
         println!("Total bytes submitted: {} bytes", self.total_bytes);
         println!("Throughput: {throughput_kibs:.2} KiB/s");
