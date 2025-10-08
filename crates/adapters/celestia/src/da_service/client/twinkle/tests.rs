@@ -8,10 +8,6 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use std::str::FromStr;
 
-fn default_mocha_config() -> TwinkleConfig {
-    TwinkleConfig::test()
-}
-
 const BATCH_NAMESPACE: Namespace = Namespace::const_v0(*b"sov-twinkl");
 
 #[tokio::test(flavor = "multi_thread")]
@@ -21,7 +17,7 @@ async fn async_blob_submit() -> anyhow::Result<()> {
         "debug,hyper=info,sov_celestia_adapter=trace",
     );
     let backoff_policy = ExponentialBuilder::default();
-    let twinkle_client = TwinkleClient::new(&default_mocha_config(), backoff_policy)?;
+    let twinkle_client = TwinkleClient::new(&TwinkleConfig::test(), backoff_policy)?;
     let celestia_address = CelestiaAddress::from_str(ADDR_1)?;
 
     let blob: Vec<u8> = b"hello-from-sov-rust".to_vec();
@@ -55,7 +51,7 @@ async fn get_head_block_header() -> anyhow::Result<()> {
     let vanilla_client = CelestiaService::new(config, params).await;
 
     let backoff_policy = ExponentialBuilder::default();
-    let twinkle_client = TwinkleClient::new(&default_mocha_config(), backoff_policy)?;
+    let twinkle_client = TwinkleClient::new(&TwinkleConfig::test(), backoff_policy)?;
 
     let twinkle_header = twinkle_client.get_head_block_header().await?;
     println!("Twinkle Header {twinkle_header:?}");

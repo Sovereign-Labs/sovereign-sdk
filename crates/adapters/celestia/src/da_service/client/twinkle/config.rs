@@ -4,16 +4,18 @@ use schemars::JsonSchema;
 
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct TwinkleConfig {
-    /// If not set, will be taken from the environment variable ` SOV_TWINKLE_API_KEY `
+    /// If not set, will be taken from the environment variable `SOV_TWINKLE_API_KEY`
     pub api_key: Option<String>,
+    /// Celestia network: "mocha" or "mainnet"
     pub network: Network,
+    /// At which interval pull blob status after it has been submitted.
     #[serde(default = "default_pull_interval_millis")]
     pub pull_interval_millis: u64,
     /// Timeout for individual HTTP requests in seconds
-    // TODO: This is duplicated with CelestiaConfig. What to do?
     #[serde(default = "default_request_timeout_secs")]
     pub request_timeout_secs: u64,
     /// Timeout for the entire request including retries in seconds
+    // TODO:
     pub total_timeout_secs: u64,
     /// Timeout for establishing HTTP connections in seconds
     #[serde(default = "default_connect_timeout_secs")]

@@ -26,44 +26,16 @@ pub use crate::config::CelestiaConfig;
 use crate::da_service::client::twinkle::TwinkleClient;
 pub use crate::da_service::client::twinkle::TwinkleConfig;
 use crate::da_service::client::vanilla::VanillaClient;
+use crate::da_service::client::CelestiaClient;
 use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData,
-    RollupNamespace, TmHash,
+    RollupNamespace,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use crate::CelestiaHeader;
-
-// Move to client:
-#[derive(Debug, Clone)]
-pub enum CelestiaClient {
-    Vanilla(VanillaClient),
-    Twinkle(TwinkleClient),
-}
-
-impl CelestiaClient {
-    async fn submit_blob_to_namespace(
-        &self,
-        blob: &[u8],
-        namespace: RollupNamespace,
-        signer: &CelestiaAddress,
-    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
-        match self {
-            CelestiaClient::Vanilla(vanilla_client) => {
-                vanilla_client
-                    .submit_blob_to_namespace(blob, namespace, signer)
-                    .await
-            }
-            CelestiaClient::Twinkle(twinkle_client) => {
-                twinkle_client
-                    .submit_blob_to_namespace_inner(blob, namespace, signer)
-                    .await
-            }
-        }
-    }
-}
 
 type BoxError = anyhow::Error;
 

@@ -194,7 +194,7 @@ impl TwinkleClient {
                             return Ok(receipt);
                         }
                         BlobStatus::Rejected => {
-                            tracing::debug!(
+                            tracing::warn!(
                                 ?submit_time,
                                 pull_time = ?pull_start.elapsed(),
                                 total_time = ?start.elapsed(),
