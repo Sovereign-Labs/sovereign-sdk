@@ -1032,7 +1032,7 @@ where
         let (resp, recv) = oneshot::channel();
         self.send(Message::AcceptTx {
             resp,
-            baked_tx: baked_tx,
+            baked_tx,
             tx_hash,
             original_tx_queue_id,
             reason,
