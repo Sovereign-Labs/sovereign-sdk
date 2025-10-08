@@ -1,6 +1,7 @@
 mod error;
 
 use std::convert::Infallible;
+use std::fmt::Formatter;
 use std::ops::Range;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -288,6 +289,46 @@ impl NamespaceBoundaryProof {
             last_share_proof: last_share_proof.into(),
             last_share: Some(last_share),
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RollupNamespace {
+    Batch(Namespace),
+    Proof(Namespace),
+}
+
+impl RollupNamespace {
+    pub fn id(&self) -> Namespace {
+        match self {
+            Self::Batch(ns) | Self::Proof(ns) => *ns,
+        }
+    }
+
+    pub fn ns_type(&self) -> RollupNamespaceType {
+        match self {
+            Self::Batch(_) => RollupNamespaceType::Batch,
+            Self::Proof(_) => RollupNamespaceType::Proof,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RollupNamespaceType {
+    Batch,
+    Proof,
+}
+
+impl std::fmt::Display for RollupNamespaceType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RollupNamespaceType::Batch => {
+                write!(f, "batch")
+            }
+            RollupNamespaceType::Proof => {
+                write!(f, "proof")
+            }
+        }
     }
 }
 

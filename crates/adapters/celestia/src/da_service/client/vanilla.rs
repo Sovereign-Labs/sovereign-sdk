@@ -1,12 +1,11 @@
 use crate::da_service::into_transient_with_context;
-use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
-use crate::types::{TmHash, APP_VERSION};
+use crate::metrics::BlobSubmitMeasurement;
+use crate::types::{RollupNamespace, TmHash, APP_VERSION};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaConfig;
 use backon::ExponentialBuilder;
 use celestia_rpc::{StateClient, TxPriority};
 use celestia_types::blob::Blob as JsonBlob;
-use celestia_types::nmt::Namespace;
 use jsonrpsee::http_client::HttpClient;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::{
@@ -45,7 +44,6 @@ impl VanillaClient {
     async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
-        namespace_id: Namespace,
         namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
@@ -53,7 +51,7 @@ impl VanillaClient {
         let bytes = blob.len();
 
         let blob = JsonBlob::new(
-            namespace_id,
+            namespace.id(),
             blob.to_vec(),
             Some(signer.0.clone()),
             APP_VERSION,
@@ -62,7 +60,7 @@ impl VanillaClient {
 
         let blob_hash = HexHash::new(*blob.commitment.hash());
         debug!(
-            ?namespace,
+            namespace = ?namespace.ns_type(),
             commitment = %blob_hash,
             bytes,
             "Submitting a blob"
@@ -86,7 +84,7 @@ impl VanillaClient {
         let submit_time = start_submit.elapsed();
         let total_time = start.elapsed();
         let measurement = BlobSubmitMeasurement::new_for_vanilla(
-            namespace,
+            namespace.ns_type(),
             &tx_result,
             bytes,
             lock_acquisition,
@@ -125,14 +123,13 @@ impl VanillaClient {
     pub async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
-        namespace_id: Namespace,
         namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         let (tx, rx) = oneshot::channel();
         let res = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
-            || self.submit_blob_to_namespace_inner(blob, namespace_id, namespace, signer),
+            || self.submit_blob_to_namespace_inner(blob, namespace, signer),
             "send_transaction",
         )
         .await;

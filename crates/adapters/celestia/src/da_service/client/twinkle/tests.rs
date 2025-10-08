@@ -38,8 +38,7 @@ async fn async_blob_submit() -> anyhow::Result<()> {
     let rx = twinkle_client
         .submit_blob_to_namespace_inner(
             &blob,
-            BATCH_NAMESPACE,
-            RollupNamespace::Batch,
+            RollupNamespace::Batch(BATCH_NAMESPACE),
             &celestia_address,
         )
         .await;

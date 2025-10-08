@@ -1,27 +1,8 @@
+use crate::types::RollupNamespaceType;
 use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::state::RawTxResponse;
 use sov_metrics::Metric;
-use std::fmt::Formatter;
 use std::io::Write;
-
-#[derive(Debug, Clone, Copy)]
-pub enum RollupNamespace {
-    Batch,
-    Proof,
-}
-
-impl std::fmt::Display for RollupNamespace {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RollupNamespace::Batch => {
-                write!(f, "batch")
-            }
-            RollupNamespace::Proof => {
-                write!(f, "proof")
-            }
-        }
-    }
-}
 
 #[derive(Debug)]
 pub(crate) struct NamespaceDataMetrics {
@@ -84,7 +65,7 @@ pub struct SuccessfulSubmitMeasurement {
 
 #[derive(Debug)]
 pub(crate) struct BlobSubmitMeasurement {
-    pub namespace: RollupNamespace,
+    pub namespace: RollupNamespaceType,
     pub bytes: usize,
     pub success_metrics: Option<SuccessfulSubmitMeasurement>,
     pub lock_acquisition_time: std::time::Duration,
@@ -96,7 +77,7 @@ pub(crate) struct BlobSubmitMeasurement {
 
 impl BlobSubmitMeasurement {
     pub fn new_for_vanilla(
-        namespace: RollupNamespace,
+        namespace: RollupNamespaceType,
         result: &Result<RawTxResponse, jsonrpsee::core::ClientError>,
         bytes: usize,
         lock_acquisition_time: std::time::Duration,
@@ -124,7 +105,7 @@ impl BlobSubmitMeasurement {
     }
 
     pub fn new_for_twinkle(
-        namespace: RollupNamespace,
+        namespace: RollupNamespaceType,
         bytes: usize,
         pull_time: std::time::Duration,
         submit_time: std::time::Duration,

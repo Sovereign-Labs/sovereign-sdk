@@ -26,15 +26,17 @@ pub use crate::config::CelestiaConfig;
 use crate::da_service::client::twinkle::TwinkleClient;
 pub use crate::da_service::client::twinkle::TwinkleConfig;
 use crate::da_service::client::vanilla::VanillaClient;
-use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics, RollupNamespace};
+use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{
-    BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
+    BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData,
+    RollupNamespace, TmHash,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use crate::CelestiaHeader;
 
+// Move to client:
 #[derive(Debug, Clone)]
 pub enum CelestiaClient {
     Vanilla(VanillaClient),
@@ -45,19 +47,18 @@ impl CelestiaClient {
     async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
-        namespace_id: Namespace,
         namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         match self {
             CelestiaClient::Vanilla(vanilla_client) => {
                 vanilla_client
-                    .submit_blob_to_namespace(blob, namespace_id, namespace, signer)
+                    .submit_blob_to_namespace(blob, namespace, signer)
                     .await
             }
             CelestiaClient::Twinkle(twinkle_client) => {
                 twinkle_client
-                    .submit_blob_to_namespace_inner(blob, namespace_id, namespace, signer)
+                    .submit_blob_to_namespace_inner(blob, namespace, signer)
                     .await
             }
         }
@@ -72,8 +73,8 @@ pub struct CelestiaService {
     submit_client: CelestiaClient,
     // Client used for queries, where it is not important to have ordering
     read_client: Arc<HttpClient>,
-    rollup_batch_namespace: Namespace,
-    rollup_proof_namespace: Namespace,
+    rollup_batch_namespace: RollupNamespace,
+    rollup_proof_namespace: RollupNamespace,
     signer_address: CelestiaAddress,
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
@@ -94,8 +95,8 @@ impl CelestiaService {
         Self {
             submit_client,
             read_client: Arc::new(read_client),
-            rollup_batch_namespace,
-            rollup_proof_namespace,
+            rollup_batch_namespace: RollupNamespace::Batch(rollup_batch_namespace),
+            rollup_proof_namespace: RollupNamespace::Proof(rollup_proof_namespace),
             signer_address,
             safe_lead_time,
             backoff_policy,
@@ -202,9 +203,9 @@ impl CelestiaService {
         let data_futures_all = Instant::now();
 
         let rollup_batch_rows_future =
-            client.share_get_namespace_data(&header, self.rollup_batch_namespace);
+            client.share_get_namespace_data(&header, self.rollup_batch_namespace.id());
         let rollup_proof_rows_future =
-            client.share_get_namespace_data(&header, self.rollup_proof_namespace);
+            client.share_get_namespace_data(&header, self.rollup_proof_namespace.id());
 
         let (batch_rows, proof_rows) =
             tokio::try_join!(rollup_batch_rows_future, rollup_proof_rows_future,)
@@ -218,11 +219,11 @@ impl CelestiaService {
         let build_relevant_data_start = std::time::Instant::now();
         let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
         let rollup_batch_shares =
-            NamespaceRelevantData::new(self.rollup_batch_namespace, batch_rows);
+            NamespaceRelevantData::new(self.rollup_batch_namespace.id(), batch_rows);
 
         let proof_ns_metrics = NamespaceDataMetrics::new(&proof_rows);
         let rollup_proof_shares =
-            NamespaceRelevantData::new(self.rollup_proof_namespace, proof_rows);
+            NamespaceRelevantData::new(self.rollup_proof_namespace.id(), proof_rows);
         let build_relevant_data = build_relevant_data_start.elapsed();
 
         let total_time = start_get_block.elapsed();
@@ -262,7 +263,7 @@ impl CelestiaService {
         height: u64,
     ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
         self.read_client
-            .blob_get_all(height, &[self.rollup_proof_namespace])
+            .blob_get_all(height, &[self.rollup_proof_namespace.id()])
             .await
             .map_err(into_transient_with_context)
             .map(|blobs| match blobs {
@@ -331,7 +332,7 @@ impl DaService for CelestiaService {
     async fn get_last_finalized_block_header(
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        // Tendermint has instant finality, so head block is the one that finalized
+        // Tendermint has instant finality, so the head block is the one that finalized
         // and network is always guaranteed to be secure,
         // it can work even if the node is still catching up.
         self.get_head_block_header().await
@@ -374,12 +375,7 @@ impl DaService for CelestiaService {
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
         self.submit_client
-            .submit_blob_to_namespace(
-                blob,
-                self.rollup_batch_namespace,
-                RollupNamespace::Batch,
-                &self.signer_address,
-            )
+            .submit_blob_to_namespace(blob, self.rollup_batch_namespace, &self.signer_address)
             .await
     }
 
@@ -393,7 +389,6 @@ impl DaService for CelestiaService {
             .submit_blob_to_namespace(
                 aggregated_proof,
                 self.rollup_proof_namespace,
-                RollupNamespace::Proof,
                 &self.signer_address,
             )
             .await

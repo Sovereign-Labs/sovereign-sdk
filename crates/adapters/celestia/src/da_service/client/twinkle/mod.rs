@@ -7,13 +7,12 @@ use crate::da_service::client::twinkle::types::{
     BlobStatusNice, BlobStatusResponse, HeaderResponse, Network, SubmitBlobAsyncResponse,
     SubmitBlobRequest,
 };
-use crate::metrics::{BlobSubmitMeasurement, RollupNamespace};
-use crate::types::TmHash;
+use crate::metrics::BlobSubmitMeasurement;
+use crate::types::{RollupNamespace, TmHash};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
-use celestia_types::nmt::Namespace;
 use celestia_types::DataAvailabilityHeader;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
@@ -118,11 +117,10 @@ impl TwinkleClient {
         .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
 
-    #[instrument(skip(self, blob, namespace_id, _signer))]
+    #[instrument(skip(self, blob, _signer))]
     async fn submit_blob_to_namespace_and_pull(
         &self,
         blob: Vec<u8>,
-        namespace_id: Namespace,
         namespace: RollupNamespace,
         // TODO: Use it when it becomes supported
         _signer: CelestiaAddress,
@@ -136,7 +134,7 @@ impl TwinkleClient {
         tracing::debug!(?namespace, bytes, "Submitting a blob");
 
         let request = SubmitBlobRequest {
-            namespace: namespace_id,
+            namespace: namespace.id(),
             data: blob,
             asynchronous: true,
             network: self.network,
@@ -159,7 +157,7 @@ impl TwinkleClient {
             } => {
                 if result.is_err() {
                     let measurement = BlobSubmitMeasurement::new_for_twinkle(
-                        namespace,
+                        namespace.ns_type(),
                         bytes,
                         submit_start.elapsed(),
                         Default::default(),
@@ -174,7 +172,7 @@ impl TwinkleClient {
             },
             _ = &mut timeout => {
                 let measurement = BlobSubmitMeasurement::new_for_twinkle(
-                    namespace,
+                    namespace.ns_type(),
                     bytes,
                     submit_start.elapsed(),
                     Default::default(),
@@ -216,7 +214,7 @@ impl TwinkleClient {
                                 %height,
                                 "Blob has been included");
                             let measurement = BlobSubmitMeasurement::new_for_twinkle(
-                                namespace,
+                                namespace.ns_type(),
                                 bytes,
                                 submit_start.elapsed(),
                                 pull_start.elapsed(),
@@ -235,7 +233,7 @@ impl TwinkleClient {
                                 total_time = ?start.elapsed(),
                                 "Blob has been rejected");
                             let measurement = BlobSubmitMeasurement::new_for_twinkle(
-                                namespace,
+                                namespace.ns_type(),
                                 bytes,
                                 submit_start.elapsed(),
                                 pull_start.elapsed(),
@@ -252,7 +250,7 @@ impl TwinkleClient {
             } => result,
             _ = timeout => {
                 let measurement = BlobSubmitMeasurement::new_for_twinkle(
-                    namespace,
+                    namespace.ns_type(),
                     bytes,
                     submit_start.elapsed(),
                     pull_start.elapsed(),
@@ -270,7 +268,6 @@ impl TwinkleClient {
     pub async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
-        namespace_id: Namespace,
         namespace: RollupNamespace,
         signer: &CelestiaAddress,
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
@@ -282,7 +279,7 @@ impl TwinkleClient {
         let _join_handle = tokio::task::spawn(async move {
             tx.send(
                 client
-                    .submit_blob_to_namespace_and_pull(blob, namespace_id, namespace, signer)
+                    .submit_blob_to_namespace_and_pull(blob, namespace, signer)
                     .await,
             )
             .expect("Failed to propagate blob submission result into a channel");

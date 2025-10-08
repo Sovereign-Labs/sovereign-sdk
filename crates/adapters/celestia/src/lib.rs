@@ -6,7 +6,7 @@ mod config;
 #[cfg(feature = "native")]
 mod da_service;
 #[cfg(feature = "native")]
-pub mod metrics;
+mod metrics;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;
