@@ -24,7 +24,7 @@ impl From<SealedBlock> for BlockEnv {
             block.header.timestamp,
             block.header.beneficiary,
             block.header.number,
-            None,
+            Some(block.header.mix_hash),
         )
     }
 }
