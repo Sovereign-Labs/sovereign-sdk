@@ -33,18 +33,14 @@ use crate::{
 #[derivative(Clone, PartialEq, Eq, Debug, Hash, Ord)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct SlotKey {
-    // // TODO: Handle extra long keys
-    // pub(crate) prefix: Prefix,
     key: KeyContents,
 }
 
 /// A logical key consists of [module_tag, item_tag, serialized_key]
 /// We have two different *physical* representations of the key in memory.
-///    If serialized_key length is less than 79 bytes, we store the key inline.
-///    With the representation length_bytes || module_tag || item_tag || serialized_key.
-///       AsRef<[u8]> returns module_tag || item_tag || serialized_key
-///
-///    If the serialized_key length is greater than 79 bytes, we store the key as Vec<u8> containing [module_tag, item_tag, serialized_key].
+/// - If serialized_key length is less than 79 bytes, we store the key inline.
+///   With the representation length_bytes || module_tag || item_tag || serialized_key.
+/// - If the serialized_key length is greater than 79 bytes, we store the key as Vec<u8> containing [module_tag, item_tag, serialized_key].
 ///
 /// When we store a slot key on disk, we store the physical representation
 #[derive(
