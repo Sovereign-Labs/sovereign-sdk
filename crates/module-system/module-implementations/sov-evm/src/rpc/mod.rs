@@ -435,12 +435,7 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    /// Retrieves the transaction.
-    pub fn get_transaction(
-        &self,
-        hash: B256,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Option<Transaction> {
+    fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
         let tx_number = self.get_tx_index_by_hash(&hash, state)?;
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
@@ -449,8 +444,7 @@ where
         Some(tx)
     }
 
-    /// Retrieves the receipt.
-    pub fn get_receipt(
+    fn get_receipt(
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
