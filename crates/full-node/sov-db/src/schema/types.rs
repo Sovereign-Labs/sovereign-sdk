@@ -132,10 +132,6 @@ impl StoredBatch {
 /// The on-disk format of a transaction. Includes the txhash, the serialized tx data,
 /// and identifies the events emitted by this transaction
 #[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Clone)]
-// #[cfg_attr(
-//     feature = "arbitrary",
-//     derive(proptest_derive::Arbitrary, arbitrary::Arbitrary)
-// )]
 pub struct StoredTransaction {
     /// The hash of the transaction.
     pub hash: DbHash,

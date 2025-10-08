@@ -28,7 +28,7 @@ type TxAndError = (TxProcessingError, FullyBakedTx);
 /// this method must return Ok(()) and handle any sequencer rewards internally.
 #[allow(clippy::result_large_err, clippy::too_many_arguments)]
 #[cfg_attr(feature = "native", tracing::instrument(skip_all, name = "StfBlueprint::process_tx", fields(context = ?execution_context)))]
-// #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 pub fn process_tx_and_reward_prover<S, R, I, C>(
     runtime: &mut R,
     pre_exec_working_set: PreExecWorkingSet<S, I>,
@@ -323,7 +323,7 @@ where
     (Ok(apply_tx), scratchpad, pre_exec_gas_meter)
 }
 
-// #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 #[cfg_attr(
     feature = "native",
     tracing::instrument(skip_all, name = "StfBlueprint::authenticate")
@@ -355,7 +355,7 @@ impl<S: Spec> IncrementalBatchReceipt<S> {
 
 #[tracing::instrument(skip_all, name = "StfBlueprint::apply_batch", fields(context = ?execution_context))]
 #[allow(clippy::too_many_arguments)]
-// #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
+#[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 pub(crate) fn apply_batch<S, RT, B>(
     runtime: &mut RT,
     mut checkpoint: StateCheckpoint<S>,
@@ -659,7 +659,7 @@ fn penalize_sequencer<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 }
 
 /// Executes the authentication and processing of a transaction, and rewards/penalizes the sequencer
-// #[cfg_attr(feature = "bench", sov_modules_api::cycsle_tracker)]
+#[cfg_attr(feature = "bench", sov_modules_api::cycsle_tracker)]
 #[allow(clippy::too_many_arguments)]
 fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     runtime: &mut RT,
