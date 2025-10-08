@@ -91,14 +91,28 @@ impl Access {
 }
 
 pub(crate) mod internal {
+    use std::collections::HashMap;
+
+    use crate::DEFAULT_CACHE_CAPACITY;
+
     use super::*;
+
     /// [`CacheLog`] keeps track of the original and current values of each key accessed.
     /// By tracking original values, we can detect and eliminate write patterns where a key is
     /// changed temporarily and then reset to its original value
-    #[derive(Default, Debug, Clone)]
+    #[derive(Debug, Clone)]
     pub(crate) struct CacheLog {
-        revertable_log: std::collections::HashMap<SlotKey, Access>,
-        log: std::collections::HashMap<SlotKey, Access>,
+        revertable_log: HashMap<SlotKey, Access>,
+        log: HashMap<SlotKey, Access>,
+    }
+
+    impl Default for CacheLog {
+        fn default() -> Self {
+            Self {
+                revertable_log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+                log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+            }
+        }
     }
 
     impl CacheLog {
@@ -298,7 +312,9 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
     /// Commit the revertable part of the `ProvableStorageCache`.
     pub fn commit_revertable_storage_cache(&mut self) {
-        let revertable_ordered_reads = mem::take(&mut self.revertable_ordered_reads);
+        let cap = self.revertable_ordered_reads.capacity();
+        let revertable_ordered_reads =
+            mem::replace(&mut self.revertable_ordered_reads, Vec::with_capacity(cap));
         self.ordered_db_reads.extend(
             revertable_ordered_reads
                 .into_iter()

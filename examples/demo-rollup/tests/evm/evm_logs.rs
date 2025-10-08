@@ -1,4 +1,4 @@
-use crate::evm::evm_test_helper::setup;
+use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
@@ -7,7 +7,7 @@ use sov_sequencer::SeqConfigExtension;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs() {
-    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
+    let (test_rollup, evm_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract_address = evm_client.alloy_deploy_contract().await;
     test_rollup.wait_for_next_blocks(1).await;
 
@@ -60,7 +60,7 @@ async fn evm_test_get_logs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs_range() {
-    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
+    let (test_rollup, evm_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract_address = evm_client.alloy_deploy_contract().await;
     test_rollup.wait_for_next_blocks(1).await;
 
@@ -111,7 +111,8 @@ async fn evm_test_get_logs_range() {
 async fn evm_test_get_logs_range_limit() {
     let max_log_limit = 93;
 
-    let (test_rollup, evm_client, _) = setup(0, SeqConfigExtension { max_log_limit }).await;
+    let (test_rollup, evm_client, _) =
+        setup_with_simple_storage(0, SeqConfigExtension { max_log_limit }).await;
     let contract_address = evm_client.alloy_deploy_contract().await;
     test_rollup.wait_for_next_blocks(1).await;
 

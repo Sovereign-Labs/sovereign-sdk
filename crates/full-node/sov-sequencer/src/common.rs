@@ -485,7 +485,7 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
                 details: Default::default(),
             };
         }
-        SequencerNotReadyDetails::PreferredSequencerAtStopHeight{
+        SequencerNotReadyDetails::PreferredSequencerAtStopHeight {
             height_to_stop_at,
             current_height,
 

@@ -1,10 +1,10 @@
+use crate::conversions::create_block_env;
 use crate::evm::primitive_types::{Block, TransactionSigned};
-use crate::{BlockEnv, Evm, PendingTransaction, BLOB_GAS_PRICE, EXCESS_BLOB_GAS};
+use crate::{Evm, PendingTransaction};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::TxReceipt;
 use alloy_primitives::Bloom;
-use alloy_primitives::{B256, U256};
-use revm::context_interface::block::BlobExcessGasAndPrice;
+use alloy_primitives::B256;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -56,23 +56,15 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .unwrap_infallible()
             .as_millis() as u64;
 
-        let new_pending_env = BlockEnv {
-            number: U256::from(new_block_number),
-            beneficiary: cfg.chain_spec.coinbase,
-            timestamp: U256::from(new_timestamp),
-            // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
-            // Users should follow the same best practice that they would on Ethereum and use future randomness.
-            // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
-            prevrandao: Some(B256::from(pre_state_user_root)),
-            gas_limit: cfg.chain_spec.block_gas_limit,
-            blob_excess_gas_and_price: Some(BlobExcessGasAndPrice {
-                excess_blob_gas: EXCESS_BLOB_GAS,
-                blob_gasprice: BLOB_GAS_PRICE,
-            }),
+        let new_pending_env = create_block_env(
+            self.base_fee(),
+            cfg.chain_spec.block_gas_limit,
+            new_timestamp,
+            cfg.chain_spec.coinbase,
+            new_block_number,
+            Some(B256::from(pre_state_user_root)),
+        );
 
-            basefee: self.base_fee(),
-            ..Default::default()
-        };
         self.block_env
             .set(&new_pending_env, state)
             .unwrap_infallible();

@@ -2,8 +2,13 @@ use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
 
+use alloy::signers::local::PrivateKeySigner;
+use alloy_provider::DynProvider;
+use alloy_provider::Provider as _;
+use alloy_provider::ProviderBuilder;
 use ethers::core::abi::Address;
 use futures::future::join_all;
+use reqwest::Url;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::SimpleStorageClient;
@@ -51,13 +56,22 @@ pub(crate) async fn start_node(
     .unwrap()
 }
 
-/// Creates a test client to communicate with the rollup node.
-pub(crate) async fn create_test_client(
+/// Creates a test simple storage client to communicate with the rollup node & SimpleStorage contract.
+pub(crate) async fn create_simple_storage_client(
     rest_port: SocketAddr,
     private_key: &str,
 ) -> SimpleStorageClient {
     let contract = SimpleStorage::default();
     SimpleStorageClient::new(private_key, contract, rest_port).await
+}
+
+pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
+    let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
+    ProviderBuilder::new()
+        .wallet(signer)
+        .connect_http(url)
+        .erased()
 }
 
 /// Deploys a test contract on the test rollup.
@@ -128,56 +142,21 @@ pub(crate) async fn set_multiple_values_check(
     Ok(())
 }
 
-pub async fn setup(
+pub async fn setup_test_rollup(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+) -> TestRollup<MockDemoRollup<Native>> {
+    let host_args = mock_da_risc0_host_args();
+    let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
+    start_node(config, finalization_blocks, Some(extension)).await
+}
+
+pub async fn setup_with_simple_storage(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
-    let rollup_prover_config =
-        get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(mock_da_risc0_host_args());
-
-    let chain_id = config_value!("CHAIN_ID");
-    let test_rollup: TestRollup<MockDemoRollup<Native>> =
-        start_node(rollup_prover_config, finalization_blocks, Some(extension)).await;
-
-    let evm_client = create_test_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
-
+    let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
     test_rollup.wait_for_next_blocks(10).await;
-
-    (test_rollup, evm_client, chain_id)
+    let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }
-
-// TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
-// /// Checks evm gas evolution.
-// pub(crate) async fn gas_check(
-//     client: &TestClient,
-//     da_service: &StorableMockDaService,
-//     contract_address: Address,
-// ) -> Result<(), Box<dyn std::error::Error>> {
-//     // get initial gas price
-//     let initial_base_fee_per_gas = client.eth_gas_price().await;
-//
-//     // send 10 "set" transactions with high gas fee in 5 batches to increase gas price
-//     for _ in 0..5 {
-//         let values: Vec<u32> = (0..10).collect();
-//         let requests = client
-//             .set_values(contract_address, values, Some(200u64), Some(210u128))
-//             .await;
-//
-//         let receipts: Vec<Result<Option<_>, ProviderError>> = join_all(requests).await;
-//         assert!(receipts
-//             .into_iter()
-//             .all(|x| x.is_ok() && x.unwrap().is_some()));
-//     }
-//     // get gas price
-//     let latest_gas_price = client.eth_gas_price().await;
-//
-//     // assert gas price is higher
-//     // TODO: emulate gas price oracle here to have exact value
-//     assert!(
-//         latest_gas_price > initial_base_fee_per_gas,
-//         "Failed gas check initial={:?} latest={:?}",
-//         initial_base_fee_per_gas,
-//         latest_gas_price,
-//     );
-//     Ok(())
-// }

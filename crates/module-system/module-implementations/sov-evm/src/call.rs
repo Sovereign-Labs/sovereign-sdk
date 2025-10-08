@@ -108,7 +108,7 @@ where
 
         let gas_used = result.gas_used();
         start_timer!(receipt_t);
-        let receipt = self.get_receipt(&tx, pending_len, result, state)?;
+        let receipt = self.create_receipt(&tx, pending_len, result, state)?;
         save_elapsed!(receipt_time SINCE receipt_t);
         state.charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)?;
 
@@ -193,7 +193,7 @@ where
             .expect("gas_to_charge_per_evm_gas() is zero")
     }
 
-    fn get_receipt(
+    fn create_receipt(
         &self,
         tx: &TxSignedAndRecovered,
         tx_index: u64,

@@ -6,6 +6,7 @@ use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{GenesisState, Module, Spec};
 
+use crate::conversions::create_block_env;
 use crate::db::init::InitEvmDb;
 use crate::evm::primitive_types::Block;
 use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig, EXCESS_BLOB_GAS};
@@ -55,6 +56,17 @@ where
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
+
+        let block_env = create_block_env(
+            self.base_fee(),
+            block.header.gas_limit,
+            block.header.timestamp,
+            block.header.beneficiary,
+            block.header.number,
+            None,
+        );
+        self.block_env.set(&block_env, state)?;
+
         #[cfg(feature = "native")]
         {
             self.block_numbers.set(&RangeInclusive::new(0, 0), state)?;

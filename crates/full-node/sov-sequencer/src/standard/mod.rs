@@ -717,6 +717,8 @@ where
             .publish_proof_blob(blob_bytes, blob_id)
             .await?;
 
+        debug!(blob_id, "Proof blob has been dispatched for publishing");
+
         Ok(())
     }
 }

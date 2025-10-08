@@ -1,21 +1,29 @@
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
+use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::{Coins, TokenId};
 use sov_cli::NodeClient;
+use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
-    Address, AggregatedProofPublicData, CryptoSpec, PrivateKey, PublicKey, SafeVec, Spec, Storage,
+    Address, AggregatedProofPublicData, CryptoSpec, OperatingMode, PrivateKey, PublicKey, SafeVec,
+    Spec, Storage,
 };
+use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::node::ledger_api::FinalityStatus;
 use sov_rollup_interface::zk::aggregated_proof::AggregateProofVerifier;
-use sov_test_utils::default_test_signed_transaction;
-use sov_test_utils::test_rollup::read_private_key;
+use sov_stf_runner::processes::RollupProverConfig;
+use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
+use sov_test_utils::{
+    default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+    TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+};
 
 use super::{TOKEN_DECIMALS, TOKEN_NAME};
-use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
+use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
 
 type TestSpec = DemoRollupSpec;
 
@@ -235,4 +243,56 @@ pub(crate) async fn send_tx_and_wait_for_status(
     let res = client.client.get_latest_slot(None).await?;
     // We are certain that the transaction result will be visible after this height.
     Ok(res.number)
+}
+
+/// Single place for configuring test rollup.
+/// Applies all necessary configuration changes to make it work with the tests.
+/// Starts it and ensures it is ready to accept transactions.
+pub async fn start_test_rollup(
+    test_case: &TestCase,
+    operating_mode: OperatingMode,
+) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
+    let prover_config = match &operating_mode {
+        OperatingMode::Operator => None,
+        OperatingMode::Zk | OperatingMode::Optimistic => Some(RollupProverConfig::Skip),
+    };
+    let disable_state_root_consistency_check = match &operating_mode {
+        OperatingMode::Operator => false,
+        OperatingMode::Zk | OperatingMode::Optimistic => true,
+    };
+
+    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
+        test_genesis_source(operating_mode),
+        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+        test_case.finalization_blocks,
+    )
+    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .set_config(|c| {
+        c.max_concurrent_blobs = 16777216;
+        c.rollup_prover_config = prover_config;
+        c.blob_processing_timeout_secs = 180;
+        if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
+            sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
+                * std::cmp::max(1, test_case.finalization_blocks as u64);
+            sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
+            sequencer_config.disable_state_root_consistency_checks =
+                disable_state_root_consistency_check;
+        }
+    })
+    .start()
+    .await?;
+
+    // We need a handful of blocks for the sequencer to be able to advance the
+    // visible slot number.
+    // Fewer blocks could possibly be enough as well, I haven't counted (@neysofu).
+    let warm_up_blocks = 5;
+
+    let mut slots = test_rollup.client.client.subscribe_slots().await?;
+    for _ in 0..warm_up_blocks {
+        let _slot = slots.next().await;
+    }
+
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    Ok(test_rollup)
 }
