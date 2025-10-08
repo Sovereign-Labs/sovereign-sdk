@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 #[cfg(test)]
 mod tests;
 mod types;
@@ -21,26 +19,24 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
+use tracing::instrument;
 
 const HEADER_URL: &str = "https://t.tech/v0/header";
 const SUBMIT_BLOB_URL: &str = "https://t.tech/v0/blob";
-const GET_ALL_BLOBS_URL: &str = "https://t.tech/v0/blob/get_all";
 const BLOB_STATUS: &str = "https://t.tech/v0/blob/status";
 
 const AGENT: &str = "sov-celestia-adapter";
-const API_KEY_ENV: &str = "SOV_TWINKLE_API_KEY";
 
 // TODO for later:
 //  ~ Get block and header compatible with return types of celestia sender
 //     + Header: Compact header
 //     - Header: DAH
 //     - Block: Namespace data
-//  - Logging
-//  - Metrics
+//  ~ Logging
+//  ~ Metrics
 //  - Unit tests with mockserver
 //  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
 // ---------
-//  - Mo
 
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct TwinkleConfig {
@@ -69,6 +65,8 @@ impl TwinkleConfig {
     }
 }
 
+/// Client for [Twinkle](https://t.tech/) service.
+/// Documentation: <https://t.tech/docs>.
 #[derive(Debug, Clone)]
 pub struct TwinkleClient {
     client: reqwest::Client,
@@ -106,6 +104,7 @@ impl TwinkleClient {
         })
     }
 
+    #[instrument(skip(self))]
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
         tracing::trace!(%twinkle_request_id, "Checking blob status");
         (|| async {
@@ -119,11 +118,13 @@ impl TwinkleClient {
         .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
 
+    #[instrument(skip(self, blob, namespace_id, _signer))]
     async fn submit_blob_to_namespace_and_pull(
         &self,
         blob: Vec<u8>,
         namespace_id: Namespace,
         namespace: RollupNamespace,
+        // TODO: Use it when it becomes supported
         _signer: CelestiaAddress,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
@@ -188,6 +189,7 @@ impl TwinkleClient {
         };
         let submit_time = submit_start.elapsed();
         let pull_start = std::time::Instant::now();
+        tracing::trace!(twinkle_request_id = %submit_response.twinkle_request_id, "Blob submit request has been accepted by Twinkle, waiting for blob inclusion");
 
         tokio::select! {
             result = async {
@@ -265,7 +267,6 @@ impl TwinkleClient {
         }
     }
 
-    // #[instrument(skip_all)]
     pub async fn submit_blob_to_namespace_inner(
         &self,
         blob: &[u8],
@@ -290,11 +291,11 @@ impl TwinkleClient {
     }
 
     async fn query_header(&self, height: Option<u64>) -> anyhow::Result<CelestiaHeader> {
-        tracing::trace!("Getting head block header");
+        tracing::trace!(?height, "Getting head block header");
 
         let header_response: HeaderResponse = (|| async {
             let mut request = self.client.get(HEADER_URL);
-            request = request.query(&[("network", self.network.to_string())]);
+            request = request.query(&[("network", self.network)]);
             if let Some(height) = height {
                 request = request.query(&[("height", height)]);
             }
@@ -303,7 +304,7 @@ impl TwinkleClient {
         })
         .retry(&self.backoff_policy)
         .await
-        .context("Head block header")?;
+        .with_context(|| format!("Getting block header at height={height:?}"))?;
 
         let compact_header = CompactHeader::from(header_response.header);
         let empty_dah = DataAvailabilityHeader::new_unchecked(Vec::new(), Vec::new());
@@ -313,10 +314,14 @@ impl TwinkleClient {
         Ok(celestia_header)
     }
 
+    #[allow(dead_code)]
+    #[instrument(skip(self))]
     pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
         self.query_header(None).await
     }
 
+    #[allow(dead_code)]
+    #[instrument(skip(self))]
     pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
         self.query_header(Some(height)).await
     }

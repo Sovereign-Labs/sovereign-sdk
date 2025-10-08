@@ -1,6 +1,6 @@
 use crate::celestia::{CompactHeader, ProtobufHash};
+use crate::celestia_tm_version;
 use crate::types::TmHash;
-use crate::{celestia_tm_version, TendermintHeader};
 use jsonrpsee::core::Serialize;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serializer};
@@ -158,36 +158,6 @@ pub struct TwinkleBlockHeader {
     proposer_address: tendermint::account::Id,
 }
 
-impl From<TwinkleBlockHeader> for TendermintHeader {
-    fn from(_value: TwinkleBlockHeader) -> Self {
-        todo!()
-    }
-}
-
-impl From<Version> for tendermint::block::header::Version {
-    fn from(value: Version) -> Self {
-        Self {
-            block: value.block,
-            app: value.app,
-        }
-    }
-}
-
-impl From<PartSetHeader> for tendermint::block::parts::Header {
-    fn from(value: PartSetHeader) -> Self {
-        Self::new(value.total, value.hash).expect("Invalid TwinklePartSetHeader")
-    }
-}
-
-impl From<BlockId> for tendermint::block::Id {
-    fn from(value: BlockId) -> Self {
-        Self {
-            hash: value.hash,
-            part_set_header: value.parts.into(),
-        }
-    }
-}
-
 impl From<TwinkleBlockHeader> for CompactHeader {
     fn from(value: TwinkleBlockHeader) -> Self {
         let TwinkleBlockHeader {
@@ -243,6 +213,15 @@ pub struct Version {
     pub app: u64,
 }
 
+impl From<Version> for tendermint::block::header::Version {
+    fn from(value: Version) -> Self {
+        Self {
+            block: value.block,
+            app: value.app,
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct BlockId {
@@ -251,10 +230,25 @@ pub struct BlockId {
     pub parts: PartSetHeader,
 }
 
+impl From<BlockId> for tendermint::block::Id {
+    fn from(value: BlockId) -> Self {
+        Self {
+            hash: value.hash,
+            part_set_header: value.parts.into(),
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, Deserialize)]
 pub struct PartSetHeader {
     pub total: u32,
     #[serde_as(as = "serde_with::DisplayFromStr")]
     pub hash: tendermint::Hash,
+}
+
+impl From<PartSetHeader> for tendermint::block::parts::Header {
+    fn from(value: PartSetHeader) -> Self {
+        Self::new(value.total, value.hash).expect("Invalid TwinklePartSetHeader")
+    }
 }
