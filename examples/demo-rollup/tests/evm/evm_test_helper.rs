@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 
 use crate::test_helpers::test_genesis_source;
 
+use alloy::signers::local::PrivateKeySigner;
 use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
@@ -65,8 +66,12 @@ pub(crate) async fn create_simple_storage_client(
 }
 
 pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
     let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
-    ProviderBuilder::new().connect_http(url).erased()
+    ProviderBuilder::new()
+        .wallet(signer)
+        .connect_http(url)
+        .erased()
 }
 
 /// Deploys a test contract on the test rollup.
