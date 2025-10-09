@@ -624,6 +624,15 @@
           "format": "uint64",
           "minimum": 0.0
         },
+        "pruner_max_batch_size": {
+          "description": "Maximum number of keys to prune in a single batch.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "pruner_versions_to_keep": {
           "description": "These many versions will be available for historical querying.",
           "type": [

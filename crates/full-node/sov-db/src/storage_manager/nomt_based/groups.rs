@@ -28,7 +28,7 @@ const GIGABYTE: usize = 1024 * 1024 * 1024;
 
 // 300 thousand keys * 32 bytes is about 10 MB. This should be a large enough batch size to keep up with state growth,
 // without consuming excessive memory.
-pub(crate) const MAX_INDIVIDUAL_PRUNING_BATCH_SIZE: usize = 300_000;
+pub(crate) const DEFAULT_MAX_PRUNING_BATCH_SIZE: usize = 300_000;
 
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
@@ -167,11 +167,11 @@ where
         update_ledger_finalized_height(self.ledger.clone())
     }
 
-    pub(crate) fn start_pruner(&self, versions_to_keep: usize) -> PrunerJob {
+    pub(crate) fn start_pruner(&self, versions_to_keep: usize, max_batch_size: usize) -> PrunerJob {
         tracing::info!(versions_to_keep, "Starting pruner task iteration");
         let user = self.flat_state.get_user_db().clone();
         let kernel = self.flat_state.get_kernel_db().clone();
-        let accessory_pruner = Pruner::new(self.accessory.clone());
+        let accessory_pruner = Pruner::new(self.accessory.clone(), Some(max_batch_size));
 
         // Spawn historical state pruner thread
         let historical_state: JoinHandle<Result<PrunerJobOutput, anyhow::Error>> =
@@ -212,7 +212,7 @@ where
                             batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
                             keys_to_prune += 1;
                         }
-                        if keys_to_prune >= MAX_INDIVIDUAL_PRUNING_BATCH_SIZE {
+                        if keys_to_prune >= max_batch_size {
                             hit_size_limit = true;
                             break;
                         }
@@ -227,7 +227,7 @@ where
                 {
                     let prunable_keys = kernel
                         .iter_pruning_keys_up_to_version(kernel_version)?
-                        .take(MAX_INDIVIDUAL_PRUNING_BATCH_SIZE);
+                        .take(max_batch_size);
                     for key in prunable_keys {
                         // Prune the pruning table.
                         let key = key?;
@@ -247,7 +247,7 @@ where
                             batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
                             keys_to_prune += 1;
                         }
-                        if keys_to_prune >= MAX_INDIVIDUAL_PRUNING_BATCH_SIZE {
+                        if keys_to_prune >= max_batch_size {
                             hit_size_limit = true;
                             break;
                         }
