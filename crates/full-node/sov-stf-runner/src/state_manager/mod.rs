@@ -802,27 +802,60 @@ where
         &mut self,
         da_service: &Da,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
+        let mut da_service_calls = 0;
+
+        // Step 1: Determine the finalization boundary
+        let (last_seen_finalized_header, calls) =
+            self.determine_finalization_boundary(da_service).await?;
+        da_service_calls += calls;
+
+        // Step 2: Prune orphaned branches that don't descend from finalized header
+        self.prune_orphaned_branches(&last_seen_finalized_header);
+
+        // Step 3: Extract finalized transitions from seen blocks
+        let (finalized_transitions, calls) = self
+            .extract_finalized_transitions(da_service, &last_seen_finalized_header)
+            .await?;
+        da_service_calls += calls;
+
+        tracing::trace!(
+            finalized_transitions = finalized_transitions.len(),
+            ?da_service_calls,
+            "Completed check for finalized transitions"
+        );
+        Ok(finalized_transitions)
+    }
+
+    /// Determines the highest finalized header that we've seen a transition for.
+    /// Returns the header and the number of DA service calls made.
+    async fn determine_finalization_boundary(
+        &self,
+        da_service: &Da,
+    ) -> anyhow::Result<(<Da::Spec as DaSpec>::BlockHeader, u32)> {
+        let mut da_service_calls = 0;
+
         // DaService call # 1
-        let mut da_service_calls = 1;
         let last_finalized_header = da_service.get_last_finalized_block_header().await?;
-        let earliest_seen_transition = self
+        da_service_calls += 1;
+
+        let earliest_seen_height = self
             .get_earliest_seen_height()
             .expect("Should be called after at least single transition added");
-        let highest_seen_transition = self
+        let highest_seen_height = self
             .get_highest_seen_height()
             .expect("Should be called after at least single transition added");
 
         tracing::trace!(
             last_finalized_header = %last_finalized_header.display(),
-            highest_seen_transition,
-            "Compare truly last finalized header with highest seen transition");
+            highest_seen_height,
+            "Determining finalization boundary");
 
-        let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_transition
-        {
+        // If finalized height is beyond what we've seen, cap it at highest seen
+        let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_height {
             // DaService call # 2
             da_service_calls += 1;
             da_service
-                .get_block_header_at(highest_seen_transition)
+                .get_block_header_at(highest_seen_height)
                 .await?
                 .clone()
         } else {
@@ -831,120 +864,145 @@ where
 
         tracing::trace!(
             last_seen_finalized_header = %last_seen_finalized_header.display(),
-            seen_transitions = self.state_on_block.len(),
-            "Start processing finalized state transitions"
+            earliest_seen_height,
+            highest_seen_height,
+            "Finalization boundary determined"
         );
 
-        // Start with eliminating all non-finalized transitions
-        // that does not originate from a finalized header.
-        // But do we need this? Won't they be cleared on the next iteration, when finalized height rises?
-        // Yes, 2 reasons:
-        //   1. Not all of them will be removed, so we might have many orphaned transitions in memory.
-        //   2. We rely on check on clean-seen state to check if reorg happened or not.
-        {
-            // We start from height after the last finalized header
-            let start_height = last_seen_finalized_header
-                .height()
-                .checked_add(1)
-                .expect("end of chain");
-            let mut survivors = vec![last_seen_finalized_header.hash()];
+        Ok((last_seen_finalized_header, da_service_calls))
+    }
 
-            let range = start_height..=highest_seen_transition;
-            tracing::trace!(
-                 last_seen_finalized_header = % last_seen_finalized_header.display(),
-                ?range,
-                "Going to eliminate all future transitions which are not derived from last seen finalized header");
-            for height in range {
-                let new_survivors: Vec<_> = {
-                    let this_height_blocks = self
-                        .seen_on_height
-                        .get(&height)
-                        .expect("Continuity broken, inconsistent internal state");
-                    this_height_blocks
-                        .iter()
-                        .filter(|block_hash| survivors.contains(&self.get_prev_hash(block_hash)))
-                        .cloned()
-                        .collect()
-                };
+    /// Removes all non-finalized transitions that don't descend from the finalized header.
+    /// This is necessary because:
+    /// 1. Without pruning, orphaned transitions accumulate in memory
+    /// 2. Clean state is used to detect reorgs
+    fn prune_orphaned_branches(
+        &mut self,
+        last_seen_finalized_header: &<Da::Spec as DaSpec>::BlockHeader,
+    ) {
+        let highest_seen_height = self
+            .get_highest_seen_height()
+            .expect("Should have seen transitions");
 
-                {
-                    self.seen_on_height.get_mut(&height)
-                        .expect("Continuity broken, inconsistent internal state")
-                        .retain(|block_hash| {
-                            if new_survivors.contains(block_hash) {
-                                true
-                            } else {
-                                tracing::trace!(
-                                %block_hash,
-                                ?new_survivors,
-                                "Removing block header from seen_on_height, because it does not originate from last seen finalized header"
-                            );
-                                self.state_on_block.remove(block_hash);
-                                false
-                            }
-                        });
-                }
+        // Start from the block after finalized and track which blocks descend from it
+        let start_height = last_seen_finalized_header
+            .height()
+            .checked_add(1)
+            .expect("end of chain");
 
-                survivors = new_survivors;
-            }
+        let mut blocks_descending_from_finalized = vec![last_seen_finalized_header.hash()];
+
+        let range = start_height..=highest_seen_height;
+        tracing::trace!(
+            last_seen_finalized_header = %last_seen_finalized_header.display(),
+            ?range,
+            "Pruning orphaned branches not descended from finalized header"
+        );
+
+        for height in range {
+            // Find blocks at this height that descend from finalized chain
+            let blocks_at_height = self
+                .seen_on_height
+                .get(&height)
+                .expect("Continuity broken, inconsistent internal state");
+
+            let surviving_blocks: Vec<_> = blocks_at_height
+                .iter()
+                .filter(|block_hash| {
+                    blocks_descending_from_finalized.contains(&self.get_prev_hash(block_hash))
+                })
+                .cloned()
+                .collect();
+
+            // Remove orphaned blocks from both maps
+            self.seen_on_height
+                .get_mut(&height)
+                .expect("Continuity broken, inconsistent internal state")
+                .retain(|block_hash| {
+                    if surviving_blocks.contains(block_hash) {
+                        true
+                    } else {
+                        tracing::trace!(
+                            %block_hash,
+                            height,
+                            "Removing orphaned block not descended from finalized header"
+                        );
+                        self.state_on_block.remove(block_hash);
+                        false
+                    }
+                });
+
+            blocks_descending_from_finalized = surviving_blocks;
         }
+    }
+
+    /// Extracts finalized transitions from seen blocks by querying DA service.
+    /// Returns the finalized transitions and the number of DA service calls made.
+    async fn extract_finalized_transitions(
+        &mut self,
+        da_service: &Da,
+        last_seen_finalized_header: &<Da::Spec as DaSpec>::BlockHeader,
+    ) -> anyhow::Result<(Vec<StateOnBlock<Da::Spec, StateRoot>>, u32)> {
+        let mut da_service_calls = 0;
+
+        let earliest_seen_height = self
+            .get_earliest_seen_height()
+            .expect("Should have seen transitions");
 
         let mut finalized_transitions = Vec::with_capacity(
             last_seen_finalized_header
                 .height()
-                .saturating_sub(earliest_seen_transition) as usize,
+                .saturating_sub(earliest_seen_height) as usize,
         );
 
-        // Going backwards does not mean there's a connection between earliest and fetched last seen finalized header.
-        // TO BE 100% sure, we need to do N queries from earliest to latest seen finalized header.
-        // We can offload that into a background task that is subscribed and read it via a channel.
-        // But now it does queries. In reality, there shouldn't be a lot of them, as normally rollup progresses together with chain.
-        let range = (earliest_seen_transition..=last_seen_finalized_header.height()).rev();
-        tracing::trace!(
-            ?range,
-            "Going to extract finalized transitions from previously seen transitions"
-        );
+        // Note: We iterate backwards from highest to lowest finalized height.
+        // For each height, we query DA service to get the canonical finalized header
+        // and match it against our seen transitions.
+        // TODO: This makes N DA calls. Could be optimized with background header fetching.
+        let range = (earliest_seen_height..=last_seen_finalized_header.height()).rev();
+        tracing::trace!(?range, "Extracting finalized transitions from seen blocks");
+
         for height in range {
-            // DaService call # 3 + n
-            let finalized_at_that_height = da_service.get_block_header_at(height).await?;
+            // DaService call # 3 + n (this is the performance bottleneck)
+            let finalized_header_at_height = da_service.get_block_header_at(height).await?;
             da_service_calls += 1;
 
-            tracing::trace!(height, "Going to extract finalized transitions from height");
-            let blocks_on_height = self
+            tracing::trace!(
+                height,
+                finalized_header = %finalized_header_at_height.display(),
+                "Checking for finalized transition at height"
+            );
+
+            let blocks_at_height = self
                 .seen_on_height
                 .remove(&height)
-                .expect("Should be at least one seen transition on each height");
-            tracing::trace!(
-                ?blocks_on_height,
-                "Going to extract finalized transitions from height"
-            );
-            let mut pushed_for_this_height = false;
-            for block_hash in blocks_on_height {
+                .expect("Should have at least one seen transition at each height");
+
+            let mut found_finalized_at_height = false;
+            for block_hash in blocks_at_height {
                 let transition = self
                     .state_on_block
                     .remove(&block_hash)
-                    .expect("Should be there");
-                if block_hash == finalized_at_that_height.hash() {
+                    .expect("Block should exist in state_on_block");
+
+                if block_hash == finalized_header_at_height.hash() {
                     assert!(
-                        !pushed_for_this_height,
+                        !found_finalized_at_height,
                         "Should be only one finalized transition per height"
                     );
                     finalized_transitions.push(transition);
-                    pushed_for_this_height = true;
+                    found_finalized_at_height = true;
                 }
             }
         }
 
-        // Remove all entries in `seen_on_height` that have empty vectors.
-        self.seen_on_height.retain(|_, entries| !entries.is_empty());
+        // Clean up empty entries
+        self.seen_on_height.retain(|_, blocks| !blocks.is_empty());
 
+        // Reverse to get chronological order (earliest to latest)
         finalized_transitions.reverse();
-        tracing::trace!(
-            finalized_transitions = finalized_transitions.len(),
-            ?da_service_calls,
-            "Completed check for finalized transitions"
-        );
-        Ok(finalized_transitions)
+
+        Ok((finalized_transitions, da_service_calls))
     }
 
     // Returns updating time
