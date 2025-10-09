@@ -1,44 +1,13 @@
 use crate::celestia::{CompactHeader, ProtobufHash};
 use crate::celestia_tm_version;
+use crate::config::Network;
 use crate::types::TmHash;
 use jsonrpsee::core::Serialize;
-use schemars::JsonSchema;
 use serde::{Deserialize, Serializer};
 use serde_with::serde_as;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tendermint_proto::Protobuf;
-
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum Network {
-    Mocha,
-    Mainnet,
-}
-
-impl Network {
-    fn as_str(&self) -> &str {
-        match self {
-            Network::Mocha => "mocha-4",
-            Network::Mainnet => "mainnet",
-        }
-    }
-}
-
-impl std::fmt::Display for Network {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl serde::Serialize for Network {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(self.as_str())
-    }
-}
 
 #[serde_as]
 #[derive(Debug, Serialize)]

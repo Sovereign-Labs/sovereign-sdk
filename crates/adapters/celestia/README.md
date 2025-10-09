@@ -121,6 +121,13 @@ Each time a Celestia block is created,
 the DA service makes a series of RPC requests to obtain all of the relevant share data. 
 Then, it packages that data into the format expected by the DA verifier and returns.
 
+## Links
+
+ * [Status page of the network](https://status.celestia.org/) - a good place to check in case of issues
+ * [Official Documentation](https://docs.celestia.org/)
+ * [RPC API Reference](https://node-rpc-docs.celestia.org/)
+ * [Twinkle API documentation](https://t.tech/docs)Documentation about Twinkle client that can be used for higher throughput.
+
 ## License
 
 Licensed under the [Apache License, Version 2.0](../../../LICENSE).

@@ -1,13 +1,11 @@
-mod config;
 #[cfg(test)]
 mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
-pub use crate::da_service::client::twinkle::config::TwinkleConfig;
+use crate::config::{Network, TwinkleConfig};
 use crate::da_service::client::twinkle::types::{
-    BlobStatus, BlobStatusResponse, HeaderResponse, Network, SubmitBlobAsyncResponse,
-    SubmitBlobRequest,
+    BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
 };
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{RollupNamespace, TmHash};
@@ -24,8 +22,6 @@ use tracing::instrument;
 const HEADER_URL: &str = "https://t.tech/v0/header";
 const SUBMIT_BLOB_URL: &str = "https://t.tech/v0/blob";
 const BLOB_STATUS: &str = "https://t.tech/v0/blob/status";
-
-const AGENT: &str = "sov-celestia-adapter";
 
 // TODO for later:
 //  ~ Get block and header compatible with return types of celestia sender
@@ -278,14 +274,14 @@ impl TwinkleClient {
         Ok(celestia_header)
     }
 
-    // Will be used later when neede data is implemented
+    // Will be used later when necessary data is implemented on Twinkle API
     #[allow(dead_code)]
     #[instrument(skip(self))]
     pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
         self.query_header(None).await
     }
 
-    // Will be used later when needed data is implemented
+    // Will be used later when necessary data is implemented on Twinkle API
     #[allow(dead_code)]
     #[instrument(skip(self))]
     pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {

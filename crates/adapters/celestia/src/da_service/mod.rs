@@ -25,7 +25,6 @@ use tracing::{debug, instrument, trace};
 pub use crate::config::CelestiaConfig;
 use crate::da_service::client::standard_node::StandardNodeClient;
 use crate::da_service::client::twinkle::TwinkleClient;
-pub use crate::da_service::client::twinkle::TwinkleConfig;
 use crate::da_service::client::CelestiaClient;
 use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{
