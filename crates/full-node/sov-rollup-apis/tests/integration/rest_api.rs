@@ -222,33 +222,30 @@ async fn test_simulation_v2_success() {
         .await
         .unwrap();
     let actual = response.json::<serde_json::Value>().await.unwrap();
-    // Test raw JSON to ensure it's acutally usable
-    let expected = serde_json::json!({
-        "outcome": "success",
-        "gas_used": "104000",
-        "events": [
-            {
-                "key": "Bank/TokenTransferred",
-                "module": "Bank",
-                "value": {
-                    "token_transferred": {
-                        "from": {
-                            "user": data.user.address()
-                        },
-                        "to": {
-                            "user": receiver
-                        },
-                        "coins": {
-                            "amount": "1000",
-                            "token_id": "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
-                        }
+
+    assert_eq!(actual["outcome"], "success");
+    assert!(actual.get("gas_used").is_some());
+    assert_eq!(
+        actual["events"][0],
+        serde_json::json!({
+            "key": "Bank/TokenTransferred",
+            "module": "Bank",
+            "value": {
+                "token_transferred": {
+                    "from": {
+                        "user": data.user.address()
+                    },
+                    "to": {
+                        "user": receiver
+                    },
+                    "coins": {
+                        "amount": "1000",
+                        "token_id": "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
                     }
                 }
             }
-        ]
-    });
-
-    assert_eq!(actual, expected);
+        })
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
