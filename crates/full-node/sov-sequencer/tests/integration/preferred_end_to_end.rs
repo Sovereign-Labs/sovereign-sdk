@@ -12,6 +12,7 @@ use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use futures::future;
+use serde_json::Number;
 use sov_api_spec::types::{
     self as api_types, SequencerListEventsPage, SequencerListEventsResponse, TxReceiptResult,
 };
@@ -60,6 +61,18 @@ generate_optimistic_runtime_with_kernel!(
             Self::Decodable::HooksCount(sov_test_modules::hooks_count::CallMessage::DelayedCallMsg) => DELAYED_TX_DELAY_MS,
             _ => 0,
         }
+    },
+    transaction_priority_wrapper: |call: &sov_modules_api::FullyBakedTx| {
+        use sov_modules_api::capabilities::TransactionAuthenticator;
+        let Ok(call) = Self::Auth::decode_serialized_tx(call) else {
+            return 0;
+        };
+        match call {
+            Self::Decodable::ValueSetter(sov_value_setter::CallMessage::SetValue { value, .. }) =>
+                value,
+            _ => 0,
+        }
+
     }
 );
 
@@ -145,6 +158,77 @@ impl DaLayerWithSubscription {
         for _ in 0..n {
             self.produce_and_wait_for_slot().await;
         }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_transaction_priority() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+    )
+    .await;
+
+    let Some(test_rollup) = test_rollup else {
+        return;
+    };
+
+    let nb_of_blocks = 5;
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
+    let mut event_subscription = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
+    // Send a transaction which will block the sequencer for a while. This gives us time to send other txs with different priorities and ensure
+    // that the priority tiebreaker is working.
+    let client = test_rollup.api_client().clone();
+    let tx = tx_set_value_and_sleep(&admin.private_key, 0, 1000, 5000);
+    tokio::spawn(async move {
+        client
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&tx),
+            })
+            .await
+            .unwrap();
+    });
+    // Sleep for a little while to ensure the tx has been received and is currently blocking the sequencer.
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Send transactions in from 1 to 10 concurrently.
+    for i in 1..10 {
+        let tx = tx_set_value(&admin.private_key, 0, i);
+        let client = test_rollup.api_client().clone();
+        tokio::spawn(async move {
+            client
+                .accept_tx(&api_types::AcceptTxBody {
+                    body: BASE64_STANDARD.encode(&tx),
+                })
+                .await
+                .unwrap();
+        });
+    }
+
+    fn assert_event_value(event: &sov_api_spec::types::LedgerEvent, expected_value: u32) {
+        assert_eq!(
+            event.value.get("new_value").unwrap(),
+            &serde_json::Value::Number(Number::from(expected_value)),
+            "Event value is not {expected_value}. {event:?}"
+        );
+    }
+
+    // Check that our initial tx arrived first and was processed - otherwise the priority numbers won't have had any effect.
+    let initial_event = event_subscription.next().await.unwrap().unwrap();
+    assert_event_value(&initial_event, 1000);
+
+    // No matter what order txs arrived in, events should always be received in reverse order because higher numbers get higher priority.
+    for i in (1..10).rev() {
+        let event = event_subscription.next().await.unwrap().unwrap();
+        assert_event_value(&event, i);
     }
 }
 
