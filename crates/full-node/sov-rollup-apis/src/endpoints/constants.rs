@@ -13,6 +13,7 @@ pub struct ConstantsResponse {
     chain_id: u64,
     chain_name: &'static str,
     hyperlane_domain: u32,
+    address_prefix: &'static str,
 }
 
 impl Default for ConstantsResponse {
@@ -21,6 +22,7 @@ impl Default for ConstantsResponse {
             chain_id: config_value!("CHAIN_ID"),
             chain_name: config_value!("CHAIN_NAME"),
             hyperlane_domain: config_value!("HYPERLANE_BRIDGE_DOMAIN"),
+            address_prefix: config_value!("ADDRESS_PREFIX"),
         }
     }
 }

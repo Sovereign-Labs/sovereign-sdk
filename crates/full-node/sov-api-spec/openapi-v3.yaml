@@ -465,6 +465,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SimulateExecutionResponse"
+  /rollup/simulate-v2:
+    post:
+      summary: Simulate transaction execution (v2)
+      description: |-
+        Simulates transaction execution against the current blockchain state without committing changes.
+        This endpoint provides detailed gas estimation, event emission, and error handling.
+        Useful for estimating gas costs, testing transaction behavior, and debugging.
+      operationId: simulate_v2
+      tags:
+        - Rollup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulateParametersV2"
+      responses:
+        "200":
+          description: Simulation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulateOutcomeV2"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/ApiErrorResponse"
   /rollup/sync-status:
     get:
       summary: Get the current sync status of the rollup
@@ -856,10 +882,15 @@ components:
           type: integer
         hyperlane_domain:
           type: integer
+        address_prefix:
+          type: string
+          description: The HRP used for addresses in this rollup (e.g., "sov"). Doesn't apply to solana/eth addressed apps.
+          example: "sov"
       required:
         - chain_name
         - chain_id
         - hyperlane_domain
+        - address_prefix
     Hash:
       type: string
       title: Hash
@@ -1142,3 +1173,137 @@ components:
                 - target_da_height
           required:
             - syncing
+    SimulateParametersV2:
+      type: object
+      description: Parameters for transaction simulation requests (v2)
+      properties:
+        sender:
+          type: string
+          description: The credential ID of the transaction sender
+          example: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+        call:
+          type: object
+          description: The runtime call to simulate, provided as JSON
+          additionalProperties: true
+          example:
+            Bank:
+              Transfer:
+                to:
+                  user: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+                coins:
+                  amount: "1000"
+                  token_id: "token_1234567890abcdef"
+        tx_details:
+          $ref: "#/components/schemas/TxDetailsParameterV2"
+        sequencer:
+          $ref: "#/components/schemas/SequencerParameterV2"
+        uniqueness:
+          type: object
+          description: Optional uniqueness data for the transaction
+          additionalProperties: true
+      required:
+        - sender
+        - call
+    TxDetailsParameterV2:
+      type: object
+      description: Optional transaction details for simulation requests
+      properties:
+        max_priority_fee_bips:
+          type: integer
+          description: Maximum priority fee in basis points
+          format: uint16
+          example: 100
+        max_fee:
+          type: string
+          description: Maximum fee the sender is willing to pay
+          example: "1000000"
+        gas_limit:
+          type: array
+          items:
+            type: integer
+            format: uint64
+          description: Gas limit for the transaction as an array of u64 values
+          example: [1000000, 0, 0, 0]
+    SequencerParameterV2:
+      type: object
+      description: Optional sequencer configuration for simulation requests
+      properties:
+        rollup_address:
+          type: string
+          description: Custom rollup address for the sequencer
+          example: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+        da_address:
+          type: string
+          description: Custom data availability address for the sequencer
+          example: "celestia1234567890abcdef"
+    SimulateOutcomeV2:
+      type: object
+      description: The outcome of a transaction simulation
+      discriminator:
+        propertyName: outcome
+      oneOf:
+        - $ref: "#/components/schemas/SuccessOutcomeV2"
+        - $ref: "#/components/schemas/FailOutcomeV2"
+    SuccessOutcomeV2:
+      type: object
+      description: Successful simulation outcome
+      properties:
+        outcome:
+          type: string
+          enum: [success]
+        gas_used:
+          type: string
+          description: The amount of gas consumed by the transaction
+          example: "104000"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimulatedEventV2"
+          description: Events emitted during transaction execution
+      required:
+        - outcome
+        - gas_used
+        - events
+    FailOutcomeV2:
+      type: object
+      description: Failed simulation outcome
+      properties:
+        outcome:
+          type: string
+          enum: [reverted, skipped]
+        reason:
+          type: string
+          description: The reason why the transaction failed
+          example: "Insufficient balance"
+      required:
+        - outcome
+        - reason
+    SimulatedEventV2:
+      type: object
+      description: An event emitted during transaction simulation
+      properties:
+        value:
+          type: object
+          description: The event data
+          additionalProperties: true
+          example:
+            token_transferred:
+              coins:
+                amount: "1000"
+                token_id: "token_1234567890abcdef"
+              from:
+                user: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+              to:
+                user: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq2k2jj4"
+        key:
+          type: string
+          description: The event key
+          example: "Bank/TokenTransferred"
+        module:
+          type: string
+          description: The module that emitted the event
+          example: "Bank"
+      required:
+        - value
+        - key
+        - module
