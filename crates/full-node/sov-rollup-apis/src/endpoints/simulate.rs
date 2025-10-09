@@ -64,14 +64,14 @@ pub trait SimulateEndpoint: Send + Sync + 'static {
 
     /// Returns a configured axum router for the endpoint.
     ///
-    /// Creates an axum router with the `/rollup/simulate-v2` endpoint that accepts POST requests.
+    /// Creates an axum router with the `/rollup/simulate` endpoint that accepts POST requests.
     /// The router calls the implemented [`Self::handler`] and returns the result as JSON.
     /// If [`Self::handler`] returns an error, it will be converted to an [`ErrorObject`] and
     /// returned with the appropriate HTTP status code.
     ///
     /// # Warning
     ///
-    /// If you override this method, you should ensure you provide the standard `/rollup/simulate-v2` path.
+    /// If you override this method, you should ensure you provide the standard `/rollup/simulate` path.
     /// If the path is different, then external tooling like web3 SDKs won't be able to consume the
     /// functionality and will fail to work.
     ///
@@ -81,7 +81,7 @@ pub trait SimulateEndpoint: Send + Sync + 'static {
         preconfigured_router_layers(
             Router::new()
                 .route(
-                    "/rollup/simulate-v2",
+                    "/rollup/simulate",
                     post(
                         |State(state): State<Self::State>, Json(body): Json<Self::Parameters>| async move {
                             match Self::handler(state, body) {
@@ -243,7 +243,7 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Sovere
     /// to serve the simulation endpoint.
     ///
     /// # Returns
-    /// An axum [`Router`] configured with the `/rollup/simulate-v2` endpoint.
+    /// An axum [`Router`] configured with the `/rollup/simulate` endpoint.
     pub fn into_router(self) -> Router<()> {
         Self::axum_router(std::sync::Arc::new(self))
     }

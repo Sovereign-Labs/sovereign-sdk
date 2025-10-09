@@ -1,10 +1,9 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use sov_api_spec::Client;
 use sov_modules_api::prelude::tokio::sync::watch;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
-use sov_rollup_apis::{DefaultRollupStateProvider, RollupTxRouter};
+use sov_rollup_apis::rollup_tx_router;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::StateUpdateInfo;
 use sov_test_utils::storage::SimpleLedgerStorageManager;
@@ -89,13 +88,8 @@ impl TestData {
             sequencer_da_address,
         );
         let axum_router: axum::Router<()> =
-            RollupTxRouter::<Arc<DefaultRollupStateProvider<S, RT>>>::axum_router(
-                state_update_receiver,
-                sequencer_da_address,
-                sequencer_rollup_address,
-                sync_receiver,
-            )
-            .merge(simulate_v2.into_router());
+            rollup_tx_router::<S, RT>(state_update_receiver, sync_receiver)
+                .merge(simulate_v2.into_router());
 
         let (axum_addr, axum_server) = {
             let handle = axum_server::Handle::new();
