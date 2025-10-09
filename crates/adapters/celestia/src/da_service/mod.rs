@@ -23,9 +23,9 @@ use tokio::time::Instant;
 use tracing::{debug, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
-use crate::da_service::client::standard_node::StandardNodeClient;
-use crate::da_service::client::twinkle::TwinkleClient;
-use crate::da_service::client::CelestiaClient;
+pub use crate::da_service::client::standard_node::StandardNodeClient;
+pub use crate::da_service::client::twinkle::TwinkleClient;
+pub use crate::da_service::client::CelestiaClient;
 use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData,
@@ -81,11 +81,7 @@ impl CelestiaService {
         let request_timeout = Duration::from_secs(config.celestia_rpc_timeout_seconds.get());
         let backoff_policy = config.get_backoff_policy();
 
-        let submit_client = if let Some(twinkle_config) = &config.twinkle {
-            CelestiaClient::Twinkle(TwinkleClient::new(twinkle_config, backoff_policy))
-        } else {
-            CelestiaClient::StandardNode(StandardNodeClient::new(&config))
-        };
+        let submit_client = config.construct_celestia_client();
 
         let read_client = config.construct_rpc_client();
 

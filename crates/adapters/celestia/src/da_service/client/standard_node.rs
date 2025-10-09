@@ -1,7 +1,6 @@
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{RollupNamespace, TmHash, APP_VERSION};
 use crate::verifier::address::CelestiaAddress;
-use crate::CelestiaConfig;
 use backon::ExponentialBuilder;
 use celestia_rpc::{StateClient, TxPriority};
 use celestia_types::blob::Blob as JsonBlob;
@@ -29,14 +28,17 @@ pub struct StandardNodeClient {
 }
 
 impl StandardNodeClient {
-    pub fn new(config: &CelestiaConfig) -> Self {
-        let client = config.construct_rpc_client();
-
+    pub fn new(
+        client: HttpClient,
+        tx_priority: Option<TxPriority>,
+        request_timeout: Duration,
+        backoff_policy: ExponentialBuilder,
+    ) -> Self {
         Self {
             client: Arc::new(Mutex::new(client)),
-            backoff_policy: config.get_backoff_policy(),
-            request_timeout: config.request_timeout(),
-            tx_priority: config.tx_priority.clone().map(Into::into),
+            backoff_policy,
+            request_timeout,
+            tx_priority,
         }
     }
 

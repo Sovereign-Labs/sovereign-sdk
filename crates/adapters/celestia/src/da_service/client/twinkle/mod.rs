@@ -3,7 +3,7 @@ mod tests;
 mod types;
 
 use crate::celestia::CompactHeader;
-use crate::config::{Network, TwinkleConfig};
+use crate::config::Network;
 use crate::da_service::client::twinkle::types::{
     BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
 };
@@ -48,14 +48,18 @@ pub struct TwinkleClient {
 }
 
 impl TwinkleClient {
-    pub fn new(config: &TwinkleConfig, backoff_policy: ExponentialBuilder) -> Self {
-        let client = config.construct_reqwest_client();
-
+    pub(crate) fn new(
+        client: reqwest::Client,
+        network: Network,
+        pull_interval: std::time::Duration,
+        total_timeout: std::time::Duration,
+        backoff_policy: ExponentialBuilder,
+    ) -> Self {
         Self {
             client,
-            network: config.network,
-            pull_interval: config.pull_interval(),
-            total_timeout: config.total_timeout(),
+            network,
+            pull_interval,
+            total_timeout,
             backoff_policy,
         }
     }
