@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use sov_api_spec::Client;
 use sov_modules_api::prelude::tokio::sync::watch;
+use sov_rollup_apis::endpoints::simulate::{SimulateEndpoint, SovereignSimulate};
 use sov_rollup_apis::{DefaultRollupStateProvider, RollupTxRouter};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::StateUpdateInfo;
@@ -27,7 +28,7 @@ struct TestData {
 
     user: TestUser<S>,
 
-    axum_addr: SocketAddr,
+    pub axum_addr: SocketAddr,
     axum_server: axum_server::Handle,
 
     sync_sender: watch::Sender<SyncStatus>,
@@ -82,13 +83,19 @@ impl TestData {
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
 
+        let simulate_v2 = SovereignSimulate::<S, RT>::new(
+            state_update_receiver.clone(),
+            sequencer_rollup_address,
+            sequencer_da_address,
+        );
         let axum_router: axum::Router<()> =
             RollupTxRouter::<Arc<DefaultRollupStateProvider<S, RT>>>::axum_router(
                 state_update_receiver,
                 sequencer_da_address,
                 sequencer_rollup_address,
                 sync_receiver,
-            );
+            )
+            .merge(simulate_v2.into_router());
 
         let (axum_addr, axum_server) = {
             let handle = axum_server::Handle::new();

@@ -12556,7 +12556,9 @@ dependencies = [
  "borsh",
  "derivative",
  "derive_more 1.0.0",
+ "hex",
  "openapiv3",
+ "reqwest 0.12.23",
  "serde",
  "serde_json",
  "serde_with",
@@ -12573,6 +12575,7 @@ dependencies = [
  "sov-uniqueness",
  "strum 0.26.3",
  "tempfile",
+ "thiserror 1.0.69",
  "tracing",
  "utoipa-swagger-ui",
 ]

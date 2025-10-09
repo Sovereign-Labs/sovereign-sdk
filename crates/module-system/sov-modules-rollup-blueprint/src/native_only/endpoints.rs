@@ -9,6 +9,7 @@ use sov_modules_api::{
     BatchSequencerReceipt, NodeEndpoints, RuntimeEventProcessor, Spec, SyncStatus, *,
 };
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
+use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::{DefaultRollupStateProvider, RollupTxRouter};
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
@@ -63,6 +64,12 @@ where
             .merge(ledger_axum_router.with_state(ledger_state));
     }
 
+    let simulate_v2 = SovereignSimulate::<B::Spec, B::Runtime>::new(
+        state_update_receiver.clone(),
+        config.sequencer.rollup_address.clone(),
+        sequencer.da_address.clone(),
+    );
+    endpoints.axum_router = endpoints.axum_router.merge(simulate_v2.into_router());
     // Rollup endpoint
     {
         let rollup_router = RollupTxRouter::<

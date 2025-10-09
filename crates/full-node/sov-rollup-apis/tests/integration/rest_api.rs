@@ -4,8 +4,9 @@ use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::prelude::tokio::{self};
 use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
 use sov_modules_api::{Amount, Gas, GasArray, GasSpec, PrivateKey, Spec, SyncStatus, TxEffect};
+use sov_rest_utils::json_obj;
 use sov_rollup_apis::{PartialTransaction, SimulateExecutionContainer};
-use sov_test_utils::{AsUser, EncodeCall, TransactionTestCase, TEST_DEFAULT_MAX_FEE};
+use sov_test_utils::{AsUser, EncodeCall, TestUser, TransactionTestCase, TEST_DEFAULT_MAX_FEE};
 
 use crate::{TestData, RT, S};
 
@@ -191,6 +192,102 @@ async fn test_simulation() {
         "The queries receipt isn't successful. Instead, the receipt is {:?}",
         query_apply_tx_receipt.receipt
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_simulation_v2_success() {
+    let data = TestData::setup().await;
+
+    let sender = data.user.credential_id().to_string();
+    let receiver = TestUser::<S>::generate_with_default_balance().address();
+    let call = sov_bank::CallMessage::<S>::Transfer {
+        to: receiver,
+        coins: sov_bank::Coins {
+            amount: Amount::new(1000),
+            token_id: config_gas_token_id(),
+        },
+    };
+    let params = json_obj!({
+        "sender": sender,
+        "call": {
+            "bank": call,
+        },
+    });
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("http://{}/rollup/simulate-v2", data.axum_addr))
+        .json(&params)
+        .send()
+        .await
+        .unwrap();
+    let actual = response.json::<serde_json::Value>().await.unwrap();
+    // Test raw JSON to ensure it's acutally usable
+    let expected = serde_json::json!({
+        "outcome": "success",
+        "gas_used": "104000",
+        "events": [
+            {
+                "key": "Bank/TokenTransferred",
+                "module": "Bank",
+                "value": {
+                    "token_transferred": {
+                        "from": {
+                            "user": data.user.address()
+                        },
+                        "to": {
+                            "user": receiver
+                        },
+                        "coins": {
+                            "amount": "1000",
+                            "token_id": "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
+                        }
+                    }
+                }
+            }
+        ]
+    });
+
+    assert_eq!(actual, expected);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_simulation_v2_fail() {
+    let data = TestData::setup().await;
+
+    let sender = TestUser::<S>::generate_with_default_balance();
+    let receiver = TestUser::<S>::generate_with_default_balance().address();
+    let call = sov_bank::CallMessage::<S>::Transfer {
+        to: receiver,
+        coins: sov_bank::Coins {
+            amount: Amount::new(1000),
+            token_id: config_gas_token_id(),
+        },
+    };
+    let params = json_obj!({
+        "sender": sender.credential_id().to_string(),
+        "call": {
+            "bank": call,
+        },
+    });
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("http://{}/rollup/simulate-v2", data.axum_addr))
+        .json(&params)
+        .send()
+        .await
+        .unwrap();
+    let actual = response.json::<serde_json::Value>().await.unwrap();
+    // Test raw JSON to ensure it's acutally usable
+    let expected = serde_json::json!({
+        "outcome": "reverted",
+        // we lose the context because of how module errors are currently implemented
+        // the actual reason for the failure is the sender doesnt have enough balance
+        "reason": "Failed to transfer token_id=token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
+    });
+
+    assert_eq!(actual, expected);
 }
 
 #[tokio::test(flavor = "multi_thread")]

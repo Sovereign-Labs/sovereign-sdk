@@ -4,3 +4,5 @@ pub mod constants;
 pub mod dedup;
 /// Provides functionality for the `/rollup/schema` endpoint.
 pub mod schema;
+/// Provides functionality for the `/rollup/simulate` endpoint.
+pub mod simulate;
