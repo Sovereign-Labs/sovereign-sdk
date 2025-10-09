@@ -37,6 +37,11 @@ pub enum Event<S: Spec> {
         /// The new value that was set
         new_value: u64,
     },
+    /// Emitted when the accessory value is updated
+    AccessoryValueUpdated {
+        /// The new value that was set
+        new_value: u64,
+    }
 }
 
 /// The State Consistency module. Provides utility transactions for consistency testing through

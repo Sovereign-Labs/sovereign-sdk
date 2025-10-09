@@ -88,7 +88,16 @@ impl<S: Spec> StateConsistency<S> {
         _context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        Ok(self.accessory_value.set(&new, state)?)
+        self.accessory_value.set(&new, state)?;
+        // Emit event
+        self.emit_event(
+            state,
+            Event::AccessoryValueUpdated {
+                new_value: new,
+            },
+        );
+
+        Ok(())
     }
 
     pub(crate) fn assert_block_state(
