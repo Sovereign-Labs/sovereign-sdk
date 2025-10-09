@@ -54,8 +54,8 @@ impl TwinkleClient {
         Self {
             client,
             network: config.network,
-            pull_interval: std::time::Duration::from_millis(config.pull_interval_millis),
-            total_timeout: std::time::Duration::from_secs(config.total_timeout_secs),
+            pull_interval: config.pull_interval(),
+            total_timeout: config.total_timeout(),
             backoff_policy,
         }
     }

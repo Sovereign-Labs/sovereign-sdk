@@ -72,9 +72,9 @@ impl From<TxPriority> for celestia_rpc::TxPriority {
 impl CelestiaConfig {
     pub(crate) fn get_backoff_policy(&self) -> backon::ExponentialBuilder {
         let backoff_policy = backon::ExponentialBuilder::default()
-            .with_min_delay(std::time::Duration::from_millis(self.backoff_min_delay_ms))
+            .with_min_delay(Duration::from_millis(self.backoff_min_delay_ms))
             .with_max_times(self.backoff_max_times)
-            .with_max_delay(std::time::Duration::from_millis(self.backoff_max_delay_ms))
+            .with_max_delay(Duration::from_millis(self.backoff_max_delay_ms))
             .with_factor(self.backoff_factor);
 
         tracing::debug!(?backoff_policy, "Configured backoff policy");
@@ -99,7 +99,7 @@ impl CelestiaConfig {
         }
     }
 
-    pub(crate) fn request_timeout(&self) -> std::time::Duration {
+    pub(crate) fn request_timeout(&self) -> Duration {
         Duration::from_secs(self.celestia_rpc_timeout_seconds.get())
     }
 
@@ -128,8 +128,10 @@ fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
+// Assuming  there's node on localhost.
+// Explicit IPv4 for compatibility.
 fn default_rpc_addr() -> String {
-    "http://localhost:11111/".into()
+    "http://127.0.0.1:26658/".into()
 }
 
 fn default_max_response_size() -> NonZero<u32> {
@@ -138,7 +140,7 @@ fn default_max_response_size() -> NonZero<u32> {
 }
 
 // Exponential backoff defaults:
-// **Timing for Each Attempt:**
+// **Timing for Each Attempt: **
 // 1. Attempt 1: 100ms
 // 2. Attempt 2: 200ms
 // 3. Attempt 3: 400ms
@@ -150,8 +152,8 @@ fn default_max_response_size() -> NonZero<u32> {
 // 9. Attempt 9: 25.6s
 // 10. Attempt 10: 10s (capped at max_delay)
 // 11. Attempt 11-60: 10s each
-// **Total Number of Attempts:** 60 (as specified by ) `with_max_times(60)`
-// **Total Waiting Time:**
+// **Total Number of Attempts: ** 60 (as specified by ) `with_max_times(60)`
+// **Total Waiting Time: **
 // - First 9 attempts: 100ms + 200ms + 400ms + 800ms + 1.6s + 3.2s + 6.4s + 12.8s + 25.6s = ~51.1 seconds
 // - Remaining 51 attempts: 51 × 30s = 1,530 seconds (25.5 minutes)
 // - **Total waiting time: ~1,581 seconds (≈ 26.35 minutes)**
@@ -178,24 +180,24 @@ pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct TwinkleConfig {
     /// If not set, will be taken from the environment variable `SOV_TWINKLE_API_KEY`
-    pub api_key: Option<String>,
+    api_key: Option<String>,
     /// Celestia network: "mocha" or "mainnet"
     pub network: Network,
     /// At which interval pull blob status after it has been submitted.
     #[serde(default = "default_pull_interval_millis")]
-    pub pull_interval_millis: u64,
+    pull_interval_millis: NonZero<u64>,
     /// Timeout for individual HTTP requests in seconds
     #[serde(default = "default_request_timeout_secs")]
-    pub request_timeout_secs: u64,
+    request_timeout_secs: NonZero<u64>,
     /// Timeout for the entire request including retries in seconds
-    // TODO:
-    pub total_timeout_secs: u64,
+    #[serde(default = "default_total_timeout_secs")]
+    total_timeout_secs: NonZero<u64>,
     /// Timeout for establishing HTTP connections in seconds
     #[serde(default = "default_connect_timeout_secs")]
-    pub connect_timeout_secs: u64,
+    connect_timeout_secs: NonZero<u64>,
     /// Timeout for idle connections in the connection pool in seconds
     #[serde(default = "default_pool_idle_timeout_secs")]
-    pub pool_idle_timeout_secs: u64,
+    pool_idle_timeout_secs: NonZero<u64>,
 }
 
 impl std::fmt::Debug for TwinkleConfig {
@@ -213,20 +215,24 @@ impl std::fmt::Debug for TwinkleConfig {
     }
 }
 
-fn default_pull_interval_millis() -> u64 {
-    100
+fn default_pull_interval_millis() -> NonZero<u64> {
+    NonZero::new(100).unwrap()
 }
 
-fn default_request_timeout_secs() -> u64 {
-    60
+fn default_request_timeout_secs() -> NonZero<u64> {
+    NonZero::new(30).unwrap()
 }
 
-fn default_connect_timeout_secs() -> u64 {
-    10
+fn default_total_timeout_secs() -> NonZero<u64> {
+    NonZero::new(60).unwrap()
 }
 
-fn default_pool_idle_timeout_secs() -> u64 {
-    30
+fn default_connect_timeout_secs() -> NonZero<u64> {
+    NonZero::new(10).unwrap()
+}
+
+fn default_pool_idle_timeout_secs() -> NonZero<u64> {
+    NonZero::new(30).unwrap()
 }
 
 impl TwinkleConfig {
@@ -237,8 +243,7 @@ impl TwinkleConfig {
             network: Network::Mocha,
             pull_interval_millis: default_pull_interval_millis(),
             request_timeout_secs: default_request_timeout_secs(),
-            // TODO: Use same as in CelestiaConfig.
-            total_timeout_secs: 120,
+            total_timeout_secs: default_total_timeout_secs(),
             connect_timeout_secs: default_connect_timeout_secs(),
             pool_idle_timeout_secs: default_pool_idle_timeout_secs(),
         }
@@ -250,6 +255,14 @@ impl TwinkleConfig {
             ),
             Some(set) => set.clone(),
         }
+    }
+
+    pub fn pull_interval(&self) -> Duration {
+        Duration::from_millis(self.pull_interval_millis.get())
+    }
+
+    pub fn total_timeout(&self) -> Duration {
+        Duration::from_secs(self.total_timeout_secs.get())
     }
 
     pub fn construct_reqwest_client(&self) -> reqwest::Client {
@@ -266,9 +279,9 @@ impl TwinkleConfig {
 
         reqwest::Client::builder()
             .default_headers(headers)
-            .timeout(std::time::Duration::from_secs(self.request_timeout_secs))
-            .connect_timeout(std::time::Duration::from_secs(self.connect_timeout_secs))
-            .pool_idle_timeout(std::time::Duration::from_secs(self.pool_idle_timeout_secs))
+            .timeout(Duration::from_secs(self.request_timeout_secs.get()))
+            .connect_timeout(Duration::from_secs(self.connect_timeout_secs.get()))
+            .pool_idle_timeout(Duration::from_secs(self.pool_idle_timeout_secs.get()))
             .build()
             .expect("Reqwest HTTP client config should be valid")
     }
@@ -303,4 +316,39 @@ impl serde::Serialize for Network {
     {
         serializer.serialize_str(self.as_str())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_correct_minimal_standard_config() {
+        let config_s = r#"
+            celestia_rpc_auth_token = "MY.SECRET.TOKEN"
+        "#;
+
+        let config = toml::from_str::<CelestiaConfig>(config_s).unwrap();
+        insta::assert_json_snapshot!(config);
+    }
+
+    #[test]
+    fn test_correct_minimal_twinkle_config() {
+        let config_s = r#"
+            celestia_rpc_auth_token = "MY.SECRET.TOKEN"
+            [twinkle]
+            network = "mocha"
+        "#;
+
+        let config = toml::from_str::<CelestiaConfig>(config_s).unwrap();
+        insta::assert_json_snapshot!(config);
+    }
+
+    // Test Twinkle API from env variable
+
+    // Test Twinkle API errors
+
+    // Test custom values and verify rpc client config
+
+    // Test custom values and verify reqwest client
 }
