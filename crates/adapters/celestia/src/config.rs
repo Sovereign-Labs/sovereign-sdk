@@ -12,22 +12,26 @@ const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "-", env!("CARGO_PKG_VE
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct CelestiaConfig {
-    /// The JWT used to authenticate with the Celestia RPC server
+    /// The JWT used to authenticate with the Celestia node
     pub celestia_rpc_auth_token: String,
-    /// The address of the Celestia RPC server
+    /// The address of the Celestia node
     #[serde(default = "default_rpc_addr")]
     pub celestia_rpc_address: String,
     /// The maximum size of a Celestia RPC response, in bytes
     #[serde(default = "default_max_response_size")]
     pub max_celestia_response_body_size: NonZero<u32>,
-    /// The timeout for a Celestia RPC request, in seconds
-    #[serde(default = "default_request_timeout_seconds")]
-    pub celestia_rpc_timeout_seconds: NonZero<u64>,
-
-    /// Timeout for establishing HTTP connections in seconds
+    /// The timeout for a Celestia HTTP request in seconds
+    #[serde(
+        default = "default_request_timeout_seconds",
+        alias = "celestia_rpc_timeout_seconds"
+    )]
+    pub(crate) request_timeout_secs: NonZero<u64>,
+    /// Timeout for establishing HTTP connections in seconds.
+    /// Currently only applicable for Twinkle
     #[serde(default = "default_connect_timeout_secs")]
     connect_timeout_secs: NonZero<u64>,
     /// Timeout for idle connections in the connection pool in seconds
+    /// Currently only applicable for Twinkle
     #[serde(default = "default_pool_idle_timeout_secs")]
     pool_idle_timeout_secs: NonZero<u64>,
 
@@ -96,7 +100,7 @@ impl CelestiaConfig {
             celestia_rpc_auth_token: "TEST".to_string(),
             celestia_rpc_address: url.to_string(),
             max_celestia_response_body_size: NonZero::new(1024 * 1024 * 100).unwrap(),
-            celestia_rpc_timeout_seconds: NonZero::new(120).unwrap(),
+            request_timeout_secs: NonZero::new(120).unwrap(),
             connect_timeout_secs: NonZero::new(5).unwrap(),
             pool_idle_timeout_secs: NonZero::new(60).unwrap(),
             safe_lead_time_ms: 500,
@@ -111,7 +115,7 @@ impl CelestiaConfig {
     }
 
     pub(crate) fn request_timeout(&self) -> Duration {
-        Duration::from_secs(self.celestia_rpc_timeout_seconds.get())
+        Duration::from_secs(self.request_timeout_secs.get())
     }
 
     pub(crate) fn construct_rpc_client(&self) -> jsonrpsee::http_client::HttpClient {
@@ -361,12 +365,23 @@ mod tests {
     }
 
     #[test]
+    fn test_old_timeout_value_is_supported() {
+        let config_s = r#"
+            celestia_rpc_auth_token = "MY.SECRET.TOKEN"
+            celestia_rpc_timeout_seconds = 30
+        "#;
+
+        let config = toml::from_str::<CelestiaConfig>(config_s).unwrap();
+        insta::assert_json_snapshot!(config);
+    }
+
+    #[test]
     fn test_correct_standard_config_with_client() {
         let config_s = r#"
             celestia_rpc_auth_token = "MY.SECRET.TOKEN"
             celestia_rpc_address = "https://mocha.example.com:36658"
             max_celestia_response_body_size = 60_000_000
-            celestia_rpc_timeout_seconds = 10
+            request_timeout_secs = 10
             safe_lead_time_ms = 300
         "#;
         let config = toml::from_str::<CelestiaConfig>(config_s).unwrap();
@@ -374,7 +389,8 @@ mod tests {
 
         let client = config.construct_rpc_client();
         let debug_repr = format!("{client:?}");
-        assert!(debug_repr.contains("\"authorization\": \"Bearer MY.SECRET.TOKEN\""));
+        // No actual token, but header is there
+        assert!(debug_repr.contains("\"authorization\": Sensitive"));
         assert!(debug_repr.contains("target: \"https://mocha.example.com:36658/\""));
         assert!(debug_repr.contains("max_response_size: 60000000"));
         assert!(debug_repr.contains("max_request_size: 60000000"));

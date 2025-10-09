@@ -78,7 +78,7 @@ impl CelestiaService {
 
 impl CelestiaService {
     pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
-        let request_timeout = Duration::from_secs(config.celestia_rpc_timeout_seconds.get());
+        let request_timeout = config.request_timeout();
         let backoff_policy = config.get_backoff_policy();
 
         let submit_client = config.construct_celestia_client();

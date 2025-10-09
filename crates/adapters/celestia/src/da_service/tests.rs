@@ -74,7 +74,7 @@ async fn setup_service(
         .unwrap_or_else(default_request_timeout_seconds);
     let mut config = CelestiaConfig::dev_config(&mock_server.uri());
     config.signer_address = Some(address);
-    config.celestia_rpc_timeout_seconds = timeout_sec;
+    config.request_timeout_secs = timeout_sec;
 
     let da_service = CelestiaService::new(config.clone(), params).await;
 
