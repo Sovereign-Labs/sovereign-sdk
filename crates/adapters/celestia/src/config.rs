@@ -177,9 +177,17 @@ pub struct TwinkleConfig {
     /// At which interval pull blob status after it has been submitted.
     #[serde(default = "default_pull_interval_millis")]
     pull_interval_millis: NonZero<u64>,
-    /// Timeout for the entire request including retries in seconds
+    /// A timeout for the blob to be included or rejected.
+    /// Timeout for blob inclusion in seconds.
+    /// This is the maximum time to wait for a SINGLE blob submission request to be
+    /// included or rejected by Celestia.
+    /// This includes the initial submission time plus polling for status updates.
+    ///
+    /// This timeout is independent of the retry/backoff policy.
+    /// If a blob is not included within this timeout, the entire request is considered failed and
+    /// will be retried according to the backoff policy (backoff_* settings).
     #[serde(default = "default_total_timeout_secs")]
-    total_timeout_secs: NonZero<u64>,
+    blob_inclusion_timeout_secs: NonZero<u64>,
 }
 
 impl std::fmt::Debug for TwinkleConfig {
@@ -189,7 +197,7 @@ impl std::fmt::Debug for TwinkleConfig {
             .field("api_key", &redacted_api_key)
             .field("network", &self.network)
             .field("pull_interval_millis", &self.pull_interval_millis)
-            .field("total_timeout_secs", &self.total_timeout_secs)
+            .field("total_timeout_secs", &self.blob_inclusion_timeout_secs)
             .finish()
     }
 }
@@ -201,7 +209,7 @@ impl TwinkleConfig {
             api_key: Some("TEMP_SECRET".to_string()),
             network: Network::Mocha,
             pull_interval_millis: default_pull_interval_millis(),
-            total_timeout_secs: default_total_timeout_secs(),
+            blob_inclusion_timeout_secs: default_total_timeout_secs(),
         }
     }
     fn api_key(&self) -> String {
@@ -218,7 +226,7 @@ impl TwinkleConfig {
     }
 
     pub fn total_timeout(&self) -> Duration {
-        Duration::from_secs(self.total_timeout_secs.get())
+        Duration::from_secs(self.blob_inclusion_timeout_secs.get())
     }
 
     pub(crate) fn construct_reqwest_client(
@@ -313,7 +321,7 @@ fn default_connect_timeout_secs() -> NonZero<u64> {
 }
 
 fn default_pool_idle_timeout_secs() -> NonZero<u64> {
-    NonZero::new(30).unwrap()
+    NonZero::new(90).unwrap()
 }
 
 // Exponential backoff defaults:
@@ -391,6 +399,7 @@ mod tests {
         let debug_repr = format!("{client:?}");
         // No actual token, but header is there
         assert!(debug_repr.contains("\"authorization\": Sensitive"));
+        assert!(!debug_repr.contains("MY.SECRET.TOKEN"));
         assert!(debug_repr.contains("target: \"https://mocha.example.com:36658/\""));
         assert!(debug_repr.contains("max_response_size: 60000000"));
         assert!(debug_repr.contains("max_request_size: 60000000"));

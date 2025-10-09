@@ -5,15 +5,39 @@ celestia_rpc_auth_token = "MY.SECRET.TOKEN"
 celestia_rpc_address = "http://127.0.0.1:26658"
 # The largest response the rollup will accept from the Celestia node. Defaults to 100 MB
 max_celestia_response_body_size = 104_857_600
-# The maximum time to wait for a response to an RPC query against Celestia node. 
-# Default: 60 seconds
+# The maximum time to wait for a response to an RPC query against Celestia node.
+# Default: 30 seconds
 # We set it to allow skipping 3 blocks on mocha testnet
-celestia_rpc_timeout_seconds = 18
+request_timeout_secs = 18
+
+# Timeout for establishing HTTP connections in seconds.
+# Used by Twinkle client; StandardNode connections are managed by jsonrpsee.
+# Default: 10 seconds
+# connect_timeout_secs = 10
+
+# Timeout for idle connections in the connection pool in seconds.
+# Used by Twinkle client to keep connections alive for reuse.
+# Should be larger than request_timeout_secs for efficient connection reuse.
+# Default: 90 seconds
+# pool_idle_timeout_secs = 90
 
 # Options are "Low", "Medium" and "High"
 # Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
 # Default: Medium
-tx_priority = "High"
+#tx_priority = "High"
+
+# Optional section, enablng Twinkle clean
+# [twinkle]
+# # Possible values are "mocha" or "mainnet"
+# network = "mocha"
+# # Can also be set in `SOV_TWINKLE_API_KEY` environment variable
+# api_key = "SECRET"
+# # How often to pull for blob inclusion status change
+# # Default: 100ms
+# pull_interval_millis = 200
+# # How long to wait for blob inclusion.
+# # This is total time, includes time of initial submission plus pulling for status update
+# blob_inclusion_timeout_secs = 60
 
 # Exponential backoff configuration for retrying failed requests to Celestia node
 # Minimal time to wait before reattempting to request to celestia node.
@@ -28,7 +52,6 @@ backoff_max_times = 10
 # Exponential factor for reattempting failed requests
 # Default: 2.0
 # backoff_factor = 2.0
-
 
 # WITH CURRENT UNCOMMENTED VALUES:
 # Timeout per request: 18 seconds

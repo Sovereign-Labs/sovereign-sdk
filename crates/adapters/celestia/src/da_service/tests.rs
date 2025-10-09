@@ -206,7 +206,7 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
         .to_string();
 
     assert_eq!(
-        "Celestia RPC node returned an error: Transport(Rejected { status_code: 500 })",
+        "Error from state.SubmitPayForBlob: Transport(Rejected { status_code: 500 })",
         error
     );
     Ok(())
