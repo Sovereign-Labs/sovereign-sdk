@@ -2,7 +2,11 @@ use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
+use alloy_rpc_types_eth::FilterBlockOption;
+use alloy_rpc_types_eth::FilterSet;
+use alloy_rpc_types_eth::Topic;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
+use sov_rpc_eth_types::FilterWithCursor;
 use sov_sequencer::SeqConfigExtension;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -150,4 +154,42 @@ fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_
     for log in logs {
         assert!(filter.matches(log.inner.as_ref()));
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_get_logs_with_cursor() {
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
+
+    let (test_rollup, evm_client, _) = setup(0, EVM_EXTENSION).await;
+    let contract_address = evm_client.alloy_deploy_contract().await;
+    test_rollup.wait_for_next_blocks(1).await;
+
+    let nb_of_txs = 20;
+    let nb_of_logs_per_tx: u32 = 5;
+
+    let start_block = evm_client
+        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .await
+        .number();
+
+    let mut tx_hashes = Vec::new();
+    for i in 0..nb_of_txs {
+        let hash = evm_client
+            .alloy_emit_logs(contract_address, i, nb_of_logs_per_tx)
+            .await;
+        tx_hashes.push(hash);
+        if i % 3 == 0 {
+            test_rollup.wait_for_next_blocks(1).await;
+        }
+    }
+    test_rollup.wait_for_next_blocks(1).await;
+
+    let filter = FilterWithCursor {
+        cursor: None,
+        filter: Filter::new(),
+    };
+
+    let logs = evm_client.get_logs_with_cursor(&filter).await;
+
+    println!("Logs {:?}", logs.len());
 }

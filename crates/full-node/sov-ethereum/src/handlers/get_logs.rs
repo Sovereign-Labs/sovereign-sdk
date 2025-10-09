@@ -19,9 +19,25 @@ use sov_evm::MaybeSealedBlock;
 use sov_evm::PendingOrBlock;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::FilterWithCursor;
 use sov_sequencer::SeqConfigExtension;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
+
+pub async fn eth_get_logs_with_cursor<S, Seq>(
+    parameters: JRpcParams<'static>,
+    ethereum: Arc<Ethereum<S, Seq>>,
+    _: Extensions,
+) -> Result<Vec<Log>, ErrorObjectOwned>
+where
+    S: Spec,
+    Seq: Sequencer<Spec = S>,
+    S::Address: FromVmAddress<EthereumAddress>,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+{
+    let x = parameters.one::<FilterWithCursor>()?;
+    todo!();
+}
 
 pub async fn eth_get_logs<S, Seq>(
     parameters: JRpcParams<'static>,
