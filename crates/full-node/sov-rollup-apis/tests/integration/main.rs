@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use sov_api_spec::Client;
 use sov_modules_api::prelude::tokio::sync::watch;
-use sov_rollup_apis::endpoints::simulate::{SimulateEndpoint, SovereignSimulate};
+use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::{DefaultRollupStateProvider, RollupTxRouter};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::StateUpdateInfo;
