@@ -25,6 +25,7 @@ block_time_ms = 1_000
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
+# pruner_max_batch_size = 300000 # The maximum number of key/value pairs to prune in a single batch. Each key is about 70 bytes, so your prunery memory requirements will be about 21MB by default.
 
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed

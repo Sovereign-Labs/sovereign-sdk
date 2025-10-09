@@ -63,7 +63,7 @@ fn bench_pruner(c: &mut Criterion) {
                 (tempdir, rocksdb)
             },
             |(_tempdir, rocksdb)| {
-                let pruner = Pruner::new(rocksdb.clone());
+                let pruner = Pruner::new(rocksdb.clone(), None);
                 let output = pruner
                     .collect_pruning_batch_for_module_accessory_state(100)
                     .unwrap();
