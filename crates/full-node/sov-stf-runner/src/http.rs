@@ -409,7 +409,9 @@ mod tests {
         // Send a JSON-RPC request as binary frame
         let request = r#"{"jsonrpc":"2.0","method":"test_hello","params":[],"id":1}"#;
         write
-            .send(TungsteniteMessage::Binary(request.as_bytes().to_vec().into()))
+            .send(TungsteniteMessage::Binary(
+                request.as_bytes().to_vec().into(),
+            ))
             .await?;
 
         // Read binary response
