@@ -50,6 +50,12 @@ The purpose of this change is to enable rollups to accept transactions signed wi
 
 # 2025-10-10
 - #1840 DOn't panic on selfdestruct/blockhash. Return an error.
+# 2025-10-09
+- #1838 Add binary WebSocket frame support to RPC server and client for reduced overhead.
+
+# 2025-10-08
+- #1833 Adds a config option `pruner_max_batch_size` in the `storage` section of the rollup config. If the pruner appears to cause performance degradation, you can reduce the batch size here
+to decrease the number of writes it will attempt at each slot.
 
 # 2025-10-08
 - #1827 Implement eth_getBlockReceipts in EVM module.
