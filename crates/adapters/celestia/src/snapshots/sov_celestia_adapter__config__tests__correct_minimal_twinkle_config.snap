@@ -1,0 +1,25 @@
+---
+source: crates/adapters/celestia/src/config.rs
+expression: config
+---
+{
+  "celestia_rpc_auth_token": "MY.SECRET.TOKEN",
+  "celestia_rpc_address": "http://127.0.0.1:26658/",
+  "max_celestia_response_body_size": 104857600,
+  "request_timeout_secs": 30,
+  "connect_timeout_secs": 10,
+  "pool_idle_timeout_secs": 90,
+  "safe_lead_time_ms": 500,
+  "signer_address": null,
+  "tx_priority": null,
+  "backoff_min_delay_ms": 100,
+  "backoff_max_delay_ms": 12000,
+  "backoff_max_times": 60,
+  "backoff_factor": 2.0,
+  "twinkle": {
+    "api_key": null,
+    "network": "mocha-4",
+    "pull_interval_millis": 100,
+    "blob_inclusion_timeout_secs": 60
+  }
+}
