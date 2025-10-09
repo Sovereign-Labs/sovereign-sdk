@@ -432,7 +432,7 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Simula
             )
             .map_err(SimulateError::ContextResolution)?;
 
-        let ws_gas_meter = auth_tx_data.gas_meter(&gas_price, &<S::Gas>::MAX);
+        let ws_gas_meter = auth_tx_data.gas_meter(gas_price, <S::Gas>::MAX);
         let working_set = WorkingSet::create_working_set(scratchpad, &auth_tx_data, ws_gas_meter);
 
         let schema = get_runtime_schema::<S, R>().map_err(SimulateError::SchemaConstruction)?;
