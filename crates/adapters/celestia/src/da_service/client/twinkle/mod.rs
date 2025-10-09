@@ -52,16 +52,16 @@ pub struct TwinkleClient {
 }
 
 impl TwinkleClient {
-    pub fn new(config: &TwinkleConfig, backoff_policy: ExponentialBuilder) -> anyhow::Result<Self> {
-        let client = config.construct_reqwest_client()?;
+    pub fn new(config: &TwinkleConfig, backoff_policy: ExponentialBuilder) -> Self {
+        let client = config.construct_reqwest_client();
 
-        Ok(Self {
+        Self {
             client,
             network: config.network,
             pull_interval: std::time::Duration::from_millis(config.pull_interval_millis),
             total_timeout: std::time::Duration::from_secs(config.total_timeout_secs),
             backoff_policy,
-        })
+        }
     }
 
     #[instrument(skip(self))]

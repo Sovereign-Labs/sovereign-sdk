@@ -118,7 +118,7 @@ impl CelestiaConfig {
                 .request_timeout(self.request_timeout())
                 .build(&self.celestia_rpc_address)
         }
-        .expect("HttpClient initialization is valid")
+        .expect("RPC HttpClient initialization should be valid")
     }
 }
 

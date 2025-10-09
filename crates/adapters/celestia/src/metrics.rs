@@ -75,7 +75,7 @@ pub(crate) struct BlobSubmitMeasurement {
 }
 
 impl BlobSubmitMeasurement {
-    pub fn new_for_vanilla(
+    pub fn new_for_standard(
         namespace: RollupNamespaceType,
         result: &anyhow::Result<RawTxResponse>,
         bytes: usize,

@@ -63,7 +63,7 @@ impl TwinkleConfig {
             network: Network::Mocha,
             pull_interval_millis: default_pull_interval_millis(),
             request_timeout_secs: default_request_timeout_secs(),
-            // TODO: Use same as
+            // TODO: Use same as in CelestiaConfig.
             total_timeout_secs: 120,
             connect_timeout_secs: default_connect_timeout_secs(),
             pool_idle_timeout_secs: default_pool_idle_timeout_secs(),
@@ -78,10 +78,11 @@ impl TwinkleConfig {
         }
     }
 
-    pub fn construct_reqwest_client(&self) -> anyhow::Result<reqwest::Client> {
+    pub fn construct_reqwest_client(&self) -> reqwest::Client {
         let mut headers = reqwest::header::HeaderMap::new();
         let mut auth_value =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", self.api_key()))?;
+            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", self.api_key()))
+                .expect("Failed to set TwinkleClient auth");
         auth_value.set_sensitive(true);
         headers.insert(reqwest::header::AUTHORIZATION, auth_value);
         headers.insert(
@@ -95,6 +96,6 @@ impl TwinkleConfig {
             .connect_timeout(std::time::Duration::from_secs(self.connect_timeout_secs))
             .pool_idle_timeout(std::time::Duration::from_secs(self.pool_idle_timeout_secs))
             .build()
-            .map_err(Into::into)
+            .expect("Reqwest HTTP client config should be valid")
     }
 }

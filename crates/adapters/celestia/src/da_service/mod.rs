@@ -23,9 +23,9 @@ use tokio::time::Instant;
 use tracing::{debug, instrument, trace};
 
 pub use crate::config::CelestiaConfig;
+use crate::da_service::client::standard_node::StandardNodeClient;
 use crate::da_service::client::twinkle::TwinkleClient;
 pub use crate::da_service::client::twinkle::TwinkleConfig;
-use crate::da_service::client::vanilla::VanillaClient;
 use crate::da_service::client::CelestiaClient;
 use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{
@@ -83,12 +83,9 @@ impl CelestiaService {
         let backoff_policy = config.get_backoff_policy();
 
         let submit_client = if let Some(twinkle_config) = &config.twinkle {
-            let twinkle_client = TwinkleClient::new(twinkle_config, backoff_policy)
-                .expect("Failed to initialize TwinkleClient");
-            CelestiaClient::Twinkle(twinkle_client)
+            CelestiaClient::Twinkle(TwinkleClient::new(twinkle_config, backoff_policy))
         } else {
-            let vanilla_client = VanillaClient::new(&config);
-            CelestiaClient::Vanilla(vanilla_client)
+            CelestiaClient::StandardNode(StandardNodeClient::new(&config))
         };
 
         let read_client = config.construct_rpc_client();

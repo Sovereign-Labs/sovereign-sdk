@@ -71,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
         ),
     };
 
-    // Initialize CelestiaService (which will internally choose Vanilla or Twinkle)
+    // Initialize CelestiaService which will internally choose type based on config
     let service = CelestiaService::new(da_config.da, rollup_params).await;
 
     // Run measurement for 5 minutes

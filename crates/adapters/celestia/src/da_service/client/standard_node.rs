@@ -17,8 +17,10 @@ use tokio::sync::oneshot::Receiver;
 use tokio::sync::{oneshot, Mutex};
 use tracing::{debug, info, instrument};
 
+/// Client that communicates with standard celestia data availability nodes,
+/// such as light, bridge or full node.
 #[derive(Debug, Clone)]
-pub struct VanillaClient {
+pub struct StandardNodeClient {
     client: Arc<Mutex<HttpClient>>,
     backoff_policy: ExponentialBuilder,
     // Separate request timeout, because jsonrpsee is sloppy about it.
@@ -26,7 +28,7 @@ pub struct VanillaClient {
     tx_priority: Option<TxPriority>,
 }
 
-impl VanillaClient {
+impl StandardNodeClient {
     pub fn new(config: &CelestiaConfig) -> Self {
         let client = config.construct_rpc_client();
 
@@ -89,7 +91,7 @@ impl VanillaClient {
 
         let submit_time = start_submit.elapsed();
         let total_time = start.elapsed();
-        let measurement = BlobSubmitMeasurement::new_for_vanilla(
+        let measurement = BlobSubmitMeasurement::new_for_standard(
             namespace.ns_type(),
             &tx_result,
             bytes,

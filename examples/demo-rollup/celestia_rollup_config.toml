@@ -13,7 +13,7 @@ celestia_rpc_timeout_seconds = 18
 # Options are "Low", "Medium" and "High"
 # Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
 # Default: Medium
-#tx_priority = "High"
+tx_priority = "High"
 
 # Exponential backoff configuration for retrying failed requests to Celestia node
 # Minimal time to wait before reattempting to request to celestia node.

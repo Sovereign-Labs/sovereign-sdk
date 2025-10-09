@@ -17,7 +17,7 @@ async fn async_blob_submit() -> anyhow::Result<()> {
         "debug,hyper=info,sov_celestia_adapter=trace",
     );
     let backoff_policy = ExponentialBuilder::default();
-    let twinkle_client = TwinkleClient::new(&TwinkleConfig::test(), backoff_policy)?;
+    let twinkle_client = TwinkleClient::new(&TwinkleConfig::test(), backoff_policy);
     let celestia_address = CelestiaAddress::from_str(ADDR_1)?;
 
     let blob: Vec<u8> = b"hello-from-sov-rust".to_vec();
@@ -48,19 +48,19 @@ async fn get_head_block_header() -> anyhow::Result<()> {
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
     };
 
-    let vanilla_client = CelestiaService::new(config, params).await;
+    let standard_client = CelestiaService::new(config, params).await;
 
     let backoff_policy = ExponentialBuilder::default();
-    let twinkle_client = TwinkleClient::new(&TwinkleConfig::test(), backoff_policy)?;
+    let twinkle_client = TwinkleClient::new(&TwinkleConfig::test(), backoff_policy);
 
     let twinkle_header = twinkle_client.get_head_block_header().await?;
     println!("Twinkle Header {twinkle_header:?}");
 
     let height = twinkle_header.height();
 
-    let vanilla_header = vanilla_client.get_block_header_at(height).await?;
+    let standard_header = standard_client.get_block_header_at(height).await?;
 
-    assert_eq!(twinkle_header.header, vanilla_header.header);
+    assert_eq!(twinkle_header.header, standard_header.header);
 
     Ok(())
 }
