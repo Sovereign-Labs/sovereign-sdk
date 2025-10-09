@@ -1,0 +1,112 @@
+name: Promote to Nightly
+
+on:
+  repository_dispatch:
+    types: [acceptance-test-success, acceptance-test-failure]
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  # Use test branches for now, will change to dev/nightly later
+  DEV_BRANCH: 'theodore/acceptance-dev-testing'
+  NIGHTLY_BRANCH: 'theodore/accentance-nightly-testing'
+
+jobs:
+  promote:
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    timeout-minutes: 10
+    steps:
+      - name: Log event details
+        run: |
+          echo "Event type: ${{ github.event.action }}"
+          echo "Commit SHA: ${{ github.event.client_payload.commit_sha }}"
+          echo "Test duration: ${{ github.event.client_payload.test_duration_seconds }}s"
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.client_payload.commit_sha }}
+          fetch-depth: 0
+
+      - name: Promote to nightly on success
+        if: github.event.action == 'acceptance-test-success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          NIGHTLY_BRANCH="${{ env.NIGHTLY_BRANCH }}"
+          COMMIT_SHA="${{ github.event.client_payload.commit_sha }}"
+          SHORT_SHA=$(git rev-parse --short "$COMMIT_SHA")
+
+          echo "Attempting to fast-forward $NIGHTLY_BRANCH to $SHORT_SHA"
+
+          # Fetch the nightly branch
+          git fetch origin "$NIGHTLY_BRANCH"
+
+          # Verify this is a fast-forward
+          if ! git merge-base --is-ancestor "origin/$NIGHTLY_BRANCH" HEAD; then
+            echo "❌ ERROR: Cannot fast-forward $NIGHTLY_BRANCH to this commit"
+            echo "The nightly branch has diverged from the dev branch"
+            exit 1
+          fi
+
+          # Push the fast-forward
+          git push origin "HEAD:$NIGHTLY_BRANCH"
+
+          echo "✅ Successfully promoted $SHORT_SHA to $NIGHTLY_BRANCH"
+          echo "Test duration: ${{ github.event.client_payload.test_duration_seconds }}s"
+
+      - name: Create issue on failure
+        if: github.event.action == 'acceptance-test-failure'
+        uses: actions/github-script@v7
+        env:
+          DEV_BRANCH: ${{ env.DEV_BRANCH }}
+          NIGHTLY_BRANCH: ${{ env.NIGHTLY_BRANCH }}
+        with:
+          script: |
+            const payload = context.payload.client_payload;
+            const commit_sha = payload.commit_sha;
+            const short_sha = commit_sha.substring(0, 7);
+            const duration_hours = Math.floor(payload.test_duration_seconds / 3600);
+            const duration_minutes = Math.floor((payload.test_duration_seconds % 3600) / 60);
+
+            const logs_url = payload.logs_url || 'N/A';
+            const error_message = payload.error_message || 'Unknown error';
+            const error_details = payload.error_details || 'No details available';
+
+            const devBranch = process.env.DEV_BRANCH;
+            const nightlyBranch = process.env.NIGHTLY_BRANCH;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔴 Nightly acceptance test failed for ${short_sha}`,
+              body: `## Acceptance Test Failure
+
+            **Commit**: [\`${short_sha}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${commit_sha})
+            **Branch**: ${devBranch}
+            **Duration**: ${duration_hours}h ${duration_minutes}m (${payload.test_duration_seconds}s)
+            **Error**: ${error_message}
+
+            ### Debug Resources
+            - [Test Logs](${logs_url})
+
+            ### Error Details
+            \`\`\`
+            ${error_details}
+            \`\`\`
+
+            ### Action Required
+            The \`${nightlyBranch}\` branch was **not** updated due to this failure.
+            Please investigate and fix the issue before the next nightly run.
+            `,
+              labels: ['acceptance-test-failure', 'nightly', 'bug']
+            });
+
+      - name: Comment on success
+        if: github.event.action == 'acceptance-test-success'
+        run: |
+          echo "✅ Acceptance tests passed!"
+          echo "Duration: ${{ github.event.client_payload.test_duration_seconds }}s"
+          echo "Nightly branch updated to: ${{ github.event.client_payload.commit_sha }}"

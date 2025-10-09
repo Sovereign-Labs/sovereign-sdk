@@ -1,0 +1,90 @@
+name: Trigger Acceptance Tests
+
+on:
+  # schedule:
+  #   # Nightly at 5am UTC
+  #   - cron: "0 5 * * *"
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      dev_branch:
+        description: 'Dev branch to test'
+        required: false
+        default: 'theodore/acceptance-dev-testing'
+      dev_branch:
+        description: 'Nightly branch to merge into'
+        required: false
+        default: 'theodore/acceptance-nightly-testing'
+
+env:
+  # Use test branches for now, will change to dev/nightly later
+  DEV_BRANCH: ${{ github.event.inputs.dev_branch || 'theodore/acceptance-dev-testing' }}
+  NIGHTLY_BRANCH: ${{ github.event.inputs.dev_branch || 'theodore/acceptance-nightly-testing' }}
+
+jobs:
+  trigger:
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.DEV_BRANCH }}
+          fetch-depth: 0
+
+      - name: Get commit info
+        id: commit
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "message=$(git log -1 --pretty=%B | head -n1)" >> $GITHUB_OUTPUT
+
+      - name: Check if nightly needs update
+        id: check
+        run: |
+          # Fetch the nightly branch
+          git fetch origin ${{ env.NIGHTLY_BRANCH }}
+
+          # Check if there are new commits since last nightly update
+          if git diff --quiet origin/${{ env.NIGHTLY_BRANCH }} HEAD; then
+            echo "No changes since last nightly update"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "New commits found, will trigger tests"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger test run on Hetzner
+        if: steps.check.outputs.skip != 'true'
+        env:
+          SERVER_API_TOKEN: ${{ secrets.SERVER_API_TOKEN }}
+          SERVER_API_URL: ${{ secrets.SERVER_API_URL }}
+          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          echo "Triggering acceptance test for commit ${{ steps.commit.outputs.short_sha }}"
+          echo "Commit message: ${{ steps.commit.outputs.message }}"
+
+          response=$(curl -X POST "${SERVER_API_URL}/start-test" \
+            -H "Authorization: Bearer ${SERVER_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "commit_sha": "'"$COMMIT_SHA"'",
+              "repo": "${{ github.repository }}"
+            }' \
+            -w "\n%{http_code}" -s)
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ Failed to trigger test (HTTP $http_code)"
+            echo "Response: $body"
+            exit 1
+          fi
+
+          echo "✅ Test triggered successfully"
+          echo "$body"
+
+      - name: Skip message
+        if: steps.check.outputs.skip == 'true'
+        run: |
+          echo "⏭️  Skipping test run - no changes since last nightly update"
