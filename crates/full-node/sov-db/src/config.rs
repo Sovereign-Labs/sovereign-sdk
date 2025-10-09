@@ -1,6 +1,8 @@
 use nomt::Options;
 use schemars::JsonSchema;
 
+use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
+
 /// Configuration for Sovereign Rollup node database.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct RollupDbConfig {
@@ -50,6 +52,8 @@ pub struct RollupDbConfig {
     pub pruner_block_interval: Option<u64>,
     /// These many versions will be available for historical querying.
     pub pruner_versions_to_keep: Option<usize>,
+    /// Maximum number of keys to prune in a single batch.
+    pub pruner_max_batch_size: Option<usize>,
 }
 
 impl RollupDbConfig {
@@ -83,6 +87,7 @@ impl RollupDbConfig {
             kernel_leaf_cache_size: None,
             pruner_block_interval: Some(100),
             pruner_versions_to_keep: Some(20),
+            pruner_max_batch_size: None,
         }
     }
 
@@ -152,6 +157,11 @@ impl RollupDbConfig {
     pub(crate) fn get_pruner_versions_to_keep(&self) -> usize {
         self.pruner_versions_to_keep
             .expect("`pruner_versions_to_keep` must be set")
+    }
+
+    pub(crate) fn get_pruner_max_batch_size(&self) -> usize {
+        self.pruner_max_batch_size
+            .unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
     }
 }
 

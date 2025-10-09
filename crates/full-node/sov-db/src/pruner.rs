@@ -6,19 +6,20 @@ use sov_rollup_interface::common::SlotNumber;
 
 use crate::metrics::nomt::PrunerMetric;
 use crate::schema::tables::ModuleAccessoryState;
-use crate::storage_manager::{PrunerJobOutput, MAX_INDIVIDUAL_PRUNING_BATCH_SIZE};
+use crate::storage_manager::{PrunerJobOutput, DEFAULT_MAX_PRUNING_BATCH_SIZE};
 
 type VersionedSchemaKey = (SchemaKey, SlotNumber);
 
 /// Allows pruning old versions of keys.
 pub struct Pruner {
     db: Arc<DB>,
+    max_batch_size: Option<usize>,
 }
 
 impl Pruner {
     /// Creates a new pruner instance with the given database.
-    pub fn new(db: Arc<DB>) -> Self {
-        Self { db }
+    pub fn new(db: Arc<DB>, max_batch_size: Option<usize>) -> Self {
+        Self { db, max_batch_size }
     }
 
     /// Gathers all delete operations that can prune older versions.
@@ -51,7 +52,11 @@ impl Pruner {
                     &(base_key, last_prunable_version),
                 )?;
             }
-            if keys_to_prune >= MAX_INDIVIDUAL_PRUNING_BATCH_SIZE {
+            if keys_to_prune
+                >= self
+                    .max_batch_size
+                    .unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
+            {
                 hit_size_limit = true;
                 break;
             }
@@ -314,7 +319,7 @@ mod tests {
         .unwrap();
         rocksdb.write_schemas(data_9).unwrap();
 
-        let pruner = Pruner::new(rocksdb.clone());
+        let pruner = Pruner::new(rocksdb.clone(), None);
 
         let keys_to_prune = pruner
             .collect_pruning_batch::<ModuleAccessoryState>(3)

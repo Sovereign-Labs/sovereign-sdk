@@ -22,7 +22,7 @@ use crate::metrics::nomt::StorageManagerFinalizationMetric;
 use crate::state_db_nomt::{NomtSessionBuilder, StateOverlay};
 use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob, SnapshotGroup};
 pub use groups::PrunerJobOutput;
-pub(crate) use groups::MAX_INDIVIDUAL_PRUNING_BATCH_SIZE;
+pub(crate) use groups::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
 #[allow(missing_docs)]
 pub struct StateFinishedSession {
@@ -110,6 +110,7 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     last_pruner_finish_at_height: Option<u64>,
     pruner_block_interval: Option<u64>,
     pruner_versions_to_keep: usize,
+    pruner_max_batch_size: usize,
 
     _phantom_s: PhantomData<S>,
 }
@@ -124,6 +125,7 @@ where
     pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let pruner_block_interval = config.get_pruner_interval();
         let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
+        let pruner_max_batch_size = config.get_pruner_max_batch_size();
         assert!(
             pruner_versions_to_keep >= 1,
             "Pruner versions to keep should be at least 1, got {pruner_versions_to_keep}",
@@ -143,6 +145,7 @@ where
             last_pruner_finish_at_height: None,
             pruner_block_interval,
             pruner_versions_to_keep,
+            pruner_max_batch_size,
             _phantom_s: Default::default(),
         })
     }
@@ -479,7 +482,9 @@ where
                     })
                     .unwrap_or(true);
             if should_run_pruner {
-                let pruner = self.db_group.start_pruner(self.pruner_versions_to_keep);
+                let pruner = self
+                    .db_group
+                    .start_pruner(self.pruner_versions_to_keep, self.pruner_max_batch_size);
                 self.pruner = Some(pruner);
             }
         }
