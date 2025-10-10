@@ -100,7 +100,7 @@ where
     let mut rpc_logs = Vec::new();
 
     let block_height = match maybe_cursor {
-        Some(cursor) => cursor.block_height as u64,
+        Some(cursor) => cursor.block_height,
         None => {
             let Some(block_height) = evm.get_block_height_by_hash(&block_hash, state) else {
                 let msg = format!("Block for block_hash {block_hash:?} does not exist");
@@ -144,7 +144,7 @@ where
     let evm = sov_evm::Evm::<S>::default();
 
     let start = match maybe_cursor {
-        Some(cursor) => cursor.block_height as u64,
+        Some(cursor) => cursor.block_height,
         None => get_block_nr(from_block, &evm, state)?,
     };
 
