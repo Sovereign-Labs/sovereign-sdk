@@ -12,6 +12,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::FilterBlockOption;
 use alloy_rpc_types::Log;
+use hex::{decode, encode};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -54,7 +55,7 @@ where
         _: Extensions,
     ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
         let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
-        let cursor = cursor.map(Cursor::unpack);
+        let cursor = cursor.map(|s| Cursor::unpack(&s));
         Self::logs_for_filter(filter, cursor, ethereum).await
     }
 
@@ -238,7 +239,7 @@ where
 
             if rpc_logs.len() >= limits.max_log_limit {
                 let cursor = Cursor {
-                    block_height: block_height as u32,
+                    block_height,
                     tx_index_absolute: tx_index,
                     log_index_in_tx: log_index_in_tx as u32,
                 };
@@ -292,27 +293,40 @@ where
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Cursor indicating where to start processing.
 pub struct Cursor {
-    /// Starting block height for this cursor (inclusive). Top 32 bits.
-    pub block_height: u32,
-    /// Absolute index of the first transaction to process (inclusive). Middle 64 bits.
+    /// Starting block height for this cursor.
+    pub block_height: u64,
+    /// Absolute index of the first transaction to process.
     pub tx_index_absolute: u64,
-    /// Index of the first log within that transaction to process (zero-based, inclusive). Lowest 32 bits.
+    /// Index of the first log within that transaction to process.
     pub log_index_in_tx: u32,
 }
 
 impl Cursor {
-    /// Packs `Self` to u128.
-    pub fn pack(self) -> u128 {
-        ((self.block_height as u128) << 96)
-            | ((self.tx_index_absolute as u128) << 32)
-            | (self.log_index_in_tx as u128)
+    /// Packs `Self` into a 40-character hex string (20 bytes total).
+    /// Layout (big-endian): [block_height:8][tx_index_absolute:8][log_index_in_tx:4]
+    pub fn pack(&self) -> String {
+        let mut bytes = [0u8; 20];
+        bytes[0..8].copy_from_slice(&self.block_height.to_be_bytes());
+        bytes[8..16].copy_from_slice(&self.tx_index_absolute.to_be_bytes());
+        bytes[16..20].copy_from_slice(&self.log_index_in_tx.to_be_bytes());
+
+        encode(bytes)
     }
 
-    /// Unpacks u128 to `Self`.
-    pub fn unpack(v: u128) -> Self {
-        let block_height = (v >> 96) as u32;
-        let tx_index_absolute = ((v >> 32) & 0xFFFF_FFFF_FFFF_FFFFu128) as u64;
-        let log_index_in_tx = (v & 0xFFFF_FFFFu128) as u32;
+    /// Unpacks a 40-character (or "0x"-prefixed) hex string into `Self`.
+    /// Panics if decoding fails or if the length is not 20 bytes.
+    pub fn unpack(hex_str: &str) -> Self {
+        let s = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+        let bytes = decode(s).expect("invalid hex string");
+
+        assert!(
+            bytes.len() == 20,
+            "invalid decoded length (expected 20 bytes)"
+        );
+
+        let block_height = u64::from_be_bytes(bytes[0..8].try_into().unwrap());
+        let tx_index_absolute = u64::from_be_bytes(bytes[8..16].try_into().unwrap());
+        let log_index_in_tx = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
 
         Self {
             block_height,
@@ -366,50 +380,47 @@ impl CursorIndexses {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Cursor;
+    use hex::encode;
 
     #[test]
-    fn test_packs_and_unpacks_exact_layout() {
+    fn pack_known_vector() {
         let c = Cursor {
-            block_height: 0x89AB_CDEF,
-            tx_index_absolute: 0x0123_4567_89AB_CDEF,
-            log_index_in_tx: 0x7654_3210,
+            block_height: 12345,
+            tx_index_absolute: 67890,
+            log_index_in_tx: 42,
         };
 
-        let packed = c.pack();
-        assert_eq!(packed, 0x89AB_CDEF_0123_4567_89AB_CDEF_7654_3210u128);
-
-        let unpacked = Cursor::unpack(packed);
-        assert_eq!(unpacked, c);
+        let hex = c.pack();
+        assert_eq!(hex, "000000000000303900000000000109320000002a");
+        assert_eq!(hex.len(), 40);
     }
 
     #[test]
-    fn test_roundtrip() {
-        let samples = [
+    fn unpack_known_vector() {
+        let hex = "000000000000303900000000000109320000002a";
+        let c = Cursor::unpack(hex);
+        assert_eq!(c.block_height, 12345);
+        assert_eq!(c.tx_index_absolute, 67890);
+        assert_eq!(c.log_index_in_tx, 42);
+    }
+
+    #[test]
+    fn unpack_accepts_0x_prefix() {
+        let hex = "0x000000000000303900000000000109320000002a";
+        let c = Cursor::unpack(hex);
+        assert_eq!(c.block_height, 12345);
+        assert_eq!(c.tx_index_absolute, 67890);
+        assert_eq!(c.log_index_in_tx, 42);
+    }
+
+    #[test]
+    fn roundtrip_various_values() {
+        let cases = [
             Cursor {
                 block_height: 0,
                 tx_index_absolute: 0,
                 log_index_in_tx: 0,
-            },
-            Cursor {
-                block_height: u32::MAX,
-                tx_index_absolute: 0,
-                log_index_in_tx: 0,
-            },
-            Cursor {
-                block_height: 0,
-                tx_index_absolute: u64::MAX,
-                log_index_in_tx: 0,
-            },
-            Cursor {
-                block_height: 0,
-                tx_index_absolute: 0,
-                log_index_in_tx: u32::MAX,
-            },
-            Cursor {
-                block_height: u32::MAX,
-                tx_index_absolute: u64::MAX,
-                log_index_in_tx: u32::MAX,
             },
             Cursor {
                 block_height: 1,
@@ -417,16 +428,94 @@ mod tests {
                 log_index_in_tx: 3,
             },
             Cursor {
-                block_height: 0x0123_4567,
-                tx_index_absolute: 0x89AB_CDEF_FEDC_BA98,
-                log_index_in_tx: 0x7654_3210,
+                block_height: u64::MAX,
+                tx_index_absolute: 0,
+                log_index_in_tx: 0,
+            },
+            Cursor {
+                block_height: 0,
+                tx_index_absolute: u64::MAX,
+                log_index_in_tx: 0,
+            },
+            Cursor {
+                block_height: 0,
+                tx_index_absolute: 0,
+                log_index_in_tx: u32::MAX,
+            },
+            Cursor {
+                block_height: u64::MAX,
+                tx_index_absolute: u64::MAX,
+                log_index_in_tx: u32::MAX,
+            },
+            Cursor {
+                block_height: 42,
+                tx_index_absolute: 1_000_000,
+                log_index_in_tx: 999,
             },
         ];
 
-        for c in samples {
-            let packed = c.pack();
-            let unpacked = Cursor::unpack(packed);
-            assert_eq!(unpacked, c);
+        for c in cases {
+            let hex = c.pack();
+            assert_eq!(hex.len(), 40, "hex length must be fixed 40");
+            let decoded = Cursor::unpack(&hex);
+            assert_eq!(decoded, c, "roundtrip mismatch for {:?}", c);
         }
+    }
+
+    #[test]
+    fn pack_endianness_layout() {
+        // Manually construct the expected 20 bytes: BE([bh:8][tx:8][log:4])
+        let c = Cursor {
+            block_height: 0x1122_3344_5566_7788,
+            tx_index_absolute: 0x99aa_bbcc_ddee_ff00,
+            log_index_in_tx: 0x1234_5678,
+        };
+
+        // Expected bytes in big-endian layout
+        let mut expected = Vec::new();
+        expected.extend_from_slice(&c.block_height.to_be_bytes());
+        expected.extend_from_slice(&c.tx_index_absolute.to_be_bytes());
+        expected.extend_from_slice(&c.log_index_in_tx.to_be_bytes());
+
+        let hex = c.pack();
+        assert_eq!(hex, encode(expected));
+    }
+
+    #[test]
+    fn pack_all_maxes_is_all_fs() {
+        let c = Cursor {
+            block_height: u64::MAX,
+            tx_index_absolute: u64::MAX,
+            log_index_in_tx: u32::MAX,
+        };
+        let hex = c.pack();
+        assert_eq!(hex, "ffffffffffffffffffffffffffffffffffffffff");
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid hex string")]
+    fn unpack_invalid_char_panics() {
+        // Not valid hex
+        let _ = Cursor::unpack("zz0000000000303900000000000109320000002a");
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid decoded length")]
+    fn unpack_wrong_length_panics() {
+        // 38 hex chars -> 19 bytes after decode -> triggers assert on length
+        let _ = Cursor::unpack("00000000000030390000000000010932000000");
+    }
+
+    #[test]
+    fn leading_zeros_preserved_on_pack() {
+        let c = Cursor {
+            block_height: 1, // lots of leading zeros
+            tx_index_absolute: 0,
+            log_index_in_tx: 0,
+        };
+        let hex = c.pack();
+        // First 8 bytes are block_height; only the last byte is 0x01
+        assert_eq!(&hex[0..16], "0000000000000001");
+        assert_eq!(hex.len(), 40);
     }
 }

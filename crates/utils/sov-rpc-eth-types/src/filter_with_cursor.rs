@@ -6,7 +6,7 @@ use serde::Serialize;
 /// Filter for logs with cursor.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FilterWithCursor {
-    pub cursor: Option<u128>,
+    pub cursor: Option<String>,
     pub filter: Filter,
 }
 
@@ -16,5 +16,5 @@ pub struct FilterWithCursor {
 pub struct LogsWithMaybeCursor {
     pub logs: Vec<Log>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cursor: Option<u128>,
+    pub cursor: Option<String>,
 }

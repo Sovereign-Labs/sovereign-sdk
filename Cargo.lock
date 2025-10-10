@@ -11948,6 +11948,7 @@ dependencies = [
  "ethereum-types",
  "ethers",
  "futures",
+ "hex",
  "jsonrpsee",
  "proptest",
  "reth-primitives",
