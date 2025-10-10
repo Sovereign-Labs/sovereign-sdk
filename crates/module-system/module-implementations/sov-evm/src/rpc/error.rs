@@ -52,11 +52,6 @@ impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
     }
 }
 
-/// Hack while reth is not upgraded for `jsonrpsee` 0.25
-pub fn eth_api_into_rpc_error(eth_error: EthApiError) -> ErrorObjectOwned {
-    ErrorObject::owned(500, format!("Eth Error: {eth_error:?}"), None::<()>)
-}
-
 /// Converts internal error into rpc error
 pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
     ErrorObject::owned(500, format!("{err}"), None::<()>)

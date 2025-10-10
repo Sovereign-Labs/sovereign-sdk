@@ -1,5 +1,5 @@
 use crate::db::commit::FallibleDatabaseCommit;
-use crate::error::{eth_api_into_rpc_error, into_rpc_error};
+use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use crate::rpc::eth_from_evm_error;
 use alloy_primitives::{Address, U64};
@@ -114,7 +114,7 @@ where
         let balance = self
             .get_db(state.deref_mut())
             .basic(address)
-            .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
+            .map_err(|e| EthApiError::from(e))?
             .map(|account| account.balance)
             .unwrap_or_default();
 
@@ -248,7 +248,7 @@ where
     ) -> RpcResult<Bytes> {
         debug!("EVM module JSON-RPC request to `eth_call`");
         let result = self.call(request, block_number, state)?.result;
-        ensure_success(result).map_err(eth_api_into_rpc_error)
+        Ok(ensure_success(result)?)
     }
 
     /// Handler for: `eth_blockNumber`
@@ -304,11 +304,11 @@ where
         // Get transaction and block data
         let index = self
             .get_tx_index_by_hash(&tx_hash, state)
-            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
+            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
 
         let traced_tx = self
             .transaction(index, state)
-            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
+            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
 
         let block = self
             .blocks
@@ -322,7 +322,7 @@ where
 
         let block_env = self
             .block_env(&mut archival_state)?
-            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
+            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
 
         let cfg = self.cfg(&mut archival_state).map_err(into_rpc_error)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
@@ -333,7 +333,7 @@ where
         for tx_idx in block.transactions {
             let tx = self
                 .transaction(tx_idx, state)
-                .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
+                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
 
             // Skip the transaction we're tracing
             if *tx.signed_transaction.hash() == tx_hash {
@@ -341,17 +341,16 @@ where
             }
 
             transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
+                .map_err(|e| eth_from_evm_error(e))?;
         }
 
         // Trace the target transaction
-        self.trace_transaction(
+        Ok(self.trace_transaction(
             block_env,
             replay_tx_env(&traced_tx),
             cfg_env,
             evm_db,
             &opts.unwrap_or_default(),
-        )
-        .map_err(eth_api_into_rpc_error)
+        )?)
     }
 }
