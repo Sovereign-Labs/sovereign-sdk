@@ -8,7 +8,6 @@ use alloy_primitives::TxHash;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::Filter;
-use sov_db::test_utils;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
