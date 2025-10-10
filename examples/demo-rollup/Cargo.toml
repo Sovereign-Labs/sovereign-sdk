@@ -143,6 +143,8 @@ sov-state = { workspace = true, features = ["native"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }
 sov-zkvm-utils = { workspace = true }
 sov-build = { workspace = true }
+sov-ethereum = { workspace = true }
+
 
 [features]
 default = []

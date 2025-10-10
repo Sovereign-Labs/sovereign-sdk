@@ -55,9 +55,9 @@ use sov_state::User;
 use crate::account_storage_key::AccountStorageKey;
 use crate::db::{DbAccount, EvmDb};
 pub use crate::evm::primitive_types::TransactionSigned;
-use crate::evm::primitive_types::{
-    Block, PendingTransaction, Receipt, SealedBlock, TxSignedAndRecovered,
-};
+use crate::evm::primitive_types::{Block, PendingTransaction, Receipt, TxSignedAndRecovered};
+
+pub use crate::evm::primitive_types::SealedBlock;
 
 pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;

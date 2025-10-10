@@ -3,6 +3,7 @@ mod subscribe;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::TransactionReceipt;
 pub use get_logs::eth_get_logs;
+pub use get_logs::{eth_get_logs_with_cursor, Cursor};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;

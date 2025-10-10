@@ -16,6 +16,8 @@ use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
+pub use handlers::Cursor;
+
 #[derive(Clone)]
 pub struct EthRpcConfig {
     #[cfg(feature = "local")]
