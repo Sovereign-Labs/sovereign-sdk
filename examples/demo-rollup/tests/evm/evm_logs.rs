@@ -1,5 +1,3 @@
-use std::u32;
-
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::B256;
