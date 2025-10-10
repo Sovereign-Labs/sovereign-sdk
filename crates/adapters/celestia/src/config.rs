@@ -153,6 +153,7 @@ impl CelestiaConfig {
                 twinkle_config.pull_interval(),
                 twinkle_config.total_timeout(),
                 self.get_backoff_policy(),
+                self.tx_priority.clone().map(Into::into),
             );
             CelestiaClient::Twinkle(twinkle_client)
         } else {

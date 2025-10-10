@@ -5,7 +5,8 @@ mod types;
 use crate::celestia::CompactHeader;
 use crate::config::Network;
 use crate::da_service::client::twinkle::types::{
-    BlobStatus, BlobStatusResponse, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
+    BlobStatus, BlobStatusResponse, FeePriority, HeaderResponse, SubmitBlobAsyncResponse,
+    SubmitBlobRequest,
 };
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{RollupNamespace, TmHash};
@@ -44,6 +45,7 @@ pub struct TwinkleClient {
     // Total timeout for a method to complete.
     total_timeout: std::time::Duration,
     backoff_policy: ExponentialBuilder,
+    fee_priority: Option<FeePriority>,
 }
 
 impl TwinkleClient {
@@ -53,6 +55,7 @@ impl TwinkleClient {
         pull_interval: std::time::Duration,
         total_timeout: std::time::Duration,
         backoff_policy: ExponentialBuilder,
+        fee_priority: Option<FeePriority>,
     ) -> Self {
         Self {
             client,
@@ -60,6 +63,7 @@ impl TwinkleClient {
             pull_interval,
             total_timeout,
             backoff_policy,
+            fee_priority,
         }
     }
 
@@ -98,6 +102,7 @@ impl TwinkleClient {
             data: blob,
             asynchronous: true,
             network: self.network,
+            fee_priority: self.fee_priority,
         };
 
         let submit_start = std::time::Instant::now();

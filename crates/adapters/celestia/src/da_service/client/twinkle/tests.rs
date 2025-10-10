@@ -27,11 +27,11 @@ fn build_client() -> TwinkleClient {
         PULL_INTERVAL,
         TOTAL_TIMEOUT,
         backoff_policy,
+        Some(FeePriority::Fast),
     )
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
 async fn async_blob_submit() -> anyhow::Result<()> {
     sov_test_utils::logging::initialize_or_change_logging_with_filter(
         "debug,hyper=info,sov_celestia_adapter=trace",
@@ -72,7 +72,7 @@ async fn get_head_block_header() -> anyhow::Result<()> {
     let twinkle_client = build_client();
 
     let standard_header = standard_client.get_head_block_header().await?;
-    println!("Standard Header {:?}", standard_header);
+    println!("Standard Header {standard_header:?}");
 
     let height = standard_header.height();
     let twinkle_header = twinkle_client.get_block_header_at(height).await?;

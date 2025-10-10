@@ -1,6 +1,6 @@
 use crate::celestia::{CompactHeader, ProtobufHash};
 use crate::celestia_tm_version;
-use crate::config::Network;
+use crate::config::{Network, TxPriority};
 use crate::types::{TmHash, APP_VERSION};
 use celestia_types::nmt::NamespacedHash;
 use celestia_types::DataAvailabilityHeader;
@@ -11,6 +11,24 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tendermint_proto::Protobuf;
 
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FeePriority {
+    Slow,
+    Normal,
+    Fast,
+}
+
+impl From<TxPriority> for FeePriority {
+    fn from(value: TxPriority) -> Self {
+        match value {
+            TxPriority::Low => FeePriority::Slow,
+            TxPriority::Medium => FeePriority::Normal,
+            TxPriority::High => FeePriority::Fast,
+        }
+    }
+}
+
 #[serde_as]
 #[derive(Debug, Serialize)]
 pub struct SubmitBlobRequest {
@@ -20,6 +38,8 @@ pub struct SubmitBlobRequest {
     pub data: Vec<u8>,
     pub asynchronous: bool,
     pub network: Network,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fee_priority: Option<FeePriority>,
 }
 
 fn serialize_namespace_hex<S>(
@@ -113,7 +133,7 @@ impl TryFrom<TwinkleDataAvailabilityHeader> for DataAvailabilityHeader {
         } = value;
         let mut row_roots = Vec::with_capacity(raw_row_roots.len());
         for raw_row_root in raw_row_roots {
-            row_roots.push(NamespacedHash::try_from(&raw_row_root[..])?)
+            row_roots.push(NamespacedHash::try_from(&raw_row_root[..])?);
         }
         let mut column_roots = Vec::with_capacity(raw_column_roots.len());
         for raw_column_root in raw_column_roots {
