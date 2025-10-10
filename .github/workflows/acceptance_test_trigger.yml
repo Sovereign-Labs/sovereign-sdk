@@ -11,7 +11,7 @@ on:
         description: 'Dev branch to test'
         required: false
         default: 'theodore/acceptance-dev-testing'
-      dev_branch:
+      nightly_branch:
         description: 'Nightly branch to merge into'
         required: false
         default: 'theodore/acceptance-nightly-testing'
@@ -19,7 +19,7 @@ on:
 env:
   # Use test branches for now, will change to dev/nightly later
   DEV_BRANCH: ${{ github.event.inputs.dev_branch || 'theodore/acceptance-dev-testing' }}
-  NIGHTLY_BRANCH: ${{ github.event.inputs.dev_branch || 'theodore/acceptance-nightly-testing' }}
+  NIGHTLY_BRANCH: ${{ github.event.inputs.nightly_branch || 'theodore/acceptance-nightly-testing' }}
 
 jobs:
   trigger:
