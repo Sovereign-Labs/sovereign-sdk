@@ -8,6 +8,7 @@ use alloy_primitives::TxHash;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use alloy_rpc_types_eth::Filter;
+use sov_db::test_utils;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
@@ -124,6 +125,7 @@ async fn evm_test_log_subscription_with_pending_blcok() {
 // This behavior is used to verify the filtering mechanism.
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_logs_filter() {
+    sov_test_utils::initialize_logging();
     TestCase {
         nb_of_txs: 17,
         nb_of_logs_per_tx: 5,
