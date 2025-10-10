@@ -22,54 +22,65 @@ use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::{FilterWithCursor, LogsWithMaybeCursor};
 use sov_sequencer::SeqConfigExtension;
+use std::marker::PhantomData;
 use std::ops::Range;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 
-pub async fn eth_get_logs<S, Seq>(
-    parameters: JRpcParams<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<Vec<Log>, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    logs_for_filter(parameters.one::<Filter>()?, None, ethereum)
-        .await
-        .map(|r| r.logs)
+pub struct EthLogsService<S: Spec, Seq: Sequencer<Spec = S>> {
+    _phantom: PhantomData<(S, Seq)>,
 }
 
-async fn logs_for_filter<S, Seq>(
-    filter: Filter,
-    maybe_cursor: Option<Cursor>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-) -> Result<LogsWithMaybeCursor, ErrorObjectOwned>
+impl<S, Seq> EthLogsService<S, Seq>
 where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let state = &mut ethereum.api_state_accessor();
+    pub async fn eth_get_logs(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<Vec<Log>, ErrorObjectOwned> {
+        Self::logs_for_filter(parameters.one::<Filter>()?, None, ethereum)
+            .await
+            .map(|r| r.logs)
+    }
 
-    match filter.block_option {
-        FilterBlockOption::AtBlockHash(block_hash) => {
-            logs_for_block_hash(filter, block_hash, &ethereum.extension, maybe_cursor, state)
+    pub async fn eth_get_logs_with_cursor(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
+        let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
+        let cursor = cursor.map(Cursor::unpack);
+        Self::logs_for_filter(filter, cursor, ethereum).await
+    }
+
+    async fn logs_for_filter(
+        filter: Filter,
+        maybe_cursor: Option<Cursor>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+    ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
+        let state = &mut ethereum.api_state_accessor();
+
+        match filter.block_option {
+            FilterBlockOption::AtBlockHash(block_hash) => {
+                logs_for_block_hash(filter, block_hash, &ethereum.extension, maybe_cursor, state)
+            }
+            FilterBlockOption::Range {
+                from_block,
+                to_block,
+            } => logs_for_blocks_range(
+                filter,
+                from_block,
+                to_block,
+                &ethereum.extension,
+                maybe_cursor,
+                state,
+            ),
         }
-        FilterBlockOption::Range {
-            from_block,
-            to_block,
-        } => logs_for_blocks_range(
-            filter,
-            from_block,
-            to_block,
-            &ethereum.extension,
-            maybe_cursor,
-            state,
-        ),
     }
 }
 
@@ -276,22 +287,6 @@ where
         }
         PendingOrBlock::Number(number) => Ok(number),
     }
-}
-
-pub async fn eth_get_logs_with_cursor<S, Seq>(
-    parameters: JRpcParams<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<LogsWithMaybeCursor, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
-    let cursor = cursor.map(Cursor::unpack);
-    logs_for_filter(filter, cursor, ethereum).await
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
