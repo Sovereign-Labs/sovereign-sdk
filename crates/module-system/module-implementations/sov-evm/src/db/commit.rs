@@ -39,6 +39,7 @@ where
 
 impl<'a, Ws: StateAccessor, S: Spec> EvmDb<'a, Ws, S>
 where
+    EvmDb<'a, Ws, S>: FallibleDatabaseCommit<Error = Error<Ws>>,
     S::Address: FromVmAddress<EthereumAddress>,
 {
     fn commit_account(
@@ -49,7 +50,7 @@ where
         // TODO figure out what to do when account is destroyed.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
         if account.is_selfdestructed() {
-            todo!("Account destruction not supported")
+            return Err(Error::SelfDestructUnsupported);
         }
 
         self.commit_storage(address, account.storage)?;

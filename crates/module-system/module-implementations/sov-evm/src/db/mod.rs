@@ -20,6 +20,8 @@ pub(crate) mod metrics;
 pub enum Error<Ws: StateAccessor> {
     #[error(transparent)]
     State(<Ws as StateReader<User>>::Error),
+    #[error("selfdestruct unsupported")]
+    SelfDestructUnsupported,
 }
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
