@@ -62,7 +62,7 @@ where
                 &to_rollup_address::<S>(address),
                 self.state,
             )
-            .map_err(Error)?;
+            .map_err(Error::State)?;
         // Set the EVM account balance to 0 - as balances are stored in the bank module.
         account.balance = U256::ZERO;
 
@@ -71,13 +71,13 @@ where
                 // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                 self.code
                     .set(&account.code_hash, code, self.state)
-                    .map_err(Error)?;
+                    .map_err(Error::State)?;
             }
         }
 
         self.accounts
             .set(&address, &DbAccount(account), self.state)
-            .map_err(Error)?;
+            .map_err(Error::State)?;
 
         Ok(())
     }
@@ -94,7 +94,7 @@ where
                 let value = value.present_value();
                 self.account_storage
                     .set(&(&address, &key), &value, self.state)
-                    .map_err(Error)
+                    .map_err(Error::State)
             })
     }
 }

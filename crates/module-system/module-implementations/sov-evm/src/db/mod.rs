@@ -1,5 +1,6 @@
 use crate::{to_rollup_address, AccountStorageKey};
 use alloy_primitives::{Address, B256, U256};
+use derive_more::Debug;
 use derive_more::{Deref, Into};
 use derive_new::new;
 use revm::state::{AccountInfo, Bytecode};
@@ -10,20 +11,15 @@ use sov_modules_api::{BorshSerializedSize, TxState};
 use sov_modules_api::{Spec, StateAccessor, StateMap, StateReader};
 use sov_state::codec::BcsCodec;
 use sov_state::User;
-use std::fmt::{self, Debug};
 
 pub(crate) mod commit;
 pub(crate) mod init;
 pub(crate) mod metrics;
 
-#[derive(thiserror::Error, Deref)]
-#[error(transparent)]
-pub struct Error<Ws: StateAccessor>(<Ws as StateReader<User>>::Error);
-
-impl<Ws: StateAccessor> Debug for Error<Ws> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
+#[derive(thiserror::Error, Debug)]
+pub enum Error<Ws: StateAccessor> {
+    #[error(transparent)]
+    State(<Ws as StateReader<User>>::Error),
 }
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
@@ -52,7 +48,7 @@ where
         let maybe_account_info = self
             .accounts
             .get(&address, self.state)
-            .map_err(Error)?
+            .map_err(Error::State)?
             .map(|acc| acc.0);
 
         let rollup_address: <S as Spec>::Address = to_rollup_address::<S>(address);
@@ -60,7 +56,7 @@ where
         let bank_balance = self
             .bank_module
             .get_balance_of(&rollup_address, sov_bank::config_gas_token_id(), self.state)
-            .map_err(Error)?
+            .map_err(Error::State)?
             .unwrap_or_default();
 
         match maybe_account_info {
@@ -92,7 +88,7 @@ where
         let bytecode = self
             .code
             .get(&code_hash, self.state)
-            .map_err(Error)?
+            .map_err(Error::State)?
             .unwrap_or_default();
 
         self.state.put_cached::<CachedByteCode>(
@@ -109,7 +105,7 @@ where
         let storage_value: U256 = self
             .account_storage
             .get(&(&address, &index), self.state)
-            .map_err(Error)?
+            .map_err(Error::State)?
             .unwrap_or_default();
 
         Ok(storage_value)

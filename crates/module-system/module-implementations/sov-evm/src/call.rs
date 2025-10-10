@@ -97,7 +97,7 @@ where
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
         db.commit(state_changes)
-            .map_err(|e| anyhow::anyhow!("{}", &*e))?;
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
         if !result.is_success() {
