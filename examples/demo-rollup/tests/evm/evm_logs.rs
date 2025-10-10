@@ -164,10 +164,7 @@ async fn evm_test_get_logs_with_cursor() {
             Some(packed) => packed,
             None => {
                 let total = (nb_of_txs * nb_of_logs_per_tx) as usize;
-                assert_eq!(
-                    logs_with_cursor.logs.len(),
-                    total % (max_log_limit as usize)
-                );
+                assert_eq!(logs_with_cursor.logs.len(), total % max_log_limit);
                 break;
             }
         };

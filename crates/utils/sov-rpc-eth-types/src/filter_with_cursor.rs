@@ -13,5 +13,6 @@ pub struct FilterWithCursor {
 /// Logs and the next cursor.
 pub struct LogsWithMaybeCursor {
     pub logs: Vec<Log>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<u128>,
 }
