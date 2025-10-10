@@ -26,6 +26,7 @@ pub enum CommitStatus {
 pub struct CommitFlag {
     file_path: PathBuf,
     temp_file_path: PathBuf,
+    use_tmpfs: bool,
 }
 
 impl CommitFlag {
@@ -44,12 +45,14 @@ impl CommitFlag {
             Self {
                 file_path: tmpfs_path.join(FLAG_FILE_NAME),
                 temp_file_path: tmpfs_path.join(format!("{FLAG_FILE_NAME}.tmp")),
+                use_tmpfs,
             }
         } else {
             let base_path = base_path.as_ref();
             Self {
                 file_path: base_path.join(FLAG_FILE_NAME),
                 temp_file_path: base_path.join(format!("{FLAG_FILE_NAME}.tmp")),
+                use_tmpfs,
             }
         }
     }
@@ -113,9 +116,12 @@ impl CommitFlag {
             .write_all(&message)
             .context("Failed to write to temp commit flag file")?;
 
-        temp_file
-            .sync_data()
-            .context("Failed to sync temp commit flag file")?;
+        // Skip sync for tmpfs - it's RAM-backed and doesn't need fsync
+        if !self.use_tmpfs {
+            temp_file
+                .sync_data()
+                .context("Failed to sync temp commit flag file")?;
+        }
 
         // Atomically rename the temporary file to the actual flag file
         std::fs::rename(&self.temp_file_path, &self.file_path)
