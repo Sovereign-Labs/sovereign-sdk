@@ -1,5 +1,5 @@
 # 2025-10-10
-- #1840 DOn't panic on selfdestruct. Return an error.
+- #1840 DOn't panic on selfdestruct/blockhash. Return an error.
 
 # 2025-10-08
 - #1827 Implement eth_getBlockReceipts in EVM module.
