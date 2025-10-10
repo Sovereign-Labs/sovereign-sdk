@@ -55,7 +55,7 @@ where
         _: Extensions,
     ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
         let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
-        let cursor = cursor.map(|s| Cursor::unpack(&s));
+        let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
         Self::logs_for_filter(filter, cursor, ethereum).await
     }
 
@@ -315,24 +315,28 @@ impl Cursor {
 
     /// Unpacks a 40-character (or "0x"-prefixed) hex string into `Self`.
     /// Panics if decoding fails or if the length is not 20 bytes.
-    pub fn unpack(hex_str: &str) -> Self {
+    pub fn unpack(hex_str: &str) -> Result<Self, ErrorObjectOwned> {
         let s = hex_str.strip_prefix("0x").unwrap_or(hex_str);
-        let bytes = decode(s).expect("invalid hex string");
+        let bytes = decode(s)
+            .map_err(|_| to_jsonrpsee_error_object("Invalid hex string", ETH_RPC_ERROR))?;
 
-        assert!(
-            bytes.len() == 20,
-            "invalid decoded length (expected 20 bytes)"
-        );
+        if bytes.len() != 20 {
+            let msg = format!(
+                "Invalid decoded length expected 20 bytes, got {}",
+                bytes.len()
+            );
+            return Err(to_jsonrpsee_error_object(msg, ETH_RPC_ERROR));
+        }
 
         let block_height = u64::from_be_bytes(bytes[0..8].try_into().unwrap());
         let tx_index_absolute = u64::from_be_bytes(bytes[8..16].try_into().unwrap());
         let log_index_in_tx = u32::from_be_bytes(bytes[16..20].try_into().unwrap());
 
-        Self {
+        Ok(Self {
             block_height,
             tx_index_absolute,
             log_index_in_tx,
-        }
+        })
     }
 }
 

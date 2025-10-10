@@ -171,7 +171,7 @@ async fn evm_test_get_logs_with_cursor() {
             }
         };
 
-        let cursor = Cursor::unpack(&packed_cursor);
+        let cursor = Cursor::unpack(&packed_cursor).unwrap();
         let nb_of_logs_according_to_cursor =
             nb_of_logs_according_to_cursor(cursor, nb_of_logs_per_tx);
 
