@@ -1,3 +1,5 @@
+use std::u32;
+
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::B256;
@@ -26,7 +28,7 @@ async fn evm_test_get_logs() {
         .await;
 
     let tx_hashes = rollup_and_client
-        .produce_logs(nb_of_txs, nb_of_logs_per_tx)
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
 
     rollup_and_client
@@ -83,7 +85,7 @@ async fn evm_test_get_logs_range() {
         .number();
 
     rollup_and_client
-        .produce_logs(nb_of_txs, nb_of_logs_per_tx)
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -120,7 +122,7 @@ async fn evm_test_get_logs_range_limit() {
     let rollup_and_client = RollupAndClient::new(max_log_limit).await;
 
     rollup_and_client
-        .produce_logs(nb_of_txs, nb_of_logs_per_tx)
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -145,10 +147,10 @@ async fn evm_test_get_logs_with_cursor() {
     let nb_of_logs_per_tx: u32 = 7;
 
     let rollup_and_client = RollupAndClient::new(max_log_limit).await;
-    let start_tx = rollup_and_client.get_tx_counet().await as u32;
+    let start_tx = rollup_and_client.get_tx_count().await as u32;
 
     rollup_and_client
-        .produce_logs(nb_of_txs, nb_of_logs_per_tx)
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -210,7 +212,6 @@ impl RollupAndClient {
 
         let (test_rollup, evm_client, _) = setup_with_simple_storage(0, ext).await;
         let contract_address = evm_client.alloy_deploy_contract().await;
-        test_rollup.wait_for_next_blocks(1).await;
 
         RollupAndClient {
             test_rollup,
@@ -223,23 +224,26 @@ impl RollupAndClient {
         &self,
         nb_of_txs: u32,
         nb_of_logs_per_tx: u32,
+        block_interval: Option<u32>,
     ) -> Vec<alloy_primitives::TxHash> {
-        let mut tx_hashes = Vec::new();
+        let mut tx_hashes = Vec::with_capacity(nb_of_txs as usize);
         for i in 0..nb_of_txs {
             let hash = self
                 .client
                 .alloy_emit_logs(self.contract_address, i, nb_of_logs_per_tx)
                 .await;
             tx_hashes.push(hash);
-            if i % 3 == 0 {
-                self.test_rollup.wait_for_next_blocks(1).await;
+            if let Some(block_interval) = block_interval {
+                if i % block_interval == 0 {
+                    self.test_rollup.wait_for_next_blocks(1).await;
+                }
             }
         }
 
         tx_hashes
     }
 
-    async fn get_tx_counet(&self) -> u64 {
+    async fn get_tx_count(&self) -> u64 {
         self.client
             .eth_get_transaction_count(self.client.address())
             .await

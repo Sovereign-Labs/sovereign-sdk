@@ -1,14 +1,16 @@
 use alloy_rpc_types::Filter;
 use alloy_rpc_types::Log;
+use serde::Deserialize;
+use serde::Serialize;
 
 /// Filter for logs with cursor.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FilterWithCursor {
     pub cursor: Option<u128>,
     pub filter: Filter,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 /// Logs and the next cursor.
 pub struct LogsWithMaybeCursor {

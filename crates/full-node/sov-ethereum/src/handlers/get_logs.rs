@@ -100,7 +100,7 @@ where
         }
     };
 
-    let next_cursor = logs_from_block(
+    let next_cursor = logs_for_block(
         &mut rpc_logs,
         &filter,
         &evm,
@@ -142,7 +142,7 @@ where
     let block_range = RangeInclusive::new(start, end);
 
     for height in block_range {
-        let next_cursor = logs_from_block(
+        let next_cursor = logs_for_block(
             &mut rpc_logs,
             &filter,
             &evm,
@@ -167,7 +167,7 @@ where
 }
 
 // panics if a block number or pending block is passed.
-fn logs_from_block<S>(
+fn logs_for_block<S>(
     rpc_logs: &mut Vec<Log>,
     filter: &Filter,
     evm: &sov_evm::Evm<S>,
@@ -359,10 +359,7 @@ impl CursorIndexses {
                 }
 
                 (
-                    Range {
-                        start: cursor.tx_index_absolute,
-                        end: block.transactions.end,
-                    },
+                    cursor.tx_index_absolute..block.transactions.end,
                     (cursor.log_index_in_tx as usize),
                 )
             }
