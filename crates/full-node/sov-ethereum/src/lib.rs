@@ -16,6 +16,8 @@ use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
+pub use handlers::Cursor;
+
 #[derive(Clone)]
 pub struct EthRpcConfig {
     #[cfg(feature = "local")]
@@ -74,7 +76,14 @@ where
         handlers::realtime_send_raw_transaction,
     )?;
 
-    rpc.register_async_method("eth_getLogs", handlers::eth_get_logs)?;
+    rpc.register_async_method(
+        "eth_getLogs",
+        handlers::EthLogsService::<S, Seq>::eth_get_logs,
+    )?;
+    rpc.register_async_method(
+        "eth_getLogsWithCursor",
+        handlers::EthLogsService::<S, Seq>::eth_get_logs_with_cursor,
+    )?;
     rpc.register_subscription(
         "eth_subscribe",
         "eth_subscription",

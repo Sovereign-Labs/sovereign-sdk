@@ -33,6 +33,7 @@ alloy-rpc-types = { workspace = true }
 alloy-eips = { workspace = true }
 reth-primitives = { workspace = true }
 sov-rpc-eth-types = { workspace = true }
+hex = { workspace = true }
 
 tokio = { workspace = true, features = ["sync"] }
 

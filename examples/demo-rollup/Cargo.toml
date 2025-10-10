@@ -120,6 +120,7 @@ alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
 alloy-pubsub = "1.0"
 alloy-provider = { workspace = true }
+sov-rpc-eth-types = { workspace = true}
 
 
 reqwest = { version = "0.12", features = [
@@ -142,6 +143,8 @@ sov-state = { workspace = true, features = ["native"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }
 sov-zkvm-utils = { workspace = true }
 sov-build = { workspace = true }
+sov-ethereum = { workspace = true }
+
 
 [features]
 default = []

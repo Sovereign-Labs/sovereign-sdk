@@ -92,6 +92,7 @@ impl Block {
     }
 }
 
+/// Block with seald header.
 #[derive(Debug, PartialEq, Clone)]
 pub struct SealedBlock {
     /// Block header.
@@ -112,6 +113,7 @@ impl SealedBlock {
         &self.transactions
     }
 
+    /// EIP1559 base fee.
     pub fn base_fee(&self) -> u64 {
         self.header
             .base_fee_per_gas
