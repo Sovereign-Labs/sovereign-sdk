@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn unpack_known_vector() {
         let hex = "000000000000303900000000000109320000002a";
-        let c = Cursor::unpack(hex);
+        let c = Cursor::unpack(hex).unwrap();
         assert_eq!(c.block_height, 12345);
         assert_eq!(c.tx_index_absolute, 67890);
         assert_eq!(c.log_index_in_tx, 42);
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn unpack_accepts_0x_prefix() {
         let hex = "0x000000000000303900000000000109320000002a";
-        let c = Cursor::unpack(hex);
+        let c = Cursor::unpack(hex).unwrap();
         assert_eq!(c.block_height, 12345);
         assert_eq!(c.tx_index_absolute, 67890);
         assert_eq!(c.log_index_in_tx, 42);
@@ -461,7 +461,7 @@ mod tests {
         for c in cases {
             let hex = c.pack();
             assert_eq!(hex.len(), 40, "hex length must be fixed 40");
-            let decoded = Cursor::unpack(&hex);
+            let decoded = Cursor::unpack(&hex).unwrap();
             assert_eq!(decoded, c, "roundtrip mismatch for {:?}", c);
         }
     }
@@ -497,17 +497,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "invalid hex string")]
-    fn unpack_invalid_char_panics() {
+    fn unpack_invalid_char() {
         // Not valid hex
-        let _ = Cursor::unpack("zz0000000000303900000000000109320000002a");
+        assert!(Cursor::unpack("zz0000000000303900000000000109320000002a").is_err());
     }
 
     #[test]
-    #[should_panic(expected = "invalid decoded length")]
     fn unpack_wrong_length_panics() {
         // 38 hex chars -> 19 bytes after decode -> triggers assert on length
-        let _ = Cursor::unpack("00000000000030390000000000010932000000");
+        assert!(Cursor::unpack("00000000000030390000000000010932000000").is_err());
     }
 
     #[test]
