@@ -212,8 +212,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)
-            .map_err(|err| eth_from_evm_error(err))?)
+        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env).map_err(eth_from_evm_error)?)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.

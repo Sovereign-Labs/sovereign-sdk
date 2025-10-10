@@ -114,7 +114,7 @@ where
         let balance = self
             .get_db(state.deref_mut())
             .basic(address)
-            .map_err(|e| EthApiError::from(e))?
+            .map_err(EthApiError::from)?
             .map(|account| account.balance)
             .unwrap_or_default();
 
@@ -341,7 +341,7 @@ where
             }
 
             transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(|e| eth_from_evm_error(e))?;
+                .map_err(eth_from_evm_error)?;
         }
 
         // Trace the target transaction
