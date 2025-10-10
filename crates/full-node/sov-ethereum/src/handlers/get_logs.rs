@@ -314,7 +314,6 @@ impl Cursor {
     }
 
     /// Unpacks a 40-character (or "0x"-prefixed) hex string into `Self`.
-    /// Panics if decoding fails or if the length is not 20 bytes.
     pub fn unpack(hex_str: &str) -> Result<Self, ErrorObjectOwned> {
         let s = hex_str.strip_prefix("0x").unwrap_or(hex_str);
         let bytes = decode(s)
