@@ -11,7 +11,7 @@ use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::{
-    AuthorizationData, ChainState, HasCapabilities, TransactionAuthorizer, UniquenessData,
+    AuthorizationData, ChainState, TransactionAuthorizer, UniquenessData,
 };
 use sov_modules_api::common::Amount;
 use sov_modules_api::macros::config_value;
@@ -21,8 +21,8 @@ use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
     get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, EventModuleName,
-    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, RuntimeEventProcessor, Spec,
-    StateCheckpoint, StateProvider as _, WorkingSet,
+    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, Spec, StateCheckpoint,
+    StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
@@ -210,7 +210,7 @@ pub enum SimulateOutcome<E> {
     Skipped(FailOutcome),
 }
 
-impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> SovereignSimulate<S, R> {
+impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
     /// Creates a new simulation endpoint instance.
     ///
     /// # Arguments
@@ -392,9 +392,7 @@ pub struct SimulateParameters {
     pub uniqueness: Option<UniquenessData>,
 }
 
-impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> SimulateEndpoint
-    for SovereignSimulate<S, R>
-{
+impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
     type State = std::sync::Arc<Self>;
 
     type Parameters = SimulateParameters;
