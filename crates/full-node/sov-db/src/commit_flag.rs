@@ -103,19 +103,12 @@ impl CommitFlag {
             .context("Failed to write to temp commit flag file")?;
 
         temp_file
-            .sync_all()
+            .sync_data()
             .context("Failed to sync temp commit flag file")?;
 
         // Atomically rename the temporary file to the actual flag file
         std::fs::rename(&self.temp_file_path, &self.file_path)
             .context("Failed to rename temp commit flag file to actual flag file")?;
-
-        // Attempt to sync the parent directory to ensure the rename operation is persisted on some filesystems
-        if let Some(parent_dir) = self.file_path.parent() {
-            if let Ok(dir_file) = File::open(parent_dir) {
-                let _ = dir_file.sync_all(); // Best effort sync
-            }
-        }
 
         Ok(())
     }
