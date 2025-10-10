@@ -461,7 +461,7 @@ mod tests {
             let hex = c.pack();
             assert_eq!(hex.len(), 40, "hex length must be fixed 40");
             let decoded = Cursor::unpack(&hex).unwrap();
-            assert_eq!(decoded, c, "roundtrip mismatch for {:?}", c);
+            assert_eq!(decoded, c);
         }
     }
 
