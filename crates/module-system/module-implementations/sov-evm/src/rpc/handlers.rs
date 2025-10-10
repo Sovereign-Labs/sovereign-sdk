@@ -1,7 +1,6 @@
 use crate::db::commit::FallibleDatabaseCommit;
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
-use crate::rpc::eth_from_evm_error;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
@@ -341,7 +340,7 @@ where
             }
 
             transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(eth_from_evm_error)?;
+                .map_err(EthApiError::from)?;
         }
 
         // Trace the target transaction

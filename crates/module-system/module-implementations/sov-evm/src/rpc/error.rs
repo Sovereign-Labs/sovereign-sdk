@@ -4,7 +4,7 @@ use std::error::Error;
 
 use alloy_primitives::Bytes;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use revm::context::result::{EVMError, ExecutionResult, HaltReason, InvalidHeader};
+use revm::context::result::{ExecutionResult, HaltReason};
 use sov_modules_api::StateAccessor;
 use sov_rpc_eth_types::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
 
@@ -33,16 +33,6 @@ pub(crate) fn ensure_success(result: ExecutionResult<HaltReason>) -> EthResult<B
         ExecutionResult::Halt { reason, gas_used } => {
             Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
         }
-    }
-}
-
-pub fn eth_from_evm_error<Ws: StateAccessor>(err: EVMError<crate::db::Error<Ws>>) -> EthApiError {
-    match err {
-        EVMError::Transaction(err) => RpcInvalidTransactionError::from(err).into(),
-        EVMError::Header(InvalidHeader::PrevrandaoNotSet) => EthApiError::PrevrandaoNotSet,
-        EVMError::Header(InvalidHeader::ExcessBlobGasNotSet) => EthApiError::ExcessBlobGasNotSet,
-        EVMError::Database(db_err) => db_err.into(),
-        EVMError::Custom(data) => EthApiError::EvmCustom(data),
     }
 }
 

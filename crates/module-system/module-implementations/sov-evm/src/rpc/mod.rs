@@ -20,7 +20,7 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
 use crate::db::EvmDb;
-use crate::error::{eth_from_evm_error, into_rpc_error};
+use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect};
@@ -205,14 +205,14 @@ where
         request: TransactionRequest,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<ResultAndState> {
+    ) -> Result<ResultAndState, EthApiError> {
         let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env = prepare_call_env(&block_env, request.clone())?;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.get_db(state);
 
-        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env).map_err(eth_from_evm_error)?)
+        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)?)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.
