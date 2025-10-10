@@ -61,7 +61,6 @@ async fn async_blob_submit() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
 async fn get_head_block_header() -> anyhow::Result<()> {
     let config = CelestiaConfig::dev_config("http://127.0.0.1:26658");
     let params = RollupParams {
@@ -72,14 +71,17 @@ async fn get_head_block_header() -> anyhow::Result<()> {
     let standard_client = CelestiaService::new(config, params).await;
     let twinkle_client = build_client();
 
-    let twinkle_header = twinkle_client.get_head_block_header().await?;
+    let standard_header = standard_client.get_head_block_header().await?;
+    println!("Standard Header {:?}", standard_header);
+
+    let height = standard_header.height();
+    let twinkle_header = twinkle_client.get_block_header_at(height).await?;
+    println!("-------- {height}");
     println!("Twinkle Header {twinkle_header:?}");
-
-    let height = twinkle_header.height();
-
-    let standard_header = standard_client.get_block_header_at(height).await?;
+    println!("Twinkle DAH: {:?}", twinkle_header.dah);
 
     assert_eq!(twinkle_header.header, standard_header.header);
+    assert_eq!(twinkle_header.dah, standard_header.dah);
 
     Ok(())
 }

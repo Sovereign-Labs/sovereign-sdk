@@ -13,7 +13,6 @@ use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
-use celestia_types::DataAvailabilityHeader;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
@@ -270,10 +269,10 @@ impl TwinkleClient {
         .await
         .with_context(|| format!("Getting block header at height={height:?}"))?;
 
-        let compact_header = CompactHeader::from(header_response.header);
-        let empty_dah = DataAvailabilityHeader::new_unchecked(Vec::new(), Vec::new());
+        let HeaderResponse { header, dah } = header_response;
 
-        let celestia_header = CelestiaHeader::new(empty_dah, compact_header);
+        let compact_header = CompactHeader::from(header);
+        let celestia_header = CelestiaHeader::new(dah.into(), compact_header);
 
         Ok(celestia_header)
     }

@@ -1,7 +1,9 @@
 use crate::celestia::{CompactHeader, ProtobufHash};
 use crate::celestia_tm_version;
 use crate::config::Network;
-use crate::types::TmHash;
+use crate::types::{TmHash, APP_VERSION};
+use celestia_types::nmt::{NamespacedHash, NamespacedHashExt};
+use celestia_types::DataAvailabilityHeader;
 use jsonrpsee::core::Serialize;
 use serde::{Deserialize, Serializer};
 use serde_with::serde_as;
@@ -87,6 +89,51 @@ impl TryFrom<BlobStatusResponse> for SubmitBlobReceipt<TmHash> {
 #[derive(Debug, Deserialize)]
 pub struct HeaderResponse {
     pub header: TwinkleBlockHeader,
+    pub dah: TwinkleDah,
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize)]
+pub struct TwinkleDah {
+    #[serde(rename = "rowRoots")]
+    #[serde_as(as = "Vec<Base64NamespacedHash>")]
+    row_roots: Vec<NamespacedHash>,
+    #[serde(rename = "columnRoots")]
+    #[serde_as(as = "Vec<Base64NamespacedHash>")]
+    column_roots: Vec<NamespacedHash>,
+}
+
+struct Base64NamespacedHash;
+
+impl serde_with::SerializeAs<NamespacedHash> for Base64NamespacedHash {
+    fn serialize_as<S>(source: &NamespacedHash, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde_with::base64::Standard;
+        serde_with::base64::Base64::<Standard>::serialize_as(&source.to_array(), serializer)
+    }
+}
+
+impl<'de> serde_with::DeserializeAs<'de, NamespacedHash> for Base64NamespacedHash {
+    fn deserialize_as<D>(deserializer: D) -> Result<NamespacedHash, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde_with::base64::Standard;
+        let bytes: Vec<u8> = serde_with::base64::Base64::<Standard>::deserialize_as(deserializer)?;
+        NamespacedHash::try_from(bytes.as_slice()).map_err(serde::de::Error::custom)
+    }
+}
+
+impl From<TwinkleDah> for DataAvailabilityHeader {
+    fn from(value: TwinkleDah) -> Self {
+        let TwinkleDah {
+            row_roots,
+            column_roots,
+        } = value;
+        DataAvailabilityHeader::new(row_roots, column_roots, APP_VERSION).unwrap()
+    }
 }
 
 #[serde_as]
