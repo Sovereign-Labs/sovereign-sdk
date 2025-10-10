@@ -116,7 +116,7 @@ where
     }
 
     fn block_hash(&mut self, _number: u64) -> Result<B256, Self::Error> {
-        return Err(Error::BlockHashUnsupported);
+        Err(Error::BlockHashUnsupported)
     }
 }
 
