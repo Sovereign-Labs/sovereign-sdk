@@ -54,6 +54,11 @@ pub struct RollupDbConfig {
     pub pruner_versions_to_keep: Option<usize>,
     /// Maximum number of keys to prune in a single batch.
     pub pruner_max_batch_size: Option<usize>,
+    /// If true, stores the commit flag in tmpfs (/dev/shm) for better performance.
+    /// This trades durability for speed - the flag won't survive reboots, but the
+    /// startup recovery logic already handles missing/invalid flags.
+    /// Default: false (store flag alongside database files)
+    pub use_tmpfs_for_commit_flag: Option<bool>,
 }
 
 impl RollupDbConfig {
@@ -88,6 +93,7 @@ impl RollupDbConfig {
             pruner_block_interval: Some(100),
             pruner_versions_to_keep: Some(20),
             pruner_max_batch_size: None,
+            use_tmpfs_for_commit_flag: None,
         }
     }
 

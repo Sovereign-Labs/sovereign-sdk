@@ -6,6 +6,7 @@ use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 
 const FLAG_FILE_NAME: &str = "commit_status.flag";
+const TMPFS_PATH: &str = "/dev/shm";
 
 /// Represents the status of a two-phase commit operation.
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Clone, Copy)]
@@ -30,16 +31,26 @@ pub struct CommitFlag {
 impl CommitFlag {
     /// Creates a new `CommitFlag` instance.
     ///
-    /// The flag file will be located at `base_path/commit_status.flag`.
+    /// The flag file will be located at `base_path/commit_status.flag`, unless
+    /// `use_tmpfs` is true, in which case it will be in `/dev/shm`.
     ///
     /// # Arguments
     ///
-    /// * `base_path`: The directory path where the flag file will be stored.
-    pub fn new(base_path: impl AsRef<Path>) -> Self {
-        let base_path = base_path.as_ref();
-        Self {
-            file_path: base_path.join(FLAG_FILE_NAME),
-            temp_file_path: base_path.join(format!("{FLAG_FILE_NAME}.tmp")),
+    /// * `base_path`: The directory path where the flag file will be stored (ignored if `use_tmpfs` is true).
+    /// * `use_tmpfs`: If true, stores the flag in tmpfs for better performance at the cost of durability.
+    pub fn new(base_path: impl AsRef<Path>, use_tmpfs: bool) -> Self {
+        if use_tmpfs {
+            let tmpfs_path = PathBuf::from(TMPFS_PATH);
+            Self {
+                file_path: tmpfs_path.join(FLAG_FILE_NAME),
+                temp_file_path: tmpfs_path.join(format!("{FLAG_FILE_NAME}.tmp")),
+            }
+        } else {
+            let base_path = base_path.as_ref();
+            Self {
+                file_path: base_path.join(FLAG_FILE_NAME),
+                temp_file_path: base_path.join(format!("{FLAG_FILE_NAME}.tmp")),
+            }
         }
     }
 
@@ -132,7 +143,7 @@ mod tests {
     #[test]
     fn test_commit_flag_flow() {
         let dir = tempdir().unwrap();
-        let flag = CommitFlag::new(dir.path());
+        let flag = CommitFlag::new(dir.path(), false);
 
         // 1. Initial read: file doesn't exist, should create and return Completed
         assert_eq!(flag.read_status().unwrap(), CommitStatus::Completed);
@@ -179,7 +190,7 @@ mod tests {
         file.write_all(b"CORRUPTED_DATA").unwrap();
         drop(file);
 
-        let commit_flag = CommitFlag::new(dir.path());
+        let commit_flag = CommitFlag::new(dir.path(), false);
         // Should detect corruption, fix the file, and return Completed
         assert_eq!(commit_flag.read_status().unwrap(), CommitStatus::Completed);
 
