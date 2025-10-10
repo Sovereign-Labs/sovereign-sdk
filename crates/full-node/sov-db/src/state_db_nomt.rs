@@ -9,7 +9,7 @@ use sov_rollup_interface::reexports::digest;
 
 use super::commit_flag::{CommitFlag, CommitStatus};
 use crate::config::RollupDbConfig;
-use crate::metrics::nomt::{NomtBeginSessionMetric, NomtDbMetric};
+use crate::metrics::nomt::{MerklizedCommitMetric, NomtBeginSessionMetric, NomtDbMetric};
 
 const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
@@ -86,22 +86,28 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
     /// Commit [`StateOverlay`] to disk.
     #[tracing::instrument(skip_all)]
-    pub(crate) fn commit(&self, overlay: StateOverlay) -> anyhow::Result<()> {
+    pub(crate) fn commit(&self, overlay: StateOverlay) -> anyhow::Result<MerklizedCommitMetric> {
+        let start = std::time::Instant::now();
         let StateOverlay { user, kernel } = overlay;
         // Status should be completed before committing.
+        let flag_prepare_start = std::time::Instant::now();
         debug_assert_eq!(self.commit_flag.read_status()?, CommitStatus::Completed);
 
         let in_progress_commit_status = CommitStatus::InProgress(kernel.root().into_inner());
+        let flag_prepare = flag_prepare_start.elapsed();
 
-        {
+        let start_kernel = std::time::Instant::now();
+        let write_attempts_kernel = {
             let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
             try_commit_overlay_with_backoff(&self.kernel, kernel)
-                .context("kernel namespace commit")?;
-        }
+                .context("kernel namespace commit")?
+        };
+        let write_kernel = start_kernel.elapsed();
 
         // If the kernel commit fails, the flag is untouched, meaning DB remains synced on previous state.
         // Write IN-PROGRESS status after kernel committed successfully.
 
+        let flag_mid_start = std::time::Instant::now();
         // 2. Kernel commit succeeded. Try to set flag to IN-PROGRESS.
         if let Err(flag_write_err) = self.commit_flag.write_status(in_progress_commit_status) {
             // CRITICAL: Kernel committed, but couldn't write IN-PROGRESS flag.
@@ -133,12 +139,16 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         }
 
         debug_assert_eq!(self.commit_flag.read_status()?, in_progress_commit_status);
+        let flag_mid = flag_mid_start.elapsed();
 
-        {
+        let start_user = std::time::Instant::now();
+        let write_attempts_user = {
             let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
-            try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?;
-        }
+            try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?
+        };
+        let write_user = start_user.elapsed();
 
+        let flag_finish_start = std::time::Instant::now();
         self.commit_flag
             .write_status(CommitStatus::Completed)
             .with_context(|| {
@@ -146,7 +156,18 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                 "Failed to write `COMPLETED` status after successful user commit"
             })?;
         debug_assert_eq!(self.commit_flag.read_status()?, CommitStatus::Completed);
-        Ok(())
+        let flag_finish = flag_finish_start.elapsed();
+        let total = start.elapsed();
+        Ok(MerklizedCommitMetric {
+            flag_prepare,
+            write_attempts_kernel,
+            write_kernel,
+            flag_mid,
+            write_attempts_user,
+            write_user,
+            flag_finish,
+            total,
+        })
     }
 
     /// Commit [`crate::storage_manager::StateFinishedSession`] to disk.
@@ -154,7 +175,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     pub fn commit_change_set(
         &self,
         session: crate::storage_manager::StateFinishedSession,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<MerklizedCommitMetric> {
         let overlay = session.into_state_overlay();
         self.commit(overlay)
     }
@@ -426,7 +447,7 @@ where
 fn try_commit_overlay_with_backoff<H>(
     nomt: &Nomt<BinaryHasher<H>>,
     mut overlay: Overlay,
-) -> anyhow::Result<()>
+) -> anyhow::Result<usize>
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
@@ -435,7 +456,7 @@ where
         match overlay.try_commit_nonblocking(nomt)? {
             None => {
                 tracing::trace!(attempts = %attempt, "Commit completed");
-                return Ok(());
+                return Ok(attempt.saturating_add(1));
             }
             Some(returned) => {
                 match attempt {

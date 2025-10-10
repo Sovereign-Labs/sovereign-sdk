@@ -7,6 +7,7 @@ use rockbound::{
     default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB, SchemaBatch,
 };
 
+use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
     historical_state::StateChanges,
     namespaces::{KernelNamespace, UserNamespace},
@@ -100,9 +101,13 @@ impl FlatStateDb {
     }
 
     /// Coalesce all the changes into a single schema batch and write it atomically.
-    pub fn commit(&self, state: StateChanges) -> anyhow::Result<()> {
+    pub fn commit(&self, state: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
+        let start_prepare = std::time::Instant::now();
         let commit = self.prepare_commit(state)?;
+        let prepare = start_prepare.elapsed();
+        let start_write = std::time::Instant::now();
         self.other.write_schemas(commit)?;
-        Ok(())
+        let write = start_write.elapsed();
+        Ok(FlatStateCommitMetric { prepare, write })
     }
 }

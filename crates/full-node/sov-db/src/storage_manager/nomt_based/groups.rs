@@ -14,7 +14,7 @@ use crate::config::RollupDbConfig;
 use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
-use crate::metrics::nomt::PrunerMetric;
+use crate::metrics::nomt::{CommitDetailedMetric, PrunerMetric};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::{
@@ -71,16 +71,35 @@ where
                 },
         } = group;
 
+        let merklized_start = std::time::Instant::now();
         // Note: failure handling and data recovery will be implemented later.
-        self.merklized_state.commit(state)?;
+        let merklized_commit = self.merklized_state.commit(state)?;
+        let merklized_commit_from_caller = merklized_start.elapsed();
         // Historical data is committed after merklized state, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
-        self.flat_state.commit(historical_state)?;
+        let flat_metrics = self.flat_state.commit(historical_state)?;
+        let accessory_start = std::time::Instant::now();
         self.accessory
             .write_schemas(Arc::unwrap_or_clone(accessory))?;
+        let accessory_commit = accessory_start.elapsed();
+
+        let ledger_start = std::time::Instant::now();
         // Ledger goes after last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
         self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
+        let ledger_commit = ledger_start.elapsed();
+
+        let commit_detailed_metrics = CommitDetailedMetric {
+            merklized_commit,
+            merklized_commit_from_caller,
+            flat: flat_metrics,
+            accessory_commit,
+            ledger_commit,
+        };
+
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(commit_detailed_metrics);
+        });
 
         self.merklized_state.send_metrics();
 
