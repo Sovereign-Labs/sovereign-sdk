@@ -252,16 +252,19 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     let mut total_txns = 0;
 
     while !*rx.borrow() {
-        let txn_count = {
+        // Generate both values while RNG is in scope, then await after it drops.
+        let (txn_count, sleep_ms) = {
             // rng must fall out of scope before awaiting anything so this fn is Send
             let mut rng = rand::thread_rng();
 
             // Do this at the start so we add some jitter to initial API requests
             let sleep_ms = rng.gen_range(25..100);
-            std::thread::sleep(Duration::from_millis(sleep_ms));
-
-            rng.gen_range(10..100)
+            let txn_count = rng.gen_range(10..100);
+            (txn_count, sleep_ms)
         };
+
+        // Use cooperative sleep to avoid blocking the async runtime
+        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
 
         let mut txns = vec![];
         for _ in 0..txn_count {
