@@ -154,3 +154,58 @@ impl Metric for PrunerMetric {
         )
     }
 }
+
+#[derive(Debug)]
+pub struct MerklizedCommitMetric {
+    pub flag_prepare: std::time::Duration,
+    pub write_attempts_kernel: usize,
+    // How much time in total it took to write overlay
+    pub write_kernel: std::time::Duration,
+    pub flag_mid: std::time::Duration,
+    // How many attempts it took to write
+    pub write_attempts_user: usize,
+    pub write_user: std::time::Duration,
+    pub flag_finish: std::time::Duration,
+    pub total: std::time::Duration,
+}
+
+#[derive(Debug)]
+pub struct FlatStateCommitMetric {
+    pub prepare: std::time::Duration,
+    pub write: std::time::Duration,
+}
+
+#[derive(Debug)]
+pub struct CommitDetailedMetric {
+    pub merklized_commit: MerklizedCommitMetric,
+    pub merklized_commit_from_caller: std::time::Duration,
+    pub flat: FlatStateCommitMetric,
+    pub accessory_commit: std::time::Duration,
+    pub ledger_commit: std::time::Duration,
+}
+
+impl Metric for CommitDetailedMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_nomt_commit_detailed"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} merklized_flag_prepare_us={},write_attempts_kernel={},write_kernel_us={},write_attempts_user={},write_user_us={},flag_finish_us={},merklized_total_us={},merklized_from_caller_us={},flat_prepare_us={},flat_write_us={},accessory_commit_us={},ledger_commit_us={}",
+            self.measurement_name(),
+            self.merklized_commit_from_caller.as_micros(),
+            self.merklized_commit.flag_prepare.as_micros(),
+            self.merklized_commit.write_attempts_kernel,
+            self.merklized_commit.write_kernel.as_micros(),
+            self.merklized_commit.write_attempts_user,
+            self.merklized_commit.write_user.as_micros(),
+            self.merklized_commit.flag_finish.as_micros(),
+            self.merklized_commit.total.as_micros(),
+            self.flat.prepare.as_micros(),
+            self.flat.write.as_micros(),
+            self.accessory_commit.as_micros(),
+            self.ledger_commit.as_micros(),
+        )
+    }
+}
