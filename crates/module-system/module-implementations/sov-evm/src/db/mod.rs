@@ -22,6 +22,8 @@ pub enum Error<Ws: StateAccessor> {
     State(<Ws as StateReader<User>>::Error),
     #[error("selfdestruct unsupported")]
     SelfDestructUnsupported,
+    #[error("blockhash unsupported")]
+    BlockHashUnsupported,
 }
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
@@ -114,7 +116,7 @@ where
     }
 
     fn block_hash(&mut self, _number: u64) -> Result<B256, Self::Error> {
-        todo!("block_hash not yet implemented")
+        return Err(Error::BlockHashUnsupported);
     }
 }
 
