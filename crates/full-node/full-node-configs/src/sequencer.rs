@@ -20,7 +20,7 @@ impl Default for SequencerKindConfig {
 }
 
 /// Configuration data used by sequencer extensions, such as EVM endpoints.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, Copy)]
 pub struct SeqConfigExtension {
     pub max_log_limit: usize,
 }

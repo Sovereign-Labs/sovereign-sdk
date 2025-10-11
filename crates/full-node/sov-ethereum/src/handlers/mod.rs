@@ -1,9 +1,11 @@
+mod cursor;
 mod get_logs;
+mod service;
 mod subscribe;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::TransactionReceipt;
-pub use get_logs::Cursor;
-pub use get_logs::EthLogsService;
+pub use cursor::Cursor;
+pub use get_logs::LogHandlers;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;

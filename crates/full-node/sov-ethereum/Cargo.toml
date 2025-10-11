@@ -34,6 +34,7 @@ alloy-eips = { workspace = true }
 reth-primitives = { workspace = true }
 sov-rpc-eth-types = { workspace = true }
 hex = { workspace = true }
+thiserror = { workspace = true }
 
 tokio = { workspace = true, features = ["sync"] }
 

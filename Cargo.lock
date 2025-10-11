@@ -11970,6 +11970,7 @@ dependencies = [
  "sov-uniqueness",
  "strum 0.26.3",
  "test-strategy",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]
