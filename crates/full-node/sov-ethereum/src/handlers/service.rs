@@ -139,19 +139,14 @@ where
         block_range: RangeInclusive<u64>,
     ) -> Result<LogsWithMaybeCursor, Error> {
         let mut rpc_logs = Vec::new();
+        let mut cursor_indices = self.maybe_cursor.map(CursorIndices::new);
 
         for height in block_range {
-            let next_cursor = self.logs_for_block(
-                &mut rpc_logs,
-                evm,
-                height,
-                self.maybe_cursor.map(CursorIndices::new),
-            )?;
+            let next_cursor = self.logs_for_block(&mut rpc_logs, evm, height, cursor_indices)?;
 
-            self.maybe_cursor = None;
-            if next_cursor.is_some() {
-                let cursor = next_cursor.map(|c| c.pack());
-                return Ok(LogsWithMaybeCursor::new(rpc_logs, cursor));
+            cursor_indices = None;
+            if let Some(cursor) = next_cursor {
+                return Ok(LogsWithMaybeCursor::new(rpc_logs, Some(cursor.pack())));
             }
         }
         Ok(LogsWithMaybeCursor::new(rpc_logs, None))
