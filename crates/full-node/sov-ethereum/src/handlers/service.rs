@@ -37,6 +37,11 @@ pub enum Error {
     BlockPruned(BlockNumber),
     #[error("Block with hash {0} not found")]
     BlockHashNotFound(B256),
+    #[error("Cursor block mismatch: cursor points to block {cursor_block} but filter expects hash {expected_hash}")]
+    CursorBlockHashMismatch {
+        cursor_block: BlockNumber,
+        expected_hash: B256,
+    },
     #[error("Invalid cursor: block {block} starts at tx #{first_tx_idx}, which is greater than cursor tx #{cursor_tx_idx}.")]
     InvalidCursor {
         block: BlockNumber,
@@ -96,7 +101,27 @@ where
         let mut rpc_logs = Vec::new();
 
         let block_height = match self.maybe_cursor {
-            Some(cursor) => cursor.block_height,
+            Some(cursor) => {
+                // Validate that the cursor's block matches the requested hash
+                let cursor_height = cursor.block_height;
+                let block = evm
+                    .get_maybe_sealed_block(cursor_height, &mut self.state)
+                    .ok_or(Error::BlockPruned(cursor_height))?;
+
+                let actual_hash = match block {
+                    MaybeSealedBlock::Sealed(ref b) => b.header.hash(),
+                    MaybeSealedBlock::Pending(_) => return Err(Error::PendingBlock),
+                };
+
+                if actual_hash != block_hash {
+                    return Err(Error::CursorBlockHashMismatch {
+                        cursor_block: cursor_height,
+                        expected_hash: block_hash,
+                    });
+                }
+
+                cursor_height
+            }
             None => {
                 let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state)
                 else {
