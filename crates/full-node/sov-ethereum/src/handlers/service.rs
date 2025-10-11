@@ -27,7 +27,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Receipt for index {0} not found, The state may have already been pruned.")]
+    #[error("Receipt for index {0} not found. The state may have already been pruned.")]
     ReceiptPruned(u64),
     #[error("Pending blocks are not supported")]
     PendingBlock,
@@ -111,7 +111,7 @@ where
             &mut rpc_logs,
             &evm,
             block_height,
-            self.maybe_cursor.map(CursorIndexses::new),
+            self.maybe_cursor.map(CursorIndices::new),
         )?;
 
         Ok(LogsWithMaybeCursor {
@@ -143,7 +143,7 @@ where
                 &mut rpc_logs,
                 &evm,
                 height,
-                self.maybe_cursor.map(CursorIndexses::new),
+                self.maybe_cursor.map(CursorIndices::new),
             )?;
 
             self.maybe_cursor = None;
@@ -160,13 +160,14 @@ where
         })
     }
 
-    // panics if a block number or pending block is passed.
+    /// Returns a cursor if the log limit was reached, otherwise None.
+    /// Panics if a pending block is encountered (should be validated before calling).
     fn logs_for_block(
         &mut self,
         rpc_logs: &mut Vec<Log>,
         evm: &sov_evm::Evm<S>,
         block_number: u64,
-        indexses_from_cursor: Option<CursorIndexses>,
+        indices_from_cursor: Option<CursorIndices>,
     ) -> Result<Option<Cursor>, Error> {
         let block = match evm.get_maybe_sealed_block(block_number, &mut self.state) {
             Some(MaybeSealedBlock::Sealed(block)) => block,
@@ -187,11 +188,11 @@ where
         let block_hash = header.hash();
 
         let (tx_range, mut next_log_index_in_tx) =
-            CursorIndexses::tx_range_and_log_index(indexses_from_cursor, &block)?;
+            CursorIndices::tx_range_and_log_index(indices_from_cursor, &block)?;
 
         for tx_index in tx_range {
             let Some(receipt) = evm.receipt(tx_index, &mut self.state) else {
-                tracing::error!(tx_index, %block_hash, "Receipt for index not found, The state may have already been pruned.");
+                tracing::error!(tx_index, %block_hash, "Receipt for index not found. The state may have already been pruned.");
                 return Err(Error::ReceiptPruned(tx_index));
             };
 
@@ -252,12 +253,12 @@ where
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CursorIndexses {
+struct CursorIndices {
     tx_index_absolute: u64,
     log_index_in_tx: u32,
 }
 
-impl CursorIndexses {
+impl CursorIndices {
     fn new(cursor: Cursor) -> Self {
         Self {
             tx_index_absolute: cursor.tx_index_absolute,
