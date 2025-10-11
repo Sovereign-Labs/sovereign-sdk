@@ -101,23 +101,17 @@ where
         let evm = sov_evm::Evm::<S>::default();
         let mut rpc_logs = Vec::new();
 
-        let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state)
-        else {
+        let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state) else {
             tracing::warn!(block_hash = %block_hash, "Block with hash not found");
             return Err(Error::BlockHashNotFound(block_hash));
         };
 
-        let next_cursor = self.logs_for_block(
-            &mut rpc_logs,
-            &evm,
-            block_height,
-            None,
-        )?;
+        let next_cursor = self.logs_for_block(&mut rpc_logs, &evm, block_height, None)?;
 
-        Ok(LogsWithMaybeCursor {
-            logs: rpc_logs,
-            cursor: next_cursor.map(|c| c.pack()),
-        })
+        Ok(LogsWithMaybeCursor::new(
+            rpc_logs,
+            next_cursor.map(|c| c.pack()),
+        ))
     }
 
     pub fn by_range(
@@ -148,16 +142,11 @@ where
 
             self.maybe_cursor = None;
             if next_cursor.is_some() {
-                return Ok(LogsWithMaybeCursor {
-                    logs: rpc_logs,
-                    cursor: next_cursor.map(|c| c.pack()),
-                });
+                let cursor = next_cursor.map(|c| c.pack());
+                return Ok(LogsWithMaybeCursor::new(rpc_logs, cursor));
             }
         }
-        Ok(LogsWithMaybeCursor {
-            logs: rpc_logs,
-            cursor: None,
-        })
+        Ok(LogsWithMaybeCursor::new(rpc_logs, None))
     }
 
     /// Returns a cursor if the log limit was reached, otherwise None.
