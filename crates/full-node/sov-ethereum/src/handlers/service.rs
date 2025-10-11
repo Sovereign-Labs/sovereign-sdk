@@ -13,6 +13,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{FilterBlockOption, Log};
 use jsonrpsee::types::ErrorObjectOwned;
+use sov_evm::Evm;
 use sov_evm::MaybeSealedBlock;
 use sov_evm::PendingOrBlock;
 use sov_evm::SealedBlock;
@@ -60,6 +61,7 @@ pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     maybe_cursor: Option<Cursor>,
     limits: SeqConfigExtension,
     state: ApiStateAccessor<S>,
+    evm: Evm<S>,
     _phantom: PhantomData<(S, Seq)>,
 }
 
@@ -81,6 +83,7 @@ where
             maybe_cursor,
             limits,
             state,
+            evm: Evm::<S>::default(),
             _phantom: PhantomData,
         }
     }
@@ -100,14 +103,15 @@ where
             return Err(Error::CursorNotSupportedForBlockHash);
         }
 
-        let evm = sov_evm::Evm::<S>::default();
-
-        let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state) else {
+        let Some(block_height) = self
+            .evm
+            .get_block_height_by_hash(&block_hash, &mut self.state)
+        else {
             tracing::warn!(block_hash = %block_hash, "Block with hash not found");
             return Err(Error::BlockHashNotFound(block_hash));
         };
 
-        let result = self.scan_block_range(&evm, block_height..=block_height)?;
+        let result = self.scan_block_range(block_height..=block_height)?;
 
         if result.cursor.is_some() {
             return Err(Error::TooManyLogsInBlock(
@@ -124,28 +128,25 @@ where
         from_block: Option<BlockNumberOrTag>,
         to_block: Option<BlockNumberOrTag>,
     ) -> Result<LogsWithMaybeCursor, Error> {
-        let evm = sov_evm::Evm::<S>::default();
-
         let start = match self.maybe_cursor {
             Some(cursor) => cursor.block_height,
-            None => get_block_nr(from_block, &evm, &mut self.state)?,
+            None => self.get_block_nr(from_block)?,
         };
 
-        let end = get_block_nr(to_block, &evm, &mut self.state)?;
+        let end = self.get_block_nr(to_block)?;
 
-        self.scan_block_range(&evm, start..=end)
+        self.scan_block_range(start..=end)
     }
 
     fn scan_block_range(
         &mut self,
-        evm: &sov_evm::Evm<S>,
         block_range: RangeInclusive<u64>,
     ) -> Result<LogsWithMaybeCursor, Error> {
         let mut rpc_logs = Vec::new();
         let mut cursor_indices = self.maybe_cursor.map(CursorIndices::new);
 
         for height in block_range {
-            let next_cursor = self.logs_for_block(&mut rpc_logs, evm, height, cursor_indices)?;
+            let next_cursor = self.logs_for_block(&mut rpc_logs, height, cursor_indices)?;
 
             cursor_indices = None;
             if let Some(cursor) = next_cursor {
@@ -160,11 +161,13 @@ where
     fn logs_for_block(
         &mut self,
         rpc_logs: &mut Vec<Log>,
-        evm: &sov_evm::Evm<S>,
         block_number: u64,
         indices_from_cursor: Option<CursorIndices>,
     ) -> Result<Option<Cursor>, Error> {
-        let block = match evm.get_maybe_sealed_block(block_number, &mut self.state) {
+        let block = match self
+            .evm
+            .get_maybe_sealed_block(block_number, &mut self.state)
+        {
             Some(MaybeSealedBlock::Sealed(block)) => block,
             Some(MaybeSealedBlock::Pending(_)) => unreachable!("Pending blocks are not supported"), // This should be validated before calling this method.
             None => {
@@ -186,7 +189,7 @@ where
             CursorIndices::tx_range_and_log_index(indices_from_cursor, &block)?;
 
         for tx_index in tx_range {
-            let Some(receipt) = evm.receipt(tx_index, &mut self.state) else {
+            let Some(receipt) = self.evm.receipt(tx_index, &mut self.state) else {
                 tracing::error!(tx_index, %block_hash, "Receipt for index not found. The state may have already been pruned.");
                 return Err(Error::ReceiptPruned(tx_index));
             };
@@ -227,23 +230,15 @@ where
 
         Ok(None)
     }
-}
 
-fn get_block_nr<S>(
-    block_nr_or_tag: Option<BlockNumberOrTag>,
-    evm: &sov_evm::Evm<S>,
-    state: &mut ApiStateAccessor<S>,
-) -> Result<u64, Error>
-where
-    S: Spec,
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    let block_num = block_nr_or_tag.map(|b| b.to_string());
-    let number = evm.str_to_block_nr(block_num, state);
-    match number {
-        PendingOrBlock::Pending => Err(Error::PendingBlock),
-        PendingOrBlock::Invalid(err) => Err(Error::InvalidBlock(err)),
-        PendingOrBlock::Number(number) => Ok(number),
+    fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<u64, Error> {
+        let block_num = block_nr_or_tag.map(|b| b.to_string());
+        let number = self.evm.str_to_block_nr(block_num, &mut self.state);
+        match number {
+            PendingOrBlock::Pending => Err(Error::PendingBlock),
+            PendingOrBlock::Invalid(err) => Err(Error::InvalidBlock(err)),
+            PendingOrBlock::Number(number) => Ok(number),
+        }
     }
 }
 
