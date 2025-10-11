@@ -39,8 +39,8 @@ pub enum Error {
     BlockHashNotFound(B256),
     #[error("Cursor not supported when filtering by block hash")]
     CursorNotSupportedForBlockHash,
-    #[error("Too many logs in block {block_hash}: limit is {limit}")]
-    TooManyLogsInBlock { block_hash: B256, limit: usize },
+    #[error("Too many logs in block {0}: limit is {1}")]
+    TooManyLogsInBlock(B256, usize),
     #[error("Invalid cursor: block {block} starts at tx #{first_tx_idx}, which is greater than cursor tx #{cursor_tx_idx}.")]
     InvalidCursor {
         block: BlockNumber,
@@ -108,14 +108,10 @@ where
             return Err(Error::BlockHashNotFound(block_hash));
         };
 
-        let next_cursor = self.logs_for_block(&mut rpc_logs, &evm, block_height, None)?;
-
-        if next_cursor.is_some() {
-            return Err(Error::TooManyLogsInBlock {
-                block_hash,
-                limit: self.limits.max_log_limit,
-            });
-        }
+        let None = self.logs_for_block(&mut rpc_logs, &evm, block_height, None)? else {
+            let err = Error::TooManyLogsInBlock(block_hash, self.limits.max_log_limit);
+            return Err(err);
+        };
 
         Ok(LogsWithMaybeCursor::new(rpc_logs, None))
     }
