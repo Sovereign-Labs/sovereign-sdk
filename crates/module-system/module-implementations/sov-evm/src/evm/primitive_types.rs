@@ -10,7 +10,6 @@ use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
-use revm::context::result::EVMError;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 
@@ -243,8 +242,6 @@ pub struct Receipt {
     pub gas_used: u64,
     /// log index start
     pub log_index_start: u64,
-    /// optional error
-    pub error: Option<EVMError<u8>>,
 }
 
 impl From<TxSignedAndRecovered> for Recovered<TransactionSigned> {
