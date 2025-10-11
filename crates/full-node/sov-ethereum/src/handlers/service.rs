@@ -164,20 +164,7 @@ where
         block_number: u64,
         indices_from_cursor: Option<CursorIndices>,
     ) -> Result<Option<Cursor>, Error> {
-        let block = match self
-            .evm
-            .get_maybe_sealed_block(block_number, &mut self.state)
-        {
-            Some(MaybeSealedBlock::Sealed(block)) => block,
-            Some(MaybeSealedBlock::Pending(_)) => unreachable!("Pending blocks are not supported"), // This should be validated before calling this method.
-            None => {
-                tracing::error!(
-                    block_number,
-                    "Block for height not found. The state may have already been pruned."
-                );
-                return Err(Error::BlockPruned(block_number));
-            }
-        };
+        let block = self.get_block(block_number)?;
 
         let header = &block.header;
         if !self.filter.matches_bloom(header.logs_bloom()) {
@@ -229,6 +216,20 @@ where
         }
 
         Ok(None)
+    }
+
+    fn get_block(&mut self, number: BlockNumber) -> Result<SealedBlock, Error> {
+        let Some(block) = self.evm.get_maybe_sealed_block(number, &mut self.state) else {
+            tracing::error!(
+                number,
+                "Block for height not found. The state may have already been pruned."
+            );
+            return Err(Error::BlockPruned(number));
+        };
+        let MaybeSealedBlock::Sealed(block) = block else {
+            unreachable!("Pending blocks are not supported"); // This should be validated before calling this method.
+        };
+        Ok(block)
     }
 
     fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<u64, Error> {
