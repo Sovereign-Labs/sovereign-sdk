@@ -35,6 +35,8 @@ pub enum Error {
     InvalidBlock(String),
     #[error("Block for height {0} not found. The state may have already been pruned.")]
     BlockPruned(BlockNumber),
+    #[error("Block with hash {0} not found")]
+    BlockHashNotFound(B256),
     #[error("Invalid cursor: block {block} starts at tx #{first_tx_idx}, which is greater than cursor tx #{cursor_tx_idx}.")]
     InvalidCursor {
         block: BlockNumber,
@@ -98,9 +100,8 @@ where
             None => {
                 let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state)
                 else {
-                    let msg = format!("Block for block_hash {block_hash:?} does not exist");
-                    tracing::warn!(%msg);
-                    return Err(to_jsonrpsee_error_object(&msg, ETH_RPC_ERROR));
+                    tracing::warn!(block_hash = %block_hash, "Block with hash not found");
+                    return Err(Error::BlockHashNotFound(block_hash).into());
                 };
 
                 block_height
