@@ -191,6 +191,11 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// The range of transactions in the block
+    pub fn tx_range(&self) -> Range<u64> {
+        self.transactions_start()..self.transactions_end()
+    }
+
     /// Index of the first transaction in the block.
     pub fn transactions_start(&self) -> u64 {
         match self {

@@ -1,13 +1,15 @@
 use std::error::Error;
 
 use crate::db::commit::FallibleDatabaseCommit;
+use alloy_consensus::Sealed;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_primitives::{Address, BlockHash, U64};
+use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
     ReceiptEnvelope, ReceiptWithBloom, Transaction, TransactionReceipt, TransactionRequest,
 };
+use alloy_rpc_types::{BlockTransactionsKind, Header};
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
@@ -31,9 +33,7 @@ use crate::db::EvmDb;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
-use crate::helpers::{
-    from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
-};
+use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::Evm;
 
@@ -93,9 +93,9 @@ where
             .get(&block_hash, state)
             .unwrap_infallible()
             .map(|number| hex::encode(number.to_be_bytes()));
-
+        let kind = details.unwrap_or_default().into();
         Ok(match block_number_hex {
-            Some(block_number_hex) => self.get_block(Some(block_number_hex), details, state),
+            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state),
             None => None,
         })
     }
@@ -112,7 +112,8 @@ where
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
-        Ok(self.get_block(block_number, details, state))
+        let kind = details.unwrap_or_default().into();
+        Ok(self.get_block(block_number, kind, state))
     }
 
     /// Handler for: `eth_getBalance`
@@ -394,42 +395,55 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_block_transactions(
+        &self,
+        block: &MaybeSealedBlock,
+        kind: BlockTransactionsKind,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<BlockTransactions<Transaction>> {
+        let tx_range = block.tx_range();
+        let txs = match kind {
+            BlockTransactionsKind::Full => {
+                let txs = tx_range
+                    .clone()
+                    .map(|idx| {
+                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
+                        Some(from_recovered_with_block_context(
+                            tx.into(),
+                            Some(block.hash().unwrap_or_default()),
+                            block.number(),
+                            U256::from(idx - tx_range.start),
+                        ))
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                BlockTransactions::Full(txs)
+            }
+            BlockTransactionsKind::Hashes => {
+                let hashes = tx_range
+                    .into_iter()
+                    .map(|idx| {
+                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
+                        Some(*tx.signed_transaction.hash())
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                BlockTransactions::Hashes(hashes)
+            }
+        };
+        Some(txs)
+    }
+
     fn get_block(
         &self,
         block_number: Option<String>,
-        details: Option<bool>,
+        kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<Block> {
         let block = self.get_sealed_block_by_number(block_number, state)?;
+        let hash = block.hash().unwrap_or_default();
 
-        let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
-        let header = from_primitive_with_hash(block.header().clone(), block_hash);
-
-        let block_number = block.number();
-        let tx_range = block.transactions_start()..block.transactions_end();
-
-        let transactions = if Some(true) == details {
-            let txs = tx_range
-                .map(|index| {
-                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                    Some(from_recovered_with_block_context(
-                        tx.into(),
-                        Some(block_hash),
-                        block_number,
-                        U256::from(index - block.transactions_start()),
-                    ))
-                })
-                .collect::<Option<Vec<_>>>()?;
-            BlockTransactions::Full(txs)
-        } else {
-            let hashes = tx_range
-                .map(|index| {
-                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                    Some(*tx.signed_transaction.hash())
-                })
-                .collect::<Option<Vec<_>>>()?;
-            BlockTransactions::Hashes(hashes)
-        };
+        let transactions = self.get_block_transactions(&block, kind, state)?;
+        let header = Sealed::new_unchecked(block.header().clone(), hash);
+        let header = Header::from_consensus(header, None, None);
 
         Some(Block {
             header,
@@ -489,8 +503,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Option<Vec<TransactionReceipt>> {
         let block = self.get_sealed_block_by_number(block_number, state)?;
-        let tx_range = block.transactions_start()..block.transactions_end();
-        let receipts = tx_range
+        let receipts = block
+            .tx_range()
             .map(|index| self.get_receipt_by_index(index, state))
             .collect::<Option<Vec<_>>>()?;
         Some(receipts)
@@ -731,7 +745,7 @@ where
     }
 }
 
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Range};
 
 enum MaybeArchivalState<'a, S: Spec> {
     Current(&'a mut ApiStateAccessor<S>),
