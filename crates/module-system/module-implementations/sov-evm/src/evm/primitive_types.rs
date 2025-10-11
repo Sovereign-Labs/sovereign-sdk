@@ -225,17 +225,25 @@ impl MaybeSealedBlock {
     }
 }
 
+/// TODO: Can we replace this with Reth type?
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+/// Receipt
 pub struct Receipt {
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "ReceiptBincodeCompat")]
     pub receipt: reth_primitives::Receipt,
+    /// tx hash
     pub transaction_hash: TxHash,
+    /// tx index
     pub transaction_index: u64,
+    /// block number
     pub block_number: u64,
+    /// gas used
     pub gas_used: u64,
+    /// log index start
     pub log_index_start: u64,
+    /// optional error
     pub error: Option<EVMError<u8>>,
 }
 

@@ -13,10 +13,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{FilterBlockOption, Log};
 use jsonrpsee::types::ErrorObjectOwned;
-use sov_evm::Evm;
-use sov_evm::MaybeSealedBlock;
-use sov_evm::PendingOrBlock;
-use sov_evm::SealedBlock;
+use sov_evm::{Evm, MaybeSealedBlock, PendingOrBlock, Receipt, SealedBlock};
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
@@ -170,21 +167,16 @@ where
         if !self.filter.matches_bloom(header.logs_bloom()) {
             return Ok(None);
         }
-        let block_hash = header.hash();
 
-        let (tx_range, mut next_log_index_in_tx) =
+        let (tx_range, mut log_offset) =
             CursorIndices::tx_range_and_log_index(indices_from_cursor, &block)?;
 
         for tx_index in tx_range {
-            let Some(receipt) = self.evm.receipt(tx_index, &mut self.state) else {
-                tracing::error!(tx_index, %block_hash, "Receipt for index not found. The state may have already been pruned.");
-                return Err(Error::ReceiptPruned(tx_index));
-            };
-
+            let receipt = self.get_receipt(tx_index)?;
             let logs = receipt.receipt.logs;
 
-            for (log_index_in_tx, log) in logs.into_iter().enumerate() {
-                if log_index_in_tx < next_log_index_in_tx {
+            for (log_idx, log) in logs.into_iter().enumerate() {
+                if log_idx < log_offset {
                     continue;
                 }
 
@@ -192,7 +184,7 @@ where
                     let cursor = Cursor {
                         block_height: block_number,
                         tx_index_absolute: tx_index,
-                        log_index_in_tx: log_index_in_tx as u32,
+                        log_index_in_tx: log_idx as u32,
                     };
 
                     return Ok(Some(cursor));
@@ -201,21 +193,31 @@ where
                 if self.filter.matches(&log) {
                     let rpc_log = Log {
                         inner: log,
-                        block_hash: Some(block_hash),
+                        block_hash: Some(header.hash()),
                         block_number: Some(receipt.block_number),
                         block_timestamp: Some(header.timestamp),
                         transaction_hash: Some(receipt.transaction_hash),
                         transaction_index: Some(receipt.transaction_index),
-                        log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
+                        log_index: Some(receipt.log_index_start + log_idx as u64),
                         removed: false,
                     };
                     rpc_logs.push(rpc_log);
                 }
             }
-            next_log_index_in_tx = 0;
+            log_offset = 0;
         }
 
         Ok(None)
+    }
+
+    fn get_receipt(&mut self, tx_idx: u64) -> Result<Receipt, Error> {
+        self.evm.receipt(tx_idx, &mut self.state).ok_or_else(|| {
+            tracing::error!(
+                tx_idx,
+                "Receipt for index not found. The state may have already been pruned."
+            );
+            Error::ReceiptPruned(tx_idx)
+        })
     }
 
     fn get_block(&mut self, number: BlockNumber) -> Result<SealedBlock, Error> {
