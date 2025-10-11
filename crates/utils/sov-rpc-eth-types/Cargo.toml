@@ -22,6 +22,7 @@ alloy-transport = { workspace = true }
 reth-errors = { workspace = true }
 reth-primitives-traits = { workspace = true }
 serde = { workspace = true }
+derive-new = { workspace = true }
 
 [lints]
 workspace = true

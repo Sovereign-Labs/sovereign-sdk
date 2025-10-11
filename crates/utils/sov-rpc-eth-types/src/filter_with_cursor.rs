@@ -1,5 +1,6 @@
 use alloy_rpc_types::Filter;
 use alloy_rpc_types::Log;
+use derive_new::new;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -10,7 +11,7 @@ pub struct FilterWithCursor {
     pub filter: Filter,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, new)]
 #[serde(rename_all = "camelCase")]
 /// Logs and the next cursor.
 pub struct LogsWithMaybeCursor {

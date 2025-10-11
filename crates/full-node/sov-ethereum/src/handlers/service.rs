@@ -110,7 +110,10 @@ where
         let result = self.scan_block_range(&evm, block_height..=block_height)?;
 
         if result.cursor.is_some() {
-            return Err(Error::TooManyLogsInBlock(block_hash, self.limits.max_log_limit));
+            return Err(Error::TooManyLogsInBlock(
+                block_hash,
+                self.limits.max_log_limit,
+            ));
         }
 
         Ok(result)
