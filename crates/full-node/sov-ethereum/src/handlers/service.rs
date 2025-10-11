@@ -101,19 +101,19 @@ where
         }
 
         let evm = sov_evm::Evm::<S>::default();
-        let mut rpc_logs = Vec::new();
 
         let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state) else {
             tracing::warn!(block_hash = %block_hash, "Block with hash not found");
             return Err(Error::BlockHashNotFound(block_hash));
         };
 
-        let None = self.logs_for_block(&mut rpc_logs, &evm, block_height, None)? else {
-            let err = Error::TooManyLogsInBlock(block_hash, self.limits.max_log_limit);
-            return Err(err);
-        };
+        let result = self.scan_block_range(&evm, block_height..=block_height)?;
 
-        Ok(LogsWithMaybeCursor::new(rpc_logs, None))
+        if result.cursor.is_some() {
+            return Err(Error::TooManyLogsInBlock(block_hash, self.limits.max_log_limit));
+        }
+
+        Ok(result)
     }
 
     pub fn by_range(
@@ -121,7 +121,6 @@ where
         from_block: Option<BlockNumberOrTag>,
         to_block: Option<BlockNumberOrTag>,
     ) -> Result<LogsWithMaybeCursor, Error> {
-        let mut rpc_logs = Vec::new();
         let evm = sov_evm::Evm::<S>::default();
 
         let start = match self.maybe_cursor {
@@ -131,13 +130,20 @@ where
 
         let end = get_block_nr(to_block, &evm, &mut self.state)?;
 
-        // We just validated that `start` and `end` are not pending.
-        let block_range = RangeInclusive::new(start, end);
+        self.scan_block_range(&evm, start..=end)
+    }
+
+    fn scan_block_range(
+        &mut self,
+        evm: &sov_evm::Evm<S>,
+        block_range: RangeInclusive<u64>,
+    ) -> Result<LogsWithMaybeCursor, Error> {
+        let mut rpc_logs = Vec::new();
 
         for height in block_range {
             let next_cursor = self.logs_for_block(
                 &mut rpc_logs,
-                &evm,
+                evm,
                 height,
                 self.maybe_cursor.map(CursorIndices::new),
             )?;
