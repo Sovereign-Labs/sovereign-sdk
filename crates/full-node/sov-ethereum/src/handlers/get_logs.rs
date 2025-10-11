@@ -39,7 +39,7 @@ where
             ethereum.extension,
             state,
         );
-        service.logs_for_filter().await.map(|r| r.logs)
+        Ok(service.logs_for_filter().await?.logs)
     }
 
     pub async fn eth_get_logs_with_cursor(
@@ -51,6 +51,6 @@ where
         let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
         let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
         let service = LogsService::<S, Seq>::new(filter, cursor, ethereum.extension, state);
-        service.logs_for_filter().await
+        Ok(service.logs_for_filter().await?)
     }
 }

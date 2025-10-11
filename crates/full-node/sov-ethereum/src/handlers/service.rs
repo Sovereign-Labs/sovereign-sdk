@@ -81,7 +81,7 @@ where
         }
     }
 
-    pub async fn logs_for_filter(self) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
+    pub async fn logs_for_filter(self) -> Result<LogsWithMaybeCursor, Error> {
         match self.filter.block_option {
             FilterBlockOption::AtBlockHash(block_hash) => self.by_hash(block_hash),
             FilterBlockOption::Range {
@@ -91,7 +91,7 @@ where
         }
     }
 
-    pub fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
+    pub fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor, Error> {
         let evm = sov_evm::Evm::<S>::default();
         let mut rpc_logs = Vec::new();
 
@@ -101,7 +101,7 @@ where
                 let Some(block_height) = evm.get_block_height_by_hash(&block_hash, &mut self.state)
                 else {
                     tracing::warn!(block_hash = %block_hash, "Block with hash not found");
-                    return Err(Error::BlockHashNotFound(block_hash).into());
+                    return Err(Error::BlockHashNotFound(block_hash));
                 };
 
                 block_height
@@ -125,7 +125,7 @@ where
         mut self,
         from_block: Option<BlockNumberOrTag>,
         to_block: Option<BlockNumberOrTag>,
-    ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
+    ) -> Result<LogsWithMaybeCursor, Error> {
         let mut rpc_logs = Vec::new();
         let evm = sov_evm::Evm::<S>::default();
 
