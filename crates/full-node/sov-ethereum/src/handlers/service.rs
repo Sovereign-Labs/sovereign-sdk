@@ -139,7 +139,10 @@ where
         ))
     }
 
-    fn scan_block_range(&mut self, mut range: RangeInclusive<u64>) -> Result<Option<Cursor>> {
+    fn apply_block_level_cursor(
+        &self,
+        range: RangeInclusive<BlockNumber>,
+    ) -> Result<RangeInclusive<u64>> {
         if let Some(cursor) = self.cursor {
             if !range.contains(&cursor.block_height) {
                 tracing::warn!(
@@ -152,8 +155,13 @@ where
                     range,
                 });
             }
-            range = cursor.block_height..=*range.end();
-        }
+            return Ok(cursor.block_height..=*range.end());
+        };
+        Ok(range)
+    }
+
+    fn scan_block_range(&mut self, range: RangeInclusive<u64>) -> Result<Option<Cursor>> {
+        let range = self.apply_block_level_cursor(range)?;
         for block_number in range {
             let block = self.get_block(block_number)?;
             if !self.filter.matches_bloom(block.header.logs_bloom()) {
@@ -166,10 +174,13 @@ where
         Ok(None)
     }
 
-    fn scan_block(&mut self, block: SealedBlock) -> Result<Option<Cursor>> {
-        let mut tx_range_absolut = block.transactions.clone();
+    fn apply_tx_level_cursor(
+        &self,
+        tx_range_absolut: Range<u64>,
+        block_number: BlockNumber,
+    ) -> Result<Range<u64>> {
         if let Some(cursor) = self.cursor {
-            if cursor.block_height == block.number() {
+            if cursor.block_height == block_number {
                 if !tx_range_absolut.contains(&cursor.tx_index_absolute) {
                     tracing::warn!(
                         cursor = cursor.tx_index_absolute,
@@ -181,10 +192,15 @@ where
                         range: tx_range_absolut,
                     });
                 }
-                tx_range_absolut.start = cursor.tx_index_absolute;
+                return Ok(cursor.tx_index_absolute..tx_range_absolut.end);
             }
         }
+        Ok(tx_range_absolut)
+    }
 
+    fn scan_block(&mut self, block: SealedBlock) -> Result<Option<Cursor>> {
+        let mut tx_range_absolut = block.transactions.clone();
+        tx_range_absolut = self.apply_tx_level_cursor(tx_range_absolut, block.number())?;
         for tx_idx_absolute in tx_range_absolut {
             let receipt = self.get_receipt(tx_idx_absolute)?;
             if !self.filter.matches_bloom(receipt.bloom()) {
@@ -198,19 +214,14 @@ where
         Ok(None)
     }
 
-    fn scan_tx(
-        &mut self,
+    fn apply_log_level_cursor(
+        &self,
+        log_range: Range<u32>,
         tx_index_absolute: u64,
-        receipt: Receipt,
-        header: &Sealed<Header>,
-    ) -> Result<Option<Cursor>> {
-        let logs = receipt.receipt.logs;
-        let log_range = (0 as u32)..(logs.len() as u32);
-        let logs_iter = logs.into_iter().enumerate();
-        let mut skipped_logs = 0;
+        block_number: u64,
+    ) -> Result<u32> {
         if let Some(cursor) = self.cursor {
-            if cursor.block_height == header.number()
-                && cursor.tx_index_absolute == tx_index_absolute
+            if cursor.block_height == block_number && cursor.tx_index_absolute == tx_index_absolute
             {
                 if !log_range.contains(&cursor.log_index_in_tx) {
                     tracing::warn!(
@@ -223,9 +234,24 @@ where
                         range: log_range,
                     });
                 }
-                skipped_logs = cursor.log_index_in_tx;
+                return Ok(cursor.log_index_in_tx);
             }
         }
+        Ok(0)
+    }
+
+    fn scan_tx(
+        &mut self,
+        tx_index_absolute: u64,
+        receipt: Receipt,
+        header: &Sealed<Header>,
+    ) -> Result<Option<Cursor>> {
+        let logs = receipt.receipt.logs;
+        let log_range = (0 as u32)..(logs.len() as u32);
+        let logs_iter = logs.into_iter().enumerate();
+        let skipped_logs =
+            self.apply_log_level_cursor(log_range, tx_index_absolute, header.number())?;
+
         // As logs iter is pre-enumerated - we keep correct indices
         for (idx, log) in logs_iter.skip(skipped_logs as usize) {
             if self.logs.len() >= self.max_logs {
