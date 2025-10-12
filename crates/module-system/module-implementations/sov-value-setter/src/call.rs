@@ -99,7 +99,10 @@ impl<S: Spec> ValueSetter<S> {
         state: &mut impl TxState<S>,
     ) -> Result<()> {
         self.set_value(new_value, None, context, state)?;
-        std::thread::sleep(std::time::Duration::from_millis(sleep_millis));
+        // Cap sleep to avoid blocking the executor for excessive time (DoS risk).
+        let max_ms: u64 = 100;
+        let bounded = std::cmp::min(sleep_millis, max_ms);
+        std::thread::sleep(std::time::Duration::from_millis(bounded));
         Ok(())
     }
 
