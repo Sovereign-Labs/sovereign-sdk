@@ -1,6 +1,6 @@
+use super::cursor::Cursor;
 use crate::handlers::ETH_RPC_ERROR;
 use crate::to_jsonrpsee_error_object;
-use crate::Cursor;
 use crate::EthereumAddress;
 use crate::EthereumAuthenticator;
 use crate::FromVmAddress;

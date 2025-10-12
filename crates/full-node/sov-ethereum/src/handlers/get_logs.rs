@@ -1,5 +1,3 @@
-use super::service::LogsService;
-use crate::Cursor;
 use crate::Ethereum;
 use crate::EthereumAddress;
 use crate::EthereumAuthenticator;
@@ -8,13 +6,18 @@ use crate::HasKernel;
 use crate::Sequencer;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::Log;
+pub use cursor::Cursor;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
+use service::LogsService;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::{FilterWithCursor, LogsWithMaybeCursor};
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+mod cursor;
+mod service;
 
 pub struct LogHandlers<S: Spec, Seq: Sequencer<Spec = S>> {
     _phantom: PhantomData<(S, Seq)>,
