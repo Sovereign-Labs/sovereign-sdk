@@ -18,7 +18,6 @@ use sov_evm::{Evm, MaybeSealedBlock, Receipt, SealedBlock};
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
-use sov_sequencer::SeqConfigExtension;
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::ops::RangeInclusive;
@@ -67,7 +66,7 @@ impl From<Error> for ErrorObjectOwned {
 pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     filter: Filter,
     maybe_cursor: Option<Cursor>,
-    limits: SeqConfigExtension,
+    max_logs: usize,
     state: ApiStateAccessor<S>,
     evm: Evm<S>,
     _phantom: PhantomData<(S, Seq)>,
@@ -83,13 +82,13 @@ where
     pub fn new(
         filter: Filter,
         maybe_cursor: Option<Cursor>,
-        limits: SeqConfigExtension,
+        max_logs: usize,
         state: ApiStateAccessor<S>,
     ) -> Self {
         Self {
             filter,
             maybe_cursor,
-            limits,
+            max_logs,
             state,
             evm: Evm::<S>::default(),
             _phantom: PhantomData,
@@ -122,10 +121,7 @@ where
         let result = self.scan_block_range(block_height..=block_height)?;
 
         if result.cursor.is_some() {
-            return Err(Error::TooManyLogsInBlock(
-                block_hash,
-                self.limits.max_log_limit,
-            ));
+            return Err(Error::TooManyLogsInBlock(block_hash, self.max_logs));
         }
 
         Ok(result)
@@ -203,7 +199,7 @@ where
                     continue;
                 }
 
-                if rpc_logs.len() >= self.limits.max_log_limit {
+                if rpc_logs.len() >= self.max_logs {
                     let cursor = Cursor {
                         block_height: block_number,
                         tx_index_absolute: tx_index,
