@@ -8,6 +8,7 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
+use derive_more::{Deref, DerefMut};
 use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
@@ -92,9 +93,11 @@ impl Block {
 }
 
 /// Block with seald header.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deref, DerefMut)]
 pub struct SealedBlock {
     /// Block header.
+    #[deref]
+    #[deref_mut]
     pub header: Sealed<Header>,
 
     /// Transactions in this block.
@@ -231,11 +234,13 @@ impl MaybeSealedBlock {
 
 /// TODO: Can we replace this with Reth type?
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut)]
 /// Receipt
 pub struct Receipt {
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "ReceiptBincodeCompat")]
+    #[deref]
+    #[deref_mut]
     pub receipt: reth_primitives::Receipt,
     /// tx hash
     pub transaction_hash: TxHash,

@@ -9,6 +9,7 @@ use crate::Sequencer;
 use alloy_consensus::BlockHeader;
 use alloy_consensus::Header;
 use alloy_consensus::Sealed;
+use alloy_consensus::TxReceipt;
 use alloy_eips::eip1898::ParseBlockNumberError;
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::BlockHash;
@@ -129,9 +130,16 @@ where
         from_block: Option<BlockNumberOrTag>,
         to_block: Option<BlockNumberOrTag>,
     ) -> Result<LogsWithMaybeCursor> {
-        let mut start = self.get_block_nr(from_block)?;
+        let start = self.get_block_nr(from_block)?;
         let end = self.get_block_nr(to_block)?;
-        let range = start..=end;
+        let maybe_cursor = self.scan_block_range(start..=end)?;
+        Ok(LogsWithMaybeCursor::new(
+            self.logs,
+            maybe_cursor.map(|c| c.pack()),
+        ))
+    }
+
+    fn scan_block_range(&mut self, mut range: RangeInclusive<u64>) -> Result<Option<Cursor>> {
         if let Some(cursor) = self.cursor {
             if !range.contains(&cursor.block_height) {
                 tracing::warn!(
@@ -144,52 +152,45 @@ where
                     range,
                 });
             }
-            start = cursor.block_height;
+            range = cursor.block_height..=*range.end();
         }
-        let maybe_cursor = self.scan_block_range(start..=end)?;
-        Ok(LogsWithMaybeCursor::new(
-            self.logs,
-            maybe_cursor.map(|c| c.pack()),
-        ))
-    }
-
-    fn scan_block_range(&mut self, block_range: RangeInclusive<u64>) -> Result<Option<Cursor>> {
-        for block_number in block_range {
-            if let Some(cursor) = self.scan_block(block_number)? {
+        for block_number in range {
+            let block = self.get_block(block_number)?;
+            if !self.filter.matches_bloom(block.header.logs_bloom()) {
+                continue;
+            }
+            if let Some(cursor) = self.scan_block(block)? {
                 return Ok(Some(cursor));
             }
         }
         Ok(None)
     }
 
-    fn scan_block(&mut self, block_number: u64) -> Result<Option<Cursor>> {
-        let block = self.get_block(block_number)?;
-
-        let header = &block.header;
-        if !self.filter.matches_bloom(header.logs_bloom()) {
-            return Ok(None);
-        }
-
-        let mut tx_range = block.transactions.clone();
+    fn scan_block(&mut self, block: SealedBlock) -> Result<Option<Cursor>> {
+        let mut tx_range_absolut = block.transactions.clone();
         if let Some(cursor) = self.cursor {
-            if cursor.block_height == block_number {
-                if !tx_range.contains(&cursor.tx_index_absolute) {
+            if cursor.block_height == block.number() {
+                if !tx_range_absolut.contains(&cursor.tx_index_absolute) {
                     tracing::warn!(
-                        cursor = cursor.block_height,
-                        ?tx_range,
+                        cursor = cursor.tx_index_absolute,
+                        ?tx_range_absolut,
                         "Invalid cursor tx index"
                     );
                     return Err(Error::InvalidCursorTxIdx {
                         cursor: cursor.tx_index_absolute,
-                        range: tx_range,
+                        range: tx_range_absolut,
                     });
                 }
-                tx_range.start = cursor.tx_index_absolute;
+                tx_range_absolut.start = cursor.tx_index_absolute;
             }
         }
 
-        for tx_index in tx_range {
-            if let Some(cursor) = self.scan_tx(block_number, tx_index, header)? {
+        for tx_idx_absolute in tx_range_absolut {
+            let receipt = self.get_receipt(tx_idx_absolute)?;
+            if !self.filter.matches_bloom(receipt.bloom()) {
+                continue;
+            }
+            if let Some(cursor) = self.scan_tx(tx_idx_absolute, receipt, &block.header)? {
                 return Ok(Some(cursor));
             }
         }
@@ -199,17 +200,18 @@ where
 
     fn scan_tx(
         &mut self,
-        block_number: BlockNumber,
-        tx_idx: u64,
+        tx_index_absolute: u64,
+        receipt: Receipt,
         header: &Sealed<Header>,
     ) -> Result<Option<Cursor>> {
-        let receipt = self.get_receipt(tx_idx)?;
         let logs = receipt.receipt.logs;
         let log_range = (0 as u32)..(logs.len() as u32);
         let logs_iter = logs.into_iter().enumerate();
         let mut skipped_logs = 0;
         if let Some(cursor) = self.cursor {
-            if cursor.block_height == block_number && cursor.tx_index_absolute == tx_idx {
+            if cursor.block_height == header.number()
+                && cursor.tx_index_absolute == tx_index_absolute
+            {
                 if !log_range.contains(&cursor.log_index_in_tx) {
                     tracing::warn!(
                         cursor = cursor.block_height,
@@ -228,8 +230,8 @@ where
         for (idx, log) in logs_iter.skip(skipped_logs as usize) {
             if self.logs.len() >= self.max_logs {
                 return Ok(Some(Cursor {
-                    block_height: block_number,
-                    tx_index_absolute: tx_idx,
+                    block_height: header.number(),
+                    tx_index_absolute,
                     log_index_in_tx: idx as u32,
                 }));
             }
