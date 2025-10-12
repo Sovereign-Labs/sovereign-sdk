@@ -85,7 +85,7 @@ impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
             max_concurrent_blobs: self.max_concurrent_blobs,
             sequencer_kind_config: seq_config,
             blob_processing_timeout_secs: self.blob_processing_timeout_secs,
-            extension: self.extension.clone(),
+            extension: self.extension,
         }
     }
 }

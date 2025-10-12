@@ -491,7 +491,7 @@ where
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
                 max_concurrent_blobs: self.config.max_concurrent_blobs,
                 blob_processing_timeout_secs: self.config.blob_processing_timeout_secs,
-                extension: self.config.extension.clone(),
+                extension: self.config.extension,
             },
 
             monitoring: MonitoringConfig {
