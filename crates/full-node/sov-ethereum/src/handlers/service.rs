@@ -7,13 +7,14 @@ use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
 use alloy_consensus::BlockHeader;
+use alloy_eips::eip1898::ParseBlockNumberError;
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::BlockNumber;
 use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{FilterBlockOption, Log};
 use jsonrpsee::types::ErrorObjectOwned;
-use sov_evm::{Evm, MaybeSealedBlock, PendingOrBlock, Receipt, SealedBlock};
+use sov_evm::{Evm, MaybeSealedBlock, Receipt, SealedBlock};
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
@@ -40,11 +41,21 @@ pub enum Error {
     #[error("Too many logs in block {0}: limit is {1}")]
     TooManyLogsInBlock(B256, usize),
     #[error("Invalid cursor: block {block} starts at tx #{first_tx_idx}, which is greater than cursor tx #{cursor_tx_idx}.")]
-    InvalidCursor {
+    InvalidCursorTxIdx {
         block: BlockNumber,
         first_tx_idx: u64,
         cursor_tx_idx: u64,
     },
+    #[error(
+        "Invalid cursor: Cursor block number {cursor} should be within {from_block} and {to_block}."
+    )]
+    InvalidCursorBlockNumber {
+        cursor: BlockNumber,
+        from_block: BlockNumber,
+        to_block: BlockNumber,
+    },
+    #[error(transparent)]
+    ParseBlockNumber(ParseBlockNumberError),
 }
 
 impl From<Error> for ErrorObjectOwned {
@@ -125,13 +136,25 @@ where
         from_block: Option<BlockNumberOrTag>,
         to_block: Option<BlockNumberOrTag>,
     ) -> Result<LogsWithMaybeCursor, Error> {
-        let start = match self.maybe_cursor {
-            Some(cursor) => cursor.block_height,
-            None => self.get_block_nr(from_block)?,
-        };
-
+        let mut start = self.get_block_nr(from_block)?;
         let end = self.get_block_nr(to_block)?;
-
+        let range = start..=end;
+        if let Some(cursor) = self.maybe_cursor {
+            if !range.contains(&cursor.block_height) {
+                tracing::warn!(
+                    cursor = cursor.block_height,
+                    from_block = start,
+                    to_block = end,
+                    "Invalid cursor block height"
+                );
+                return Err(Error::InvalidCursorBlockNumber {
+                    cursor: cursor.block_height,
+                    from_block: start,
+                    to_block: end,
+                });
+            }
+            start = cursor.block_height;
+        }
         self.scan_block_range(start..=end)
     }
 
@@ -234,14 +257,21 @@ where
         Ok(block)
     }
 
-    fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<u64, Error> {
-        let block_num = block_nr_or_tag.map(|b| b.to_string());
-        let number = self.evm.str_to_block_nr(block_num, &mut self.state);
-        match number {
-            PendingOrBlock::Pending => Err(Error::PendingBlock),
-            PendingOrBlock::Invalid(err) => Err(Error::InvalidBlock(err)),
-            PendingOrBlock::Number(number) => Ok(number),
-        }
+    fn get_block_nr(
+        &mut self,
+        block_nr_or_tag: Option<BlockNumberOrTag>,
+    ) -> Result<BlockNumber, Error> {
+        let block_number = block_nr_or_tag.unwrap_or_default();
+        let block_numbers = self.evm.block_numbers(&mut self.state);
+        let block_number = match block_number {
+            BlockNumberOrTag::Earliest => *block_numbers.start(),
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                *block_numbers.end()
+            }
+            BlockNumberOrTag::Number(nr) => nr,
+            BlockNumberOrTag::Pending => return Err(Error::PendingBlock),
+        };
+        Ok(block_number)
     }
 }
 
@@ -268,7 +298,7 @@ impl CursorIndices {
         };
 
         if block.transactions.start > cursor.tx_index_absolute {
-            return Err(Error::InvalidCursor {
+            return Err(Error::InvalidCursorTxIdx {
                 block: block.header.number,
                 first_tx_idx: block.transactions.start,
                 cursor_tx_idx: cursor.tx_index_absolute,

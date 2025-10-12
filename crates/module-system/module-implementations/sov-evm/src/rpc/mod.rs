@@ -596,27 +596,8 @@ where
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
         match block_number_str.as_str() {
-            "earliest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                PendingOrBlock::Number(*block_numbers.start())
-            }
-            "latest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                PendingOrBlock::Number(*block_numbers.end())
-            }
-
+            "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
+            "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
             "pending" => PendingOrBlock::Pending,
             number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
                 Ok(nr) => PendingOrBlock::Number(nr),
@@ -745,7 +726,7 @@ where
     }
 }
 
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::{Deref, DerefMut};
 
 enum MaybeArchivalState<'a, S: Spec> {
     Current(&'a mut ApiStateAccessor<S>),
