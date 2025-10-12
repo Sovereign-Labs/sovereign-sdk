@@ -7,8 +7,11 @@ use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
 use alloy_consensus::BlockHeader;
+use alloy_consensus::Header;
+use alloy_consensus::Sealed;
 use alloy_eips::eip1898::ParseBlockNumberError;
 use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::BlockHash;
 use alloy_primitives::BlockNumber;
 use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
@@ -39,23 +42,21 @@ pub enum Error {
     CursorNotSupportedForBlockHash,
     #[error("Too many logs in block {0}: limit is {1}")]
     TooManyLogsInBlock(B256, usize),
-    #[error("Invalid cursor: block {block} starts at tx #{first_tx_idx}, which is greater than cursor tx #{cursor_tx_idx}.")]
-    InvalidCursorTxIdx {
-        block: BlockNumber,
-        first_tx_idx: u64,
-        cursor_tx_idx: u64,
-    },
     #[error(
-        "Invalid cursor: Cursor block number {cursor} should be within {from_block} and {to_block}."
+        "Invalid cursor: Cursor block number {cursor} should be within [{}..{}].", range.start(), range.end()
     )]
     InvalidCursorBlockNumber {
         cursor: BlockNumber,
-        from_block: BlockNumber,
-        to_block: BlockNumber,
+        range: RangeInclusive<BlockNumber>,
     },
+    #[error("Invalid cursor: Cursor tx index {cursor} should be within [{}..{}).", range.start, range.end)]
+    InvalidCursorTxIdx { cursor: u64, range: Range<u64> },
+    #[error("Invalid cursor: Cursor log index {cursor} should be within [{}..{}).", range.start, range.end)]
+    InvalidCursorLogIdx { cursor: u32, range: Range<u32> },
     #[error(transparent)]
     ParseBlockNumber(ParseBlockNumberError),
 }
+type Result<T> = std::result::Result<T, Error>;
 
 impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> ErrorObjectOwned {
@@ -65,10 +66,11 @@ impl From<Error> for ErrorObjectOwned {
 
 pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     filter: Filter,
-    maybe_cursor: Option<Cursor>,
+    cursor: Option<Cursor>,
     max_logs: usize,
     state: ApiStateAccessor<S>,
     evm: Evm<S>,
+    logs: Vec<Log>,
     _phantom: PhantomData<(S, Seq)>,
 }
 
@@ -81,21 +83,22 @@ where
 {
     pub fn new(
         filter: Filter,
-        maybe_cursor: Option<Cursor>,
+        cursor: Option<Cursor>,
         max_logs: usize,
         state: ApiStateAccessor<S>,
     ) -> Self {
         Self {
             filter,
-            maybe_cursor,
+            cursor,
             max_logs,
             state,
             evm: Evm::<S>::default(),
+            logs: vec![],
             _phantom: PhantomData,
         }
     }
 
-    pub async fn logs_for_filter(self) -> Result<LogsWithMaybeCursor, Error> {
+    pub async fn logs_for_filter(self) -> Result<LogsWithMaybeCursor> {
         match self.filter.block_option {
             FilterBlockOption::AtBlockHash(block_hash) => self.by_hash(block_hash),
             FilterBlockOption::Range {
@@ -105,81 +108,61 @@ where
         }
     }
 
-    pub fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor, Error> {
-        if self.maybe_cursor.is_some() {
+    fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor> {
+        if self.cursor.is_some() {
             return Err(Error::CursorNotSupportedForBlockHash);
         }
 
-        let Some(block_height) = self
-            .evm
-            .get_block_height_by_hash(&block_hash, &mut self.state)
-        else {
-            tracing::warn!(block_hash = %block_hash, "Block with hash not found");
-            return Err(Error::BlockHashNotFound(block_hash));
-        };
+        let block_height = self.resolve_block_hash(block_hash)?;
+        let maybe_cursor = self.scan_block_range(block_height..=block_height)?;
 
-        let result = self.scan_block_range(block_height..=block_height)?;
-
-        if result.cursor.is_some() {
-            return Err(Error::TooManyLogsInBlock(block_hash, self.max_logs));
+        if let Some(_) = maybe_cursor {
+            tracing::warn!(block_hash = %block_hash, "Too many logs in block requested by hash");
+            Err(Error::TooManyLogsInBlock(block_hash, self.max_logs))
+        } else {
+            Ok(LogsWithMaybeCursor::new(self.logs, None))
         }
-
-        Ok(result)
     }
 
-    pub fn by_range(
+    fn by_range(
         mut self,
         from_block: Option<BlockNumberOrTag>,
         to_block: Option<BlockNumberOrTag>,
-    ) -> Result<LogsWithMaybeCursor, Error> {
+    ) -> Result<LogsWithMaybeCursor> {
         let mut start = self.get_block_nr(from_block)?;
         let end = self.get_block_nr(to_block)?;
         let range = start..=end;
-        if let Some(cursor) = self.maybe_cursor {
+        if let Some(cursor) = self.cursor {
             if !range.contains(&cursor.block_height) {
                 tracing::warn!(
                     cursor = cursor.block_height,
-                    from_block = start,
-                    to_block = end,
+                    ?range,
                     "Invalid cursor block height"
                 );
                 return Err(Error::InvalidCursorBlockNumber {
                     cursor: cursor.block_height,
-                    from_block: start,
-                    to_block: end,
+                    range,
                 });
             }
             start = cursor.block_height;
         }
-        self.scan_block_range(start..=end)
+        let maybe_cursor = self.scan_block_range(start..=end)?;
+        Ok(LogsWithMaybeCursor::new(
+            self.logs,
+            maybe_cursor.map(|c| c.pack()),
+        ))
     }
 
-    fn scan_block_range(
-        &mut self,
-        block_range: RangeInclusive<u64>,
-    ) -> Result<LogsWithMaybeCursor, Error> {
-        let mut rpc_logs = Vec::new();
-        let mut cursor_indices = self.maybe_cursor.map(CursorIndices::new);
-
-        for height in block_range {
-            let next_cursor = self.logs_for_block(&mut rpc_logs, height, cursor_indices)?;
-
-            cursor_indices = None;
-            if let Some(cursor) = next_cursor {
-                return Ok(LogsWithMaybeCursor::new(rpc_logs, Some(cursor.pack())));
+    fn scan_block_range(&mut self, block_range: RangeInclusive<u64>) -> Result<Option<Cursor>> {
+        for block_number in block_range {
+            if let Some(cursor) = self.scan_block(block_number)? {
+                return Ok(Some(cursor));
             }
         }
-        Ok(LogsWithMaybeCursor::new(rpc_logs, None))
+        Ok(None)
     }
 
-    /// Returns a cursor if the log limit was reached, otherwise None.
-    /// Panics if a pending block is encountered (should be validated before calling).
-    fn logs_for_block(
-        &mut self,
-        rpc_logs: &mut Vec<Log>,
-        block_number: u64,
-        indices_from_cursor: Option<CursorIndices>,
-    ) -> Result<Option<Cursor>, Error> {
+    fn scan_block(&mut self, block_number: u64) -> Result<Option<Cursor>> {
         let block = self.get_block(block_number)?;
 
         let header = &block.header;
@@ -187,49 +170,88 @@ where
             return Ok(None);
         }
 
-        let (tx_range, mut log_offset) =
-            CursorIndices::tx_range_and_log_index(indices_from_cursor, &block)?;
+        let mut tx_range = block.transactions.clone();
+        if let Some(cursor) = self.cursor {
+            if cursor.block_height == block_number {
+                if !tx_range.contains(&cursor.tx_index_absolute) {
+                    tracing::warn!(
+                        cursor = cursor.block_height,
+                        ?tx_range,
+                        "Invalid cursor tx index"
+                    );
+                    return Err(Error::InvalidCursorTxIdx {
+                        cursor: cursor.tx_index_absolute,
+                        range: tx_range,
+                    });
+                }
+                tx_range.start = cursor.tx_index_absolute;
+            }
+        }
 
         for tx_index in tx_range {
-            let receipt = self.get_receipt(tx_index)?;
-            let logs = receipt.receipt.logs;
-
-            for (log_idx, log) in logs.into_iter().enumerate() {
-                if log_idx < log_offset {
-                    continue;
-                }
-
-                if rpc_logs.len() >= self.max_logs {
-                    let cursor = Cursor {
-                        block_height: block_number,
-                        tx_index_absolute: tx_index,
-                        log_index_in_tx: log_idx as u32,
-                    };
-
-                    return Ok(Some(cursor));
-                }
-
-                if self.filter.matches(&log) {
-                    let rpc_log = Log {
-                        inner: log,
-                        block_hash: Some(header.hash()),
-                        block_number: Some(receipt.block_number),
-                        block_timestamp: Some(header.timestamp),
-                        transaction_hash: Some(receipt.transaction_hash),
-                        transaction_index: Some(receipt.transaction_index),
-                        log_index: Some(receipt.log_index_start + log_idx as u64),
-                        removed: false,
-                    };
-                    rpc_logs.push(rpc_log);
-                }
+            if let Some(cursor) = self.scan_tx(block_number, tx_index, header)? {
+                return Ok(Some(cursor));
             }
-            log_offset = 0;
         }
 
         Ok(None)
     }
 
-    fn get_receipt(&mut self, tx_idx: u64) -> Result<Receipt, Error> {
+    fn scan_tx(
+        &mut self,
+        block_number: BlockNumber,
+        tx_idx: u64,
+        header: &Sealed<Header>,
+    ) -> Result<Option<Cursor>> {
+        let receipt = self.get_receipt(tx_idx)?;
+        let logs = receipt.receipt.logs;
+        let log_range = (0 as u32)..(logs.len() as u32);
+        let logs_iter = logs.into_iter().enumerate();
+        let mut skipped_logs = 0;
+        if let Some(cursor) = self.cursor {
+            if cursor.block_height == block_number && cursor.tx_index_absolute == tx_idx {
+                if !log_range.contains(&cursor.log_index_in_tx) {
+                    tracing::warn!(
+                        cursor = cursor.block_height,
+                        ?log_range,
+                        "Invalid cursor log index"
+                    );
+                    return Err(Error::InvalidCursorLogIdx {
+                        cursor: cursor.log_index_in_tx,
+                        range: log_range,
+                    });
+                }
+                skipped_logs = cursor.log_index_in_tx;
+            }
+        }
+        // As logs iter is pre-enumerated - we keep correct indices
+        for (idx, log) in logs_iter.skip(skipped_logs as usize) {
+            if self.logs.len() >= self.max_logs {
+                return Ok(Some(Cursor {
+                    block_height: block_number,
+                    tx_index_absolute: tx_idx,
+                    log_index_in_tx: idx as u32,
+                }));
+            }
+            if !self.filter.matches(&log) {
+                continue;
+            }
+            let rpc_log = Log {
+                inner: log,
+                block_hash: Some(header.hash()),
+                block_number: Some(receipt.block_number),
+                block_timestamp: Some(header.timestamp),
+                transaction_hash: Some(receipt.transaction_hash),
+                transaction_index: Some(receipt.transaction_index),
+                log_index: Some(receipt.log_index_start + idx as u64),
+                removed: false,
+            };
+            self.logs.push(rpc_log);
+        }
+        Ok(None)
+    }
+
+    fn get_receipt(&mut self, tx_idx: u64) -> Result<Receipt> {
         self.evm.receipt(tx_idx, &mut self.state).ok_or_else(|| {
             tracing::error!(
                 tx_idx,
@@ -239,7 +261,7 @@ where
         })
     }
 
-    fn get_block(&mut self, number: BlockNumber) -> Result<SealedBlock, Error> {
+    fn get_block(&mut self, number: BlockNumber) -> Result<SealedBlock> {
         let Some(block) = self.evm.get_maybe_sealed_block(number, &mut self.state) else {
             tracing::error!(
                 number,
@@ -253,10 +275,18 @@ where
         Ok(block)
     }
 
-    fn get_block_nr(
-        &mut self,
-        block_nr_or_tag: Option<BlockNumberOrTag>,
-    ) -> Result<BlockNumber, Error> {
+    fn resolve_block_hash(&mut self, block_hash: BlockHash) -> Result<u64> {
+        let Some(block_height) = self
+            .evm
+            .get_block_height_by_hash(&block_hash, &mut self.state)
+        else {
+            tracing::warn!(block_hash = %block_hash, "Block with hash not found");
+            return Err(Error::BlockHashNotFound(block_hash));
+        };
+        Ok(block_height)
+    }
+
+    fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<BlockNumber> {
         let block_number = block_nr_or_tag.unwrap_or_default();
         let block_numbers = self.evm.block_numbers(&mut self.state);
         let block_number = match block_number {
@@ -268,40 +298,5 @@ where
             BlockNumberOrTag::Pending => return Err(Error::PendingBlock),
         };
         Ok(block_number)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct CursorIndices {
-    tx_index_absolute: u64,
-    log_index_in_tx: u32,
-}
-
-impl CursorIndices {
-    fn new(cursor: Cursor) -> Self {
-        Self {
-            tx_index_absolute: cursor.tx_index_absolute,
-            log_index_in_tx: cursor.log_index_in_tx,
-        }
-    }
-
-    fn tx_range_and_log_index(
-        maybe_cursor_data: Option<Self>,
-        block: &SealedBlock,
-    ) -> Result<(Range<u64>, usize), Error> {
-        let Some(cursor) = maybe_cursor_data else {
-            return Ok((block.transactions.clone(), 0));
-        };
-
-        if block.transactions.start > cursor.tx_index_absolute {
-            return Err(Error::InvalidCursorTxIdx {
-                block: block.header.number,
-                first_tx_idx: block.transactions.start,
-                cursor_tx_idx: cursor.tx_index_absolute,
-            });
-        }
-
-        let range = cursor.tx_index_absolute..block.transactions.end;
-        Ok((range, (cursor.log_index_in_tx as usize)))
     }
 }
