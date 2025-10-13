@@ -91,7 +91,7 @@ harness = false
 required-features = ["test-utils"]
 
 [[bench]]
-name = "commit_flag"
+name = "commit_flag_bench"
 path = "benches/commit_flag_bench.rs"
 harness = false
 required-features = ["test-utils"]

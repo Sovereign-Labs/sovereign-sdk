@@ -6,9 +6,6 @@ use std::path::Path;
 use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 
-#[cfg(target_os = "linux")]
-use std::alloc::{alloc, dealloc, Layout};
-
 // https://github.com/bminor/glibc/blob/3a0a8eae50679d3170df7af500dde2c4c3d11c78/sysdeps/unix/sysv/linux/bits/fcntl-linux.h#L97
 #[cfg(target_os = "linux")]
 const O_DSYNC: i32 = 0o10000;
@@ -60,66 +57,32 @@ pub enum CommitStatus {
 /// or syscalls will fail with `EINVAL`:
 ///
 /// 1. **Buffer address** must be aligned to sector size (512 bytes)
-/// 2. **File offset** must be aligned to sector size
+/// 2. **File offset** must be aligned to the sector siz.
 /// 3. **I/O size** must be a multiple of sector size
 ///
 /// Regular Rust allocations (`Vec<u8>`, `Box<[u8]>`, etc.) are typically aligned
-/// to 8 or 16 bytes, which is insufficient for O_DIRECT. This struct uses
-/// [`std::alloc::alloc`] with a 512-byte aligned [`Layout`] to ensure proper alignment.
+/// to 8 or 16 bytes, which is insufficient for O_DIRECT.
 ///
-/// ## Why Not Use Alternatives?
+/// ## Implementation
 ///
-/// - **Drop O_DIRECT**: Would lose performance benefits (more syscalls, page cache overhead)
-/// - **`#[repr(align(512))]`**: Requires nightly Rust (unstable feature)
-/// - **External crates**: Would add dependencies and use the same `unsafe` approach internally
-///
-/// ## Safety
-///
-/// This implementation properly encapsulates `unsafe` code:
-/// - Memory is allocated with correct alignment
-/// - Memory is zero-initialized
-/// - Memory is deallocated in [`Drop`]
-/// - All access is through safe slice APIs
+/// This struct uses `#[repr(align(512))]` (stable since Rust 1.25) to ensure
+/// the buffer is properly aligned.
 #[cfg(target_os = "linux")]
-#[allow(unsafe_code)]
-struct AlignedBuffer {
-    ptr: *mut u8,
-    layout: Layout,
-}
+#[repr(align(512))]
+struct AlignedBuffer([u8; SECTOR_SIZE]);
 
 #[cfg(target_os = "linux")]
-#[allow(unsafe_code)]
 impl AlignedBuffer {
-    fn new() -> anyhow::Result<Self> {
-        let layout = Layout::from_size_align(SECTOR_SIZE, SECTOR_SIZE)
-            .context("Failed to create layout for aligned buffer")?;
-        let ptr = unsafe { alloc(layout) };
-        if ptr.is_null() {
-            anyhow::bail!("Failed to allocate aligned buffer");
-        }
-        // Zero-initialize the buffer
-        unsafe {
-            std::ptr::write_bytes(ptr, 0, SECTOR_SIZE);
-        }
-        Ok(AlignedBuffer { ptr, layout })
+    fn new() -> Self {
+        AlignedBuffer([0u8; SECTOR_SIZE])
     }
 
     fn as_slice_mut(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, SECTOR_SIZE) }
+        &mut self.0
     }
 
     fn as_slice(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.ptr, SECTOR_SIZE) }
-    }
-}
-
-#[cfg(target_os = "linux")]
-#[allow(unsafe_code)]
-impl Drop for AlignedBuffer {
-    fn drop(&mut self) {
-        unsafe {
-            dealloc(self.ptr, self.layout);
-        }
+        &self.0
     }
 }
 
@@ -193,7 +156,7 @@ impl CommitFlag {
                     .context("Failed to pre-allocate commit flag file")?;
 
                 // Initialize with Completed status using aligned buffer
-                let mut buffer = AlignedBuffer::new()?;
+                let mut buffer = AlignedBuffer::new();
                 let status = CommitStatus::Completed;
                 let serialized = borsh::to_vec(&status)?;
 
@@ -236,7 +199,7 @@ impl CommitFlag {
         #[cfg(target_os = "linux")]
         {
             // On Linux with O_DIRECT, read using an aligned buffer
-            let mut buffer = AlignedBuffer::new()?;
+            let mut buffer = AlignedBuffer::new();
 
             match self.file.read_at(buffer.as_slice_mut(), 0) {
                 Ok(bytes_read) if bytes_read > 0 => {
@@ -324,7 +287,7 @@ impl CommitFlag {
             }
 
             // Create aligned buffer and copy serialized data
-            let mut buffer = AlignedBuffer::new()?;
+            let mut buffer = AlignedBuffer::new();
             buffer.as_slice_mut()[..serialized.len()].copy_from_slice(&serialized);
 
             // Single pwrite syscall at offset 0 - hot path!
