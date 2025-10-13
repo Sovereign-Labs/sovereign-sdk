@@ -48,7 +48,7 @@ rand_chacha = { workspace = true, optional = true }
 
 # For HTTP server and client
 axum = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json"], optional = true}
+reqwest = { workspace = true, features = ["json"], optional = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
@@ -68,7 +68,7 @@ tokio = { workspace = true, features = [
 rand = { workspace = true }
 testcontainers = { workspace = true, features = ["blocking"] }
 testcontainers-modules = { workspace = true, features = ["postgres"] }
-axum-test = "15.0"
+
 
 [features]
 default = []
