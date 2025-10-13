@@ -39,8 +39,6 @@ pub enum Error {
     BlockPruned(BlockNumber),
     #[error("Block with hash {0} not found")]
     BlockHashNotFound(B256),
-    #[error("Cursor not supported when filtering by block hash")]
-    CursorNotSupportedForBlockHash,
     #[error("Too many logs in block {0}: limit is {1}")]
     TooManyLogsInBlock(B256, usize),
     #[error(
@@ -110,19 +108,12 @@ where
     }
 
     fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor> {
-        if self.cursor.is_some() {
-            return Err(Error::CursorNotSupportedForBlockHash);
-        }
-
         let block_height = self.resolve_block_hash(block_hash)?;
         let maybe_cursor = self.scan_block_range(block_height..=block_height)?;
-
-        if maybe_cursor.is_some() {
-            tracing::warn!(block_hash = %block_hash, "Too many logs in block requested by hash");
-            Err(Error::TooManyLogsInBlock(block_hash, self.max_logs))
-        } else {
-            Ok(LogsWithMaybeCursor::new(self.logs, None))
-        }
+        Ok(LogsWithMaybeCursor::new(
+            self.logs,
+            maybe_cursor.map(|c| c.pack()),
+        ))
     }
 
     fn by_range(
