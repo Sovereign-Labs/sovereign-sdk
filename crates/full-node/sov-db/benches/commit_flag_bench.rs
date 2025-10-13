@@ -6,7 +6,7 @@ use sov_db::commit_flag::{CommitFlag, CommitStatus};
 /// Benchmark write_status() with Completed status
 fn bench_write_completed(c: &mut Criterion) {
     let tempdir = tempfile::tempdir().unwrap();
-    let flag = CommitFlag::new(tempdir.path());
+    let flag = CommitFlag::new(tempdir.path()).unwrap();
 
     c.bench_function("commit_flag_write_completed", |b| {
         b.iter(|| {
@@ -19,7 +19,7 @@ fn bench_write_completed(c: &mut Criterion) {
 /// Benchmark write_status() with InProgress status
 fn bench_write_in_progress(c: &mut Criterion) {
     let tempdir = tempfile::tempdir().unwrap();
-    let flag = CommitFlag::new(tempdir.path());
+    let flag = CommitFlag::new(tempdir.path()).unwrap();
     let root_hash = [0xAB; 32];
 
     c.bench_function("commit_flag_write_in_progress", |b| {
@@ -33,7 +33,7 @@ fn bench_write_in_progress(c: &mut Criterion) {
 /// Benchmark read_status()
 fn bench_read_status(c: &mut Criterion) {
     let tempdir = tempfile::tempdir().unwrap();
-    let flag = CommitFlag::new(tempdir.path());
+    let flag = CommitFlag::new(tempdir.path()).unwrap();
 
     // Write initial status
     flag.write_status(CommitStatus::Completed).unwrap();
@@ -49,7 +49,7 @@ fn bench_read_status(c: &mut Criterion) {
 /// Benchmark full write-then-read cycle (simulates hot path)
 fn bench_write_read_cycle(c: &mut Criterion) {
     let tempdir = tempfile::tempdir().unwrap();
-    let flag = CommitFlag::new(tempdir.path());
+    let flag = CommitFlag::new(tempdir.path()).unwrap();
     let root_hash = [0xCD; 32];
 
     c.bench_function("commit_flag_write_read_cycle", |b| {
@@ -68,7 +68,7 @@ fn bench_write_read_cycle(c: &mut Criterion) {
 /// Benchmark alternating writes (simulates realistic usage pattern)
 fn bench_alternating_writes(c: &mut Criterion) {
     let tempdir = tempfile::tempdir().unwrap();
-    let flag = CommitFlag::new(tempdir.path());
+    let flag = CommitFlag::new(tempdir.path()).unwrap();
     let root_hash = [0xEF; 32];
 
     c.bench_function("commit_flag_alternating_writes", |b| {

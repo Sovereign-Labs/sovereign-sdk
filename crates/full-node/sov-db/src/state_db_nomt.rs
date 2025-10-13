@@ -28,7 +28,7 @@ pub struct NomtStateDb<H> {
 impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtStateDb<H> {
     /// Initialize a new [` NomtStateDb `] in the given path.
     pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
-        let commit_flag = CommitFlag::new(&config.path);
+        let commit_flag = CommitFlag::new(&config.path)?;
 
         tracing::debug!(options = ?config, "Opening NOMT");
 

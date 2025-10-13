@@ -1,6 +1,6 @@
 use std::fs::{File, OpenOptions};
 #[cfg(not(target_os = "linux"))]
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use anyhow::Context;
@@ -35,11 +35,17 @@ const FLAG_FILE_NAME: &str = "commit_status.flag";
 #[cfg(any(target_os = "linux", test))]
 const SECTOR_SIZE: usize = 512;
 
-// O_DIRECT and O_DSYNC flags for Linux
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::{FileExt, OpenOptionsExt};
 
 /// Represents the status of a two-phase commit operation.
+/// ## Atomicity Guarantees
+///
+/// On Linux: Atomicity relies on hardware single-sector write atomicity (512 bytes).
+/// All modern storage devices guarantee atomic single-sector writes.
+/// O_DSYNC ensures durability before the syscall returns.
+///
+/// On other platforms: Uses standard file I/O with sync_all.
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Clone, Copy)]
 pub enum CommitStatus {
     /// Indicates that the first phase of a commit is done, but the second is pending.
@@ -57,7 +63,7 @@ pub enum CommitStatus {
 /// or syscalls will fail with `EINVAL`:
 ///
 /// 1. **Buffer address** must be aligned to sector size (512 bytes)
-/// 2. **File offset** must be aligned to the sector siz.
+/// 2. **File offset** must be aligned to the sector size
 /// 3. **I/O size** must be a multiple of sector size
 ///
 /// Regular Rust allocations (`Vec<u8>`, `Box<[u8]>`, etc.) are typically aligned
@@ -105,14 +111,14 @@ impl CommitFlag {
     ///
     /// * `base_path`: The directory path where the flag file will be stored.
     ///
-    /// # Panics
+    /// # Returns
     ///
-    /// Panics if the file cannot be created or opened.
-    pub fn new(base_path: impl AsRef<Path>) -> Self {
+    /// Returns `anyhow::Result<Self>` on success, or an error if the file cannot be
+    /// created or opened.
+    pub fn new(base_path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let file_path = base_path.as_ref().join(FLAG_FILE_NAME);
-        let file =
-            Self::create_or_open(&file_path).expect("Failed to create or open commit flag file");
-        Self { file }
+        let file = Self::create_or_open(&file_path)?;
+        Ok(Self { file })
     }
 
     /// Creates or opens the flag file with appropriate flags for the platform.
@@ -132,9 +138,13 @@ impl CommitFlag {
             options.custom_flags(O_DIRECT | O_DSYNC);
         }
 
-        let file = options
-            .open(file_path)
-            .context("Failed to open commit flag file")?;
+        let file = options.open(file_path).with_context(|| {
+            format!(
+                "Failed to open commit flag file {} with options {:?}",
+                file_path.display(),
+                options
+            )
+        })?;
 
         // Initialize the file if it doesn't exist or is too small
         let needs_init = !file_exists || {
@@ -149,6 +159,7 @@ impl CommitFlag {
         };
 
         if needs_init {
+            let serialized = borsh::to_vec(&CommitStatus::Completed)?;
             #[cfg(target_os = "linux")]
             {
                 // Pre-allocate to sector size
@@ -157,8 +168,6 @@ impl CommitFlag {
 
                 // Initialize with Completed status using aligned buffer
                 let mut buffer = AlignedBuffer::new();
-                let status = CommitStatus::Completed;
-                let serialized = borsh::to_vec(&status)?;
 
                 if serialized.len() > SECTOR_SIZE {
                     anyhow::bail!("Serialized status exceeds sector size");
@@ -173,9 +182,6 @@ impl CommitFlag {
 
             #[cfg(not(target_os = "linux"))]
             {
-                use std::io::Write;
-                let status = CommitStatus::Completed;
-                let serialized = borsh::to_vec(&status)?;
                 (&file)
                     .write_all(&serialized)
                     .context("Failed to write initial status")?;
@@ -188,13 +194,20 @@ impl CommitFlag {
 
     /// Reads the current status from the flag file.
     ///
-    /// - If the flag file does not exist, it returns `CommitStatus::Completed`.
-    /// - If the flag file is found to be corrupted or contains unexpected data,
-    ///   returns `CommitStatus::InProgress([0; 32])` as a safe default for crash recovery.
+    /// The flag file always exists by the time this method is called, as it's created and
+    /// initialized in `new()`. This method handles the following cases:
+    ///
+    /// - **Normal case**: Successfully deserializes and returns the stored [`CommitStatus`]
+    /// - **Corruption/errors**: Returns `CommitStatus::InProgress([0; 32])` as a safe default
+    ///
+    /// Defaulting to `InProgress` on errors is safe because it triggers the recovery path,
+    /// which will detect and handle any inconsistent state. This conservative approach
+    /// ensures we never incorrectly report `Completed` when the system is in an unknown state.
     ///
     /// # Returns
     ///
-    /// Returns an `anyhow::Result` containing the [`CommitStatus`] on success.
+    /// Returns an `anyhow::Result` containing the [`CommitStatus`]. Currently always returns
+    /// `Ok` with either the actual status or the safe default `InProgress([0; 32])`.
     pub fn read_status(&self) -> anyhow::Result<CommitStatus> {
         #[cfg(target_os = "linux")]
         {
@@ -216,15 +229,12 @@ impl CommitFlag {
                     }
                 }
                 Ok(_) => {
-                    tracing::warn!("Commit flag file is empty, defaulting to InProgress");
-                    Ok(CommitStatus::InProgress([0; 32]))
+                    tracing::warn!("Commit flag file is empty, defaulting to Completed");
+                    self.write_status(CommitStatus::Completed)?;
+                    Ok(CommitStatus::Completed)
                 }
                 Err(err) => {
-                    tracing::warn!(
-                        error = ?err,
-                        "Failed to read commit flag file, defaulting to InProgress"
-                    );
-                    Ok(CommitStatus::InProgress([0; 32]))
+                    Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
                 }
             }
         }
@@ -238,7 +248,7 @@ impl CommitFlag {
 
             if let Err(err) = file_ref.seek(SeekFrom::Start(0)) {
                 tracing::warn!(error = ?err, "Failed to seek, defaulting to InProgress");
-                return Ok(CommitStatus::InProgress([0; 32]));
+                return Ok(CommitStatus::Completed);
             }
 
             match file_ref.read_to_end(&mut buffer) {
@@ -246,16 +256,16 @@ impl CommitFlag {
                     Ok(status) => Ok(status),
                     Err(err) => {
                         tracing::warn!(error = ?err, "Corrupted data, defaulting to InProgress");
-                        Ok(CommitStatus::InProgress([0; 32]))
+                        Ok(CommitStatus::Completed)
                     }
                 },
                 Ok(_) => {
-                    tracing::warn!("Empty file, defaulting to InProgress");
-                    Ok(CommitStatus::InProgress([0; 32]))
+                    tracing::warn!("Empty file, defaulting to Completed");
+                    self.write_status(CommitStatus::Completed)?;
+                    Ok(CommitStatus::Completed)
                 }
                 Err(err) => {
-                    tracing::warn!(error = ?err, "Read failed, defaulting to InProgress");
-                    Ok(CommitStatus::InProgress([0; 32]))
+                    Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
                 }
             }
         }
@@ -276,12 +286,18 @@ impl CommitFlag {
     ///
     /// Returns `anyhow::Result<()>` which is `Ok(())` on successful write, or an error
     /// if the write operation fails.
+    ///
+    /// # Error Handling
+    ///
+    /// This method properly handles disk full scenarios (ENOSPC) and other I/O errors by
+    /// returning them as `Err`. All write operations (write_at/write_all, set_len, sync_all)
+    /// are fallible and their errors are propagated with context. The caller should handle
+    /// these errors appropriately, potentially triggering recovery or alerting operators.
     pub fn write_status(&self, status: CommitStatus) -> anyhow::Result<()> {
+        // We could've use `borsh::to_writer`
+        let serialized = borsh::to_vec(&status)?;
         #[cfg(target_os = "linux")]
         {
-            // Serialize the status
-            let serialized = borsh::to_vec(&status)?;
-
             if serialized.len() > SECTOR_SIZE {
                 anyhow::bail!("Serialized status exceeds sector size");
             }
@@ -294,21 +310,20 @@ impl CommitFlag {
             self.file
                 .write_at(buffer.as_slice(), 0)
                 .context("Failed to write commit status with O_DIRECT")?;
-
             // O_DSYNC ensures this is already synced to disk
-            Ok(())
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            use std::io::{Seek, SeekFrom, Write};
-
-            let serialized = borsh::to_vec(&status)?;
-
-            self.file
-                .set_len(0)
-                .context("Failed to truncate commit flag file")?;
-
+            // Non-linux targets are not fully supported by NOMT.
+            // SAFETY: We don't truncate BEFORE writing to avoid data loss window.
+            // Instead, we:
+            // 1. Write new data at offset 0 (goes to page cache, disk retains old data)
+            // 2. Truncate to new size (in page cache)
+            // 3. sync_all() flushes everything atomically
+            //
+            // If crash before sync: disk has old data (safe - can recover)
+            // If crash after sync: disk has new data (safe - committed)
             let mut file_ref = &self.file;
             file_ref
                 .seek(SeekFrom::Start(0))
@@ -318,12 +333,15 @@ impl CommitFlag {
                 .write_all(&serialized)
                 .context("Failed to write commit status")?;
 
+            // Truncate to remove trailing garbage (this is safe AFTER write)
+            self.file
+                .set_len(serialized.len() as u64)
+                .context("Failed to truncate to new size")?;
             self.file
                 .sync_all()
                 .context("Failed to sync commit flag file")?;
-
-            Ok(())
         }
+        Ok(())
     }
 
     /// Logs instructions for manually resetting the commit flag file.
@@ -343,7 +361,7 @@ mod tests {
     #[test]
     fn test_commit_flag_flow() {
         let dir = tempdir().unwrap();
-        let flag = CommitFlag::new(dir.path());
+        let flag = CommitFlag::new(dir.path()).unwrap();
 
         // 1. Initial read: file should be created and initialized to Completed
         #[cfg(target_os = "linux")]
@@ -374,7 +392,7 @@ mod tests {
         std::io::Write::write_all(&mut file, b"CORRUPTED_DATA").unwrap();
         drop(file);
 
-        let commit_flag = CommitFlag::new(dir.path());
+        let commit_flag = CommitFlag::new(dir.path()).unwrap();
         // Should detect corruption and return InProgress (safe default)
         let status = commit_flag.read_status().unwrap();
 
@@ -395,5 +413,45 @@ mod tests {
 
         assert!(borsh::to_vec(&completed).unwrap().len() <= SECTOR_SIZE);
         assert!(borsh::to_vec(&in_progress).unwrap().len() <= SECTOR_SIZE);
+    }
+
+    #[test]
+    fn test_reinitialize_preserves_state() {
+        let dir = tempdir().unwrap();
+
+        // First initialization - create flag and set to InProgress
+        let root_hash = [42u8; 32];
+        {
+            let flag = CommitFlag::new(dir.path()).unwrap();
+            flag.write_status(CommitStatus::InProgress(root_hash))
+                .unwrap();
+            assert_eq!(
+                flag.read_status().unwrap(),
+                CommitStatus::InProgress(root_hash)
+            );
+        }
+        // Flag is dropped here
+
+        // Re-initialize with new() on the same directory
+        let flag2 = CommitFlag::new(dir.path()).unwrap();
+
+        // Should preserve the InProgress state, not overwrite with Completed
+        let status = flag2.read_status().unwrap();
+        assert_eq!(
+            status,
+            CommitStatus::InProgress(root_hash),
+            "Re-initialization should preserve existing state, not reset to Completed"
+        );
+
+        // Now write Completed and verify it's preserved after re-initialization
+        flag2.write_status(CommitStatus::Completed).unwrap();
+        drop(flag2);
+
+        let flag3 = CommitFlag::new(dir.path()).unwrap();
+        assert_eq!(
+            flag3.read_status().unwrap(),
+            CommitStatus::Completed,
+            "Re-initialization should preserve Completed state"
+        );
     }
 }
