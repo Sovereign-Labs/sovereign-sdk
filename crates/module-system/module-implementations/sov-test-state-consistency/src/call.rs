@@ -90,12 +90,7 @@ impl<S: Spec> StateConsistency<S> {
     ) -> Result<()> {
         self.accessory_value.set(&new, state)?;
         // Emit event
-        self.emit_event(
-            state,
-            Event::AccessoryValueUpdated {
-                new_value: new,
-            },
-        );
+        self.emit_event(state, Event::AccessoryValueUpdated { new_value: new });
 
         Ok(())
     }
