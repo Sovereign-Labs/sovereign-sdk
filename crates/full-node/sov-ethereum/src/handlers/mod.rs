@@ -140,7 +140,6 @@ pub(crate) mod signer {
     use alloy_eips::Encodable2718;
     use alloy_primitives::Address;
     use alloy_rpc_types::TransactionRequest;
-    use sov_evm::eth_api_into_rpc_error;
     use sov_modules_api::macros::config_value;
     use sov_rpc_eth_types::EthApiError;
 
@@ -212,7 +211,7 @@ pub(crate) mod signer {
 
             let transaction = transaction_request
                 .build_typed_tx()
-                .map_err(|_| eth_api_into_rpc_error(EthApiError::TransactionConversionError))?;
+                .map_err(|_| EthApiError::TransactionConversionError)?;
 
             // sign transaction
             let signed_tx = ethereum
