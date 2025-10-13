@@ -43,12 +43,6 @@ pub(crate) struct ExtractionProofResponse {
 }
 
 #[derive(Serialize, Deserialize)]
-pub(crate) struct ExtractionProofRequest {
-    pub(crate) block: MockBlock,
-    pub(crate) blobs: RelevantBlobs<<MockDaSpec as DaSpec>::BlobTransaction>,
-}
-
-#[derive(Serialize, Deserialize)]
 pub(crate) struct ProofsResponse {
     pub(crate) proofs: Vec<String>, // hex-encoded proofs
 }
