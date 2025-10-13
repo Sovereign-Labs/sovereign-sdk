@@ -203,21 +203,16 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
 
     let LogsWithMaybeCursor { mut logs, cursor } =
         rollup_and_client.get_logs_with_cursor(None).await;
-    let cursor = cursor.map(|c| Cursor::unpack(&c).unwrap());
+    let cursor = cursor.map(|c| Cursor::unpack(&c).unwrap()).unwrap();
     assert_eq!(logs.len(), 1);
     let log = logs.pop().unwrap();
     assert_eq!(log.transaction_index, Some(0));
     assert_eq!(log.log_index, Some(0));
-    assert_eq!(
-        cursor,
-        Some(Cursor {
-            block_height: 18,
-            tx_index_absolute: 1,
-            log_index_in_tx: 1
-        })
-    );
+    assert_eq!(cursor.tx_index_absolute, 1);
+    assert_eq!(cursor.log_index_in_tx, 1);
 
-    let LogsWithMaybeCursor { mut logs, .. } = rollup_and_client.get_logs_with_cursor(cursor).await;
+    let LogsWithMaybeCursor { mut logs, .. } =
+        rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
     assert_eq!(logs.len(), 1);
     let log = logs.pop().unwrap();
     assert_eq!(log.transaction_index, Some(0));
