@@ -24,7 +24,7 @@ async fn test_get_head_block_header() {
     let addr = start_server(da_service.clone(), "127.0.0.1", 0)
         .await
         .unwrap();
-    let client = StorableMockDaClient::new(format!("http://{}", addr));
+    let client = StorableMockDaClient::new(format!("http://{addr}"));
 
     da_service.produce_block_now().await.unwrap();
     let header = client.get_head_block_header().await.unwrap();
@@ -42,7 +42,7 @@ async fn test_send_transaction() {
         .await
         .unwrap();
 
-    let client = StorableMockDaClient::new(format!("http://{}", addr));
+    let client = StorableMockDaClient::new(format!("http://{addr}"));
 
     let test_blob = b"test blob data";
     let receiver = client.send_transaction(test_blob).await;
