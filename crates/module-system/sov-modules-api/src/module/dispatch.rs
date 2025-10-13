@@ -88,4 +88,33 @@ pub trait DispatchCall: Send + Sync {
         &self,
         discriminant: <Self::Decodable as NestedEnumUtils>::Discriminants,
     ) -> &dyn ModuleInfo<Spec = Self::Spec>;
+
+    /// Validates that RuntimeCall enum discriminants match module discriminants from constants.toml
+    /// Panics if there's a mismatch as this is not recoverable
+    ///
+    /// This check is currently useful when using the `UnmanagedRuntimeCall` type to add an extra
+    /// check to ensure call message discriminants match. Note that this is still not fool proof,
+    /// if the call messages RuntimeDiscriminant impl uses a completely different value
+    /// then serialization can still fail when using `UnmanagedRuntimeCall`.
+    ///
+    /// The goal is to eventually do this automatically so there is no room for developer mistakes
+    /// but it is currently tricky to derive RuntimeDiscriminant for call messages automatically.
+    fn validate_discriminants(&self) {
+        use strum::VariantArray;
+        let runtime_variants =
+            <<Self::Decodable as NestedEnumUtils>::Discriminants as VariantArray>::VARIANTS;
+
+        for (enum_index, variant) in runtime_variants.iter().enumerate() {
+            let variant_discriminant = self.module_info(*variant).discriminant();
+
+            if enum_index as u8 != variant_discriminant {
+                panic!(
+                    "Discriminant mismatch for variant '{}': RuntimeCall enum position {} != module discriminant {}",
+                    variant.as_ref(),
+                    enum_index,
+                    variant_discriminant
+                );
+            }
+        }
+    }
 }

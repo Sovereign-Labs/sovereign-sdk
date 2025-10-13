@@ -2,7 +2,8 @@ use anyhow::{bail, Context as _, Result};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
-    Context, EventEmitter, SafeString, SafeVec, Spec, StateAccessor, StateReader, TxState,
+    Context, EventEmitter, ModuleInfo, RuntimeDiscriminant, SafeString, SafeVec, Spec,
+    StateAccessor, StateReader, TxState,
 };
 use sov_state::User;
 use strum::{EnumDiscriminants, EnumIs, EnumIter, VariantArray};
@@ -566,5 +567,11 @@ impl<S: Spec> Bank<S> {
             .tokens
             .get(token_id, state)?
             .map(|token| token.total_supply))
+    }
+}
+
+impl<S: Spec> RuntimeDiscriminant for CallMessage<S> {
+    fn runtime_discriminant() -> u8 {
+        crate::Bank::<S>::default().discriminant()
     }
 }

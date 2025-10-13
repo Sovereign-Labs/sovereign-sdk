@@ -537,6 +537,15 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         }
     }
 
+    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
+    pub fn sign(
+        self,
+        private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+        chain_hash: &[u8; 32],
+    ) -> Transaction<R, S> {
+        Transaction::new_signed_tx(private_key, chain_hash, self)
+    }
+
     /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
     /// and a public key.
     pub fn to_signed_tx<C: CryptoSpecExt>(
