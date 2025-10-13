@@ -6,4 +6,5 @@ mod evm_rpc;
 mod evm_soft_conf;
 mod evm_subscribe;
 mod evm_test_helper;
+mod evm_tracing;
 mod evm_tx;

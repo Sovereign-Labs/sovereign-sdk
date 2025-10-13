@@ -4,11 +4,11 @@ use crate::rpc::error::ensure_success;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
-    state::StateOverride, Block, BlockOverrides, FeeHistory, Transaction, TransactionReceipt,
-    TransactionRequest,
+    state::StateOverride, Block, BlockNumberOrTag, BlockOverrides, FeeHistory, Transaction,
+    TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
-use alloy_rpc_types_trace::geth::GethTrace;
+use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::Database;
@@ -290,6 +290,17 @@ where
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         Ok(U64::from(apply_margins(total_gas_used)?))
+    }
+
+    /// Handler for `debug_traceBlockByNumber`
+    #[rpc_method(name = "debug_traceBlockByNumber")]
+    pub fn debug_trace_block_by_number(
+        &self,
+        _block: BlockNumberOrTag,
+        _opts: Option<GethDebugTracingOptions>,
+        _state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Vec<TraceResult>> {
+        Ok(vec![])
     }
 
     /// Handler for: `debug_traceTransaction`

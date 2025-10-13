@@ -451,7 +451,9 @@ dependencies = [
  "alloy-primitives",
  "alloy-pubsub",
  "alloy-rpc-client",
+ "alloy-rpc-types-debug",
  "alloy-rpc-types-eth",
+ "alloy-rpc-types-trace",
  "alloy-signer",
  "alloy-sol-types",
  "alloy-transport",
@@ -568,6 +570,18 @@ dependencies = [
  "alloy-consensus-any",
  "alloy-rpc-types-eth",
  "alloy-serde",
+]
+
+[[package]]
+name = "alloy-rpc-types-debug"
+version = "1.0.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a0ac29dd005c33e3f7e09087accc80843315303685c3f7a1b888002cd27785b"
+dependencies = [
+ "alloy-primitives",
+ "derive_more 2.0.1",
+ "serde",
+ "serde_with",
 ]
 
 [[package]]
@@ -11783,6 +11797,7 @@ dependencies = [
  "alloy-provider",
  "alloy-pubsub",
  "alloy-rpc-types-eth",
+ "alloy-rpc-types-trace",
  "anyhow",
  "async-trait",
  "axum 0.7.9",
