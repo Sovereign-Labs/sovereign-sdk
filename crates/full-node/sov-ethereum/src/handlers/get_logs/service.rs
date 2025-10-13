@@ -117,7 +117,7 @@ where
         let block_height = self.resolve_block_hash(block_hash)?;
         let maybe_cursor = self.scan_block_range(block_height..=block_height)?;
 
-        if let Some(_) = maybe_cursor {
+        if maybe_cursor.is_some() {
             tracing::warn!(block_hash = %block_hash, "Too many logs in block requested by hash");
             Err(Error::TooManyLogsInBlock(block_hash, self.max_logs))
         } else {
@@ -247,7 +247,7 @@ where
         header: &Sealed<Header>,
     ) -> Result<Option<Cursor>> {
         let logs = receipt.receipt.logs;
-        let log_range = (0 as u32)..(logs.len() as u32);
+        let log_range = 0_u32..(logs.len() as u32);
         let logs_iter = logs.into_iter().enumerate();
         let skipped_logs =
             self.apply_log_level_cursor(log_range, tx_index_absolute, header.number())?;
