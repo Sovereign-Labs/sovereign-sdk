@@ -4,7 +4,7 @@
 //! - DB "Table" definitions can be found in the [`schema`] module
 //! - Types and traits for storing state data can be found in the [`state_db`] module
 //! - The default db configuration is generated in the [`rocks_db_config`] module
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![deny(missing_docs)]
 
 use rockbound::rocksdb::ColumnFamilyDescriptor;
