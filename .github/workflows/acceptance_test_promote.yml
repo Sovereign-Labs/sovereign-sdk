@@ -10,8 +10,8 @@ permissions:
 
 env:
   # Use test branches for now, will change to dev/nightly later
-  DEV_BRANCH: 'theodore/acceptance-dev-testing'
-  NIGHTLY_BRANCH: 'theodore/accentance-nightly-testing'
+  DEV_BRANCH: 'theodore/acceptance-dev-testing-2'
+  NIGHTLY_BRANCH: 'theodore/acceptance-nightly-testing'
 
 jobs:
   promote:
