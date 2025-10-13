@@ -7,12 +7,14 @@ use super::types::*;
 use crate::{MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier};
 
 #[derive(Clone)]
+/// Http client implementing DaService for StorableMockDa.
 pub struct StorableMockDaClient {
     base_url: String,
     client: reqwest::Client,
 }
 
 impl StorableMockDaClient {
+    /// Creates a new client.
     pub fn new(base_url: String) -> Self {
         Self {
             base_url,

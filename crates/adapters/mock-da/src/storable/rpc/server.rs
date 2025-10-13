@@ -216,6 +216,7 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
         .with_state(state)
 }
 
+/// Starts external `StorableMockDaService`.
 pub async fn start_server(da_service: StorableMockDaService) -> SocketAddr {
     let app = create_router(da_service);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

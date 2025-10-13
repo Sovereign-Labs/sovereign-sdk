@@ -1,4 +1,4 @@
-//! Data Availability service is a controller of [`StorableMockDaLayer`].
+//! [`StorableMockDaService`] implementation.
 use core::time::Duration;
 use futures::stream::BoxStream;
 use futures::StreamExt;

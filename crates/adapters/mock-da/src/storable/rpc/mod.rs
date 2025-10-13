@@ -1,4 +1,5 @@
-#![allow(missing_docs)]
+//! Rpc server and client for `StorableMockDaService`.
+
 mod client;
 mod server;
 mod types;

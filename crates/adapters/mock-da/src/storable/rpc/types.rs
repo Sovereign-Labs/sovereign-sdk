@@ -1,5 +1,3 @@
-#![allow(dead_code, missing_docs)]
-
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
