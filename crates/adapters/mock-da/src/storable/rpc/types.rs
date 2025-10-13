@@ -1,19 +1,9 @@
 #![allow(dead_code, missing_docs)]
 
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    response::Json,
-    routing::{get, post},
-    Router,
-};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
-use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
-use std::net::SocketAddr;
+use sov_rollup_interface::node::da::SubmitBlobReceipt;
 
-use crate::storable::StorableMockDaService;
 use crate::{MockBlock, MockDaSpec, MockHash};
 
 #[derive(Serialize, Deserialize)]

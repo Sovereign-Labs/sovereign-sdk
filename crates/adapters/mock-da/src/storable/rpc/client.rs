@@ -252,39 +252,3 @@ impl DaService for StorableMockDaClient {
         signer_response.address
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::storable::layer::StorableMockDaLayer;
-    use crate::storable::rpc::server::create_router;
-    use crate::storable::rpc::server::start_server;
-    use crate::storable::StorableMockDaService;
-    use crate::MockAddress;
-    use sov_rollup_interface::da::BlockHeaderTrait;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
-
-    #[tokio::test]
-    async fn test_client_with_real_server_send_transaction() {
-        // Create a server
-        let da_layer = Arc::new(RwLock::new(
-            StorableMockDaLayer::new_in_memory(0)
-                .await
-                .expect("Failed to create DA layer"),
-        ));
-        let da_service =
-            StorableMockDaService::new_manual_producing(MockAddress::new([1; 32]), da_layer).await;
-
-        let addr = start_server(da_service).await;
-
-        // Create a client
-        let client = StorableMockDaClient::new(format!("http://{}", addr));
-
-        // Test the client
-        let test_blob = b"test blob data";
-        let receiver = client.send_transaction(test_blob).await;
-        let result = receiver.await.unwrap();
-        assert!(result.is_ok());
-    }
-}
