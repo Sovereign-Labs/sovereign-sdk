@@ -49,10 +49,14 @@ use std::os::unix::fs::{FileExt, OpenOptionsExt};
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Clone, Copy)]
 pub enum CommitStatus {
     /// Indicates that the first phase of a commit is done, but the second is pending.
-    /// Write root hash that has been written while in progress.
+    /// Contains the root hash that was written during the first phase.
     InProgress([u8; 32]),
     /// Indicates that a commit operation is fully completed, or no operation is in progress.
     Completed,
+    /// Indicates that the flag file state could not be determined reliably.
+    /// This occurs when the file is corrupted, empty, or unreadable.
+    /// The caller must decide how to handle this case (e.g., treat as safe, trigger recovery, or error).
+    Unknown,
 }
 
 /// Helper struct to manage 512-byte aligned buffer for O_DIRECT writes.
@@ -198,16 +202,20 @@ impl CommitFlag {
     /// initialized in `new()`. This method handles the following cases:
     ///
     /// - **Normal case**: Successfully deserializes and returns the stored [`CommitStatus`]
-    /// - **Corruption/errors**: Returns `CommitStatus::InProgress([0; 32])` as a safe default
+    ///   (`Completed` or `InProgress(hash)`)
+    /// - **Corruption/errors**: Returns `CommitStatus::Unknown` to indicate the state cannot
+    ///   be reliably determined
     ///
-    /// Defaulting to `InProgress` on errors is safe because it triggers the recovery path,
-    /// which will detect and handle any inconsistent state. This conservative approach
-    /// ensures we never incorrectly report `Completed` when the system is in an unknown state.
+    /// Returning `Unknown` on errors allows the caller to decide how to handle uncertain state,
+    /// rather than making assumptions. The caller can choose to:
+    /// - Treat as safe and proceed with a warning
+    /// - Trigger conservative recovery logic
+    /// - Error out and require manual intervention
     ///
     /// # Returns
     ///
     /// Returns an `anyhow::Result` containing the [`CommitStatus`]. Currently always returns
-    /// `Ok` with either the actual status or the safe default `InProgress([0; 32])`.
+    /// `Ok` with either the actual status or `Unknown`.
     pub fn read_status(&self) -> anyhow::Result<CommitStatus> {
         #[cfg(target_os = "linux")]
         {
@@ -216,25 +224,32 @@ impl CommitFlag {
 
             match self.file.read_at(buffer.as_slice_mut(), 0) {
                 Ok(bytes_read) if bytes_read > 0 => {
-                    match borsh::from_slice::<CommitStatus>(&buffer.as_slice()[..bytes_read]) {
+                    // Use deserialize with a Cursor to handle padding bytes correctly
+                    // (from_slice requires all bytes to be consumed, which fails with padding)
+                    use std::io::Cursor;
+                    let mut cursor = Cursor::new(&buffer.as_slice()[..bytes_read]);
+
+                    match CommitStatus::deserialize(&mut cursor) {
                         Ok(status) => Ok(status),
                         Err(err) => {
                             tracing::warn!(
                                 error = ?err,
-                                "Commit flag file is corrupted, defaulting to InProgress for safety"
+                                "Commit flag file is corrupted, returning Unknown"
                             );
-                            // Safe default: assume in progress so recovery will be triggered
-                            Ok(CommitStatus::InProgress([0; 32]))
+                            Ok(CommitStatus::Unknown)
                         }
                     }
                 }
                 Ok(_) => {
-                    tracing::warn!("Commit flag file is empty, defaulting to Completed");
-                    self.write_status(CommitStatus::Completed)?;
-                    Ok(CommitStatus::Completed)
+                    tracing::warn!("Commit flag file is empty, returning Unknown");
+                    Ok(CommitStatus::Unknown)
                 }
                 Err(err) => {
-                    Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
+                    tracing::warn!(
+                        error = ?err,
+                        "Failed to read commit flag file, returning Unknown"
+                    );
+                    Ok(CommitStatus::Unknown)
                 }
             }
         }
@@ -247,25 +262,25 @@ impl CommitFlag {
             let mut buffer = Vec::new();
 
             if let Err(err) = file_ref.seek(SeekFrom::Start(0)) {
-                tracing::warn!(error = ?err, "Failed to seek, defaulting to InProgress");
-                return Ok(CommitStatus::Completed);
+                tracing::warn!(error = ?err, "Failed to seek, returning Unknown");
+                return Ok(CommitStatus::Unknown);
             }
 
             match file_ref.read_to_end(&mut buffer) {
                 Ok(_) if !buffer.is_empty() => match borsh::from_slice::<CommitStatus>(&buffer) {
                     Ok(status) => Ok(status),
                     Err(err) => {
-                        tracing::warn!(error = ?err, "Corrupted data, defaulting to InProgress");
-                        Ok(CommitStatus::Completed)
+                        tracing::warn!(error = ?err, "Corrupted data, returning Unknown");
+                        Ok(CommitStatus::Unknown)
                     }
                 },
                 Ok(_) => {
-                    tracing::warn!("Empty file, defaulting to Completed");
-                    self.write_status(CommitStatus::Completed)?;
-                    Ok(CommitStatus::Completed)
+                    tracing::warn!("Empty file, returning Unknown");
+                    Ok(CommitStatus::Unknown)
                 }
                 Err(err) => {
-                    Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
+                    tracing::warn!(error = ?err, "Read failed, returning Unknown");
+                    Ok(CommitStatus::Unknown)
                 }
             }
         }
@@ -393,16 +408,16 @@ mod tests {
         drop(file);
 
         let commit_flag = CommitFlag::new(dir.path()).unwrap();
-        // Should detect corruption and return InProgress (safe default)
+        // Should detect corruption and return Unknown
         let status = commit_flag.read_status().unwrap();
 
         // On Linux with O_DIRECT, the file will be reinitialized on open if too small
-        // So we should get Completed. On other platforms, we return InProgress for corrupted data.
+        // So we should get Completed. On other platforms, we return Unknown for corrupted data.
         #[cfg(target_os = "linux")]
         assert_eq!(status, CommitStatus::Completed);
 
         #[cfg(not(target_os = "linux"))]
-        assert_eq!(status, CommitStatus::InProgress([0; 32]));
+        assert_eq!(status, CommitStatus::Unknown);
     }
 
     #[test]

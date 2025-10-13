@@ -70,6 +70,20 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             CommitStatus::Completed => {
                 tracing::trace!("Commit flag is `Completed`, proceeding as usual");
             }
+            CommitStatus::Unknown => {
+                tracing::warn!(
+                    "Commit flag status is Unknown (corrupted, empty, or unreadable). \
+                     Treating as safe and proceeding without recovery. \
+                     This is expected on first initialization but may indicate issues if recurring."
+                );
+                // Write Completed status to fix the flag file
+                commit_flag
+                    .write_status(CommitStatus::Completed)
+                    .with_context(|| {
+                        commit_flag.log_reset_instruction();
+                        "Failed to write `COMPLETED` status to fix Unknown flag state"
+                    })?;
+            }
         }
 
         let user = {
