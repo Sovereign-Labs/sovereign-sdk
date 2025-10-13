@@ -46,6 +46,10 @@ chrono = { workspace = true, optional = true }
 rand = { workspace = true, optional = true, features = ["small_rng"] }
 rand_chacha = { workspace = true, optional = true }
 
+# For HTTP server and client
+axum = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["json"], optional = true }
+
 [dev-dependencies]
 bincode = { workspace = true }
 toml = { workspace = true }
@@ -64,6 +68,7 @@ tokio = { workspace = true, features = [
 rand = { workspace = true }
 testcontainers = { workspace = true, features = ["blocking"] }
 testcontainers-modules = { workspace = true, features = ["postgres"] }
+
 
 [features]
 default = []
@@ -85,6 +90,8 @@ native = [
     "sov-rollup-interface/native",
     "dep:rand",
     "dep:rand_chacha",
+    "dep:axum",
+    "dep:reqwest"
 ]
 postgres = ["native", "sea-orm/sqlx-postgres"]
 

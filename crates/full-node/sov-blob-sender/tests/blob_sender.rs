@@ -7,7 +7,7 @@ use sov_blob_sender::{
     FinalizationManager,
 };
 use sov_mock_da::storable::layer::StorableMockDaLayer;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockDaSpec};
 use sov_modules_api::da::BlockHeaderTrait;
 use sov_modules_api::HexHash;
