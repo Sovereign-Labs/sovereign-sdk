@@ -2,13 +2,13 @@
 //! Currently, SQLite and PostgreSQL are supported.
 //!
 
-pub mod da;
 mod entity;
 pub mod layer;
+pub mod local_service;
 pub mod rpc;
 pub mod service;
 
-pub use da::StorableMockDaService;
+pub use local_service::StorableMockDaService;
 
 #[cfg(test)]
 mod tests {
