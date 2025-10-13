@@ -42,4 +42,11 @@ impl CelestiaClient {
             CelestiaClient::Twinkle(client) => client.get_block_header_at(height).await,
         }
     }
+
+    pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
+        match self {
+            CelestiaClient::StandardNode(client) => client.get_head_block_header().await,
+            CelestiaClient::Twinkle(client) => client.get_head_block_header().await,
+        }
+    }
 }

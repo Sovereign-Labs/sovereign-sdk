@@ -165,12 +165,33 @@ impl StandardNodeClient {
         Ok(extended_header.into())
     }
 
+    async fn get_head_block_header_inner(
+        &self,
+    ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        let header = self
+            .read_client
+            .header_network_head()
+            .await
+            .map_err(into_transient_with_context)?;
+        Ok(CelestiaHeader::from(header))
+    }
+
     #[instrument(skip(self))]
     pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
         run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
             || self.get_block_header_at_inner(height),
             "get_block_header_at",
+        )
+        .await
+    }
+
+    #[instrument(skip(self))]
+    pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
+        run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.get_head_block_header_inner(),
+            "get_head_block_header",
         )
         .await
     }

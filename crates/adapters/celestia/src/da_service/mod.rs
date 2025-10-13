@@ -197,17 +197,6 @@ impl CelestiaService {
             .map_err(MaybeRetryable::Permanent)
     }
 
-    async fn get_head_block_header_inner(
-        &self,
-    ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
-        let header = self
-            .read_client
-            .header_network_head()
-            .await
-            .map_err(into_transient_with_context)?;
-        Ok(CelestiaHeader::from(header))
-    }
-
     async fn get_proofs_at_inner(
         &self,
         height: u64,
@@ -287,12 +276,7 @@ impl DaService for CelestiaService {
     async fn get_head_block_header(
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_head_block_header_inner(),
-            "get_head_block_header",
-        )
-        .await
+        self.client.get_head_block_header().await
     }
 
     fn extract_relevant_blobs(
