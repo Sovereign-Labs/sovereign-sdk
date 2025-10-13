@@ -1,3 +1,6 @@
+# 2025-10-13
+- #1851 Implement `debug_traceBlockByNumber` in EVM module.
+
 # 2025-10-10
 - #1840 DOn't panic on selfdestruct/blockhash. Return an error.
 
