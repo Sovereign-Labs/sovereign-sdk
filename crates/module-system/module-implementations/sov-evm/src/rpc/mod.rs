@@ -12,7 +12,7 @@ use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
 use alloy_rpc_types_trace::geth::{GethDebugTracingOptions, TraceResult};
 use jsonrpsee::core::RpcResult;
-use revm::context::result::ResultAndState;
+use revm::context::result::{ExecResultAndState, ResultAndState};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -23,6 +23,7 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
 use crate::conversions::replay_tx_env;
+use crate::db::commit::FallibleDatabaseCommit;
 use crate::db::EvmDb;
 use crate::error::into_rpc_error;
 use crate::evm::executor;
@@ -174,6 +175,16 @@ where
         Some(receipts)
     }
 
+    fn archival_state(
+        &self,
+        height: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<ApiStateAccessor<S>, EthApiError> {
+        state
+            .get_archival_state(RollupHeight::new(height))
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))
+    }
+
     fn trace_block_by_number(
         &self,
         block: BlockNumberOrTag,
@@ -186,11 +197,7 @@ where
             .blocks
             .get(&block_number, state)?
             .ok_or(EthApiError::PrunedHistoryUnavailable)?;
-
-        // Get archival state and environment
-        let mut archival_state = state
-            .get_archival_state(RollupHeight::new(block_number - 1))
-            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        let mut archival_state = self.archival_state(block_number - 1, state)?;
 
         let block_env = self
             .block_env(&mut archival_state)?
@@ -240,10 +247,7 @@ where
             .get(&traced_tx.block_number, state)?
             .expect("Transaction block not available");
 
-        // Get archival state and environment
-        let mut archival_state = state
-            .get_archival_state(RollupHeight::new(traced_tx.block_number - 1))
-            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        let mut archival_state = self.archival_state(traced_tx.block_number - 1, state)?;
 
         let block_env = self
             .block_env(&mut archival_state)?
@@ -305,12 +309,14 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let res = inspect(db, &block_env, tx_env, cfg, &mut inspector)?;
-                    inspector.set_transaction_gas_limit(gas_limit);
+                    let ExecResultAndState { result, state } =
+                        inspect(&mut *db, &block_env, tx_env, cfg, &mut inspector)?;
+                    db.commit(state)?;
 
+                    inspector.set_transaction_gas_limit(gas_limit);
                     let frame = inspector
                         .geth_builder()
-                        .geth_call_traces(call_config, res.result.gas_used());
+                        .geth_call_traces(call_config, result.gas_used());
 
                     return Ok(frame.into());
                 }
