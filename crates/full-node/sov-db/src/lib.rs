@@ -34,6 +34,9 @@ pub mod accessory_db;
 pub mod namespaces;
 
 /// Implements commit flag logic for state_db_nomt.
+#[cfg(any(test, feature = "test-utils"))]
+pub mod commit_flag;
+#[cfg(not(any(test, feature = "test-utils")))]
 pub(crate) mod commit_flag;
 /// Configuration for `sov-db`
 pub mod config;

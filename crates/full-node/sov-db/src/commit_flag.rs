@@ -1,4 +1,5 @@
 use std::fs::{File, OpenOptions};
+#[cfg(not(target_os = "linux"))]
 use std::io::Read;
 use std::path::Path;
 
@@ -7,6 +8,13 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 #[cfg(target_os = "linux")]
 use std::alloc::{alloc, dealloc, Layout};
+
+// https://github.com/bminor/glibc/blob/3a0a8eae50679d3170df7af500dde2c4c3d11c78/sysdeps/unix/sysv/linux/bits/fcntl-linux.h#L97
+#[cfg(target_os = "linux")]
+const O_DSYNC: i32 = 0o10000;
+// https://github.com/bminor/glibc/blob/3a0a8eae50679d3170df7af500dde2c4c3d11c78/sysdeps/unix/sysv/linux/bits/fcntl-linux.h#L88
+#[cfg(target_os = "linux")]
+const O_DIRECT: i32 = 0o40000;
 
 const FLAG_FILE_NAME: &str = "commit_status.flag";
 
@@ -131,7 +139,7 @@ impl CommitFlag {
         #[cfg(target_os = "linux")]
         {
             // Use O_DIRECT + O_DSYNC for direct disk writes
-            options.custom_flags(libc::O_DIRECT | libc::O_DSYNC);
+            options.custom_flags(O_DIRECT | O_DSYNC);
         }
 
         let file = options
@@ -328,6 +336,9 @@ impl CommitFlag {
         }
     }
 
+    /// Logs instructions for manually resetting the commit flag file.
+    ///
+    /// This is used when the commit flag gets into an inconsistent state and needs manual intervention.
     pub fn log_reset_instruction(&self) {
         tracing::error!("To reset commit flag, please remove the commit_status.flag file manually");
     }
