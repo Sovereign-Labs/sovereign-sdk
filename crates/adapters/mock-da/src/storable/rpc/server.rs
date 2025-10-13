@@ -96,7 +96,7 @@ pub(crate) async fn get_extraction_proof_handler(
             (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: format!("Invalid block format: {}", e),
+                    error: format!("Invalid block format: {e}"),
                 }),
             )
         })?;
@@ -106,7 +106,7 @@ pub(crate) async fn get_extraction_proof_handler(
             (
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: format!("Invalid blobs format: {}", e),
+                    error: format!("Invalid blobs format: {e}"),
                 }),
             )
         })?;
@@ -124,7 +124,7 @@ pub(crate) async fn send_transaction_handler(
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: format!("Invalid hex blob: {}", e),
+                error: format!("Invalid hex blob: {e}"),
             }),
         )
     })?;
@@ -136,7 +136,7 @@ pub(crate) async fn send_transaction_handler(
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: format!("Receiver error: {}", e),
+                error: format!("Receiver error: {e}"),
             }),
         )),
     }
@@ -151,7 +151,7 @@ pub(crate) async fn send_proof_handler(
         (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                error: format!("Invalid hex proof data: {}", e),
+                error: format!("Invalid hex proof data: {e}"),
             }),
         )
     })?;
@@ -163,7 +163,7 @@ pub(crate) async fn send_proof_handler(
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: format!("Receiver error: {}", e),
+                error: format!("Receiver error: {e}"),
             }),
         )),
     }
@@ -224,13 +224,13 @@ pub async fn start_server(
     port: u16,
 ) -> Result<SocketAddr, io::Error> {
     let app = create_router(da_service);
-    let addr = format!("{}:{}", host, port);
+    let addr = format!("{host}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     let bound_addr = listener.local_addr()?;
 
     tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
-            tracing::error!("Server error: {}", e);
+            tracing::error!(%e, "Server error.");
         }
     });
 

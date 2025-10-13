@@ -38,7 +38,7 @@ impl DaService for StorableMockDaClient {
     const GUARANTEES_TRANSACTION_ORDERING: bool = true;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let url = self.url(&format!("/blocks/{}", height));
+        let url = self.url(&format!("/blocks/{height}"));
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -54,7 +54,7 @@ impl DaService for StorableMockDaClient {
         &self,
         height: u64,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        let url = self.url(&format!("/block-headers/{}", height));
+        let url = self.url(&format!("/block-headers/{height}"));
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -205,7 +205,7 @@ impl DaService for StorableMockDaClient {
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        let url = self.url(&format!("/proofs/{}", height));
+        let url = self.url(&format!("/proofs/{height}"));
         let response = self.client.get(&url).send().await?;
 
         if !response.status().is_success() {
@@ -217,7 +217,7 @@ impl DaService for StorableMockDaClient {
         let proofs = proofs_response
             .proofs
             .into_iter()
-            .map(|hex_proof| hex::decode(hex_proof))
+            .map(hex::decode)
             .collect::<Result<Vec<_>, _>>()?;
         Ok(proofs)
     }
