@@ -40,7 +40,7 @@ risc0 = { path = "../provers/risc0", features = ["bench"] }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true, default-features = false }
 prettytable-rs = "^0.10"
-criterion = "0.5.1"
+criterion = "0.7.0"
 bincode = { workspace = true }
 derivative = { workspace = true, features = ["use_core"] }
 anyhow = { workspace = true }

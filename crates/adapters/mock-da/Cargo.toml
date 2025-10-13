@@ -54,7 +54,7 @@ futures = { workspace = true }
 serde_json = { workspace = true }
 sov-mock-da = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-criterion = { version = "0.5.1", features = ["async_tokio"] }
+criterion = { version = "0.7.0", features = ["async_tokio"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",

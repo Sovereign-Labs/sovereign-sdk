@@ -127,7 +127,7 @@ reqwest = { version = "0.12", features = [
   "rustls-tls",
 ], default-features = false }
 prettytable-rs = "0.10"
-criterion = "0.5.1"
+criterion = "0.7.0"
 
 [build-dependencies]
 anyhow = { workspace = true }

@@ -47,7 +47,7 @@ sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true }
 sov-test-utils = { workspace = true }
 tempfile = { workspace = true }
-criterion = "0.5.1"
+criterion = "0.7.0"
 rand = { workspace = true }
 sha2 = { workspace = true }
 serde_json = { workspace = true }
