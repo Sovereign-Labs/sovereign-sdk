@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::postgres::connection_string_from_postgres_container;
 use std::net::SocketAddr;
 use std::num::NonZero;
@@ -112,7 +113,7 @@ pub struct RollupBuilderConfig<S: Spec, StoragePath = Arc<tempfile::TempDir>> {
 #[derivative(Clone(bound = "StoragePath: Clone"))]
 pub struct RollupBuilder<R: FullNodeBlueprint<Native>, StoragePath = Arc<tempfile::TempDir>> {
     genesis: GenesisSource<R::Spec, R::Runtime>,
-    da_config: MockDaConfig,
+    da_config: <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config,
     config: RollupBuilderConfig<R::Spec, StoragePath>,
     postgres_container_opt: Option<Arc<ContainerAsync<PostgresImage>>>,
     with_secondary_sequencer: Option<MockAddress>,
@@ -187,23 +188,23 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
         storage_path: StoragePath,
         in_memory_da: bool,
     ) -> Self {
-        let da_config = MockDaConfig {
-            // This will be set later based on the storage path. In case of a bug,
-            // SQLite will simply fail to open the file and we'll immediately get a
-            // panic, so it's not dangerous.
-            connection_string: if in_memory_da {
-                MockDaConfig::sqlite_in_memory()
-            } else {
-                MockDaConfig::sqlite_in_dir(storage_path.as_path()).unwrap()
-            },
-            // This value is important and should match `examples/test-data/genesis/integration-tests/sequencer_registry.json`
-            // Otherwise batches are going to be rejected in `examples/demo-rollup` tests.
-            sender_address: MockAddress::new([0; 32]),
-            finalization_blocks,
-            block_producing,
-            da_layer: None,
-            randomization: None,
-        };
+        let da_config = todo!(); /*MockDaConfig {
+                                     // This will be set later based on the storage path. In case of a bug,
+                                     // SQLite will simply fail to open the file and we'll immediately get a
+                                     // panic, so it's not dangerous.
+                                     connection_string: if in_memory_da {
+                                         MockDaConfig::sqlite_in_memory()
+                                     } else {
+                                         MockDaConfig::sqlite_in_dir(storage_path.as_path()).unwrap()
+                                     },
+                                     // This value is important and should match `examples/test-data/genesis/integration-tests/sequencer_registry.json`
+                                     // Otherwise batches are going to be rejected in `examples/demo-rollup` tests.
+                                     sender_address: MockAddress::new([0; 32]),
+                                     finalization_blocks,
+                                     block_producing,
+                                     da_layer: None,
+                                     randomization: None,
+                                 };*/
 
         Self {
             genesis,
@@ -298,7 +299,10 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
     }
 
     /// Allows to modify DA configuration options.
-    pub fn set_da_config(mut self, config_f: impl FnOnce(&mut MockDaConfig)) -> Self {
+    pub fn set_da_config(
+        mut self,
+        config_f: impl FnOnce(&mut <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config),
+    ) -> Self {
         config_f(&mut self.da_config);
         self
     }
@@ -319,6 +323,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
 
     /// If rollup needs to be restarted, this needs to be activated.
     pub fn set_persistent_da(mut self) -> Self {
+        /*
         // We store DA data in the same directory as the rollup data. This
         // ensures that, when reusing the same path, we restore not only node
         // data but also DA history.
@@ -326,6 +331,8 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
             MockDaConfig::sqlite_in_dir(self.config.storage.as_path())
                 .expect("storage folder should exist by this time");
         self
+        */
+        todo!()
     }
 
     /// A reference to the storage directory the rollup will run in
@@ -336,7 +343,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
 
 impl<R, StoragePath> RollupBuilder<R, StoragePath>
 where
-    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
+    R: FullNodeBlueprint<Native> + Default + 'static,
     R::Spec: Spec<Da = MockDaSpec>,
     StoragePath: AsPath,
 {
@@ -403,6 +410,8 @@ where
                         .tempdir_in(self.config.storage.as_path())?;
                     let mut rollup_config = rollup_config.clone();
                     rollup_config.storage.path = second_sequencer_dir.path().to_path_buf();
+
+                    /*
                     let (client, sender) = Self::start_secondary_sequencer(
                         da_service.another_on_the_same_layer(addr).await,
                         rollup_config.clone(),
@@ -410,6 +419,8 @@ where
                     )
                     .await?;
                     (Some(client), Some(sender))
+                    */
+                    todo!()
                 }
                 None => (None, None),
             };
@@ -689,7 +700,8 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>, StoragePath = Arc<tempfile::
     ///
     /// You can use it to query DA layer information or directly submit blobs,
     /// bypassing the sequencer.
-    pub da_service: Arc<StorableMockDaService>,
+    pub da_service:
+        Arc<<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService>,
     /// Allows programmatically initialize shutdown of the test-rollup.
     /// Used for checking graceful shutdown and restart.
     pub shutdown_sender: watch::Sender<()>,
