@@ -192,7 +192,7 @@ async-trait = "0.1.81"
 arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
 console-subscriber = "0.4"
 
-axum = { version = "0.7.9", default-features = false }
+axum = { version = "0.8.4", default-features = false }
 axum-server = { version = "0.6", features = ["tls-rustls"] }
 arbitrary = { version = "1.3.2", features = ["derive"] }
 backon = { version = "1.5.1", default-features = false, features = ["tokio-sleep"] }
