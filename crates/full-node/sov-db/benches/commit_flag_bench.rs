@@ -2,6 +2,7 @@ extern crate criterion;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sov_db::commit_flag::{CommitFlag, CommitStatus};
+use std::os::macos::raw::stat;
 
 /// Benchmark write_status() with Completed status
 fn bench_write_completed(c: &mut Criterion) {
@@ -10,7 +11,8 @@ fn bench_write_completed(c: &mut Criterion) {
 
     c.bench_function("commit_flag_write_completed", |b| {
         b.iter(|| {
-            black_box(flag.write_status(CommitStatus::Completed).unwrap());
+            let result = black_box(flag.write_status(CommitStatus::Completed));
+            result.unwrap();
         });
     });
 }
@@ -23,10 +25,8 @@ fn bench_write_in_progress(c: &mut Criterion) {
 
     c.bench_function("commit_flag_write_in_progress", |b| {
         b.iter(|| {
-            black_box(
-                flag.write_status(CommitStatus::InProgress(root_hash))
-                    .unwrap(),
-            );
+            let result = black_box(flag.write_status(CommitStatus::InProgress(root_hash)));
+            result.unwrap();
         });
     });
 }
@@ -41,8 +41,8 @@ fn bench_read_status(c: &mut Criterion) {
 
     c.bench_function("commit_flag_read_status", |b| {
         b.iter(|| {
-            let status = black_box(flag.read_status().unwrap());
-            black_box(status);
+            let status = black_box(flag.read_status());
+            status.unwrap();
         });
     });
 }
@@ -56,12 +56,11 @@ fn bench_write_read_cycle(c: &mut Criterion) {
     c.bench_function("commit_flag_write_read_cycle", |b| {
         b.iter(|| {
             // Simulate commit flow: write InProgress, then Completed
-            black_box(
-                flag.write_status(CommitStatus::InProgress(root_hash))
-                    .unwrap(),
-            );
+            let result = flag.write_status(CommitStatus::InProgress(root_hash));
+            black_box(result).unwrap();
             black_box(flag.read_status().unwrap());
-            black_box(flag.write_status(CommitStatus::Completed).unwrap());
+            let result = flag.write_status(CommitStatus::Completed);
+            black_box(result).unwrap();
             black_box(flag.read_status().unwrap());
         });
     });
@@ -75,11 +74,10 @@ fn bench_alternating_writes(c: &mut Criterion) {
 
     c.bench_function("commit_flag_alternating_writes", |b| {
         b.iter(|| {
-            black_box(
-                flag.write_status(CommitStatus::InProgress(root_hash))
-                    .unwrap(),
-            );
-            black_box(flag.write_status(CommitStatus::Completed).unwrap());
+            let result = flag.write_status(CommitStatus::InProgress(root_hash));
+            black_box(result).unwrap();
+            let result = flag.write_status(CommitStatus::Completed);
+            black_box(result).unwrap();
         });
     });
 }
