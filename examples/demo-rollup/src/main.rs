@@ -10,7 +10,7 @@ use sov_demo_rollup::{
     celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, CelestiaNomtDemoRollup,
     MockDemoRollup, MockNomtDemoRollup,
 };
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_rollup_blueprint::logging::initialize_logging;

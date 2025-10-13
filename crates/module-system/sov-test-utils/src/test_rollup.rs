@@ -22,7 +22,7 @@ use sov_cli::NodeClient;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig, MockDaSpec};
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::execution_mode::Native;

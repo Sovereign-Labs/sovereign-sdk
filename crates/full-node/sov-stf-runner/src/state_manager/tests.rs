@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use rand::SeedableRng;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockDaService,
     MockDaSpec, MockHash, PlannedFork, RandomizationBehaviour, RandomizationConfig,

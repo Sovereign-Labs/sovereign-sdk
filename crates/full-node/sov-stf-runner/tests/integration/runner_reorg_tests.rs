@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NativeStorageManager;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
     MockDaService, MockDaSpec, PlannedFork, RandomizationBehaviour, RandomizationConfig,

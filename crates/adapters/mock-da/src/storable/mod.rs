@@ -2,9 +2,12 @@
 //! Currently, SQLite and PostgreSQL are supported.
 //!
 
+pub mod da;
 mod entity;
 pub mod layer;
 pub mod service;
+
+pub use da::StorableMockDaService;
 
 #[cfg(test)]
 mod tests {
@@ -21,7 +24,7 @@ mod tests {
     use tokio::sync::RwLock;
 
     use crate::storable::layer::StorableMockDaLayer;
-    use crate::storable::service::StorableMockDaService;
+    use crate::storable::StorableMockDaService;
     use crate::{BlockProducingConfig, MockAddress, MockDaConfig};
 
     #[tokio::test(flavor = "multi_thread")]

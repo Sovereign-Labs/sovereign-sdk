@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::ensure;
 use backon::Retryable;
 use futures::{Stream, StreamExt};
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::transaction::TxDetails;
 use sov_modules_api::{CryptoSpec, HexHash, Runtime, Spec};

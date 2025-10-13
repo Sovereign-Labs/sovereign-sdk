@@ -8,7 +8,7 @@ use base64::Engine;
 use futures::StreamExt;
 use sov_api_spec::types::AcceptTxBody;
 use sov_blob_storage::config_deferred_slots_count;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockBlock};
 use sov_modules_api::{Amount, RawTx, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
