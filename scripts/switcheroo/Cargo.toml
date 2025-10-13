@@ -11,4 +11,4 @@ repository = { workspace = true }
 [dependencies]
 clap = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
-toml_edit = "0.22"
+toml_edit = "0.23"
