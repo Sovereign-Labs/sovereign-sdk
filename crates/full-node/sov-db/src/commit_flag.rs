@@ -23,9 +23,8 @@ use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 
-
 // https://github.com/bminor/glibc/blob/3a0a8eae50679d3170df7af500dde2c4c3d11c78/sysdeps/unix/sysv/linux/bits/fcntl-linux.h#L97
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 const O_DSYNC: i32 = 0o10000;
 const FLAG_FILE_NAME: &str = "commit_status.flag";
 
