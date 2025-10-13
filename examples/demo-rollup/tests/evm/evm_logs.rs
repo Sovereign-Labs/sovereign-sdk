@@ -188,6 +188,42 @@ async fn evm_test_get_logs_with_cursor() {
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
+    let max_log_limit = 1;
+    let nb_of_txs = 1;
+    let nb_of_logs_per_tx: u32 = 2;
+
+    let rollup_and_client = RollupAndClient::new(max_log_limit).await;
+
+    rollup_and_client
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let LogsWithMaybeCursor { mut logs, cursor } =
+        rollup_and_client.get_logs_with_cursor(None).await;
+    let cursor = cursor.map(|c| Cursor::unpack(&c).unwrap());
+    assert_eq!(logs.len(), 1);
+    let log = logs.pop().unwrap();
+    assert_eq!(log.transaction_index, Some(0));
+    assert_eq!(log.log_index, Some(0));
+    assert_eq!(
+        cursor,
+        Some(Cursor {
+            block_height: 18,
+            tx_index_absolute: 1,
+            log_index_in_tx: 1
+        })
+    );
+
+    let LogsWithMaybeCursor { mut logs, .. } = rollup_and_client.get_logs_with_cursor(cursor).await;
+    assert_eq!(logs.len(), 1);
+    let log = logs.pop().unwrap();
+    assert_eq!(log.transaction_index, Some(0));
+    assert_eq!(log.log_index, Some(1));
+}
+
 fn nb_of_logs_according_to_cursor(cursor: Cursor, nb_of_logs_per_tx: u32) -> u32 {
     (cursor.tx_index_absolute as u32) * nb_of_logs_per_tx + cursor.log_index_in_tx
 }
