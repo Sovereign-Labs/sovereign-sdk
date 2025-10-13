@@ -22,6 +22,7 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 
+use crate::da_utils::DaHeaderProvider;
 use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
 use crate::query_state_update_info;
 
@@ -98,6 +99,7 @@ where
     da_sync_state: Arc<DaSyncState>,
     da_polling_interval: std::time::Duration,
     da_total_timeout: std::time::Duration,
+    da_header_provider: DaHeaderProvider<Da::Spec>,
 }
 
 impl<StateRoot, Witness, Sm, Da> StateManager<StateRoot, Witness, Sm, Da>
@@ -123,6 +125,7 @@ where
         da_sync_state: Arc<DaSyncState>,
         da_polling_interval: std::time::Duration,
         da_total_timeout: std::time::Duration,
+        da_header_provider: DaHeaderProvider<Da::Spec>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             storage_manager,
@@ -137,6 +140,7 @@ where
             da_sync_state,
             da_polling_interval,
             da_total_timeout,
+            da_header_provider,
         })
     }
 
@@ -482,7 +486,7 @@ where
         // 0. Short circuit
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
-            let finalized = da_service.get_last_finalized_block_header().await?;
+            let finalized = self.da_header_provider.get_last_finalize()?;
             // Simple case
             if block_header.prev_hash() == finalized.hash()
                 || block_header.hash() == finalized.hash()
@@ -562,7 +566,7 @@ where
     // the next incremental continuation of that fork that hasn't been processed should be found.
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
         if self.state_on_block.is_empty() {
-            let last_finalized = da_service.get_last_finalized_block_header().await?;
+            let last_finalized = self.da_header_provider.get_last_finalize()?;
             let adjacent = da_service.get_block_at(last_finalized.height() + 1).await?;
             // reorg can happen between these 2 calls, right now just panic, improve handling in the future.
             // TODO: This can be iterated and included in attempts.
@@ -580,7 +584,7 @@ where
             .get_highest_seen_height()
             .expect("Choosing fork point only possible if some transitions have been seen");
 
-        let mut head = da_service.get_head_block_header().await?;
+        let mut head = self.da_header_provider.get_head()?;
 
         for attempt in 0..MAX_REORG_FINDING_ATTEMPTS {
             match self
@@ -652,10 +656,8 @@ where
                 head = %head.display(),
                 "Checking height"
             );
-            let (candidate, this_head) = tokio::try_join!(
-                da_service.get_block_at(mid),
-                da_service.get_head_block_header()
-            )?;
+            let candidate = da_service.get_block_at(mid).await?;
+            let this_head = self.da_header_provider.get_head()?;
 
             if is_head_changed::<Da::Spec>(&head, &this_head) {
                 return Ok(ForkPointSearchResult::HeadChanged(this_head));
@@ -766,17 +768,15 @@ where
                     .height()
                     .checked_add(1)
                     .expect("end of chain");
-                let (this_candidate, this_head) = tokio::try_join!(
-                    // Need fetch re-org aware if the chain rewinds here.
-                    crate::da_utils::fetch_block_reorg_aware(
-                        da_service,
-                        self.da_sync_state.as_ref(),
-                        next_candidate_height,
-                        self.da_polling_interval,
-                        self.da_total_timeout,
-                    ),
-                    da_service.get_head_block_header(),
-                )?;
+                let this_candidate = crate::da_utils::fetch_block_reorg_aware(
+                    da_service,
+                    self.da_sync_state.as_ref(),
+                    next_candidate_height,
+                    self.da_polling_interval,
+                    self.da_total_timeout,
+                )
+                .await?;
+                let this_head = self.da_header_provider.get_head()?;
                 if is_head_changed::<Da::Spec>(&head, &this_head) {
                     return Ok(ForkPointSearchResult::HeadChanged(this_head));
                 }
@@ -834,9 +834,8 @@ where
     ) -> anyhow::Result<(<Da::Spec as DaSpec>::BlockHeader, u32)> {
         let mut da_service_calls = 0;
 
-        // DaService call # 1
-        let last_finalized_header = da_service.get_last_finalized_block_header().await?;
-        da_service_calls += 1;
+        // Using DaHeaderProvider instead of DaService call
+        let last_finalized_header = self.da_header_provider.get_last_finalize()?;
 
         let earliest_seen_height = self
             .get_earliest_seen_height()

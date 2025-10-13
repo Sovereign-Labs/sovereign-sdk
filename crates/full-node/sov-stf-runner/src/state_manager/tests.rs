@@ -1036,6 +1036,14 @@ where
     // Update channel, receiver does not need to be alive
     let (state_update_sender, _state_update_recv) = watch::channel(update_info);
 
+    // Create a temporary MockDaService for DaHeaderProvider initialization
+    let temp_da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS));
+    let da_header_provider = crate::da_utils::initialize_da_header_provider(
+        temp_da_service,
+        std::time::Duration::from_millis(10),
+    )
+    .await?;
+
     let mut state_manager = StateManager::new(
         storage_manager,
         ledger_db,
@@ -1046,6 +1054,7 @@ where
         sync_state,
         std::time::Duration::from_millis(10),
         std::time::Duration::from_millis(3_600_000),
+        da_header_provider,
     )?;
     state_manager.startup().await?;
 

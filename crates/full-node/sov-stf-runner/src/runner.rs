@@ -29,6 +29,7 @@ use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
 use crate::da_pre_fetcher::FinalizedBlocksBulkFetcher;
+use crate::da_utils::initialize_da_header_provider;
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
 
@@ -214,6 +215,9 @@ where
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
         let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
+        let da_header_provider =
+            initialize_da_header_provider(da_service.clone(), da_polling_interval).await?;
+
         let state_manager = StateManager::new(
             storage_manager,
             ledger_db,
@@ -224,6 +228,7 @@ where
             sync_state.clone(),
             da_polling_interval,
             da_total_timeout,
+            da_header_provider,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
