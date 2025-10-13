@@ -23,7 +23,7 @@ sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true }
 sov-bank = { workspace = true }
 sov-rollup-interface = { workspace = true }
-directories = "5.0.1"
+directories = "6.0.0"
 anyhow = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 borsh = { workspace = true }

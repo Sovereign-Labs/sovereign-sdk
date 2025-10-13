@@ -3552,7 +3552,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3819,15 +3819,6 @@ dependencies = [
  "const-oid",
  "crypto-common",
  "subtle",
-]
-
-[[package]]
-name = "directories"
-version = "5.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a49173b84e034382284f27f1af4dcbbd231ffa358c0fe316541a7337f376a35"
-dependencies = [
- "dirs-sys 0.4.1",
 ]
 
 [[package]]
@@ -9908,7 +9899,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaaa3e04c71e4244354dd9e3f8b89378cfecfbb03f9c72de4e2e7e0482b30c9a"
 dependencies = [
  "cc",
- "directories 6.0.0",
+ "directories",
  "hex",
  "rayon",
  "sha2 0.10.9",
@@ -11717,7 +11708,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "derive_more 1.0.0",
- "directories 5.0.1",
+ "directories",
  "futures",
  "hex",
  "reqwest 0.12.23",
