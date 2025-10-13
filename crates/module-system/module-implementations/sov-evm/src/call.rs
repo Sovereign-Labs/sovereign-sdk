@@ -242,7 +242,6 @@ where
             block_number: tx.block_number,
             gas_used,
             log_index_start,
-            error: None,
             transaction_index: tx_index,
         })
     }

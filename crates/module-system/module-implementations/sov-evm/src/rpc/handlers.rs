@@ -79,9 +79,9 @@ where
             .get(&block_hash, state)
             .unwrap_infallible()
             .map(|number| hex::encode(number.to_be_bytes()));
-
+        let kind = details.unwrap_or_default().into();
         Ok(match block_number_hex {
-            Some(block_number_hex) => self.get_block(Some(block_number_hex), details, state),
+            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state),
             None => None,
         })
     }
@@ -98,7 +98,8 @@ where
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
-        Ok(self.get_block(block_number, details, state))
+        let kind = details.unwrap_or_default().into();
+        Ok(self.get_block(block_number, kind, state))
     }
 
     /// Handler for: `eth_getBalance`

@@ -1,10 +1,12 @@
+use alloy_consensus::Sealed;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_primitives::{Address, BlockHash};
+use alloy_primitives::Address;
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
     TransactionReceipt, TransactionRequest,
 };
+use alloy_rpc_types::{BlockTransactionsKind, Header};
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
@@ -24,9 +26,7 @@ use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect};
-use crate::helpers::{
-    from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
-};
+use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::Evm;
 
@@ -57,42 +57,55 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_block_transactions(
+        &self,
+        block: &MaybeSealedBlock,
+        kind: BlockTransactionsKind,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<BlockTransactions<Transaction>> {
+        let tx_range = block.tx_range();
+        let txs = match kind {
+            BlockTransactionsKind::Full => {
+                let txs = tx_range
+                    .clone()
+                    .map(|idx| {
+                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
+                        Some(from_recovered_with_block_context(
+                            tx.into(),
+                            Some(block.hash().unwrap_or_default()),
+                            block.number(),
+                            U256::from(idx - tx_range.start),
+                        ))
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                BlockTransactions::Full(txs)
+            }
+            BlockTransactionsKind::Hashes => {
+                let hashes = tx_range
+                    .into_iter()
+                    .map(|idx| {
+                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
+                        Some(*tx.signed_transaction.hash())
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                BlockTransactions::Hashes(hashes)
+            }
+        };
+        Some(txs)
+    }
+
     fn get_block(
         &self,
         block_number: Option<String>,
-        details: Option<bool>,
+        kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<Block> {
         let block = self.get_sealed_block_by_number(block_number, state)?;
+        let hash = block.hash().unwrap_or_default();
 
-        let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
-        let header = from_primitive_with_hash(block.header().clone(), block_hash);
-
-        let block_number = block.number();
-        let tx_range = block.transactions_start()..block.transactions_end();
-
-        let transactions = if Some(true) == details {
-            let txs = tx_range
-                .map(|index| {
-                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                    Some(from_recovered_with_block_context(
-                        tx.into(),
-                        Some(block_hash),
-                        block_number,
-                        U256::from(index - block.transactions_start()),
-                    ))
-                })
-                .collect::<Option<Vec<_>>>()?;
-            BlockTransactions::Full(txs)
-        } else {
-            let hashes = tx_range
-                .map(|index| {
-                    let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                    Some(*tx.signed_transaction.hash())
-                })
-                .collect::<Option<Vec<_>>>()?;
-            BlockTransactions::Hashes(hashes)
-        };
+        let transactions = self.get_block_transactions(&block, kind, state)?;
+        let header = Sealed::new_unchecked(block.header().clone(), hash);
+        let header = Header::from_consensus(header, None, None);
 
         Some(Block {
             header,
@@ -152,8 +165,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Option<Vec<TransactionReceipt>> {
         let block = self.get_sealed_block_by_number(block_number, state)?;
-        let tx_range = block.transactions_start()..block.transactions_end();
-        let receipts = tx_range
+        let receipts = block
+            .tx_range()
             .map(|index| self.get_receipt_by_index(index, state))
             .collect::<Option<Vec<_>>>()?;
         Some(receipts)
@@ -243,27 +256,8 @@ where
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
         match block_number_str.as_str() {
-            "earliest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                PendingOrBlock::Number(*block_numbers.start())
-            }
-            "latest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                PendingOrBlock::Number(*block_numbers.end())
-            }
-
+            "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
+            "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
             "pending" => PendingOrBlock::Pending,
             number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
                 Ok(nr) => PendingOrBlock::Number(nr),
