@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 
-use crate::{MockBlock, MockDaSpec, MockHash};
+use crate::{MockBlock, MockBlockHeader, MockDaSpec, MockHash};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct BlockResponse {
@@ -13,7 +13,7 @@ pub(crate) struct BlockResponse {
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct BlockHeaderResponse {
-    pub(crate) header: <MockDaSpec as DaSpec>::BlockHeader,
+    pub(crate) header: MockBlockHeader,
 }
 
 #[derive(Serialize, Deserialize)]

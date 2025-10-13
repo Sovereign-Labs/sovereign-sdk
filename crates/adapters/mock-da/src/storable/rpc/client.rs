@@ -1,5 +1,3 @@
-#![allow(dead_code, missing_docs)]
-
 use async_trait::async_trait;
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
@@ -155,23 +153,20 @@ impl DaService for StorableMockDaClient {
             blob: hex::encode(blob),
         };
 
-        let client = self.client.clone();
-        tokio::spawn(async move {
-            let result = async {
-                let response = client.post(&url).json(&request).send().await?;
+        let result = async {
+            let response = self.client.post(&url).json(&request).send().await?;
 
-                if !response.status().is_success() {
-                    let error: ErrorResponse = response.json().await?;
-                    return Err(anyhow::anyhow!("Server error: {}", error.error));
-                }
-
-                let submit_response: SubmitBlobResponse = response.json().await?;
-                Ok(submit_response.receipt)
+            if !response.status().is_success() {
+                let error: ErrorResponse = response.json().await?;
+                return Err(anyhow::anyhow!("Server error: {}", error.error));
             }
-            .await;
 
-            let _ = tx.send(result);
-        });
+            let submit_response: SubmitBlobResponse = response.json().await?;
+            Ok(submit_response.receipt)
+        }
+        .await;
+
+        let _ = tx.send(result);
 
         rx
     }
@@ -189,23 +184,20 @@ impl DaService for StorableMockDaClient {
             aggregated_proof_data: hex::encode(aggregated_proof_data),
         };
 
-        let client = self.client.clone();
-        tokio::spawn(async move {
-            let result = async {
-                let response = client.post(&url).json(&request).send().await?;
+        let result = async {
+            let response = self.client.post(&url).json(&request).send().await?;
 
-                if !response.status().is_success() {
-                    let error: ErrorResponse = response.json().await?;
-                    return Err(anyhow::anyhow!("Server error: {}", error.error));
-                }
-
-                let submit_response: SubmitBlobResponse = response.json().await?;
-                Ok(submit_response.receipt)
+            if !response.status().is_success() {
+                let error: ErrorResponse = response.json().await?;
+                return Err(anyhow::anyhow!("Server error: {}", error.error));
             }
-            .await;
 
-            let _ = tx.send(result);
-        });
+            let submit_response: SubmitBlobResponse = response.json().await?;
+            Ok(submit_response.receipt)
+        }
+        .await;
+
+        let _ = tx.send(result);
 
         rx
     }

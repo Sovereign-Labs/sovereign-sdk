@@ -1,5 +1,3 @@
-#![allow(dead_code, missing_docs)]
-
 use super::types::*;
 use crate::storable::StorableMockDaService;
 use crate::{MockBlock, MockDaSpec};
@@ -21,7 +19,6 @@ pub(crate) struct AppState {
     da_service: StorableMockDaService,
 }
 
-// Handler functions
 pub(crate) async fn get_block_at_handler(
     Path(height): Path<u64>,
     State(state): State<AppState>,
