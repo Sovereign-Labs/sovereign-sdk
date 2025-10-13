@@ -175,10 +175,10 @@ where
 
     fn trace_transaction(
         &self,
-        block_env: BlockEnv,
+        block_env: &BlockEnv,
         tx_env: TxEnv,
         cfg: CfgEnv,
-        db: EvmDb<ApiStateAccessor<S>, S>,
+        db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
     ) -> Result<GethTrace, EthApiError> {
         let GethDebugTracingOptions {

@@ -312,7 +312,7 @@ where
 
     fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<BlockNumber> {
         let block_number = block_nr_or_tag.unwrap_or_default();
-        if block_number = BlockNumberOrTag::Pending {
+        if block_number == BlockNumberOrTag::Pending {
             return Err(Error::PendingBlock);
         }
         Ok(self.evm.resolve_block_number(block_number, &mut self.state))

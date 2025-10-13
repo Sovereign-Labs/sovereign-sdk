@@ -296,11 +296,51 @@ where
     #[rpc_method(name = "debug_traceBlockByNumber")]
     pub fn debug_trace_block_by_number(
         &self,
-        _block: BlockNumberOrTag,
-        _opts: Option<GethDebugTracingOptions>,
-        _state: &mut ApiStateAccessor<S>,
+        block: BlockNumberOrTag,
+        opts: Option<GethDebugTracingOptions>,
+        state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Vec<TraceResult>> {
-        Ok(vec![])
+        debug!("EVM module JSON-RPC request to `debug_traceBlockByNumber`");
+        let opts = opts.unwrap_or_default();
+        let block_number = self.resolve_block_number(block, state);
+        // Get transaction and block data
+        let block = self
+            .blocks
+            .get(&block_number, state)?
+            .expect("Block not available");
+
+        // Get archival state and environment
+        let mut archival_state = state
+            .get_archival_state(RollupHeight::new(block_number - 1))
+            .map_err(into_rpc_error)?;
+
+        let block_env = self
+            .block_env(&mut archival_state)?
+            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+
+        let cfg = self.cfg(&mut archival_state).map_err(into_rpc_error)?;
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
+
+        // Replay previous transactions in the block
+        let mut evm_db = self.get_db(&mut archival_state);
+
+        let mut traces = vec![];
+        for tx_idx in block.transactions {
+            let tx = self
+                .transaction(tx_idx, state)
+                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+
+            let result = self.trace_transaction(
+                &block_env,
+                replay_tx_env(&tx),
+                cfg_env.clone(),
+                &mut evm_db,
+                &opts,
+            )?;
+            traces.push(TraceResult::new_success(result, Some(*tx.hash())));
+        }
+
+        Ok(traces)
     }
 
     /// Handler for: `debug_traceTransaction`
@@ -357,10 +397,10 @@ where
 
         // Trace the target transaction
         Ok(self.trace_transaction(
-            block_env,
+            &block_env,
             replay_tx_env(&traced_tx),
             cfg_env,
-            evm_db,
+            &mut evm_db,
             &opts.unwrap_or_default(),
         )?)
     }
