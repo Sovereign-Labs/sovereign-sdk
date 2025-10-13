@@ -108,38 +108,12 @@ impl DaService for StorableMockDaClient {
     async fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
-        blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
+        _blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
     ) -> RelevantProofs<
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     > {
-        let url = self.url("/extraction-proof");
-        let request = ExtractionProofRequest {
-            block: block.clone(),
-            blobs: blobs.clone(),
-        };
-
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .expect("Failed to send extraction proof request");
-
-        if !response.status().is_success() {
-            let error: ErrorResponse = response
-                .json()
-                .await
-                .expect("Failed to parse error response");
-            panic!("Server error: {}", error.error);
-        }
-
-        let proof_response: ExtractionProofResponse = response
-            .json()
-            .await
-            .expect("Failed to parse extraction proof response");
-        proof_response.proofs
+        block.get_relevant_proofs()
     }
 
     async fn send_transaction(
