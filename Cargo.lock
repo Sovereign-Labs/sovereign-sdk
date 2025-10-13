@@ -354,9 +354,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-json-rpc"
-version = "1.0.37"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65f763621707fa09cece30b73ecc607eb43fd7a72451fe3b46f645b905086926"
+checksum = "d91676d242c0ced99c0dd6d0096d7337babe9457cc43407d26aa6367fcf90553"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -742,9 +742,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-transport"
-version = "1.0.37"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d94ee404368a3d9910dfe61b203e888c6b0e151a50e147f95da8baff9f9c7763"
+checksum = "702002659778d89a94cd4ff2044f6b505460df6c162e2f47d1857573845b0ace"
 dependencies = [
  "alloy-json-rpc",
  "alloy-primitives",
