@@ -9,7 +9,7 @@ use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{broadcast, oneshot, watch, Mutex, RwLock};
+use tokio::sync::{broadcast, watch, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep};
 use tracing::Instrument;
