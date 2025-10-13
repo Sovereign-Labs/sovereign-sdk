@@ -13,7 +13,7 @@ publish = false
 # more here: <https://github.com/oxidecomputer/progenitor>.
 [dependencies]
 futures = "0.3"
-progenitor-client = { version = "0.8" }
+progenitor-client = { version = "0.11" }
 regress = "0.4.1"
 reqwest = { workspace = true, features = ["rustls-tls", "json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
