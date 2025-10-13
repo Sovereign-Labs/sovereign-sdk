@@ -9,6 +9,9 @@
 //! - O_DSYNC on Linux (eliminating extra fsync calls)
 //! - sync_data() on other platforms
 //!
+//! The ping-pong technique is a form of double buffering where writes alternate
+//! between two slots. See: <https://en.wikipedia.org/wiki/Multiple_buffering>
+//!
 //! Recovery handles corruption by checking CRCs and falling back to the
 //! slot with the highest valid sequence number.
 
@@ -20,6 +23,10 @@ use std::sync::atomic::{AtomicU64, AtomicU8, Ordering};
 use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 
+
+// https://github.com/bminor/glibc/blob/3a0a8eae50679d3170df7af500dde2c4c3d11c78/sysdeps/unix/sysv/linux/bits/fcntl-linux.h#L97
+#[cfg(not(target_os = "linux"))]
+const O_DSYNC: i32 = 0o10000;
 const FLAG_FILE_NAME: &str = "commit_status.flag";
 
 // File layout constants
@@ -413,7 +420,7 @@ impl CommitFlag {
         #[cfg(target_os = "linux")]
         let options = {
             use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_DSYNC)
+            options.custom_flags(O_DSYNC)
         };
 
         options
