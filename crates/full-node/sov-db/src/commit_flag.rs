@@ -63,18 +63,18 @@ struct AlignedBuffer {
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
 impl AlignedBuffer {
-    fn new() -> Self {
+    fn new() -> anyhow::Result<Self> {
         let layout = Layout::from_size_align(SECTOR_SIZE, SECTOR_SIZE)
-            .expect("Failed to create layout for aligned buffer");
+            .context("Failed to create layout for aligned buffer")?;
         let ptr = unsafe { alloc(layout) };
         if ptr.is_null() {
-            panic!("Failed to allocate aligned buffer");
+            anyhow::bail!("Failed to allocate aligned buffer");
         }
         // Zero-initialize the buffer
         unsafe {
             std::ptr::write_bytes(ptr, 0, SECTOR_SIZE);
         }
-        AlignedBuffer { ptr, layout }
+        Ok(AlignedBuffer { ptr, layout })
     }
 
     fn as_slice_mut(&mut self) -> &mut [u8] {
@@ -166,7 +166,7 @@ impl CommitFlag {
                     .context("Failed to pre-allocate commit flag file")?;
 
                 // Initialize with Completed status using aligned buffer
-                let mut buffer = AlignedBuffer::new();
+                let mut buffer = AlignedBuffer::new()?;
                 let status = CommitStatus::Completed;
                 let serialized = borsh::to_vec(&status)?;
 
@@ -209,7 +209,7 @@ impl CommitFlag {
         #[cfg(target_os = "linux")]
         {
             // On Linux with O_DIRECT, read using an aligned buffer
-            let mut buffer = AlignedBuffer::new();
+            let mut buffer = AlignedBuffer::new()?;
 
             match self.file.read_at(buffer.as_slice_mut(), 0) {
                 Ok(bytes_read) if bytes_read > 0 => {
@@ -297,7 +297,7 @@ impl CommitFlag {
             }
 
             // Create aligned buffer and copy serialized data
-            let mut buffer = AlignedBuffer::new();
+            let mut buffer = AlignedBuffer::new()?;
             buffer.as_slice_mut()[..serialized.len()].copy_from_slice(&serialized);
 
             // Single pwrite syscall at offset 0 - hot path!
