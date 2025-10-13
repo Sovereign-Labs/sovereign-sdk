@@ -312,15 +312,9 @@ where
 
     fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<BlockNumber> {
         let block_number = block_nr_or_tag.unwrap_or_default();
-        let block_numbers = self.evm.block_numbers(&mut self.state);
-        let block_number = match block_number {
-            BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                *block_numbers.end()
-            }
-            BlockNumberOrTag::Number(nr) => nr,
-            BlockNumberOrTag::Pending => return Err(Error::PendingBlock),
-        };
-        Ok(block_number)
+        if block_number = BlockNumberOrTag::Pending {
+            return Err(Error::PendingBlock);
+        }
+        Ok(self.evm.resolve_block_number(block_number, &mut self.state))
     }
 }

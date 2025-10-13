@@ -1,6 +1,7 @@
 use alloy_consensus::Sealed;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_primitives::Address;
+use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::{Address, BlockNumber};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
@@ -264,6 +265,24 @@ where
                 Err(_) => PendingOrBlock::Invalid(block_number_str),
             },
         }
+    }
+
+    /// Converts BlockNumberOrTag into number.
+    pub fn resolve_block_number(
+        &self,
+        block: BlockNumberOrTag,
+        state: &mut ApiStateAccessor<S>,
+    ) -> BlockNumber {
+        let block_numbers = self.block_numbers(state);
+        let block_number = match block {
+            BlockNumberOrTag::Earliest => *block_numbers.start(),
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                *block_numbers.end()
+            }
+            BlockNumberOrTag::Number(nr) => nr,
+            BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+        };
+        block_number
     }
 
     /// Retrieves a sealed block by number.
