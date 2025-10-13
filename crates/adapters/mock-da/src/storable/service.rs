@@ -22,7 +22,8 @@ use crate::config::WAIT_ATTEMPT_PAUSE;
 use crate::storable::layer::{Randomizer, StorableMockDaLayer};
 use crate::{
     BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockDaSpec,
-    MockDaVerifier, RandomizationBehaviour, RandomizationConfig, DEFAULT_BLOCK_WAITING_TIME_MS,
+    MockDaVerifier, MockHash, RandomizationBehaviour, RandomizationConfig,
+    DEFAULT_BLOCK_WAITING_TIME_MS,
 };
 
 const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
@@ -343,7 +344,7 @@ impl StorableMockDaService {
     /// Subscribe to finalized headers as they are finalized.
     /// Expect only to receive headers which were finalized after subscription
     /// Optimized version of `get_last_finalized_block_header`.
-    pub async fn subscribe_finalized_header(&self) -> Result<HeaderStream, anyhow::Error> {
+    pub async fn subscribe_finalized_header(&self) -> anyhow::Result<HeaderStream> {
         let receiver = {
             let da_layer = self.da_layer.read().await;
             da_layer.finalized_header_sender.subscribe()
@@ -358,19 +359,8 @@ impl StorableMockDaService {
 
         Ok(stream.boxed())
     }
-}
 
-#[async_trait]
-impl DaService for StorableMockDaService {
-    type Spec = MockDaSpec;
-    type Config = MockDaConfig;
-    type Verifier = MockDaVerifier;
-    type FilteredBlock = MockBlock;
-    type Error = anyhow::Error;
-
-    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
-
-    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+    async fn get_block_at_inner(&self, height: u64) -> anyhow::Result<MockBlock> {
         tracing::trace!(%height, "Getting block at");
         if height > u32::MAX as u64 {
             return Err(anyhow::anyhow!(
@@ -393,10 +383,7 @@ impl DaService for StorableMockDaService {
         Ok(block)
     }
 
-    async fn get_block_header_at(
-        &self,
-        height: u64,
-    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+    async fn get_block_header_at_inner(&self, height: u64) -> anyhow::Result<MockBlockHeader> {
         tracing::trace!(%height, "Getting block header at");
         if height > u32::MAX as u64 {
             return Err(anyhow::anyhow!(
@@ -417,9 +404,7 @@ impl DaService for StorableMockDaService {
         Ok(block_header)
     }
 
-    async fn get_last_finalized_block_header(
-        &self,
-    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+    async fn get_last_finalized_block_header(&self) -> anyhow::Result<MockBlockHeader> {
         self.da_layer
             .read()
             .await
@@ -427,37 +412,10 @@ impl DaService for StorableMockDaService {
             .await
     }
 
-    async fn get_head_block_header(
-        &self,
-    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        let head_block_header = { self.head_block.borrow().clone() };
-        Ok(head_block_header)
-    }
-
-    fn extract_relevant_blobs(
-        &self,
-        block: &Self::FilteredBlock,
-    ) -> RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction> {
-        block.as_relevant_blobs()
-    }
-
-    async fn get_extraction_proof(
-        &self,
-        block: &Self::FilteredBlock,
-        _blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
-    ) -> RelevantProofs<
-        <Self::Spec as DaSpec>::InclusionMultiProof,
-        <Self::Spec as DaSpec>::CompletenessProof,
-    > {
-        block.get_relevant_proofs()
-    }
-
-    async fn send_transaction(
+    async fn send_transaction_inner(
         &self,
         blob: &[u8],
-    ) -> oneshot::Receiver<
-        Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
-    > {
+    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<MockHash>>> {
         let (tx, rx) = oneshot::channel();
         if !self.send_transaction_success.load(Ordering::Relaxed) {
             tx.send(Err(anyhow::anyhow!(
@@ -504,12 +462,10 @@ impl DaService for StorableMockDaService {
         rx
     }
 
-    async fn send_proof(
+    async fn send_proof_inner(
         &self,
         aggregated_proof_data: &[u8],
-    ) -> oneshot::Receiver<
-        Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
-    > {
+    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<MockHash>>> {
         let (tx, rx) = oneshot::channel();
         tracing::trace!(
             blob = hex::encode(aggregated_proof_data),
@@ -549,12 +505,87 @@ impl DaService for StorableMockDaService {
         rx
     }
 
-    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+    async fn get_proofs_at_inner(&self, height: u64) -> anyhow::Result<Vec<Vec<u8>>> {
         let blobs = self.get_block_at(height).await?.proof_blobs;
         Ok(blobs
             .into_iter()
             .map(|mut proof_blob| proof_blob.full_data().to_vec())
             .collect())
+    }
+}
+
+#[async_trait]
+impl DaService for StorableMockDaService {
+    type Spec = MockDaSpec;
+    type Config = MockDaConfig;
+    type Verifier = MockDaVerifier;
+    type FilteredBlock = MockBlock;
+    type Error = anyhow::Error;
+
+    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
+
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        self.get_block_at_inner(height).await
+    }
+
+    async fn get_block_header_at(
+        &self,
+        height: u64,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        self.get_block_header_at_inner(height).await
+    }
+
+    async fn get_last_finalized_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        self.get_last_finalized_block_header().await
+    }
+
+    async fn get_head_block_header(
+        &self,
+    ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
+        let head_block_header = { self.head_block.borrow().clone() };
+        Ok(head_block_header)
+    }
+
+    fn extract_relevant_blobs(
+        &self,
+        block: &Self::FilteredBlock,
+    ) -> RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction> {
+        block.as_relevant_blobs()
+    }
+
+    async fn get_extraction_proof(
+        &self,
+        block: &Self::FilteredBlock,
+        _blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
+    ) -> RelevantProofs<
+        <Self::Spec as DaSpec>::InclusionMultiProof,
+        <Self::Spec as DaSpec>::CompletenessProof,
+    > {
+        block.get_relevant_proofs()
+    }
+
+    async fn send_transaction(
+        &self,
+        blob: &[u8],
+    ) -> oneshot::Receiver<
+        Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
+    > {
+        self.send_transaction_inner(blob).await
+    }
+
+    async fn send_proof(
+        &self,
+        aggregated_proof_data: &[u8],
+    ) -> oneshot::Receiver<
+        Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
+    > {
+        self.send_proof_inner(aggregated_proof_data).await
+    }
+
+    async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        self.get_proofs_at_inner(height).await
     }
 
     async fn take_background_join_handle(&self) -> Option<JoinHandle<()>> {
