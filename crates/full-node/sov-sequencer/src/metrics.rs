@@ -28,6 +28,8 @@ pub struct PreferredSequencerUpdateStateMetrics {
     pub transactions_count: u64,
     pub in_progress_batch: bool,
     pub time_spent_fetching_batches: std::time::Duration,
+    pub true_slot: u64,
+    pub visible_slot: u64,
 }
 
 impl Metric for PreferredSequencerUpdateStateMetrics {
@@ -38,14 +40,16 @@ impl Metric for PreferredSequencerUpdateStateMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} duration_ms={},total_message_processing_duration_ms={},fetch_batches_duration_us={},batches_count={},transactions_count={},in_progress_batch={}",
+            "{} duration_ms={},total_message_processing_duration_ms={},fetch_batches_duration_us={},batches_count={},transactions_count={},in_progress_batch={},true_slot={},visible_slot={}",
             self.measurement_name(),
             self.duration.as_millis(),
             self.total_message_processing_duration.as_millis(),
             self.time_spent_fetching_batches.as_micros(),
             self.batches_count,
             self.transactions_count,
-            self.in_progress_batch
+            self.in_progress_batch,
+            self.true_slot,
+            self.visible_slot
         )
     }
 }

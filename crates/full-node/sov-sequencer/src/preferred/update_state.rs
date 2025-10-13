@@ -6,9 +6,9 @@ use sov_state::{NativeStorage, Storage};
 
 use crate::metrics::PreferredSequencerUpdateStateMetrics;
 use crate::preferred::{
-    get_next_sequence_number_according_to_node, DbEvent, FetchBatches, Flow,
-    PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
-    StateUpdateInfo,
+    current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
+    DbEvent, FetchBatches, Flow, PreferredBatchToReplay, PreferredSequencer,
+    ProcessFinalCatchupData, RollupBlockExecutor, StateUpdateInfo,
 };
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -157,6 +157,11 @@ where
             .await?;
         }
 
+        // Extract slot numbers before moving info
+
+        let true_slot = info.slot_number.get();
+        let visible_slot = current_visible_slot_number_according_to_node::<S, Rt>(&info).get();
+
         let (maybe_data, message_processing_duration) = self
             .synchronized_state_updator
             .final_catchup_msg(
@@ -188,6 +193,8 @@ where
                 .expect("transactions in a single batch cannot possibly exceed u64::MAX"),
             in_progress_batch: data.batch_is_in_progress,
             time_spent_fetching_batches,
+            true_slot,
+            visible_slot,
         };
 
         sov_metrics::track_metrics(|t| {
