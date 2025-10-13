@@ -100,8 +100,6 @@ impl DaService for StorableMockDaClient {
         &self,
         block: &Self::FilteredBlock,
     ) -> RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction> {
-        // For the HTTP client, we use the block's implementation directly
-        // since this method is not async
         block.as_relevant_blobs()
     }
 
