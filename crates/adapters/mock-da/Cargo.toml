@@ -46,10 +46,11 @@ chrono = { workspace = true, optional = true }
 rand = { workspace = true, optional = true, features = ["small_rng"] }
 rand_chacha = { workspace = true, optional = true }
 
-# For HTTP server
+# For HTTP server and client
 axum = { workspace = true }
-tower = { workspace = true }
-tower-http = { workspace = true }
+tower = { workspace = true}
+tower-http = { workspace = true}
+reqwest = { version = "0.12", features = ["json"] }
 
 [dev-dependencies]
 bincode = { workspace = true }

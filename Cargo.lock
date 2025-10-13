@@ -12265,6 +12265,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "reqwest 0.12.23",
  "schemars 0.8.22",
  "sea-orm",
  "serde",

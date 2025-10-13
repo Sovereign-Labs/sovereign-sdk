@@ -6,9 +6,11 @@ pub mod da;
 mod entity;
 pub mod layer;
 pub mod server;
+pub mod client;
 pub mod service;
 
 pub use da::StorableMockDaService;
+pub use client::StorableMockDaClient;
 
 #[cfg(test)]
 mod tests {

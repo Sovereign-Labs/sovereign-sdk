@@ -59,6 +59,12 @@ pub struct ExtractionProofResponse {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct ExtractionProofRequest {
+    pub block: MockBlock,
+    pub blobs: RelevantBlobs<<MockDaSpec as DaSpec>::BlobTransaction>,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct ProofsResponse {
     pub proofs: Vec<String>, // hex-encoded proofs
 }
@@ -274,12 +280,13 @@ pub fn create_router(da_service: StorableMockDaService) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storable::StorableMockDaLayer;
-    use crate::MockAddress;
+    use crate::{BlockProducingConfig, MockAddress};
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use std::sync::Arc;
     use tokio::sync::RwLock;
+
+    use crate::storable::layer::StorableMockDaLayer;
 
     #[tokio::test]
     async fn test_get_head_block_header() {
@@ -288,8 +295,12 @@ mod tests {
                 .await
                 .expect("Failed to create DA layer"),
         ));
-        let da_service =
-            StorableMockDaService::new_manual_producing(MockAddress::new([1; 32]), da_layer).await;
+        let da_service = StorableMockDaService::new(
+            MockAddress::new([1; 32]),
+            da_layer,
+            BlockProducingConfig::Periodic { block_time_ms: 100 },
+        )
+        .await;
 
         let app = create_router(da_service);
         let server = TestServer::new(app).unwrap();
@@ -305,8 +316,12 @@ mod tests {
                 .await
                 .expect("Failed to create DA layer"),
         ));
-        let da_service =
-            StorableMockDaService::new_manual_producing(MockAddress::new([1; 32]), da_layer).await;
+        let da_service = StorableMockDaService::new(
+            MockAddress::new([1; 32]),
+            da_layer,
+            BlockProducingConfig::Periodic { block_time_ms: 100 },
+        )
+        .await;
 
         let app = create_router(da_service);
         let server = TestServer::new(app).unwrap();
