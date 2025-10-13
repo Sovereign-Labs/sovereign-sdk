@@ -413,14 +413,11 @@ impl StorableMockDaService {
     pub(crate) async fn send_transaction_inner(
         &self,
         blob: &[u8],
-    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<MockHash>>> {
-        let (tx, rx) = oneshot::channel();
+    ) -> anyhow::Result<SubmitBlobReceipt<MockHash>> {
         if !self.send_transaction_success.load(Ordering::Relaxed) {
-            tx.send(Err(anyhow::anyhow!(
+            return Err(anyhow::anyhow!(
                 "StorableMockDaService::send_transaction failed"
-            )))
-            .unwrap();
-            return rx;
+            ));
         }
 
         let block_producing_pauser = {
@@ -451,20 +448,17 @@ impl StorableMockDaService {
             }
             blob_hash
         };
-        let res = Ok(SubmitBlobReceipt {
+
+        Ok(SubmitBlobReceipt {
             blob_hash: HexHash::new(blob_hash.0),
             da_transaction_id: blob_hash,
-        });
-
-        tx.send(res).unwrap();
-        rx
+        })
     }
 
     pub(crate) async fn send_proof_inner(
         &self,
         aggregated_proof_data: &[u8],
-    ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<MockHash>>> {
-        let (tx, rx) = oneshot::channel();
+    ) -> anyhow::Result<SubmitBlobReceipt<MockHash>> {
         tracing::trace!(
             blob = hex::encode(aggregated_proof_data),
             "Sending an aggregated proof"
@@ -494,13 +488,10 @@ impl StorableMockDaService {
 
         self.aggregated_proof_sender.send(()).unwrap();
 
-        let res = Ok(SubmitBlobReceipt {
+        Ok(SubmitBlobReceipt {
             blob_hash: HexHash::new(blob_hash.0),
             da_transaction_id: blob_hash,
-        });
-
-        tx.send(res).unwrap();
-        rx
+        })
     }
 
     pub(crate) async fn get_proofs_at_inner(&self, height: u64) -> anyhow::Result<Vec<Vec<u8>>> {

@@ -68,7 +68,10 @@ impl DaService for StorableMockDaService {
     ) -> oneshot::Receiver<
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
-        self.send_transaction_inner(blob).await
+        let (tx, rx) = oneshot::channel();
+        let res = self.send_transaction_inner(blob).await;
+        tx.send(res).unwrap();
+        rx
     }
 
     async fn send_proof(
@@ -77,7 +80,10 @@ impl DaService for StorableMockDaService {
     ) -> oneshot::Receiver<
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
-        self.send_proof_inner(aggregated_proof_data).await
+        let (tx, rx) = oneshot::channel();
+        let res = self.send_proof_inner(aggregated_proof_data).await;
+        tx.send(res).unwrap();
+        rx
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
