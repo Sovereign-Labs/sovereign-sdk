@@ -39,6 +39,7 @@ tracing = { workspace = true }
 rand = { workspace = true, optional = true }
 schemars = { workspace = true }
 uuid = { workspace = true, features = ["std", "v7"] }
+crc32fast = "1.5"
 
 [dev-dependencies]
 test-strategy = { workspace = true }

@@ -11746,6 +11746,7 @@ dependencies = [
  "bincode",
  "borsh",
  "byteorder",
+ "crc32fast",
  "criterion",
  "futures",
  "hex",
