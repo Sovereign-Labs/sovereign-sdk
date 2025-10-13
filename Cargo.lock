@@ -3552,7 +3552,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -11914,7 +11914,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-primitives",
  "arbitrary",
- "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "reth-primitives",
  "revm",
  "secp256k1 0.30.0",
@@ -12179,7 +12179,7 @@ dependencies = [
  "proptest",
  "proptest-derive 0.5.1",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "schemars 0.8.22",
  "sea-orm",
  "serde",
@@ -12934,7 +12934,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "schemars 0.8.22",
  "serde",
  "sov-address",
@@ -13046,7 +13046,7 @@ dependencies = [
  "indexmap 2.11.1",
  "progenitor-client",
  "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand_chacha 0.9.0",
  "schemars 0.8.22",
  "serde",
  "sha2 0.10.9",
