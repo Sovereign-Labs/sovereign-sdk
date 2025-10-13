@@ -17,6 +17,7 @@ use alloy_primitives::BlockNumber;
 use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{FilterBlockOption, Log};
+use derive_more::{Deref, From};
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_evm::{Evm, MaybeSealedBlock, Receipt, SealedBlock};
 use sov_modules_api::ApiStateAccessor;
@@ -63,13 +64,15 @@ impl From<Error> for ErrorObjectOwned {
     }
 }
 
+/// A container for values that can only be deref'd immutably.
+#[derive(From, Deref)]
+struct Immutable<T>(T);
+
 pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
-    /// Immutable
-    filter: Filter,
-    cursor: Option<Cursor>,
-    max_logs: usize,
+    filter: Immutable<Filter>,
+    cursor: Immutable<Option<Cursor>>,
+    max_logs: Immutable<usize>,
     evm: Evm<S>,
-    /// Mutable
     logs: Vec<Log>,
     state: ApiStateAccessor<S>,
     _phantom: PhantomData<(S, Seq)>,
@@ -89,9 +92,9 @@ where
         state: ApiStateAccessor<S>,
     ) -> Self {
         Self {
-            filter,
-            cursor,
-            max_logs,
+            filter: filter.into(),
+            cursor: cursor.into(),
+            max_logs: max_logs.into(),
             state,
             evm: Evm::<S>::default(),
             logs: vec![],
@@ -136,7 +139,7 @@ where
         &self,
         range: RangeInclusive<BlockNumber>,
     ) -> Result<RangeInclusive<u64>> {
-        if let Some(cursor) = self.cursor {
+        if let Some(cursor) = *self.cursor {
             if !range.contains(&cursor.block_height) {
                 tracing::warn!(
                     cursor = cursor.block_height,
@@ -172,7 +175,7 @@ where
         tx_range_absolut: Range<u64>,
         block_number: BlockNumber,
     ) -> Result<Range<u64>> {
-        if let Some(cursor) = self.cursor {
+        if let Some(cursor) = *self.cursor {
             if cursor.block_height == block_number {
                 if !tx_range_absolut.contains(&cursor.tx_index_absolute) {
                     tracing::warn!(
@@ -213,7 +216,7 @@ where
         tx_index_absolute: u64,
         block_number: u64,
     ) -> Result<u32> {
-        if let Some(cursor) = self.cursor {
+        if let Some(cursor) = *self.cursor {
             if cursor.block_height == block_number && cursor.tx_index_absolute == tx_index_absolute
             {
                 if !log_range.contains(&cursor.log_index_in_tx) {
@@ -247,7 +250,7 @@ where
 
         // As logs iter is pre-enumerated - we keep correct indices
         for (idx, log) in logs_iter.skip(skipped_logs as usize) {
-            if self.logs.len() >= self.max_logs {
+            if self.logs.len() >= *self.max_logs {
                 return Ok(Some(Cursor {
                     block_height: header.number(),
                     tx_index_absolute,

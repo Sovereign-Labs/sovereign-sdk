@@ -11945,6 +11945,7 @@ dependencies = [
  "alloy-rpc-types",
  "anyhow",
  "borsh",
+ "derive_more 1.0.0",
  "ethereum-types",
  "ethers",
  "futures",
