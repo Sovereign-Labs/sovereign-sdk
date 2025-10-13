@@ -12279,8 +12279,6 @@ dependencies = [
  "testcontainers-modules",
  "tokio",
  "toml 0.8.23",
- "tower 0.5.2",
- "tower-http 0.5.2",
  "tracing",
 ]
 

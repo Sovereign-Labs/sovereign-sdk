@@ -47,10 +47,8 @@ rand = { workspace = true, optional = true, features = ["small_rng"] }
 rand_chacha = { workspace = true, optional = true }
 
 # For HTTP server and client
-axum = { workspace = true }
-tower = { workspace = true}
-tower-http = { workspace = true}
-reqwest = { version = "0.12", features = ["json"] }
+axum = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["json"], optional = true}
 
 [dev-dependencies]
 bincode = { workspace = true }
@@ -92,6 +90,8 @@ native = [
     "sov-rollup-interface/native",
     "dep:rand",
     "dep:rand_chacha",
+    "dep:axum",
+    "dep:reqwest"
 ]
 postgres = ["native", "sea-orm/sqlx-postgres"]
 
