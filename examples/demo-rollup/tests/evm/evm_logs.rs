@@ -125,7 +125,7 @@ async fn evm_test_get_logs_range_limit() {
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let filter = new_fileter_for_all_logs();
+    let filter = new_filter_for_all_logs();
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), max_log_limit);
@@ -192,7 +192,7 @@ fn nb_of_logs_according_to_cursor(cursor: Cursor, nb_of_logs_per_tx: u32) -> u32
     (cursor.tx_index_absolute as u32) * nb_of_logs_per_tx + cursor.log_index_in_tx
 }
 
-fn new_fileter_for_all_logs() -> Filter {
+fn new_filter_for_all_logs() -> Filter {
     Filter::new()
         .from_block(0)
         .to_block(BlockNumberOrTag::Latest)
@@ -250,7 +250,7 @@ impl RollupAndClient {
     async fn get_logs_with_cursor(&self, cursor: Option<Cursor>) -> LogsWithMaybeCursor {
         let filter_with_cursor = FilterWithCursor {
             cursor: cursor.map(|c| c.pack()),
-            filter: new_fileter_for_all_logs(),
+            filter: new_filter_for_all_logs(),
         };
 
         self.client.get_logs_with_cursor(&filter_with_cursor).await
