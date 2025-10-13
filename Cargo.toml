@@ -257,7 +257,7 @@ utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa.git", rev = "a985d
 unwrap-infallible = "0.1.5"
 bech32 = { version = "0.11" }
 derive_more = { version = "1.0", default-features = false, features = ["std"] }
-clap = { version = "4.5.16", features = ["derive"] }
+clap = { version = "4.5.48", features = ["derive"] }
 toml = { version = "0.8.19", features = ["parse"] }
 jsonrpsee = { version = "0.26.0" }
 jsonrpsee-types = { version = "0.26.0" }
