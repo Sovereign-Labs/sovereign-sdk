@@ -64,12 +64,14 @@ impl From<Error> for ErrorObjectOwned {
 }
 
 pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
+    /// Immutable
     filter: Filter,
     cursor: Option<Cursor>,
     max_logs: usize,
-    state: ApiStateAccessor<S>,
     evm: Evm<S>,
+    /// Mutable
     logs: Vec<Log>,
+    state: ApiStateAccessor<S>,
     _phantom: PhantomData<(S, Seq)>,
 }
 
