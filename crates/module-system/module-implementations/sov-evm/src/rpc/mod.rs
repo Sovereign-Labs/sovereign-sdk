@@ -274,13 +274,13 @@ where
         }
 
         // Trace the target transaction
-        Ok(self.trace_transaction_inner(
+        self.trace_transaction_inner(
             &block_env,
             replay_tx_env(&traced_tx),
             cfg_env,
             &mut evm_db,
             &opts,
-        )?)
+        )
     }
 
     fn trace_transaction_inner(
@@ -310,7 +310,7 @@ where
 
                     let gas_limit = tx_env.gas_limit;
                     let ExecResultAndState { result, state } =
-                        inspect(&mut *db, &block_env, tx_env, cfg, &mut inspector)?;
+                        inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
                     db.commit(state)?;
 
                     inspector.set_transaction_gas_limit(gas_limit);
