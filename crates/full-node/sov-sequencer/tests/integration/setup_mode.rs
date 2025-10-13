@@ -49,7 +49,7 @@ generate_optimistic_runtime_with_kernel!(
     modules: [value_setter: ValueSetter<S>],
     transaction_delay_ms_wrapper: |_: &Self::Decodable| {
         0
-    }
+    },
 );
 
 #[tokio::test(flavor = "multi_thread")]
