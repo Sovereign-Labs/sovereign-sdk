@@ -167,9 +167,7 @@ where
             if !self.filter.matches_bloom(block.header.logs_bloom()) {
                 continue;
             }
-            if let Some(cursor) = self.scan_block(block)? {
-                return Ok(Some(cursor));
-            }
+            self.scan_block(block)
         }
         Ok(None)
     }
@@ -206,9 +204,7 @@ where
             if !self.filter.matches_bloom(receipt.bloom()) {
                 continue;
             }
-            if let Some(cursor) = self.scan_tx(tx_idx_absolute, receipt, &block.header)? {
-                return Ok(Some(cursor));
-            }
+            self.scan_tx(tx_idx_absolute, receipt, &block.header)
         }
 
         Ok(None)

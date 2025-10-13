@@ -2,6 +2,7 @@
 //! Currently, SQLite and PostgreSQL are supported.
 //!
 
+pub mod da_impl;
 mod entity;
 pub mod layer;
 pub mod service;
