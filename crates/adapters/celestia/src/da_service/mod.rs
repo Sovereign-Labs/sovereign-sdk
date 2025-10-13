@@ -41,7 +41,7 @@ type BoxError = anyhow::Error;
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     // Client is used for a submission request, where we want to have consistent ordering.
-    submit_client: CelestiaClient,
+    client: CelestiaClient,
     // Client used for queries, where it is not important to have ordering
     read_client: Arc<HttpClient>,
     rollup_batch_namespace: RollupNamespace,
@@ -64,7 +64,7 @@ impl CelestiaService {
         request_timeout: Duration,
     ) -> Self {
         Self {
-            submit_client,
+            client: submit_client,
             read_client: Arc::new(read_client),
             rollup_batch_namespace: RollupNamespace::Batch(rollup_batch_namespace),
             rollup_proof_namespace: RollupNamespace::Proof(rollup_proof_namespace),
@@ -134,20 +134,6 @@ impl CelestiaService {
 type HeaderStream = BoxStream<'static, Result<CelestiaHeader, anyhow::Error>>;
 
 impl CelestiaService {
-    async fn get_block_header_at_inner(
-        &self,
-        height: u64,
-    ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
-        let client = &self.read_client;
-        let extended_header =
-            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
-                .await
-                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-                .map_err(into_transient_with_context)?;
-
-        Ok(extended_header.into())
-    }
-
     async fn get_block_at_inner(
         &self,
         height: u64,
@@ -280,12 +266,7 @@ impl DaService for CelestiaService {
         &self,
         height: u64,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
-        run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_block_header_at_inner(height),
-            "get_block_header_at",
-        )
-        .await
+        self.client.get_block_header_at(height).await
     }
 
     fn safe_lead_time(&self) -> Duration {
@@ -338,7 +319,7 @@ impl DaService for CelestiaService {
     ) -> oneshot::Receiver<
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
-        self.submit_client
+        self.client
             .submit_blob_to_namespace(blob, self.rollup_batch_namespace, &self.signer_address)
             .await
     }
@@ -349,7 +330,7 @@ impl DaService for CelestiaService {
     ) -> oneshot::Receiver<
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
-        self.submit_client
+        self.client
             .submit_blob_to_namespace(
                 aggregated_proof,
                 self.rollup_proof_namespace,

@@ -2,6 +2,7 @@ use crate::da_service::client::standard_node::StandardNodeClient;
 use crate::da_service::client::twinkle::TwinkleClient;
 use crate::types::{RollupNamespace, TmHash};
 use crate::verifier::address::CelestiaAddress;
+use crate::CelestiaHeader;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
 
@@ -29,9 +30,16 @@ impl CelestiaClient {
             }
             CelestiaClient::Twinkle(client) => {
                 client
-                    .submit_blob_to_namespace_inner(blob, namespace, signer)
+                    .submit_blob_to_namespace(blob, namespace, signer)
                     .await
             }
+        }
+    }
+
+    pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
+        match self {
+            CelestiaClient::StandardNode(client) => client.get_block_header_at(height).await,
+            CelestiaClient::Twinkle(client) => client.get_block_header_at(height).await,
         }
     }
 }

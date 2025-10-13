@@ -32,6 +32,7 @@ fn build_client() -> TwinkleClient {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn async_blob_submit() -> anyhow::Result<()> {
     sov_test_utils::logging::initialize_or_change_logging_with_filter(
         "debug,hyper=info,sov_celestia_adapter=trace",
@@ -45,7 +46,7 @@ async fn async_blob_submit() -> anyhow::Result<()> {
 
     let start = std::time::Instant::now();
     let rx = twinkle_client
-        .submit_blob_to_namespace_inner(
+        .submit_blob_to_namespace(
             &blob,
             RollupNamespace::Batch(BATCH_NAMESPACE),
             &celestia_address,
@@ -61,7 +62,8 @@ async fn async_blob_submit() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn get_head_block_header() -> anyhow::Result<()> {
+#[ignore]
+async fn get_block_header() -> anyhow::Result<()> {
     let config = CelestiaConfig::dev_config("http://127.0.0.1:26658");
     let params = RollupParams {
         rollup_batch_namespace: BATCH_NAMESPACE,
@@ -82,6 +84,18 @@ async fn get_head_block_header() -> anyhow::Result<()> {
 
     assert_eq!(twinkle_header.header, standard_header.header);
     assert_eq!(twinkle_header.dah, standard_header.dah);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn test_get_head_block_header() -> anyhow::Result<()> {
+    let twinkle_client = build_client();
+
+    let twinkle_header = twinkle_client.get_head_block_header().await?;
+    println!("Twinkle Header {twinkle_header:?}");
+    println!("Twinkle DAH: {:?}", twinkle_header.dah);
 
     Ok(())
 }

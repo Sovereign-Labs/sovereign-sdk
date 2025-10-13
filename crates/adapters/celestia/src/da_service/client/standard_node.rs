@@ -1,8 +1,10 @@
+use crate::da_service::into_transient_with_context;
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{RollupNamespace, TmHash, APP_VERSION};
 use crate::verifier::address::CelestiaAddress;
+use crate::CelestiaHeader;
 use backon::ExponentialBuilder;
-use celestia_rpc::{StateClient, TxPriority};
+use celestia_rpc::{HeaderClient, StateClient, TxPriority};
 use celestia_types::blob::Blob as JsonBlob;
 use jsonrpsee::http_client::HttpClient;
 use sov_rollup_interface::common::HexHash;
@@ -20,7 +22,8 @@ use tracing::{debug, info, instrument};
 /// such as light, bridge or full node.
 #[derive(Debug, Clone)]
 pub struct StandardNodeClient {
-    client: Arc<Mutex<HttpClient>>,
+    submit_client: Arc<Mutex<HttpClient>>,
+    read_client: Arc<HttpClient>,
     backoff_policy: ExponentialBuilder,
     // Separate request timeout, because jsonrpsee is sloppy about it.
     request_timeout: Duration,
@@ -35,7 +38,8 @@ impl StandardNodeClient {
         backoff_policy: ExponentialBuilder,
     ) -> Self {
         Self {
-            client: Arc::new(Mutex::new(client)),
+            submit_client: Arc::new(Mutex::new(client.clone())),
+            read_client: Arc::new(client),
             backoff_policy,
             request_timeout,
             tx_priority,
@@ -73,7 +77,7 @@ impl StandardNodeClient {
         }
 
         let start_lock = std::time::Instant::now();
-        let submit_client = self.client.lock().await;
+        let submit_client = self.submit_client.lock().await;
         let lock_acquisition = start_lock.elapsed();
 
         let start_submit = std::time::Instant::now();
@@ -145,5 +149,29 @@ impl StandardNodeClient {
         .await;
         tx.send(res).unwrap();
         rx
+    }
+
+    async fn get_block_header_at_inner(
+        &self,
+        height: u64,
+    ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        let client = &self.read_client;
+        let extended_header =
+            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
+                .await
+                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+                .map_err(into_transient_with_context)?;
+
+        Ok(extended_header.into())
+    }
+
+    #[instrument(skip(self))]
+    pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
+        run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.get_block_header_at_inner(height),
+            "get_block_header_at",
+        )
+        .await
     }
 }

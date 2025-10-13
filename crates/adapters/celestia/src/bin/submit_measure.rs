@@ -104,7 +104,7 @@ async fn measure_throughput(
     let start_header = service.get_head_block_header().await?;
     let start_height = start_header.height();
 
-    let min_interval = Duration::from_millis(4000);
+    let min_interval = Duration::from_millis(5000);
     let mut last_submission = Instant::now();
 
     println!(
@@ -153,8 +153,6 @@ async fn measure_throughput(
             drop(permit);
         });
     }
-
-    println!("Measurement duration complete. Not waiting for in-flight blobs.");
 
     // Get ending block height
     let end_header = service.get_head_block_header().await?;

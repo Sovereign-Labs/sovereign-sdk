@@ -236,7 +236,7 @@ impl TwinkleClient {
         }
     }
 
-    pub async fn submit_blob_to_namespace_inner(
+    pub async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
         namespace: RollupNamespace,
@@ -290,8 +290,6 @@ impl TwinkleClient {
         self.query_header(None).await
     }
 
-    // Will be used later when necessary data is implemented on Twinkle API
-    #[allow(dead_code)]
     #[instrument(skip(self))]
     pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
         self.query_header(Some(height)).await
