@@ -5,6 +5,7 @@
 pub mod da;
 mod entity;
 pub mod layer;
+pub mod server;
 pub mod service;
 
 pub use da::StorableMockDaService;
