@@ -52,7 +52,34 @@ pub enum CommitStatus {
     Completed,
 }
 
-/// Helper struct to manage 512-byte aligned buffer for O_DIRECT writes
+/// Helper struct to manage 512-byte aligned buffer for O_DIRECT writes.
+///
+/// ## Why This Exists
+///
+/// O_DIRECT on Linux has strict alignment requirements that **must** be satisfied
+/// or syscalls will fail with `EINVAL`:
+///
+/// 1. **Buffer address** must be aligned to sector size (512 bytes)
+/// 2. **File offset** must be aligned to sector size
+/// 3. **I/O size** must be a multiple of sector size
+///
+/// Regular Rust allocations (`Vec<u8>`, `Box<[u8]>`, etc.) are typically aligned
+/// to 8 or 16 bytes, which is insufficient for O_DIRECT. This struct uses
+/// [`std::alloc::alloc`] with a 512-byte aligned [`Layout`] to ensure proper alignment.
+///
+/// ## Why Not Use Alternatives?
+///
+/// - **Drop O_DIRECT**: Would lose performance benefits (more syscalls, page cache overhead)
+/// - **`#[repr(align(512))]`**: Requires nightly Rust (unstable feature)
+/// - **External crates**: Would add dependencies and use the same `unsafe` approach internally
+///
+/// ## Safety
+///
+/// This implementation properly encapsulates `unsafe` code:
+/// - Memory is allocated with correct alignment
+/// - Memory is zero-initialized
+/// - Memory is deallocated in [`Drop`]
+/// - All access is through safe slice APIs
 #[cfg(target_os = "linux")]
 #[allow(unsafe_code)]
 struct AlignedBuffer {

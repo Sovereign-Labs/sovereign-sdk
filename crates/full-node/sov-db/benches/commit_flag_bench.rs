@@ -2,7 +2,6 @@ extern crate criterion;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sov_db::commit_flag::{CommitFlag, CommitStatus};
-use std::os::macos::raw::stat;
 
 /// Benchmark write_status() with Completed status
 fn bench_write_completed(c: &mut Criterion) {
