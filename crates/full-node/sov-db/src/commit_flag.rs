@@ -407,19 +407,16 @@ impl CommitFlag {
     }
 
     fn open_for_write(&self) -> anyhow::Result<File> {
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_DSYNC)
-                .open(&self.file_path)
-                .context("Failed to open commit flag file for writing")
-        }
+        let mut options = OpenOptions::new();
+        options.write(true);
 
-        #[cfg(not(target_os = "linux"))]
-        OpenOptions::new()
-            .write(true)
+        #[cfg(target_os = "linux")]
+        let options = {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_DSYNC)
+        };
+
+        options
             .open(&self.file_path)
             .context("Failed to open commit flag file for writing")
     }
