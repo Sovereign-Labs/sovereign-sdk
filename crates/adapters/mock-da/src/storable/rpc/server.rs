@@ -12,6 +12,7 @@ use axum::{
 use serde_json::Value;
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
+use std::io;
 use std::net::SocketAddr;
 
 #[derive(Clone)]
@@ -217,16 +218,21 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
 }
 
 /// Starts external `StorableMockDaService`.
-pub async fn start_server(da_service: StorableMockDaService) -> SocketAddr {
+pub async fn start_server(
+    da_service: StorableMockDaService,
+    host: &str,
+    port: u16,
+) -> Result<SocketAddr, io::Error> {
     let app = create_router(da_service);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
+    let addr = format!("{}:{}", host, port);
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let bound_addr = listener.local_addr()?;
 
     tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
+        if let Err(e) = axum::serve(listener, app).await {
+            tracing::error!("Server error: {}", e);
+        }
     });
 
-    // Give the server a moment to start
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-    addr
+    Ok(bound_addr)
 }

@@ -21,7 +21,9 @@ async fn create_da() -> StorableMockDaService {
 #[tokio::test]
 async fn test_get_head_block_header() {
     let da_service = create_da().await;
-    let addr = start_server(da_service.clone()).await;
+    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
+        .await
+        .unwrap();
     let client = StorableMockDaClient::new(format!("http://{}", addr));
 
     da_service.produce_block_now().await.unwrap();
@@ -36,7 +38,9 @@ async fn test_get_head_block_header() {
 #[tokio::test]
 async fn test_send_transaction() {
     let da_service = create_da().await;
-    let addr = start_server(da_service.clone()).await;
+    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
+        .await
+        .unwrap();
 
     let client = StorableMockDaClient::new(format!("http://{}", addr));
 
