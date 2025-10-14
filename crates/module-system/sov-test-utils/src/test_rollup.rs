@@ -71,7 +71,6 @@ pub enum GenesisSource<S: Spec, R: Runtime<S>> {
 }
 
 #[derive(Clone)]
-
 pub enum StoragePath {
     Tmp(Arc<tempfile::TempDir>),
     Buf(PathBuf),
@@ -870,13 +869,7 @@ where
         )
         .await
     }
-}
 
-impl<R> TestRollup<R>
-where
-    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
-    R::Spec: Spec<Da = MockDaSpec>,
-{
     /// Pauses batch production for the preferred sequencer.
     ///
     /// Transactions accepted by the preferred sequencer after this call (and
@@ -898,7 +891,13 @@ where
 
         std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
     }
+}
 
+impl<R> TestRollup<R>
+where
+    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
+    R::Spec: Spec<Da = MockDaSpec>,
+{
     /// Restarts the rollup.
     pub async fn restart(self) -> anyhow::Result<Self> {
         self.restart_with_heights(None, None).await
