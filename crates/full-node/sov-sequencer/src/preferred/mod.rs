@@ -343,6 +343,7 @@ where
         )
     }
 
+    #[tracing::instrument(skip_all, level = "debug", name = "Recovery")]
     async fn recover_and_catch_up(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
@@ -350,6 +351,7 @@ where
         mut info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
         let mut rt = Rt::default();
+        let start = std::time::Instant::now();
 
         loop {
             let (min_batches_to_send, max_batches_to_send) = self.catchup_batches_to_send(&info);
@@ -357,11 +359,15 @@ where
                 tracing::info!(
                     min_batches_to_send,
                     max_batches_to_send,
-                    "Recovery: no need to send any more batches!"
+                    "no need to send any more batches!"
                 );
                 break;
             }
-            tracing::info!(min_batches_to_send, max_batches_to_send, "Recovery: sending max_batches_to_send empty catchup batches to bump the visible_slot_number");
+            tracing::info!(
+                min_batches_to_send,
+                max_batches_to_send,
+                "sending max_batches_to_send empty catchup batches to bump the visible_slot_number"
+            );
 
             // 1. Dump our catchup batches once every DA block to fast-forward the
             //    visible_slot_number
@@ -384,7 +390,7 @@ where
                 if i % 10 == 0 {
                     tracing::info!(number = %i, min = %min_batches_to_send, max = %max_batches_to_send, "Sending catchup batch");
                 } else {
-                    tracing::debug!(number = %i, min = %min_batches_to_send, max = %max_batches_to_send, "Sending catchup batch");
+                    tracing::debug!(number = %i, min = %min_batches_to_send, max = %max_batches_to_send, recovery_time_so_far = ?start.elapsed(), "Sending catchup batch");
                 }
 
                 self.synchronized_state_updator
@@ -402,7 +408,7 @@ where
                 .await
                 .map_err(|e| e.into_state_update_error())?;
 
-            tracing::info!(target_sequence_number, "Recovery: catchup batches sent; sequencer will now wait for the node to process them. We will then re-evaluate if we need to catch up again (if there are so many batches that by the time the node catches up we need to bump the visible_slot_number some more).");
+            tracing::info!(target_sequence_number, recovery_time_so_far = ?start.elapsed(), "catchup batches sent; sequencer will now wait for the node to process them. We will then re-evaluate if we need to catch up again (if there are so many batches that by the time the node catches up we need to bump the visible_slot_number some more).");
 
             loop {
                 let next_sequence_number_according_to_node =
@@ -410,10 +416,10 @@ where
                 tracing::debug!(
                     next_sequence_number_according_to_node,
                     target_sequence_number,
-                    "Recovery: waiting for the node to process sequencer's catchup batches..."
+                    "waiting for the node to process sequencer's catchup batches..."
                 );
                 if next_sequence_number_according_to_node >= target_sequence_number {
-                    tracing::info!("Node sequence number caught up to our recovery batches. The sequencer may have finished recovery, or we may need to send another round of batches if catching up this far took too long");
+                    tracing::info!(recovery_time_so_far = ?start.elapsed(), "Node sequence number caught up to our recovery batches. The sequencer may have finished recovery, or we may need to send another round of batches if catching up this far took too long");
                     break;
                 }
 
@@ -436,6 +442,7 @@ where
 
         info!(
             ?info,
+            recovery_time = ?start.elapsed(),
             "Sequencer exiting recovery and resuming normal operation."
         );
         Ok(())
@@ -667,8 +674,13 @@ where
             .await?;
         }
         PreferredSeqOperation::RecoverAndCatchUp => {
-            seq.recover_and_catch_up(state_update_receiver, shutdown_receiver, info)
-                .await?;
+            let start = std::time::Instant::now();
+            let result = seq
+                .recover_and_catch_up(state_update_receiver, shutdown_receiver, info)
+                .await;
+            let _recovery_time = start.elapsed();
+            let _is_success = result.is_ok();
+            result?;
         }
 
         PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
