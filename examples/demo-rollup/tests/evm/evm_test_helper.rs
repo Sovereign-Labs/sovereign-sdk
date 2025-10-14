@@ -20,7 +20,7 @@ use sov_sequencer::SeqConfigExtension;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
-use sov_test_utils::SimpleStorage;
+use sov_test_utils::LegacySimpleStorage;
 
 const SENDER_PRIV_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
@@ -61,7 +61,7 @@ pub(crate) async fn create_simple_storage_client(
     rest_port: SocketAddr,
     private_key: &str,
 ) -> SimpleStorageClient {
-    let contract = SimpleStorage::default();
+    let contract = LegacySimpleStorage::default();
     SimpleStorageClient::new(private_key, contract, rest_port).await
 }
 

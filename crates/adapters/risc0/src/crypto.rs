@@ -15,7 +15,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 #[cfg(feature = "native")]
 pub mod private_key {
 
-    use ed25519_dalek::{Signer, SigningKey};
+    use ed25519_dalek::{SignatureError, Signer, SigningKey};
     use rand::rngs::OsRng;
 
     use super::{Risc0PublicKey, Risc0Signature};
@@ -33,6 +33,21 @@ pub mod private_key {
                 .field("public_key", &self.key_pair.verifying_key())
                 .field("private_key", &"***REDACTED***")
                 .finish()
+        }
+    }
+
+    impl AsRef<[u8]> for Risc0PrivateKey {
+        fn as_ref(&self) -> &[u8] {
+            self.key_pair.as_bytes()
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for Risc0PrivateKey {
+        type Error = SignatureError;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            let key_pair = SigningKey::try_from(value.as_slice())?;
+            Ok(Self { key_pair })
         }
     }
 

@@ -115,7 +115,7 @@ pub trait DaService: Clone + Send + Sync + 'static {
 
     /// [`serde`]-compatible configuration data for this [`DaService`]. Parsed
     /// from TOML.
-    type Config: JsonSchema + PartialEq + Send + Sync + 'static;
+    type Config: JsonSchema + PartialEq + Send + Sync + Clone + 'static;
 
     /// The verifier for this DA layer.
     type Verifier: DaVerifier<Spec = Self::Spec> + Clone;

@@ -29,6 +29,7 @@ use sov_test_utils::runtime::{
     Paymaster, Runtime, TestOptimisticRuntime, TestOptimisticRuntimeCall,
 };
 use sov_test_utils::sequencer::TestSequencerSetup;
+use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
@@ -247,7 +248,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     .set_config(|c| {
         c.rollup_prover_config = rollup_prover_config;
         c.automatic_batch_production = automatic_batch_production;
-        c.storage = dir;
+        c.storage = StoragePath::Tmp(dir);
         c.max_batch_size_bytes = max_batch_size_bytes;
         c.blob_processing_timeout_secs = blob_processing_timeout_secs;
         c.stop_at_rollup_height = stop_at_rollup_height;

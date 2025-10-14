@@ -192,7 +192,7 @@ async-trait = "0.1.81"
 arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
 console-subscriber = "0.4"
 
-axum = { version = "0.7.9" }
+axum = { version = "0.7.9", default-features = false }
 axum-server = { version = "0.6", features = ["tls-rustls"] }
 arbitrary = { version = "1.3.2", features = ["derive"] }
 backon = { version = "1.5.1", default-features = false, features = ["tokio-sleep"] }
@@ -276,7 +276,7 @@ ruint = { version = "1", default-features = false }
 risc0-zkvm = { version = "2.1", default-features = false }
 risc0-zkvm-platform = "2.0"
 risc0-build = "2.1"
-flume = { version = "0.11.1", features = ["async"]}
+flume = { version = "0.11.1", features = ["async"] }
 
 # EVM dependencies
 ethereum-types = "0.14.1"

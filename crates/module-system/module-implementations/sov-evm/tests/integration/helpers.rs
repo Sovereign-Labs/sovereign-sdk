@@ -18,7 +18,7 @@ use sov_evm::{
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};
-use sov_test_utils::{SimpleStorage, TransactionType, TEST_DEFAULT_USER_BALANCE};
+use sov_test_utils::{LegacySimpleStorage, TransactionType, TEST_DEFAULT_USER_BALANCE};
 pub(crate) struct EvmAccount(SecretKey);
 
 impl EvmAccount {
@@ -107,7 +107,7 @@ pub(crate) struct TxWithNonceAndHash {
 
 pub(crate) fn create_deploy_tx(
     nonce: u64,
-    contract: &SimpleStorage,
+    contract: &LegacySimpleStorage,
     account: &EvmAccount,
 ) -> TxWithNonceAndHash {
     let tx = TxEip1559 {
@@ -121,7 +121,7 @@ pub(crate) fn create_deploy_tx(
 pub(crate) fn create_set_arg_tx(
     set_arg: u32,
     nonce: u64,
-    contract: &SimpleStorage,
+    contract: &LegacySimpleStorage,
     contract_addr: Address,
     account: &EvmAccount,
 ) -> TxWithNonceAndHash {
@@ -136,7 +136,7 @@ pub(crate) fn create_set_arg_tx(
 
 pub(crate) fn create_inc_tx(
     nonce: u64,
-    contract: &SimpleStorage,
+    contract: &LegacySimpleStorage,
     contract_addr: Address,
     account: &EvmAccount,
 ) -> TxWithNonceAndHash {
@@ -151,7 +151,7 @@ pub(crate) fn create_inc_tx(
 
 pub(crate) fn create_emit_logs(
     nonce: u64,
-    contract: &SimpleStorage,
+    contract: &LegacySimpleStorage,
     contract_addr: Address,
     account: &EvmAccount,
     topic: u32,

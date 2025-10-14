@@ -34,6 +34,7 @@ use sov_sequencer::StateUpdateNotification;
 use sov_test_modules::hooks_count::HooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::FullNodeBlueprint;
+use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint,
@@ -2102,7 +2103,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
         )
         .set_config(|c| {
             c.rollup_prover_config = None;
-            c.storage = dir;
+            c.storage = StoragePath::Tmp(dir);
             c.axum_port = port;
         })
         .set_da_config(|c| {
@@ -2526,7 +2527,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         )
         .set_config(|c| {
             c.rollup_prover_config = None;
-            c.storage = dir;
+            c.storage = StoragePath::Tmp(dir);
         })
         .set_da_config(|c| {
             c.sender_address = sequencer_addr;
@@ -2788,7 +2789,7 @@ async fn flaky_test_hooks_state_is_visible() {
         .set_config(|c| {
             c.automatic_batch_production = false;
             c.rollup_prover_config = None;
-            c.storage = dir;
+            c.storage = StoragePath::Tmp(dir);
         })
         .set_da_config(|c| {
             c.sender_address = sequencer_addr;
