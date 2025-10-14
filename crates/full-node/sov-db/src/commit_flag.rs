@@ -203,19 +203,15 @@ impl CommitFlag {
     ///
     /// - **Normal case**: Successfully deserializes and returns the stored [`CommitStatus`]
     ///   (`Completed` or `InProgress(hash)`)
-    /// - **Corruption/errors**: Returns `CommitStatus::Unknown` to indicate the state cannot
+    /// - **Corruption/errors**: Returns `Ok(CommitStatus::Unknown)` to indicate the state cannot
     ///   be reliably determined
+    /// - **Real I/O errors**: Returns `Err(anyhow::Error)`
     ///
     /// Returning `Unknown` on errors allows the caller to decide how to handle uncertain state,
     /// rather than making assumptions. The caller can choose to:
     /// - Treat as safe and proceed with a warning
     /// - Trigger conservative recovery logic
     /// - Error out and require manual intervention
-    ///
-    /// # Returns
-    ///
-    /// Returns an `anyhow::Result` containing the [`CommitStatus`]. Currently always returns
-    /// `Ok` with either the actual status or `Unknown`.
     pub fn read_status(&self) -> anyhow::Result<CommitStatus> {
         #[cfg(target_os = "linux")]
         {
@@ -224,16 +220,16 @@ impl CommitFlag {
 
             match self.file.read_at(buffer.as_slice_mut(), 0) {
                 Ok(bytes_read) if bytes_read > 0 => {
-                    // Use deserialize with a Cursor to handle padding bytes correctly
+                    // Use deserialize_reader with a Cursor to handle padding bytes correctly
                     // (from_slice requires all bytes to be consumed, which fails with padding)
                     use std::io::Cursor;
                     let mut cursor = Cursor::new(&buffer.as_slice()[..bytes_read]);
 
-                    match CommitStatus::deserialize(&mut cursor) {
+                    match CommitStatus::deserialize_reader(&mut cursor) {
                         Ok(status) => Ok(status),
-                        Err(err) => {
+                        Err(error) => {
                             tracing::warn!(
-                                error = ?err,
+                                ?error,
                                 "Commit flag file is corrupted, returning Unknown"
                             );
                             Ok(CommitStatus::Unknown)
@@ -245,32 +241,25 @@ impl CommitFlag {
                     Ok(CommitStatus::Unknown)
                 }
                 Err(err) => {
-                    tracing::warn!(
-                        error = ?err,
-                        "Failed to read commit flag file, returning Unknown"
-                    );
-                    Ok(CommitStatus::Unknown)
+                    Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
                 }
             }
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            use std::io::{Seek, SeekFrom};
-
             let mut file_ref = &self.file;
             let mut buffer = Vec::new();
 
             if let Err(err) = file_ref.seek(SeekFrom::Start(0)) {
-                tracing::warn!(error = ?err, "Failed to seek, returning Unknown");
-                return Ok(CommitStatus::Unknown);
+                Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
             }
 
             match file_ref.read_to_end(&mut buffer) {
                 Ok(_) if !buffer.is_empty() => match borsh::from_slice::<CommitStatus>(&buffer) {
                     Ok(status) => Ok(status),
-                    Err(err) => {
-                        tracing::warn!(error = ?err, "Corrupted data, returning Unknown");
+                    Err(error) => {
+                        tracing::warn!(?error, "Commit flag file is corrupted, returning Unknown");
                         Ok(CommitStatus::Unknown)
                     }
                 },
@@ -279,8 +268,7 @@ impl CommitFlag {
                     Ok(CommitStatus::Unknown)
                 }
                 Err(err) => {
-                    tracing::warn!(error = ?err, "Read failed, returning Unknown");
-                    Ok(CommitStatus::Unknown)
+                    Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
                 }
             }
         }
@@ -330,7 +318,7 @@ impl CommitFlag {
 
         #[cfg(not(target_os = "linux"))]
         {
-            // Non-linux targets are not fully supported by NOMT.
+            // Non-linux targets are not
             // SAFETY: We don't truncate BEFORE writing to avoid data loss window.
             // Instead, we:
             // 1. Write new data at offset 0 (goes to page cache, disk retains old data)
@@ -379,10 +367,6 @@ mod tests {
         let flag = CommitFlag::new(dir.path()).unwrap();
 
         // 1. Initial read: file should be created and initialized to Completed
-        #[cfg(target_os = "linux")]
-        assert_eq!(flag.read_status().unwrap(), CommitStatus::Completed);
-
-        #[cfg(not(target_os = "linux"))]
         assert_eq!(flag.read_status().unwrap(), CommitStatus::Completed);
 
         let root_hash = [128u8; 32];
@@ -398,26 +382,38 @@ mod tests {
     }
 
     #[test]
-    fn test_corrupted_file() {
+    fn test_corrupted_file_on_open() {
         let dir = tempdir().unwrap();
         let flag_path = dir.path().join(FLAG_FILE_NAME);
 
         // Create a corrupted file
         let mut file = File::create(&flag_path).unwrap();
-        std::io::Write::write_all(&mut file, b"CORRUPTED_DATA").unwrap();
+        let data: Vec<u8> = vec![245; 1024];
+        std::io::Write::write_all(&mut file, &data).unwrap();
+        file.sync_all().unwrap();
         drop(file);
 
         let commit_flag = CommitFlag::new(dir.path()).unwrap();
         // Should detect corruption and return Unknown
         let status = commit_flag.read_status().unwrap();
-
-        // On Linux with O_DIRECT, the file will be reinitialized on open if too small
-        // So we should get Completed. On other platforms, we return Unknown for corrupted data.
-        #[cfg(target_os = "linux")]
-        assert_eq!(status, CommitStatus::Completed);
-
-        #[cfg(not(target_os = "linux"))]
         assert_eq!(status, CommitStatus::Unknown);
+    }
+
+    // Test empty file
+
+    // Test corrupted small
+
+    // File removed before writing status
+
+
+    // File removed before reading status
+
+
+    #[test]
+    fn test_cannot_open_file() {
+        let path = "/does/not/exists";
+        let result = CommitFlag::new(path);
+        assert!(result.is_err());
     }
 
     #[test]
