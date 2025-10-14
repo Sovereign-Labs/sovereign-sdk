@@ -193,10 +193,7 @@ where
     ) -> Result<Vec<TraceResult>, EthApiError> {
         let block_number = self.resolve_block_number(block, state);
         // Get transaction and block data
-        let block = self
-            .blocks
-            .get(&block_number, state)?
-            .ok_or(EthApiError::PrunedHistoryUnavailable)?;
+        let block = self.block(block_number, state)?;
         let mut archival_state = self.archival_state(block_number - 1, state)?;
 
         let block_env = self.block_env(&mut archival_state)?;
@@ -235,15 +232,10 @@ where
         let index = self
             .tx_index(&tx_hash, state)
             .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
         let traced_tx = self
             .transaction(index, state)
             .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-        let block = self
-            .blocks
-            .get(&traced_tx.block_number, state)?
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+        let block = self.block(traced_tx.block_number, state)?;
 
         let mut archival_state = self.archival_state(traced_tx.block_number - 1, state)?;
 

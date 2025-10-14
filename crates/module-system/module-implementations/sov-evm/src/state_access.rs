@@ -1,5 +1,6 @@
 use std::ops::RangeInclusive;
 
+use alloy_eips::BlockId;
 use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
@@ -9,13 +10,34 @@ use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, InfallibleStateAccessor,
     InfallibleStateReaderAndWriter, Spec, StateReader,
 };
+use sov_rpc_eth_types::EthApiError;
 use sov_state::User;
 
+use crate::SealedBlock;
 use crate::{
     db::EvmDb,
     primitive_types::{Block, PendingTransaction, TxSignedAndRecovered},
     Evm, EvmRuntimeConfig, Receipt,
 };
+
+/// Non-trivial state reads
+impl<S: Spec> Evm<S> {
+    /// Gets block by number. Fails if prunned or in the future
+    pub fn block<Accessor: AccessoryStateReaderAndWriter>(
+        &self,
+        number: u64,
+        state: &mut Accessor,
+    ) -> Result<SealedBlock, EthApiError> {
+        let numbers = self.block_numbers(state);
+        if number >= *numbers.end() {
+            return Err(EthApiError::HeaderNotFound(BlockId::number(number)));
+        }
+        let Some(block) = self.blocks.get(&number, state)? else {
+            return Err(EthApiError::PrunedHistoryUnavailable);
+        };
+        Ok(block)
+    }
+}
 
 /// User state reads
 impl<S: Spec> Evm<S> {
