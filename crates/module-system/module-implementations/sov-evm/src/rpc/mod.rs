@@ -175,16 +175,6 @@ where
         Some(receipts)
     }
 
-    fn archival_state(
-        &self,
-        height: u64,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<ApiStateAccessor<S>, EthApiError> {
-        state
-            .get_archival_state(RollupHeight::new(height))
-            .map_err(|e| EthApiError::other(into_rpc_error(e)))
-    }
-
     fn trace_block_by_number(
         &self,
         block: BlockNumberOrTag,
@@ -194,7 +184,7 @@ where
         let block_number = self.resolve_block_number(block, state);
         // Get transaction and block data
         let block = self.block(block_number, state)?;
-        let mut archival_state = self.archival_state(block_number - 1, state)?;
+        let mut archival_state = self.archival_state_pre_block(block_number, state)?;
 
         let block_env = self.block_env(&mut archival_state)?;
 
@@ -232,7 +222,7 @@ where
         let traced_tx = self.tx(tx_hash, state)?;
         let block = self.block(traced_tx.block_number, state)?;
 
-        let mut archival_state = self.archival_state(traced_tx.block_number - 1, state)?;
+        let mut archival_state = self.archival_state_pre_block(traced_tx.block_number, state)?;
 
         let block_env = self.block_env(&mut archival_state)?;
 

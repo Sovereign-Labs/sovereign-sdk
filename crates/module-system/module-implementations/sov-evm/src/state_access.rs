@@ -6,13 +6,16 @@ use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, InfallibleStateAccessor,
     InfallibleStateReaderAndWriter, Spec, StateReader,
 };
+use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::EthApiError;
 use sov_state::User;
 
+use crate::error::into_rpc_error;
 use crate::SealedBlock;
 use crate::{
     db::EvmDb,
@@ -51,6 +54,23 @@ impl<S: Spec> Evm<S> {
             return Err(EthApiError::PrunedHistoryUnavailable);
         };
         Ok(tx)
+    }
+
+    /// Gets archival state before block `number`
+    pub fn archival_state_pre_block(
+        &self,
+        number: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<ApiStateAccessor<S>, EthApiError> {
+        let height = if number == 0 {
+            RollupHeight::GENESIS
+        } else {
+            RollupHeight::new(number - 1)
+        };
+        match state.get_archival_state(height) {
+            Ok(state) => Ok(state),
+            Err(err) => Err(EthApiError::other(into_rpc_error(err))),
+        }
     }
 }
 
