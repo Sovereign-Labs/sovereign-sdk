@@ -27,8 +27,8 @@ use crate::{BasicGasMeter, GasMeter, VersionReader};
 /// This method tracks the gas consumed outside of the transaction lifecycle without explicitly consuming a finite resource.
 /// This should only be used in infailible methods.
 pub struct TxScratchpad<S: Spec, I: StateProvider<S>> {
-    pub(super) inner: RevertableWriter<I>,
-    pub(super) phantom: PhantomData<S>,
+    pub(in crate::state::accessors) inner: RevertableWriter<I>,
+    pub(in crate::state::accessors) phantom: PhantomData<S>,
 }
 
 impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for TxScratchpad<S, I> {
