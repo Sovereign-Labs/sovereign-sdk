@@ -1,6 +1,6 @@
 /// Defines private key types and operations
 use alloy_primitives::keccak256;
-use k256::ecdsa::{Signature, SigningKey};
+use k256::ecdsa::{Error, Signature, SigningKey};
 use k256::PublicKey;
 use rand::rngs::OsRng;
 use sov_rollup_interface::crypto::PrivateKey;
@@ -13,6 +13,7 @@ use crate::evm::signature::EthereumSignature;
 #[derive(Clone)]
 pub struct EthereumPrivateKey {
     signing_key: SigningKey,
+    key_bytes: Vec<u8>,
 }
 
 impl core::fmt::Debug for EthereumPrivateKey {
@@ -24,6 +25,21 @@ impl core::fmt::Debug for EthereumPrivateKey {
     }
 }
 
+impl AsRef<[u8]> for EthereumPrivateKey {
+    fn as_ref(&self) -> &[u8] {
+        &self.key_bytes
+    }
+}
+
+impl TryFrom<Vec<u8>> for EthereumPrivateKey {
+    type Error = Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let signing_key = SigningKey::try_from(value.as_slice())?;
+        Ok(Self::new(signing_key))
+    }
+}
+
 impl PrivateKey for EthereumPrivateKey {
     type PublicKey = EthereumPublicKey;
 
@@ -32,9 +48,7 @@ impl PrivateKey for EthereumPrivateKey {
     fn generate() -> Self {
         let mut csprng = OsRng;
 
-        Self {
-            signing_key: SigningKey::random(&mut csprng),
-        }
+        Self::new(SigningKey::random(&mut csprng))
     }
 
     fn pub_key(&self) -> Self::PublicKey {
@@ -52,6 +66,14 @@ impl PrivateKey for EthereumPrivateKey {
 }
 
 impl EthereumPrivateKey {
+    pub fn new(signing_key: SigningKey) -> Self {
+        let key_bytes = signing_key.to_bytes().to_vec();
+        Self {
+            signing_key,
+            key_bytes,
+        }
+    }
+
     /// Returns the private key as a hex string.
     /// TODO: Should it be 0x prefixed??
     pub fn as_hex(&self) -> String {
@@ -95,14 +117,14 @@ impl<'de> serde::Deserialize<'de> for EthereumPrivateKey {
                 .map_err(|_| serde::de::Error::custom("Invalid private key length"))?;
             let signing_key =
                 SigningKey::from_bytes(&bytes.into()).map_err(serde::de::Error::custom)?;
-            Ok(Self { signing_key })
+            Ok(Self::new(signing_key))
         } else {
             // For binary formats, deserialize as fixed 32-byte array
             // This matches secp256k1's binary deserialization format
             let bytes = <[u8; 32]>::deserialize(deserializer)?;
             let signing_key =
                 SigningKey::from_bytes(&bytes.into()).map_err(serde::de::Error::custom)?;
-            Ok(Self { signing_key })
+            Ok(Self::new(signing_key))
         }
     }
 }
@@ -125,7 +147,7 @@ mod arbitrary_impls {
             let rng = &mut StdRng::from_seed(seed);
             let signing_key = SigningKey::random(rng);
 
-            Ok(Self { signing_key })
+            Ok(Self::new(signing_key))
         }
     }
 
@@ -151,9 +173,7 @@ mod arbitrary_impls {
 
         fn arbitrary_with((): Self::Parameters) -> Self::Strategy {
             any::<[u8; 32]>()
-                .prop_map(|seed| Self {
-                    signing_key: SigningKey::random(&mut StdRng::from_seed(seed)),
-                })
+                .prop_map(|seed| Self::new(SigningKey::random(&mut StdRng::from_seed(seed))))
                 .boxed()
         }
     }
