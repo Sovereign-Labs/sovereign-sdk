@@ -25,8 +25,8 @@ impl Arbitrary for ForkDescription {
 
     fn arbitrary_with(params: Self::Parameters) -> Self::Strategy {
         // lengths must be >= 1 to satisfy invariants in ForkMap materialization
-        debug_assert!(*params.leaf_length.start() >= 1);
-        debug_assert!(params.inner_length.start >= 1);
+        assert!(*params.leaf_length.start() >= 1);
+        assert!(params.inner_length.start >= 1);
 
         let leaf = (params.leaf_start_height.clone(), params.leaf_length.clone()).prop_map(
             |(start_height, length)| ForkDescription {
