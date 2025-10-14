@@ -113,7 +113,6 @@ pub struct RollupBuilderConfig<S: Spec> {
 /// A one-stop shop for building entire rollups and starting them in the
 /// background to test node APIs.
 #[derive(Clone)]
-
 pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
     genesis: GenesisSource<R::Spec, R::Runtime>,
     da_config: <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config,
