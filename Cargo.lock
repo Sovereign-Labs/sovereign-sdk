@@ -12795,6 +12795,7 @@ dependencies = [
  "sov-mock-da",
  "sov-modules-api",
  "sov-synthetic-load",
+ "sov-test-state-consistency",
  "sov-test-utils",
  "sov-transaction-generator",
  "sov-value-setter",
@@ -12987,6 +12988,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-test-state-consistency"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "schemars 0.8.22",
+ "serde",
+ "sov-modules-api",
+ "sov-state",
+ "sov-test-utils",
+ "strum 0.26.3",
+]
+
+[[package]]
 name = "sov-test-utils"
 version = "0.3.0"
 dependencies = [
@@ -13081,6 +13097,7 @@ dependencies = [
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
+ "sov-test-state-consistency",
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",

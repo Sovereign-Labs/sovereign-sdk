@@ -18,6 +18,8 @@ pub struct AccountState<S: Spec, Data = ()> {
     pub sequencing_bond: Option<u64>,
     /// The private key for this account
     pub private_key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
+    /// The current value for state consistency testing
+    pub consistency_value: u64,
     /// Any additional state tracked by external modules
     pub additional_info: Data,
 }
@@ -30,6 +32,7 @@ impl<S: Spec, T: Default> AccountState<S, T> {
             can_mint: Default::default(),
             sequencing_bond: None,
             private_key,
+            consistency_value: 0,
             additional_info: Default::default(),
         }
     }
