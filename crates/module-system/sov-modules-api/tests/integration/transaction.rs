@@ -10,6 +10,7 @@ type Runtime = TestOptimisticRuntime<TestSpec>;
 
 const ASSERT_MSG: &str = "JSON representation changed, this is a breaking change for web3 SDK, please ensure it is also updated";
 
+<<<<<<< HEAD
 // ensure custom serde serialized fields are serialized as expected
 // i.e Transaction pub_key and signature fields as hex strings
 #[test]
@@ -50,6 +51,8 @@ fn test_serde_serialize_tx() {
     );
 }
 
+=======
+>>>>>>> aaac3443e (impl to/from bytes for crypto spec types)
 // Ensure a Schema json_to_borsh serialized json transaction type produces the same bytes as borsh
 // serializing the native type directly.
 #[test]
