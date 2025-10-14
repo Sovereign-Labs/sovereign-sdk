@@ -11,16 +11,12 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 serde_json = { workspace = true }
-tempfile = { workspace = true }
 rand = { workspace = true }
-sha2 = { workspace = true }
 
 # Sovereign-maintained dependencies.
-sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-modules-api = { workspace = true, features = ["arbitrary", "native"] }
 sov-accounts = { workspace = true, features = ["arbitrary", "native"] }
 sov-bank = { workspace = true, features = ["native"] }
-sov-rollup-interface = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 
 [[bin]]
