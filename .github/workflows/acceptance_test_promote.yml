@@ -9,8 +9,7 @@ permissions:
   issues: write
 
 env:
-  # Use test branches for now, will change to dev/nightly later
-  DEV_BRANCH: 'theodore/acceptance-dev-testing-2'
+  # Use test branch for now, will change to dev/nightly later
   NIGHTLY_BRANCH: 'theodore/acceptance-nightly-testing'
 
 jobs:
@@ -24,10 +23,27 @@ jobs:
           echo "Commit SHA: ${{ github.event.client_payload.commit_sha }}"
           echo "Test duration: ${{ github.event.client_payload.test_duration_seconds }}s"
 
+      - name: Validate payload
+        run: |
+          if [ -z "${{ github.event.client_payload.commit_sha }}" ]; then
+            echo "❌ Missing required field: commit_sha"
+            exit 1
+          fi
+          echo "✅ Payload validation passed"
+
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.client_payload.commit_sha }}
           fetch-depth: 0
+
+      - name: Verify commit exists
+        run: |
+          COMMIT_SHA="${{ github.event.client_payload.commit_sha }}"
+          if ! git cat-file -e "$COMMIT_SHA" 2>/dev/null; then
+            echo "❌ Commit $COMMIT_SHA not found in repository"
+            exit 1
+          fi
+          echo "✅ Commit verified: $(git log -1 --oneline $COMMIT_SHA)"
 
       - name: Promote to nightly on success
         if: github.event.action == 'acceptance-test-success'
@@ -54,59 +70,25 @@ jobs:
           # Push the fast-forward
           git push origin "HEAD:$NIGHTLY_BRANCH"
 
+          COMMIT_MESSAGE=$(git log -1 --pretty=%s "$COMMIT_SHA")
           echo "✅ Successfully promoted $SHORT_SHA to $NIGHTLY_BRANCH"
+          echo "Commit: $COMMIT_MESSAGE"
           echo "Test duration: ${{ github.event.client_payload.test_duration_seconds }}s"
 
-      - name: Create issue on failure
+      - name: Slack notification on failure
         if: github.event.action == 'acceptance-test-failure'
-        uses: actions/github-script@v7
         env:
-          DEV_BRANCH: ${{ env.DEV_BRANCH }}
           NIGHTLY_BRANCH: ${{ env.NIGHTLY_BRANCH }}
-        with:
-          script: |
-            const payload = context.payload.client_payload;
-            const commit_sha = payload.commit_sha;
-            const short_sha = commit_sha.substring(0, 7);
-            const duration_hours = Math.floor(payload.test_duration_seconds / 3600);
-            const duration_minutes = Math.floor((payload.test_duration_seconds % 3600) / 60);
-
-            const logs_url = payload.logs_url || 'N/A';
-            const error_message = payload.error_message || 'Unknown error';
-            const error_details = payload.error_details || 'No details available';
-
-            const devBranch = process.env.DEV_BRANCH;
-            const nightlyBranch = process.env.NIGHTLY_BRANCH;
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🔴 Nightly acceptance test failed for ${short_sha}`,
-              body: `## Acceptance Test Failure
-
-            **Commit**: [\`${short_sha}\`](https://github.com/${context.repo.owner}/${context.repo.repo}/commit/${commit_sha})
-            **Branch**: ${devBranch}
-            **Duration**: ${duration_hours}h ${duration_minutes}m (${payload.test_duration_seconds}s)
-            **Error**: ${error_message}
-
-            ### Debug Resources
-            - [Test Logs](${logs_url})
-
-            ### Error Details
-            \`\`\`
-            ${error_details}
-            \`\`\`
-
-            ### Action Required
-            The \`${nightlyBranch}\` branch was **not** updated due to this failure.
-            Please investigate and fix the issue before the next nightly run.
-            `,
-              labels: ['acceptance-test-failure', 'nightly', 'bug']
-            });
-
-      - name: Comment on success
-        if: github.event.action == 'acceptance-test-success'
+          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          ERROR_DETAILS: ${{ github.event.client_payload.error_details }}
         run: |
-          echo "✅ Acceptance tests passed!"
-          echo "Duration: ${{ github.event.client_payload.test_duration_seconds }}s"
-          echo "Nightly branch updated to: ${{ github.event.client_payload.commit_sha }}"
+          SHORT_SHA=$(echo "$COMMIT_SHA" | cut -c1-7)
+
+          echo "❌ Acceptance test failed for commit $SHORT_SHA"
+          echo "Branch: $NIGHTLY_BRANCH"
+          echo "Test duration: ${{ github.event.client_payload.test_duration_seconds }}s"
+          echo ""
+          echo "Error details (last 20 lines):"
+          echo "$ERROR_DETAILS"
+          echo ""
+          echo "TODO: Send Slack notification to configured channel"
