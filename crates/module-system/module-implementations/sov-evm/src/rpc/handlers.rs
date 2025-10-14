@@ -1,14 +1,13 @@
 use crate::db::commit::FallibleDatabaseCommit;
-use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
-    state::StateOverride, Block, BlockOverrides, FeeHistory, Transaction, TransactionReceipt,
-    TransactionRequest,
+    state::StateOverride, Block, BlockNumberOrTag, BlockOverrides, FeeHistory, Transaction,
+    TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
-use alloy_rpc_types_trace::geth::GethTrace;
+use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::Database;
@@ -16,12 +15,9 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec};
-use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::EthApiError;
 use tracing::debug;
 
-use crate::conversions::replay_tx_env;
-use crate::executor::{get_cfg_env, transact_commit};
 use crate::{apply_margins, Evm};
 use std::ops::DerefMut;
 
@@ -112,7 +108,7 @@ where
     ) -> RpcResult<U256> {
         let mut state = self.resolve_state(block_number, state)?;
         let balance = self
-            .get_db(state.deref_mut())
+            .db(state.deref_mut())
             .basic(address)
             .map_err(EthApiError::from)?
             .map(|account| account.balance)
@@ -255,13 +251,7 @@ where
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         debug!("EVM module JSON-RPC request to `eth_blockNumber`");
-        let block_number_range = self
-            .block_numbers
-            .get(state)
-            .unwrap_infallible()
-            // Justified, we set it at genesis and later only override it.
-            .expect("The impossible happened: block_numbers was not set.");
-
+        let block_number_range = self.block_numbers(state);
         Ok(U256::from(*block_number_range.end()))
     }
 
@@ -279,7 +269,7 @@ where
             result,
             state: changes,
         } = self.call(request, block_number, state)?;
-        self.get_db(state)
+        self.db(state)
             .commit(changes)
             .expect("Impossible as gas meter is initialized with INF");
         let gas_used = result.gas_used();
@@ -292,6 +282,18 @@ where
         Ok(U64::from(apply_margins(total_gas_used)?))
     }
 
+    /// Handler for `debug_traceBlockByNumber`
+    #[rpc_method(name = "debug_traceBlockByNumber")]
+    pub fn debug_trace_block_by_number(
+        &self,
+        block: BlockNumberOrTag,
+        opts: Option<GethDebugTracingOptions>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Vec<TraceResult>> {
+        debug!("EVM module JSON-RPC request to `debug_traceBlockByNumber`");
+        Ok(self.trace_block_by_number(block, opts.unwrap_or_default(), state)?)
+    }
+
     /// Handler for: `debug_traceTransaction`
     #[rpc_method(name = "debug_traceTransaction")]
     pub fn debug_trace_transaction(
@@ -301,56 +303,6 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
         debug!("EVM module JSON-RPC request to `debug_traceTransaction`");
-        // Get transaction and block data
-        let index = self
-            .get_tx_index_by_hash(&tx_hash, state)
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-        let traced_tx = self
-            .transaction(index, state)
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-        let block = self
-            .blocks
-            .get(&traced_tx.block_number, state)?
-            .expect("Transaction block not available");
-
-        // Get archival state and environment
-        let mut archival_state = state
-            .get_archival_state(RollupHeight::new(traced_tx.block_number - 1))
-            .map_err(into_rpc_error)?;
-
-        let block_env = self
-            .block_env(&mut archival_state)?
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-        let cfg = self.cfg(&mut archival_state).map_err(into_rpc_error)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        // Replay previous transactions in the block
-        let mut evm_db = self.get_db(&mut archival_state);
-
-        for tx_idx in block.transactions {
-            let tx = self
-                .transaction(tx_idx, state)
-                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-            // Skip the transaction we're tracing
-            if *tx.signed_transaction.hash() == tx_hash {
-                break;
-            }
-
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(EthApiError::from)?;
-        }
-
-        // Trace the target transaction
-        Ok(self.trace_transaction(
-            block_env,
-            replay_tx_env(&traced_tx),
-            cfg_env,
-            evm_db,
-            &opts.unwrap_or_default(),
-        )?)
+        Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
     }
 }

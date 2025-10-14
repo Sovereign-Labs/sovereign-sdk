@@ -6,7 +6,7 @@ use revm::context::{BlockEnv, CfgEnv};
 use sov_evm::{convert_to_tx_signed, create_tx_env, executor, EthereumAuthenticator, Evm, SpecId};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
-use sov_test_utils::{SimpleStorage, TransactionType};
+use sov_test_utils::{LegacySimpleStorage, TransactionType};
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};
@@ -14,7 +14,7 @@ use crate::runtime::{RT, S};
 #[test]
 fn test_invalid_contract_execution() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorage::default();
+    let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
     let tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
@@ -34,7 +34,7 @@ fn test_invalid_contract_execution() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let mut evm_db = evm.get_db(state);
+        let mut evm_db = evm.db(state);
         let tx_request = TypedTransaction::Eip1559(TxEip1559 {
             chain_id: config_value!("CHAIN_ID"),
             nonce: 1,

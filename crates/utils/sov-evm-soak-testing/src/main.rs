@@ -3,7 +3,7 @@ use alloy_primitives::Address;
 use anyhow::Result;
 use clap::Parser;
 use sov_eth_client::{RpcClient, SimpleStorageClient};
-use sov_test_utils::SimpleStorage;
+use sov_test_utils::LegacySimpleStorage;
 use std::net::SocketAddr;
 
 use crate::uniswap::UniSoakTest;
@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
             }
         }
         TestType::SimpleStorage => {
-            let contract = SimpleStorage::default();
+            let contract = LegacySimpleStorage::default();
             let client = SimpleStorageClient::new(&args.private_key, contract, args.rpc_addr).await;
             simple_storage::run(client).await?;
         }
