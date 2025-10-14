@@ -252,7 +252,7 @@ impl CommitFlag {
             let mut buffer = Vec::new();
 
             if let Err(err) = file_ref.seek(SeekFrom::Start(0)) {
-                Err(anyhow::Error::from(err).context("Failed to read commit flag file"))
+                return Err(anyhow::Error::from(err).context("Failed to read commit flag file"));
             }
 
             match file_ref.read_to_end(&mut buffer) {
