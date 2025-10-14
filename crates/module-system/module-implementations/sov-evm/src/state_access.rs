@@ -1,21 +1,26 @@
-use std::ops::RangeInclusive;
-
+#[cfg(feature = "native")]
 use alloy_eips::BlockId;
 use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
 use sov_modules_api::prelude::UnwrapInfallible;
+#[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, InfallibleStateAccessor,
     InfallibleStateReaderAndWriter, Spec, StateReader,
 };
+#[cfg(feature = "native")]
 use sov_rollup_interface::common::RollupHeight;
+#[cfg(feature = "native")]
 use sov_rpc_eth_types::EthApiError;
 use sov_state::User;
+use std::ops::RangeInclusive;
 
+#[cfg(feature = "native")]
 use crate::error::into_rpc_error;
+#[cfg(feature = "native")]
 use crate::SealedBlock;
 use crate::{
     db::EvmDb,
@@ -24,6 +29,7 @@ use crate::{
 };
 
 /// Non-trivial state reads
+#[cfg(feature = "native")]
 impl<S: Spec> Evm<S> {
     /// Gets block by number. Fails if prunned or in the future
     pub fn block<Accessor: AccessoryStateReaderAndWriter>(
