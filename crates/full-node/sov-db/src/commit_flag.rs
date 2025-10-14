@@ -150,17 +150,8 @@ impl CommitFlag {
             )
         })?;
 
-        // Initialize the file if it doesn't exist or is too small
-        let needs_init = !file_exists || {
-            #[cfg(target_os = "linux")]
-            {
-                file.metadata()?.len() < SECTOR_SIZE as u64
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                file.metadata()?.len() == 0
-            }
-        };
+        // Initialize the file if it doesn't exist or is empty.
+        let needs_init = !file_exists || file.metadata()?.len() == 0;
 
         if needs_init {
             let serialized = borsh::to_vec(&CommitStatus::Completed)?;
@@ -224,7 +215,6 @@ impl CommitFlag {
                     // (from_slice requires all bytes to be consumed, which fails with padding)
                     use std::io::Cursor;
                     let mut cursor = Cursor::new(&buffer.as_slice()[..bytes_read]);
-
                     match CommitStatus::deserialize_reader(&mut cursor) {
                         Ok(status) => Ok(status),
                         Err(error) => {
@@ -399,15 +389,38 @@ mod tests {
         assert_eq!(status, CommitStatus::Unknown);
     }
 
-    // Test empty file
+    #[test]
+    fn test_empty_file() {
+        let dir = tempdir().unwrap();
+        let flag_path = dir.path().join(FLAG_FILE_NAME);
 
-    // Test corrupted small
+        // Create an empty file
+        let file = File::create(&flag_path).unwrap();
+        file.sync_all().unwrap();
+        drop(file);
 
-    // File removed before writing status
+        let commit_flag = CommitFlag::new(dir.path()).unwrap();
+        let status = commit_flag.read_status().unwrap();
+        // Empty file should return `Completed`, similar to absent file
+        assert_eq!(status, CommitStatus::Completed);
+    }
 
+    #[test]
+    fn test_corrupted_small_file() {
+        let dir = tempdir().unwrap();
+        let flag_path = dir.path().join(FLAG_FILE_NAME);
 
-    // File removed before reading status
+        // Create a small corrupted file (less than expected size)
+        let mut file = File::create(&flag_path).unwrap();
+        std::io::Write::write_all(&mut file, b"BAD").unwrap();
+        file.sync_all().unwrap();
+        drop(file);
 
+        let commit_flag = CommitFlag::new(dir.path()).unwrap();
+        let status = commit_flag.read_status().unwrap();
+        // Small corrupted file should return Unknown.
+        assert_eq!(status, CommitStatus::Unknown);
+    }
 
     #[test]
     fn test_cannot_open_file() {
