@@ -340,7 +340,7 @@ pub fn extract_authorization_data_v1<S: Spec, D: DispatchCall<Spec = S>>(
         uniqueness: tx_v1.uniqueness,
         tx_hash: raw_tx_hash,
         credential_id,
-        credentials: Default::default(),
+        credentials: Credentials::new(multisg),
         default_address: credential_id.into(),
     })
 }
