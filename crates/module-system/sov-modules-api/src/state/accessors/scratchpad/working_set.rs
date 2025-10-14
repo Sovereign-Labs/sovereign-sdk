@@ -299,3 +299,62 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for WorkingSet<S, I> {
     }
 }
 
+
+#[cfg(test)]
+mod tests {
+    use sov_rollup_interface::common::HexString;
+    use sov_state::codec::BcsCodec;
+    use sov_state::namespaces::User;
+    use sov_state::{Kernel, SlotKey, SlotValue};
+    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::{MockDaSpec, MockZkvm};
+
+    use crate::capabilities::mocks::MockKernel;
+    use crate::capabilities::Kernel as _;
+    use crate::execution_mode::Native;
+    use crate::{StateCheckpoint, StateReader, StateWriter, WorkingSet};
+
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+
+    #[test]
+    fn test_workingset_get() {
+        let codec = BcsCodec {};
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let prefix = sov_state::Prefix::new(1, 2);
+        let storage_key = SlotKey::new::<HexString, _, _>(&prefix, [4, 5, 6].as_ref(), &codec);
+        let storage_value = SlotValue::new(&vec![7, 8, 9], &codec);
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+        StateWriter::<User>::set(&mut working_set, &storage_key, storage_value.clone()).expect("The set operation should succeed because there should be enough funds in the metered working set");
+        let value = StateReader::<User>::get(&mut working_set, &storage_key).expect("The get operation should succeed because there should be enough funds in the metered working set");
+
+        assert_eq!(Some(storage_value), value);
+    }
+
+    #[test]
+    fn test_kernel_workingset_get() {
+        let codec = BcsCodec {};
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let prefix = sov_state::Prefix::new(1, 2);
+        let storage_key = SlotKey::new::<HexString, _, _>(&prefix, [4, 5, 6].as_ref(), &codec);
+        let storage_value = SlotValue::new(&vec![7, 8, 9], &codec);
+        let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
+
+        let mut working_set = StateCheckpoint::<TestSpec>::new(storage.clone(), &kernel);
+        let mut working_set = kernel.accessor(&mut working_set);
+
+        StateWriter::<Kernel>::set(&mut working_set, &storage_key, storage_value.clone())
+            .expect("This should be unfaillible");
+
+        assert_eq!(
+            Some(storage_value),
+            StateReader::<Kernel>::get(&mut working_set, &storage_key)
+                .expect("This should be unfaillible")
+        );
+    }
+}
