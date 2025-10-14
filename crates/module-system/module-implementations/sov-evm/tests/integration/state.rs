@@ -51,7 +51,7 @@ fn test_block_updates() {
             let txs = current_block.transactions();
             assert_eq!(txs.start, 0);
             assert_eq!(txs.end, 1);
-            let block_height = evm.get_block_height_by_hash(&current_block.header().hash(), state);
+            let block_height = evm.block_height(&current_block.header().hash(), state);
             assert_eq!(block_height, Some(1));
         }),
     });

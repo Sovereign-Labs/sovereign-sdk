@@ -134,7 +134,7 @@ where
     }
 
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
-        let tx_number = self.get_tx_index_by_hash(&hash, state)?;
+        let tx_number = self.tx_index(&hash, state)?;
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let index = U256::from(tx_number - block.transactions_start());
@@ -147,7 +147,7 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<TransactionReceipt> {
-        let number = self.get_tx_index_by_hash(&hash, state)?;
+        let number = self.tx_index(&hash, state)?;
         self.get_receipt_by_index(number, state)
     }
 
@@ -235,7 +235,7 @@ where
     ) -> Result<GethTrace, EthApiError> {
         // Get transaction and block data
         let index = self
-            .get_tx_index_by_hash(&tx_hash, state)
+            .tx_index(&tx_hash, state)
             .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
 
         let traced_tx = self

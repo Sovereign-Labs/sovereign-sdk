@@ -300,10 +300,7 @@ where
     }
 
     fn resolve_block_hash(&mut self, block_hash: BlockHash) -> Result<u64> {
-        let Some(block_height) = self
-            .evm
-            .get_block_height_by_hash(&block_hash, &mut self.state)
-        else {
+        let Some(block_height) = self.evm.block_height(&block_hash, &mut self.state) else {
             tracing::warn!(block_hash = %block_hash, "Block with hash not found");
             return Err(Error::BlockHashNotFound(block_hash));
         };

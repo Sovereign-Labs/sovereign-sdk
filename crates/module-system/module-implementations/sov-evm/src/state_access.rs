@@ -117,7 +117,7 @@ impl<S: Spec> Evm<S> {
     }
 
     /// Lookup the index of a Ethereum transaction based on the supplied hash.
-    pub fn get_tx_index_by_hash<Accessor: AccessoryStateReader>(
+    pub fn tx_index<Accessor: AccessoryStateReader>(
         &self,
         tx_hash: &B256,
         state: &mut Accessor,
@@ -128,7 +128,7 @@ impl<S: Spec> Evm<S> {
     }
 
     /// Lookup the height of an Ethereum block based on the supplied hash.
-    pub fn get_block_height_by_hash<Accessor: AccessoryStateReader>(
+    pub fn block_height<Accessor: AccessoryStateReader>(
         &self,
         block_hash: &B256,
         state: &mut Accessor,

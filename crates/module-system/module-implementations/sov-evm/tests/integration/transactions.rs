@@ -110,7 +110,7 @@ fn test_executing_eth_transactions() {
                     &tx_hash
                 );
 
-                assert_eq!(evm.get_tx_index_by_hash(&tx_hash, state), Some(nonce));
+                assert_eq!(evm.tx_index(&tx_hash, state), Some(nonce));
 
                 assert!(evm.receipt(nonce, state).unwrap().receipt.success);
 
