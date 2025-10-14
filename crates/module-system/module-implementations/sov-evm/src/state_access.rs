@@ -77,7 +77,7 @@ impl<S: Spec> Evm<S> {
     }
 }
 
-/// Infallible
+/// Infallible state access returning Option<T>
 impl<S: Spec> Evm<S> {
     /// Access the pending Ethereum transactions.
     pub fn pending_transactions<Accessor: InfallibleStateReaderAndWriter<User>>(
@@ -105,17 +105,6 @@ impl<S: Spec> Evm<S> {
         self.transactions.get(&index, state).unwrap_infallible()
     }
 
-    /// Access the Ethereum blocks.
-    pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        state: &mut Accessor,
-    ) -> RangeInclusive<u64> {
-        self.block_numbers
-            .get(state)
-            .unwrap_infallible()
-            .expect("Block numbers must be set")
-    }
-
     /// Lookup the index of a Ethereum transaction based on the supplied hash.
     pub fn tx_index<Accessor: AccessoryStateReader>(
         &self,
@@ -136,6 +125,28 @@ impl<S: Spec> Evm<S> {
         self.block_hashes.get(block_hash, state).unwrap_infallible()
     }
 
+    /// Get the currently pending head block.
+    pub fn pending_head<Accessor: AccessoryStateReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Option<Block> {
+        self.pending_head.get(state).unwrap_infallible()
+    }
+}
+
+/// Fully Infallible access to state set in genesis
+impl<S: Spec> Evm<S> {
+    /// Access the Ethereum blocks.
+    pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
+        &self,
+        state: &mut Accessor,
+    ) -> RangeInclusive<u64> {
+        self.block_numbers
+            .get(state)
+            .unwrap_infallible()
+            .expect("Block numbers must be set in genesis")
+    }
+
     /// Get the Evm chain config.
     pub fn cfg_infallible<Accessor: InfallibleStateAccessor>(
         &self,
@@ -145,14 +156,6 @@ impl<S: Spec> Evm<S> {
             .get(state)
             .unwrap_infallible()
             // The config must be set at genesis.
-            .expect("The impossible happened: EVM config is not set")
-    }
-
-    /// Get the currently pending head block.
-    pub fn pending_head<Accessor: AccessoryStateReader>(
-        &self,
-        state: &mut Accessor,
-    ) -> Option<Block> {
-        self.pending_head.get(state).unwrap_infallible()
+            .expect("EVM config must be set in genesis")
     }
 }
