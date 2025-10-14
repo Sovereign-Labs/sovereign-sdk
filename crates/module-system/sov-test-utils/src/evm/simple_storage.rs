@@ -5,6 +5,19 @@ use ethers::core::types::Bytes;
 use crate::evm::make_contract_from_abi;
 use crate::evm::test_data_path;
 
+sol!(
+    #[sol(
+        rpc,
+        all_derives = true,
+        bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/evm/test-data/artifacts/", "SimpleStorage.bin")))]
+    SimpleStorage,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/evm/test-data/artifacts/",
+        "SimpleStorage.abi"
+    )
+);
+
 /// SimpleStorageContract wrapper.
 pub struct LegacySimpleStorage {
     bytecode: Bytes,
