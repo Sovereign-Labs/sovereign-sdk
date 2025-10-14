@@ -20,15 +20,14 @@ use crate::{
 
 #[cfg(feature = "test-utils")]
 use crate::AccessoryStateReader;
-/// A state diff over the storage that contains all the changes related to transaction execution.
+/// A revertable state layer that wraps a [`TxState`] and tracks writes and events separately.
 ///
-/// This structure is built from a [`StateProvider`] (typically a
-/// [`StateCheckpoint`]) and is used in the entire transaction lifecycle (from
-/// pre-execution checks to post execution state updates).
+/// Changes can be either committed to the underlying state via [`RevertableTxState::commit`],
+/// or discarded via [`RevertableTxState::revert`].
 ///
 /// ## Usage note
-/// This method tracks the gas consumed outside of the transaction lifecycle without explicitly consuming a finite resource.
-/// This should only be used in infailible methods.
+/// This structure tracks gas consumed outside of the transaction lifecycle without explicitly consuming a finite resource.
+/// This should only be used in infallible methods.
 pub struct RevertableTxState<'a, S: Spec, State> {
     pub(super) inner: &'a mut State,
     pub(super) events: Vec<TypeErasedEvent>,

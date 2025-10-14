@@ -17,15 +17,15 @@ use crate::module::Spec;
 use crate::state::traits::{PerBlockCache, delegate_version_reader};
 use crate::{BasicGasMeter, GasMeter, VersionReader};
 
-/// A state diff over the storage that contains all the changes related to transaction execution.
+/// Transaction-level state accumulator without gas metering.
 ///
-/// This structure is built from a [`StateProvider`] (typically a
-/// [`StateCheckpoint`]) and is used in the entire transaction lifecycle (from
-/// pre-execution checks to post execution state updates).
+/// This structure is built from a [`StateProvider`] (typically a [`StateCheckpoint`])
+/// and accumulates all state changes from a transaction. It can be converted to a
+/// [`PreExecWorkingSet`] or [`WorkingSet`] when gas metering is needed.
 ///
 /// ## Usage note
-/// This method tracks the gas consumed outside of the transaction lifecycle without explicitly consuming a finite resource.
-/// This should only be used in infailible methods.
+/// This structure does not meter gas - it implements [`GasMeter`] as a no-op.
+/// Use [`PreExecWorkingSet`] or [`WorkingSet`] for actual gas metering.
 pub struct TxScratchpad<S: Spec, I: StateProvider<S>> {
     pub(in crate::state::accessors) inner: RevertableWriter<I>,
     pub(in crate::state::accessors) phantom: PhantomData<S>,
