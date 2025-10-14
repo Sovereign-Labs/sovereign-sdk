@@ -28,8 +28,6 @@ pub struct PreferredSequencerUpdateStateMetrics {
     pub transactions_count: u64,
     pub in_progress_batch: bool,
     pub time_spent_fetching_batches: std::time::Duration,
-    pub true_slot: u64,
-    pub visible_slot: u64,
 }
 
 impl Metric for PreferredSequencerUpdateStateMetrics {
@@ -40,16 +38,14 @@ impl Metric for PreferredSequencerUpdateStateMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} duration_ms={},total_message_processing_duration_ms={},fetch_batches_duration_us={},batches_count={},transactions_count={},in_progress_batch={},true_slot={},visible_slot={}",
+            "{} duration_ms={},total_message_processing_duration_ms={},fetch_batches_duration_us={},batches_count={},transactions_count={},in_progress_batch={}",
             self.measurement_name(),
             self.duration.as_millis(),
             self.total_message_processing_duration.as_millis(),
             self.time_spent_fetching_batches.as_micros(),
             self.batches_count,
             self.transactions_count,
-            self.in_progress_batch,
-            self.true_slot,
-            self.visible_slot
+            self.in_progress_batch
         )
     }
 }
@@ -146,6 +142,32 @@ impl Metric for PreferredSequencerFetchBatchesToReplayMetrics {
             self.duration.as_micros(),
             self.num_batches,
             self.num_transactions,
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct PreferredSequencerSlotNumberMetrics {
+    pub true_slot_number: u64,
+    pub latest_finalized_slot_number: u64,
+    pub node_visible_slot_number: u64,
+    pub seq_visible_slot_number: u64,
+}
+
+impl Metric for PreferredSequencerSlotNumberMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_preferred_sequencer_slot_numbers"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} true_slot={},last_finalized_slot={},node_visible_slot={},seq_visible_slot={}",
+            self.measurement_name(),
+            self.true_slot_number,
+            self.latest_finalized_slot_number,
+            self.node_visible_slot_number,
+            self.seq_visible_slot_number,
         )
     }
 }
