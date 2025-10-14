@@ -251,13 +251,7 @@ where
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         debug!("EVM module JSON-RPC request to `eth_blockNumber`");
-        let block_number_range = self
-            .block_numbers
-            .get(state)
-            .unwrap_infallible()
-            // Justified, we set it at genesis and later only override it.
-            .expect("The impossible happened: block_numbers was not set.");
-
+        let block_number_range = self.block_numbers(state);
         Ok(U256::from(*block_number_range.end()))
     }
 

@@ -416,12 +416,7 @@ where
 
     /// Retrieves the pending block.
     pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
-        let block_numbers = self
-            .block_numbers
-            .get(state)
-            .unwrap_infallible()
-            // This is justified, as block numbers are set at genesis and only overridden later.
-            .expect("The impossible happened: block_numbers was not set.");
+        let block_numbers = self.block_numbers(state);
 
         let head_block = self
             .blocks
