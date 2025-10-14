@@ -58,7 +58,14 @@ pub trait PublicKey:
 /// A private key for generating digital signatures.
 #[cfg(feature = "native")]
 pub trait PrivateKey:
-    Debug + Send + Sync + Serialize + Clone + serde::de::DeserializeOwned
+    Debug
+    + Send
+    + Sync
+    + Serialize
+    + Clone
+    + serde::de::DeserializeOwned
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
 {
     /// The public key type associated with this signature scheme.
     type PublicKey: PublicKey;

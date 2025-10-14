@@ -15,7 +15,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 /// Defines private key types and operations
 #[cfg(feature = "native")]
 pub mod private_key {
-    use ed25519_dalek::{Signer, SigningKey};
+    use ed25519_dalek::{SignatureError, Signer, SigningKey};
     use rand::rngs::OsRng;
     #[cfg(feature = "arbitrary")]
     use sov_rollup_interface::crypto::PrivateKey;
@@ -27,6 +27,21 @@ pub mod private_key {
     #[derive(Clone, serde::Serialize, serde::Deserialize)]
     pub struct Ed25519PrivateKey {
         key_pair: SigningKey,
+    }
+
+    impl AsRef<[u8]> for Ed25519PrivateKey {
+        fn as_ref(&self) -> &[u8] {
+            self.key_pair.as_bytes()
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for Ed25519PrivateKey {
+        type Error = SignatureError;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            let key_pair = SigningKey::try_from(value.as_slice())?;
+            Ok(Self { key_pair })
+        }
     }
 
     impl core::fmt::Debug for Ed25519PrivateKey {

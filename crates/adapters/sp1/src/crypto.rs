@@ -34,6 +34,21 @@ pub mod private_key {
         }
     }
 
+    impl AsRef<[u8]> for SP1PrivateKey {
+        fn as_ref(&self) -> &[u8] {
+            self.key_pair.as_bytes()
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for SP1PrivateKey {
+        type Error = ed25519_consensus::Error;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            let key_pair = SigningKey::try_from(value.as_slice())?;
+            Ok(Self { key_pair })
+        }
+    }
+
     impl sov_rollup_interface::crypto::PrivateKey for SP1PrivateKey {
         type PublicKey = SP1PublicKey;
 
