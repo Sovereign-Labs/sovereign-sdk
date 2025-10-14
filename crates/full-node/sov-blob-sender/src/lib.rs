@@ -333,8 +333,24 @@ where
             },
         );
 
-        // TODO: handle errors from the spawned tasks.
-        blobs.retain(|_, b| !b.handle.is_finished());
+        // Handle finished tasks: await their JoinHandle to surface any errors, then remove.
+        let finished_ids: Vec<_> = blobs
+            .iter()
+            .filter(|(_, b)| b.handle.is_finished())
+            .map(|(id, _)| *id)
+            .collect();
+        drop(blobs);
+        for id in finished_ids {
+            let maybe_blob = {
+                let mut map = self.in_flight_blobs.lock().await;
+                map.remove(&id)
+            };
+            if let Some(b) = maybe_blob {
+                if let Err(err) = b.handle.await {
+                    error!(%err, blob_id = id, "BlobSender task failed");
+                }
+            }
+        }
 
         Ok(())
     }
