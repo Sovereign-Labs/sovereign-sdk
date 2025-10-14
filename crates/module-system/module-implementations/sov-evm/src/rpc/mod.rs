@@ -243,7 +243,7 @@ where
         let block = self
             .blocks
             .get(&traced_tx.block_number, state)?
-            .expect("Transaction block not available");
+            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
 
         let mut archival_state = self.archival_state(traced_tx.block_number - 1, state)?;
 
