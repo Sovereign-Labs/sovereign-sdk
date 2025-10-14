@@ -29,35 +29,6 @@ impl<S: Spec> Evm<S> {
         )
     }
 
-    /// Access the Ethereum transaction receipt by number.
-    pub fn receipt<Accessor: AccessoryStateReader>(
-        &self,
-        index: u64,
-        state: &mut Accessor,
-    ) -> Option<Receipt> {
-        self.receipts.get(&index, state).unwrap_infallible()
-    }
-
-    /// Access the Ethereum transaction by number.
-    pub fn transaction<Accessor: AccessoryStateReader>(
-        &self,
-        index: u64,
-        state: &mut Accessor,
-    ) -> Option<TxSignedAndRecovered> {
-        self.transactions.get(&index, state).unwrap_infallible()
-    }
-
-    /// Access the Ethereum blocks.
-    pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
-        &self,
-        state: &mut Accessor,
-    ) -> RangeInclusive<u64> {
-        self.block_numbers
-            .get(state)
-            .unwrap_infallible()
-            .expect("Block numbers must be set")
-    }
-
     /// Lookup an Ethereum account by address.
     pub fn get_account<Accessor: StateReader<User>>(
         &self,
@@ -75,14 +46,6 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> Result<Option<U256>, Accessor::Error> {
         self.account_storage.get(&(address, index), state)
-    }
-
-    /// Get the currently pending head block.
-    pub fn pending_head<Accessor: AccessoryStateReader>(
-        &self,
-        state: &mut Accessor,
-    ) -> Option<Block> {
-        self.pending_head.get(state).unwrap_infallible()
     }
 
     /// Get the current head block.
@@ -112,6 +75,66 @@ impl<S: Spec> Evm<S> {
             .expect("The impossible happened: EVM config is not set");
         Ok(cfg)
     }
+}
+
+/// Infallible
+impl<S: Spec> Evm<S> {
+    /// Access the pending Ethereum transactions.
+    pub fn pending_transactions<Accessor: InfallibleStateReaderAndWriter<User>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Vec<PendingTransaction> {
+        self.pending_transactions.collect_infallible(state)
+    }
+
+    /// Access the Ethereum transaction receipt by number.
+    pub fn receipt<Accessor: AccessoryStateReader>(
+        &self,
+        index: u64,
+        state: &mut Accessor,
+    ) -> Option<Receipt> {
+        self.receipts.get(&index, state).unwrap_infallible()
+    }
+
+    /// Access the Ethereum transaction by number.
+    pub fn transaction<Accessor: AccessoryStateReader>(
+        &self,
+        index: u64,
+        state: &mut Accessor,
+    ) -> Option<TxSignedAndRecovered> {
+        self.transactions.get(&index, state).unwrap_infallible()
+    }
+
+    /// Access the Ethereum blocks.
+    pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
+        &self,
+        state: &mut Accessor,
+    ) -> RangeInclusive<u64> {
+        self.block_numbers
+            .get(state)
+            .unwrap_infallible()
+            .expect("Block numbers must be set")
+    }
+
+    /// Lookup the index of a Ethereum transaction based on the supplied hash.
+    pub fn get_tx_index_by_hash<Accessor: AccessoryStateReader>(
+        &self,
+        tx_hash: &B256,
+        state: &mut Accessor,
+    ) -> Option<u64> {
+        self.transaction_hashes
+            .get(tx_hash, state)
+            .unwrap_infallible()
+    }
+
+    /// Lookup the height of an Ethereum block based on the supplied hash.
+    pub fn get_block_height_by_hash<Accessor: AccessoryStateReader>(
+        &self,
+        block_hash: &B256,
+        state: &mut Accessor,
+    ) -> Option<u64> {
+        self.block_hashes.get(block_hash, state).unwrap_infallible()
+    }
 
     /// Get the Evm chain config.
     pub fn cfg_infallible<Accessor: InfallibleStateAccessor>(
@@ -125,31 +148,11 @@ impl<S: Spec> Evm<S> {
             .expect("The impossible happened: EVM config is not set")
     }
 
-    /// Access the pending Ethereum transactions.
-    pub fn pending_transactions<Accessor: InfallibleStateReaderAndWriter<User>>(
+    /// Get the currently pending head block.
+    pub fn pending_head<Accessor: AccessoryStateReader>(
         &self,
         state: &mut Accessor,
-    ) -> Vec<PendingTransaction> {
-        self.pending_transactions.collect_infallible(state)
-    }
-
-    /// Lookup the height of an Ethereum block based on the supplied hash.
-    pub fn get_block_height_by_hash<Accessor: AccessoryStateReader>(
-        &self,
-        block_hash: &B256,
-        state: &mut Accessor,
-    ) -> Option<u64> {
-        self.block_hashes.get(block_hash, state).unwrap_infallible()
-    }
-
-    /// Lookup the index of a Ethereum transaction based on the supplied hash.
-    pub fn get_tx_index_by_hash<Accessor: AccessoryStateReader>(
-        &self,
-        tx_hash: &B256,
-        state: &mut Accessor,
-    ) -> Option<u64> {
-        self.transaction_hashes
-            .get(tx_hash, state)
-            .unwrap_infallible()
+    ) -> Option<Block> {
+        self.pending_head.get(state).unwrap_infallible()
     }
 }
