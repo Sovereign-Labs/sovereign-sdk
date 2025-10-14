@@ -6,12 +6,12 @@ use crate::evm::make_contract_from_abi;
 use crate::evm::test_data_path;
 
 /// SimpleStorageContract wrapper.
-pub struct SimpleStorage {
+pub struct LegacySimpleStorage {
     bytecode: Bytes,
     base_contract: BaseContract,
 }
 
-impl Default for SimpleStorage {
+impl Default for LegacySimpleStorage {
     fn default() -> Self {
         let contract_data = {
             let mut path = test_data_path();
@@ -35,7 +35,7 @@ impl Default for SimpleStorage {
     }
 }
 
-impl SimpleStorage {
+impl LegacySimpleStorage {
     /// SimpleStorage bytecode.
     pub fn byte_code(&self) -> Bytes {
         self.bytecode.clone()
@@ -94,7 +94,7 @@ sol! {
     event SimpleLog(address indexed sender,uint256 indexed topic,uint256 value);
 }
 
-impl SimpleStorage {
+impl LegacySimpleStorage {
     /// Decode log
     pub fn decode_alloy(log: alloy_rpc_types_eth::Log) -> SimpleStorageContractLog {
         let decoded_log = SimpleLog::decode_log_validate(&log.inner).unwrap();
