@@ -7,7 +7,7 @@ use revm::context::BlockEnv;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, InfallibleStateAccessor,
-    InfallibleStateReaderAndWriter, Spec, StateAccessor, StateReader,
+    InfallibleStateReaderAndWriter, Spec, StateReader,
 };
 use sov_state::User;
 
@@ -17,9 +17,10 @@ use crate::{
     Evm, EvmRuntimeConfig, Receipt,
 };
 
+/// User state reads
 impl<S: Spec> Evm<S> {
     /// Get a EvmDb instance for the supplied state.
-    pub fn db<'a, Ws: StateAccessor>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
+    pub fn db<'a, Ws: StateReader<User>>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
         EvmDb::new(
             self.accounts.clone(),
             self.account_storage.clone(),
@@ -77,7 +78,7 @@ impl<S: Spec> Evm<S> {
     }
 }
 
-/// Infallible state access returning Option<T>
+/// Accessory state reads
 impl<S: Spec> Evm<S> {
     /// Access the pending Ethereum transactions.
     pub fn pending_transactions<Accessor: InfallibleStateReaderAndWriter<User>>(
@@ -134,7 +135,7 @@ impl<S: Spec> Evm<S> {
     }
 }
 
-/// Fully Infallible access to state set in genesis
+/// Reads on accessory state set in genesis
 impl<S: Spec> Evm<S> {
     /// Access the Ethereum blocks.
     pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
