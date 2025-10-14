@@ -135,6 +135,7 @@ pub struct Version1<Call, S: Spec> {
 
 impl<Call: BorshSerialize, S: Spec> Version1<Call, S> {
     /// Signs the transaction with the given key but does not add the signature to the list in the transaction.
+    #[cfg(feature = "native")]
     pub fn sign_without_adding(
         &self,
         key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
@@ -144,6 +145,7 @@ impl<Call: BorshSerialize, S: Spec> Version1<Call, S> {
     }
 
     /// Signs and adds the signature to the transaction.
+    #[cfg(feature = "native")]
     pub fn sign(
         &mut self,
         key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
