@@ -1,4 +1,5 @@
 # 2025-10-13
+- #1876 Use workspace dependencies consistently across all crates. This ensures version consistency and simplifies dependency management.
 - #1851 Implement `debug_traceBlockByNumber` in EVM module.
 
 # 2025-10-10
