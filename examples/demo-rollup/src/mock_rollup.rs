@@ -26,7 +26,7 @@ use sov_stf_runner::RollupConfig;
 use crate::eth_dev_signer;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }

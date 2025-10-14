@@ -1,8 +1,9 @@
-#![allow(dead_code)]
+#![allow(dead_code, missing_docs)]
 use crate::postgres::connection_string_from_postgres_container;
 use std::net::SocketAddr;
 use std::num::NonZero;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -69,10 +70,25 @@ pub enum GenesisSource<S: Spec, R: Runtime<S>> {
     CustomParams(GenesisParams<R::GenesisConfig>),
 }
 
-/// Various configuration options for [`RollupBuilder`].
-#[allow(missing_docs)]
 #[derive(Clone)]
-pub struct RollupBuilderConfig<S: Spec, StoragePath = Arc<tempfile::TempDir>> {
+
+pub enum StoragePath {
+    Tmp(Arc<tempfile::TempDir>),
+    Buf(PathBuf),
+}
+
+impl StoragePath {
+    pub fn path(&self) -> &Path {
+        match self {
+            Self::Tmp(tmp) => tmp.path(),
+            Self::Buf(buf) => buf.as_path(),
+        }
+    }
+}
+
+/// Various configuration options for [`RollupBuilder`].
+#[derive(Clone)]
+pub struct RollupBuilderConfig<S: Spec> {
     pub automatic_batch_production: bool,
     pub max_allowed_node_distance_behind: u64,
     pub sequencer_config: SequencerKindConfig,
@@ -83,18 +99,6 @@ pub struct RollupBuilderConfig<S: Spec, StoragePath = Arc<tempfile::TempDir>> {
     pub max_channel_size: u64,
     pub telegraf_address: sov_stf_runner::TelegrafSocketConfig,
     pub rollup_prover_config: Option<RollupProverConfig<S::InnerZkvm>>,
-    /// This is wrapped in an [`Arc`] to enable re-use of the same directory
-    /// when dropping a [`TestRollup`] and creating a new one. The pattern
-    /// looks something like this:
-    ///
-    ///  1. Instantiate a [`RollupBuilder`].
-    ///  2. Clone its [`RollupBuilderConfig::storage`] and store it for later use.
-    ///  3. Run some tests against the [`TestRollup`], then call
-    ///     [`TestRollup::shutdown`].
-    ///  4. Instantiate a new [`RollupBuilder`] and set its
-    ///     [`RollupBuilderConfig::storage`] to the original directory.
-    ///  6. Voila, your data is still there and you can test node behavior after
-    ///     a restart.
     pub storage: StoragePath,
     pub axum_host: String,
     pub axum_port: u16,
@@ -109,37 +113,21 @@ pub struct RollupBuilderConfig<S: Spec, StoragePath = Arc<tempfile::TempDir>> {
 
 /// A one-stop shop for building entire rollups and starting them in the
 /// background to test node APIs.
-#[derive(Derivative)]
-#[derivative(Clone(bound = "StoragePath: Clone"))]
-pub struct RollupBuilder<R: FullNodeBlueprint<Native>, StoragePath = Arc<tempfile::TempDir>> {
+#[derive(Clone)]
+
+pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
     genesis: GenesisSource<R::Spec, R::Runtime>,
     da_config: <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config,
-    config: RollupBuilderConfig<R::Spec, StoragePath>,
+    config: RollupBuilderConfig<R::Spec>,
     postgres_container_opt: Option<Arc<ContainerAsync<PostgresImage>>>,
     with_secondary_sequencer: Option<MockAddress>,
 }
 
-impl<R: FullNodeBlueprint<Native>> RollupBuilder<R> {
-    /// Creates a new [`RollupBuilder`] with automatic [`StorableMockDaService`]
-    /// configuration.
-    pub fn new(
-        genesis: GenesisSource<R::Spec, R::Runtime>,
-        block_producing: BlockProducingConfig,
-        finalization_blocks: u32,
-    ) -> Self {
-        Self::new_with_storage_path(
-            genesis,
-            block_producing,
-            finalization_blocks,
-            Arc::new(tempfile::tempdir().unwrap()),
-            true,
-        )
-    }
-
+impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     /// Uses the preferred sequencer with Postgres as a database.
     pub async fn with_postgres_sequencer(mut self) -> anyhow::Result<Self> {
         let postgres =
-            create_postgres_container(&self.config.storage.as_path().join("postgres_data")).await
+            create_postgres_container(&self.config.storage.path().join("postgres_data")).await
             .with_context(|| "Failed to start Postgres container. This is most likely because (1) the Docker daemon is not running or (2) Docker Desktop doesn't have file sharing permissions to the repository directory")?;
 
         let postgres_connection_string =
@@ -154,88 +142,6 @@ impl<R: FullNodeBlueprint<Native>> RollupBuilder<R> {
         }
 
         Ok(self)
-    }
-}
-
-/// A type that can be used as a [`Path`].
-// We need a custom trait because Arc<T> doesn't implement AsRef<Path>
-// even if T does.
-pub trait AsPath: Clone {
-    /// Returns a [`Path`] reference.
-    fn as_path(&self) -> &Path;
-}
-
-// We also can't blanket impl AsPath because rustc complains that TempDir might add an `Arc<Tempdir>: AsRef<Path>` implementation in the future.
-impl AsPath for Arc<tempfile::TempDir> {
-    fn as_path(&self) -> &Path {
-        self.as_ref().as_ref()
-    }
-}
-
-impl AsPath for PathBuf {
-    fn as_path(&self) -> &Path {
-        self.as_path()
-    }
-}
-
-impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, StoragePath> {
-    /// Creates a new [`RollupBuilder`] with automatic [`StorableMockDaService`]
-    /// configuration.
-    pub fn new_with_storage_path(
-        genesis: GenesisSource<R::Spec, R::Runtime>,
-        block_producing: BlockProducingConfig,
-        finalization_blocks: u32,
-        storage_path: StoragePath,
-        in_memory_da: bool,
-    ) -> Self {
-        let da_config = todo!(); /*MockDaConfig {
-                                     // This will be set later based on the storage path. In case of a bug,
-                                     // SQLite will simply fail to open the file and we'll immediately get a
-                                     // panic, so it's not dangerous.
-                                     connection_string: if in_memory_da {
-                                         MockDaConfig::sqlite_in_memory()
-                                     } else {
-                                         MockDaConfig::sqlite_in_dir(storage_path.as_path()).unwrap()
-                                     },
-                                     // This value is important and should match `examples/test-data/genesis/integration-tests/sequencer_registry.json`
-                                     // Otherwise batches are going to be rejected in `examples/demo-rollup` tests.
-                                     sender_address: MockAddress::new([0; 32]),
-                                     finalization_blocks,
-                                     block_producing,
-                                     da_layer: None,
-                                     randomization: None,
-                                 };*/
-
-        Self {
-            genesis,
-            da_config,
-            postgres_container_opt: None,
-            config: RollupBuilderConfig {
-                max_allowed_node_distance_behind: 10,
-                max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-                max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
-                max_channel_size: 60,
-                max_infos_in_db: 250 + finalization_blocks as u64,
-                automatic_batch_production: true,
-                sequencer_config: SequencerKindConfig::Preferred(Default::default()),
-                prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
-                sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
-                aggregated_proof_block_jump: 1,
-                rollup_prover_config: None,
-                storage: storage_path,
-                telegraf_address: MonitoringConfig::standard().telegraf_address,
-                axum_host: "127.0.0.1".to_string(),
-                axum_port: 0,
-                blob_processing_timeout_secs: 60,
-                start_at_rollup_height: None,
-                stop_at_rollup_height: None,
-                extension: Some(SeqConfigExtension {
-                    max_log_limit: 20000,
-                }),
-                num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
-            },
-            with_secondary_sequencer: None,
-        }
     }
 
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
@@ -290,10 +196,7 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
     }
 
     /// Allows to modify configuration options.
-    pub fn set_config(
-        mut self,
-        config_f: impl FnOnce(&mut RollupBuilderConfig<R::Spec, StoragePath>),
-    ) -> Self {
+    pub fn set_config(mut self, config_f: impl FnOnce(&mut RollupBuilderConfig<R::Spec>)) -> Self {
         config_f(&mut self.config);
         self
     }
@@ -321,35 +224,12 @@ impl<R: FullNodeBlueprint<Native>, StoragePath: AsPath> RollupBuilder<R, Storage
         self
     }
 
-    /// If rollup needs to be restarted, this needs to be activated.
-    pub fn set_persistent_da(mut self) -> Self {
-        /*
-        // We store DA data in the same directory as the rollup data. This
-        // ensures that, when reusing the same path, we restore not only node
-        // data but also DA history.
-        self.da_config.connection_string =
-            MockDaConfig::sqlite_in_dir(self.config.storage.as_path())
-                .expect("storage folder should exist by this time");
-        self
-        */
-        todo!()
-    }
-
     /// A reference to the storage directory the rollup will run in
     pub fn storage_path(&self) -> StoragePath {
         self.config.storage.clone()
     }
-}
 
-impl<R, StoragePath> RollupBuilder<R, StoragePath>
-where
-    R: FullNodeBlueprint<Native> + Default + 'static,
-    R::Spec: Spec<Da = MockDaSpec>,
-    StoragePath: AsPath,
-{
-    /// Creates a new [`TestRollup`] and starts running it in a background Tokio
-    /// task. See [`TestRollup`] for usage information.
-    pub async fn start(self) -> anyhow::Result<TestRollup<R, StoragePath>> {
+    async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
         let blueprint: R = Default::default();
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
@@ -358,10 +238,10 @@ where
                 tracing::warn!("Prover process is enabled, but state root consistency checks are not disabled. This will cause crashes in the sequencer since proofs are created but not yet handled by the sequencer. Consider disabling one of the two options.");
             }
         }
-        std::fs::create_dir_all(self.config.storage.as_path()).with_context(|| {
+        std::fs::create_dir_all(self.config.storage.path()).with_context(|| {
             format!(
                 "Failed to create storage directory: {}",
-                self.config.storage.as_path().display()
+                self.config.storage.path().display()
             )
         })?;
 
@@ -401,30 +281,6 @@ where
             other_handles.push(handle);
         }
 
-        let (secondary_test_sequencer_client, secondary_sequencer_state_sender) =
-            match self.with_secondary_sequencer {
-                Some(addr) => {
-                    // We "keep" it because it is going to be deleted when the parent is deleted.
-                    let second_sequencer_dir = tempfile::Builder::new()
-                        .disable_cleanup(true)
-                        .tempdir_in(self.config.storage.as_path())?;
-                    let mut rollup_config = rollup_config.clone();
-                    rollup_config.storage.path = second_sequencer_dir.path().to_path_buf();
-
-                    /*
-                    let (client, sender) = Self::start_secondary_sequencer(
-                        da_service.another_on_the_same_layer(addr).await,
-                        rollup_config.clone(),
-                        shutdown_sender.clone(),
-                    )
-                    .await?;
-                    (Some(client), Some(sender))
-                    */
-                    todo!()
-                }
-                None => (None, None),
-            };
-
         let rollup_task = tokio::spawn(async move {
             match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
                 Ok(()) => {
@@ -460,15 +316,15 @@ where
             client,
             da_service,
             shutdown_sender,
-            secondary_test_sequencer_client,
-            _secondary_sequencer_state_sender: secondary_sequencer_state_sender,
+            secondary_test_sequencer_client: None,
+            _secondary_sequencer_state_sender: None,
             other_handles,
         })
     }
 
     fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
         RollupConfig {
-            storage: RollupDbConfig::default_in_path(self.config.storage.as_path().to_path_buf()),
+            storage: RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf()),
             runner: RunnerConfig {
                 genesis_height: 0,
                 da_polling_interval_ms: 30,
@@ -511,6 +367,125 @@ where
                 max_pending_metrics: None,
             },
         }
+    }
+}
+
+impl<R> RollupBuilder<R>
+where
+    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
+    R::Spec: Spec<Da = MockDaSpec>,
+{
+    /// Creates a new [`RollupBuilder`] with automatic [`StorableMockDaService`]
+    /// configuration.
+    pub fn new(
+        genesis: GenesisSource<R::Spec, R::Runtime>,
+        block_producing: BlockProducingConfig,
+        finalization_blocks: u32,
+    ) -> Self {
+        Self::new_with_storage_path(
+            genesis,
+            block_producing,
+            finalization_blocks,
+            StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap())),
+            true,
+        )
+    }
+
+    /// Creates a new [`RollupBuilder`] with automatic [`StorableMockDaService`]
+    /// configuration.
+    pub fn new_with_storage_path(
+        genesis: GenesisSource<R::Spec, R::Runtime>,
+        block_producing: BlockProducingConfig,
+        finalization_blocks: u32,
+        storage_path: StoragePath,
+        in_memory_da: bool,
+    ) -> Self {
+        let da_config = MockDaConfig {
+            // This will be set later based on the storage path. In case of a bug,
+            // SQLite will simply fail to open the file and we'll immediately get a
+            // panic, so it's not dangerous.
+            connection_string: if in_memory_da {
+                MockDaConfig::sqlite_in_memory()
+            } else {
+                MockDaConfig::sqlite_in_dir(storage_path.path()).unwrap()
+            },
+            // This value is important and should match `examples/test-data/genesis/integration-tests/sequencer_registry.json`
+            // Otherwise batches are going to be rejected in `examples/demo-rollup` tests.
+            sender_address: MockAddress::new([0; 32]),
+            finalization_blocks,
+            block_producing,
+            da_layer: None,
+            randomization: None,
+        };
+
+        Self {
+            genesis,
+            da_config,
+            postgres_container_opt: None,
+            config: RollupBuilderConfig {
+                max_allowed_node_distance_behind: 10,
+                max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
+                max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+                max_channel_size: 60,
+                max_infos_in_db: 250 + finalization_blocks as u64,
+                automatic_batch_production: true,
+                sequencer_config: SequencerKindConfig::Preferred(Default::default()),
+                prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
+                sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
+                aggregated_proof_block_jump: 1,
+                rollup_prover_config: None,
+                storage: storage_path,
+                telegraf_address: MonitoringConfig::standard().telegraf_address,
+                axum_host: "127.0.0.1".to_string(),
+                axum_port: 0,
+                blob_processing_timeout_secs: 60,
+                start_at_rollup_height: None,
+                stop_at_rollup_height: None,
+                extension: Some(SeqConfigExtension {
+                    max_log_limit: 20000,
+                }),
+                num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
+            },
+            with_secondary_sequencer: None,
+        }
+    }
+
+    /// Creates a new [`TestRollup`] and starts running it in a background Tokio
+    /// task. See [`TestRollup`] for usage information.
+    pub async fn start(self) -> anyhow::Result<TestRollup<R>> {
+        let with_secondary_sequencer = self.with_secondary_sequencer;
+        let storage_config = &self.config.storage.clone();
+        let mut test_rollup = self.start_test_rollup().await?;
+
+        let da_service = test_rollup.da_service.clone();
+
+        let rollup_config = test_rollup.rollup_config.clone();
+        let shutdown_sender = test_rollup.shutdown_sender.clone();
+        let (secondary_test_sequencer_client, secondary_sequencer_state_sender) =
+            match with_secondary_sequencer {
+                Some(addr) => {
+                    // We "keep" it because it is going to be deleted when the parent is deleted.
+                    let second_sequencer_dir = tempfile::Builder::new()
+                        .disable_cleanup(true)
+                        .tempdir_in(storage_config.path())?;
+                    let mut rollup_config = rollup_config.clone();
+                    rollup_config.storage.path = second_sequencer_dir.path().to_path_buf();
+
+                    let (client, sender) = Self::start_secondary_sequencer(
+                        da_service.another_on_the_same_layer(addr).await,
+                        rollup_config.clone(),
+                        shutdown_sender.clone(),
+                    )
+                    .await?;
+                    (Some(client), Some(sender))
+                }
+                None => (None, None),
+            };
+
+        test_rollup.secondary_test_sequencer_client = secondary_test_sequencer_client;
+        test_rollup._secondary_sequencer_state_sender = secondary_sequencer_state_sender;
+
+        Ok(test_rollup)
     }
 
     async fn start_secondary_sequencer(
@@ -581,13 +556,17 @@ where
 
         Ok((client, sender))
     }
-}
 
-impl<R> RollupBuilder<R, Arc<tempfile::TempDir>>
-where
-    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
-    R::Spec: Spec<Da = MockDaSpec>,
-{
+    /// If rollup needs to be restarted, this needs to be activated.
+    pub fn set_persistent_da(mut self) -> Self {
+        // We store DA data in the same directory as the rollup data. This
+        // ensures that, when reusing the same path, we restore not only node
+        // data but also DA history.
+        self.da_config.connection_string = MockDaConfig::sqlite_in_dir(self.config.storage.path())
+            .expect("storage folder should exist by this time");
+        self
+    }
+
     /// Creates multiple [`TestRollup`] instances with shared database infrastructure.
     /// The first rollup acts as master, subsequent ones as replicas.
     /// All instances share the same MockDA sqlite and postgres database.
@@ -606,7 +585,7 @@ where
     pub async fn start_with_replicas(
         self,
         num_replicas: u64,
-    ) -> anyhow::Result<Vec<TestRollup<R, Arc<tempfile::TempDir>>>> {
+    ) -> anyhow::Result<Vec<TestRollup<R>>> {
         if num_replicas == 0 {
             anyhow::bail!("num_replicas must be at least 1 (master + replicas)");
         }
@@ -622,7 +601,7 @@ where
         }
 
         // Create base temp directory for shared infrastructure
-        let base_path = self.config.storage.as_path();
+        let base_path = self.config.storage.path();
         std::fs::create_dir_all(base_path).with_context(|| {
             format!(
                 "Failed to create storage directory: {}",
@@ -659,7 +638,9 @@ where
                     ..self.da_config.clone()
                 },
                 config: RollupBuilderConfig {
-                    storage: Arc::new(tempfile::Builder::new().tempdir_in(&instance_dir)?),
+                    storage: StoragePath::Tmp(Arc::new(
+                        tempfile::Builder::new().tempdir_in(&instance_dir)?,
+                    )),
                     ..self.config.clone()
                 },
                 postgres_container_opt: self.postgres_container_opt.clone(),
@@ -687,7 +668,7 @@ where
 /// Represents a **running** rollup node while providing access to its
 /// [`DaService`] and wallet client
 /// to help run end-to-end tests against its APIs.
-pub struct TestRollup<R: FullNodeBlueprint<Native>, StoragePath = Arc<tempfile::TempDir>> {
+pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     /// A wallet client that can be used to interact with the node and submit
     /// txs to the sequencer.
     pub client: NodeClient,
@@ -713,47 +694,23 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>, StoragePath = Arc<tempfile::
     /// client that can be used to submit transactions.
     pub secondary_test_sequencer_client: Option<sov_api_spec::client::Client>,
     #[allow(missing_docs)]
-    pub builder: RollupBuilder<R, StoragePath>,
+    pub builder: RollupBuilder<R>,
     // Keep it open, so the secondary sequencer runs without errors
     #[allow(dead_code)]
     _secondary_sequencer_state_sender:
         Option<watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>>,
 }
 
-impl<R, StoragePath> TestRollup<R, StoragePath>
+impl<R> TestRollup<R>
 where
-    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
-    R::Spec: Spec<Da = MockDaSpec>,
-    StoragePath: AsPath,
+    R: FullNodeBlueprint<Native> + Default + 'static,
 {
     /// Default timeout for polling operations in seconds.
     pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
-    /// Pauses batch production for the preferred sequencer.
-    ///
-    /// Transactions accepted by the preferred sequencer after this call (and
-    /// before [`TestRollup::resume_preferred_batches`]) will all be part of the
-    /// same batch.
-    pub async fn pause_preferred_batches(&self) {
-        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
-    }
-
     /// Helper to get api_client
     pub fn api_client(&self) -> &sov_api_spec::client::Client {
         &self.client.client
-    }
-
-    /// Resumes batch production after [`TestRollup::pause_preferred_batches`].
-    ///
-    /// Note: calling this method MAY NOT immediately produce a batch.
-    pub async fn resume_preferred_batches(&self) {
-        assert_eq!(
-            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
-            "1",
-            "Resuming but it was never paused in the first place",
-        );
-
-        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
     }
 
     /// Waits for the rollup to shutdown.
@@ -777,7 +734,7 @@ where
     }
 
     /// Shuts down the rollup and waits for all background tasks to finish.
-    pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R, StoragePath>> {
+    pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R>> {
         if let Err(error) = self.shutdown_sender.send(()) {
             tracing::info!(%error, "shutdown triggered elsewhere, this is probably OK");
         }
@@ -912,6 +869,34 @@ where
             "node to sync",
         )
         .await
+    }
+}
+
+impl<R> TestRollup<R>
+where
+    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
+    R::Spec: Spec<Da = MockDaSpec>,
+{
+    /// Pauses batch production for the preferred sequencer.
+    ///
+    /// Transactions accepted by the preferred sequencer after this call (and
+    /// before [`TestRollup::resume_preferred_batches`]) will all be part of the
+    /// same batch.
+    pub async fn pause_preferred_batches(&self) {
+        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
+    }
+
+    /// Resumes batch production after [`TestRollup::pause_preferred_batches`].
+    ///
+    /// Note: calling this method MAY NOT immediately produce a batch.
+    pub async fn resume_preferred_batches(&self) {
+        assert_eq!(
+            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
+            "1",
+            "Resuming but it was never paused in the first place",
+        );
+
+        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
     }
 
     /// Restarts the rollup.
