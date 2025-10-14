@@ -4,8 +4,8 @@ use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{Namespace, SlotKey, SlotValue};
 
-use super::TxScratchpad;
 use super::super::{StateMetricsProvider, StateProvider, UniversalStateAccessor};
+use super::TxScratchpad;
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::traits::delegate_version_reader;
@@ -136,7 +136,9 @@ mod tests {
     use crate::capabilities::mocks::MockKernel;
     use crate::execution_mode::Native;
     use crate::state::accessors::StateProvider;
-    use crate::{BasicGasMeter, GasArray, Spec, StateAccessor, StateCheckpoint, StateReader, StateWriter};
+    use crate::{
+        BasicGasMeter, GasArray, Spec, StateAccessor, StateCheckpoint, StateReader, StateWriter,
+    };
 
     type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 

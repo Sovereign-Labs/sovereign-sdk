@@ -10,11 +10,13 @@ use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
 use super::super::checkpoints::StateCheckpoint;
 use super::super::internals::{FirstTimeReads, RevertableWriter};
 use super::super::temp_cache::TempCache;
-use super::super::{BorshSerializedSize, StateMetricsProvider, StateProvider, UniversalStateAccessor};
+use super::super::{
+    BorshSerializedSize, StateMetricsProvider, StateProvider, UniversalStateAccessor,
+};
 use super::PreExecWorkingSet;
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
-use crate::state::traits::{PerBlockCache, delegate_version_reader};
+use crate::state::traits::{delegate_version_reader, PerBlockCache};
 use crate::{BasicGasMeter, GasMeter, VersionReader};
 
 /// Transaction-level state accumulator without gas metering.
