@@ -52,8 +52,12 @@ impl<D: DispatchCall> TransactionCallable for D {
 /// V0 transaction.
 pub struct Version0<Call, S: Spec> {
     /// The signature of the transaction.
+    #[serde(with = "bytes_field_format")]
+    #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
     /// The public key of the sender of the transaction.
+    #[serde(with = "bytes_field_format")]
+    #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
     pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
     /// The runtime call of the transaction.
     #[sov_wallet(
@@ -393,4 +397,25 @@ pub struct AuthenticatedTransactionAndRawHash<S: Spec> {
     pub raw_tx_hash: TxHash,
     /// Authenticated transaction data.
     pub authenticated_tx: AuthenticatedTransactionData<S>,
+}
+
+mod bytes_field_format {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S, V>(value: &V, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        V: AsRef<[u8]>,
+    {
+        serializer.serialize_bytes(value.as_ref())
+    }
+
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: TryFrom<Vec<u8>>,
+    {
+        let bytes: Vec<u8> = Vec::deserialize(deserializer)?;
+        T::try_from(bytes).map_err(|_e| serde::de::Error::custom("invalid bytes"))
+    }
 }

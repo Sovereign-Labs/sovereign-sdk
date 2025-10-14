@@ -52,8 +52,10 @@ impl PrivateKey for EthereumPrivateKey {
     }
 
     fn pub_key(&self) -> Self::PublicKey {
+        let pub_key = self.signing_key.verifying_key();
         EthereumPublicKey {
-            pub_key: PublicKey::from(self.signing_key.verifying_key()),
+            pub_key: PublicKey::from(pub_key),
+            key_bytes: pub_key.to_sec1_bytes().to_vec(),
         }
     }
 
@@ -61,7 +63,7 @@ impl PrivateKey for EthereumPrivateKey {
         let digest = keccak256(msg);
         use k256::ecdsa::signature::hazmat::PrehashSigner;
         let signature: Signature = self.signing_key.sign_prehash(&digest.0).unwrap();
-        EthereumSignature { msg_sig: signature }
+        EthereumSignature::new(signature)
     }
 }
 
