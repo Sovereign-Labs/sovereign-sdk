@@ -9,7 +9,7 @@ use std::time::Duration;
 use super::batch_size_tracker::BatchSizeTracker;
 use crate::metrics::{
     track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
-    PreferredSequencerPruneMetrics,
+    PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics,
 };
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::block_executor::{
@@ -1563,6 +1563,10 @@ where
         reason: &'static str,
     ) -> PreferredSeqOperation<S, Rt> {
         let sync_status = &info.sync_status;
+        let true_slot_number = info.slot_number.get();
+        let latest_finalized_slot_number = info.latest_finalized_slot_number.get();
+        let node_visible_slot_number =
+            current_visible_slot_number_according_to_node::<S, Rt>(info).get();
 
         debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -1572,6 +1576,14 @@ where
                 inner.completed_batches_to_replay(next_sequence_number_according_to_node, true),
                 !inner.has_finished_startup,
             )
+        };
+
+        let seq_visible_slot_number = match batches_to_replay.iter().last() {
+            None => node_visible_slot_number,
+            Some(b) => {
+                let _visible_slots_advance = b.batch.inner.visible_slots_to_advance.get();
+                b.visible_slot_number_after_increase.get()
+            }
         };
 
         let is_resync = matches!(
@@ -1587,6 +1599,12 @@ where
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
         sov_metrics::track_metrics(|t| {
             t.submit(fetch_batches_to_replay_metrics);
+            t.submit(PreferredSequencerSlotNumberMetrics {
+                true_slot_number,
+                latest_finalized_slot_number,
+                node_visible_slot_number,
+                seq_visible_slot_number,
+            });
         });
 
         let distance = sync_status.distance();
