@@ -72,7 +72,7 @@ mod serde_array {
 }
 
 /// The public key of a secp256k1 keypair.
-#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
 pub struct EthereumPublicKey {
     #[schemars(flatten, with = "String", length(equal = "PUBLIC_KEY_SIZE * 2"))]
     #[sov_wallet(as_ty = "[u8; PUBLIC_KEY_SIZE]")]

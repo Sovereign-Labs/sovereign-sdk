@@ -16,12 +16,12 @@ use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
     TxDetails, VersionedTx,
 };
-use crate::GetGasPrice;
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
-    GasMeteringError, MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher,
-    ProvableStateReader, RawTx, Runtime, Spec,
+    GasMeteringError, GasSpec, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    MeteredHasher, ProvableStateReader, RawTx, Runtime, Spec,
 };
+use crate::{GetGasPrice, Multisig};
 
 /// The chain ID of the rollup.
 pub fn config_chain_id() -> u64 {
@@ -315,6 +315,36 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
     })
 }
 
+/// Extracts authorization data from a verified transaction.
+pub fn extract_authorization_data_v1<S: Spec, D: DispatchCall<Spec = S>>(
+    tx_v1: &crate::transaction::Version1<D::Decodable, S>,
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthorizationData<S>, AuthenticationError> {
+    // Charge gas; We charge for credential ID calculation based on the number of keys in the multisig
+    let num_signatures = (tx_v1.signatures.len() + tx_v1.unused_pub_keys.len()) as u32;
+    meter
+        .charge_linear_gas(S::gas_to_charge_for_credential(), num_signatures)
+        .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+    // Calculate credential ID as hash(min_signers || sorted(pub_keys))
+    let pub_keys = tx_v1
+        .signatures
+        .iter()
+        .map(|s| s.pub_key.clone())
+        .chain(tx_v1.unused_pub_keys.iter().cloned())
+        .collect::<Vec<_>>();
+    let multisg = Multisig::new(tx_v1.min_signers, pub_keys);
+    let credential_id = multisg.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
+
+    Ok(AuthorizationData {
+        uniqueness: tx_v1.uniqueness,
+        tx_hash: raw_tx_hash,
+        credential_id,
+        credentials: Default::default(),
+        default_address: credential_id.into(),
+    })
+}
+
 /// Authenticate and verify deserialized sov-tx. See `authenticate`.
 ///
 /// # Errors
@@ -336,6 +366,20 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
             let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
                 raw_tx_hash,
                 authenticated_tx: tx_v0.details.clone().into(),
+            };
+
+            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+        }
+        VersionedTx::V1(tx_v1) => {
+            verify_chain_id(&tx_v1.details, raw_tx_hash)?;
+            verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
+            let authorization_data =
+                extract_authorization_data_v1::<S, D>(tx_v1, raw_tx_hash, meter)?;
+
+            let runtime_call = tx_v1.runtime_call.clone();
+            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+                raw_tx_hash,
+                authenticated_tx: tx_v1.details.clone().into(),
             };
 
             Ok((tx_and_raw_hash, authorization_data, runtime_call))

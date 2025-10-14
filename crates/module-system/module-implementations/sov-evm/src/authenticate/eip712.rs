@@ -233,6 +233,12 @@ fn verify_and_decode_tx<
 
             Ok((tx_and_raw_hash, authorization_data, runtime_call))
         }
+        VersionedTx::V1(_tx_v1) => Err(AuthenticationError::FatalError(
+            FatalError::Other(
+                "V1 (multisig) transactions are not compatible with EIP-712".to_string(),
+            ),
+            raw_tx_hash,
+        )),
     }
 }
 

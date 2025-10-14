@@ -125,6 +125,20 @@ pub struct Ed25519PublicKey {
     pub(crate) pub_key: DalekPublicKey,
 }
 
+impl PartialOrd for Ed25519PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ed25519PublicKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let self_bytes = self.pub_key.as_bytes();
+        let other_bytes = other.pub_key.as_bytes();
+        self_bytes.cmp(other_bytes)
+    }
+}
+
 impl Ed25519PublicKey {
     /// Returns a reference to the underlying bytes of the public key.
     pub fn bytes(&self) -> &[u8; 32] {

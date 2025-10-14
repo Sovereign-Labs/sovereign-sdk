@@ -1,10 +1,17 @@
 use sov_accounts::{Accounts, CallMessage, Response};
-use sov_modules_api::{Error, PrivateKey, PublicKey, Spec, TxEffect};
+use sov_modules_api::transaction::{UnsignedTransaction, Version1};
+use sov_modules_api::{
+    CryptoSpec, Error, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
+use sov_test_utils::{default_test_tx_details, TransactionType};
 use sov_test_utils::{
     generate_optimistic_runtime, AsUser, TestPrivateKey, TestUser, TransactionTestCase,
 };
+
+use sov_modules_api::transaction::PubKeyAndSignature;
+use sov_modules_api::transaction::Transaction;
 
 type S = sov_test_utils::TestSpec;
 
@@ -142,6 +149,232 @@ fn test_update_account_fails() {
             }
         }),
     });
+}
+
+/// Tests the multisig functionality of the Accounts module.
+#[test]
+fn test_setup_multisig_and_act() {
+    use sov_modules_api::Multisig;
+    let (
+        TestData {
+            non_registered_account: user,
+            ..
+        },
+        mut runner,
+    ) = setup();
+
+    // First, create and register a multisig
+    let multisig_keys = vec![
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let multisig = Multisig::new(2, multisig_keys.iter().map(|k| k.pub_key()).collect());
+    let multisig_credential_id =
+        multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
+            multisig_credential_id,
+        )),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+
+            let accounts = Accounts::<S>::default();
+
+            // New account with the new public key and an old address is created.
+            assert_eq!(
+                accounts.get_account(multisig_credential_id, state),
+                Response::AccountExists {
+                    addr: user.address()
+                }
+            );
+            // Account corresponding to the old credential still exists.
+            assert_eq!(
+                accounts.get_account(user.credential_id(), state),
+                Response::AccountExists {
+                    addr: user.address()
+                }
+            );
+
+            assert_ne!(multisig_credential_id, user.credential_id());
+        }),
+    });
+
+    // Define utilities for...
+    // - Generating a valid multisig (version 1) transaction
+    // - Signing a (version 1) transaction with a key
+    // - Submitting the transaction and asserting it is successful
+    // - Submitting the transaction and asserting it is skipped
+    let generate_multisig_tx = || {
+        let key = TestPrivateKey::generate();
+        UnsignedTransaction::<RT, S>::new_with_details(
+            TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(
+                key.pub_key().credential_id(),
+            )),
+            sov_modules_api::capabilities::UniquenessData::Generation(0),
+            default_test_tx_details::<S>(),
+        )
+        .to_multisig_tx(multisig.clone())
+    };
+
+    let sign = |tx: &mut Version1<TestAccountsRuntimeCall<S>, S>, key: &TestPrivateKey| {
+        use sov_modules_api::Runtime;
+        let chain_hash = &<RT as Runtime<S>>::CHAIN_HASH;
+        tx.sign(key, chain_hash).unwrap();
+    };
+
+    let assert_tx_success = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
+                             runner: &mut TestRunner<RT, S>| {
+        let tx = Transaction::<RT, S> {
+            versioned_tx: tx.into(),
+        };
+        let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
+            data: borsh::to_vec(&tx).unwrap(),
+        });
+        runner.execute_transaction(TransactionTestCase {
+            input: multisig_tx,
+            assert: Box::new(move |result, _state| {
+                assert!(result.tx_receipt.is_successful());
+            }),
+        });
+    };
+
+    let assert_tx_skip = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
+                          runner: &mut TestRunner<RT, S>,
+                          reason: &'static str| {
+        let tx = Transaction::<RT, S> {
+            versioned_tx: tx.into(),
+        };
+        let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
+            data: borsh::to_vec(&tx).unwrap(),
+        });
+        runner.execute_transaction(TransactionTestCase {
+            input: multisig_tx,
+            assert: Box::new(move |result, _state| {
+                assert!(result.tx_receipt.is_skipped());
+                match result.tx_receipt {
+                    TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                        assert!(
+                            error.to_string().contains(reason),
+                            "Unexpected skip reason. Expected: {reason}, Got: {error}"
+                        );
+                    }
+                    _ => panic!(
+                        "Expected skipped transaction but found {:?}",
+                        result.tx_receipt
+                    ),
+                }
+            }),
+        });
+    };
+
+    // A transaction with two valid signatures should succeed in our 2/3 multisig
+    let tx_with_two_valid_signatures = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[0]);
+        sign(&mut tx, &multisig_keys[1]);
+        tx
+    };
+    assert_tx_success(tx_with_two_valid_signatures, &mut runner);
+
+    // A transaction with three valid signatures should succeed in our 2/3 multisig
+    let tx_with_three_valid_signatures = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[0]);
+        sign(&mut tx, &multisig_keys[1]);
+        sign(&mut tx, &multisig_keys[2]);
+        tx
+    };
+    assert_tx_success(tx_with_three_valid_signatures, &mut runner);
+
+    // A transaction with a different set of two valid signatures should succeed in our 2/3 multisig
+    let tx_with_other_valid_signatures = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[1]);
+        sign(&mut tx, &multisig_keys[2]);
+        tx
+    };
+    assert_tx_success(tx_with_other_valid_signatures, &mut runner);
+
+    // A transaction with a non-member signature should be skipped because it does not match a valid credential ID.
+    // Note that this error will disappear if we add the paymaster to our test runtime; the tx will succeed on a different account. In that case,
+    // this test will need refinement
+    let tx_with_non_member_signature = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[0]);
+        sign(&mut tx, &multisig_keys[1]);
+        // Manually add a signature from a non-member key
+        {
+            let non_member_key = TestPrivateKey::generate();
+            let non_member_sig =
+                tx.sign_without_adding(&non_member_key, &<RT as Runtime<S>>::CHAIN_HASH);
+            tx.signatures
+                .try_push(PubKeyAndSignature {
+                    signature: non_member_sig,
+                    pub_key: non_member_key.pub_key(),
+                })
+                .unwrap();
+        }
+        tx
+    };
+    assert_tx_skip(
+        tx_with_non_member_signature,
+        &mut runner,
+        "Impossible to reserve gas",
+    ); // Fails to reserve gas because the credential ID has changed
+
+    // A transaction with only one signature should be skipped because it does not meet the required threshold.
+    let tx_with_too_few_signatures = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[0]);
+        tx
+    };
+    assert_tx_skip(
+        tx_with_too_few_signatures,
+        &mut runner,
+        "Not enough valid signatures. Required: 2, Got: 1",
+    );
+
+    // A transaction with a bad signature should fail verification
+    let tx_with_bad_signature = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[0]);
+        let bad_signature = multisig_keys[1].sign(&[1, 2, 3]);
+        tx.add_signature(bad_signature, multisig_keys[1].pub_key())
+            .unwrap();
+        tx
+    };
+    assert_tx_skip(
+        tx_with_bad_signature,
+        &mut runner,
+        "Verification equation was not satisfied",
+    );
+
+    // A transaction with a duplicate signature should be rejected
+    let tx_with_duplicate_signature = {
+        let mut tx = generate_multisig_tx();
+        sign(&mut tx, &multisig_keys[0]);
+        sign(&mut tx, &multisig_keys[1]);
+        // Manually add a duplicate signature
+        {
+            let duplicate_sig =
+                tx.sign_without_adding(&multisig_keys[0], &<RT as Runtime<S>>::CHAIN_HASH);
+            tx.signatures
+                .try_push(PubKeyAndSignature {
+                    signature: duplicate_sig,
+                    pub_key: multisig_keys[0].pub_key(),
+                })
+                .unwrap();
+        }
+
+        tx
+    };
+
+    assert_tx_skip(
+        tx_with_duplicate_signature,
+        &mut runner,
+        "is not part of the multisig or has already signed.",
+    );
 }
 
 #[test]
