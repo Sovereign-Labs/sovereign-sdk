@@ -8,11 +8,16 @@ connection_string = "sqlite://mock_da.sqlite?mode=rwc"
 # For initial full node should match genesis of sequencer-registry.
 # It is going to be a DA address that blobs from this node will be associated with.
 sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
-finalization = 40
+finalization = 40 # Reorgs up to this depth are allowed. Set to zero for instant finality
+
 [da.block_producing.periodic]
 block_time_ms = 1_000
+
+# Alternative block producing modes:
+# [da.block_producing.manual] # Manual block production mode
 # Disable reorg for now, for better stability
-#[da.randomization]
+
+#[da.randomization] # Config for managing reorgs
 #seed = "0x0000000000000000000000000000000000000000000000000000000000000012"
 #reorg_interval = [10, 20]
 #[da.randomization.behaviour.shuffle_and_resize]
@@ -25,6 +30,18 @@ block_time_ms = 1_000
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
+# user_commit_concurrency = 4 # Number of concurrent commit workers for user state
+# user_hashtable_buckets = 15000000 # Expected state size, cannot be changed after creation
+# user_preallocate_ht = false # Whether to preallocate hashtable file for user db
+# user_page_cache_size = 1073741824 # Page cache size for user state in bytes
+# user_leaf_cache_size = 536870912 # Leaf cache size for user state in bytes
+# kernel_commit_concurrency = 2 # Number of concurrent commit workers for kernel state
+# kernel_hashtable_buckets = 256000 # Hashtable buckets for kernel db
+# kernel_preallocate_ht = false # Whether to preallocate hashtable file for kernel db
+# kernel_page_cache_size = 268435456 # Page cache size for kernel state in bytes
+# kernel_leaf_cache_size = 134217728 # Leaf cache size for kernel state in bytes
+# pruner_block_interval = 100 # How often to run pruner measured by DA blocks
+# pruner_versions_to_keep = 20 # Number of versions available for historical querying
 # pruner_max_batch_size = 300000 # The maximum number of key/value pairs to prune in a single batch. Each key is about 70 bytes, so your prunery memory requirements will be about 21MB by default.
 
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
@@ -34,12 +51,16 @@ genesis_height = 0
 
 # da.block_time is 1s, so status updater will try to poll it 20 times during it.
 da_polling_interval_ms = 50
+# da_total_timeout_secs = 600 # Total timeout for DA service including re-orgs and retries
+# concurrent_sync_tasks = 5 # Number of concurrent tasks to get blocks from DA service
+# save_tx_bodies = false # Whether to save transaction bodies to the database
 
 [runner.http_config]
 bind_host = "127.0.0.1"
 bind_port = 12346
 # In case of the arollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
+# cors = "permissive" # CORS configuration: "permissive" or "restrictive"
 
 [monitoring]
 telegraf_address = "udp://127.0.0.1:8094"
@@ -67,6 +88,10 @@ max_batch_size_bytes = 1048576
 max_concurrent_blobs = 128
 max_allowed_node_distance_behind = 10
 rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+# automatic_batch_production = true # Whether to automatically produce batches
+# dropped_tx_ttl_secs = 60 # How long to track dropped transactions for status queries
+# admin_addresses = [] # List of addresses allowed to perform admin operations
+
 [sequencer.preferred]
 # TODO: Remove it when https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2814 is resolved
 disable_state_root_consistency_checks = true
@@ -79,5 +104,17 @@ batch_execution_time_limit_millis = 2000 # Do no more than 2000ms of work per ba
 # This warms up caches so the main transaction executor can run with ready-to-use data.
 # This variable determines the number of worker threads.
 num_cache_warmup_workers = 5
+# minimum_profit_per_tx = 0 # Minimum fee the preferred sequencer accepts per tx, in gas tokens
+# events_channel_size = 10000 # Size of Tokio channel for streaming events. Larger values increase memory usage
+# postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
+ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintain. Larger values increase lag in seeing DA info on chain, but allow more buffering when the DA layer is unstable
+# db_event_channel_size = 10000 # Event buffer size while update_state is running
+# is_replica = false # Run sequencer in read-only replica mode
+
+# Alternative configuration for non-preferred sequencer. This is mutually exclusive with the preferred sequencer configuration:
+# [sequencer.standard]
+# mempool_max_txs_count = 10000 # Maximum transactions in mempool
+# max_batch_size_bytes = 1048576 # Maximum batch size
+
 [sequencer.extension]
 max_log_limit = 20000
