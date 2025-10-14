@@ -20,6 +20,7 @@ use sov_modules_api::{OperatingMode, RawTx, Runtime, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
 use sov_risc0_adapter::crypto::private_key::Risc0PrivateKey;
 use sov_test_utils::logging::LogCollector;
+use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
@@ -106,7 +107,7 @@ async fn start_rollup(
             test_genesis_source(OperatingMode::Operator),
             TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
             FINALIZATION_SLOTS,
-            rollup_storage_path.clone(),
+            StoragePath::Tmp(rollup_storage_path.clone()),
             false,
         )
         .with_zkvm_host_args(mock_da_risc0_host_args())
