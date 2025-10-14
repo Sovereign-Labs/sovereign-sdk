@@ -12,6 +12,7 @@ use super::super::temp_cache::{CacheLookup, TempCache};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::traits::PerBlockCache;
+use crate::state::traits::delegate_version_reader;
 use crate::{
     AccessoryStateWriter, BasicGasMeter, GasMeter, GasMeteringError, ProvableStateReader,
     ProvableStateWriter, TxState, VersionReader,
@@ -104,19 +105,7 @@ impl<S: Spec, I: TxState<S>> PerBlockCache for RevertableTxState<'_, S, I> {
     }
 }
 
-impl<S: Spec, I: TxState<S>> VersionReader for RevertableTxState<'_, S, I> {
-    fn rollup_height_to_access(&self) -> RollupHeight {
-        self.inner.rollup_height_to_access()
-    }
-
-    fn current_visible_slot_number(&self) -> VisibleSlotNumber {
-        self.inner.current_visible_slot_number()
-    }
-
-    fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
-        self.inner.max_allowed_slot_number_to_access()
-    }
-}
+delegate_version_reader!(RevertableTxState<'_, S, I> where [S: Spec, I: TxState<S>] => inner);
 
 impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S, I> {
     fn get_size(

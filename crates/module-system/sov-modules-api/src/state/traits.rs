@@ -551,6 +551,27 @@ pub trait VersionReader {
     fn rollup_height_to_access(&self) -> RollupHeight;
 }
 
+/// Helper macro to delegate VersionReader implementation to an inner field.
+macro_rules! delegate_version_reader {
+    ($ty:ty $(where [$($bounds:tt)*])? => $($field:tt).+) => {
+        impl$(<$($bounds)*>)? VersionReader for $ty {
+            fn rollup_height_to_access(&self) -> RollupHeight {
+                self.$($field).+.rollup_height_to_access()
+            }
+
+            fn current_visible_slot_number(&self) -> VisibleSlotNumber {
+                self.$($field).+.current_visible_slot_number()
+            }
+
+            fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
+                self.$($field).+.max_allowed_slot_number_to_access()
+            }
+        }
+    };
+}
+
+pub(crate) use delegate_version_reader;
+
 /// A trait for state accessors that can know the true [`SlotNumber`] and use it to read/write the kernel.
 /// Note that this trait should be implemented with extreme care, since misuse can cause accidental breakage of
 /// soft confirmations. In particular, this trait should never be added to [`TxState`].

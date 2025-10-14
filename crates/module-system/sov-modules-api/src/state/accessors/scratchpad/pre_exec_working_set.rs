@@ -8,6 +8,7 @@ use super::TxScratchpad;
 use super::super::{StateMetricsProvider, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
+use crate::state::traits::delegate_version_reader;
 use crate::{BasicGasMeter, Gas, GasMeter, GasMeteringError, GetGasPrice, VersionReader};
 
 /// A working set that can be used to charge gas for pre transaction execution checks.
@@ -122,16 +123,4 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for PreExecWorkingSet<
     }
 }
 
-impl<S: Spec, I: StateProvider<S>> VersionReader for PreExecWorkingSet<S, I> {
-    fn rollup_height_to_access(&self) -> RollupHeight {
-        self.inner.rollup_height_to_access()
-    }
-
-    fn current_visible_slot_number(&self) -> VisibleSlotNumber {
-        self.inner.current_visible_slot_number()
-    }
-
-    fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
-        self.inner.max_allowed_slot_number_to_access()
-    }
-}
+delegate_version_reader!(PreExecWorkingSet<S, I> where [S: Spec, I: StateProvider<S>] => inner);

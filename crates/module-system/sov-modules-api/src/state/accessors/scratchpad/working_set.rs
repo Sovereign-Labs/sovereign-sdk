@@ -14,7 +14,7 @@ use super::super::temp_cache::TempCache;
 use super::super::{BorshSerializedSize, StateMetricsProvider, StateProvider, UniversalStateAccessor};
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
-use crate::state::traits::PerBlockCache;
+use crate::state::traits::{PerBlockCache, delegate_version_reader};
 use crate::transaction::{
     transaction_consumption_helper, AuthenticatedTransactionData, PriorityFeeBips,
     TransactionConsumption,
@@ -275,19 +275,7 @@ impl<S: Spec, I: StateProvider<S>> EventContainer for WorkingSet<S, I> {
     }
 }
 
-impl<S: Spec, I: StateProvider<S>> VersionReader for WorkingSet<S, I> {
-    fn rollup_height_to_access(&self) -> RollupHeight {
-        self.delta.inner.rollup_height_to_access()
-    }
-
-    fn current_visible_slot_number(&self) -> VisibleSlotNumber {
-        self.delta.inner.current_visible_slot_number()
-    }
-
-    fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
-        self.delta.inner.max_allowed_slot_number_to_access()
-    }
-}
+delegate_version_reader!(WorkingSet<S, I> where [S: Spec, I: StateProvider<S>] => delta.inner);
 
 impl<S: Spec, I: StateProvider<S>> PerBlockCache for WorkingSet<S, I> {
     fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {

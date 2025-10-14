@@ -14,7 +14,7 @@ use super::super::{BorshSerializedSize, StateMetricsProvider, StateProvider, Uni
 use super::PreExecWorkingSet;
 use crate::capabilities::RollupHeight;
 use crate::module::Spec;
-use crate::state::traits::PerBlockCache;
+use crate::state::traits::{PerBlockCache, delegate_version_reader};
 use crate::{BasicGasMeter, GasMeter, VersionReader};
 
 /// A state diff over the storage that contains all the changes related to transaction execution.
@@ -119,19 +119,7 @@ impl<S: Spec, I: StateProvider<S> + StateMetricsProvider> StateMetricsProvider
     }
 }
 
-impl<S: Spec, I: StateProvider<S>> VersionReader for TxScratchpad<S, I> {
-    fn rollup_height_to_access(&self) -> RollupHeight {
-        self.inner.inner.rollup_height_to_access()
-    }
-
-    fn current_visible_slot_number(&self) -> VisibleSlotNumber {
-        self.inner.inner.current_visible_slot_number()
-    }
-
-    fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
-        self.inner.inner.max_allowed_slot_number_to_access()
-    }
-}
+delegate_version_reader!(TxScratchpad<S, I> where [S: Spec, I: StateProvider<S>] => inner.inner);
 
 impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
     fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
