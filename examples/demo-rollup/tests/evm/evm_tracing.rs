@@ -17,7 +17,6 @@ async fn debug_trace_block_by_number() -> anyhow::Result<()> {
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
     let mint_tx = usdc.mint(Address::ZERO, parse_ether("1")?).send().await?;
     rollup.wait_for_next_blocks(1).await; // Block nr 2 mined with 2 transactions
-    rollup.pause_preferred_batches().await;
 
     let opts = GethDebugTracingOptions::call_tracer(CallConfig::default());
     let trace = client
