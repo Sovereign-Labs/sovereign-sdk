@@ -229,12 +229,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<GethTrace, EthApiError> {
         // Get transaction and block data
-        let index = self
-            .tx_index(&tx_hash, state)
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-        let traced_tx = self
-            .transaction(index, state)
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+        let traced_tx = self.tx(tx_hash, state)?;
         let block = self.block(traced_tx.block_number, state)?;
 
         let mut archival_state = self.archival_state(traced_tx.block_number - 1, state)?;

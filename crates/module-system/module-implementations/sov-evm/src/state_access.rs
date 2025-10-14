@@ -37,6 +37,21 @@ impl<S: Spec> Evm<S> {
         };
         Ok(block)
     }
+
+    /// Gets tx by hash. Fails if prunned
+    pub fn tx<Accessor: AccessoryStateReader>(
+        &self,
+        hash: B256,
+        state: &mut Accessor,
+    ) -> Result<TxSignedAndRecovered, EthApiError> {
+        let Some(idx) = self.tx_index(&hash, state) else {
+            return Err(EthApiError::PrunedHistoryUnavailable);
+        };
+        let Some(tx) = self.transaction(idx, state) else {
+            return Err(EthApiError::PrunedHistoryUnavailable);
+        };
+        Ok(tx)
+    }
 }
 
 /// User state reads
