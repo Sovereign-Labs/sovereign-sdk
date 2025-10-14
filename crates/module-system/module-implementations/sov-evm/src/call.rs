@@ -40,9 +40,7 @@ where
         state: &mut impl TxState<S>,
         tx: TransactionSigned,
     ) -> anyhow::Result<(CfgEnv, BlockEnv, TxEnv, TxSignedAndRecovered, u64)> {
-        let block_env = self.block_env(state)?.expect(
-            "The impossible happened: block_env should be set in `begin_rollup_block_hook`.",
-        );
+        let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.

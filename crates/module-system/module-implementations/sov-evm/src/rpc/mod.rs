@@ -199,9 +199,7 @@ where
             .ok_or(EthApiError::PrunedHistoryUnavailable)?;
         let mut archival_state = self.archival_state(block_number - 1, state)?;
 
-        let block_env = self
-            .block_env(&mut archival_state)?
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+        let block_env = self.block_env(&mut archival_state)?;
 
         let cfg = self.cfg(&mut archival_state)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
@@ -249,9 +247,7 @@ where
 
         let mut archival_state = self.archival_state(traced_tx.block_number - 1, state)?;
 
-        let block_env = self
-            .block_env(&mut archival_state)?
-            .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+        let block_env = self.block_env(&mut archival_state)?;
 
         let cfg = self.cfg(&mut archival_state)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);

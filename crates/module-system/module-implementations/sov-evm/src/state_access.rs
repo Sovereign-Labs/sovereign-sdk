@@ -12,7 +12,7 @@ use sov_modules_api::{
 use sov_state::User;
 
 use crate::{
-    db::{DbAccount, EvmDb},
+    db::EvmDb,
     primitive_types::{Block, PendingTransaction, TxSignedAndRecovered},
     Evm, EvmRuntimeConfig, Receipt,
 };
@@ -30,15 +30,6 @@ impl<S: Spec> Evm<S> {
         )
     }
 
-    /// Lookup an Ethereum account by address.
-    pub fn account<Accessor: StateReader<User>>(
-        &self,
-        address: &Address,
-        state: &mut Accessor,
-    ) -> Result<Option<DbAccount>, Accessor::Error> {
-        self.accounts.get(address, state)
-    }
-
     /// Get the value from a storage slot.
     pub fn storage<Accessor: StateReader<User>>(
         &self,
@@ -53,8 +44,10 @@ impl<S: Spec> Evm<S> {
     pub fn block_env<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
-    ) -> Result<Option<BlockEnv>, Accessor::Error> {
-        self.block_env.get(state)
+    ) -> Result<BlockEnv, Accessor::Error> {
+        Ok(self.block_env.get(state)?.expect(
+            "The impossible happened: block_env should be set in `begin_rollup_block_hook`",
+        ))
     }
 
     /// Get the Evm chain config.
