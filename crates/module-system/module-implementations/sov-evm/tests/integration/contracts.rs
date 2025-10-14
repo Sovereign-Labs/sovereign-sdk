@@ -34,7 +34,7 @@ fn test_invalid_contract_execution() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let mut evm_db = evm.get_db(state);
+        let mut evm_db = evm.db(state);
         let tx_request = TypedTransaction::Eip1559(TxEip1559 {
             chain_id: config_value!("CHAIN_ID"),
             nonce: 1,

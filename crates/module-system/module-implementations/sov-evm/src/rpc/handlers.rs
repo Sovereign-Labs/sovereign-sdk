@@ -108,7 +108,7 @@ where
     ) -> RpcResult<U256> {
         let mut state = self.resolve_state(block_number, state)?;
         let balance = self
-            .get_db(state.deref_mut())
+            .db(state.deref_mut())
             .basic(address)
             .map_err(EthApiError::from)?
             .map(|account| account.balance)
@@ -275,7 +275,7 @@ where
             result,
             state: changes,
         } = self.call(request, block_number, state)?;
-        self.get_db(state)
+        self.db(state)
             .commit(changes)
             .expect("Impossible as gas meter is initialized with INF");
         let gas_used = result.gas_used();

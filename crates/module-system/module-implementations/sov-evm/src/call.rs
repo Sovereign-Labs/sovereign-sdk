@@ -82,7 +82,7 @@ where
         start_timer!(fetch_state);
         let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
-        let db = self.get_db(state);
+        let db = self.db(state);
         let mut db = MetricsDb::new(db);
 
         start_timer!(execution);

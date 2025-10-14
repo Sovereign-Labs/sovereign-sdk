@@ -23,7 +23,7 @@ fn test_simple_transfer() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |ctx, state| {
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
             // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
@@ -121,7 +121,7 @@ fn test_executing_eth_transactions() {
 
                 assert_eq!(nonce + 1, nonce_from_module);
 
-                let storage_value = evm.get_storage(&contract_addr, &U256::ZERO, state).unwrap();
+                let storage_value = evm.storage(&contract_addr, &U256::ZERO, state).unwrap();
 
                 if nonce == 0 {
                     // On contract creation the value is absent.
@@ -215,7 +215,7 @@ fn test_account_nonce() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 1);
         }),
@@ -227,7 +227,7 @@ fn test_account_nonce() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 2);
         }),
@@ -263,7 +263,7 @@ fn test_deploy_many_contracts() {
             // The two contracts have different addresses.
             assert_ne!(contract_addr_1, contract_addr_2);
 
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let contract_1_account = db.basic(contract_addr_1).unwrap().unwrap();
             let contract_2_account = db.basic(contract_addr_2).unwrap().unwrap();
 
@@ -271,7 +271,7 @@ fn test_deploy_many_contracts() {
             assert_eq!(contract_1_account.code_hash, contract_2_account.code_hash);
 
             let storage_value_2 = evm
-                .get_storage(&contract_addr_2, &U256::ZERO, state)
+                .storage(&contract_addr_2, &U256::ZERO, state)
                 .unwrap()
                 .unwrap();
 
@@ -279,7 +279,7 @@ fn test_deploy_many_contracts() {
 
             // The storage of the first contract didn't change.
             let storage_value_1 = evm
-                .get_storage(&contract_addr_1, &U256::ZERO, state)
+                .storage(&contract_addr_1, &U256::ZERO, state)
                 .unwrap()
                 .unwrap();
 

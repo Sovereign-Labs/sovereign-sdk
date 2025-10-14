@@ -207,7 +207,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         // Replay previous transactions in the block
-        let mut evm_db = self.get_db(&mut archival_state);
+        let mut evm_db = self.db(&mut archival_state);
 
         let mut traces = vec![];
         for tx_idx in block.transactions {
@@ -257,7 +257,7 @@ where
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         // Replay previous transactions in the block
-        let mut evm_db = self.get_db(&mut archival_state);
+        let mut evm_db = self.db(&mut archival_state);
 
         for tx_idx in block.transactions {
             let tx = self
@@ -336,7 +336,7 @@ where
         let tx_env = prepare_call_env(&block_env, request.clone())?;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
-        let evm_db: EvmDb<_, S> = self.get_db(state);
+        let evm_db: EvmDb<_, S> = self.db(state);
 
         Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)?)
     }

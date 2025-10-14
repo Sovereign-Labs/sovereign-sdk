@@ -19,7 +19,7 @@ use crate::{
 
 impl<S: Spec> Evm<S> {
     /// Get a EvmDb instance for the supplied state.
-    pub fn get_db<'a, Ws: StateAccessor>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
+    pub fn db<'a, Ws: StateAccessor>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
         EvmDb::new(
             self.accounts.clone(),
             self.account_storage.clone(),
@@ -30,7 +30,7 @@ impl<S: Spec> Evm<S> {
     }
 
     /// Lookup an Ethereum account by address.
-    pub fn get_account<Accessor: StateReader<User>>(
+    pub fn account<Accessor: StateReader<User>>(
         &self,
         address: &Address,
         state: &mut Accessor,
@@ -39,7 +39,7 @@ impl<S: Spec> Evm<S> {
     }
 
     /// Get the value from a storage slot.
-    pub fn get_storage<Accessor: StateReader<User>>(
+    pub fn storage<Accessor: StateReader<User>>(
         &self,
         address: &Address,
         index: &U256,
