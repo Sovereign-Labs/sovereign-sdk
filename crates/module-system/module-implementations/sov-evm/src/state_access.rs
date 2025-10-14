@@ -49,14 +49,6 @@ impl<S: Spec> Evm<S> {
         self.account_storage.get(&(address, index), state)
     }
 
-    /// Get the current head block.
-    pub fn head<Accessor: StateReader<User>>(
-        &self,
-        state: &mut Accessor,
-    ) -> Result<Option<Block>, Accessor::Error> {
-        self.head.get(state)
-    }
-
     /// Get the current block env.
     pub fn block_env<Accessor: StateReader<User>>(
         &self,
