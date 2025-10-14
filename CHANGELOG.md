@@ -1,3 +1,6 @@
+# 2025-10-14
+- #1874 Refactor `scratchpad.rs` into focused submodules for better maintainability.
+
 # 2025-10-13
 - #1851 Implement `debug_traceBlockByNumber` in EVM module.
 
