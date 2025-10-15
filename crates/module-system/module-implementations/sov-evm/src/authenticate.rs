@@ -23,11 +23,6 @@ use sov_modules_api::{
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 
-mod eip712;
-pub use eip712::{
-    Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
-};
-
 use crate::conversions::RlpConversionError;
 use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};

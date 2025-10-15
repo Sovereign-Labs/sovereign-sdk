@@ -24,7 +24,7 @@ sov-bank = { workspace = true }
 sov-metrics = { workspace = true }
 sov-uniqueness = { workspace = true }
 sov-chain-state = { workspace = true }
-sov-universal-wallet = { workspace = true, features = ["eip712"] }
+sov-universal-wallet = { workspace = true }
 
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }

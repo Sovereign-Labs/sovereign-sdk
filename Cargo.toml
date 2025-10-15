@@ -51,6 +51,7 @@ members = [
     "crates/module-system/module-implementations/sov-attester-incentives",
     "crates/module-system/module-implementations/sov-sequencer-registry",
     "crates/module-system/sov-solana-offchain-auth",
+    "crates/module-system/sov-eip712-auth",
     "crates/module-system/module-implementations/sov-value-setter",
     "crates/module-system/module-implementations/sov-revenue-share",
     "crates/module-system/module-implementations/sov-synthetic-load",
@@ -150,6 +151,7 @@ sov-eth-dev-signer = { path = "crates/full-node/sov-eth-dev-signer", default-fea
 sov-eth-dev-generator = { path = "crates/full-node/sov-eth-dev-generator", default-features = false, version = "0.3" }
 sov-modules-api = { path = "crates/module-system/sov-modules-api", default-features = false, version = "0.3" }
 sov-solana-offchain-auth = { path = "crates/module-system/sov-solana-offchain-auth", default-features = false, version = "0.3" }
+sov-eip712-auth = { path = "crates/module-system/sov-eip712-auth", default-features = false, version = "0.3" }
 sov-uniqueness = { path = "crates/module-system/module-implementations/sov-uniqueness", default-features = false, version = "0.3" }
 sov-paymaster = { path = "crates/module-system/module-implementations/sov-paymaster", default-features = false, version = "0.3" }
 sov-rollup-interface = { path = "crates/rollup-interface", default-features = false, version = "0.3" }
