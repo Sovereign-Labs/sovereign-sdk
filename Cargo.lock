@@ -11901,7 +11901,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "sov-address",
  "sov-modules-api",
  "sov-state",
  "sov-universal-wallet",

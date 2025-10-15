@@ -17,14 +17,12 @@ workspace = true
 [dependencies]
 sov-modules-api = { workspace = true }
 sov-state = { workspace = true }
-sov-address = { workspace = true, features = ["evm"] }
 sov-universal-wallet = { workspace = true, features = ["eip712"] }
 anyhow = { workspace = true }
 borsh = { workspace = true }
 
 [features]
 native = [
-	"sov-address/native",
 	"sov-modules-api/native",
 	"sov-state/native",
 ]

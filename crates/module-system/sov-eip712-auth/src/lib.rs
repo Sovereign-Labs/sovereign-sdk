@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_address::EvmCryptoSpec;
 use sov_modules_api::capabilities::{
     self, calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
     AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
@@ -13,8 +12,7 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError,
 };
 use sov_modules_api::{
-    DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Runtime, Spec, TxHash,
+    DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError, ProvableStateReader, RawTx, Runtime, Secp256k1CryptoSpec, Spec, TxHash
 };
 use sov_state::User;
 
@@ -65,7 +63,7 @@ pub enum Eip712AuthenticatorInput {
 
 impl<S, Rt, SP> TransactionAuthenticator<S> for Eip712Authenticator<S, Rt, SP>
 where
-    S: Spec<CryptoSpec = EvmCryptoSpec>,
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
     SP: SchemaProvider,
 {
@@ -179,7 +177,7 @@ where
 /// signature cannot be verified.
 pub fn authenticate<
     Accessor: ProvableStateReader<User, Spec = S>,
-    S: Spec<CryptoSpec = EvmCryptoSpec>,
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
@@ -211,7 +209,7 @@ pub fn authenticate<
 }
 
 fn verify_and_decode_tx<
-    S: Spec<CryptoSpec = EvmCryptoSpec>,
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
@@ -237,7 +235,7 @@ fn verify_and_decode_tx<
 }
 
 fn verify_eip712_signature<
-    S: Spec<CryptoSpec = EvmCryptoSpec>,
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
