@@ -19,7 +19,7 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 anyhow = { workspace = true }
 rand = { workspace = true }
-clap = { version = "4", features = ["derive"] }
+clap = { workspace = true }
 
 sov-api-spec = { workspace = true }
 sov-transaction-generator = { workspace = true }

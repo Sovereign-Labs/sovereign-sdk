@@ -23,7 +23,7 @@ semicolon_if_nothing_returned = "deny"
 float_arithmetic = "deny"              # Can cause subtle bugs due to different behavior between native and zkVM execution.
 
 [dependencies]
-lazy_static = "1.5.0"
+lazy_static = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

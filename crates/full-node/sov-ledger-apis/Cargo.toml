@@ -19,8 +19,8 @@ borsh = { workspace = true }
 derive_more = { workspace = true, features = ["display"] }
 futures = { workspace = true }
 hex = { workspace = true }
-serde = "1"
-serde_json = "1"
+serde = { workspace = true }
+serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
 serde_yaml = { workspace = true }
 sov-db = { workspace = true }
@@ -42,5 +42,5 @@ sov-db = { workspace = true }
 sov-api-spec = { workspace = true }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
-tempfile = "3"
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
