@@ -172,10 +172,6 @@ async fn test_transaction_priority() {
     )
     .await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     let nb_of_blocks = 5;
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
@@ -242,10 +238,6 @@ async fn test_archival_state_is_immediately_available() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let nb_of_blocks = 5;
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
@@ -344,7 +336,7 @@ async fn create_test_rollup(
     max_batch_size: usize,
     blob_processing_timeout_secs: u64,
     max_batch_execution_time_millis: u64,
-) -> (Option<TestRollup<TestBlueprint>>, TestUser<TestSpec>) {
+) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let admin = genesis_config.additional_accounts()[0].clone();
@@ -381,13 +373,11 @@ async fn create_test_rollup(
             BlockProducingConfig::Manual,
             None,
             blob_processing_timeout_secs,
-            1,
             max_batch_execution_time_millis,
             None,
             TEST_FINALIZATION_BLOCKS,
         )
-        .await
-        .map(|v| v.into_iter().next().unwrap()),
+        .await,
         admin,
     )
 }
@@ -448,10 +438,6 @@ async fn txs_below_min_fee_are_rejected() {
     )
     .await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
@@ -483,10 +469,6 @@ async fn test_archival_state_with_pruning() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
@@ -587,7 +569,7 @@ async fn sequencer_filled_up_block() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let Some(test_rollups) = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -601,17 +583,11 @@ async fn sequencer_filled_up_block() {
         BlockProducingConfig::Manual,
         None,
         60,
-        1,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    else {
-        // Docker issues, don't fail the test and just return early.
-        return;
-    };
-    let test_rollup = test_rollups.into_iter().next().unwrap();
+    .await;
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
@@ -712,9 +688,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
+
     let client = test_rollup.api_client().clone();
     // Sleep for the rollup to start up
     sleep(Duration::from_millis(500)).await;
@@ -863,9 +837,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
+
     let client = test_rollup.api_client().clone();
     // Sleep for the rollup to start up
     sleep(Duration::from_millis(500)).await;
@@ -1039,7 +1011,7 @@ async fn seq_out_of_gas_for_pre_checks() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let Some(test_rollups) = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -1053,17 +1025,11 @@ async fn seq_out_of_gas_for_pre_checks() {
         BlockProducingConfig::Manual,
         None,
         60,
-        1,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    else {
-        // Docker issues, don't fail the test and just return early.
-        return;
-    };
-    let test_rollup = test_rollups.into_iter().next().unwrap();
+    .await;
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
@@ -1121,10 +1087,6 @@ async fn max_batch_size() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
@@ -1212,10 +1174,6 @@ async fn test_sequencer_getters() {
         1000, // Timeout the batch after 1 second of execution time.
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     // Set up the rollup the usual way.
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
@@ -1328,10 +1286,6 @@ async fn test_sequencer_event_stream_filtering() {
     )
     .await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     // Set up the rollup the usual way.
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
@@ -1412,10 +1366,6 @@ async fn max_batch_execution_time() {
         1000, // Timeout the batch after 1 second of execution time.
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
@@ -1558,7 +1508,7 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let Some(test_rollups) = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -1574,17 +1524,11 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         },
         None,
         60,
-        1,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    else {
-        // Docker issues, don't fail the test and just return early.
-        return;
-    };
-    let test_rollup = test_rollups.into_iter().next().unwrap();
+    .await;
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     test_rollup
@@ -1629,10 +1573,6 @@ async fn test_rollup_emits_all_slot_notifications() {
     )
     .await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     let nb_of_blocks = 10;
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
@@ -1659,10 +1599,6 @@ async fn rollup_shuts_down_if_blob_sender_fails() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let nb_of_blocks = 5 + default_ideal_lag_behind_finalized_slot() as usize;
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
@@ -1703,10 +1639,6 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
     let (test_rollup, admin) =
         create_test_rollup(0, TEST_MAX_BATCH_SIZE, 1, MAX_BATCH_EXECUTION_TIME_MILLIS).await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     let nb_of_blocks = 5;
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
@@ -1741,10 +1673,6 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
 async fn rollup_shuts_down_if_panic_is_triggered() {
     let (test_rollup, admin) =
         create_test_rollup(0, TEST_MAX_BATCH_SIZE, 60, MAX_BATCH_EXECUTION_TIME_MILLIS).await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let nb_of_blocks = 5;
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
@@ -1797,10 +1725,6 @@ async fn sequencer_back_pressure() {
         max_batch_execution_time_millis,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let warm_up_blocks = 5;
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
@@ -1903,10 +1827,6 @@ async fn seq_many_invalid_txs() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     test_rollup
         .da_service
@@ -2177,10 +2097,6 @@ async fn events_are_returned_in_tx_response() {
     )
     .await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     test_rollup
         .da_service
@@ -2210,10 +2126,6 @@ async fn test_no_crashes_on_resync_with_transactions() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     let (test_rollup, state) = setup_test_rollup_with_initial_state(test_rollup, &admin).await;
 
@@ -2278,10 +2190,6 @@ async fn delayed_tx_is_processed_after_delay() {
     )
     .await;
 
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
-
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     test_rollup
         .da_service
@@ -2338,10 +2246,6 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         1000, // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     // Produce a the exact minimum number of blocks to ensure that the sequencer has a finalized slot.
     // If we change the finalized slot in the test framework, this number will need to be updated.
@@ -2663,7 +2567,7 @@ async fn heavy_blob_submission_long_delay() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let Some(test_rollups) = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -2677,17 +2581,11 @@ async fn heavy_blob_submission_long_delay() {
         BlockProducingConfig::Periodic { block_time_ms: 200 },
         None,
         blob_processing_timeout_secs,
-        1,
         400, // Set the batch time limit to twice the block time
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    else {
-        // Docker issues, don't fail the test and just return early.
-        return;
-    };
-    let test_rollup = test_rollups.into_iter().next().unwrap();
+    .await;
 
     test_rollup.da_service.set_delay_blobs_by(30).await;
 
@@ -2892,10 +2790,6 @@ async fn not_sequencer_safe_txs_are_restricted() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
-
-    let Some(test_rollup) = test_rollup else {
-        return;
-    };
 
     test_rollup
         .da_service
@@ -3134,7 +3028,7 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
 
     let dir = tempdir_inside_codebase_dir();
 
-    let Some(test_rollups) = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -3148,17 +3042,11 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
         DEFAULT_BLOCK_PRODUCING_CONFIG,
         Some(RollupProverConfig::Skip),
         60,
-        1,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    else {
-        // Docker issues, don't fail the test and just return early.
-        return Default::default();
-    };
-    let test_rollup = test_rollups.into_iter().next().unwrap();
+    .await;
 
     let (test_rollup, test_state) = setup_test_rollup_with_initial_state(test_rollup, &admin).await;
     run_actions_against_test_rollup(actions, test_rollup, &admin, test_state).await;

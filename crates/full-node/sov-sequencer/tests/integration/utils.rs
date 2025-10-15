@@ -228,18 +228,10 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     block_producing_config: BlockProducingConfig,
     rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
     blob_processing_timeout_secs: u64,
-    num_replicas: u64,
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
-) -> Option<Vec<TestRollup<RtAgnosticBlueprint<TestSpec, RT>>>> {
-    // We skip all docker (i.e. postgres) tests on our dev server due to firewall false positives
-    // bricking the machine.
-    // The dev machine has 96 threads, which we detect to disable postgres. Currently no dev or CI
-    // setup uses a machine of exactly this size, though if this ever changes this will cause
-    // false positives.
-    const DEV_SERVER_CPUS: usize = 96;
-
+) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
     let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
         GenesisSource::CustomParams(genesis_params),
         block_producing_config,
@@ -264,36 +256,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
     .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave);
 
-    let builder_res = if num_cpus::get() != DEV_SERVER_CPUS {
-        builder.with_postgres_sequencer().await
-    } else {
-        tracing::warn!("Running tests with postgres disabled in the sequencer! Detected machine with {DEV_SERVER_CPUS} threads, assuming we are running on the dev server.");
-        if num_replicas > 1 {
-            tracing::warn!(
-                "Replica test cannot run, postgres is disabled due to detecting the dev server"
-            );
-            return None;
-        } else {
-            Ok(builder)
-        }
-    };
-
-    match builder_res {
-        Ok(builder) => match num_replicas {
-            0 => panic!("At least one node needs to be started"),
-            1 => Some(vec![builder.start().await.unwrap()]),
-            2.. => Some(builder.start_with_replicas(num_replicas).await.unwrap()),
-        },
-        Err(e) => {
-            if std::env::var("SOV_TEST_SKIP_DOCKER") == Ok("1".to_string()) {
-                None
-            } else {
-                eprintln!("Error starting rollup builder: {e:?}");
-                eprintln!("To skip docker based tests run with the env var SOV_TEST_SKIP_DOCKER=1");
-                panic!("Unable to proceed without docker");
-            }
-        }
-    }
+    builder.start().await.unwrap()
 }
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
