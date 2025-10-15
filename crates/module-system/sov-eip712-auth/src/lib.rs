@@ -12,7 +12,8 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError,
 };
 use sov_modules_api::{
-    DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError, ProvableStateReader, RawTx, Runtime, Secp256k1CryptoSpec, Spec, TxHash
+    DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    ProvableStateReader, RawTx, Runtime, Secp256k1CryptoSpec, Spec, TxHash,
 };
 use sov_state::User;
 
