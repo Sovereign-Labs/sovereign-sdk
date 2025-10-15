@@ -421,7 +421,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
             }
             VersionedTx::V1(inner) => {
                 for signature in inner.signatures.iter() {
-                    // Charge gas for the signature verification with out verifying
+                    // Charge gas for all the signatures up front before verifying. This way, we can switch to batch verification and the gas price will be the same.
                     MeteredSignature::new::<S>(signature.signature.clone())
                         .charge_gas(meter, msg)
                         .map_err(TransactionVerificationError::from)?;
