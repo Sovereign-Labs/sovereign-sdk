@@ -5714,6 +5714,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-rollup-interface",
  "tracing",
+ "url",
 ]
 
 [[package]]

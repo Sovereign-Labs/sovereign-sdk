@@ -24,6 +24,8 @@ use sov_cli::NodeClient;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
+use sov_mock_da::storable::rpc::MockDaClientConfig;
+use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig, MockDaSpec};
 use sov_modules_api::capabilities::RollupHeight;
@@ -227,7 +229,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self.config.storage.clone()
     }
 
-    async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
+    pub async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
         let blueprint: R = Default::default();
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
@@ -320,7 +322,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         })
     }
 
-    fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
+    pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
         RollupConfig {
             storage: RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf()),
             runner: RunnerConfig {
@@ -364,6 +366,56 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_datagram_size: None,
                 max_pending_metrics: None,
             },
+        }
+    }
+
+    fn default_config(
+        finalization_blocks: u32,
+        storage_path: StoragePath,
+    ) -> RollupBuilderConfig<R::Spec> {
+        RollupBuilderConfig {
+            max_allowed_node_distance_behind: 10,
+            max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
+            max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+            max_channel_size: 60,
+            max_infos_in_db: 250 + finalization_blocks as u64,
+            automatic_batch_production: true,
+            sequencer_config: SequencerKindConfig::Preferred(Default::default()),
+            prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
+            sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
+            aggregated_proof_block_jump: 1,
+            rollup_prover_config: None,
+            storage: storage_path,
+            telegraf_address: MonitoringConfig::standard().telegraf_address,
+            axum_host: "127.0.0.1".to_string(),
+            axum_port: 0,
+            blob_processing_timeout_secs: 60,
+            start_at_rollup_height: None,
+            stop_at_rollup_height: None,
+            extension: Some(SeqConfigExtension {
+                max_log_limit: 20000,
+            }),
+            num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
+        }
+    }
+}
+
+impl<R> RollupBuilder<R>
+where
+    R: FullNodeBlueprint<Native, DaService = StorableMockDaClient> + Default + 'static,
+{
+    pub fn new_with_external_da(
+        genesis: GenesisSource<R::Spec, R::Runtime>,
+        da_config: MockDaClientConfig,
+    ) -> Self {
+        let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
+
+        Self {
+            genesis,
+            da_config,
+            config: Self::default_config(0, storage_path),
+            postgres_container_opt: None,
+            with_secondary_sequencer: None,
         }
     }
 }
@@ -420,30 +472,7 @@ where
             genesis,
             da_config,
             postgres_container_opt: None,
-            config: RollupBuilderConfig {
-                max_allowed_node_distance_behind: 10,
-                max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-                max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
-                max_channel_size: 60,
-                max_infos_in_db: 250 + finalization_blocks as u64,
-                automatic_batch_production: true,
-                sequencer_config: SequencerKindConfig::Preferred(Default::default()),
-                prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
-                sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
-                aggregated_proof_block_jump: 1,
-                rollup_prover_config: None,
-                storage: storage_path,
-                telegraf_address: MonitoringConfig::standard().telegraf_address,
-                axum_host: "127.0.0.1".to_string(),
-                axum_port: 0,
-                blob_processing_timeout_secs: 60,
-                start_at_rollup_height: None,
-                stop_at_rollup_height: None,
-                extension: Some(SeqConfigExtension {
-                    max_log_limit: 20000,
-                }),
-                num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
-            },
+            config: Self::default_config(finalization_blocks, storage_path),
             with_secondary_sequencer: None,
         }
     }
@@ -889,6 +918,10 @@ where
         );
 
         std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
+    }
+
+    pub async fn height(&self) -> RollupHeight {
+        get_height(&self.client).await.unwrap()
     }
 }
 

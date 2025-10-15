@@ -7,5 +7,5 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use client::StorableMockDaClient;
+pub use client::{MockDaClientConfig, StorableMockDaClient};
 pub use server::start_server;
