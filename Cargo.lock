@@ -12933,7 +12933,6 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
- "toml 0.8.23",
  "tower 0.5.2",
  "tower-http 0.5.2",
  "tower-layer",
@@ -13212,14 +13211,10 @@ dependencies = [
  "libfuzzer-sys",
  "rand 0.8.5",
  "serde_json",
- "sha2 0.10.9",
  "sov-accounts",
  "sov-bank",
- "sov-celestia-adapter",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-test-utils",
- "tempfile",
 ]
 
 [[package]]
