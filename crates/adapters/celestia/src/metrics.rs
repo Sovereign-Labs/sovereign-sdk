@@ -159,7 +159,6 @@ impl Metric for BlobSubmitMeasurement {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct GetBlockHeaderMeasurement {
     pub height: u64,

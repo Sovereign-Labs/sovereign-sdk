@@ -1,5 +1,7 @@
 use crate::da_service::into_transient_with_context;
-use crate::metrics::{BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics};
+use crate::metrics::{
+    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, NamespaceDataMetrics,
+};
 use crate::types::{
     FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace, TmHash, APP_VERSION,
 };
@@ -192,12 +194,21 @@ impl StandardNodeClient {
         height: u64,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         let client = &self.read_client;
-        let extended_header =
+        let start = std::time::Instant::now();
+        let result =
             tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
                 .await
                 .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-                .map_err(into_transient_with_context)?;
-
+                .map_err(into_transient_with_context);
+        let measurement = GetBlockHeaderMeasurement {
+            height,
+            fetch_header_time: start.elapsed(),
+            is_success: result.is_ok(),
+        };
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(measurement);
+        });
+        let extended_header = result?;
         Ok(extended_header.into())
     }
 
