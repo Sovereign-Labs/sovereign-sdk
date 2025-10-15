@@ -1,9 +1,10 @@
+use crate::test_helpers::build_transfer_token_tx;
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
-use sov_bank::{Coins, TokenId};
+use sov_bank::TokenId;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
@@ -80,23 +81,6 @@ pub(crate) fn build_create_token_tx(
         mint_to_address: user_address.into(),
         admins: SafeVec::new(),
         supply_cap: None,
-    });
-    default_test_signed_transaction(key, &msg, nonce, &CHAIN_HASH)
-}
-
-pub(crate) fn build_transfer_token_tx(
-    key: &<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
-    token_id: TokenId,
-    recipient: <TestSpec as Spec>::Address,
-    amount: u128,
-    nonce: u64,
-) -> Transaction<Runtime<TestSpec>, TestSpec> {
-    let msg = RuntimeCall::<TestSpec>::Bank(sov_bank::CallMessage::<TestSpec>::Transfer {
-        to: recipient,
-        coins: Coins {
-            amount: amount.into(),
-            token_id,
-        },
     });
     default_test_signed_transaction(key, &msg, nonce, &CHAIN_HASH)
 }

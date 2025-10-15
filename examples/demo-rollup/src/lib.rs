@@ -22,8 +22,8 @@ pub use celestia_nomt_rollup::*;
 mod mock_nomt_rollup;
 pub use mock_nomt_rollup::*;
 
-mod external_mock_nomt_rollup;
-pub use external_mock_nomt_rollup::*;
+mod external_mock_rollup;
+pub use external_mock_rollup::*;
 
 mod zk;
 pub use zk::*;
