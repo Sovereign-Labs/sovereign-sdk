@@ -115,12 +115,12 @@ See [`AvailDAConfig`](https://github.com/availproject/avail-sovereign-sdk/blob/a
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](../../../LICENSE).
+Licensed under the [MIT License](./LICENSE).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
+for inclusion in this repository by you, as defined in the MIT license, shall be
 licensed as above, without any additional terms or conditions.
 
 > **_NOTE:_**
-This adapter was originally written by Rishabh Agrawal and reviewed by Vibhu rajeev and Avail team, and
-provided as part of the Sovereign SDK under the Apache 2.0 and MIT licenses.
+This adapter was originally written by [Rishabh Agrawal](https://github.com/RISHABHAGRAWALZRA) and reviewed by [Vibhu rajeev](https://github.com/vibhurajeev) and [Avail](https://github.com/availproject) team, and
+provided as part of the Sovereign SDK under the MIT license.
