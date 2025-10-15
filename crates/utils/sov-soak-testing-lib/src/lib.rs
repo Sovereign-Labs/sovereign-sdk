@@ -61,16 +61,6 @@ pub fn plain_tx_with_default_details<R: Runtime<S>, S: Spec>(
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
-pub enum TxType {
-    /// Only [`SyntheticLoad`] transactions - includes many heavy txs
-    SyntheticLoad,
-    /// Only [`Bank`] transactions
-    Bank,
-    /// Mixed [`SyntheticLoad`] and [`Bank`] transactions
-    Mixed,
-}
-
-#[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum ValidityProfile {
     /// Only valid transactions
     Clean,
@@ -101,6 +91,111 @@ impl ValidityProfile {
         }
     }
 }
+
+/// A runner for the soak tests, providing helpers for setting up modules to be used in the soak
+/// test.
+///
+/// Modules can be seleted dynamically but only if the Runtime includes them.
+///
+/// # Example
+/// ```ignore
+/// SoakTestBuilder::new()
+///     .with_bank()
+///     .with_state_consistency()
+///     .run(client, rx, worker_id, num_workers, validity).await?;
+/// ```
+#[derive(Default)]
+pub struct SoakTestRunner<R, S: Spec> {
+    modules: Vec<BasicModuleRef<S, R>>,
+}
+
+impl<R, S> SoakTestRunner<R, S>
+where
+    R: Runtime<S> + Clone,
+    S: Spec,
+{
+    /// Create a new builder with no modules.
+    pub fn new() -> Self {
+        Self {
+            modules: Vec::new(),
+        }
+    }
+
+    /// Add Bank module to the soak test.
+    ///
+    /// This method is only available if your Runtime implements `EncodeCall<Bank<S>>`.
+    pub fn with_bank(mut self) -> Self
+    where
+        R: EncodeCall<Bank<S>>,
+    {
+        let bank_harness = BankHarness::new(BankMessageGenerator::<S>::new(
+            Distribution::with_equiprobable_values(vec![Transfer]),
+            Percent::fifty(),
+        ));
+        self.modules.push(Arc::new(bank_harness));
+        self
+    }
+
+    /// Add SyntheticLoad module to the soak test.
+    ///
+    /// This method is only available if your Runtime implements `EncodeCall<SyntheticLoad<S>>`.
+    pub fn with_synthetic_load(mut self) -> Self
+    where
+        R: EncodeCall<SyntheticLoad<S>>,
+    {
+        let synthetic_load_admin = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+        let synthetic_load_harness = SyntheticLoadHarness::new(SyntheticLoadMessageGenerator::new(
+            Distribution::with_equiprobable_values(vec![
+                ReadAndSetManyIndividualValues,
+                ReadAndSetHeavyState,
+                RunCPUHeavyOperation,
+            ]),
+            sov_transaction_generator::generators::synthetic_load::SyntheticLoadGeneratorOptions {
+                maximum_vec_length: 10,
+                min_and_max_number_of_individual_state_operations: (1, 10000),
+                min_and_max_number_of_new_values_for_heavy_state: (100, 1000),
+                min_and_max_number_of_iterations_for_cpu_heavy_operation: (1000, 5000),
+                max_heavy_state_size: 1_000_000,
+            },
+            synthetic_load_admin,
+        ));
+        self.modules.push(Arc::new(synthetic_load_harness));
+        self
+    }
+
+    /// Add StateConsistency module to the soak test.
+    ///
+    /// This method is only available if your Runtime implements `EncodeCall<StateConsistency<S>>`.
+    pub fn with_state_consistency(mut self) -> Self
+    where
+        R: EncodeCall<StateConsistency<S>>,
+    {
+        let state_consistency_harness =
+            StateConsistencyHarness::new(StateConsistencyMessageGenerator::default());
+        self.modules.push(Arc::new(state_consistency_harness));
+        self
+    }
+
+    /// Run the soak test with the configured modules.
+    ///
+    /// # Parameters
+    /// - `client`: The API client for submitting transactions
+    /// - `rx`: Receiver to signal when to stop the test
+    /// - `worker_id`: Unique identifier for this worker
+    /// - `num_workers`: Total number of parallel workers
+    /// - `validity`: Distribution of valid vs invalid messages
+    pub async fn run(
+        self,
+        client: sov_api_spec::Client,
+        rx: Receiver<bool>,
+        worker_id: u128,
+        num_workers: u32,
+        validity: Distribution<MessageValidity>,
+    ) -> anyhow::Result<()> {
+        prepare_and_send_txs(self.modules, client, rx, worker_id, num_workers, validity).await
+    }
+}
+
 pub struct TestGenerator<R: Runtime<S>, S: Spec> {
     generator: BasicCallMessageFactory<S, R>,
     state: State<S, BasicTag>,
@@ -172,85 +267,6 @@ pub fn setup_harness<R: Runtime<S> + Clone, S: Spec>(rng_salt: u128) -> TestGene
         target_buffer_size: BUFFER_SIZE,
         salt: rng_salt,
     }
-}
-
-/// The passed client is responsible for handling timeouts (otherwise calls can block).
-pub async fn run_generator_task_for_bank_and_synthetic_load<
-    R: Runtime<S> + EncodeCall<Bank<S>> + EncodeCall<SyntheticLoad<S>> + Clone,
-    S: Spec,
->(
-    client: sov_api_spec::Client,
-    rx: Receiver<bool>,
-    worker_id: u128,
-    num_workers: u32,
-    validity: Distribution<MessageValidity>,
-    tx_type: TxType,
-) -> anyhow::Result<()> {
-    let bank_harness = BankHarness::new(BankMessageGenerator::<S>::new(
-        Distribution::with_equiprobable_values(vec![Transfer]),
-        Percent::fifty(),
-    ));
-    let synthetic_load_admin = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
-    let synthetic_load_harness = SyntheticLoadHarness::new(SyntheticLoadMessageGenerator::new(
-        Distribution::with_equiprobable_values(vec![
-            ReadAndSetManyIndividualValues,
-            ReadAndSetHeavyState,
-            RunCPUHeavyOperation,
-        ]),
-        sov_transaction_generator::generators::synthetic_load::SyntheticLoadGeneratorOptions {
-            maximum_vec_length: 10,
-            min_and_max_number_of_individual_state_operations: (1, 10000),
-            min_and_max_number_of_new_values_for_heavy_state: (100, 1000),
-            min_and_max_number_of_iterations_for_cpu_heavy_operation: (1000, 5000),
-            max_heavy_state_size: 1_000_000,
-        },
-        synthetic_load_admin,
-    ));
-    let modules: Vec<BasicModuleRef<S, R>> = match tx_type {
-        TxType::SyntheticLoad => vec![Arc::new(synthetic_load_harness.clone())],
-        TxType::Bank => vec![Arc::new(bank_harness.clone())],
-        TxType::Mixed => vec![
-            Arc::new(bank_harness.clone()),
-            Arc::new(synthetic_load_harness.clone()),
-        ],
-    };
-
-    prepare_and_send_txs(modules, client, rx, worker_id, num_workers, validity).await
-}
-
-/// The passed client is responsible for handling timeouts (otherwise calls can block).
-pub async fn run_generator_task_for_bank<R: Runtime<S> + EncodeCall<Bank<S>> + Clone, S: Spec>(
-    client: sov_api_spec::Client,
-    rx: Receiver<bool>,
-    worker_id: u128,
-    num_workers: u32,
-    validity: Distribution<MessageValidity>,
-) -> anyhow::Result<()> {
-    let bank_harness = BankHarness::new(BankMessageGenerator::<S>::new(
-        Distribution::with_equiprobable_values(vec![Transfer]),
-        Percent::fifty(),
-    ));
-
-    let modules: Vec<BasicModuleRef<S, R>> = vec![Arc::new(bank_harness.clone())];
-    prepare_and_send_txs(modules, client, rx, worker_id, num_workers, validity).await
-}
-
-/// The passed client is responsible for handling timeouts (otherwise calls can block).
-pub async fn run_generator_task_for_state_consistency<
-    R: Runtime<S> + EncodeCall<StateConsistency<S>> + Clone,
-    S: Spec,
->(
-    client: sov_api_spec::Client,
-    rx: Receiver<bool>,
-    worker_id: u128,
-    num_workers: u32,
-    validity: Distribution<MessageValidity>,
-) -> anyhow::Result<()> {
-    let state_consistency_harness =
-        StateConsistencyHarness::new(StateConsistencyMessageGenerator::default());
-
-    let modules: Vec<BasicModuleRef<S, R>> = vec![Arc::new(state_consistency_harness.clone())];
-    prepare_and_send_txs(modules, client, rx, worker_id, num_workers, validity).await
 }
 
 async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(

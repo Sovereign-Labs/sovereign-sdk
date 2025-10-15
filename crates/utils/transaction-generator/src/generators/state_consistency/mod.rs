@@ -33,6 +33,13 @@ impl<S: Spec, T> From<&AccountState<S, T>> for StateConsistencyAccount<S> {
         StateConsistencyAccount {
             private_key: value.private_key.clone(),
             current_value: value.consistency_value,
+            // The generator normally uses only one singleton account. The tag is applied once, the
+            // first time the account is generated. To avoid a bit of extra overhead in the
+            // generator, we can skip the TagAction::Add except the first time we generate the
+            // account.
+            // So by default, on every normal account load, this will be true. When we do not find
+            // an account with the tag and generated a new one for the first time, then we
+            // explicitly set it to false.
             already_tagged: true,
         }
     }
