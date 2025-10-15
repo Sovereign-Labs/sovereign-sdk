@@ -6,11 +6,9 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 env:
-  # Use test branch for now, will change to dev/nightly later
-  NIGHTLY_BRANCH: 'theodore/acceptance-nightly-testing'
+  NIGHTLY_BRANCH: 'nightly'
 
 jobs:
   promote:
@@ -92,3 +90,5 @@ jobs:
           echo "$ERROR_DETAILS"
           echo ""
           echo "TODO: Send Slack notification to configured channel"
+
+          exit 1
