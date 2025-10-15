@@ -8,7 +8,7 @@ use ethers::core::abi::Abi;
 mod fake_uni;
 mod simple_storage;
 pub use fake_uni::{Erc20, Router};
-pub use simple_storage::SimpleStorage;
+pub use simple_storage::{LegacySimpleStorage, SimpleStorage};
 
 /// Helper trait to submit contract calls without needing to handle the response
 #[async_trait::async_trait]

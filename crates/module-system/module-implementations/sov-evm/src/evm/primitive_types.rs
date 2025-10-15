@@ -36,13 +36,15 @@ pub struct RlpEvmTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, new)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut, new)]
 pub struct TxSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "EthereumTxEnvelopeBincodeCompat")]
+    #[deref]
+    #[deref_mut]
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
     pub block_number: u64,

@@ -70,7 +70,7 @@ sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 strum = { workspace = true }
 tempfile = { workspace = true }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rockbound = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 

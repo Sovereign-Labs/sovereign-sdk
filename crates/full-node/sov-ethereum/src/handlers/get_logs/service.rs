@@ -300,10 +300,7 @@ where
     }
 
     fn resolve_block_hash(&mut self, block_hash: BlockHash) -> Result<u64> {
-        let Some(block_height) = self
-            .evm
-            .get_block_height_by_hash(&block_hash, &mut self.state)
-        else {
+        let Some(block_height) = self.evm.block_height(&block_hash, &mut self.state) else {
             tracing::warn!(block_hash = %block_hash, "Block with hash not found");
             return Err(Error::BlockHashNotFound(block_hash));
         };
@@ -312,15 +309,9 @@ where
 
     fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<BlockNumber> {
         let block_number = block_nr_or_tag.unwrap_or_default();
-        let block_numbers = self.evm.block_numbers(&mut self.state);
-        let block_number = match block_number {
-            BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                *block_numbers.end()
-            }
-            BlockNumberOrTag::Number(nr) => nr,
-            BlockNumberOrTag::Pending => return Err(Error::PendingBlock),
-        };
-        Ok(block_number)
+        if block_number == BlockNumberOrTag::Pending {
+            return Err(Error::PendingBlock);
+        }
+        Ok(self.evm.resolve_block_number(block_number, &mut self.state))
     }
 }

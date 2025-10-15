@@ -24,7 +24,7 @@ float_arithmetic = "deny"              # Can cause subtle bugs due to different 
 
 [build-dependencies]
 anyhow = { workspace = true }
-risc0-build = "2.1"
+risc0-build = { workspace = true }
 sov-zkvm-utils = { workspace = true }
 
 [package.metadata.risc0]

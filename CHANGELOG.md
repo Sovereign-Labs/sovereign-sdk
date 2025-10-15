@@ -3,6 +3,10 @@
         This does not affect the borsh serialization and thus network serialization of transactions, only if you're using `Schema` to serialize transactions,
         i.e with the `web3` SDK
 
+# 2025-10-13
+- #1876 Use workspace dependencies consistently across all crates. This ensures version consistency and simplifies dependency management.
+- #1851 Implement `debug_traceBlockByNumber` in EVM module.
+
 # 2025-10-10
 - #1840 DOn't panic on selfdestruct/blockhash. Return an error.
 
