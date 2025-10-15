@@ -9,11 +9,11 @@ sol!(
     #[sol(
         rpc,
         all_derives = true,
-        bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/evm/test-data/artifacts/", "SimpleStorage.bin")))]
+        bytecode = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/contracts/artifacts/", "SimpleStorage.bin")))]
     SimpleStorage,
     concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/src/evm/test-data/artifacts/",
+        "/contracts/artifacts/",
         "SimpleStorage.abi"
     )
 );
