@@ -68,6 +68,7 @@ members = [
     "crates/universal-wallet/macro-helpers",
     "crates/universal-wallet/fuzz",
     "crates/utils/sov-eth-client",
+    "crates/utils/sov-evm-soak-testing",
     "crates/utils/workspace-hack",
     # Hyperlane
     "crates/module-system/hyperlane",
