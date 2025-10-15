@@ -52,11 +52,11 @@ impl<D: DispatchCall> TransactionCallable for D {
 /// V0 transaction.
 pub struct Version0<Call, S: Spec> {
     /// The signature of the transaction.
-    #[serde(with = "bytes_field_format")]
+    #[serde(with = "hex_field_format")]
     #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
     /// The public key of the sender of the transaction.
-    #[serde(with = "bytes_field_format")]
+    #[serde(with = "hex_field_format")]
     #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
     pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
     /// The runtime call of the transaction.
@@ -399,7 +399,7 @@ pub struct AuthenticatedTransactionAndRawHash<S: Spec> {
     pub authenticated_tx: AuthenticatedTransactionData<S>,
 }
 
-mod bytes_field_format {
+mod hex_field_format {
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S, V>(value: &V, serializer: S) -> Result<S::Ok, S::Error>
@@ -407,7 +407,8 @@ mod bytes_field_format {
         S: Serializer,
         V: AsRef<[u8]>,
     {
-        serializer.serialize_bytes(value.as_ref())
+        let s = hex::encode(value.as_ref());
+        serializer.serialize_str(&s)
     }
 
     pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -415,7 +416,8 @@ mod bytes_field_format {
         D: Deserializer<'de>,
         T: TryFrom<Vec<u8>>,
     {
-        let bytes: Vec<u8> = Vec::deserialize(deserializer)?;
-        T::try_from(bytes).map_err(|_e| serde::de::Error::custom("invalid bytes"))
+        let hex_string = String::deserialize(deserializer)?;
+        let bytes = hex::decode(&hex_string).map_err(serde::de::Error::custom)?;
+        T::try_from(bytes).map_err(|_e| serde::de::Error::custom("invalid hex"))
     }
 }

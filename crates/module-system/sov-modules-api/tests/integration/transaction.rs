@@ -12,6 +12,48 @@ type Runtime = TestOptimisticRuntime<TestSpec>;
 
 const ASSERT_MSG: &str = "JSON representation changed, this is a breaking change for web3 SDK, please ensure it is also updated";
 
+// ensure custom serde serialized fields are serialized as expected
+// i.e Transaction pub_key and signature fields as hex strings
+#[test]
+fn test_serde_serialize_tx() {
+    let sig_bytes = hex::decode("c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02").unwrap();
+    let native_sig = <MockZkvmCryptoSpec as CryptoSpec>::Signature::try_from(sig_bytes).unwrap();
+    let key_bytes =
+        hex::decode("1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6").unwrap();
+    let native_pub_key =
+        <MockZkvmCryptoSpec as CryptoSpec>::PublicKey::try_from(key_bytes).unwrap();
+    let native_call = sov_value_setter::CallMessage::SetValue::<TestSpec> {
+        value: 4,
+        gas: None,
+    };
+    let uniq = UniquenessData::Generation(2);
+    let details = TxDetails::<TestSpec> {
+        max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
+        max_fee: sov_bank::Amount(10000),
+        gas_limit: Some(vec![500, 500].try_into().unwrap()),
+        chain_id: 1337,
+    };
+    let native_tx = Version0 {
+        signature: native_sig,
+        pub_key: native_pub_key,
+        runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
+        uniqueness: uniq,
+        details,
+    };
+    let native = Transaction::<Runtime, TestSpec> {
+        versioned_tx: VersionedTx::V0(native_tx),
+    };
+    let native_json = serde_json::to_value(&native).unwrap();
+    let sig = &native_json["versioned_tx"]["V0"]["signature"];
+    let pub_key = &native_json["versioned_tx"]["V0"]["pub_key"];
+
+    assert_eq!(sig, "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02");
+    assert_eq!(
+        pub_key,
+        "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6"
+    );
+}
+
 // Ensure a Schema json_to_borsh serialized json transaction type produces the same bytes as borsh
 // serializing the native type directly.
 #[test]
