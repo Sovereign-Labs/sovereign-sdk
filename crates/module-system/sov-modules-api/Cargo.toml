@@ -77,7 +77,7 @@ sov-test-utils = { workspace = true, features = ["arbitrary"] }
 reqwest = { workspace = true }
 # Debug for more convinient tests output
 utoipa = { workspace = true, features = ["debug"] }
-openapiv3 = "2.0.0"
+openapiv3 = { workspace = true }
 trybuild = "1.0"
 tokio = { workspace = true }
 

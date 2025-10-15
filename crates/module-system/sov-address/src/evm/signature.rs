@@ -15,16 +15,26 @@ pub struct EthereumSignature {
     #[schemars(flatten, with = "String", length(equal = "128"))]
     #[sov_wallet(as_ty = "[u8; 64]")]
     pub msg_sig: k256::ecdsa::Signature,
+    bytes: Vec<u8>,
+}
+
+impl EthereumSignature {
+    /// Create a new instance
+    pub fn new(s: k256::ecdsa::Signature) -> Self {
+        Self {
+            msg_sig: s,
+            bytes: s.to_vec(),
+        }
+    }
 }
 
 impl BorshDeserialize for EthereumSignature {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; 64];
         reader.read_exact(&mut buffer)?;
+        let s = k256::ecdsa::Signature::from_slice(&buffer).map_err(std::io::Error::other)?;
 
-        Ok(Self {
-            msg_sig: k256::ecdsa::Signature::from_slice(&buffer).map_err(std::io::Error::other)?,
-        })
+        Ok(Self::new(s))
     }
 }
 
@@ -38,9 +48,23 @@ impl TryFrom<&[u8]> for EthereumSignature {
     type Error = anyhow::Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self {
-            msg_sig: k256::ecdsa::Signature::from_slice(value).map_err(anyhow::Error::msg)?,
-        })
+        let s = k256::ecdsa::Signature::from_slice(value).map_err(anyhow::Error::msg)?;
+        Ok(Self::new(s))
+    }
+}
+
+impl AsRef<[u8]> for EthereumSignature {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+}
+
+impl TryFrom<Vec<u8>> for EthereumSignature {
+    type Error = k256::ecdsa::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let s = k256::ecdsa::Signature::from_slice(value.as_slice())?;
+        Ok(Self::new(s))
     }
 }
 
@@ -69,7 +93,7 @@ impl std::str::FromStr for EthereumSignature {
         let signature = k256::ecdsa::Signature::from_slice(&bytes)
             .map_err(|e| anyhow::anyhow!("Invalid signature: {:?}", e))?;
 
-        Ok(EthereumSignature { msg_sig: signature })
+        Ok(EthereumSignature::new(signature))
     }
 }
 

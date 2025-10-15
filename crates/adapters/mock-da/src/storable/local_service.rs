@@ -228,6 +228,29 @@ impl StorableMockDaService {
         .await
     }
 
+    /// Creates new [`StorableMockDaService`] with a given address.
+    /// - Periodic block production.
+    /// - Data is stored only in memory.
+    pub async fn new_in_memory_periodic(
+        block_time_ms: u64,
+        sequencer_da_address: MockAddress,
+    ) -> (Self, watch::Sender<()>) {
+        let config = MockDaConfig {
+            connection_string: MockDaConfig::sqlite_in_memory(),
+            sender_address: sequencer_da_address,
+            finalization_blocks: 0,
+            block_producing: BlockProducingConfig::Periodic { block_time_ms },
+            da_layer: None,
+            randomization: None,
+        };
+
+        let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+        (
+            StorableMockDaService::from_config(config, shutdown_receiver).await,
+            shutdown_sender,
+        )
+    }
+
     /// Creates new in memory [`StorableMockDaService`] from [`MockDaConfig`].
     pub async fn from_config(config: MockDaConfig, shutdown_receiver: watch::Receiver<()>) -> Self {
         let da_layer = match config.da_layer.as_ref() {
@@ -261,7 +284,8 @@ impl StorableMockDaService {
         .await
     }
 
-    async fn wait_for_height(&self, height: u32) -> anyhow::Result<()> {
+    /// Wait for a given height.
+    pub async fn wait_for_height(&self, height: u32) -> anyhow::Result<()> {
         let start_wait = Instant::now();
         let max_waiting_time = self.block_producing.get_max_waiting_time_for_block();
         let mut interval = interval(WAIT_ATTEMPT_PAUSE);

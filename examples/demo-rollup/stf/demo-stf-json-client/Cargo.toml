@@ -12,7 +12,7 @@ publish = false
 # `progenitor` demands very specific version ranges for its dependencies. Read
 # more here: <https://github.com/oxidecomputer/progenitor>.
 [dependencies]
-futures = "0.3"
+futures = { workspace = true }
 progenitor-client = { version = "0.8" }
 regress = "0.4.1"
 reqwest = { workspace = true, features = ["rustls-tls", "json", "stream"] }
@@ -24,7 +24,7 @@ prettyplease = "0.2.22"
 sov-address = { workspace = true, features = ["evm"] }
 progenitor = { version = "0.8" }
 serde_json = { workspace = true, features = ["alloc"] }
-syn = "2.0"
+syn = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
 
 sov-modules-api = { workspace = true }

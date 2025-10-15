@@ -15,6 +15,7 @@ use sov_state::Storage;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
+use crate::test_helpers::build_transfer_token_tx;
 use crate::test_helpers::DemoRollupSpec;
 
 type TestSpec = DemoRollupSpec;

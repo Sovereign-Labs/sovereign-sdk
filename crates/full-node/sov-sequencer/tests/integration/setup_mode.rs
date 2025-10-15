@@ -159,7 +159,7 @@ where
 
     let dir = tempdir_inside_codebase_dir();
 
-    let rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -173,17 +173,11 @@ where
         BlockProducingConfig::Manual,
         None,
         TEST_BLOB_PROCESSING_TIMEOUT,
-        1,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    .map(|v| v.into_iter().next().unwrap());
-
-    let Some(test_rollup) = rollup else {
-        return;
-    };
+    .await;
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;

@@ -60,7 +60,7 @@ reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 wiremock = "0.6"
-test-strategy = "0.4.0"
+test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
     "macros",

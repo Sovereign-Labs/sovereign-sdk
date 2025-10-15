@@ -100,20 +100,20 @@ sov-chain-state = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
 reth-primitives = { workspace = true, default-features = false }
-futures = "0.3"
+futures = { workspace = true }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
 tracing-panic = { version = "0.1.2" }
 
 base64 = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
-tempfile = "3.12"
-proptest = { version = "1.5", features = ["alloc"] }
+tempfile = { workspace = true }
+proptest = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
-tracing-subscriber = "0.3.18"
-rand = "0.8"
+tracing-subscriber = { workspace = true }
+rand = { workspace = true }
 
-ethereum-types = "0.14.1"
+ethereum-types = { workspace = true }
 ethers = { workspace = true }
 alloy = { workspace = true }
 alloy-primitives = { workspace = true }
@@ -124,15 +124,13 @@ alloy-provider = { workspace = true, features = ["debug-api"] }
 sov-rpc-eth-types = { workspace = true}
 
 
-reqwest = { version = "0.12", features = [
-  "rustls-tls",
-], default-features = false }
+reqwest = { workspace = true }
 prettytable-rs = "0.10"
 criterion = "0.5.1"
 
 [build-dependencies]
 anyhow = { workspace = true }
-serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+serde_json = { workspace = true, features = ["alloc"] }
 borsh = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-modules-api = { workspace = true }

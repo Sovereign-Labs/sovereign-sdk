@@ -54,7 +54,7 @@ sov-kernels = { workspace = true }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
 
-ethereum-types = "0.14.1"
+ethereum-types = { workspace = true }
 ethers = { workspace = true }
 
 [features]

@@ -55,6 +55,7 @@ members = [
     "crates/module-system/module-implementations/sov-revenue-share",
     "crates/module-system/module-implementations/sov-synthetic-load",
     "crates/module-system/module-implementations/sov-test-modules",
+    "crates/module-system/module-implementations/sov-test-state-consistency",
     "crates/module-system/module-implementations/module-template",
     "crates/module-system/module-implementations/integration-tests",
     "crates/module-system/sov-capabilities",
@@ -135,6 +136,7 @@ sov-prover-incentives = { path = "crates/module-system/module-implementations/so
 sov-value-setter = { path = "crates/module-system/module-implementations/sov-value-setter", default-features = false, version = "0.3" }
 sov-synthetic-load = { path = "crates/module-system/module-implementations/sov-synthetic-load", default-features = false, version = "0.3" }
 sov-test-modules = { path = "crates/module-system/module-implementations/sov-test-modules", default-features = false, version = "0.3" }
+sov-test-state-consistency = { path = "crates/module-system/module-implementations/sov-test-state-consistency", default-features = false, version = "0.3" }
 sov-chain-state = { path = "crates/module-system/module-implementations/sov-chain-state", default-features = false, version = "0.3" }
 sov-blob-storage = { path = "crates/module-system/module-implementations/sov-blob-storage", default-features = false, version = "0.3" }
 sov-evm = { path = "crates/module-system/module-implementations/sov-evm", default-features = false, version = "0.3" }
