@@ -20,7 +20,7 @@ where
 
     pub async fn run(self, tx_count: usize, logs_per_tx: usize) -> Result<()> {
         for i in 1..=tx_count {
-            println!("Sending tx {} with {} logs", i, logs_per_tx);
+            println!("Sending tx {i} with {logs_per_tx} logs");
             self.contract
                 .emitLogs(U256::ZERO, U256::from(logs_per_tx))
                 .submit()
