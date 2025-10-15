@@ -118,7 +118,7 @@ pub struct RollupBuilderConfig<S: Spec> {
 pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
     genesis: GenesisSource<R::Spec, R::Runtime>,
     da_config: <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config,
-     config: RollupBuilderConfig<R::Spec>,
+    config: RollupBuilderConfig<R::Spec>,
     postgres_container_opt: Option<Arc<ContainerAsync<PostgresImage>>>,
     with_secondary_sequencer: Option<MockAddress>,
 }
