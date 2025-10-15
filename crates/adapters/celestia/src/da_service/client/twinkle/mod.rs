@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[cfg(test)]
 mod tests;
 mod types;
@@ -6,7 +7,7 @@ use crate::celestia::CompactHeader;
 use crate::config::Network;
 use crate::da_service::client::twinkle::types::{
     BlobStatus, BlobStatusResponse, FeePriority, HeaderResponse, SubmitBlobAsyncResponse,
-    SubmitBlobRequest,
+    SubmitBlobRequest, TwinkleNamespaceResponse,
 };
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{RollupNamespace, TmHash};
@@ -14,6 +15,8 @@ use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
+use base64::{engine::general_purpose, Engine as _};
+use celestia_types::row_namespace_data::NamespaceData;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
@@ -21,13 +24,15 @@ use tracing::instrument;
 
 const HEADER_URL: &str = "https://t.tech/v0/header";
 const SUBMIT_BLOB_URL: &str = "https://t.tech/v0/blob";
-const BLOB_STATUS: &str = "https://t.tech/v0/blob/status";
+const BLOB_STATUS_URL: &str = "https://t.tech/v0/blob/status";
+const NAMESPACE_DATA_URL: &str = "https://t.tech/v0/share/get_namespace_data";
 
 // TODO for later:
 //  ~ Get block and header compatible with return types of celestia sender
 //     + Header: Compact header
-//     - Header: DAH
-//     - Block: Namespace data
+//     + Header: DAH
+//     ~ Block: Namespace data
+//  - Authored blobs
 //  ~ Metrics: can be verified with actual rollup
 //  - Unit tests with mockserver
 //  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
@@ -71,7 +76,7 @@ impl TwinkleClient {
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
         tracing::trace!("Checking blob status");
         (|| async {
-            let mut request = self.client.get(BLOB_STATUS);
+            let mut request = self.client.get(BLOB_STATUS_URL);
             request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
             let response = request.send().await?;
             decode_on_success(response).await
@@ -281,6 +286,21 @@ impl TwinkleClient {
         let celestia_header = CelestiaHeader::new(dah, compact_header);
 
         Ok(celestia_header)
+    }
+
+    pub async fn get_namespace_data(
+        &self,
+        namespace: RollupNamespace,
+        height: u64,
+    ) -> anyhow::Result<NamespaceData> {
+        let mut request = self.client.get(NAMESPACE_DATA_URL);
+        request = request.query(&[("network", self.network)]);
+        request = request.query(&[("height", height)]);
+        let namespace = general_purpose::STANDARD.encode(namespace.id().as_bytes());
+        request = request.query(&[("namespace", namespace)]);
+        let response = request.send().await?;
+        let twinkle_namespace_data: TwinkleNamespaceResponse = decode_on_success(response).await?;
+        twinkle_namespace_data.try_into().map_err(Into::into)
     }
 
     // Will be used later when necessary data is implemented on Twinkle API

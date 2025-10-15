@@ -2,8 +2,9 @@ use crate::celestia::{CompactHeader, ProtobufHash};
 use crate::celestia_tm_version;
 use crate::config::{Network, TxPriority};
 use crate::types::{TmHash, APP_VERSION};
-use celestia_types::nmt::NamespacedHash;
-use celestia_types::DataAvailabilityHeader;
+use celestia_types::nmt::{NamespaceProof, NamespacedHash};
+use celestia_types::row_namespace_data::{NamespaceData, RowNamespaceData};
+use celestia_types::{DataAvailabilityHeader, Share};
 use jsonrpsee::core::Serialize;
 use serde::{Deserialize, Serializer};
 use serde_with::serde_as;
@@ -276,5 +277,95 @@ pub struct PartSetHeader {
 impl From<PartSetHeader> for tendermint::block::parts::Header {
     fn from(value: PartSetHeader) -> Self {
         Self::new(value.total, value.hash).expect("Invalid TwinklePartSetHeader")
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TwinkleNamespaceResponse {
+    result: Vec<TwinkleRowNamespaceData>,
+}
+
+impl TryFrom<TwinkleNamespaceResponse> for NamespaceData {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: TwinkleNamespaceResponse) -> Result<Self, Self::Error> {
+        let TwinkleNamespaceResponse { result } = value;
+        let mut rows = Vec::with_capacity(result.len());
+        for row_data in result {
+            rows.push(row_data.try_into()?);
+        }
+        Ok(NamespaceData { rows })
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize)]
+pub struct TwinkleRawRowProof {
+    start: Option<i64>,
+    end: i64,
+    #[serde_as(as = "Vec<serde_with::base64::Base64>")]
+    nodes: Vec<Vec<u8>>,
+    #[serde_as(as = "Option<serde_with::base64::Base64>")]
+    #[serde(rename = "leafHash")]
+    leaf_hash: Option<Vec<u8>>,
+    #[serde(rename = "isMaxNamespaceIgnored")]
+    is_max_namespace_ignored: bool,
+}
+
+impl From<TwinkleRawRowProof> for celestia_proto::proof::pb::Proof {
+    fn from(value: TwinkleRawRowProof) -> Self {
+        let TwinkleRawRowProof {
+            start,
+            end,
+            nodes,
+            leaf_hash,
+            is_max_namespace_ignored,
+        } = value;
+        Self {
+            // TODO: Verify this
+            start: start.unwrap_or_default(),
+            end,
+            nodes,
+            // TODO: Verify this
+            leaf_hash: leaf_hash.unwrap_or_default(),
+            is_max_namespace_ignored,
+        }
+    }
+}
+
+impl TryFrom<TwinkleRawRowProof> for NamespaceProof {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: TwinkleRawRowProof) -> Result<Self, Self::Error> {
+        let proto = celestia_proto::proof::pb::Proof::from(value);
+        proto.try_into()
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize)]
+pub struct TwinkleRowNamespaceData {
+    #[serde_as(as = "Vec<serde_with::base64::Base64>")]
+    #[serde(rename = "shares")]
+    raw_shares: Vec<Vec<u8>>,
+    #[serde(rename = "proof")]
+    raw_proof: TwinkleRawRowProof,
+}
+
+impl TryFrom<TwinkleRowNamespaceData> for RowNamespaceData {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: TwinkleRowNamespaceData) -> Result<Self, Self::Error> {
+        let TwinkleRowNamespaceData {
+            raw_shares,
+            raw_proof,
+        } = value;
+        let proof = NamespaceProof::try_from(raw_proof)?;
+        let mut shares = Vec::with_capacity(raw_shares.len());
+        for raw_share in raw_shares {
+            let share = Share::from_raw(&raw_share)?;
+            shares.push(share);
+        }
+        Ok(RowNamespaceData { proof, shares })
     }
 }

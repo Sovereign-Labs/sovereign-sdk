@@ -15,6 +15,7 @@ publish = true
 workspace = true
 
 [dependencies]
+base64 = { workspace = true }
 borsh = { workspace = true, features = ["derive", "bytes"] }
 bech32 = { workspace = true }
 prost = "0.13"
@@ -22,6 +23,7 @@ prost = "0.13"
 # Upgrade with care. The new version might be incompatible and require run of soak tests
 celestia-rpc = { version = "0.14.0", default-features = false, optional = true }
 celestia-types = { version = "0.16.0", default-features = false }
+celestia-proto = { version = "0.10.0", default-features = false, optional = true }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
@@ -86,6 +88,7 @@ native = [
     "backon",
     "tendermint/default",
     "dep:celestia-rpc",
+    "dep:celestia-proto",
     "dep:clap",
     "dep:futures",
     "dep:jsonrpsee",

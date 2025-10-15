@@ -4,6 +4,8 @@ use crate::test_helper::{ADDR_1, ROLLUP_PROOF_NAMESPACE};
 use crate::verifier::RollupParams;
 use crate::CelestiaConfig;
 use crate::CelestiaService;
+use celestia_rpc::share::ShareClient;
+use celestia_rpc::HeaderClient;
 use celestia_types::nmt::Namespace;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
@@ -97,5 +99,25 @@ async fn test_get_head_block_header() -> anyhow::Result<()> {
     println!("Twinkle Header {twinkle_header:?}");
     println!("Twinkle DAH: {:?}", twinkle_header.dah);
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignored]
+async fn test_namespace_data() -> anyhow::Result<()> {
+    let twinkle_client = build_client();
+
+    let namespace = RollupNamespace::Batch(Namespace::const_v0(*b"sov-mini-i"));
+    let height = 8410087;
+    let twinkle_response = twinkle_client.get_namespace_data(namespace, height).await?;
+    println!("Twinkle ROWS: {}", twinkle_response.rows.len());
+    let vanilla_raw_client =
+        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+
+    let block_header = vanilla_raw_client.header_get_by_height(height).await?;
+    let rollup_batch_rows = vanilla_raw_client
+        .share_get_namespace_data(&block_header, namespace.id())
+        .await?;
+    assert_eq!(twinkle_response, rollup_batch_rows);
     Ok(())
 }
