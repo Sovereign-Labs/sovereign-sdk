@@ -123,3 +123,15 @@ async fn test_namespace_data() -> anyhow::Result<()> {
     assert_eq!(twinkle_response, rollup_batch_rows);
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn test_blobs_at() -> anyhow::Result<()> {
+    let twinkle_client = build_client();
+
+    let namespace = RollupNamespace::Batch(Namespace::const_v0(*b"sov-mini-i"));
+    let height = 8410087;
+    let twinkle_response = twinkle_client.get_blobs_at(height, &namespace).await?;
+    println!("BLOBS: {}", twinkle_response.len());
+    Ok(())
+}

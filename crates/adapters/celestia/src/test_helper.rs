@@ -639,7 +639,11 @@ pub(crate) mod files {
         let rollup_batch_shares = NamespaceRelevantData::new(batch_namespace, rollup_batch_rows);
         let rollup_proof_shares = NamespaceRelevantData::new(proof_namespace, rollup_proof_rows);
 
-        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
+        Ok(FilteredCelestiaBlock::new(
+            rollup_batch_shares,
+            rollup_proof_shares,
+            header,
+        ))
     }
 
     pub(crate) fn make_test_path(data_path: &str) -> PathBuf {

@@ -6,8 +6,8 @@ mod types;
 use crate::celestia::CompactHeader;
 use crate::config::Network;
 use crate::da_service::client::twinkle::types::{
-    BlobStatus, BlobStatusResponse, FeePriority, HeaderResponse, SubmitBlobAsyncResponse,
-    SubmitBlobRequest, TwinkleNamespaceResponse,
+    BlobDataResponseItem, BlobStatus, BlobStatusResponse, FeePriority, GetAllBlobsRequest,
+    HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest, TwinkleNamespaceResponse,
 };
 use crate::metrics::BlobSubmitMeasurement;
 use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace, TmHash};
@@ -25,13 +25,15 @@ use tracing::instrument;
 const HEADER_URL: &str = "https://t.tech/v0/header";
 const SUBMIT_BLOB_URL: &str = "https://t.tech/v0/blob";
 const BLOB_STATUS_URL: &str = "https://t.tech/v0/blob/status";
+const BLOB_GET_ALL_URL: &str = "https://t.tech/v0/blob/get_all";
 const NAMESPACE_DATA_URL: &str = "https://t.tech/v0/share/get_namespace_data";
 
 // TODO for later:
 //  ~ Get block and header compatible with return types of celestia sender
 //     + Header: Compact header
 //     + Header: DAH
-//     ~ Block: Namespace data
+//     + Block: Namespace data
+//     - Get raw blob data
 //  - Authored blobs
 //  ~ Metrics: can be verified with actual rollup
 //  - Unit tests with mockserver
@@ -344,6 +346,26 @@ impl TwinkleClient {
             rollup_proof_shares,
             header,
         ))
+    }
+
+    pub async fn get_blobs_at(
+        &self,
+        height: u64,
+        namespace: &RollupNamespace,
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        let request_body = GetAllBlobsRequest {
+            namespaces: vec![general_purpose::STANDARD.encode(namespace.id().as_bytes())],
+            network: self.network,
+            height,
+        };
+        let response = self
+            .client
+            .post(BLOB_GET_ALL_URL)
+            .json(&request_body)
+            .send()
+            .await?;
+        let result: Vec<BlobDataResponseItem> = decode_on_success(response).await?;
+        Ok(result.into_iter().map(|item| item.data).collect())
     }
 }
 

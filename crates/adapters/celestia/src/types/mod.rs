@@ -245,13 +245,12 @@ impl FilteredCelestiaBlock {
         rollup_batch_data: NamespaceRelevantData,
         rollup_proof_data: NamespaceRelevantData,
         header: celestia_types::ExtendedHeader,
-        // TODO: Why it is Result?
-    ) -> anyhow::Result<Self> {
-        Ok(FilteredCelestiaBlock {
+    ) -> Self {
+        FilteredCelestiaBlock {
             header: CelestiaHeader::new(header.dah, header.header.into()),
             rollup_batch_data,
             rollup_proof_data,
-        })
+        }
     }
 
     // TODO: Should we return extended header from Twinkle?

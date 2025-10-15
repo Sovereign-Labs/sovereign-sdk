@@ -69,4 +69,15 @@ impl CelestiaClient {
             }
         }
     }
+
+    pub async fn get_blobs_at(
+        &self,
+        height: u64,
+        namespace: &RollupNamespace,
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        match self {
+            CelestiaClient::StandardNode(client) => client.get_blobs_at(height, namespace).await,
+            CelestiaClient::Twinkle(client) => client.get_blobs_at(height, namespace).await,
+        }
+    }
 }

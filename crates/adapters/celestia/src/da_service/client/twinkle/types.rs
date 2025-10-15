@@ -369,3 +369,23 @@ impl TryFrom<TwinkleRowNamespaceData> for RowNamespaceData {
         Ok(RowNamespaceData { proof, shares })
     }
 }
+
+#[serde_as]
+#[derive(Debug, Serialize)]
+pub struct GetAllBlobsRequest {
+    pub namespaces: Vec<String>,
+    pub network: Network,
+    pub height: u64,
+}
+
+#[serde_as]
+#[derive(Debug, Deserialize)]
+pub struct BlobDataResponseItem {
+    #[serde_as(as = "serde_with::base64::Base64")]
+    pub data: Vec<u8>,
+    //    "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAN6t////////vu8=",
+    //     "data": "AAAAdHdpbmtsZQ==",
+    //     "shareVersion": 0,
+    //     "commitment": "1s1WX41x9Ti2I9Uu0vBvxMQ5dAkr1CewS5+0kfm5Q1o=",
+    //     "index": 972
+}

@@ -6,7 +6,7 @@ use crate::types::{
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use backon::ExponentialBuilder;
-use celestia_rpc::{HeaderClient, ShareClient, StateClient, TxPriority};
+use celestia_rpc::{BlobClient, HeaderClient, ShareClient, StateClient, TxPriority};
 use celestia_types::blob::Blob as JsonBlob;
 use jsonrpsee::http_client::HttpClient;
 use sov_rollup_interface::common::HexHash;
@@ -258,8 +258,11 @@ impl StandardNodeClient {
             tracker.submit(get_block_measurement);
         });
 
-        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
-            .map_err(MaybeRetryable::Permanent)
+        Ok(FilteredCelestiaBlock::new(
+            rollup_batch_shares,
+            rollup_proof_shares,
+            header,
+        ))
     }
 
     #[instrument(skip(self))]
@@ -279,5 +282,34 @@ impl StandardNodeClient {
             .and_then(|result| result)
         };
         run_maybe_retryable_async_fn_with_retries(self.backoff_policy, f, "get_block_at").await
+    }
+
+    async fn get_blobs_at_inner(
+        &self,
+        height: u64,
+        namespace: &RollupNamespace,
+    ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
+        self.read_client
+            .blob_get_all(height, &[namespace.id()])
+            .await
+            .map_err(into_transient_with_context)
+            .map(|blobs| match blobs {
+                Some(blobs) => blobs.into_iter().map(|blob| blob.data).collect(),
+                None => vec![],
+            })
+    }
+
+    #[instrument(err)]
+    pub async fn get_blobs_at(
+        &self,
+        height: u64,
+        namespace: &RollupNamespace,
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.get_blobs_at_inner(height, namespace),
+            "get_blobs_at",
+        )
+        .await
     }
 }

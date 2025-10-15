@@ -3,23 +3,18 @@ mod client;
 mod tests;
 
 use std::fmt::Debug;
-use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use backon::ExponentialBuilder;
 use celestia_rpc::prelude::*;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::Address;
-use futures::stream::BoxStream;
-use futures::StreamExt;
-use jsonrpsee::http_client::HttpClient;
 use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
 use tokio::sync::oneshot;
-use tracing::{debug, instrument};
+use tracing::instrument;
 
 pub use crate::config::CelestiaConfig;
 pub use crate::da_service::client::standard_node::StandardNodeClient;
@@ -31,58 +26,44 @@ use crate::types::{
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
-use crate::CelestiaHeader;
 
 type BoxError = anyhow::Error;
 
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
-    // Client is used for a submission request, where we want to have consistent ordering.
     client: CelestiaClient,
-    // Client used for queries, where it is not important to have ordering
-    read_client: Arc<HttpClient>,
     rollup_batch_namespace: RollupNamespace,
     rollup_proof_namespace: RollupNamespace,
     signer_address: CelestiaAddress,
     safe_lead_time: Duration,
-    backoff_policy: ExponentialBuilder,
-    #[allow(dead_code)]
-    request_timeout: Duration,
 }
 
 impl CelestiaService {
     fn with_client(
         submit_client: CelestiaClient,
-        read_client: HttpClient,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
         signer_address: CelestiaAddress,
         safe_lead_time: Duration,
-        backoff_policy: ExponentialBuilder,
-        request_timeout: Duration,
     ) -> Self {
         Self {
             client: submit_client,
-            read_client: Arc::new(read_client),
             rollup_batch_namespace: RollupNamespace::Batch(rollup_batch_namespace),
             rollup_proof_namespace: RollupNamespace::Proof(rollup_proof_namespace),
             signer_address,
             safe_lead_time,
-            backoff_policy,
-            request_timeout,
         }
     }
 }
 
 impl CelestiaService {
     pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
-        let request_timeout = config.request_timeout();
         let backoff_policy = config.get_backoff_policy();
 
         let submit_client = config.construct_celestia_client();
 
+        // TODO: Move this into client.
         let read_client = config.construct_rpc_client();
-
         let fetched_address = run_maybe_retryable_async_fn_with_retries(
             backoff_policy,
             || async {
@@ -105,7 +86,7 @@ impl CelestiaService {
                 panic!("Need account address, got consensus node: {addr}");
             }
         };
-        debug!(address = %fetched_signer, "Fetched signer.");
+        tracing::debug!(address = %fetched_signer, "Fetched signer.");
 
         if let Some(config_signer_address) = config.signer_address {
             if config_signer_address != fetched_signer {
@@ -114,48 +95,15 @@ impl CelestiaService {
                 );
             }
         }
+        //
 
         Self::with_client(
             submit_client,
-            read_client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
             fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
-            backoff_policy,
-            request_timeout,
         )
-    }
-}
-
-/// Allows consuming the [`futures::Stream`] of BlockHeaders.
-type HeaderStream = BoxStream<'static, Result<CelestiaHeader, anyhow::Error>>;
-
-impl CelestiaService {
-    async fn get_proofs_at_inner(
-        &self,
-        height: u64,
-    ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
-        self.read_client
-            .blob_get_all(height, &[self.rollup_proof_namespace.id()])
-            .await
-            .map_err(into_transient_with_context)
-            .map(|blobs| match blobs {
-                Some(blobs) => blobs.into_iter().map(|blob| blob.data).collect(),
-                None => vec![],
-            })
-    }
-
-    /// Subscribe to finalized headers as they are finalized.
-    /// Expect only to receive headers which were finalized after subscription
-    /// Optimized version of `get_last_finalized_block_header`.
-    pub async fn subscribe_finalized_header(&self) -> Result<HeaderStream, anyhow::Error> {
-        Ok(self
-            .read_client
-            .header_subscribe()
-            .await?
-            .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
-            .boxed())
     }
 }
 
@@ -260,12 +208,9 @@ impl DaService for CelestiaService {
 
     #[instrument(err)]
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_proofs_at_inner(height),
-            "get_proofs_at",
-        )
-        .await
+        self.client
+            .get_blobs_at(height, &self.rollup_proof_namespace)
+            .await
     }
 
     async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
