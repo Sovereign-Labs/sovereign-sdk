@@ -483,7 +483,6 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         .expect("Unwrapping an infallible type cannot fail")
     }
 
-
     /// Gets a value from the cache or reads it from the provided `ValueReader`.
     #[cfg(not(feature = "native"))]
     pub fn get_or_fetch<S: Storage>(
