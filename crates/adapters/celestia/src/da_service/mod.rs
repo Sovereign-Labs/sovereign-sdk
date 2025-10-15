@@ -19,17 +19,14 @@ use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
 use tokio::sync::oneshot;
-use tokio::time::Instant;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, instrument};
 
 pub use crate::config::CelestiaConfig;
 pub use crate::da_service::client::standard_node::StandardNodeClient;
 pub use crate::da_service::client::twinkle::TwinkleClient;
 pub use crate::da_service::client::CelestiaClient;
-use crate::metrics::{GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{
-    BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData,
-    RollupNamespace,
+    BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, RollupNamespace,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
@@ -49,6 +46,7 @@ pub struct CelestiaService {
     signer_address: CelestiaAddress,
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
+    #[allow(dead_code)]
     request_timeout: Duration,
 }
 
@@ -134,69 +132,6 @@ impl CelestiaService {
 type HeaderStream = BoxStream<'static, Result<CelestiaHeader, anyhow::Error>>;
 
 impl CelestiaService {
-    async fn get_block_at_inner(
-        &self,
-        height: u64,
-    ) -> Result<FilteredCelestiaBlock, MaybeRetryable<anyhow::Error>> {
-        let client = &self.read_client;
-
-        // Fetch the header and relevant shares via RPC
-        let start_get_block = Instant::now();
-        let header = client
-            .header_get_by_height(height)
-            .await
-            .map_err(into_transient_with_context)?;
-        let fetch_header_time = start_get_block.elapsed();
-        let square_width = header.dah.square_width();
-        trace!(%header, height, time_ms = fetch_header_time.as_millis(), "Got the block header");
-
-        let data_futures_all = Instant::now();
-
-        let rollup_batch_rows_future =
-            client.share_get_namespace_data(&header, self.rollup_batch_namespace.id());
-        let rollup_proof_rows_future =
-            client.share_get_namespace_data(&header, self.rollup_proof_namespace.id());
-
-        let (batch_rows, proof_rows) =
-            tokio::try_join!(rollup_batch_rows_future, rollup_proof_rows_future,)
-                .map_err(into_transient_with_context)?;
-        let fetch_rows_time = data_futures_all.elapsed();
-        trace!(
-            time_ms = data_futures_all.elapsed().as_millis(),
-            "All data futures are resolved"
-        );
-
-        let build_relevant_data_start = std::time::Instant::now();
-        let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
-        let rollup_batch_shares =
-            NamespaceRelevantData::new(self.rollup_batch_namespace.id(), batch_rows);
-
-        let proof_ns_metrics = NamespaceDataMetrics::new(&proof_rows);
-        let rollup_proof_shares =
-            NamespaceRelevantData::new(self.rollup_proof_namespace.id(), proof_rows);
-        let build_relevant_data = build_relevant_data_start.elapsed();
-
-        let total_time = start_get_block.elapsed();
-        trace!(time_ms = total_time.as_millis(), "Get block total");
-
-        sov_metrics::track_metrics(|tracker| {
-            let get_block_measurement = GetBlockMeasurement {
-                height,
-                square_width,
-                fetch_header_time,
-                fetch_rows_time,
-                build_relevant_data,
-                batch_ns_metrics,
-                proof_ns_metrics,
-                total_time,
-            };
-            tracker.submit(get_block_measurement);
-        });
-
-        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
-            .map_err(MaybeRetryable::Permanent)
-    }
-
     async fn get_proofs_at_inner(
         &self,
         height: u64,
@@ -241,13 +176,13 @@ impl DaService for CelestiaService {
 
     #[instrument(skip(self))]
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let f = || async {
-            tokio::time::timeout(self.request_timeout, self.get_block_at_inner(height))
-                .await
-                .map_err(|e| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout: {:?}", e)))
-                .and_then(|result| result)
-        };
-        run_maybe_retryable_async_fn_with_retries(self.backoff_policy, f, "get_block_at").await
+        self.client
+            .get_block_at(
+                height,
+                &self.rollup_batch_namespace,
+                &self.rollup_proof_namespace,
+            )
+            .await
     }
 
     #[instrument(skip(self))]

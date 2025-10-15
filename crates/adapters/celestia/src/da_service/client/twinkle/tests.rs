@@ -103,13 +103,15 @@ async fn test_get_head_block_header() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignored]
+#[ignore]
 async fn test_namespace_data() -> anyhow::Result<()> {
     let twinkle_client = build_client();
 
     let namespace = RollupNamespace::Batch(Namespace::const_v0(*b"sov-mini-i"));
     let height = 8410087;
-    let twinkle_response = twinkle_client.get_namespace_data(namespace, height).await?;
+    let twinkle_response = twinkle_client
+        .get_namespace_data(&namespace, height)
+        .await?;
     println!("Twinkle ROWS: {}", twinkle_response.rows.len());
     let vanilla_raw_client =
         jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;

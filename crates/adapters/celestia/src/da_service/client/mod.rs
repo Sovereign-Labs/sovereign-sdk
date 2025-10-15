@@ -1,6 +1,6 @@
 use crate::da_service::client::standard_node::StandardNodeClient;
 use crate::da_service::client::twinkle::TwinkleClient;
-use crate::types::{RollupNamespace, TmHash};
+use crate::types::{FilteredCelestiaBlock, RollupNamespace, TmHash};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
@@ -47,6 +47,26 @@ impl CelestiaClient {
         match self {
             CelestiaClient::StandardNode(client) => client.get_head_block_header().await,
             CelestiaClient::Twinkle(client) => client.get_head_block_header().await,
+        }
+    }
+
+    pub async fn get_block_at(
+        &self,
+        height: u64,
+        batch_namespace: &RollupNamespace,
+        proof_namespace: &RollupNamespace,
+    ) -> anyhow::Result<FilteredCelestiaBlock> {
+        match self {
+            CelestiaClient::StandardNode(client) => {
+                client
+                    .get_block_at(height, batch_namespace, proof_namespace)
+                    .await
+            }
+            CelestiaClient::Twinkle(client) => {
+                client
+                    .get_block_at(height, batch_namespace, proof_namespace)
+                    .await
+            }
         }
     }
 }

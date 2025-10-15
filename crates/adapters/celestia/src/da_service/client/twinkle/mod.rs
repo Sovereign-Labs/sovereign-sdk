@@ -10,7 +10,7 @@ use crate::da_service::client::twinkle::types::{
     SubmitBlobRequest, TwinkleNamespaceResponse,
 };
 use crate::metrics::BlobSubmitMeasurement;
-use crate::types::{RollupNamespace, TmHash};
+use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace, TmHash};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
@@ -290,7 +290,7 @@ impl TwinkleClient {
 
     pub async fn get_namespace_data(
         &self,
-        namespace: RollupNamespace,
+        namespace: &RollupNamespace,
         height: u64,
     ) -> anyhow::Result<NamespaceData> {
         let mut request = self.client.get(NAMESPACE_DATA_URL);
@@ -298,6 +298,7 @@ impl TwinkleClient {
         request = request.query(&[("height", height)]);
         let namespace = general_purpose::STANDARD.encode(namespace.id().as_bytes());
         request = request.query(&[("namespace", namespace)]);
+        // TODO: Add retry
         let response = request.send().await?;
         let twinkle_namespace_data: TwinkleNamespaceResponse = decode_on_success(response).await?;
         twinkle_namespace_data.try_into().map_err(Into::into)
@@ -313,6 +314,36 @@ impl TwinkleClient {
     #[instrument(skip(self))]
     pub async fn get_block_header_at(&self, height: u64) -> anyhow::Result<CelestiaHeader> {
         self.query_header(Some(height)).await
+    }
+
+    #[instrument(skip(self, batch_namespace, proof_namespace))]
+    pub async fn get_block_at(
+        &self,
+        height: u64,
+        batch_namespace: &RollupNamespace,
+        proof_namespace: &RollupNamespace,
+    ) -> anyhow::Result<FilteredCelestiaBlock> {
+        // TODO: Metrics
+        let header_future = self.query_header(Some(height));
+
+        let rollup_batch_rows_future = self.get_namespace_data(batch_namespace, height);
+        let rollup_proof_rows_future = self.get_namespace_data(proof_namespace, height);
+
+        // Each future will do its own retries
+        let (header, batch_rows, proof_rows) = tokio::try_join!(
+            header_future,
+            rollup_batch_rows_future,
+            rollup_proof_rows_future,
+        )?;
+
+        let rollup_batch_shares = NamespaceRelevantData::new(batch_namespace.id(), batch_rows);
+        let rollup_proof_shares = NamespaceRelevantData::new(proof_namespace.id(), proof_rows);
+
+        Ok(FilteredCelestiaBlock::new_with_short_header(
+            rollup_batch_shares,
+            rollup_proof_shares,
+            header,
+        ))
     }
 }
 
