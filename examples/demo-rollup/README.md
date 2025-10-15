@@ -110,9 +110,9 @@ Once a batch is submitted, the output should also contain the transaction hashes
 
 ```text
 2025-08-06T10:24:30.667058Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-08-06T10:24:30.687784Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321
+2025-08-06T10:24:30.687784Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x0b43d44193a44c27978f1e3df335f9312855fdb653a57409816f5c468e5bb895
 2025-08-06T10:24:30.687803Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
-2025-08-06T10:24:30.701577Z  INFO sov_node_client: Submitted tx hash="0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321"
+2025-08-06T10:24:30.701577Z  INFO sov_node_client: Submitted tx hash="0x0b43d44193a44c27978f1e3df335f9312855fdb653a57409816f5c468e5bb895"
 2025-08-06T10:24:30.701604Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
 2025-08-06T10:24:32.758861Z  INFO sov_node_client: Rollup has processed the submitted batch!
 ```
@@ -122,7 +122,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x0b43d44193a44c27978f1e3df335f9312855fdb653a57409816f5c468e5bb895/events | jq
 [
   {
     "type": "event",
@@ -156,7 +156,7 @@ $ curl -sS http://127.0.0.1:12346/ledger/txs/0x0d6fd50888b9ea54acbb90cc9cb04e8f4
       "type": "moduleRef",
       "name": "Bank"
     },
-    "tx_hash": "0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321"
+    "tx_hash": "0x0b43d44193a44c27978f1e3df335f9312855fdb653a57409816f5c468e5bb895"
   }
 ]
 ```
