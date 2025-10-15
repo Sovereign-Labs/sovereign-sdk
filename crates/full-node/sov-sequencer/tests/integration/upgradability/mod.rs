@@ -88,8 +88,6 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     )
     .await;
 
-    let test_rollup = test_rollup.unwrap();
-
     test_rollup
         .da_service
         .produce_n_blocks_now(5)
@@ -142,7 +140,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         stop_at_height.get()
     );
 
-    let test_rollup = test_rollup.unwrap();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
     let client = test_rollup.client.clone();
@@ -210,8 +207,6 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
     )
     .await;
 
-    let test_rollup = test_rollup.unwrap();
-
     let client = test_rollup.client.clone();
 
     test_rollup
@@ -257,7 +252,6 @@ async fn check_start_at(finalization_blocks: u32) {
     )
     .await;
 
-    let test_rollup = test_rollup.unwrap();
     let client = test_rollup.client.clone();
 
     test_rollup
@@ -358,7 +352,7 @@ async fn create_test_rollup(
     blob_processing_timeout_secs: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
-) -> (Option<TestRollup<TestBlueprint>>, TestUser<TestSpec>) {
+) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let reward_user = TestUser::<TestSpec>::generate(TEST_DEFAULT_USER_BALANCE);
 
     let genesis_config =
@@ -397,13 +391,11 @@ async fn create_test_rollup(
             BlockProducingConfig::Manual,
             None,
             blob_processing_timeout_secs,
-            1,
             MAX_BATCH_EXECUTION_TIME_MILLIS,
             stop_at_rollup_height,
             finalization_blocks,
         )
-        .await
-        .map(|v| v.into_iter().next().unwrap()),
+        .await,
         admin,
     )
 }

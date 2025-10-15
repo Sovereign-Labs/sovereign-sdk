@@ -61,14 +61,11 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
             BlockProducingConfig::Manual,
             None,
             TEST_BLOB_PROCESSING_TIMEOUT,
-            1,
             MAX_BATCH_EXECUTION_TIME_MILLIS,
             None,
             1,
         )
-        .await
-        .map(|v| v.into_iter().next().unwrap())
-        .unwrap(),
+        .await,
         admin,
     )
 }

@@ -16,6 +16,8 @@ use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
+use std::net::SocketAddr;
+use tokio::sync::watch;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 
@@ -24,36 +26,46 @@ fn random_address() -> <S as Spec>::Address {
     pk.pub_key().credential_id().into()
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_replica() {
-    let genesis = test_genesis_source(OperatingMode::Operator);
-    let (da_service, _shutdown_sender) =
-        StorableMockDaService::new_in_memory_periodic(1000, MockAddress::new([0; 32])).await;
+async fn create_da_service() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
+    let (da_service, shutdown_sender) =
+        StorableMockDaService::new_in_memory_periodic(300, MockAddress::new([0; 32])).await;
 
     let addr = start_server(da_service.clone(), "127.0.0.1", 0)
         .await
         .unwrap();
 
-    let key_and_address = read_private_key::<
-        <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec,
-    >("tx_signer_private_key.json");
+    (da_service, shutdown_sender, addr)
+}
 
-    let test_rollup: TestRollup<ExternalMockDemoRollup<Native>> =
-        RollupBuilder::new_with_external_da(
-            genesis,
-            MockDaClientConfig {
-                url: format!("http://{addr}"),
-            },
-        )
-        .start_test_rollup()
-        .await
-        .unwrap();
+async fn start_rollup(
+    is_replica: bool,
+    addr: SocketAddr,
+) -> TestRollup<ExternalMockDemoRollup<Native>> {
+    let genesis = test_genesis_source(OperatingMode::Operator);
+    RollupBuilder::new_with_external_da(
+        is_replica,
+        genesis,
+        MockDaClientConfig {
+            url: format!("http://{addr}"),
+        },
+    )
+    .start_test_rollup()
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_receives_txs_from_da() {
+    let (_, shutdown_sender, addr) = create_da_service().await;
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+
+    let test_rollup = start_rollup(false, addr).await;
+    let replica_test_rollup = start_rollup(true, addr).await;
 
     let token_id = config_gas_token_id();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    da_service.wait_for_height(10).await.unwrap();
-
-    let receiver_addr: <S as Spec>::Address = random_address();
+    let receiver_addr = random_address();
 
     let tx = build_transfer_token_tx::<S>(
         &key_and_address.private_key,
@@ -63,6 +75,8 @@ async fn test_replica() {
         0,
     );
 
+    let height_before_tx = test_rollup.height().await;
+
     test_rollup
         .client
         .client
@@ -70,11 +84,17 @@ async fn test_replica() {
         .await
         .unwrap();
 
-    let receiver_balance = test_rollup
+    test_rollup
+        .wait_for_height(height_before_tx.get() + 5)
+        .await;
+
+    let receiver_balance = replica_test_rollup
         .client
         .get_balance::<S>(&receiver_addr, &token_id, None)
         .await
         .unwrap();
 
     assert_eq!(receiver_balance.0, 100);
+    let _ = test_rollup.shutdown().await;
+    let _ = shutdown_sender.send(());
 }

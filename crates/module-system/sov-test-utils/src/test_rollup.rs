@@ -23,7 +23,6 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
-use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -51,7 +50,7 @@ use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
 };
 use testcontainers::ContainerAsync;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
@@ -125,7 +124,7 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     /// Uses the preferred sequencer with Postgres as a database.
-    pub async fn with_postgres_sequencer(mut self) -> anyhow::Result<Self> {
+    async fn with_postgres_sequencer(mut self) -> anyhow::Result<Self> {
         let postgres =
             create_postgres_container(&self.config.storage.path().join("postgres_data")).await
             .with_context(|| "Failed to start Postgres container. This is most likely because (1) the Docker daemon is not running or (2) Docker Desktop doesn't have file sharing permissions to the repository directory")?;
@@ -372,6 +371,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     fn default_config(
         finalization_blocks: u32,
         storage_path: StoragePath,
+        is_replica: bool,
     ) -> RollupBuilderConfig<R::Spec> {
         RollupBuilderConfig {
             max_allowed_node_distance_behind: 10,
@@ -380,7 +380,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             max_channel_size: 60,
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,
-            sequencer_config: SequencerKindConfig::Preferred(Default::default()),
+            sequencer_config: SequencerKindConfig::Preferred(PreferredSequencerConfig {
+                is_replica,
+                ..Default::default()
+            }),
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
             sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
             aggregated_proof_block_jump: 1,
@@ -405,6 +408,7 @@ where
     R: FullNodeBlueprint<Native, DaService = StorableMockDaClient> + Default + 'static,
 {
     pub fn new_with_external_da(
+        is_replica: bool,
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
     ) -> Self {
@@ -413,7 +417,7 @@ where
         Self {
             genesis,
             da_config,
-            config: Self::default_config(0, storage_path),
+            config: Self::default_config(0, storage_path, is_replica),
             postgres_container_opt: None,
             with_secondary_sequencer: None,
         }
@@ -472,7 +476,7 @@ where
             genesis,
             da_config,
             postgres_container_opt: None,
-            config: Self::default_config(finalization_blocks, storage_path),
+            config: Self::default_config(finalization_blocks, storage_path, false),
             with_secondary_sequencer: None,
         }
     }
@@ -592,103 +596,6 @@ where
         self.da_config.connection_string = MockDaConfig::sqlite_in_dir(self.config.storage.path())
             .expect("storage folder should exist by this time");
         self
-    }
-
-    /// Creates multiple [`TestRollup`] instances with shared database infrastructure.
-    /// The first rollup acts as master, subsequent ones as replicas.
-    /// All instances share the same MockDA sqlite and postgres database.
-    ///
-    /// # Requirements
-    /// - Must be called after `.with_postgres_sequencer()` to set up shared postgres; skipped in
-    ///   contexts that skip postgres tests (i.e. the dev server)
-    /// - Only works with a TempDir currently
-    ///
-    /// # Example
-    /// ```ignore
-    /// let rollups = RollupBuilder::new(genesis, config)
-    ///     .with_postgres_sequencer().await?
-    ///     .start_with_replicas(3).await?; // 1 master + 2 replicas
-    /// ```
-    pub async fn start_with_replicas(
-        self,
-        num_replicas: u64,
-    ) -> anyhow::Result<Vec<TestRollup<R>>> {
-        if num_replicas == 0 {
-            anyhow::bail!("num_replicas must be at least 1 (master + replicas)");
-        }
-
-        // Validate configuration requirements
-        let SequencerKindConfig::Preferred(ref preferred_config) = self.config.sequencer_config
-        else {
-            panic!("Replicas can only be used with Preferred sequencer configuration. Use RollupBuilder::with_preferred_sequencer() first.");
-        };
-
-        if preferred_config.postgres_connection_string.is_none() {
-            panic!("Replicas require shared postgres database. Call .with_postgres_sequencer().await? before .start_with_replicas()");
-        }
-
-        // Create base temp directory for shared infrastructure
-        let base_path = self.config.storage.path();
-        std::fs::create_dir_all(base_path).with_context(|| {
-            format!(
-                "Failed to create storage directory: {}",
-                base_path.display()
-            )
-        })?;
-
-        // Create shared MockDA sqlite file in base directory
-        let shared_da_connection = format!(
-            "sqlite://{}?mode=rwc",
-            base_path.join("shared_mock_da.sqlite").to_string_lossy()
-        );
-        let da_layer = Arc::new(RwLock::new(
-            StorableMockDaLayer::new_from_connection(
-                &shared_da_connection,
-                self.da_config.finalization_blocks,
-            )
-            .await?,
-        ));
-
-        let mut rollups = Vec::new();
-
-        for i in 0..num_replicas {
-            // Create instance-specific storage directory
-            let instance_dir = base_path.join(format!("instance_{i}"));
-            std::fs::create_dir_all(&instance_dir)?;
-
-            // Clone builder configuration for this instance
-            let mut instance_builder = RollupBuilder {
-                genesis: self.genesis.clone(),
-                da_config: MockDaConfig {
-                    connection_string: shared_da_connection.clone(),
-                    da_layer: Some(da_layer.clone()),
-                    ..self.da_config.clone()
-                },
-                config: RollupBuilderConfig {
-                    storage: StoragePath::Tmp(Arc::new(
-                        tempfile::Builder::new().tempdir_in(&instance_dir)?,
-                    )),
-                    ..self.config.clone()
-                },
-                postgres_container_opt: self.postgres_container_opt.clone(),
-                with_secondary_sequencer: None, // No secondary sequencer support in replica mode
-            };
-
-            // Set replica mode for non-master instances
-            if i > 0 {
-                if let SequencerKindConfig::Preferred(ref mut preferred_config) =
-                    instance_builder.config.sequencer_config
-                {
-                    preferred_config.is_replica = true;
-                }
-            }
-
-            // Start this instance
-            let rollup = instance_builder.start().await?;
-            rollups.push(rollup);
-        }
-
-        Ok(rollups)
     }
 }
 
@@ -923,6 +830,22 @@ where
     pub async fn height(&self) -> RollupHeight {
         get_height(&self.client).await.unwrap()
     }
+
+    /// Wait until sequencer reaches a specific height.
+    pub async fn wait_for_height(&self, height: u64) {
+        let mut current_height = get_height(&self.client).await.unwrap();
+        while current_height.get() < height {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            current_height = get_height(&self.client).await.unwrap();
+        }
+    }
+
+    /// Waits until the sequencer advances by the given number of blocks.
+    pub async fn wait_for_next_blocks(&self, delta: u64) {
+        let current_height = get_height(&self.client).await.unwrap();
+        let end_height = current_height.get() + delta;
+        self.wait_for_height(end_height).await;
+    }
 }
 
 impl<R> TestRollup<R>
@@ -953,23 +876,6 @@ where
         });
         let rollup = builder.start().await?;
         Ok(rollup)
-    }
-
-    /// Wait until sequencer reaches a specific height.
-    pub async fn wait_for_height(&self, height: u64) {
-        let mut current_height = get_height(&self.client).await.unwrap();
-        while current_height.get() < height {
-            self.da_service.produce_block_now().await.unwrap();
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            current_height = get_height(&self.client).await.unwrap();
-        }
-    }
-
-    /// Waits until the sequencer advances by the given number of blocks.
-    pub async fn wait_for_next_blocks(&self, delta: u64) {
-        let current_height = get_height(&self.client).await.unwrap();
-        let end_height = current_height.get() + delta;
-        self.wait_for_height(end_height).await;
     }
 }
 
