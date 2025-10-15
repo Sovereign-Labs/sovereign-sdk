@@ -23,6 +23,8 @@ pub struct SigVerificationError {
 /// A digital signature.
 pub trait Signature:
     for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
     + Eq
     + Clone
     + Debug
@@ -49,6 +51,8 @@ pub trait PublicKey:
     + Sync
     + Serialize
     + for<'a> Deserialize<'a>
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
     + UniversalWalletSchema
 {
     /// Returns hashed public key.
