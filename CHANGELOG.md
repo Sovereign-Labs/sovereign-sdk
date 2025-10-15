@@ -3,6 +3,9 @@
         This does not affect the borsh serialization and thus network serialization of transactions, only if you're using `Schema` to serialize transactions,
         i.e with the `web3` SDK
 
+# 2025-10-14
+- #1874 Refactor `scratchpad.rs` into focused submodules for better maintainability.
+
 # 2025-10-13
 - #1876 Use workspace dependencies consistently across all crates. This ensures version consistency and simplifies dependency management.
 - #1851 Implement `debug_traceBlockByNumber` in EVM module.
