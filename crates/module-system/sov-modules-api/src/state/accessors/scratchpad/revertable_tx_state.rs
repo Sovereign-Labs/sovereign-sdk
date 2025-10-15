@@ -4,20 +4,18 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
-use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{
     EventContainer, Kernel as KernelType, Namespace, SlotKey, SlotValue, TypeErasedEvent, User,
 };
 
 use super::super::temp_cache::{CacheLookup, TempCache};
 use super::super::{BorshSerializedSize, StateMetricsProvider, UniversalStateAccessor};
-use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::traits::delegate_version_reader;
 use crate::state::traits::PerBlockCache;
 use crate::{
     AccessoryStateWriter, BasicGasMeter, GasMeter, GasMeteringError, ProvableStateReader,
-    ProvableStateWriter, TxState, VersionReader,
+    ProvableStateWriter, TxState,
 };
 
 #[cfg(feature = "test-utils")]

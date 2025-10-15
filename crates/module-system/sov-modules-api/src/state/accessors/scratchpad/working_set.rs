@@ -4,7 +4,6 @@
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
-use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{EventContainer, Namespace, SlotKey, SlotValue, TypeErasedEvent};
 
 use super::super::checkpoints::StateCheckpoint;
@@ -14,16 +13,13 @@ use super::super::{
     BorshSerializedSize, StateMetricsProvider, StateProvider, UniversalStateAccessor,
 };
 use super::TxScratchpad;
-use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::traits::{delegate_version_reader, PerBlockCache};
 use crate::transaction::{
     transaction_consumption_helper, AuthenticatedTransactionData, PriorityFeeBips,
     TransactionConsumption,
 };
-use crate::{
-    Amount, BasicGasMeter, Gas, GasInfo, GasMeter, GasMeteringError, GetGasPrice, VersionReader,
-};
+use crate::{Amount, BasicGasMeter, Gas, GasInfo, GasMeter, GasMeteringError, GetGasPrice};
 
 #[cfg(feature = "test-utils")]
 use crate::GasArray;

@@ -3,7 +3,6 @@
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
-use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_rollup_interface::stf::ExecutionContext;
 use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
 
@@ -14,10 +13,9 @@ use super::super::{
     BorshSerializedSize, StateMetricsProvider, StateProvider, UniversalStateAccessor,
 };
 use super::PreExecWorkingSet;
-use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::traits::{delegate_version_reader, PerBlockCache};
-use crate::{BasicGasMeter, GasMeter, VersionReader};
+use crate::{BasicGasMeter, GasMeter};
 
 /// Transaction-level state accumulator without gas metering.
 ///

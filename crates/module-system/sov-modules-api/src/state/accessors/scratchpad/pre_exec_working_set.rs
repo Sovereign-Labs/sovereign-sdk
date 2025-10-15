@@ -1,15 +1,13 @@
 //! Pre-execution working set implementation.
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
-use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{Namespace, SlotKey, SlotValue};
 
 use super::super::{StateMetricsProvider, StateProvider, UniversalStateAccessor};
 use super::TxScratchpad;
-use crate::capabilities::RollupHeight;
 use crate::module::Spec;
 use crate::state::traits::delegate_version_reader;
-use crate::{BasicGasMeter, Gas, GasMeter, GasMeteringError, GetGasPrice, VersionReader};
+use crate::{BasicGasMeter, Gas, GasMeter, GasMeteringError, GetGasPrice};
 
 /// A working set that can be used to charge gas for pre transaction execution checks.
 pub struct PreExecWorkingSet<S: Spec, I: StateProvider<S>> {

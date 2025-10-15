@@ -554,16 +554,16 @@ pub trait VersionReader {
 /// Helper macro to delegate VersionReader implementation to an inner field.
 macro_rules! delegate_version_reader {
     ($ty:ty $(where [$($bounds:tt)*])? => $($field:tt).+) => {
-        impl$(<$($bounds)*>)? VersionReader for $ty {
-            fn rollup_height_to_access(&self) -> RollupHeight {
+        impl$(<$($bounds)*>)? $crate::state::VersionReader for $ty {
+            fn rollup_height_to_access(&self) -> $crate::capabilities::RollupHeight {
                 self.$($field).+.rollup_height_to_access()
             }
 
-            fn current_visible_slot_number(&self) -> VisibleSlotNumber {
+            fn current_visible_slot_number(&self) -> sov_rollup_interface::common::VisibleSlotNumber {
                 self.$($field).+.current_visible_slot_number()
             }
 
-            fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
+            fn max_allowed_slot_number_to_access(&self) -> sov_rollup_interface::common::SlotNumber {
                 self.$($field).+.max_allowed_slot_number_to_access()
             }
         }
