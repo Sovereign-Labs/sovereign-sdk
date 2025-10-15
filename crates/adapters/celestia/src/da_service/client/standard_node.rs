@@ -1,6 +1,7 @@
 use crate::da_service::into_transient_with_context;
 use crate::metrics::{
-    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, NamespaceDataMetrics,
+    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
+    NamespaceDataMetrics,
 };
 use crate::types::{
     FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace, TmHash, APP_VERSION,
@@ -193,13 +194,14 @@ impl StandardNodeClient {
         &self,
         height: u64,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
-        let client = &self.read_client;
         let start = std::time::Instant::now();
-        let result =
-            tokio::time::timeout(self.request_timeout, client.header_get_by_height(height))
-                .await
-                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-                .map_err(into_transient_with_context);
+        let result = tokio::time::timeout(
+            self.request_timeout,
+            self.read_client.header_get_by_height(height),
+        )
+        .await
+        .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+        .map_err(into_transient_with_context);
         let measurement = GetBlockHeaderMeasurement {
             height,
             fetch_header_time: start.elapsed(),
@@ -215,12 +217,20 @@ impl StandardNodeClient {
     async fn get_head_block_header_inner(
         &self,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
-        let header = self
-            .read_client
-            .header_network_head()
-            .await
-            .map_err(into_transient_with_context)?;
-        Ok(CelestiaHeader::from(header))
+        let start = std::time::Instant::now();
+        let result =
+            tokio::time::timeout(self.request_timeout, self.read_client.header_network_head())
+                .await
+                .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
+                .map_err(into_transient_with_context);
+        let is_success = result.is_ok();
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(GetChainHeadMeasurement {
+                fetch_header_time: start.elapsed(),
+                is_success,
+            });
+        });
+        Ok(CelestiaHeader::from(result?))
     }
 
     #[instrument(skip(self))]
