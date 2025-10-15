@@ -8,7 +8,10 @@ use crate::da_service::client::twinkle::types::{
     BlobDataResponseItem, BlobStatus, BlobStatusResponse, FeePriority, GetAllBlobsRequest,
     HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest, TwinkleNamespaceResponse,
 };
-use crate::metrics::{BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement, NamespaceDataMetrics};
+use crate::metrics::{
+    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
+    NamespaceDataMetrics,
+};
 use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace, TmHash};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
@@ -86,9 +89,9 @@ impl TwinkleClient {
             let response = request.send().await?;
             decode_on_success(response).await
         })
-            .retry(&self.backoff_policy)
-            .await
-            .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
+        .retry(&self.backoff_policy)
+        .await
+        .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
 
     #[instrument(skip(self, blob, namespace), fields(namespace = %namespace.ns_type()))]
@@ -275,8 +278,9 @@ impl TwinkleClient {
             let result = async {
                 let response = request.send().await?;
                 decode_on_success(response).await
-            }.await;
-            let fetch_header_time = start.elapsed(),
+            }
+            .await;
+            let fetch_header_time = start.elapsed();
             let is_success = result.is_ok();
             sov_metrics::track_metrics(|tracker| {
                 match height {
@@ -299,9 +303,9 @@ impl TwinkleClient {
             });
             result
         })
-            .retry(&self.backoff_policy)
-            .await
-            .with_context(|| format!("Getting block header at height={height:?}"))?;
+        .retry(&self.backoff_policy)
+        .await
+        .with_context(|| format!("Getting block header at height={height:?}"))?;
 
         let HeaderResponse { header, dah } = header_response;
 
@@ -319,7 +323,6 @@ impl TwinkleClient {
     ) -> anyhow::Result<NamespaceData> {
         let namespace_encoded = general_purpose::STANDARD.encode(namespace.id().as_bytes());
         let twinkle_namespace_data: TwinkleNamespaceResponse = (|| async {
-            let start = std::time::Instant::now();
             let mut request = self.client.get(NAMESPACE_DATA_URL);
             request = request.query(&[("network", self.network)]);
             request = request.query(&[("height", height)]);
@@ -327,9 +330,9 @@ impl TwinkleClient {
             let response = request.send().await?;
             decode_on_success(response).await
         })
-            .retry(&self.backoff_policy)
-            .await
-            .with_context(|| format!("Getting namespace data at height={height}"))?;
+        .retry(&self.backoff_policy)
+        .await
+        .with_context(|| format!("Getting namespace data at height={height}"))?;
 
         twinkle_namespace_data.try_into().map_err(Into::into)
     }
