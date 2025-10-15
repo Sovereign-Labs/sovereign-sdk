@@ -8,7 +8,7 @@ use crate::da_service::client::twinkle::types::{
     BlobDataResponseItem, BlobStatus, BlobStatusResponse, FeePriority, GetAllBlobsRequest,
     HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest, TwinkleNamespaceResponse,
 };
-use crate::metrics::BlobSubmitMeasurement;
+use crate::metrics::{BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics};
 use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace, TmHash};
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
@@ -19,6 +19,7 @@ use celestia_types::row_namespace_data::NamespaceData;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
 use tokio::sync::oneshot;
+use tokio::time::Instant;
 use tracing::instrument;
 
 const HEADER_URL: &str = "https://t.tech/v0/header";
@@ -325,9 +326,8 @@ impl TwinkleClient {
         batch_namespace: &RollupNamespace,
         proof_namespace: &RollupNamespace,
     ) -> anyhow::Result<FilteredCelestiaBlock> {
-        // TODO: Metrics
+        let start_get_block = Instant::now();
         let header_future = self.query_header(Some(height));
-
         let rollup_batch_rows_future = self.get_namespace_data(batch_namespace, height);
         let rollup_proof_rows_future = self.get_namespace_data(proof_namespace, height);
 
@@ -337,9 +337,37 @@ impl TwinkleClient {
             rollup_batch_rows_future,
             rollup_proof_rows_future,
         )?;
+        let fetch_rows_time = start_get_block.elapsed();
+        let square_width = header.dah.square_width();
+        tracing::trace!(
+            time_ms = start_get_block.elapsed().as_millis(),
+            "All data futures are resolved"
+        );
 
+        let build_relevant_data_start = std::time::Instant::now();
+        let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
         let rollup_batch_shares = NamespaceRelevantData::new(batch_namespace.id(), batch_rows);
+        let proof_ns_metrics = NamespaceDataMetrics::new(&proof_rows);
         let rollup_proof_shares = NamespaceRelevantData::new(proof_namespace.id(), proof_rows);
+        let build_relevant_data = build_relevant_data_start.elapsed();
+
+        let total_time = start_get_block.elapsed();
+
+        tracing::trace!(time_ms = total_time.as_millis(), "Get block total");
+
+        sov_metrics::track_metrics(|tracker| {
+            let get_block_measurement = GetBlockMeasurement {
+                height,
+                square_width,
+                fetch_header_time: Default::default(),
+                fetch_rows_time,
+                build_relevant_data,
+                batch_ns_metrics,
+                proof_ns_metrics,
+                total_time,
+            };
+            tracker.submit(get_block_measurement);
+        });
 
         Ok(FilteredCelestiaBlock::new_with_short_header(
             rollup_batch_shares,
