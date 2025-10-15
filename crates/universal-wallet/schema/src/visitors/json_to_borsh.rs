@@ -30,6 +30,7 @@ pub enum EncodeError {
     #[error(transparent)]
     UnresolvedType(#[from] ResolutionError),
     #[error("Expected type or field {name}, but it was not present")]
+    // Optional fields are synthesized as JSON nulls in visit_struct; other patterns still error until explicitly supported.
     MissingType { name: String },
     #[error("Type {container_name} did not have serde metadata present in the schema. The schema is either malformed or does not support JSON parsing.")]
     MissingMetadata { container_name: String },
@@ -224,7 +225,7 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
         &mut self,
         s: &Struct<L>,
         schema: &impl TypeResolver<LinkingScheme = L, Metadata = ContainerSerdeMetadata>,
-        mut context: Context<L>,
+        context: Context<L>,
     ) -> Self::ReturnType {
         let mut json_fields = match context.value {
             Value::Object(o) => o,
@@ -245,19 +246,24 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
 
         for (field, field_serde) in s.fields.iter().zip(serde_metadata.fields_or_variants) {
             // TODO: ensure skip is handled correctly
-            let json_value =
-                json_fields
-                    .remove(&field_serde.name)
-                    .ok_or(EncodeError::MissingType {
-                        name: format!("{}.{}", s.type_name, field.display_name),
-                    })?;
             let inner_type = schema.resolve_or_err(&field.value)?;
-            context.value = json_value;
-            context.current_link = field.value.clone();
+            let field_value = match json_fields.remove(&field_serde.name) {
+                Some(value) => value,
+                None => {
+                    if let Ty::Option { .. } = &inner_type {
+                        // Optional fields may be omitted; fabricating JSON null lets visit_option encode the 0-tag None variant.
+                        Value::Null
+                    } else {
+                        return Err(EncodeError::MissingType {
+                            name: format!("{}.{}", s.type_name, field.display_name),
+                        });
+                    }
+                }
+            };
             // TODO: adjust `Context` so it can return references to views over the full JSON,
-            // without needing to clone. This is slightly annoying to ensure lifetimes are
+            // without needing to move data out. This is slightly annoying to ensure lifetimes are
             // correctly managed. Easiest solution is likely using JSON paths using value.pointer()
-            inner_type.visit(schema, self, context.clone())?;
+            inner_type.visit(schema, self, Context::from_val(field_value, &field.value))?;
         }
         if !json_fields.is_empty() {
             return Err(EncodeError::UnusedInput {
