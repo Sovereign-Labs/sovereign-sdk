@@ -190,8 +190,7 @@ impl Ord for Risc0PublicKey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let self_bytes = self.pub_key.as_bytes();
         let other_bytes = other.pub_key.as_bytes();
-        let self_bytes_cmp = self_bytes.cmp(other_bytes);
-        self_bytes_cmp
+        self_bytes.cmp(other_bytes)
     }
 }
 
