@@ -20,18 +20,13 @@ impl CelestiaClient {
         &self,
         blob: &[u8],
         namespace: RollupNamespace,
-        signer: &CelestiaAddress,
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         match self {
             CelestiaClient::StandardNode(client) => {
-                client
-                    .submit_blob_to_namespace(blob, namespace, signer)
-                    .await
+                client.submit_blob_to_namespace(blob, namespace).await
             }
             CelestiaClient::Twinkle(client) => {
-                client
-                    .submit_blob_to_namespace(blob, namespace, signer)
-                    .await
+                client.submit_blob_to_namespace(blob, namespace).await
             }
         }
     }
@@ -78,6 +73,13 @@ impl CelestiaClient {
         match self {
             CelestiaClient::StandardNode(client) => client.get_blobs_at(height, namespace).await,
             CelestiaClient::Twinkle(client) => client.get_blobs_at(height, namespace).await,
+        }
+    }
+
+    pub fn get_signer(&self) -> CelestiaAddress {
+        match self {
+            CelestiaClient::StandardNode(client) => client.signer_address.clone(),
+            CelestiaClient::Twinkle(client) => client.signer_address.clone(),
         }
     }
 }

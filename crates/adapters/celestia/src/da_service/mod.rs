@@ -6,13 +6,9 @@ use std::fmt::Debug;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use celestia_rpc::prelude::*;
 use celestia_types::nmt::Namespace;
-use celestia_types::state::Address;
 use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
-use sov_rollup_interface::node::da::{
-    run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
-};
+use sov_rollup_interface::node::da::{DaService, MaybeRetryable, SubmitBlobReceipt};
 use tokio::sync::oneshot;
 use tracing::instrument;
 
@@ -23,7 +19,6 @@ pub use crate::da_service::client::CelestiaClient;
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, RollupNamespace,
 };
-use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 
@@ -34,7 +29,6 @@ pub struct CelestiaService {
     client: CelestiaClient,
     rollup_batch_namespace: RollupNamespace,
     rollup_proof_namespace: RollupNamespace,
-    signer_address: CelestiaAddress,
     safe_lead_time: Duration,
 }
 
@@ -43,14 +37,12 @@ impl CelestiaService {
         submit_client: CelestiaClient,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
-        signer_address: CelestiaAddress,
         safe_lead_time: Duration,
     ) -> Self {
         Self {
             client: submit_client,
             rollup_batch_namespace: RollupNamespace::Batch(rollup_batch_namespace),
             rollup_proof_namespace: RollupNamespace::Proof(rollup_proof_namespace),
-            signer_address,
             safe_lead_time,
         }
     }
@@ -58,50 +50,12 @@ impl CelestiaService {
 
 impl CelestiaService {
     pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
-        let backoff_policy = config.get_backoff_policy();
-
-        let submit_client = config.construct_celestia_client();
-
-        // TODO: Move this into client.
-        let read_client = config.construct_rpc_client();
-        let fetched_address = run_maybe_retryable_async_fn_with_retries(
-            backoff_policy,
-            || async {
-                read_client
-                    .state_account_address()
-                    .await
-                    .map_err(into_transient_with_context)
-            },
-            "state_account_address",
-        )
-        .await
-        .expect("Failed to query state.AccountAddress to retrieve signer address");
-
-        let fetched_signer = match fetched_address {
-            Address::AccAddress(acc) => CelestiaAddress(acc),
-            Address::ValAddress(addr) => {
-                panic!("Need account address, got validator: {addr}");
-            }
-            Address::ConsAddress(addr) => {
-                panic!("Need account address, got consensus node: {addr}");
-            }
-        };
-        tracing::debug!(address = %fetched_signer, "Fetched signer.");
-
-        if let Some(config_signer_address) = config.signer_address {
-            if config_signer_address != fetched_signer {
-                panic!(
-                    "Signer address in in config {config_signer_address} does not match signer address fetched from node {fetched_signer}"
-                );
-            }
-        }
-        //
+        let submit_client = config.construct_celestia_client().await;
 
         Self::with_client(
             submit_client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
-            fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
         )
     }
@@ -187,7 +141,7 @@ impl DaService for CelestiaService {
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
         self.client
-            .submit_blob_to_namespace(blob, self.rollup_batch_namespace, &self.signer_address)
+            .submit_blob_to_namespace(blob, self.rollup_batch_namespace)
             .await
     }
 
@@ -198,11 +152,7 @@ impl DaService for CelestiaService {
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
         self.client
-            .submit_blob_to_namespace(
-                aggregated_proof,
-                self.rollup_proof_namespace,
-                &self.signer_address,
-            )
+            .submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
             .await
     }
 
@@ -214,7 +164,7 @@ impl DaService for CelestiaService {
     }
 
     async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
-        self.signer_address.clone()
+        self.client.get_signer()
     }
 }
 

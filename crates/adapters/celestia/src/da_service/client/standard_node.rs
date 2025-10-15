@@ -8,6 +8,7 @@ use crate::CelestiaHeader;
 use backon::ExponentialBuilder;
 use celestia_rpc::{BlobClient, HeaderClient, ShareClient, StateClient, TxPriority};
 use celestia_types::blob::Blob as JsonBlob;
+use celestia_types::state::Address;
 use jsonrpsee::http_client::HttpClient;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::{
@@ -19,7 +20,7 @@ use std::time::Duration;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::{oneshot, Mutex};
 use tokio::time::Instant;
-use tracing::{debug, info, instrument, trace};
+use tracing::instrument;
 
 /// Client that communicates with standard celestia data availability nodes,
 /// such as light, bridge or full node.
@@ -31,21 +32,54 @@ pub struct StandardNodeClient {
     // Separate request timeout, because jsonrpsee is sloppy about it.
     request_timeout: Duration,
     tx_priority: Option<TxPriority>,
+    pub(crate) signer_address: CelestiaAddress,
 }
 
 impl StandardNodeClient {
-    pub fn new(
+    pub async fn new(
         client: HttpClient,
         tx_priority: Option<TxPriority>,
         request_timeout: Duration,
         backoff_policy: ExponentialBuilder,
+        signer_address: Option<CelestiaAddress>,
     ) -> Self {
+        let fetched_address = run_maybe_retryable_async_fn_with_retries(
+            backoff_policy,
+            || async {
+                client
+                    .state_account_address()
+                    .await
+                    .map_err(into_transient_with_context)
+            },
+            "state_account_address",
+        )
+        .await
+        .expect("Failed to query state.AccountAddress to retrieve signer address");
+        let fetched_signer = match fetched_address {
+            Address::AccAddress(acc) => CelestiaAddress(acc),
+            Address::ValAddress(addr) => {
+                panic!("Need account address, got validator: {addr}");
+            }
+            Address::ConsAddress(addr) => {
+                panic!("Need account address, got consensus node: {addr}");
+            }
+        };
+        tracing::debug!(address = %fetched_signer, "Fetched signer.");
+        if let Some(config_signer_address) = signer_address {
+            if config_signer_address != fetched_signer {
+                panic!(
+                    "Signer address in in config {config_signer_address} does not match signer address fetched from node {fetched_signer}"
+                );
+            }
+        }
+
         Self {
             submit_client: Arc::new(Mutex::new(client.clone())),
             read_client: Arc::new(client),
             backoff_policy,
             request_timeout,
             tx_priority,
+            signer_address: fetched_signer,
         }
     }
 
@@ -68,7 +102,7 @@ impl StandardNodeClient {
         .expect("Bug in CelestiaAdapter");
 
         let blob_hash = HexHash::new(*blob.commitment.hash());
-        debug!(
+        tracing::debug!(
             commitment = %blob_hash,
             bytes,
             "Submitting a blob"
@@ -117,7 +151,7 @@ impl StandardNodeClient {
             tendermint::Hash::from_str(&tx_response.txhash)
                 .expect("Failed to decode hash from `TxResponse`"),
         );
-        info!(
+        tracing::info!(
             da_height = tx_response.height,
             tx_hash = %tx_hash,
             code = %tx_response.code,
@@ -141,12 +175,11 @@ impl StandardNodeClient {
         &self,
         blob: &[u8],
         namespace: RollupNamespace,
-        signer: &CelestiaAddress,
     ) -> Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         let (tx, rx) = oneshot::channel();
         let res = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
-            || self.submit_blob_to_namespace_inner(blob, namespace, signer),
+            || self.submit_blob_to_namespace_inner(blob, namespace, &self.signer_address),
             "send_transaction",
         )
         .await;
@@ -215,7 +248,7 @@ impl StandardNodeClient {
             .map_err(into_transient_with_context)?;
         let fetch_header_time = start_get_block.elapsed();
         let square_width = header.dah.square_width();
-        trace!(%header, height, time_ms = fetch_header_time.as_millis(), "Got the block header");
+        tracing::trace!(%header, height, time_ms = fetch_header_time.as_millis(), "Got the block header");
 
         let data_futures_all = Instant::now();
 
@@ -228,7 +261,7 @@ impl StandardNodeClient {
             tokio::try_join!(rollup_batch_rows_future, rollup_proof_rows_future,)
                 .map_err(into_transient_with_context)?;
         let fetch_rows_time = data_futures_all.elapsed();
-        trace!(
+        tracing::trace!(
             time_ms = data_futures_all.elapsed().as_millis(),
             "All data futures are resolved"
         );
@@ -242,7 +275,7 @@ impl StandardNodeClient {
         let build_relevant_data = build_relevant_data_start.elapsed();
 
         let total_time = start_get_block.elapsed();
-        trace!(time_ms = total_time.as_millis(), "Get block total");
+        tracing::trace!(time_ms = total_time.as_millis(), "Get block total");
 
         sov_metrics::track_metrics(|tracker| {
             let get_block_measurement = GetBlockMeasurement {

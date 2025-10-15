@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #[cfg(test)]
 mod tests;
 mod types;
@@ -53,6 +52,7 @@ pub struct TwinkleClient {
     total_timeout: std::time::Duration,
     backoff_policy: ExponentialBuilder,
     fee_priority: Option<FeePriority>,
+    pub(crate) signer_address: CelestiaAddress,
 }
 
 impl TwinkleClient {
@@ -63,6 +63,7 @@ impl TwinkleClient {
         total_timeout: std::time::Duration,
         backoff_policy: ExponentialBuilder,
         fee_priority: Option<FeePriority>,
+        signer_address: CelestiaAddress,
     ) -> Self {
         Self {
             client,
@@ -71,6 +72,7 @@ impl TwinkleClient {
             total_timeout,
             backoff_policy,
             fee_priority,
+            signer_address,
         }
     }
 
@@ -88,13 +90,11 @@ impl TwinkleClient {
         .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
 
-    #[instrument(skip(self, blob, _signer, namespace), fields(namespace = %namespace.ns_type()))]
+    #[instrument(skip(self, blob, namespace), fields(namespace = %namespace.ns_type()))]
     async fn submit_blob_waiting_inclusion(
         &self,
         blob: Vec<u8>,
         namespace: RollupNamespace,
-        // TODO: Use it when it becomes supported
-        _signer: CelestiaAddress,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
         let bytes = blob.len();
@@ -110,6 +110,7 @@ impl TwinkleClient {
             asynchronous: true,
             network: self.network,
             fee_priority: self.fee_priority,
+            // TODO: self.signer_address will come here somewhere when support is added
         };
 
         let submit_start = std::time::Instant::now();
@@ -247,20 +248,14 @@ impl TwinkleClient {
         &self,
         blob: &[u8],
         namespace: RollupNamespace,
-        signer: &CelestiaAddress,
     ) -> oneshot::Receiver<anyhow::Result<SubmitBlobReceipt<TmHash>>> {
         let (tx, rx) = oneshot::channel();
         let client = self.clone();
         let blob = blob.to_vec();
-        let signer = signer.clone();
 
         let _join_handle = tokio::task::spawn(async move {
-            tx.send(
-                client
-                    .submit_blob_waiting_inclusion(blob, namespace, signer)
-                    .await,
-            )
-            .expect("Failed to propagate blob submission result into a channel");
+            tx.send(client.submit_blob_waiting_inclusion(blob, namespace).await)
+                .expect("Failed to propagate blob submission result into a channel");
         });
         rx
     }

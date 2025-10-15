@@ -30,6 +30,7 @@ fn build_client() -> TwinkleClient {
         TOTAL_TIMEOUT,
         backoff_policy,
         Some(FeePriority::Fast),
+        CelestiaAddress::from_str(ADDR_1).unwrap(),
     )
 }
 
@@ -42,17 +43,11 @@ async fn async_blob_submit() -> anyhow::Result<()> {
 
     let twinkle_client = build_client();
 
-    let celestia_address = CelestiaAddress::from_str(ADDR_1)?;
-
     let blob: Vec<u8> = b"hello-from-sov-rust".to_vec();
 
     let start = std::time::Instant::now();
     let rx = twinkle_client
-        .submit_blob_to_namespace(
-            &blob,
-            RollupNamespace::Batch(BATCH_NAMESPACE),
-            &celestia_address,
-        )
+        .submit_blob_to_namespace(&blob, RollupNamespace::Batch(BATCH_NAMESPACE))
         .await;
     println!("A: {:?}", start.elapsed());
     let res = rx.await?;

@@ -138,7 +138,7 @@ impl CelestiaConfig {
         .expect("RPC HttpClient initialization should be valid")
     }
 
-    pub(crate) fn construct_celestia_client(&self) -> CelestiaClient {
+    pub(crate) async fn construct_celestia_client(&self) -> CelestiaClient {
         if let Some(twinkle_config) = &self.twinkle {
             let connect_timeout = Duration::from_secs(self.connect_timeout_secs.get());
             let pool_idle_timeout = Duration::from_secs(self.pool_idle_timeout_secs.get());
@@ -154,17 +154,24 @@ impl CelestiaConfig {
                 twinkle_config.total_timeout(),
                 self.get_backoff_policy(),
                 self.tx_priority.clone().map(Into::into),
+                self.signer_address
+                    .clone()
+                    .expect("`signer_address` needs to be explicitly provided for Twinkle"),
             );
             CelestiaClient::Twinkle(twinkle_client)
         } else {
             let rpc_client = self.construct_rpc_client();
 
-            CelestiaClient::StandardNode(StandardNodeClient::new(
-                rpc_client,
-                self.tx_priority.clone().map(Into::into),
-                self.request_timeout(),
-                self.get_backoff_policy(),
-            ))
+            CelestiaClient::StandardNode(
+                StandardNodeClient::new(
+                    rpc_client,
+                    self.tx_priority.clone().map(Into::into),
+                    self.request_timeout(),
+                    self.get_backoff_policy(),
+                    self.signer_address.clone(),
+                )
+                .await,
+            )
         }
     }
 }
