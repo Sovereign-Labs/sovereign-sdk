@@ -58,8 +58,10 @@ mod tests {
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
-    use sov_test_utils::postgres::connection_string_from_postgres_container;
-    use sov_test_utils::postgres::create_postgres_container;
+    use sov_test_utils::postgres::{
+        connection_string_from_postgres_container, create_postgres_container,
+    };
+
     use std::num::NonZero;
     use tokio::sync::mpsc;
 
@@ -127,10 +129,12 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications() {
         let dir = tempfile::tempdir().unwrap();
-        let postgres = create_postgres_container(&dir.path().join("postgres_data"))
-            .await
-            .unwrap();
+        let Some(postgres) = create_postgres_container(&dir.path().join("postgres_data")).await
+        else {
+            return;
+        };
 
+        let postgres = postgres.unwrap();
         let postgres_connection_string = connection_string_from_postgres_container(&postgres)
             .await
             .unwrap();

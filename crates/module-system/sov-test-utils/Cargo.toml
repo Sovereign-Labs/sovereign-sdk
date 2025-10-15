@@ -28,6 +28,8 @@ serde_json = { workspace = true }
 testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
+num_cpus = { workspace = true }
+
 
 ethereum-types = { workspace = true }
 ethers = { workspace = true }

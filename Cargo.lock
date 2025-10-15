@@ -13016,6 +13016,7 @@ dependencies = [
  "ethers",
  "hex",
  "jsonschema",
+ "num_cpus",
  "reqwest 0.12.23",
  "rockbound",
  "schemars 0.8.22",

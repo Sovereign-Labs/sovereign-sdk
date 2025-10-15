@@ -49,6 +49,9 @@ async fn start_rollup(
             url: format!("http://{addr}"),
         },
     )
+    .with_postgres_sequencer()
+    .await
+    .unwrap()
     .start_test_rollup()
     .await
     .unwrap()

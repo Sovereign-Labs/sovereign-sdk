@@ -41,18 +41,46 @@ impl Image for PostgresImage {
 /// Creates a container with a PostgreSQL database.
 pub async fn create_postgres_container(
     dir: &Path,
-) -> anyhow::Result<ContainerAsync<PostgresImage>> {
+) -> Option<anyhow::Result<ContainerAsync<PostgresImage>>> {
+    if should_skip_postgres() {
+        return None;
+    }
+
     let postgres_data_dir = dir.join("postgres_data");
     debug!(?postgres_data_dir, "Using Postgres data directory");
-    std::fs::create_dir_all(&postgres_data_dir)?;
 
-    Ok(PostgresImage
-        .with_mount(Mount::bind_mount(
-            postgres_data_dir.to_string_lossy(),
-            "/var/lib/postgresql/data",
-        ))
-        .start()
-        .await?)
+    let res = async {
+        std::fs::create_dir_all(&postgres_data_dir)?;
+        let img = PostgresImage
+            .with_mount(Mount::bind_mount(
+                postgres_data_dir.to_string_lossy(),
+                "/var/lib/postgresql/data",
+            ))
+            .start()
+            .await?;
+        Ok(img)
+    };
+
+    Some(res.await)
+}
+
+fn should_skip_postgres() -> bool {
+    // We skip all docker (i.e. postgres) tests on our dev server due to firewall false positives
+    // bricking the machine.
+    // The dev machine has 96 threads, which we detect to disable postgres. Currently no dev or CI
+    // setup uses a machine of exactly this size, though if this ever changes this will cause
+    // false positives.
+    const DEV_SERVER_CPUS: usize = 96;
+
+    if num_cpus::get() == DEV_SERVER_CPUS {
+        return true;
+    }
+
+    if std::env::var("SOV_TEST_SKIP_DOCKER") == Ok("1".to_string()) {
+        return true;
+    }
+
+    false
 }
 
 /// Returns the connection string for the PostgreSQL.
