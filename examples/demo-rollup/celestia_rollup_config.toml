@@ -26,6 +26,11 @@ request_timeout_secs = 18
 # Default: Medium
 #tx_priority = "High"
 
+# Optional signer address. If not specified, will be pulled from connected celestia node
+# If specified, but the node has different signer configure client initialization will panic
+# Mandatory for Twinkle client.
+# signer_address = "celestia1a68m2l85zn5xh0l07clk4rfvnezhywc53g8x7s"
+
 # Optional section, enablng Twinkle clean
 # [twinkle]
 # # Possible values are "mocha" or "mainnet"

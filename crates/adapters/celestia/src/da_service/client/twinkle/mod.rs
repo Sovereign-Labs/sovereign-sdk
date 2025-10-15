@@ -32,12 +32,12 @@ const NAMESPACE_DATA_URL: &str = "https://t.tech/v0/share/get_namespace_data";
 //     + Header: Compact header
 //     + Header: DAH
 //     + Block: Namespace data
-//     - Get raw blob data
+//     + Get raw blob data
 //  - Authored blobs
 //  ~ Metrics: can be verified with actual rollup
 //  - Unit tests with mockserver
 //  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
-//  - Config defaults
+//  ~ Config defaults
 // ---------
 
 /// Client for [Twinkle](https://t.tech/) service.
@@ -290,14 +290,19 @@ impl TwinkleClient {
         namespace: &RollupNamespace,
         height: u64,
     ) -> anyhow::Result<NamespaceData> {
-        let mut request = self.client.get(NAMESPACE_DATA_URL);
-        request = request.query(&[("network", self.network)]);
-        request = request.query(&[("height", height)]);
-        let namespace = general_purpose::STANDARD.encode(namespace.id().as_bytes());
-        request = request.query(&[("namespace", namespace)]);
-        // TODO: Add retry
-        let response = request.send().await?;
-        let twinkle_namespace_data: TwinkleNamespaceResponse = decode_on_success(response).await?;
+        let namespace_encoded = general_purpose::STANDARD.encode(namespace.id().as_bytes());
+        let twinkle_namespace_data: TwinkleNamespaceResponse = (|| async {
+            let mut request = self.client.get(NAMESPACE_DATA_URL);
+            request = request.query(&[("network", self.network)]);
+            request = request.query(&[("height", height)]);
+            request = request.query(&[("namespace", &namespace_encoded)]);
+            let response = request.send().await?;
+            decode_on_success(response).await
+        })
+        .retry(&self.backoff_policy)
+        .await
+        .with_context(|| format!("Getting namespace data at height={height}"))?;
+
         twinkle_namespace_data.try_into().map_err(Into::into)
     }
 

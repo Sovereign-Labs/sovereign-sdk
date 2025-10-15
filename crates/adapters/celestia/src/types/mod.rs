@@ -1,7 +1,6 @@
 mod error;
 
 use std::convert::Infallible;
-use std::fmt::Formatter;
 use std::ops::Range;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -253,7 +252,6 @@ impl FilteredCelestiaBlock {
         }
     }
 
-    // TODO: Should we return extended header from Twinkle?
     #[cfg(feature = "native")]
     pub(crate) fn new_with_short_header(
         rollup_batch_data: NamespaceRelevantData,
@@ -334,7 +332,7 @@ pub enum RollupNamespaceType {
 }
 
 impl std::fmt::Display for RollupNamespaceType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RollupNamespaceType::Batch => {
                 write!(f, "batch")
