@@ -38,7 +38,7 @@ fn build_client() -> TwinkleClient {
 #[ignore]
 async fn async_blob_submit() -> anyhow::Result<()> {
     sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "debug,hyper=info,sov_celestia_adapter=trace",
+        "debug,hyper=info,sov_celestia_adapter=trace,reqwest=info",
     );
 
     let twinkle_client = build_client();

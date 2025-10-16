@@ -5,8 +5,9 @@ mod types;
 use crate::celestia::CompactHeader;
 use crate::config::Network;
 use crate::da_service::client::twinkle::types::{
-    BlobDataResponseItem, BlobStatus, BlobStatusResponse, FeePriority, GetAllBlobsRequest,
-    HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest, TwinkleNamespaceResponse,
+    serialize_namespace_base_64, BlobDataResponseItem, BlobStatus, BlobStatusResponse, FeePriority,
+    GetAllBlobsRequest, HeaderResponse, SubmitBlobAsyncResponse, SubmitBlobRequest,
+    TwinkleNamespaceResponse,
 };
 use crate::metrics::{
     BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
@@ -17,7 +18,6 @@ use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
 use backon::{ExponentialBuilder, Retryable};
-use base64::{engine::general_purpose, Engine as _};
 use celestia_types::row_namespace_data::NamespaceData;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::node::da::SubmitBlobReceipt;
@@ -32,16 +32,9 @@ const BLOB_GET_ALL_URL: &str = "https://t.tech/v0/blob/get_all";
 const NAMESPACE_DATA_URL: &str = "https://t.tech/v0/share/get_namespace_data";
 
 // TODO for later:
-//  ~ Get block and header compatible with return types of celestia sender
-//     + Header: Compact header
-//     + Header: DAH
-//     + Block: Namespace data
-//     + Get raw blob data
-//  - Authored blobs
-//  ~ Metrics: can be verified with actual rollup
 //  - Unit tests with mockserver
 //  - More granular retry logic: do not retry on 401, 400. Respect throttling, retry on 500 and timeouts
-//  ~ Config defaults
+//  - Rejected reason: is it possible to get info from server
 // ---------
 
 /// Client for [Twinkle](https://t.tech/) service.
@@ -114,7 +107,7 @@ impl TwinkleClient {
             asynchronous: true,
             network: self.network,
             fee_priority: self.fee_priority,
-            // TODO: self.signer_address will come here somewhere when support is added
+            authored: true,
         };
 
         let submit_start = std::time::Instant::now();
@@ -321,7 +314,7 @@ impl TwinkleClient {
         namespace: &RollupNamespace,
         height: u64,
     ) -> anyhow::Result<NamespaceData> {
-        let namespace_encoded = general_purpose::STANDARD.encode(namespace.id().as_bytes());
+        let namespace_encoded = serialize_namespace_base_64(&namespace.id());
         let twinkle_namespace_data: TwinkleNamespaceResponse = (|| async {
             let mut request = self.client.get(NAMESPACE_DATA_URL);
             request = request.query(&[("network", self.network)]);
@@ -412,7 +405,7 @@ impl TwinkleClient {
         namespace: &RollupNamespace,
     ) -> anyhow::Result<Vec<Vec<u8>>> {
         let request_body = GetAllBlobsRequest {
-            namespaces: vec![general_purpose::STANDARD.encode(namespace.id().as_bytes())],
+            namespaces: vec![namespace.id()],
             network: self.network,
             height,
         };

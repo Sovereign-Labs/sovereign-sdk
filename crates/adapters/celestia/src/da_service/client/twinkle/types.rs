@@ -2,6 +2,8 @@ use crate::celestia::{CompactHeader, ProtobufHash};
 use crate::celestia_tm_version;
 use crate::config::{Network, TxPriority};
 use crate::types::{TmHash, APP_VERSION};
+use base64::engine::general_purpose;
+use base64::Engine;
 use celestia_types::nmt::{NamespaceProof, NamespacedHash};
 use celestia_types::row_namespace_data::{NamespaceData, RowNamespaceData};
 use celestia_types::{DataAvailabilityHeader, Share};
@@ -41,6 +43,7 @@ pub struct SubmitBlobRequest {
     pub network: Network,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_priority: Option<FeePriority>,
+    pub authored: bool,
 }
 
 fn serialize_namespace_hex<S>(
@@ -50,11 +53,31 @@ fn serialize_namespace_hex<S>(
 where
     S: Serializer,
 {
-    // TODO: Should we use `as_bytes()` ??
     let bytes = namespace
         .id_v0()
         .ok_or_else(|| serde::ser::Error::custom("Namespace is not v0"))?;
     serializer.serialize_str(&hex::encode(bytes))
+}
+
+pub(crate) fn serialize_namespace_base_64(namespace: &celestia_types::nmt::Namespace) -> String {
+    // Use bytes here opposed to `id_v0`, because this is what is expected.
+    let bytes = namespace.as_bytes();
+    general_purpose::STANDARD.encode(bytes)
+}
+
+fn serialize_namespaces_base64<S>(
+    namespaces: &[celestia_types::nmt::Namespace],
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    use serde::ser::SerializeSeq;
+    let mut seq = serializer.serialize_seq(Some(namespaces.len()))?;
+    for namespace in namespaces {
+        seq.serialize_element(&serialize_namespace_base_64(namespace))?;
+    }
+    seq.end()
 }
 
 /// Response from <https://t.tech/docs/v0/blob/POST>
@@ -73,7 +96,6 @@ pub enum BlobStatus {
         #[serde(rename = "txId")]
         transaction_id: HexHash,
     },
-    // TODO: is there some info that we can use?
     Rejected,
 }
 
@@ -307,6 +329,7 @@ pub struct TwinkleRawRowProof {
     nodes: Vec<Vec<u8>>,
     #[serde_as(as = "Option<serde_with::base64::Base64>")]
     #[serde(rename = "leafHash")]
+    // From docs: This field will be empty in case of Inclusion Proof.
     leaf_hash: Option<Vec<u8>>,
     #[serde(rename = "isMaxNamespaceIgnored")]
     is_max_namespace_ignored: bool,
@@ -322,11 +345,9 @@ impl From<TwinkleRawRowProof> for celestia_proto::proof::pb::Proof {
             is_max_namespace_ignored,
         } = value;
         Self {
-            // TODO: Verify this
             start: start.unwrap_or_default(),
             end,
             nodes,
-            // TODO: Verify this
             leaf_hash: leaf_hash.unwrap_or_default(),
             is_max_namespace_ignored,
         }
@@ -373,7 +394,8 @@ impl TryFrom<TwinkleRowNamespaceData> for RowNamespaceData {
 #[serde_as]
 #[derive(Debug, Serialize)]
 pub struct GetAllBlobsRequest {
-    pub namespaces: Vec<String>,
+    #[serde(serialize_with = "serialize_namespaces_base64")]
+    pub namespaces: Vec<celestia_types::nmt::Namespace>,
     pub network: Network,
     pub height: u64,
 }
@@ -383,7 +405,10 @@ pub struct GetAllBlobsRequest {
 pub struct BlobDataResponseItem {
     #[serde_as(as = "serde_with::base64::Base64")]
     pub data: Vec<u8>,
-    //    "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAN6t////////vu8=",
+    // Ignore other fields as they are not used
+    // #[serde_as(as = "serde_with::base64::Base64")]
+    // pub raw_namespace: Vec<u8>,
+    //     "namespace": "AAAAAAAAAAAAAAAAAAAAAAAAAN6t////////vu8=",
     //     "data": "AAAAdHdpbmtsZQ==",
     //     "shareVersion": 0,
     //     "commitment": "1s1WX41x9Ti2I9Uu0vBvxMQ5dAkr1CewS5+0kfm5Q1o=",
