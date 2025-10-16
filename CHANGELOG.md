@@ -1,4 +1,8 @@
 # 2025-10-16
+- #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
+        This was done because there's no guarantees that any field will remain common across all transaction versions (which was the original motiviation for this design).
+
+# 2025-10-16
 - #1878 Add EVM logs soak test
 
 # 2025-10-15
