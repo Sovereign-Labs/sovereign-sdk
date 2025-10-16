@@ -11,7 +11,7 @@ use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::{
-    AuthorizationData, ChainState, HasCapabilities, TransactionAuthorizer, UniquenessData,
+    AuthorizationData, ChainState, TransactionAuthorizer, UniquenessData,
 };
 use sov_modules_api::common::Amount;
 use sov_modules_api::macros::config_value;
@@ -21,8 +21,8 @@ use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
     get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, EventModuleName,
-    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, RuntimeEventProcessor, Spec,
-    StateCheckpoint, StateProvider as _, WorkingSet,
+    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, Spec, StateCheckpoint,
+    StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
@@ -64,14 +64,14 @@ pub trait SimulateEndpoint: Send + Sync + 'static {
 
     /// Returns a configured axum router for the endpoint.
     ///
-    /// Creates an axum router with the `/rollup/simulate-v2` endpoint that accepts POST requests.
+    /// Creates an axum router with the `/rollup/simulate` endpoint that accepts POST requests.
     /// The router calls the implemented [`Self::handler`] and returns the result as JSON.
     /// If [`Self::handler`] returns an error, it will be converted to an [`ErrorObject`] and
     /// returned with the appropriate HTTP status code.
     ///
     /// # Warning
     ///
-    /// If you override this method, you should ensure you provide the standard `/rollup/simulate-v2` path.
+    /// If you override this method, you should ensure you provide the standard `/rollup/simulate` path.
     /// If the path is different, then external tooling like web3 SDKs won't be able to consume the
     /// functionality and will fail to work.
     ///
@@ -81,7 +81,7 @@ pub trait SimulateEndpoint: Send + Sync + 'static {
         preconfigured_router_layers(
             Router::new()
                 .route(
-                    "/rollup/simulate-v2",
+                    "/rollup/simulate",
                     post(
                         |State(state): State<Self::State>, Json(body): Json<Self::Parameters>| async move {
                             match Self::handler(state, body) {
@@ -184,6 +184,8 @@ struct SimulatedEvent<E> {
 pub struct SuccessOutcome<E> {
     /// The amount of gas consumed by the transaction.
     gas_used: Amount,
+    /// The priority fee reward of the transaction expressed as a gas token amount.
+    priority_fee: Amount,
     /// Events emitted during transaction execution.
     events: Vec<SimulatedEvent<E>>,
 }
@@ -210,7 +212,7 @@ pub enum SimulateOutcome<E> {
     Skipped(FailOutcome),
 }
 
-impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> SovereignSimulate<S, R> {
+impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
     /// Creates a new simulation endpoint instance.
     ///
     /// # Arguments
@@ -243,7 +245,7 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Sovere
     /// to serve the simulation endpoint.
     ///
     /// # Returns
-    /// An axum [`Router`] configured with the `/rollup/simulate-v2` endpoint.
+    /// An axum [`Router`] configured with the `/rollup/simulate` endpoint.
     pub fn into_router(self) -> Router<()> {
         Self::axum_router(std::sync::Arc::new(self))
     }
@@ -341,6 +343,7 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Sovere
                 reason: e.reason.to_string(),
             }),
             TxEffect::Successful(_) => SimulateOutcome::Success(SuccessOutcome {
+                priority_fee: result.transaction_consumption.priority_fee().0,
                 gas_used: gas_used.value(gas_price),
                 events,
             }),
@@ -392,9 +395,7 @@ pub struct SimulateParameters {
     pub uniqueness: Option<UniquenessData>,
 }
 
-impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> SimulateEndpoint
-    for SovereignSimulate<S, R>
-{
+impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
     type State = std::sync::Arc<Self>;
 
     type Parameters = SimulateParameters;

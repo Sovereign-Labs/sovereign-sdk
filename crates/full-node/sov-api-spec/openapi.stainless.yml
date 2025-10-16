@@ -82,21 +82,15 @@ resources:
           list: get /sequencer/unstable/events
   rollup:
     models:
-      simulateExecutionResponse: SimulateExecutionResponse
+      simulateOutcome: SimulateOutcome
+      simulateParameters: SimulateParameters
+      successOutcome: SuccessOutcome
+      failOutcome: FailOutcome
+      simulatedEvent: SimulatedEvent
+      txDetailsParameter: TxDetailsParameter
+      sequencerParameter: SequencerParameter
     methods:
       simulate: post /rollup/simulate
-    subresources:
-      simulate_v2:
-        methods:
-          simulate: post /rollup/simulate-v2
-        models:
-          simulateOutcomeV2: SimulateOutcomeV2
-          simulateParametersV2: SimulateParametersV2
-          successOutcomeV2: SuccessOutcomeV2
-          failOutcomeV2: FailOutcomeV2
-          simulatedEventV2: SimulatedEventV2
-          txDetailsParameterV2: TxDetailsParameterV2
-          sequencerParameterV2: SequencerParameterV2
       base_fee_per_gas:
         methods:
           retrieve: get /rollup/base-fee-per-gas/latest
