@@ -207,8 +207,10 @@ pub struct TwinkleBlockHeader {
     proposer_address: tendermint::account::Id,
 }
 
-impl From<TwinkleBlockHeader> for CompactHeader {
-    fn from(value: TwinkleBlockHeader) -> Self {
+impl TryFrom<TwinkleBlockHeader> for CompactHeader {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: TwinkleBlockHeader) -> Result<Self, Self::Error> {
         let TwinkleBlockHeader {
             version,
             chain_id,
@@ -230,7 +232,7 @@ impl From<TwinkleBlockHeader> for CompactHeader {
             tendermint::Hash::Sha256(value) => Some(ProtobufHash(value)),
             tendermint::Hash::None => None,
         };
-        CompactHeader {
+        Ok(CompactHeader {
             version: Protobuf::<celestia_tm_version::version::Consensus>::encode_vec(
                 tendermint::block::header::Version::from(version),
             ),
@@ -238,7 +240,7 @@ impl From<TwinkleBlockHeader> for CompactHeader {
             height: height.encode_vec(),
             time: time.encode_vec(),
             last_block_id: Protobuf::<celestia_tm_version::types::BlockId>::encode_vec(
-                tendermint::block::Id::from(last_block_id),
+                tendermint::block::Id::try_from(last_block_id)?,
             ),
             last_commit_hash: last_commit_hash.encode_vec(),
             data_hash,
@@ -249,7 +251,7 @@ impl From<TwinkleBlockHeader> for CompactHeader {
             last_results_hash: last_results_hash.encode_vec(),
             evidence_hash: evidence_hash.encode_vec(),
             proposer_address: proposer_address.encode_vec(),
-        }
+        })
     }
 }
 
@@ -279,12 +281,14 @@ pub struct BlockId {
     pub parts: PartSetHeader,
 }
 
-impl From<BlockId> for tendermint::block::Id {
-    fn from(value: BlockId) -> Self {
-        Self {
+impl TryFrom<BlockId> for tendermint::block::Id {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: BlockId) -> Result<Self, Self::Error> {
+        Ok(Self {
             hash: value.hash,
-            part_set_header: value.parts.into(),
-        }
+            part_set_header: value.parts.try_into()?,
+        })
     }
 }
 
@@ -296,9 +300,11 @@ pub struct PartSetHeader {
     pub hash: tendermint::Hash,
 }
 
-impl From<PartSetHeader> for tendermint::block::parts::Header {
-    fn from(value: PartSetHeader) -> Self {
-        Self::new(value.total, value.hash).expect("Invalid TwinklePartSetHeader")
+impl TryFrom<PartSetHeader> for tendermint::block::parts::Header {
+    type Error = celestia_types::Error;
+
+    fn try_from(value: PartSetHeader) -> Result<Self, Self::Error> {
+        Self::new(value.total, value.hash).map_err(Into::into)
     }
 }
 

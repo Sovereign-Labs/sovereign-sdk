@@ -305,7 +305,7 @@ impl TwinkleClient {
 
         let HeaderResponse { header, dah } = header_response;
 
-        let compact_header = CompactHeader::from(header);
+        let compact_header = CompactHeader::try_from(header)?;
         let dah = dah.try_into()?;
         let celestia_header = CelestiaHeader::new(dah, compact_header);
 
