@@ -1,4 +1,5 @@
 # 2025-10-16
+- #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1878 Add EVM logs soak test
 
 # 2025-10-15

@@ -19,11 +19,11 @@ pub use sov_state::TypeErasedEvent;
 #[cfg(feature = "native")]
 pub use traits::ProvenStateAccessor;
 pub use traits::{
-    AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateWriter, GenesisState,
-    InfallibleKernelStateAccessor, InfallibleStateAccessor, InfallibleStateReaderAndWriter,
-    PerBlockCache, PrivilegedKernelAccessor, ProvableStateReader, ProvableStateWriter,
-    StateAccessor, StateAccessorError, StateReader, StateReaderAndWriter, StateWriter, TxState,
-    VersionReader,
+    charge_write, AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateWriter,
+    GenesisState, InfallibleKernelStateAccessor, InfallibleStateAccessor,
+    InfallibleStateReaderAndWriter, PerBlockCache, PrivilegedKernelAccessor, ProvableStateReader,
+    ProvableStateWriter, StateAccessor, StateAccessorError, StateReader, StateReaderAndWriter,
+    StateWriter, TxState, VersionReader,
 };
 
 #[cfg(feature = "native")]
