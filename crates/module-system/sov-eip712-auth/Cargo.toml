@@ -21,10 +21,13 @@ sov-state = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["eip712"] }
 anyhow = { workspace = true }
 borsh = { workspace = true }
+derive_more = { workspace = true, default-features = true, features = [ "debug" ] }
 serde = { workspace = true }
+tracing = { workspace = true }
 
 [features]
 native = [
 	"sov-modules-api/native",
 	"sov-state/native",
+	"sov-address/native"
 ]
