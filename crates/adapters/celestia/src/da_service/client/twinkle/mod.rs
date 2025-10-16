@@ -17,10 +17,12 @@ use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData, RollupNamespace
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 use anyhow::Context;
-use backon::{ExponentialBuilder, Retryable};
+use backon::ExponentialBuilder;
 use celestia_types::row_namespace_data::NamespaceData;
 use serde::de::DeserializeOwned;
-use sov_rollup_interface::node::da::SubmitBlobReceipt;
+use sov_rollup_interface::node::da::{
+    run_maybe_retryable_async_fn_with_retries, MaybeRetryable, SubmitBlobReceipt,
+};
 use tokio::sync::oneshot;
 use tokio::time::Instant;
 use tracing::instrument;
@@ -76,13 +78,15 @@ impl TwinkleClient {
     #[instrument(skip(self))]
     async fn blob_status(&self, twinkle_request_id: &str) -> anyhow::Result<BlobStatusResponse> {
         tracing::trace!("Checking blob status");
-        (|| async {
-            let mut request = self.client.get(BLOB_STATUS_URL);
-            request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
-            let response = request.send().await?;
-            decode_on_success(response).await
-        })
-        .retry(&self.backoff_policy)
+        run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || {
+                let mut request = self.client.get(BLOB_STATUS_URL);
+                request = request.query(&[("twinkleRequestId", twinkle_request_id)]);
+                make_request(request)
+            },
+            "get_blob_status",
+        )
         .await
         .with_context(|| format!("Blob status check of request {twinkle_request_id}"))
     }
@@ -113,17 +117,17 @@ impl TwinkleClient {
         let submit_start = std::time::Instant::now();
         let submit_response: SubmitBlobAsyncResponse = tokio::select! {
             result = async {
-                (|| async {
-                    let response = self
-                        .client
-                        .post(SUBMIT_BLOB_URL)
-                        .json(&request)
-                        .send()
-                        .await?;
-                    decode_on_success(response).await
-                })
-                .retry(&self.backoff_policy)
-                .await
+                run_maybe_retryable_async_fn_with_retries(
+                    self.backoff_policy,
+                    || {
+                        let request = self
+                            .client
+                            .post(SUBMIT_BLOB_URL)
+                            .json(&request);
+                        make_request(request)
+                    },
+                    "submit_blob",
+                ).await
             } => {
                 if result.is_err() {
                     let measurement = BlobSubmitMeasurement::new_for_twinkle(
@@ -260,46 +264,48 @@ impl TwinkleClient {
         rx
     }
 
+    async fn query_header_inner(
+        &self,
+        height: Option<u64>,
+    ) -> Result<HeaderResponse, MaybeRetryable<anyhow::Error>> {
+        let start = std::time::Instant::now();
+        let mut request = self.client.get(HEADER_URL);
+        request = request.query(&[("network", self.network)]);
+        if let Some(height) = height {
+            request = request.query(&[("height", height)]);
+        }
+        let result = make_request(request).await;
+        let fetch_header_time = start.elapsed();
+        let is_success = result.is_ok();
+        sov_metrics::track_metrics(|tracker| {
+            match height {
+                None => {
+                    let measurement = GetChainHeadMeasurement {
+                        fetch_header_time,
+                        is_success,
+                    };
+                    tracker.submit(measurement);
+                }
+                Some(height) => {
+                    let measurement = GetBlockHeaderMeasurement {
+                        height,
+                        fetch_header_time,
+                        is_success,
+                    };
+                    tracker.submit(measurement);
+                }
+            };
+        });
+        result
+    }
+
     async fn query_header(&self, height: Option<u64>) -> anyhow::Result<CelestiaHeader> {
         tracing::trace!(?height, "Getting head block header");
-
-        let header_response: HeaderResponse = (|| async {
-            let start = std::time::Instant::now();
-            let mut request = self.client.get(HEADER_URL);
-            request = request.query(&[("network", self.network)]);
-            if let Some(height) = height {
-                request = request.query(&[("height", height)]);
-            }
-            // let response = request.send().await?;
-            let result = async {
-                let response = request.send().await?;
-                decode_on_success(response).await
-            }
-            .await;
-            let fetch_header_time = start.elapsed();
-            let is_success = result.is_ok();
-            sov_metrics::track_metrics(|tracker| {
-                match height {
-                    None => {
-                        let measurement = GetChainHeadMeasurement {
-                            fetch_header_time,
-                            is_success,
-                        };
-                        tracker.submit(measurement);
-                    }
-                    Some(height) => {
-                        let measurement = GetBlockHeaderMeasurement {
-                            height,
-                            fetch_header_time,
-                            is_success,
-                        };
-                        tracker.submit(measurement);
-                    }
-                };
-            });
-            result
-        })
-        .retry(&self.backoff_policy)
+        let header_response: HeaderResponse = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.query_header_inner(height),
+            "get_block_header",
+        )
         .await
         .with_context(|| format!("Getting block header at height={height:?}"))?;
 
@@ -318,18 +324,19 @@ impl TwinkleClient {
         height: u64,
     ) -> anyhow::Result<NamespaceData> {
         let namespace_encoded = serialize_namespace_base_64(&namespace.id());
-        let twinkle_namespace_data: TwinkleNamespaceResponse = (|| async {
-            let mut request = self.client.get(NAMESPACE_DATA_URL);
-            request = request.query(&[("network", self.network)]);
-            request = request.query(&[("height", height)]);
-            request = request.query(&[("namespace", &namespace_encoded)]);
-            let response = request.send().await?;
-            decode_on_success(response).await
-        })
-        .retry(&self.backoff_policy)
+        let twinkle_namespace_data = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || {
+                let mut request = self.client.get(NAMESPACE_DATA_URL);
+                request = request.query(&[("network", self.network)]);
+                request = request.query(&[("height", height)]);
+                request = request.query(&[("namespace", &namespace_encoded)]);
+                make_request::<TwinkleNamespaceResponse>(request)
+            },
+            "get_namespace_data",
+        )
         .await
         .with_context(|| format!("Getting namespace data at height={height}"))?;
-
         twinkle_namespace_data.try_into().map_err(Into::into)
     }
 
@@ -422,11 +429,34 @@ impl TwinkleClient {
     }
 }
 
-async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> anyhow::Result<T> {
+async fn make_request<T: DeserializeOwned>(
+    request: reqwest::RequestBuilder,
+) -> Result<T, MaybeRetryable<anyhow::Error>> {
+    let response = request.send().await.map_err(|err| {
+        MaybeRetryable::Transient(anyhow::anyhow!("Failed requesting TwinkleAPI: {err:?}"))
+    })?;
+    decode_on_success(response).await
+}
+
+async fn decode_on_success<T: DeserializeOwned>(
+    response: reqwest::Response,
+) -> Result<T, MaybeRetryable<anyhow::Error>> {
     let status = response.status();
     if !status.is_success() {
-        let text = response.text().await?;
-        anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
+        let text = response.text().await.map_err(|e| {
+            MaybeRetryable::Permanent(anyhow::anyhow!(
+                "Failed to get text on error response {} {e:?}",
+                std::any::type_name::<T>()
+            ))
+        })?;
+        return Err(MaybeRetryable::Transient(anyhow::anyhow!(
+            "Failed response to TwinkleAPI: {status:?}: {text}"
+        )));
     }
-    response.json().await.map_err(Into::into)
+    response.json().await.map_err(|e| {
+        MaybeRetryable::Permanent(anyhow::anyhow!(
+            "Failed to decode response {} {e:?}",
+            std::any::type_name::<T>()
+        ))
+    })
 }
