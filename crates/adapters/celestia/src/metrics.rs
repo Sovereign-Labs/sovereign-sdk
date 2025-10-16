@@ -183,7 +183,6 @@ impl Metric for GetBlockHeaderMeasurement {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct GetChainHeadMeasurement {
     pub fetch_header_time: std::time::Duration,

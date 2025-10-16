@@ -331,7 +331,6 @@ impl TwinkleClient {
     }
 
     // Will be used later when necessary data is implemented on Twinkle API
-    #[allow(dead_code)]
     #[instrument(skip(self))]
     pub async fn get_head_block_header(&self) -> anyhow::Result<CelestiaHeader> {
         self.query_header(None).await
