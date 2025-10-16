@@ -196,6 +196,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-eip712-auth"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-accounts"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

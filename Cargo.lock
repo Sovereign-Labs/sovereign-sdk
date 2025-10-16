@@ -6046,6 +6046,7 @@ dependencies = [
  "sov-attester-incentives",
  "sov-bank",
  "sov-chain-state",
+ "sov-eip712-auth",
  "sov-evm",
  "sov-kernels",
  "sov-mock-da",
@@ -11892,6 +11893,18 @@ dependencies = [
  "anyhow",
  "hex",
  "k256",
+]
+
+[[package]]
+name = "sov-eip712-auth"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-address",
+ "sov-modules-api",
+ "sov-state",
+ "sov-universal-wallet",
 ]
 
 [[package]]

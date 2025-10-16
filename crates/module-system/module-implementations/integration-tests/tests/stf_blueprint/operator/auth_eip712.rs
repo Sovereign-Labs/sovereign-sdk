@@ -1,8 +1,7 @@
 use sov_address::{EthereumAddress, EvmCryptoSpec};
-use sov_evm::Eip712Authenticator;
-use sov_evm::Eip712AuthenticatorInput;
-use sov_evm::Eip712AuthenticatorTrait;
-use sov_evm::SchemaProvider;
+use sov_eip712_auth::{
+    Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
+};
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
