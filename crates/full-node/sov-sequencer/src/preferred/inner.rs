@@ -655,6 +655,78 @@ where
 
         Ok(())
     }
+
+    async fn do_new_tx(
+        &mut self,
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+    ) -> Result<
+        (
+            oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
+            <S as Spec>::Gas,
+        ),
+        AcceptTxError<S>,
+    > {
+        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            tracing::info!("The sequencer is shutting down. Cannot accept transactions");
+            return Err(AcceptTxError::Shutdown);
+        }
+
+        if !self.executor.has_in_progress_batch() {
+            panic!(
+                "No batch in progress, and no batch could be started. Please report this bug. {:?} {:?}",
+                &self.executor.checkpoint, self.latest_info
+            );
+        }
+
+        let sequence_number = self.current_sequence_number();
+        let Inner {
+            executor,
+            batch_size_tracker,
+            executor_events_sender,
+            cache_warm_up_executor,
+            ..
+        } = &mut *self;
+
+        let tx_len = baked_tx.data.len();
+        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
+            return Err(AcceptTxError::TxTooBig {
+                current_batch_size: batch_size_tracker.current_batch_size,
+                max_batch_size: batch_size_tracker.max_batch_size,
+            });
+        }
+
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
+        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+
+        let (
+            AcceptedTxWithBudgetInfo {
+                accepted_tx,
+                remaining_slot_gas,
+                execution_time_micros,
+            },
+            tx_changes,
+        ) = match apply_tx_res {
+            Ok(res) => {
+                assert_eq!(
+                    tx_hash, res.0.accepted_tx.tx_hash,
+                    "The executor returned a different tx hash than expected"
+                );
+                res
+            }
+            Err(err) => {
+                tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
+                return Err(AcceptTxError::ExecutorError(err));
+            }
+        };
+
+        batch_size_tracker.add_tx(tx_len, execution_time_micros);
+        let rx = executor_events_sender
+            .send_accept_tx(accepted_tx, tx_changes, sequence_number)
+            .await;
+
+        Ok((rx, remaining_slot_gas))
+    }
 }
 
 enum Message<S: Spec, Rt: Runtime<S>> {
@@ -1616,109 +1688,6 @@ where
             .await
     }
 
-    async fn process_accept_tx(
-        &mut self,
-        baked_tx: FullyBakedTx,
-        tx_hash: TxHash,
-        original_tx_queue_id: u64,
-        reason: &'static str,
-    ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
-        let mut inner = self.get_inner_with_timing(reason).await;
-
-        // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
-        // we've effectively jumped the line
-        let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
-        if new_tx_queue_id != original_tx_queue_id {
-            tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
-            return Err(AcceptTxError::SequencerOverloaded503);
-        }
-
-        inner
-            .check_readiness(
-                inner.seq_config.max_concurrent_blobs,
-                inner.stop_at_rollup_height,
-            )
-            .await
-            .map_err(AcceptTxError::NotFullySynced)?;
-
-        if let Err(batch_creation_error) = inner
-            .try_to_create_and_start_batch_if_none_in_progress(false)
-            .await
-        {
-            // On all errors, we treat the sequencer as having had downtime and clear out the transaction queue.
-            // Note that we'll increment the queue ID once per rejected tx. This is totally fine - we have 2**64 ids to play with
-            // and atomic increments are very cheap relative to the cost of executing the tx
-            inner.tx_queue_id.fetch_add(1, Ordering::AcqRel);
-
-            return Err(AcceptTxError::BatchError {
-                batch_creation_error,
-                nb_of_concurrent_blob_submissions: inner.nb_of_concurrent_blob_submissions(),
-            });
-        };
-
-        if inner.shutdown_receiver.has_changed().unwrap_or(true) {
-            tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-            return Err(AcceptTxError::Shutdown);
-        }
-
-        if !inner.executor.has_in_progress_batch() {
-            panic!(
-                "No batch in progress, and no batch could be started. Please report this bug. {:?} {:?}",
-                &inner.executor.checkpoint, inner.latest_info
-            );
-        }
-
-        let sequence_number = inner.current_sequence_number();
-        let Inner {
-            executor,
-            batch_size_tracker,
-            executor_events_sender,
-            cache_warm_up_executor,
-            ..
-        } = &mut *inner;
-
-        let tx_len = baked_tx.data.len();
-        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
-            return Err(AcceptTxError::TxTooBig {
-                current_batch_size: batch_size_tracker.current_batch_size,
-                max_batch_size: batch_size_tracker.max_batch_size,
-            });
-        }
-
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
-
-        let (
-            AcceptedTxWithBudgetInfo {
-                accepted_tx,
-                remaining_slot_gas,
-                execution_time_micros,
-            },
-            tx_changes,
-        ) = match apply_tx_res {
-            Ok(res) => {
-                assert_eq!(
-                    tx_hash, res.0.accepted_tx.tx_hash,
-                    "The executor returned a different tx hash than expected"
-                );
-                res
-            }
-            Err(err) => {
-                tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
-                return Err(AcceptTxError::ExecutorError(err));
-            }
-        };
-
-        batch_size_tracker.add_tx(tx_len, execution_time_micros);
-        let rx = executor_events_sender
-            .send_accept_tx(accepted_tx, tx_changes, sequence_number)
-            .await;
-
-        inner.close_batch_if_nearly_full(remaining_slot_gas).await;
-
-        Ok(rx)
-    }
-
     async fn process_latest_slot_number(&mut self, reason: &'static str) -> SlotNumber {
         let inner = self.get_inner_with_timing(reason).await;
         inner.latest_info.slot_number
@@ -1927,6 +1896,53 @@ where
     async fn process_close_current_batch(&mut self, reason: &'static str) {
         let mut inner = self.get_inner_with_timing(reason).await;
         inner.close_current_batch().await;
+    }
+
+    async fn process_accept_tx(
+        &mut self,
+        baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
+        original_tx_queue_id: u64,
+        reason: &'static str,
+    ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
+        let mut inner = self.get_inner_with_timing(reason).await;
+
+        // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
+        // we've effectively jumped the line
+        let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
+        if new_tx_queue_id != original_tx_queue_id {
+            tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
+            return Err(AcceptTxError::SequencerOverloaded503);
+        }
+
+        inner
+            .check_readiness(
+                inner.seq_config.max_concurrent_blobs,
+                inner.stop_at_rollup_height,
+            )
+            .await
+            .map_err(AcceptTxError::NotFullySynced)?;
+
+        if let Err(batch_creation_error) = inner
+            .try_to_create_and_start_batch_if_none_in_progress(false)
+            .await
+        {
+            // On all errors, we treat the sequencer as having had downtime and clear out the transaction queue.
+            // Note that we'll increment the queue ID once per rejected tx. This is totally fine - we have 2**64 ids to play with
+            // and atomic increments are very cheap relative to the cost of executing the tx
+            inner.tx_queue_id.fetch_add(1, Ordering::AcqRel);
+
+            return Err(AcceptTxError::BatchError {
+                batch_creation_error,
+                nb_of_concurrent_blob_submissions: inner.nb_of_concurrent_blob_submissions(),
+            });
+        };
+
+        let (rx, remaining_slot_gas) = inner.do_new_tx(tx_hash, baked_tx).await?;
+
+        inner.close_batch_if_nearly_full(remaining_slot_gas).await;
+
+        Ok(rx)
     }
 }
 
