@@ -13244,11 +13244,12 @@ name = "sovereign-web3"
 version = "0.3.0"
 dependencies = [
  "borsh",
+ "hex",
  "serde",
  "serde_json",
- "sov-bank",
  "sov-modules-api",
  "sov-universal-wallet",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

@@ -17,11 +17,10 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
 borsh = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
+thiserror = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
-
-[dev-dependencies]
-sov-bank = { workspace = true }
 
 [lints]
 workspace = true

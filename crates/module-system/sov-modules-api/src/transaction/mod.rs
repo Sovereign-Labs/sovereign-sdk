@@ -268,6 +268,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
+    /// Convenience function to return the transaction bytes in the correct format ready for submission.
+    pub fn tx_bytes(&self) -> Vec<u8> {
+        borsh::to_vec(self).expect("Serialization should be never fail")
+    }
+
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
         let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
         tracing::trace!(transaction = ?this, "Deserialized transaction");

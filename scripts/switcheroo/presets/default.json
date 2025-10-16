@@ -45,5 +45,6 @@
     "crates/universal-wallet/schema",
     "crates/universal-wallet/macros",
     "crates/universal-wallet/macro-helpers",
-    "crates/utils/workspace-hack"
+    "crates/utils/workspace-hack",
+    "crates/web3"
 ]
