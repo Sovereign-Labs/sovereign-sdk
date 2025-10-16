@@ -1,9 +1,11 @@
+# 2025-10-16
+- #1878 Add EVM logs soak test
+
 # 2025-10-15
 - #1877 Updates the `pub_key` and `signature` fields on `Transaction::V0` to serde (de)serialize as hex strings instead of the underlying crypto type.
         This does not affect the borsh serialization and thus network serialization of transactions, only if you're using `Schema` to serialize transactions,
         i.e with the `web3` SDK
 - #1884 Moves the EIP712 authenticator from `sov_evm` to its own crate, `sov-eip712-auth`. This significantly reduces the dependency tree when using only the authenticator on a rollup that does not integrate the entire EVM.
-- #1878 Add EVM logs soak test
 
 # 2025-10-14
 - #1874 Refactor `scratchpad.rs` into focused submodules for better maintainability.
