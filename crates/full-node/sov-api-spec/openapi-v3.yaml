@@ -1245,6 +1245,7 @@ components:
         - outcome
         - gas_used
         - events
+        - priority_fee
     FailOutcome:
       type: object
       description: Failed simulation outcome
