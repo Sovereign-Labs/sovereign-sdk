@@ -4,7 +4,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_bank::{CallMessage, Coins, TokenId};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction, VersionedTx};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
 use sov_modules_macros::config_value;
 use sov_test_utils::{
@@ -125,8 +125,8 @@ fn test_display_signed_tx() {
     })
     .unwrap();
 
-    let signature_display = match signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => hex::encode(borsh::to_vec(&inner.signature).unwrap()),
+    let signature_display = match signed_tx {
+        Transaction::V0(inner) => hex::encode(borsh::to_vec(&inner.signature).unwrap()),
     };
 
     let pubkey_display = hex::encode(borsh::to_vec(&signer.private_key.pub_key()).unwrap());
@@ -140,7 +140,7 @@ fn test_display_signed_tx() {
                 &signed_data
             )
             .unwrap(),
-        format!("{{ versioned_tx: V0 {{ signature: 0x{signature_display}, pub_key: 0x{pubkey_display}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }} }} }}")
+        format!("V0 {{ signature: 0x{signature_display}, pub_key: 0x{pubkey_display}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }} }}")
     );
 }
 
