@@ -314,7 +314,7 @@ revm-context = { version = "9.1.0", default-features = false }
 revm-handler = { version = "9.1.0", default-features = false }
 revm-context-interface = { version = "10.2.0", default-features = false }
 revm-inspector = { version = "10.0.1", default-features = false }
-revm-inspectors = { version = "0.30.0", default-features = false }
+revm-inspectors = { version = "0.30.1", default-features = false }
 secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "global-context",
     "recovery",
