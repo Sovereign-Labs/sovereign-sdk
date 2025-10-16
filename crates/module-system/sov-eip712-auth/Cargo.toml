@@ -1,0 +1,30 @@
+[package]
+name = "sov-eip712-auth"
+description = "Sovereign authenticator for transactions signed using EIP712"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sov-modules-api = { workspace = true }
+sov-state = { workspace = true }
+sov-address = { workspace = true, features = ["evm"] }
+sov-universal-wallet = { workspace = true, features = ["eip712"] }
+anyhow = { workspace = true }
+borsh = { workspace = true }
+
+[features]
+native = [
+	"sov-address/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+]

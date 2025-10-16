@@ -36,9 +36,7 @@ mod helpers;
 use alloy_primitives::U256;
 use alloy_primitives::{Address, B256};
 pub use authenticate::{
-    authenticate, decode_evm_tx, Eip712Authenticator, Eip712AuthenticatorInput,
-    Eip712AuthenticatorTrait, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
-    SchemaProvider,
+    authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
 };
 pub use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};

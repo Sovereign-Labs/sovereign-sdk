@@ -445,6 +445,10 @@ paths:
   /rollup/simulate:
     post:
       summary: Simulate transaction execution
+      description: |-
+        Simulates transaction execution against the current blockchain state without committing changes.
+        This endpoint provides detailed gas estimation, event emission, and error handling.
+        Useful for estimating gas costs, testing transaction behavior, and debugging.
       operationId: simulate
       tags:
         - Rollup
@@ -452,41 +456,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                body:
-                  $ref: "#/components/schemas/PartialTransaction"
-              required:
-                - body
-      responses:
-        "200":
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SimulateExecutionResponse"
-  /rollup/simulate-v2:
-    post:
-      summary: Simulate transaction execution (v2)
-      description: |-
-        Simulates transaction execution against the current blockchain state without committing changes.
-        This endpoint provides detailed gas estimation, event emission, and error handling.
-        Useful for estimating gas costs, testing transaction behavior, and debugging.
-      operationId: simulate_v2
-      tags:
-        - Rollup
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SimulateParametersV2"
+              $ref: "#/components/schemas/SimulateParameters"
       responses:
         "200":
           description: Simulation completed successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimulateOutcomeV2"
+                $ref: "#/components/schemas/SimulateOutcome"
         "400":
           $ref: "#/components/responses/ApiErrorResponse"
         "500":
@@ -1173,9 +1150,9 @@ components:
                 - target_da_height
           required:
             - syncing
-    SimulateParametersV2:
+    SimulateParameters:
       type: object
-      description: Parameters for transaction simulation requests (v2)
+      description: Parameters for transaction simulation requests
       properties:
         sender:
           type: string
@@ -1194,9 +1171,9 @@ components:
                   amount: "1000"
                   token_id: "token_1234567890abcdef"
         tx_details:
-          $ref: "#/components/schemas/TxDetailsParameterV2"
+          $ref: "#/components/schemas/TxDetailsParameter"
         sequencer:
-          $ref: "#/components/schemas/SequencerParameterV2"
+          $ref: "#/components/schemas/SequencerParameter"
         uniqueness:
           type: object
           description: Optional uniqueness data for the transaction
@@ -1204,7 +1181,7 @@ components:
       required:
         - sender
         - call
-    TxDetailsParameterV2:
+    TxDetailsParameter:
       type: object
       description: Optional transaction details for simulation requests
       properties:
@@ -1224,7 +1201,7 @@ components:
             format: uint64
           description: Gas limit for the transaction as an array of u64 values
           example: [1000000, 0, 0, 0]
-    SequencerParameterV2:
+    SequencerParameter:
       type: object
       description: Optional sequencer configuration for simulation requests
       properties:
@@ -1236,15 +1213,15 @@ components:
           type: string
           description: Custom data availability address for the sequencer
           example: "celestia1234567890abcdef"
-    SimulateOutcomeV2:
+    SimulateOutcome:
       type: object
       description: The outcome of a transaction simulation
       discriminator:
         propertyName: outcome
       oneOf:
-        - $ref: "#/components/schemas/SuccessOutcomeV2"
-        - $ref: "#/components/schemas/FailOutcomeV2"
-    SuccessOutcomeV2:
+        - $ref: "#/components/schemas/SuccessOutcome"
+        - $ref: "#/components/schemas/FailOutcome"
+    SuccessOutcome:
       type: object
       description: Successful simulation outcome
       properties:
@@ -1255,16 +1232,21 @@ components:
           type: string
           description: The amount of gas consumed by the transaction
           example: "104000"
+        priority_fee:
+          type: string
+          description: The amount paid for priority fee
+          example: "104000"
         events:
           type: array
           items:
-            $ref: "#/components/schemas/SimulatedEventV2"
+            $ref: "#/components/schemas/SimulatedEvent"
           description: Events emitted during transaction execution
       required:
         - outcome
         - gas_used
         - events
-    FailOutcomeV2:
+        - priority_fee
+    FailOutcome:
       type: object
       description: Failed simulation outcome
       properties:
@@ -1278,7 +1260,7 @@ components:
       required:
         - outcome
         - reason
-    SimulatedEventV2:
+    SimulatedEvent:
       type: object
       description: An event emitted during transaction simulation
       properties:

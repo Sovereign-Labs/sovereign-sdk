@@ -79,13 +79,14 @@ pub struct Version0<Call, S: Spec> {
     derive_more::Debug,
     Clone,
     borsh::BorshDeserialize,
+    borsh::BorshSerialize,
     serde::Serialize,
     serde::Deserialize,
-    borsh::BorshSerialize,
     UniversalWallet,
     PartialEq,
     Eq,
 )]
+#[serde(bound = "S: Spec")]
 /// A signature and public key pair.
 pub struct PubKeyAndSignature<S: Spec> {
     /// The signature.
@@ -196,31 +197,15 @@ impl<Call: BorshSerialize, S: Spec> Version1<Call, S> {
     }
 }
 
-#[derive(
-    derive_more::Debug,
-    Clone,
-    borsh::BorshDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
-    borsh::BorshSerialize,
-    UniversalWallet,
-)]
-#[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
-#[allow(missing_docs)]
-pub enum VersionedTx<Call, S: Spec> {
-    V0(Version0<Call, S>),
-    V1(Version1<Call, S>),
-}
-
-impl<Call, S: Spec> From<Version0<Call, S>> for VersionedTx<Call, S> {
-    fn from(value: Version0<Call, S>) -> Self {
-        VersionedTx::V0(value)
+impl<R: TransactionCallable, S: Spec> From<Version0<R::Call, S>> for Transaction<R, S> {
+    fn from(value: Version0<R::Call, S>) -> Self {
+        Transaction::V0(value)
     }
 }
 
-impl<Call, S: Spec> From<Version1<Call, S>> for VersionedTx<Call, S> {
-    fn from(value: Version1<Call, S>) -> Self {
-        VersionedTx::V1(value)
+impl<R: TransactionCallable, S: Spec> From<Version1<R::Call, S>> for Transaction<R, S> {
+    fn from(value: Version1<R::Call, S>) -> Self {
+        Transaction::V1(value)
     }
 }
 #[derive(
@@ -234,9 +219,11 @@ impl<Call, S: Spec> From<Version1<Call, S>> for VersionedTx<Call, S> {
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
-pub struct Transaction<R: TransactionCallable, S: Spec> {
-    /// Versioned transaction.
-    pub versioned_tx: VersionedTx<R::Call, S>,
+pub enum Transaction<R: TransactionCallable, S: Spec> {
+    /// V0 Transaction type.
+    V0(Version0<R::Call, S>),
+    /// A V1 (multisig) transaction.
+    V1(Version1<R::Call, S>),
 }
 
 #[cfg(feature = "native")]
@@ -248,6 +235,22 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
 
         let data = borsh::to_vec(&self).unwrap();
         <S::CryptoSpec as CryptoSpec>::Hasher::digest(&data).into()
+    }
+
+    /// Creates a new signed transaction using the provided private key.
+    pub fn new_signed_tx(
+        priv_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+        chain_hash: &[u8; 32],
+        unsigned_tx: UnsignedTransaction<R, S>,
+    ) -> Self {
+        let mut utx_bytes: Vec<u8> = Vec::new();
+        BorshSerialize::serialize(&unsigned_tx, &mut utx_bytes).unwrap();
+        utx_bytes.extend_from_slice(chain_hash);
+
+        let pub_key = priv_key.pub_key();
+        let signature = priv_key.sign(&utx_bytes);
+
+        unsigned_tx.to_signed_tx(pub_key, signature)
     }
 }
 
@@ -299,15 +302,15 @@ impl<R: TransactionCallable, S: Spec> MeteredBorshDeserialize<S> for Transaction
 // enforced in the trait definition.
 impl<R: TransactionCallable, S: Spec> PartialEq for Transaction<R, S> {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.versioned_tx, &other.versioned_tx) {
-            (VersionedTx::V0(self_inner), VersionedTx::V0(other_inner)) => {
+        match (&self, &other) {
+            (Transaction::V0(self_inner), Transaction::V0(other_inner)) => {
                 self_inner.signature == other_inner.signature
                     && self_inner.pub_key == other_inner.pub_key
                     && self_inner.runtime_call == other_inner.runtime_call
                     && self_inner.uniqueness == other_inner.uniqueness
                     && self_inner.details == other_inner.details
             }
-            (VersionedTx::V1(self_inner), VersionedTx::V1(other_inner)) => {
+            (Transaction::V1(self_inner), Transaction::V1(other_inner)) => {
                 self_inner.signatures == other_inner.signatures
                     && self_inner.runtime_call == other_inner.runtime_call
                     && self_inner.uniqueness == other_inner.uniqueness
@@ -350,17 +353,17 @@ impl<GU: Gas> From<MeteredSigVerificationError<GU>> for TransactionVerificationE
 impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     /// Returns a reference to the runtime call of the transaction.
     pub fn runtime_call(&self) -> &R::Call {
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => &inner.runtime_call,
-            VersionedTx::V1(inner) => &inner.runtime_call,
+        match &self {
+            Transaction::V0(inner) => &inner.runtime_call,
+            Transaction::V1(inner) => &inner.runtime_call,
         }
     }
 
     /// Returns the chain id.
     pub fn chain_id(&self) -> u64 {
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => inner.details.chain_id,
-            VersionedTx::V1(inner) => inner.details.chain_id,
+        match &self {
+            Transaction::V0(inner) => inner.details.chain_id,
+            Transaction::V1(inner) => inner.details.chain_id,
         }
     }
 
@@ -392,22 +395,20 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         uniqueness: UniquenessData,
         details: TxDetails<S>,
     ) -> Self {
-        Self {
-            versioned_tx: VersionedTx::V0(Version0 {
-                signature,
-                pub_key,
-                runtime_call,
-                uniqueness,
-                details,
-            }),
-        }
+        Self::V0(Version0 {
+            signature,
+            pub_key,
+            runtime_call,
+            uniqueness,
+            details,
+        })
     }
 
     /// Extract the runtime call from the transaction
     pub fn call(self) -> R::Call {
-        match self.versioned_tx {
-            VersionedTx::V0(inner) => inner.runtime_call,
-            VersionedTx::V1(inner) => inner.runtime_call,
+        match self {
+            Transaction::V0(inner) => inner.runtime_call,
+            Transaction::V1(inner) => inner.runtime_call,
         }
     }
 
@@ -417,13 +418,13 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         msg: &[u8],
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<(), TransactionVerificationError<S::Gas>> {
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => {
+        match &self {
+            Transaction::V0(inner) => {
                 MeteredSignature::new::<S>(inner.signature.clone())
                     .verify(&inner.pub_key, msg, meter)
                     .map_err(TransactionVerificationError::from)?;
             }
-            VersionedTx::V1(inner) => {
+            Transaction::V1(inner) => {
                 for signature in inner.signatures.iter() {
                     // Charge gas for all the signatures up front before verifying. This way, we can switch to batch verification and the gas price will be the same.
                     MeteredSignature::new::<S>(signature.signature.clone())
@@ -447,37 +448,18 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
 
     /// Converts the transaction to an unsigned transaction.
     pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
-        match &self.versioned_tx {
-            VersionedTx::V0(inner) => UnsignedTransaction::new_with_details(
+        match &self {
+            Transaction::V0(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
                 inner.uniqueness,
                 inner.details.clone(),
             ),
-            VersionedTx::V1(inner) => UnsignedTransaction::new_with_details(
+            Transaction::V1(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
                 inner.uniqueness,
                 inner.details.clone(),
             ),
         }
-    }
-}
-
-#[cfg(feature = "native")]
-impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
-    /// New signed transaction.
-    pub fn new_signed_tx(
-        priv_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
-        chain_hash: &[u8; 32],
-        unsigned_tx: UnsignedTransaction<R, S>,
-    ) -> Self {
-        let mut utx_bytes: Vec<u8> = Vec::new();
-        BorshSerialize::serialize(&unsigned_tx, &mut utx_bytes).unwrap();
-        utx_bytes.extend_from_slice(chain_hash);
-
-        let pub_key = priv_key.pub_key();
-        let signature = priv_key.sign(&utx_bytes);
-
-        unsigned_tx.to_signed_tx(pub_key, signature)
     }
 }
 

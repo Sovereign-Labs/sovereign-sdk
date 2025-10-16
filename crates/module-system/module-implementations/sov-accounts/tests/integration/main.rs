@@ -225,9 +225,7 @@ fn test_setup_multisig_and_act() {
 
     let assert_tx_success = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
                              runner: &mut TestRunner<RT, S>| {
-        let tx = Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        };
+        let tx = Transaction::<RT, S>::from(tx);
         let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
             data: borsh::to_vec(&tx).unwrap(),
         });
@@ -242,9 +240,7 @@ fn test_setup_multisig_and_act() {
     let assert_tx_skip = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
                           runner: &mut TestRunner<RT, S>,
                           reason: &'static str| {
-        let tx = Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        };
+        let tx = Transaction::<RT, S>::from(tx);
         let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
             data: borsh::to_vec(&tx).unwrap(),
         });

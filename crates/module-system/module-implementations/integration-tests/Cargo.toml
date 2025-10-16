@@ -42,6 +42,7 @@ sov-modules-stf-blueprint = { workspace = true, features = [
 	"test-utils",
 ] }
 sov-evm = { workspace = true, features = ["native"] }
+sov-eip712-auth = { workspace = true, features = ["native"] }
 sov-kernels = { workspace = true, features = ["native"] }
 
 sov-attester-incentives = { workspace = true, features = ["native"] }

@@ -11,7 +11,6 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
-    VersionedTx,
 };
 use sov_modules_api::{
     CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize,
@@ -220,8 +219,8 @@ fn verify_and_decode_tx<
     tx: Transaction<D, S>,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    match &tx.versioned_tx {
-        VersionedTx::V0(tx_v0) => {
+    match &tx {
+        Transaction::V0(tx_v0) => {
             verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
             let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
@@ -234,7 +233,7 @@ fn verify_and_decode_tx<
 
             Ok((tx_and_raw_hash, authorization_data, runtime_call))
         }
-        VersionedTx::V1(tx_v1) => {
+        Transaction::V1(tx_v1) => {
             verify_chain_id(&tx_v1.details, raw_tx_hash)?;
             let multisig = Multisig::new(
                 tx_v1.min_signers,

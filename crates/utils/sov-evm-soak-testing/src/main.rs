@@ -1,13 +1,14 @@
-use alloy::hex;
-use alloy_primitives::Address;
+use alloy::providers::{Provider, ProviderBuilder};
+use alloy::signers::local::PrivateKeySigner;
+use alloy::{hex, providers::DynProvider};
 use anyhow::Result;
 use clap::Parser;
-use sov_eth_client::{RpcClient, SimpleStorageClient};
-use sov_test_utils::LegacySimpleStorage;
+use reqwest::Url;
 use std::net::SocketAddr;
 
-use crate::uniswap::UniSoakTest;
+use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
 
+mod logs;
 mod simple_storage;
 mod uniswap;
 
@@ -44,6 +45,34 @@ enum TestType {
     },
     /// Run SimpleStorage soak test
     SimpleStorage,
+    /// Run Logs soak test
+    Logs {
+        /// Number of txs
+        #[arg(short, long, default_value = "100")]
+        tx_count: usize,
+        /// Number of logs per tx
+        #[arg(short, long, default_value = "100")]
+        logs_per_tx: usize,
+    },
+}
+
+// Tweak the private key to avoid conflicts between workers
+fn derive_worker_key(root_key: &str, idx: usize) -> anyhow::Result<String> {
+    let mut key_bytes: [u8; 32] = hex::decode(root_key)?.try_into().unwrap();
+    key_bytes[0] = key_bytes[0].wrapping_add(idx as u8);
+    Ok(hex::encode(key_bytes))
+}
+
+pub(crate) fn alloy_client(
+    socket: SocketAddr,
+    signer: PrivateKeySigner,
+) -> anyhow::Result<DynProvider> {
+    let url = Url::parse(&format!("http://{socket}/rpc"))?;
+    let client = ProviderBuilder::new()
+        .wallet(signer)
+        .connect_http(url)
+        .erased();
+    Ok(client)
 }
 
 #[tokio::main]
@@ -58,18 +87,12 @@ async fn main() -> Result<()> {
             let mut handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>> =
                 Vec::with_capacity(num_workers);
             for i in 0..num_workers {
-                // Tweak the private key to avoid conflicts between workers
-                let key = {
-                    let mut key_bytes: [u8; 32] =
-                        hex::decode(&args.private_key).unwrap().try_into().unwrap();
-                    key_bytes[0] = key_bytes[0].wrapping_add(i as u8);
-                    hex::encode(key_bytes)
-                };
+                let private_key = derive_worker_key(&args.private_key, i)?;
                 // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
-                    let client = RpcClient::new(&key, args.rpc_addr).await;
-                    let signer = Address::from_slice(&client.address().0);
-                    match UniSoakTest::new(client.alloy_client, signer).await {
+                    let signer: PrivateKeySigner = private_key.parse()?;
+                    let client = alloy_client(args.rpc_addr, signer.clone())?;
+                    match UniSoakTest::new(client, signer.address()).await {
                         Ok(test) => {
                             if let Err(e) = test.run(count).await {
                                 println!("Worker {i} error during run: {e:?}");
@@ -88,9 +111,18 @@ async fn main() -> Result<()> {
             }
         }
         TestType::SimpleStorage => {
-            let contract = LegacySimpleStorage::default();
-            let client = SimpleStorageClient::new(&args.private_key, contract, args.rpc_addr).await;
+            let signer: PrivateKeySigner = args.private_key.parse()?;
+            let client = alloy_client(args.rpc_addr, signer)?;
             simple_storage::run(client).await?;
+        }
+        TestType::Logs {
+            tx_count,
+            logs_per_tx,
+        } => {
+            let signer: PrivateKeySigner = args.private_key.parse()?;
+            let client = alloy_client(args.rpc_addr, signer)?;
+            let test = LogsSoakTest::new(client).await?;
+            test.run(tx_count, logs_per_tx).await?;
         }
     }
 

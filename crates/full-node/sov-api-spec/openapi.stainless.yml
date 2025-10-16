@@ -81,39 +81,16 @@ resources:
           retrieve: get /sequencer/unstable/events/{eventOffset}
           list: get /sequencer/unstable/events
   rollup:
-    models:
-      simulateExecutionResponse: SimulateExecutionResponse
     methods:
       simulate: post /rollup/simulate
+      base_fee_per_gas: get /rollup/base-fee-per-gas/latest
+      sync_status: get /rollup/sync-status
+      schema: get /rollup/schema
+      constants: get /rollup/constants
     subresources:
-      simulate_v2:
-        methods:
-          simulate: post /rollup/simulate-v2
-        models:
-          simulateOutcomeV2: SimulateOutcomeV2
-          simulateParametersV2: SimulateParametersV2
-          successOutcomeV2: SuccessOutcomeV2
-          failOutcomeV2: FailOutcomeV2
-          simulatedEventV2: SimulatedEventV2
-          txDetailsParameterV2: TxDetailsParameterV2
-          sequencerParameterV2: SequencerParameterV2
-      base_fee_per_gas:
-        methods:
-          retrieve: get /rollup/base-fee-per-gas/latest
-        models:
-          baseFeePerGas: BaseFeePerGas
       addresses:
         methods:
           dedup: get /rollup/addresses/{credential_id}/dedup
-      sync_status:
-        methods:
-          retrieve: get /rollup/sync-status
-      schema:
-        methods:
-          retrieve: get /rollup/schema
-      constants:
-        methods:
-          retrieve: get /rollup/constants
 targets:
   node:
     production_repo: Sovereign-Labs/sovereign-sdk-client-js

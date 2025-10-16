@@ -6,7 +6,7 @@ use sov_cli::workflows::transactions::{TransactionLoadWorkflow, TransactionWorkf
 use sov_cli::UnsignedTransactionWithoutUniqueness;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction, VersionedTx};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{
     Amount, CryptoSpec, DispatchCall, MeteredBorshDeserialize, PrivateKey, Spec,
 };
@@ -202,12 +202,12 @@ fn transaction_signed_properly_from_file() {
 
     let default_pubkey = &wallet_state.addresses.default_address().unwrap().pub_key;
 
-    match &signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => {
+    match &signed_tx {
+        Transaction::V0(inner) => {
             assert_eq!(default_pubkey, &inner.pub_key);
             assert_eq!(UniquenessData::Generation(generation), inner.uniqueness);
         }
-        VersionedTx::V1(_inner) => {
+        Transaction::V1(_inner) => {
             panic!("V1 (multisig) transactions are not yet supported by the CLI tests");
         }
     };
@@ -324,11 +324,11 @@ fn transaction_signed_by_account_nickname() {
         })
         .unwrap();
 
-    match signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => {
+    match signed_tx {
+        Transaction::V0(inner) => {
             assert_eq!(&key2.pub_key, &inner.pub_key);
         }
-        VersionedTx::V1(_inner) => {
+        Transaction::V1(_inner) => {
             panic!("V1 (multisig) transactions are not yet supported by the CLI tests");
         }
     }

@@ -6046,6 +6046,7 @@ dependencies = [
  "sov-attester-incentives",
  "sov-bank",
  "sov-chain-state",
+ "sov-eip712-auth",
  "sov-evm",
  "sov-kernels",
  "sov-mock-da",
@@ -11895,6 +11896,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-eip712-auth"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-address",
+ "sov-modules-api",
+ "sov-state",
+ "sov-universal-wallet",
+]
+
+[[package]]
 name = "sov-eth-client"
 version = "0.3.0"
 dependencies = [
@@ -12052,6 +12065,7 @@ dependencies = [
  "anyhow",
  "clap",
  "rand 0.8.5",
+ "reqwest 0.12.23",
  "sov-eth-client",
  "sov-test-utils",
  "tokio",
@@ -13016,6 +13030,7 @@ dependencies = [
  "ethers",
  "hex",
  "jsonschema",
+ "num_cpus",
  "reqwest 0.12.23",
  "rockbound",
  "schemars 0.8.22",
@@ -13055,6 +13070,7 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "testcontainers",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",

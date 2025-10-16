@@ -14,7 +14,7 @@ use thiserror::Error;
 use crate::capabilities::AuthorizationData;
 use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
-    TxDetails, VersionedTx,
+    TxDetails,
 };
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
@@ -356,8 +356,8 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     chain_hash: &[u8; 32],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    match &tx.versioned_tx {
-        VersionedTx::V0(tx_v0) => {
+    match &tx {
+        Transaction::V0(tx_v0) => {
             verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
             let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
@@ -370,7 +370,7 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 
             Ok((tx_and_raw_hash, authorization_data, runtime_call))
         }
-        VersionedTx::V1(tx_v1) => {
+        Transaction::V1(tx_v1) => {
             verify_chain_id(&tx_v1.details, raw_tx_hash)?;
             verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
             let authorization_data =

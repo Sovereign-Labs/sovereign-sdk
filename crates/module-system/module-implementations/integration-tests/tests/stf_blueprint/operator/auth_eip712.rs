@@ -1,9 +1,8 @@
 use sov_accounts::{Accounts, CallMessage as AccountsCallMessage};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
-use sov_evm::Eip712Authenticator;
-use sov_evm::Eip712AuthenticatorInput;
-use sov_evm::Eip712AuthenticatorTrait;
-use sov_evm::SchemaProvider;
+use sov_eip712_auth::{
+    Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
+};
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
@@ -282,9 +281,7 @@ fn test_multisig_signature_verification() {
         for (key, signature) in multisig_keys.iter().zip(signatures.iter()) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
-        Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        }
+        Transaction::<RT, S>::from(tx)
     };
     assert_tx_success(tx_with_three_sigs, &mut runner);
 
@@ -294,9 +291,7 @@ fn test_multisig_signature_verification() {
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(2)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
-        Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        }
+        Transaction::<RT, S>::from(tx)
     };
     assert_tx_success(tx_with_two_sigs, &mut runner);
 
@@ -306,9 +301,7 @@ fn test_multisig_signature_verification() {
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(1)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
-        Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        }
+        Transaction::<RT, S>::from(tx)
     };
     assert_tx_skipped(
         tx_with_one_sig,
@@ -327,9 +320,7 @@ fn test_multisig_signature_verification() {
                 pub_key: random_private_key.pub_key(),
             })
             .unwrap();
-        Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        }
+        Transaction::<RT, S>::from(tx)
     };
     // Since the random signature is not part of the multisig, this changes the computed credential ID yielding a gas error. If we were to add a paymaster,
     // The tx would succeed on a different account. In that case, this test case would need refinement to distinguish between the two cases.
@@ -350,9 +341,7 @@ fn test_multisig_signature_verification() {
                 pub_key: multisig_keys[0].pub_key(),
             })
             .unwrap();
-        Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        }
+        Transaction::<RT, S>::from(tx)
     };
     assert_tx_skipped(
         tx_with_duplicate_sig,
@@ -370,9 +359,7 @@ fn test_multisig_signature_verification() {
             multisig_keys[1].pub_key(),
         )
         .unwrap();
-        Transaction::<RT, S> {
-            versioned_tx: tx.into(),
-        }
+        Transaction::<RT, S>::from(tx)
     };
     assert_tx_skipped(tx_with_bad_sig, &mut runner, "signature error");
 }
