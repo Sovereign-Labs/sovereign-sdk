@@ -127,6 +127,7 @@ fn test_display_signed_tx() {
 
     let signature_display = match signed_tx {
         Transaction::V0(inner) => hex::encode(borsh::to_vec(&inner.signature).unwrap()),
+        _ => panic!("Expected V0 transaction"),
     };
 
     let pubkey_display = hex::encode(borsh::to_vec(&signer.private_key.pub_key()).unwrap());

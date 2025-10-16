@@ -535,6 +535,16 @@ impl<T, const MAX_SIZE: usize> SafeVec<T, MAX_SIZE> {
         self.contents.retain(|elem| f(elem));
     }
 
+    /// Removes the element at the given index and returns it.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
+    #[inline]
+    pub fn remove(&mut self, index: usize) -> T {
+        self.contents.remove(index)
+    }
+
     /// Shortens the vector, keeping the first `len` elements and dropping
     /// the rest.
     ///

@@ -263,6 +263,9 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
                 chain_id,
             },
         ),
+        Transaction::V1(_inner) => {
+            todo!("Bad signature generation for multisig transactions is not yet supported");
+        }
     }
 }
 

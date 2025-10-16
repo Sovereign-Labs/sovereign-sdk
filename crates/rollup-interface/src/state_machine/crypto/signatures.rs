@@ -50,6 +50,8 @@ pub trait PublicKey:
     + Send
     + Sync
     + Serialize
+    + PartialOrd
+    + Ord
     + for<'a> Deserialize<'a>
     + TryFrom<Vec<u8>>
     + AsRef<[u8]>

@@ -180,6 +180,20 @@ pub struct Risc0PublicKey {
     pub(crate) pub_key: DalekPublicKey,
 }
 
+impl PartialOrd for Risc0PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Risc0PublicKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let self_bytes = self.pub_key.as_bytes();
+        let other_bytes = other.pub_key.as_bytes();
+        self_bytes.cmp(other_bytes)
+    }
+}
+
 impl Risc0PublicKey {
     /// Returns the bytes of the underlying public key.
     pub fn bytes(&self) -> &[u8; 32] {

@@ -12,6 +12,7 @@
 - #1884 Moves the EIP712 authenticator from `sov_evm` to its own crate, `sov-eip712-auth`. This significantly reduces the dependency tree when using only the authenticator on a rollup that does not integrate the entire EVM.
 
 # 2025-10-14
+- #1872 Adds a new `V1` transaction type with native support for multisigs.
 - #1874 Refactor `scratchpad.rs` into focused submodules for better maintainability.
 
 # 2025-10-13

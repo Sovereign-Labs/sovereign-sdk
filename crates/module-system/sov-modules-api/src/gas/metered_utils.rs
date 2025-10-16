@@ -138,15 +138,11 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         }
     }
 
-    /// Verifies a signature with the provided gas meter. This method is a wrapper around [`Signature::verify`].
-    ///
-    /// # Errors
-    /// Returns an error if charging gas for the verification operation fails.
-    pub fn verify<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
+    /// Charges gas for the signature verification.
+    pub fn charge_gas<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
         &self,
-        pub_key: &Sign::PublicKey,
-        msg: &[u8],
         meter: &mut Meter,
+        msg: &[u8],
     ) -> Result<(), MeteredSigVerificationError<GU>> {
         meter
             .charge_gas(self.fixed_gas_to_charge_per_verification)
@@ -173,6 +169,21 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
                 })?,
             )
             .map_err(MeteredSigVerificationError::GasError)?;
+
+        Ok(())
+    }
+
+    /// Verifies a signature with the provided gas meter. This method is a wrapper around [`Signature::verify`].
+    ///
+    /// # Errors
+    /// Returns an error if charging gas for the verification operation fails.
+    pub fn verify<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
+        &self,
+        pub_key: &Sign::PublicKey,
+        msg: &[u8],
+        meter: &mut Meter,
+    ) -> Result<(), MeteredSigVerificationError<GU>> {
+        self.charge_gas(meter, msg)?;
 
         self.inner
             .verify(pub_key, msg)
