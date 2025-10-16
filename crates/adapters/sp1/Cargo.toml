@@ -33,7 +33,7 @@ sov-rollup-interface = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sp1-sdk = { version = "5.0.8", default-features = false }
+sp1-sdk = { version = "5.2.2", default-features = false }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
 sp1-zkvm = { version = "5.0.8" }
