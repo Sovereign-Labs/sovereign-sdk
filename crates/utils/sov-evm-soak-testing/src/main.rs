@@ -4,8 +4,6 @@ use alloy::{hex, providers::DynProvider};
 use anyhow::Result;
 use clap::Parser;
 use reqwest::Url;
-use sov_eth_client::SimpleStorageClient;
-use sov_test_utils::LegacySimpleStorage;
 use std::net::SocketAddr;
 
 use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
@@ -113,8 +111,8 @@ async fn main() -> Result<()> {
             }
         }
         TestType::SimpleStorage => {
-            let contract = LegacySimpleStorage::default();
-            let client = SimpleStorageClient::new(&args.private_key, contract, args.rpc_addr).await;
+            let signer: PrivateKeySigner = args.private_key.parse()?;
+            let client = alloy_client(args.rpc_addr, signer)?;
             simple_storage::run(client).await?;
         }
         TestType::Logs {
