@@ -1232,6 +1232,10 @@ components:
           type: string
           description: The amount of gas consumed by the transaction
           example: "104000"
+        priority_fee:
+          type: string
+          description: The amount paid for priority fee
+          example: "104000"
         events:
           type: array
           items:

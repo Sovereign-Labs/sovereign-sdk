@@ -184,6 +184,8 @@ struct SimulatedEvent<E> {
 pub struct SuccessOutcome<E> {
     /// The amount of gas consumed by the transaction.
     gas_used: Amount,
+    /// The priority fee reward of the transaction expressed as a gas token amount.
+    priority_fee: Amount,
     /// Events emitted during transaction execution.
     events: Vec<SimulatedEvent<E>>,
 }
@@ -341,6 +343,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
                 reason: e.reason.to_string(),
             }),
             TxEffect::Successful(_) => SimulateOutcome::Success(SuccessOutcome {
+                priority_fee: result.transaction_consumption.priority_fee().0,
                 gas_used: gas_used.value(gas_price),
                 events,
             }),
