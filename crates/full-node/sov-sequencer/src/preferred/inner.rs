@@ -209,6 +209,8 @@ where
         self.executor.checkpoint.rollup_height_to_access()
     }
 
+    async fn foo(&mut self) {}
+
     /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.
     /// We can only create a new batch if we have a finalized slot available to use as our `visible_slot_number_after_increase`.
     #[tracing::instrument(skip_all, level = "trace")]

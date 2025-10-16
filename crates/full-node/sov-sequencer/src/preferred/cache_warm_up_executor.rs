@@ -72,25 +72,37 @@ struct TxReceiver {
 }
 
 #[derive(Clone)]
-pub(crate) struct CacheWarmUpExecutor<S: Spec> {
+pub(crate) struct CacheWarmUpExecutorInner<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
     tx_sender: flume::Sender<FullyBakedTxWithTxChangeSetSender>,
     size: Arc<AtomicU64>,
 }
 
+#[derive(Clone)]
+pub(crate) struct CacheWarmUpExecutor<S: Spec> {
+    inner: Option<CacheWarmUpExecutorInner<S>>,
+}
+
 impl<S: Spec> CacheWarmUpExecutor<S> {
     pub(crate) fn send_batch_start_notification(&self, data: StartBlockNotification<S>) {
+        let Some(inner) = &self.inner else {
+            return;
+        };
         // This `send` does not block.
-        let _ = self.start_block_notification_sender.send(Some(data));
+        let _ = inner.start_block_notification_sender.send(Some(data));
     }
 
     pub(crate) fn send_tx(&self, tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+        let Some(inner) = &self.inner else {
+            return FullyBakedTxWithMaybeChangeSet { tx, receiver: None };
+        };
+
         // We need to update the `size` field before inserting the thx into tx_sender, otherwise the workers may see an outdated channel size.
-        let size = self.size.fetch_add(1, Ordering::Relaxed);
+        let size = inner.size.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
 
         // Skip update if consumer is too slow.
-        let res = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
+        let res = inner.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
             tx: tx.clone(),
             sender,
         });
@@ -106,12 +118,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 Some(receiver)
             }
             Err(flume::TrySendError::Full(_)) => {
-                let size = self.size.fetch_sub(1, Ordering::Relaxed);
+                let size = inner.size.fetch_sub(1, Ordering::Relaxed);
                 tracing::warn!(size, "The tx queue is full. You may want to increase the number of workers for cache warmup.");
                 None
             }
             Err(flume::TrySendError::Disconnected(_)) => {
-                self.size.fetch_sub(1, Ordering::Relaxed);
+                inner.size.fetch_sub(1, Ordering::Relaxed);
                 None
             }
         };
@@ -127,6 +139,8 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
+        //seq_config.sequencer_kind_config.is_replica;
+
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
         let size = Arc::new(AtomicU64::new(0));
         let tx_receiver = TxReceiver {
@@ -155,9 +169,11 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
 
         (
             Self {
-                tx_sender,
-                start_block_notification_sender,
-                size,
+                inner: Some(CacheWarmUpExecutorInner {
+                    tx_sender,
+                    start_block_notification_sender,
+                    size,
+                }),
             },
             handles,
         )
