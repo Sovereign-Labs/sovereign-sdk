@@ -12065,6 +12065,7 @@ dependencies = [
  "anyhow",
  "clap",
  "rand 0.8.5",
+ "reqwest 0.12.23",
  "sov-eth-client",
  "sov-test-utils",
  "tokio",
