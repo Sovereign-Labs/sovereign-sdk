@@ -1,5 +1,6 @@
 [
 	"crates/full-node/sov-ethereum",
 	"crates/full-node/sov-eth-dev-signer",
+	"crates/utils/sov-evm-soak-testing",
 	"crates/module-system/module-implementations/sov-evm"
 ]
