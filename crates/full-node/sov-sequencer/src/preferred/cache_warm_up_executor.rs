@@ -139,7 +139,9 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        //seq_config.sequencer_kind_config.is_replica;
+        if seq_config.sequencer_kind_config.is_replica {
+            return (Self { inner: None }, vec![]);
+        }
 
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
         let size = Arc::new(AtomicU64::new(0));
