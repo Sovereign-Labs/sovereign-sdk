@@ -218,6 +218,32 @@ where
         &mut self,
         leave_space_for_next_batch: bool,
     ) -> Result<(), BatchCreationError> {
+        let visible_increase = match next_visible_slot_number_increase(
+            &self.executor.checkpoint,
+            &self.latest_info,
+            leave_space_for_next_batch,
+            self.seq_config
+                .sequencer_kind_config
+                .ideal_lag_behind_finalized_slot,
+        ) {
+            Ok(visible_increase) => visible_increase,
+            Err(e) => {
+                warn!(
+                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
+                    e
+                );
+                return Err(BatchCreationError::NoFinalizedSlotAvailable);
+            }
+        };
+
+        debug!(visible_increase, "No in-progress batch, starting a new one");
+
+        let visible_slot_number_after_increase = self
+            .executor
+            .checkpoint
+            .current_visible_slot_number()
+            .advance(visible_increase.get().into());
+
         if self.executor.has_in_progress_batch() {
             return Ok(());
         }
@@ -238,33 +264,9 @@ where
             return Err(BatchCreationError::BlobSenderBusy);
         }
 
-        let visible_increase = match next_visible_slot_number_increase(
-            &self.executor.checkpoint,
-            &self.latest_info,
-            leave_space_for_next_batch,
-            self.seq_config
-                .sequencer_kind_config
-                .ideal_lag_behind_finalized_slot,
-        ) {
-            Ok(visible_increase) => visible_increase,
-            Err(e) => {
-                warn!(
-                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
-                    e
-                );
-                return Err(BatchCreationError::NoFinalizedSlotAvailable);
-            }
-        };
-
-        debug!(visible_increase, "No in-progress batch, starting a new one");
         let node_state_root = self
             .node_root_hash()
             .map_err(BatchCreationError::DatabaseError)?;
-        let visible_slot_number_after_increase = self
-            .executor
-            .checkpoint
-            .current_visible_slot_number()
-            .advance(visible_increase.get().into());
 
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
