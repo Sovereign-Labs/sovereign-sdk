@@ -19,7 +19,7 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 anyhow = { workspace = true }
 rand = { workspace = true }
-clap = { version = "4", features = ["derive"] }
+clap = { workspace = true }
 
 sov-api-spec = { workspace = true }
 sov-transaction-generator = { workspace = true }
@@ -30,3 +30,4 @@ sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 sov-value-setter = { workspace = true }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-synthetic-load = { workspace = true }
+sov-test-state-consistency = { workspace = true }

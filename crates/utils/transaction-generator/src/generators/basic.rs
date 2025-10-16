@@ -12,8 +12,12 @@ use super::access_pattern::{
 use super::bank::harness_interface::BankHarness;
 use super::bank::{BankChangeLogDiscriminant, BankChangeLogEntry, BankTag};
 use super::factory::CallMessageFactory;
+use super::state_consistency::StateConsistencyTag;
 use super::value_setter::{
     ValueSetterChangeLogDiscriminant, ValueSetterChangeLogEntry, ValueSetterHarness,
+};
+use crate::generators::state_consistency::{
+    StateConsistencyChangeLogDiscriminant, StateConsistencyChangeLogEntry, StateConsistencyHarness,
 };
 use crate::generators::synthetic_load::{
     SyntheticLoadChangeLogEntry, SyntheticLoadChangeLogEntryDiscriminant,
@@ -32,6 +36,9 @@ pub type BasicValueSetterHarness<S, RT, Acct = ()> =
 /// A helper type that corresponds to access pattern modules compatible with the basic harness
 pub type BasicAccessPatternHarness<S, RT, Acct = ()> =
     AccessPatternHarness<S, RT, BasicTag, BasicChangeLogEntry<S>, Acct>;
+/// A helper type that corresponds to state consistency modules compatible with the basic harness
+pub type BasicStateConsistencyHarness<S, RT, Acct = ()> =
+    StateConsistencyHarness<S, RT, BasicTag, BasicChangeLogEntry<S>, Acct>;
 /// A helper type that contains a reference to a basic module
 pub type BasicModuleRef<S, RT, Acct = ()> =
     Arc<dyn HarnessModule<S, RT, BasicTag, BasicChangeLogEntry<S>, Acct>>;
@@ -46,6 +53,8 @@ pub enum BasicTag {
     ValueSetter(()),
     /// Tags for the access pattern module
     AccessPattern(AccessPatternTag),
+    /// Tags for the state consistency module
+    StateConsistency(StateConsistencyTag),
 }
 
 /// The set of change log entries supported by the [`BasicCallMessageFactory`].
@@ -61,6 +70,8 @@ pub enum BasicChangeLogEntry<S: Spec> {
     SyntheticLoad(SyntheticLoadChangeLogEntry),
     /// Changes from the access pattern module
     AccessPattern(AccessPatternChangeLogEntry<S>),
+    /// Changes from the state consistency module
+    StateConsistency(StateConsistencyChangeLogEntry),
 }
 
 /// Helper struct that can be used to discriminate between different [`BasicChangeLogEntry`]s.
@@ -75,6 +86,8 @@ pub enum BasicChangeLogDiscriminant<S: Spec> {
     SyntheticLoad(SyntheticLoadChangeLogEntryDiscriminant),
     /// Discriminants from the access pattern module
     AccessPattern(AccessPatternChangeLogDiscriminant),
+    /// Discriminants from the state consistency module
+    StateConsistency(StateConsistencyChangeLogDiscriminant),
 }
 
 #[async_trait]
@@ -104,6 +117,10 @@ impl<S: Spec> ChangelogEntry for BasicChangeLogEntry<S> {
                 v.assert_state(Arc::new((*rollup_state_accessor).clone().into()))
                     .await
             }
+            BasicChangeLogEntry::StateConsistency(v) => {
+                v.assert_state(Arc::new((*rollup_state_accessor).clone().into()))
+                    .await
+            }
         }
     }
 
@@ -118,6 +135,9 @@ impl<S: Spec> ChangelogEntry for BasicChangeLogEntry<S> {
             }
             BasicChangeLogEntry::SyntheticLoad(v) => {
                 BasicChangeLogDiscriminant::SyntheticLoad(v.as_discriminant())
+            }
+            BasicChangeLogEntry::StateConsistency(v) => {
+                BasicChangeLogDiscriminant::StateConsistency(v.as_discriminant())
             }
         }
     }

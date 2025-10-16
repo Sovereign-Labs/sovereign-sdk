@@ -40,9 +40,7 @@ where
         state: &mut impl TxState<S>,
         tx: TransactionSigned,
     ) -> anyhow::Result<(CfgEnv, BlockEnv, TxEnv, TxSignedAndRecovered, u64)> {
-        let block_env = self.block_env(state)?.expect(
-            "The impossible happened: block_env should be set in `begin_rollup_block_hook`.",
-        );
+        let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -82,7 +80,7 @@ where
         start_timer!(fetch_state);
         let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
-        let db = self.get_db(state);
+        let db = self.db(state);
         let mut db = MetricsDb::new(db);
 
         start_timer!(execution);

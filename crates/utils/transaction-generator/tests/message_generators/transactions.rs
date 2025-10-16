@@ -65,6 +65,7 @@ fn test_outcomes(outcomes: Vec<Arc<TransactionOutcome>>, txs_count: usize) {
             balances: vec![],
             can_mint: Default::default(),
             sequencing_bond: None,
+            consistency_value: 0,
             additional_info: Default::default(),
         },
         vec![],

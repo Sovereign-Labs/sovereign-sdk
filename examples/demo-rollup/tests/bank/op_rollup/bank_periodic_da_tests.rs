@@ -7,7 +7,7 @@ use anyhow::Context;
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::OperatingMode;
 use sov_modules_macros::config_value;
 

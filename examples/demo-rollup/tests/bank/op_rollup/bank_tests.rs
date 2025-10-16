@@ -8,7 +8,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
 use sov_test_utils::test_rollup::{RollupBuilder, RollupProverConfig};

@@ -6,7 +6,7 @@ use crate::evm::evm_test_helper::EVM_EXTENSION;
 use ethereum_types::H256;
 use ethers::types::U256;
 use sov_eth_client::SimpleStorageClient;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use tokio::time::sleep;
 
 #[tokio::test(flavor = "multi_thread")]

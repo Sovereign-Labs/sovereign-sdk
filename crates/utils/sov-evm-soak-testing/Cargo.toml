@@ -17,6 +17,7 @@ alloy-primitives = { workspace = true }
 sov-test-utils = { workspace = true }
 rand = { workspace = true }
 clap = { workspace = true }
+reqwest = { workspace = true }
 
 [lints]
 workspace = true

@@ -15,7 +15,7 @@ pub use sov_soak_testing_lib::*;
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
 use sov_test_utils::{
     generate_runtime, RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser,
     TEST_DEFAULT_USER_BALANCE,
@@ -31,7 +31,7 @@ pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 5;
 
 pub type TestRT = TestRuntime<TestSpec>;
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRT>;
-pub type TestRollupBuilder = RollupBuilder<RollupBlueprint, PathBuf>;
+pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 
 // Celestia
 pub type CelestiaRollupSpec =
@@ -121,12 +121,12 @@ pub async fn setup_rollup(
     axum_port: u16,
     setup: Setup,
     db_connection_url: Option<String>,
-) -> TestRollup<RollupBlueprint, PathBuf> {
+) -> TestRollup<RollupBlueprint> {
     let rollup_builder = TestRollupBuilder::new_with_storage_path(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
         sov_soak_testing_lib::DEFAULT_BLOCK_PRODUCING_CONFIG,
         sov_soak_testing_lib::DEFAULT_FINALIZATION_BLOCKS,
-        storage_path,
+        StoragePath::Buf(storage_path),
         false,
     )
     .set_config(|config| {

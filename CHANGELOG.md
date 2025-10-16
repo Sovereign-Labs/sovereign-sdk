@@ -1,3 +1,19 @@
+# 2025-10-16
+- #1878 Add EVM logs soak test
+
+# 2025-10-15
+- #1877 Updates the `pub_key` and `signature` fields on `Transaction::V0` to serde (de)serialize as hex strings instead of the underlying crypto type.
+        This does not affect the borsh serialization and thus network serialization of transactions, only if you're using `Schema` to serialize transactions,
+        i.e with the `web3` SDK
+- #1884 Moves the EIP712 authenticator from `sov_evm` to its own crate, `sov-eip712-auth`. This significantly reduces the dependency tree when using only the authenticator on a rollup that does not integrate the entire EVM.
+
+# 2025-10-14
+- #1874 Refactor `scratchpad.rs` into focused submodules for better maintainability.
+
+# 2025-10-13
+- #1876 Use workspace dependencies consistently across all crates. This ensures version consistency and simplifies dependency management.
+- #1851 Implement `debug_traceBlockByNumber` in EVM module.
+
 # 2025-10-10
 - #1840 DOn't panic on selfdestruct/blockhash. Return an error.
 
@@ -20,6 +36,7 @@ to decrease the number of writes it will attempt at each slot.
 # 2025-10-01
 - #1796 Adds `EVM_GAS_METERING_MODE` configuration to switch between "Rollup" and "EVM" gas metering modes. Rollup mode (default) keeps existing behavior where EVM doesn't charge for storage access and initial cost. EVM mode enables mainnet-like gas costs useful for computing metrics like MGas/s.
 - #1791 Re-enable EVM gas estimation while bumping the margins.
+- #1790 Updates the `sov-soak-testing-lib` interface to introduce a `SoakTestRunner`, allowing for more flexible usage as more modules are integrated into the soak generator; the old functions `run_generator_task_for_xx()` have been removed. The soak test crate in the demo rollup has been updated accordingly. This is a *breaking change* for any custom soak testing setups.
 
 # 2025-09-29
 - #1770 **Breaking change** introduces a required `buffer_raw_txs` field to `EthRpcConfig`. This change is only breaking for EVM rollups.

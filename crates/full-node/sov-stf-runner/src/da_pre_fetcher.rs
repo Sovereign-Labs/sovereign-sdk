@@ -284,7 +284,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use sov_mock_da::storable::service::StorableMockDaService;
+    use sov_mock_da::storable::StorableMockDaService;
 
     use super::*;
 

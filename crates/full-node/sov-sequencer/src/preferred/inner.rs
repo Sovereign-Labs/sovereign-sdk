@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -8,7 +9,7 @@ use std::time::Duration;
 use super::batch_size_tracker::BatchSizeTracker;
 use crate::metrics::{
     track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
-    PreferredSequencerPruneMetrics,
+    PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics,
 };
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::block_executor::{
@@ -820,6 +821,24 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     },
 }
 
+impl<S: Spec, Rt: Runtime<S>> Message<S, Rt> {
+    fn is_accept_tx(&self) -> bool {
+        matches!(self, Message::AcceptTx { .. })
+    }
+
+    fn priority(&self, runtime: &Rt) -> u64 {
+        // Computes the priority of the message. Note that the implementation of the queue assumes that transactions never have higher priority than internal
+        // sequencer messages - if we change this assumption, we'll need to update the implementation of sequencer state updater to handle this.
+        match self {
+            Message::AcceptTx { baked_tx, .. } => {
+                let priority = runtime.get_transaction_priority(baked_tx);
+                priority as u64
+            }
+            _ => u64::MAX,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) enum AcceptTxError<S: Spec> {
     SequencerOverloaded503,
@@ -907,6 +926,8 @@ where
             inner,
             channel_size: channel_size.clone(),
             message_receiver,
+            heap: BTreeMap::new(),
+            runtime: Default::default(),
         },
         SequencerStateUpdator {
             message_sender,
@@ -1200,6 +1221,30 @@ where
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Priority {
+    priority: u64,
+    index: u64,
+}
+
+impl PartialOrd for Priority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Priority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let priority_cmp = self.priority.cmp(&other.priority);
+        if priority_cmp == std::cmp::Ordering::Equal {
+            // If priority is equal, give higher priority to the message that is older
+            self.index.cmp(&other.index).reverse()
+        } else {
+            priority_cmp
+        }
+    }
+}
+
 pub(crate) struct SynchronizedSequencerState<S, Rt>
 where
     S: Spec,
@@ -1208,6 +1253,9 @@ where
     inner: Inner<S, Rt>,
     channel_size: Arc<AtomicU32>,
     message_receiver: mpsc::Receiver<Message<S, Rt>>,
+    // A heap of message, ordered from low to high priority.
+    heap: BTreeMap<Priority, Message<S, Rt>>,
+    runtime: Rt,
 }
 
 impl<S, Rt> SynchronizedSequencerState<S, Rt>
@@ -1215,25 +1263,92 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    const MAX_HEAP_SIZE: usize = 10_000;
+
     async fn send_response<T>(&mut self, resp: oneshot::Sender<T>, v: T, name: &'static str) {
         if resp.send(v).is_err() {
             tracing::debug!("SynchronizedSequencerState: Response channel closed - unable to send response to {}", name);
         }
     }
 
+    fn heap_is_full(&self) -> bool {
+        self.heap.len() >= Self::MAX_HEAP_SIZE
+    }
+
     pub(crate) async fn start(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
-            while let Some(msg) = self.message_receiver.recv().await {
-                if let Err(e) = self.handle_next_message(msg).await {
-                    match e {
-                        SequencerStateUpdatorError::Shutdown => {
-                            return;
-                        }
-                        SequencerStateUpdatorError::Unexpected => {
-                            self.inner.shutdown_sender.send(()).unwrap();
-                            panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
+            let mut index = 0;
+            loop {
+                // Start by trying to drain the channel of inbound messages.
+                while let Ok(msg) = self.message_receiver.try_recv() {
+                    self.heap.insert(
+                        Priority {
+                            priority: msg.priority(&self.runtime),
+                            index,
+                        },
+                        msg,
+                    );
+                    index += 1;
+
+                    // If the heap is full after adding the new message, try to clear some space by dropping old messages
+                    if self.heap_is_full() {
+                        tracing::warn!("SynchronizedSequencerState: The message heap is full, dropping the lowest priority message if possible.");
+                        let Some((priority, lowest_priority_msg)) = self.heap.pop_first() else {
+                            // This should be unreachable - we just checked that the heap was full
+                            unreachable!("A heap with len >= 10_000 return None for pop_first");
+                        };
+
+                        // If the lowest priority message is an accept_tx message, send a 503 and drop it. Now we can continue retrieving messages from the channel.
+                        // Here we rely on the guarantee that accept_tx messages always have lower priority than other message types. If this guarantee is removed later,
+                        // we'll need to update this logic.
+                        if let Message::AcceptTx { resp, .. } = lowest_priority_msg {
+                            self.send_response(
+                                resp,
+                                Err(AcceptTxError::SequencerOverloaded503),
+                                "accept_tx",
+                            )
+                            .await;
+                        } else {
+                            // Otherwise, the heap is completely full of undroppable messages. Stop reading from the channel and process one.
+                            self.heap.insert(priority, lowest_priority_msg);
+                            break;
                         }
                     }
+                }
+
+                // Process the highest priority message in the heap. This ensures that the heap will not be full at the start of the next iteration
+                if let Some((_priority, msg)) = self.heap.pop_last() {
+                    if let Err(e) = self.handle_next_message(msg).await {
+                        match e {
+                            SequencerStateUpdatorError::Shutdown => {
+                                return;
+                            }
+                            SequencerStateUpdatorError::Unexpected => {
+                                self.inner.shutdown_sender.send(()).unwrap();
+                                panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
+                            }
+                        }
+                    }
+                }
+
+                // If we don't have any more messages to process, yield until a message becomes available
+                if self.heap.is_empty() {
+                    let Some(msg) = self.message_receiver.recv().await else {
+                        break;
+                    };
+                    assert!(
+                        self.heap
+                            .insert(
+                                Priority {
+                                    priority: msg.priority(&self.runtime),
+                                    index
+                                },
+                                msg
+                            )
+                            .is_none(),
+                        "Duplicate priority for message. This is a bug, please report it"
+                    );
+                    index += 1;
                 }
             }
         })
@@ -1448,6 +1563,10 @@ where
         reason: &'static str,
     ) -> PreferredSeqOperation<S, Rt> {
         let sync_status = &info.sync_status;
+        let true_slot_number = info.slot_number.get();
+        let latest_finalized_slot_number = info.latest_finalized_slot_number.get();
+        let node_visible_slot_number =
+            current_visible_slot_number_according_to_node::<S, Rt>(info).get();
 
         debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -1457,6 +1576,14 @@ where
                 inner.completed_batches_to_replay(next_sequence_number_according_to_node, true),
                 !inner.has_finished_startup,
             )
+        };
+
+        let seq_visible_slot_number = match batches_to_replay.iter().last() {
+            None => node_visible_slot_number,
+            Some(b) => {
+                let _visible_slots_advance = b.batch.inner.visible_slots_to_advance.get();
+                b.visible_slot_number_after_increase.get()
+            }
         };
 
         let is_resync = matches!(
@@ -1472,6 +1599,12 @@ where
         let time_spent_fetching_batches = fetch_batches_to_replay_metrics.duration;
         sov_metrics::track_metrics(|t| {
             t.submit(fetch_batches_to_replay_metrics);
+            t.submit(PreferredSequencerSlotNumberMetrics {
+                true_slot_number,
+                latest_finalized_slot_number,
+                node_visible_slot_number,
+                seq_visible_slot_number,
+            });
         });
 
         let distance = sync_status.distance();
