@@ -15,7 +15,7 @@ publish = true
 workspace = true
 
 [dependencies]
-base64 = { workspace = true }
+base64 = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["derive", "bytes"] }
 bech32 = { workspace = true }
 prost = "0.13"
@@ -103,6 +103,7 @@ native = [
     "dep:rand",
     "dep:reqwest",
     "dep:serde_with",
+    "dep:base64",
     "dep:tracing-subscriber",
 ]
 bench = [
