@@ -57,7 +57,7 @@ impl StandardNodeClient {
             "state_account_address",
         )
         .await
-        .expect("Failed to query state.AccountAddress to retrieve signer address");
+        .expect("Failed to query `state.AccountAddress` to retrieve signer address");
         let fetched_signer = match fetched_address {
             Address::AccAddress(acc) => CelestiaAddress(acc),
             Address::ValAddress(addr) => {
@@ -102,7 +102,7 @@ impl StandardNodeClient {
             Some(signer.0.clone()),
             APP_VERSION,
         )
-        .expect("Bug in CelestiaAdapter");
+        .map_err(|e| MaybeRetryable::Permanent(anyhow::anyhow!("Failed to build blob: {e:?}")))?;
 
         let blob_hash = HexHash::new(*blob.commitment.hash());
         tracing::debug!(
@@ -151,8 +151,9 @@ impl StandardNodeClient {
 
         let tx_response = tx_result.map_err(MaybeRetryable::Transient)?;
         let tx_hash = TmHash(
-            tendermint::Hash::from_str(&tx_response.txhash)
-                .expect("Failed to decode hash from `TxResponse`"),
+            tendermint::Hash::from_str(&tx_response.txhash).map_err(|e| {
+                MaybeRetryable::Permanent(anyhow::anyhow!("Failed to convert tx_hash: {e:?}"))
+            })?,
         );
         tracing::info!(
             da_height = tx_response.height,
@@ -186,7 +187,9 @@ impl StandardNodeClient {
             "send_transaction",
         )
         .await;
-        tx.send(res).unwrap();
+        if let Err(result) = tx.send(res) {
+            tracing::warn!(?result, "Failed to send result of submitting blob to the sender. Probably it is dropped. It is normal during shutdown");
+        }
         rx
     }
 
