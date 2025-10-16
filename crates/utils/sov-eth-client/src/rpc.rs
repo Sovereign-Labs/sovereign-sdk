@@ -18,6 +18,8 @@ use ethers::signers::{LocalWallet, Signer};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClientBuilder;
+use sov_rpc_eth_types::FilterWithCursor;
+use sov_rpc_eth_types::LogsWithMaybeCursor;
 
 pub struct RpcClient {
     pub client: ethers::middleware::SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
@@ -158,6 +160,13 @@ impl RpcClient {
     ) -> alloy_rpc_types::Block<alloy_primitives::TxHash> {
         self.ws
             .request("eth_getBlockByNumber", rpc_params![block_number, false])
+            .await
+            .unwrap()
+    }
+
+    pub async fn get_logs_with_cursor(&self, filter: &FilterWithCursor) -> LogsWithMaybeCursor {
+        self.ws
+            .request("eth_getLogsWithCursor", rpc_params![filter])
             .await
             .unwrap()
     }

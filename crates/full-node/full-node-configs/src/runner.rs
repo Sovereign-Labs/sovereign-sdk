@@ -148,11 +148,10 @@ pub struct RollupConfig<Address, Da: DaService, M> {
 
 impl<Address, Da: DaService, M> RollupConfig<Address, Da, M> {
     pub fn extension_or_panic(&self) -> SeqConfigExtension {
-        self.sequencer
+        *self.sequencer
             .extension
             .as_ref()
             .expect("Sequencer config extension is missing. Verify the [sequencer.extension] section in the rollup configuration.")
-            .clone()
     }
 }
 

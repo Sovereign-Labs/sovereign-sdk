@@ -40,9 +40,7 @@ where
         state: &mut impl TxState<S>,
         tx: TransactionSigned,
     ) -> anyhow::Result<(CfgEnv, BlockEnv, TxEnv, TxSignedAndRecovered, u64)> {
-        let block_env = self.block_env(state)?.expect(
-            "The impossible happened: block_env should be set in `begin_rollup_block_hook`.",
-        );
+        let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -82,7 +80,7 @@ where
         start_timer!(fetch_state);
         let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
-        let db = self.get_db(state);
+        let db = self.db(state);
         let mut db = MetricsDb::new(db);
 
         start_timer!(execution);
@@ -97,7 +95,7 @@ where
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
         db.commit(state_changes)
-            .map_err(|e| anyhow::anyhow!("{}", &*e))?;
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
         if !result.is_success() {
@@ -105,11 +103,10 @@ where
         }
         #[cfg(feature = "native")]
         let db_metrics = db.metrics();
-        drop(db); // To release the state
 
         let gas_used = result.gas_used();
         start_timer!(receipt_t);
-        let receipt = self.get_receipt(&tx, pending_len, result, state)?;
+        let receipt = self.create_receipt(&tx, pending_len, result, state)?;
         save_elapsed!(receipt_time SINCE receipt_t);
         state.charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)?;
 
@@ -194,7 +191,7 @@ where
             .expect("gas_to_charge_per_evm_gas() is zero")
     }
 
-    fn get_receipt(
+    fn create_receipt(
         &self,
         tx: &TxSignedAndRecovered,
         tx_index: u64,
@@ -243,7 +240,6 @@ where
             block_number: tx.block_number,
             gas_used,
             log_index_start,
-            error: None,
             transaction_index: tx_index,
         })
     }

@@ -1,442 +1,45 @@
-use std::error::Error;
-
-use crate::db::commit::FallibleDatabaseCommit;
+use alloy_consensus::Sealed;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_primitives::{Address, BlockHash, U64};
+use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::{Address, BlockNumber};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
-    state::StateOverride, Block, BlockOverrides, BlockTransactions, FeeHistory, Log,
-    ReceiptEnvelope, ReceiptWithBloom, Transaction, TransactionReceipt, TransactionRequest,
+    Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
+    TransactionReceipt, TransactionRequest,
 };
-use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
+use alloy_rpc_types::{BlockTransactionsKind, Header};
 use alloy_rpc_types_trace::geth::GethTrace;
 use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
-use error::ensure_success;
+use alloy_rpc_types_trace::geth::{GethDebugTracingOptions, TraceResult};
 use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
-use revm::context::result::{EVMError, InvalidHeader, ResultAndState};
+use revm::context::result::{ExecResultAndState, ResultAndState};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
-use revm::Database;
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::macros::{config_value, rpc_gen};
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec, StateAccessor};
+use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
-use tracing::debug;
 
 use crate::conversions::replay_tx_env;
+use crate::db::commit::FallibleDatabaseCommit;
 use crate::db::EvmDb;
+use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
-use crate::helpers::{
-    from_primitive_with_hash, from_recovered_with_block_context, prepare_call_env,
-};
+use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::Evm;
 
 pub(crate) mod error;
-
-#[rpc_gen(client, server)]
-impl<S: Spec> Evm<S>
-where
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    /// Handler for `net_version`
-    #[rpc_method(name = "net_version")]
-    pub fn net_version(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<String> {
-        debug!("EVM module JSON-RPC request to `net_version`");
-
-        // Network ID is the same as chain ID for most networks
-        let chain_id = config_value!("CHAIN_ID");
-        Ok(chain_id.to_string())
-    }
-
-    /// Handler for: `eth_chainId`
-    #[rpc_method(name = "eth_chainId")]
-    pub fn chain_id(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<Option<U64>> {
-        let chain_id = config_value!("CHAIN_ID");
-        debug!(
-            chain_id = chain_id,
-            "EVM module JSON-RPC request to `eth_chainId`"
-        );
-        Ok(Some(U64::from(chain_id)))
-    }
-
-    /// Handler for `eth_getBlockByHash`
-    #[rpc_method(name = "eth_getBlockByHash")]
-    pub fn get_block_by_hash(
-        &self,
-        block_hash: B256,
-        details: Option<bool>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Block>> {
-        debug!(
-            ?block_hash,
-            "EVM module JSON-RPC request to `eth_getBlockByHash`"
-        );
-
-        let block_number_hex = self
-            .block_hashes
-            .get(&block_hash, state)
-            .unwrap_infallible()
-            .map(|number| hex::encode(number.to_be_bytes()));
-
-        match block_number_hex {
-            Some(block_number_hex) => {
-                self.get_block_by_number(Some(block_number_hex), details, state)
-            }
-            None => Ok(None),
-        }
-    }
-
-    /// Handler for: `eth_getBlockByNumber`
-    #[rpc_method(name = "eth_getBlockByNumber")]
-    pub fn get_block_by_number(
-        &self,
-        block_number: Option<String>,
-        details: Option<bool>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Block>> {
-        debug!(
-            block_number,
-            "EVM module JSON-RPC request to `eth_getBlockByNumber`"
-        );
-
-        let maybe_block = || -> Option<Block> {
-            let block = self.get_sealed_block_by_number(block_number, state)?;
-
-            let block_hash = block.hash().unwrap_or(BlockHash::ZERO);
-            let header = from_primitive_with_hash(block.header().clone(), block_hash);
-
-            let block_number = block.number();
-            let tx_range = block.transactions_start()..block.transactions_end();
-
-            let transactions = if Some(true) == details {
-                BlockTransactions::Full(
-                    tx_range
-                        .map(|index| {
-                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                            Some(from_recovered_with_block_context(
-                                tx.into(),
-                                Some(block_hash),
-                                block_number,
-                                U256::from(index - block.transactions_start()),
-                            ))
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                )
-            } else {
-                BlockTransactions::Hashes(
-                    tx_range
-                        .map(|index| {
-                            let tx = self.transactions.get(&index, state).unwrap_infallible()?;
-                            Some(*tx.signed_transaction.hash())
-                        })
-                        .collect::<Option<Vec<_>>>()?,
-                )
-            };
-
-            Some(Block {
-                header,
-                transactions,
-                ..Default::default()
-            })
-        };
-
-        Ok(maybe_block())
-    }
-
-    /// Handler for: `eth_getBalance`
-    #[rpc_method(name = "eth_getBalance")]
-    pub fn get_balance(
-        &self,
-        address: Address,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U256> {
-        let mut state = self.resolve_state(block_number, state)?;
-        let balance = self
-            .get_db(state.deref_mut())
-            .basic(address)
-            .map_err(|e| eth_api_into_rpc_error(EthApiError::from(e)))?
-            .map(|account| account.balance)
-            .unwrap_or_default();
-
-        debug!(
-            %address,
-            %balance,
-            "EVM module JSON-RPC request to `eth_getBalance`"
-        );
-
-        Ok(balance)
-    }
-
-    /// Handler for: `eth_getStorageAt`
-    #[rpc_method(name = "eth_getStorageAt")]
-    pub fn get_storage_at(
-        &self,
-        address: Address,
-        index: U256,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U256> {
-        debug!("EVM module JSON-RPC request to `eth_getStorageAt`");
-
-        let mut state = self.resolve_state(block_number, state)?;
-        let storage_slot = self
-            .account_storage
-            .get(&(&address, &index), state.deref_mut())
-            .unwrap_infallible()
-            .unwrap_or_default();
-
-        Ok(storage_slot)
-    }
-
-    /// Handler for: `eth_getTransactionCount`
-    #[rpc_method(name = "eth_getTransactionCount")]
-    pub fn get_transaction_count(
-        &self,
-        address: Address,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U64> {
-        let mut state = self.resolve_state(block_number, state)?;
-
-        let ethereum_address: EthereumAddress = address.into();
-        let credential_id = ethereum_address.as_credential_id();
-
-        let nonce = self
-            .uniqueness_module
-            .next_nonce(&credential_id, state.deref_mut())
-            .unwrap_or_default();
-
-        debug!(%address, nonce, "EVM module JSON-RPC request to `eth_getTransactionCount`");
-        Ok(U64::from(nonce))
-    }
-
-    /// Handler for: `eth_getCode`
-    #[rpc_method(name = "eth_getCode")]
-    pub fn get_code(
-        &self,
-        address: Address,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Bytes> {
-        debug!("EVM module JSON-RPC request to `eth_getCode`");
-        let mut state = self.resolve_state(block_number, state)?;
-        let code = self
-            .accounts
-            .get(&address, state.deref_mut())
-            .unwrap_infallible()
-            .and_then(|account| {
-                self.code
-                    .get(&account.code_hash, state.deref_mut())
-                    .unwrap_infallible()
-            })
-            .map(|code| code.bytecode().clone())
-            .unwrap_or_default();
-
-        Ok(code)
-    }
-
-    /// Handler for: `eth_feeHistory`
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "eth_feeHistory")]
-    pub fn fee_history(&self) -> RpcResult<FeeHistory> {
-        debug!("EVM module JSON-RPC request to `eth_feeHistory`");
-
-        Ok(FeeHistory {
-            base_fee_per_gas: Default::default(),
-            gas_used_ratio: Default::default(),
-            oldest_block: Default::default(),
-            reward: Default::default(),
-            blob_gas_used_ratio: Default::default(),
-            // EIP-4844 related
-            base_fee_per_blob_gas: Default::default(),
-        })
-    }
-
-    /// Handler for: `eth_getTransactionByHash`
-    #[rpc_method(name = "eth_getTransactionByHash")]
-    pub fn get_transaction_by_hash(
-        &self,
-        hash: B256,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Transaction>> {
-        let mut maybe_tx = || -> Option<Transaction> {
-            let tx_number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(tx_number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-
-            Some(from_recovered_with_block_context(
-                tx.into(),
-                block.hash(),
-                block.number(),
-                U256::from(tx_number - block.transactions_start()),
-            ))
-        };
-
-        let transaction = maybe_tx();
-        debug!(
-            %hash,
-            ?transaction,
-            "EVM module JSON-RPC request to `eth_getTransactionByHash`"
-        );
-
-        Ok(transaction)
-    }
-
-    /// Handler for: `eth_getTransactionReceipt`
-    #[rpc_method(name = "eth_getTransactionReceipt")]
-    pub fn get_transaction_receipt(
-        &self,
-        hash: B256,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<TransactionReceipt>> {
-        debug!(
-            %hash,
-            "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
-        );
-
-        let mut maybe_receipt = || -> Option<TransactionReceipt> {
-            let number = self.get_tx_index_by_hash(&hash, state)?;
-            let tx = self.transaction(number, state)?;
-            let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-            let receipt = self.receipt(number, state)?;
-            Some(build_rpc_receipt(block, tx, number, receipt))
-        };
-
-        Ok(maybe_receipt())
-    }
-
-    /// Handler for: `eth_call`
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
-    #[rpc_method(name = "eth_call")]
-    pub fn eth_call(
-        &self,
-        request: TransactionRequest,
-        block_number: Option<String>,
-        _state_overrides: Option<StateOverride>,
-        _block_overrides: Option<Box<BlockOverrides>>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Bytes> {
-        debug!("EVM module JSON-RPC request to `eth_call`");
-        let result = self.call(request, block_number, state)?.result;
-        ensure_success(result).map_err(eth_api_into_rpc_error)
-    }
-
-    /// Handler for: `eth_blockNumber`
-    #[rpc_method(name = "eth_blockNumber")]
-    pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
-        debug!("EVM module JSON-RPC request to `eth_blockNumber`");
-        let block_number_range = self
-            .block_numbers
-            .get(state)
-            .unwrap_infallible()
-            // Justified, we set it at genesis and later only override it.
-            .expect("The impossible happened: block_numbers was not set.");
-
-        Ok(U256::from(*block_number_range.end()))
-    }
-
-    /// Handler for: `eth_estimateGas`
-    // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/api/call.rs#L172
-    #[rpc_method(name = "eth_estimateGas")]
-    pub fn eth_estimate_gas(
-        &self,
-        request: TransactionRequest,
-        block_number: Option<String>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U64> {
-        debug!("EVM module JSON-RPC request to `eth_estimateGas`");
-        let ResultAndState {
-            result,
-            state: changes,
-        } = self.call(request, block_number, state)?;
-        self.get_db(state)
-            .commit(changes)
-            .expect("Impossible as gas meter is initialized with INF");
-        let gas_used = result.gas_used();
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
-        gas_meter
-            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
-            .expect("No underflow is possible here as we init EVM gas with gas meter gas");
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-        Ok(U64::from(apply_margins(total_gas_used)?))
-    }
-
-    /// Handler for: `debug_traceTransaction`
-    #[rpc_method(name = "debug_traceTransaction")]
-    pub fn debug_trace_transaction(
-        &self,
-        tx_hash: B256,
-        opts: Option<GethDebugTracingOptions>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<GethTrace> {
-        debug!("EVM module JSON-RPC request to `debug_traceTransaction`");
-        // Get transaction and block data
-        let index = self
-            .get_tx_index_by_hash(&tx_hash, state)
-            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
-
-        let traced_tx = self
-            .transaction(index, state)
-            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
-
-        let block = self
-            .blocks
-            .get(&traced_tx.block_number, state)?
-            .expect("Transaction block not available");
-
-        // Get archival state and environment
-        let mut archival_state = state
-            .get_archival_state(RollupHeight::new(traced_tx.block_number - 1))
-            .map_err(into_rpc_error)?;
-
-        let block_env = self
-            .block_env(&mut archival_state)?
-            .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
-
-        let cfg = self.cfg(&mut archival_state).map_err(into_rpc_error)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        // Replay previous transactions in the block
-        let mut evm_db = self.get_db(&mut archival_state);
-
-        for tx_idx in block.transactions {
-            let tx = self
-                .transaction(tx_idx, state)
-                .ok_or_else(|| eth_api_into_rpc_error(EthApiError::PrunedHistoryUnavailable))?;
-
-            // Skip the transaction we're tracing
-            if *tx.signed_transaction.hash() == tx_hash {
-                break;
-            }
-
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(|e| eth_api_into_rpc_error(eth_from_evm_error(e)))?;
-        }
-
-        // Trace the target transaction
-        self.trace_transaction(
-            block_env,
-            replay_tx_env(&traced_tx),
-            cfg_env,
-            evm_db,
-            &opts.unwrap_or_default(),
-        )
-        .map_err(eth_api_into_rpc_error)
-    }
-}
+pub(crate) mod handlers;
 
 /// Result of String => BlockNr conversion
 #[derive(Debug)]
 pub enum PendingOrBlock {
-    /// Pending blcock.
+    /// Pending block.
     Pending,
     /// Block number.
     Number(u64),
@@ -444,10 +47,9 @@ pub enum PendingOrBlock {
     Invalid(String),
 }
 
-// HACK: This should be much lower but because gas estimation doesn't work now - we temporarily set it to a large value.
 const ABSOLUTE_MARGIN: u64 = 100_000;
 /// gas * 1.5 + 100_000
-fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
+pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
         .checked_mul(3)
         .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
@@ -458,12 +60,208 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn get_block_transactions(
+        &self,
+        block: &MaybeSealedBlock,
+        kind: BlockTransactionsKind,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<BlockTransactions<Transaction>> {
+        let tx_range = block.tx_range();
+        let txs = match kind {
+            BlockTransactionsKind::Full => {
+                let txs = tx_range
+                    .clone()
+                    .map(|idx| {
+                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
+                        Some(from_recovered_with_block_context(
+                            tx.into(),
+                            Some(block.hash().unwrap_or_default()),
+                            block.number(),
+                            U256::from(idx - tx_range.start),
+                        ))
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                BlockTransactions::Full(txs)
+            }
+            BlockTransactionsKind::Hashes => {
+                let hashes = tx_range
+                    .into_iter()
+                    .map(|idx| {
+                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
+                        Some(*tx.signed_transaction.hash())
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                BlockTransactions::Hashes(hashes)
+            }
+        };
+        Some(txs)
+    }
+
+    fn get_block(
+        &self,
+        block_number: Option<String>,
+        kind: BlockTransactionsKind,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Block> {
+        let block = self.get_sealed_block_by_number(block_number, state)?;
+        let hash = block.hash().unwrap_or_default();
+
+        let transactions = self.get_block_transactions(&block, kind, state)?;
+        let header = Sealed::new_unchecked(block.header().clone(), hash);
+        let header = Header::from_consensus(header, None, None);
+
+        Some(Block {
+            header,
+            transactions,
+            ..Default::default()
+        })
+    }
+
+    fn get_contract_code(
+        &self,
+        address: Address,
+        mut state: MaybeArchivalState<'_, S>,
+    ) -> Option<Bytes> {
+        let account = self
+            .accounts
+            .get(&address, state.deref_mut())
+            .unwrap_infallible()?;
+        let code = self
+            .code
+            .get(&account.code_hash, state.deref_mut())
+            .unwrap_infallible()?;
+        Some(code.bytes())
+    }
+
+    fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
+        let tx_number = self.tx_index(&hash, state)?;
+        let tx = self.transaction(tx_number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let index = U256::from(tx_number - block.transactions_start());
+        let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
+        Some(tx)
+    }
+
+    fn get_receipt_by_hash(
+        &self,
+        hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt> {
+        let number = self.tx_index(&hash, state)?;
+        self.get_receipt_by_index(number, state)
+    }
+
+    fn get_receipt_by_index(
+        &self,
+        number: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt> {
+        let tx = self.transaction(number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let receipt = self.receipt(number, state)?;
+        Some(build_rpc_receipt(block, tx, number, receipt))
+    }
+
+    fn get_receipts(
+        &self,
+        block_number: Option<String>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Vec<TransactionReceipt>> {
+        let block = self.get_sealed_block_by_number(block_number, state)?;
+        let receipts = block
+            .tx_range()
+            .map(|index| self.get_receipt_by_index(index, state))
+            .collect::<Option<Vec<_>>>()?;
+        Some(receipts)
+    }
+
+    fn trace_block_by_number(
+        &self,
+        block: BlockNumberOrTag,
+        opts: GethDebugTracingOptions,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<Vec<TraceResult>, EthApiError> {
+        let block_number = self.resolve_block_number(block, state);
+        // Get transaction and block data
+        let block = self.block(block_number, state)?;
+        let mut archival_state = self.archival_state_pre_block(block_number, state)?;
+
+        let block_env = self.block_env(&mut archival_state)?;
+
+        let cfg = self.cfg(&mut archival_state)?;
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
+
+        // Replay previous transactions in the block
+        let mut evm_db = self.db(&mut archival_state);
+
+        let mut traces = vec![];
+        for tx_idx in block.transactions {
+            let tx = self
+                .transaction(tx_idx, state)
+                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+
+            let result = self.trace_transaction_inner(
+                &block_env,
+                replay_tx_env(&tx),
+                cfg_env.clone(),
+                &mut evm_db,
+                &opts,
+            )?;
+            traces.push(TraceResult::new_success(result, Some(*tx.hash())));
+        }
+        Ok(traces)
+    }
+
     fn trace_transaction(
         &self,
-        block_env: BlockEnv,
+        tx_hash: B256,
+        opts: GethDebugTracingOptions,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<GethTrace, EthApiError> {
+        // Get transaction and block data
+        let traced_tx = self.tx(tx_hash, state)?;
+        let block = self.block(traced_tx.block_number, state)?;
+
+        let mut archival_state = self.archival_state_pre_block(traced_tx.block_number, state)?;
+
+        let block_env = self.block_env(&mut archival_state)?;
+
+        let cfg = self.cfg(&mut archival_state)?;
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
+
+        // Replay previous transactions in the block
+        let mut evm_db = self.db(&mut archival_state);
+
+        for tx_idx in block.transactions {
+            let tx = self
+                .transaction(tx_idx, state)
+                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
+
+            // Skip the transaction we're tracing
+            if *tx.signed_transaction.hash() == tx_hash {
+                break;
+            }
+
+            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
+                .map_err(EthApiError::from)?;
+        }
+
+        // Trace the target transaction
+        self.trace_transaction_inner(
+            &block_env,
+            replay_tx_env(&traced_tx),
+            cfg_env,
+            &mut evm_db,
+            &opts,
+        )
+    }
+
+    fn trace_transaction_inner(
+        &self,
+        block_env: &BlockEnv,
         tx_env: TxEnv,
         cfg: CfgEnv,
-        db: EvmDb<ApiStateAccessor<S>, S>,
+        db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
     ) -> Result<GethTrace, EthApiError> {
         let GethDebugTracingOptions {
@@ -484,12 +282,14 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let res = inspect(db, &block_env, tx_env, cfg, &mut inspector)?;
-                    inspector.set_transaction_gas_limit(gas_limit);
+                    let ExecResultAndState { result, state } =
+                        inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
+                    db.commit(state)?;
 
+                    inspector.set_transaction_gas_limit(gas_limit);
                     let frame = inspector
                         .geth_builder()
-                        .geth_call_traces(call_config, res.result.gas_used());
+                        .geth_call_traces(call_config, result.gas_used());
 
                     return Ok(frame.into());
                 }
@@ -504,16 +304,14 @@ where
         request: TransactionRequest,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<ResultAndState> {
+    ) -> Result<ResultAndState, EthApiError> {
         let block_env = self.resolve_block_env(block_number, state)?;
-        let tx_env =
-            prepare_call_env(&block_env, request.clone()).map_err(eth_api_into_rpc_error)?;
+        let tx_env = prepare_call_env(&block_env, request.clone())?;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
-        let evm_db: EvmDb<_, S> = self.get_db(state);
+        let evm_db: EvmDb<_, S> = self.db(state);
 
-        executor::transact(evm_db, &block_env, tx_env, cfg_env)
-            .map_err(|err| eth_api_into_rpc_error(eth_from_evm_error(err)))
+        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)?)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.
@@ -544,33 +342,32 @@ where
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
         match block_number_str.as_str() {
-            "earliest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                PendingOrBlock::Number(*block_numbers.start())
-            }
-            "latest" => {
-                let block_numbers = self
-                    .block_numbers
-                    .get(state)
-                    .unwrap_infallible()
-                    // This is justified, as block numbers are set at genesis and only overridden later.
-                    .expect("The impossible happened: block_numbers was not set.");
-
-                PendingOrBlock::Number(*block_numbers.end())
-            }
-
+            "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
+            "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
             "pending" => PendingOrBlock::Pending,
             number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
                 Ok(nr) => PendingOrBlock::Number(nr),
                 Err(_) => PendingOrBlock::Invalid(block_number_str),
             },
         }
+    }
+
+    /// Converts BlockNumberOrTag into number.
+    pub fn resolve_block_number(
+        &self,
+        block: BlockNumberOrTag,
+        state: &mut ApiStateAccessor<S>,
+    ) -> BlockNumber {
+        let block_numbers = self.block_numbers(state);
+        let block_number = match block {
+            BlockNumberOrTag::Earliest => *block_numbers.start(),
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                *block_numbers.end()
+            }
+            BlockNumberOrTag::Number(nr) => nr,
+            BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+        };
+        block_number
     }
 
     /// Retrieves a sealed block by number.
@@ -596,12 +393,7 @@ where
 
     /// Retrieves the pending block.
     pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
-        let block_numbers = self
-            .block_numbers
-            .get(state)
-            .unwrap_infallible()
-            // This is justified, as block numbers are set at genesis and only overridden later.
-            .expect("The impossible happened: block_numbers was not set.");
+        let block_numbers = self.block_numbers(state);
 
         let head_block = self
             .blocks
@@ -793,35 +585,4 @@ pub(crate) fn build_rpc_receipt(
         to,
         contract_address,
     }
-}
-
-fn eth_from_evm_error<Ws: StateAccessor>(err: EVMError<crate::db::Error<Ws>>) -> EthApiError {
-    match err {
-        EVMError::Transaction(err) => RpcInvalidTransactionError::from(err).into(),
-        EVMError::Header(InvalidHeader::PrevrandaoNotSet) => EthApiError::PrevrandaoNotSet,
-        EVMError::Header(InvalidHeader::ExcessBlobGasNotSet) => EthApiError::ExcessBlobGasNotSet,
-        EVMError::Database(db_err) => db_err.into(),
-        EVMError::Custom(data) => EthApiError::EvmCustom(data),
-    }
-}
-
-impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
-    fn from(err: crate::db::Error<Ws>) -> Self {
-        EthApiError::EvmCustom(format!("Database error: {err}"))
-    }
-}
-
-/// Hack while reth is not upgraded for `jsonrpsee` 0.25
-pub fn eth_api_into_rpc_error(eth_error: EthApiError) -> ErrorObjectOwned {
-    ErrorObject::owned(500, format!("Eth Error: {eth_error:?}"), None::<()>)
-}
-
-/// Hack while reth is not upgraded for `jsonrpsee` 0.25
-pub fn invalid_tx_into_rpc_error(rpc: RpcInvalidTransactionError) -> ErrorObjectOwned {
-    eth_api_into_rpc_error(rpc.into())
-}
-
-/// Converts internal error into rpc error
-pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
-    ErrorObject::owned(500, format!("{err}"), None::<()>)
 }

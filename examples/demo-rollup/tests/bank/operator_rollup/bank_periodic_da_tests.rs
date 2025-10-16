@@ -4,7 +4,7 @@ use std::sync::Arc;
 use sov_bank::config_gas_token_id;
 use sov_bank::derived_holder::DerivedHolder;
 use sov_cli::NodeClient;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::{OperatingMode, Spec};
 use sov_test_utils::TestSpec;
 

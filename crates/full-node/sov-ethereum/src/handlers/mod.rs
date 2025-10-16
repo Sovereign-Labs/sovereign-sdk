@@ -2,7 +2,7 @@ mod get_logs;
 mod subscribe;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::TransactionReceipt;
-pub use get_logs::eth_get_logs;
+pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -139,7 +139,6 @@ pub(crate) mod signer {
     use alloy_eips::Encodable2718;
     use alloy_primitives::Address;
     use alloy_rpc_types::TransactionRequest;
-    use sov_evm::eth_api_into_rpc_error;
     use sov_modules_api::macros::config_value;
     use sov_rpc_eth_types::EthApiError;
 
@@ -211,7 +210,7 @@ pub(crate) mod signer {
 
             let transaction = transaction_request
                 .build_typed_tx()
-                .map_err(|_| eth_api_into_rpc_error(EthApiError::TransactionConversionError))?;
+                .map_err(|_| EthApiError::TransactionConversionError)?;
 
             // sign transaction
             let signed_tx = ethereum

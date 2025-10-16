@@ -6,7 +6,7 @@ use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NativeStorageManager;
 use sov_ethereum::EthRpcConfig;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
@@ -26,7 +26,7 @@ use sov_stf_runner::RollupConfig;
 use crate::eth_dev_signer;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }

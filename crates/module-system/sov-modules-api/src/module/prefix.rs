@@ -1,6 +1,5 @@
 use sha2::Digest;
 use sov_rollup_interface::zk::CryptoSpec;
-use sov_state::Prefix;
 
 use crate::Spec;
 
@@ -13,6 +12,20 @@ pub struct ModulePrefix {
     module_path: &'static str,
     module_name: &'static str,
     storage_name: Option<&'static str>,
+}
+
+impl std::fmt::Display for ModulePrefix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(storage_name) = self.storage_name {
+            write!(
+                f,
+                "{}/{}/{}",
+                self.module_path, self.module_name, storage_name
+            )
+        } else {
+            write!(f, "{}/{}", self.module_path, self.module_name)
+        }
+    }
 }
 
 impl ModulePrefix {
@@ -78,12 +91,5 @@ impl ModulePrefix {
         let mut hasher = <S::CryptoSpec as CryptoSpec>::Hasher::new();
         hasher.update(combined_prefix);
         hasher.finalize().into()
-    }
-}
-
-impl From<ModulePrefix> for Prefix {
-    fn from(module_prefix: ModulePrefix) -> Self {
-        let combined_prefix = module_prefix.combine_prefix();
-        Prefix::new(combined_prefix)
     }
 }

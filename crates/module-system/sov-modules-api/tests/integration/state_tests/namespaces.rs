@@ -27,7 +27,7 @@ where
 {
     let (storage, prev_root) = storage_manager.create_storage_with_root();
 
-    let mut state_value = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let mut kernel = MockKernel::<S>::default();
 
@@ -80,7 +80,7 @@ where
 
     let mut kernel = MockKernel::<S>::default();
 
-    let mut state_value = KernelStateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = KernelStateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     // Native execution
     let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
@@ -125,7 +125,7 @@ where
 {
     let (storage, prev_root) = storage_manager.create_storage_with_root();
 
-    let mut state_value = StateMap::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
     let mut kernel = MockKernel::<S>::default();
 
     // Native execution
@@ -180,7 +180,7 @@ where
 {
     let (storage, prev_root) = storage_manager.create_storage_with_root();
 
-    let mut state_value = VersionedStateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = VersionedStateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let mut kernel = MockKernel::<S>::default();
 

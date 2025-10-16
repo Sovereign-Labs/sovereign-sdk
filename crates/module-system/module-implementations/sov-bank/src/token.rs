@@ -80,10 +80,9 @@ where
     BorshCodec: EncodeLike<AddrLike, Addr>,
     BorshCodec: StateItemEncoder<TokenId>,
 {
-    fn encode_like(&self, borrowed: &(AddrLike, &TokenId)) -> Vec<u8> {
-        let mut out = self.encode_like(&borrowed.0);
-        out.extend_from_slice(&self.encode(borrowed.1));
-        out
+    fn encode_like(&self, borrowed: &(AddrLike, &TokenId), writer: &mut impl std::io::Write) {
+        self.encode_like(&borrowed.0, writer);
+        self.encode(&borrowed.1, writer);
     }
 }
 
@@ -362,8 +361,8 @@ mod tests {
     fn test_balance_key_encode_like() {
         let key: BalanceKey<String> = BalanceKey("Address/".to_string(), TokenId::from([1u8; 32]));
         assert_eq!(
-            BorshCodec.encode_like(&(key.0.clone(), &key.1)),
-            BorshCodec.encode(&key)
+            BorshCodec.encode_to_vec_like(&(key.0.clone(), &key.1)),
+            BorshCodec.encode_to_vec(&key)
         );
     }
 

@@ -8,9 +8,9 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
+use derive_more::{Deref, DerefMut};
 use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
-use revm::context::result::EVMError;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 
@@ -36,13 +36,15 @@ pub struct RlpEvmTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, new)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut, new)]
 pub struct TxSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
     /// Signed transaction
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "EthereumTxEnvelopeBincodeCompat")]
+    #[deref]
+    #[deref_mut]
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
     pub block_number: u64,
@@ -92,9 +94,12 @@ impl Block {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+/// Block with seald header.
+#[derive(Debug, PartialEq, Clone, Deref, DerefMut)]
 pub struct SealedBlock {
     /// Block header.
+    #[deref]
+    #[deref_mut]
     pub header: Sealed<Header>,
 
     /// Transactions in this block.
@@ -112,6 +117,7 @@ impl SealedBlock {
         &self.transactions
     }
 
+    /// EIP1559 base fee.
     pub fn base_fee(&self) -> u64 {
         self.header
             .base_fee_per_gas
@@ -190,6 +196,11 @@ impl MaybeSealedBlock {
         }
     }
 
+    /// The range of transactions in the block
+    pub fn tx_range(&self) -> Range<u64> {
+        self.transactions_start()..self.transactions_end()
+    }
+
     /// Index of the first transaction in the block.
     pub fn transactions_start(&self) -> u64 {
         match self {
@@ -223,18 +234,26 @@ impl MaybeSealedBlock {
     }
 }
 
+/// TODO: Can we replace this with Reth type?
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut)]
+/// Receipt
 pub struct Receipt {
     /// https://reth.rs/docs/reth_primitives/serde_bincode_compat/index.html
     #[serde_as(as = "ReceiptBincodeCompat")]
+    #[deref]
+    #[deref_mut]
     pub receipt: reth_primitives::Receipt,
+    /// tx hash
     pub transaction_hash: TxHash,
+    /// tx index
     pub transaction_index: u64,
+    /// block number
     pub block_number: u64,
+    /// gas used
     pub gas_used: u64,
+    /// log index start
     pub log_index_start: u64,
-    pub error: Option<EVMError<u8>>,
 }
 
 impl From<TxSignedAndRecovered> for Recovered<TransactionSigned> {

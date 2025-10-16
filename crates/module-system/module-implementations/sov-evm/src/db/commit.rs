@@ -39,6 +39,7 @@ where
 
 impl<'a, Ws: StateAccessor, S: Spec> EvmDb<'a, Ws, S>
 where
+    EvmDb<'a, Ws, S>: FallibleDatabaseCommit<Error = Error<Ws>>,
     S::Address: FromVmAddress<EthereumAddress>,
 {
     fn commit_account(
@@ -49,7 +50,7 @@ where
         // TODO figure out what to do when account is destroyed.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
         if account.is_selfdestructed() {
-            todo!("Account destruction not supported")
+            return Err(Error::SelfDestructUnsupported);
         }
 
         self.commit_storage(address, account.storage)?;
@@ -62,7 +63,7 @@ where
                 &to_rollup_address::<S>(address),
                 self.state,
             )
-            .map_err(Error)?;
+            .map_err(Error::State)?;
         // Set the EVM account balance to 0 - as balances are stored in the bank module.
         account.balance = U256::ZERO;
 
@@ -71,13 +72,13 @@ where
                 // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                 self.code
                     .set(&account.code_hash, code, self.state)
-                    .map_err(Error)?;
+                    .map_err(Error::State)?;
             }
         }
 
         self.accounts
             .set(&address, &DbAccount(account), self.state)
-            .map_err(Error)?;
+            .map_err(Error::State)?;
 
         Ok(())
     }
@@ -94,7 +95,7 @@ where
                 let value = value.present_value();
                 self.account_storage
                     .set(&(&address, &key), &value, self.state)
-                    .map_err(Error)
+                    .map_err(Error::State)
             })
     }
 }

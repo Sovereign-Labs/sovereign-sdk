@@ -8,7 +8,7 @@ use ethers::providers::{Http, PendingTransaction};
 use futures::StreamExt;
 use sov_cli::NodeClient;
 use sov_modules_api::{Runtime, Spec};
-use sov_test_utils::SimpleStorage;
+use sov_test_utils::LegacySimpleStorage;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -21,7 +21,7 @@ const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
 #[derive(Deref)]
 pub struct SimpleStorageClient {
-    pub contract: SimpleStorage,
+    pub contract: LegacySimpleStorage,
     node_client: NodeClient,
     pub nonce: Arc<AtomicU64>,
     #[deref]
@@ -31,7 +31,7 @@ pub struct SimpleStorageClient {
 impl SimpleStorageClient {
     pub async fn new(
         private_key: &str,
-        contract: SimpleStorage,
+        contract: LegacySimpleStorage,
         http_addr: std::net::SocketAddr,
     ) -> Self {
         let rpc_client = RpcClient::new(private_key, http_addr).await;

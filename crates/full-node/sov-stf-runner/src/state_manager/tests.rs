@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use rand::SeedableRng;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockDaService,
     MockDaSpec, MockHash, PlannedFork, RandomizationBehaviour, RandomizationConfig,
@@ -1064,7 +1064,7 @@ fn produce_synthetic_changes<Da: DaSpec>(
     accesses
         .user
         .ordered_writes
-        .push((SlotKey::from(data.clone()), Some(SlotValue::from(data))));
+        .push((SlotKey::from_slice(&data), Some(SlotValue::from(data))));
     let (state_root, state_update) = prover_storage
         .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root)
         .unwrap();

@@ -34,6 +34,7 @@ use sov_solana_offchain_auth::utils::make_preamble_for_message;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{BankConfig, Runtime as _};
+use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     generate_runtime, RtAgnosticBlueprint, TestUser, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE,
@@ -148,7 +149,7 @@ async fn create_test_rollup() -> anyhow::Result<(
         3, // finalization blocks
     )
     .set_config(|c| {
-        c.storage = dir.clone();
+        c.storage = StoragePath::Tmp(dir.clone());
         c.automatic_batch_production = false;
         c.max_batch_size_bytes = 1024 * 1024; // 1MB
         c.blob_processing_timeout_secs = 60;

@@ -33,7 +33,9 @@ alloy-rpc-types = { workspace = true }
 alloy-eips = { workspace = true }
 reth-primitives = { workspace = true }
 sov-rpc-eth-types = { workspace = true }
-
+hex = { workspace = true }
+thiserror = { workspace = true }
+derive_more = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 
 [dev-dependencies]
@@ -52,7 +54,7 @@ sov-kernels = { workspace = true }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
 
-ethereum-types = "0.14.1"
+ethereum-types = { workspace = true }
 ethers = { workspace = true }
 
 [features]

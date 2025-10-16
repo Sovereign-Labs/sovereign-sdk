@@ -8,6 +8,7 @@ use sov_rollup_interface::node::ledger_api::{BatchResponse, TxResponse};
 use sov_rollup_interface::stf::{
     DiscardedBlob, StoredEvent, TransactionReceipt, TxReceiptContents,
 };
+use sov_rollup_interface::Bytes;
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -131,17 +132,13 @@ impl StoredBatch {
 /// The on-disk format of a transaction. Includes the txhash, the serialized tx data,
 /// and identifies the events emitted by this transaction
 #[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Clone)]
-#[cfg_attr(
-    feature = "arbitrary",
-    derive(proptest_derive::Arbitrary, arbitrary::Arbitrary)
-)]
 pub struct StoredTransaction {
     /// The hash of the transaction.
     pub hash: DbHash,
     /// The range of event-numbers emitted by this transaction.
     pub events: std::ops::Range<EventNumber>,
     /// The serialized transaction data, if the rollup decides to store it.
-    pub body: Option<Vec<u8>>,
+    pub body: Option<Bytes>,
     /// A custom "receipt" for this transaction defined by the rollup.
     pub receipt: DbBytes,
     /// This transaction's parent batch number.

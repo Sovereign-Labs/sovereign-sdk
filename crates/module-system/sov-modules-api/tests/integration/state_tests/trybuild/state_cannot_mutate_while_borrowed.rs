@@ -16,7 +16,7 @@ fn main() {
     let kernel = MockKernel::<TestSpec>::new(4, 1);
     let mut state = StateCheckpoint::new(storage, &kernel);
 
-    let prefix = Prefix::new(b"test".to_vec());
+    let prefix = Prefix::new(1, 1);
     let mut value = crate::StateValue::<RollupHeight>::with_codec(prefix.clone(), BorshCodec);
     value.set(&RollupHeight::new(100), &mut state);
     let val = value.borrow(&mut state).unwrap_infallible().unwrap();

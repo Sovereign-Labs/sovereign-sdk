@@ -18,7 +18,7 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::logging::LogCollector;
-use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
@@ -85,7 +85,7 @@ async fn start_stop_empty(
             .with_zkvm_host_args(mock_da_risc0_host_args())
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
-                c.storage = rollup_storage_dir.clone();
+                c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
                 c.rollup_prover_config = Some(rollup_prover_config.clone());
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
@@ -196,7 +196,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
     .with_zkvm_host_args(mock_da_risc0_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.storage = rollup_storage_dir.clone();
+        c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = Some(RollupProverConfig::Skip);
         // Since we have the prover enabled, we need to disable state root consistency checks.
         if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
@@ -351,7 +351,7 @@ async fn check_with_increasing_stf_infos(
     .with_zkvm_host_args(mock_da_risc0_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.storage = rollup_storage_dir.clone();
+        c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = Some(RollupProverConfig::Skip);
         c.aggregated_proof_block_jump = aggregated_proof_jump;
         c.max_channel_size = max_channel_size;

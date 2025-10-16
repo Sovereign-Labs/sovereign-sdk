@@ -2,6 +2,8 @@
 
 use core::{fmt, str};
 
+use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
 /// When interacting with state containers, you will usually use the same working set instance to
@@ -12,60 +14,51 @@ use core::{fmt, str};
     PartialEq,
     Eq,
     Clone,
+    Hash,
+    PartialOrd,
+    Ord,
     serde::Serialize,
     serde::Deserialize,
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
+    UniversalWallet,
+    Copy,
 )]
 #[cfg_attr(
     feature = "arbitrary",
     derive(arbitrary::Arbitrary, proptest_derive::Arbitrary)
 )]
 pub struct Prefix {
-    prefix: Vec<u8>,
+    pub(crate) module: u8,
+    pub(crate) item: u8,
 }
 
-impl AsRef<[u8]> for Prefix {
-    fn as_ref(&self) -> &[u8] {
-        self.prefix.as_ref()
+impl Prefix {
+    /// Returns a new [`Prefix`] with the item offset by the given amount.
+    pub fn offset_by(self, offset: u8) -> Self {
+        Prefix {
+            module: self.module,
+            item: self.item.checked_add(offset).expect("Overflow checking offset - this should be unreachable since we've already checked the offset"),
+        }
+    }
+    /// Returns the module short id of the [`Prefix`].
+    pub fn module(&self) -> u8 {
+        self.module
+    }
+    /// Returns the item id of the [`Prefix`].
+    pub fn item(&self) -> u8 {
+        self.item
+    }
+
+    /// Returns a new [`Prefix`] with the given module and item discriminants.
+    pub fn new(module: u8, item: u8) -> Self {
+        Self { module, item }
     }
 }
 
 impl fmt::Display for Prefix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let buf = self.prefix.as_ref();
-        match str::from_utf8(buf) {
-            Ok(s) => {
-                write!(f, "{s:?}")
-            }
-            Err(_) => {
-                write!(f, "0x{}", hex::encode(buf))
-            }
-        }
-    }
-}
-
-impl Prefix {
-    /// Creates a new prefix from a byte vector.
-    pub fn new(prefix: Vec<u8>) -> Self {
-        Self { prefix }
-    }
-
-    /// Returns `true` if the prefix is empty, `false` otherwise.
-    pub fn is_empty(&self) -> bool {
-        self.prefix.is_empty()
-    }
-
-    /// Returns the length in bytes of the prefix.
-    pub fn len(&self) -> usize {
-        self.prefix.len()
-    }
-
-    /// Returns a new prefix allocated on the fly, by extending the current
-    /// prefix with the given bytes.
-    pub fn extended(&self, bytes: &[u8]) -> Self {
-        let mut prefix = self.clone();
-        prefix.prefix.extend(bytes.iter().copied());
-        prefix
+        let buf = [self.module, self.item];
+        write!(f, "0x{}", hex::encode(buf))
     }
 }

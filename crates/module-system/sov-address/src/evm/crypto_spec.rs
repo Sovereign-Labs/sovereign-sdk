@@ -47,7 +47,10 @@ impl CryptoSpec for EvmCryptoSpec {
         let pub_key = k256::PublicKey::from_sec1_bytes(&admin_pubkey_bytes)
             .expect("Invalid admin public key bytes");
 
-        EthereumPublicKey { pub_key }
+        EthereumPublicKey {
+            pub_key,
+            key_bytes: admin_pubkey_bytes.to_vec(),
+        }
     }
 }
 

@@ -150,7 +150,6 @@ async fn check_base_runtime_info(client: &demo_stf_json_client::Client) -> anyho
     let module_name = bank_module_info.name.unwrap();
     assert_eq!("Bank", module_name);
     assert!(bank_module_info.id.unwrap().starts_with("module_1"));
-    assert!(bank_module_info.prefix.unwrap().starts_with("0x"));
     assert!(!bank_module_info.description.unwrap().is_empty());
 
     let state_items = bank_module_info.state_items;
@@ -167,7 +166,6 @@ async fn check_base_runtime_info(client: &demo_stf_json_client::Client) -> anyho
     );
 
     assert_eq!(Some("state_map"), value.type_.as_deref());
-    assert!(value.prefix.clone().unwrap().starts_with("0x"));
     assert!(!value.description.clone().unwrap().is_empty());
 
     // French bank:
@@ -215,7 +213,6 @@ async fn check_state_map(client: &demo_stf_json_client::Client) -> anyhow::Resul
         .into_inner();
 
     assert!(!meta_info.description.clone().unwrap().is_empty());
-    assert!(meta_info.prefix.clone().unwrap().starts_with("0x"));
     assert_eq!(Some("state_map"), meta_info.type_.as_deref());
     assert_eq!(
         Some(demo_stf_json_client::types::Namespace::Kernel),

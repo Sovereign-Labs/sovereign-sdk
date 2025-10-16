@@ -118,6 +118,7 @@ impl TestState {
                 }],
                 can_mint: Default::default(),
                 sequencing_bond: None,
+                consistency_value: 0,
                 private_key: account.private_key.clone(),
                 additional_info: (),
             };

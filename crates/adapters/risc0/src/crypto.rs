@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{
-    Signature as DalekSignature, VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH,
+    Signature as DalekSignature, SignatureError, VerifyingKey as DalekPublicKey, PUBLIC_KEY_LENGTH,
 };
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
 use sov_rollup_interface::reexports::schemars::{self, JsonSchema};
@@ -15,7 +15,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 #[cfg(feature = "native")]
 pub mod private_key {
 
-    use ed25519_dalek::{Signer, SigningKey};
+    use ed25519_dalek::{SignatureError, Signer, SigningKey};
     use rand::rngs::OsRng;
 
     use super::{Risc0PublicKey, Risc0Signature};
@@ -33,6 +33,21 @@ pub mod private_key {
                 .field("public_key", &self.key_pair.verifying_key())
                 .field("private_key", &"***REDACTED***")
                 .finish()
+        }
+    }
+
+    impl AsRef<[u8]> for Risc0PrivateKey {
+        fn as_ref(&self) -> &[u8] {
+            self.key_pair.as_bytes()
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for Risc0PrivateKey {
+        type Error = SignatureError;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            let key_pair = SigningKey::try_from(value.as_slice())?;
+            Ok(Self { key_pair })
         }
     }
 
@@ -56,8 +71,10 @@ pub mod private_key {
         }
 
         fn sign(&self, msg: &[u8]) -> Self::Signature {
+            let msg_sig = self.key_pair.sign(msg);
             Risc0Signature {
-                msg_sig: self.key_pair.sign(msg),
+                msg_sig,
+                bytes: msg_sig.to_vec(),
             }
         }
     }
@@ -170,6 +187,21 @@ impl Risc0PublicKey {
     }
 }
 
+impl TryFrom<Vec<u8>> for Risc0PublicKey {
+    type Error = SignatureError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let pub_key = DalekPublicKey::try_from(value.as_slice())?;
+        Ok(Self { pub_key })
+    }
+}
+
+impl AsRef<[u8]> for Risc0PublicKey {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes()
+    }
+}
+
 impl sov_rollup_interface::crypto::PublicKey for Risc0PublicKey {
     fn credential_id(&self) -> sov_rollup_interface::crypto::CredentialId {
         // The pub key is already 32 bytes, so we don't hash it.
@@ -208,6 +240,17 @@ pub struct Risc0Signature {
     )]
     #[sov_wallet(as_ty = "[u8; ed25519_dalek::Signature::BYTE_SIZE]")]
     pub msg_sig: DalekSignature,
+    bytes: Vec<u8>,
+}
+
+impl Risc0Signature {
+    /// Create a new instance
+    pub fn new(s: DalekSignature) -> Self {
+        Self {
+            msg_sig: s,
+            bytes: s.to_vec(),
+        }
+    }
 }
 
 impl BorshDeserialize for Risc0Signature {
@@ -215,9 +258,7 @@ impl BorshDeserialize for Risc0Signature {
         let mut buffer = [0; DalekSignature::BYTE_SIZE];
         reader.read_exact(&mut buffer)?;
 
-        Ok(Self {
-            msg_sig: DalekSignature::from_bytes(&buffer),
-        })
+        Ok(Self::new(DalekSignature::from_bytes(&buffer)))
     }
 }
 
@@ -233,7 +274,23 @@ impl TryFrom<&[u8]> for Risc0Signature {
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(Self {
             msg_sig: DalekSignature::from_slice(value).map_err(anyhow::Error::msg)?,
+            bytes: value.to_vec(),
         })
+    }
+}
+
+impl TryFrom<Vec<u8>> for Risc0Signature {
+    type Error = SignatureError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let msg_sig = DalekSignature::try_from(value.as_slice())?;
+        Ok(Self::new(msg_sig))
+    }
+}
+
+impl AsRef<[u8]> for Risc0Signature {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes.as_slice()
     }
 }
 
@@ -279,10 +336,8 @@ impl FromStr for Risc0Signature {
         let bytes: ed25519_dalek::ed25519::SignatureBytes = bytes
             .try_into()
             .map_err(|_| anyhow::anyhow!("Invalid signature"))?;
-
-        Ok(Risc0Signature {
-            msg_sig: DalekSignature::from_bytes(&bytes),
-        })
+        let s = DalekSignature::from_bytes(&bytes);
+        Ok(Risc0Signature::new(s))
     }
 }
 

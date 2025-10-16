@@ -43,7 +43,7 @@ fn jmt_verify_existence<S: MerkleProofSpec>(
 ) -> anyhow::Result<()> {
     // For each value that's been read from the tree, verify the provided smt proof
     for (key, read_value) in &state_accesses.ordered_reads {
-        let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
         // This TODO is for performance enhancement, not a security concern.
         // TODO: Switch to the batch read API once it becomes available
         let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
@@ -72,7 +72,7 @@ fn jmt_verify_update<S: MerkleProofSpec>(
         .ordered_writes
         .into_iter()
         .map(|(key, value)| {
-            let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+            let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
             let val_hash_and_size = value
                 .as_ref()
                 .map(SlotValue::combine_val_hash_and_size::<S::Hasher>);

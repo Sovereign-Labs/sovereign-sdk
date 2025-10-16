@@ -2,6 +2,7 @@ mod bank;
 mod evm;
 mod forced_sequencer_registration;
 mod prover;
+mod replica;
 mod rest_api;
 mod restart;
 mod resync;

@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 async-trait = { workspace = true }
 axum-server = { workspace = true }
 borsh = { workspace = true }
@@ -28,6 +29,8 @@ serde_json = { workspace = true }
 testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
+num_cpus = { workspace = true }
+
 
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
@@ -70,7 +73,7 @@ sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 strum = { workspace = true }
 tempfile = { workspace = true }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rockbound = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 

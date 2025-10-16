@@ -40,9 +40,8 @@ impl StateCodec for CustomCodec {
 }
 
 impl<V> StateItemEncoder<V> for CustomCodec {
-    fn encode(&self, _value: &V) -> Vec<u8> {
+    fn encode(&self, _value: &V, _writer: &mut impl std::io::Write) {
         std::env::set_var("TEST", self.0.to_string());
-        vec![]
     }
 }
 

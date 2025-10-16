@@ -29,7 +29,7 @@ where
     Sm: ForklessStorageManager<Storage = S::Storage>,
 {
     let mut kernel = MockKernel::<S>::default();
-    let mut state_value = KernelStateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_value = KernelStateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     for current_height in 0..100 {
         let (storage, prev_root) = storage_manager.create_storage_with_root();

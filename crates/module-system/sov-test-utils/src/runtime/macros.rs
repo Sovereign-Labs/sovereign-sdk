@@ -15,6 +15,11 @@ macro_rules! generate_runtime_without_capabilities {
         // `fn(&Self, &::sov_modules_api::FullyBakedTx) -> u64`
         // If not provided, defaults to 0ms delay (via Runtime trait default).
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
+        // Optional: A wrapper expression for custom transaction priority logic.
+        // Expected signature for the expression (e.g., a closure or function path):
+        // `fn(&Self, &::sov_modules_api::FullyBakedTx) -> u32`
+        // If not provided, defaults to 0 priority (via Runtime trait default).
+        $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         // optional final comma for the entire argument block
         $(,)?
     ) => {
@@ -184,6 +189,14 @@ macro_rules! generate_runtime_without_capabilities {
                     ($transaction_delay_ms_wrapper_expr)(call)
                 }
             )?
+
+            // Conditionally generate get_transaction_priority if the wrapper is provided.
+            // If not provided, the default from the Runtime trait (returning 0) will be used.
+            $(
+                fn get_transaction_priority(&self, call: &::sov_modules_api::FullyBakedTx) -> u32 {
+                    ($transaction_priority_wrapper_expr)(call)
+                }
+            )?
         }
 
 
@@ -273,6 +286,7 @@ macro_rules! generate_runtime {
         auth_type: $auth:ty,
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
+        $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         // optional final comma
         $(,)?
     ) => {
@@ -286,6 +300,7 @@ macro_rules! generate_runtime {
             auth_type: $auth,
             auth_call_wrapper: $auth_wrapper
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
+            $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
         }
 
         impl<S> ::sov_modules_api::capabilities::HasCapabilities<S> for $id<S>
@@ -338,7 +353,8 @@ macro_rules! generate_optimistic_runtime_with_kernel {
         $id:ident <=
         kernel_type: $kernel_ty:ty,
         modules: [$($module_name:ident : $module_ty:path),*],
-        $(transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
+        $(transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr,)?
+        $(transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         $(,)? // Optional trailing comma for the module list or wrapper
     ) => {
         $crate::generate_runtime! {
@@ -351,6 +367,7 @@ macro_rules! generate_optimistic_runtime_with_kernel {
             auth_type: sov_modules_api::capabilities::RollupAuthenticator<S, Self>,
             auth_call_wrapper: |auth_data| auth_data
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
+            $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
         }
     };
 }

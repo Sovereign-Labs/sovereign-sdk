@@ -14,7 +14,7 @@ use sov_modules_api::da::Time;
 use sov_modules_api::{ModuleId, StoredEvent};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, TxEffect};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::TxHash;
+use sov_rollup_interface::{Bytes, TxHash};
 use tempfile::{tempdir, TempDir};
 use tokio::sync::watch;
 
@@ -37,7 +37,7 @@ pub async fn materialize_simple_ledger_db_data(
 
     let tx_receipts = vec![TransactionReceipt {
         tx_hash: TxHash::new([1; 32]),
-        body_to_save: Some(b"tx-body".to_vec()),
+        body_to_save: Some(Bytes::from_static(b"tx-body")),
         events: events(0),
         receipt: TxEffect::Successful(0),
     }];
@@ -140,13 +140,13 @@ pub fn materialize_and_commit_complex_ledger_db_data(
             tx_receipts: vec![
                 TransactionReceipt::<TestTxReceiptContents> {
                     tx_hash: sha2::Sha256::digest(b"tx0").into(),
-                    body_to_save: Some(b"tx0 body".to_vec()),
+                    body_to_save: Some(Bytes::from_static(b"tx0 body")),
                     events: events(0),
                     receipt: TxEffect::Successful(0),
                 },
                 TransactionReceipt::<TestTxReceiptContents> {
                     tx_hash: sha2::Sha256::digest(b"tx1").into(),
-                    body_to_save: Some(b"tx1 body".to_vec()),
+                    body_to_save: Some(Bytes::from_static(b"tx1 body")),
                     events: events(1),
                     receipt: TxEffect::Successful(1),
                 },
@@ -159,13 +159,13 @@ pub fn materialize_and_commit_complex_ledger_db_data(
             tx_receipts: vec![
                 TransactionReceipt::<TestTxReceiptContents> {
                     tx_hash: sha2::Sha256::digest(b"tx2").into(),
-                    body_to_save: Some(b"tx2 body".to_vec()),
+                    body_to_save: Some(Bytes::from_static(b"tx2 body")),
                     events: events(2),
                     receipt: TxEffect::Successful(2),
                 },
                 TransactionReceipt::<TestTxReceiptContents> {
                     tx_hash: sha2::Sha256::digest(b"tx3").into(),
-                    body_to_save: Some(b"tx3 body".to_vec()),
+                    body_to_save: Some(Bytes::from_static(b"tx3 body")),
                     events: events(3),
                     receipt: TxEffect::Successful(3),
                 },
@@ -182,13 +182,13 @@ pub fn materialize_and_commit_complex_ledger_db_data(
             tx_receipts: vec![
                 TransactionReceipt::<TestTxReceiptContents> {
                     tx_hash: sha2::Sha256::digest(b"tx4").into(),
-                    body_to_save: Some(b"tx4 body".to_vec()),
+                    body_to_save: Some(Bytes::from_static(b"tx4 body")),
                     events: events(4),
                     receipt: TxEffect::Successful(4),
                 },
                 TransactionReceipt::<TestTxReceiptContents> {
                     tx_hash: sha2::Sha256::digest(b"tx5").into(),
-                    body_to_save: Some(b"tx5 body".to_vec()),
+                    body_to_save: Some(Bytes::from_static(b"tx5 body")),
                     events: events(5),
                     receipt: TxEffect::Successful(5),
                 },
@@ -238,7 +238,7 @@ fn batch3_tx_receipts() -> Vec<TransactionReceipt<TestTxReceiptContents>> {
     (0..260u64)
         .map(|i| TransactionReceipt::<TestTxReceiptContents> {
             tx_hash: ::sha2::Sha256::digest(format!("tx{}", 6 + i)).into(),
-            body_to_save: Some(format!("tx{} body", 6 + i).into_bytes()),
+            body_to_save: Some(Bytes::from_owner(format!("tx{} body", 6 + i).into_bytes())),
             events: events(6 + i),
             receipt: TxEffect::Skipped(0),
         })

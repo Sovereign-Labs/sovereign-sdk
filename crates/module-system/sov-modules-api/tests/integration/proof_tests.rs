@@ -23,7 +23,7 @@ fn make_user_map_proof(
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel);
-    let mut map = StateMap::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
     map.set(&key, &value, &mut state).unwrap_infallible();
 
     let (cache_log, _, witness) = state.freeze();
@@ -57,7 +57,7 @@ fn make_user_value_proof(
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default());
-    let mut state_val = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
     state_val.set(&value, &mut state).unwrap_infallible();
 
     let (cache_log, _, witness) = state.freeze();
@@ -102,7 +102,7 @@ mod map {
     #[test]
     fn test_state_proof_wrong_key() {
         let (root, mut proof, map) = make_user_map_proof(1, 2);
-        proof.key = SlotKey::new(&Prefix::new(b"wrong_prefix".to_vec()), &1, map.codec());
+        proof.key = SlotKey::new(&Prefix::new(1, 0), &1, map.codec());
         assert!(map.verify_proof::<S>(root, proof).is_err());
     }
 
@@ -143,7 +143,7 @@ mod value {
     #[test]
     fn test_state_proof_wrong_key() {
         let (root, mut proof, map) = make_user_value_proof(1);
-        proof.key = SlotKey::new(&Prefix::new(b"wrong_prefix".to_vec()), &1, map.codec());
+        proof.key = SlotKey::new(&Prefix::new(255, 0), &1, map.codec()); // Use the wrong prefix
         assert!(map.verify_proof::<S>(root, proof).is_err());
     }
 
@@ -166,7 +166,7 @@ mod value {
 fn test_archival_proof_gen() {
     let mut kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
-    let mut state_val = StateValue::with_codec(Prefix::new(vec![0]), BorshCodec);
+    let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     const NUM_ITER: u64 = 10;
 

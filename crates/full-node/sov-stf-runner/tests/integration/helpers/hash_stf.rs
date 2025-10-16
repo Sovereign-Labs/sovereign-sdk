@@ -28,7 +28,7 @@ impl HashStf {
     }
 
     fn hash_key() -> SlotKey {
-        let prefix = Prefix::new(b"root".to_vec());
+        let prefix = Prefix::new(0, 0);
         SlotKey::singleton(&prefix)
     }
 

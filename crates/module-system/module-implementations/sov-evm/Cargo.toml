@@ -24,7 +24,7 @@ sov-bank = { workspace = true }
 sov-metrics = { workspace = true }
 sov-uniqueness = { workspace = true }
 sov-chain-state = { workspace = true }
-sov-universal-wallet = { workspace = true, features = ["eip712"] }
+sov-universal-wallet = { workspace = true }
 
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
@@ -87,7 +87,7 @@ tempfile = { workspace = true }
 bytes = { workspace = true }
 ethers = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
-lazy_static = "1.5.0"
+lazy_static = { workspace = true }
 jsonschema = { workspace = true }
 bincode = { workspace = true }
 

@@ -440,7 +440,6 @@ jobs:
       SKIP_GUEST_BUILD: "sp1"
       RUST_LOG: "debug,sov_sequencer=trace,sov-celestia-adapter=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-
       - uses: actions/checkout@v5
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
@@ -545,7 +544,7 @@ jobs:
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
-          ref: "49f2f0a9b876adfda609e321f9c6a19840710730"
+          ref: "46bbd590c3b6f92ff200b6725ffd8c7d886a710a"
       - name: Run web3-js SDK tests against demo-rollup
         # See the script for more details about what to do if job
         run: |

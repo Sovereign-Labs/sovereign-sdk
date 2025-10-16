@@ -22,6 +22,7 @@ use sov_rest_utils::{
 };
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
 use tokio::sync::watch::Receiver;
 use tokio_stream::wrappers::BroadcastStream;
@@ -463,8 +464,8 @@ pub struct ApiAcceptedTx<Confirmation> {
     pub id: TxHash,
     /// The base64 encoded transaction body
     #[serde_as(as = "serde_with::base64::Base64")]
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tx: Vec<u8>,
+    #[serde(skip_serializing_if = "Bytes::is_empty")]
+    pub tx: Bytes,
     /// The confirmation data
     #[serde(flatten)]
     pub confirmation: Confirmation,

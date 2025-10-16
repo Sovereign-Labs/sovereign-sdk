@@ -2,6 +2,7 @@ use crate::preferred::replica::event_receiver::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use async_trait::async_trait;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 
 #[async_trait]
 pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
@@ -16,7 +17,6 @@ pub(crate) struct ReplicaSyncTask {
 impl ReplicaSyncTask {
     pub(crate) async fn new(
         postgres_connection_string: String,
-
         shutdown_sender: watch::Sender<()>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -25,7 +25,7 @@ impl ReplicaSyncTask {
         })
     }
 
-    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) {
+    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) -> JoinHandle<()> {
         let mut event_receiver = EventReceiver::new(
             self.postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
@@ -45,7 +45,7 @@ impl ReplicaSyncTask {
                     handler.on_da_event(data).await;
                 }
             }
-        });
+        })
     }
 }
 
@@ -58,8 +58,10 @@ mod tests {
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
-    use sov_test_utils::postgres::connection_string_from_postgres_container;
-    use sov_test_utils::postgres::create_postgres_container;
+    use sov_test_utils::postgres::{
+        connection_string_from_postgres_container, create_postgres_container, CreatePostgresError,
+    };
+
     use std::num::NonZero;
     use tokio::sync::mpsc;
 
@@ -96,9 +98,7 @@ mod tests {
             data.push(DbData::BatchStart(stored_batch.clone()));
 
             for i in 0..nb_of_txs {
-                data.push(DbData::Transaction(FullyBakedTx {
-                    data: vec![i as u8],
-                }));
+                data.push(DbData::Transaction(FullyBakedTx::new(vec![i as u8])));
             }
 
             data.push(DbData::BatchEnd(stored_batch));
@@ -129,9 +129,15 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications() {
         let dir = tempfile::tempdir().unwrap();
-        let postgres = create_postgres_container(&dir.path().join("postgres_data"))
-            .await
-            .unwrap();
+
+        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
 
         let postgres_connection_string = connection_string_from_postgres_container(&postgres)
             .await

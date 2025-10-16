@@ -1,15 +1,12 @@
-use alloy_consensus::{transaction::Recovered, Signed, TxEip4844Variant, TxEnvelope};
+use alloy_consensus::transaction::Recovered;
 use alloy_primitives::BlockNumber;
-use alloy_primitives::{BlockHash, TxKind};
+use alloy_primitives::TxKind;
 use alloy_primitives::{B256, U256};
-use alloy_rpc_types::{Header, TransactionRequest};
+use alloy_rpc_types::{TransactionInfo, TransactionRequest};
 use revm::context::{BlockEnv, TransactionType, TxEnv};
 use sov_rpc_eth_types::EthResult;
 
-use alloy_consensus::TxEip4844;
-
 use crate::evm::primitive_types::TransactionSigned;
-pub type PrimitiveTransaction = alloy_consensus::EthereumTypedTransaction<TxEip4844>;
 
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 // it is `pub(crate)` only for tests
@@ -49,15 +46,6 @@ pub(crate) fn prepare_call_env(
     Ok(env)
 }
 
-pub(crate) fn from_primitive_with_hash(header: alloy_consensus::Header, hash: BlockHash) -> Header {
-    Header {
-        hash,
-        inner: header,
-        total_difficulty: None,
-        size: None,
-    }
-}
-
 /// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]
 pub(crate) fn from_recovered_with_block_context(
     tx: Recovered<TransactionSigned>,
@@ -65,40 +53,14 @@ pub(crate) fn from_recovered_with_block_context(
     block_number: BlockNumber,
     tx_index: U256,
 ) -> alloy_rpc_types::Transaction {
-    let block_number = Some(block_number);
-    let transaction_index = Some(tx_index.to::<u64>());
-
-    let signer = tx.signer();
-    let signed_tx = tx.into_inner();
-
-    let (tx, sig, hash) = signed_tx.into_signed().into_parts();
-    let tx = match tx {
-        PrimitiveTransaction::Legacy(tx) => {
-            TxEnvelope::Legacy(Signed::new_unchecked(tx, sig, hash))
-        }
-        PrimitiveTransaction::Eip2930(tx) => {
-            TxEnvelope::Eip2930(Signed::new_unchecked(tx, sig, hash))
-        }
-        PrimitiveTransaction::Eip1559(tx) => {
-            TxEnvelope::Eip1559(Signed::new_unchecked(tx, sig, hash))
-        }
-        PrimitiveTransaction::Eip4844(tx) => TxEnvelope::Eip4844(Signed::new_unchecked(
-            TxEip4844Variant::TxEip4844(tx),
-            sig,
-            hash,
-        )),
-        PrimitiveTransaction::Eip7702(tx) => {
-            TxEnvelope::Eip7702(Signed::new_unchecked(tx, sig, hash))
-        }
-    };
-
-    alloy_rpc_types::Transaction {
-        inner: Recovered::new_unchecked(tx, signer),
+    let index = Some(tx_index.to::<u64>());
+    let tx_info = TransactionInfo {
         block_hash,
-        block_number,
-        transaction_index,
-        effective_gas_price: None,
-    }
+        block_number: Some(block_number),
+        index,
+        ..Default::default()
+    };
+    alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }
 
 #[cfg(test)]
