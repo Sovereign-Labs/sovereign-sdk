@@ -38,30 +38,41 @@ impl Image for PostgresImage {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+/// Error indicating problems when creating a Postgres container.
+pub enum CreatePostgresError {
+    #[error("Docker is not supported on this platform")]
+    /// Docker is not supported on this platform
+    DockerNotSupported,
+
+    #[error("Failed to create a Docker container: {0}")]
+    /// Failed to create a Docker container, maybe the Docker daemon is not running.
+    DockerError(#[from] anyhow::Error),
+}
+
 /// Creates a container with a PostgreSQL database.
 pub async fn create_postgres_container(
     dir: &Path,
-) -> Option<anyhow::Result<ContainerAsync<PostgresImage>>> {
+) -> Result<ContainerAsync<PostgresImage>, CreatePostgresError> {
     if should_skip_postgres() {
-        return None;
+        return Err(CreatePostgresError::DockerNotSupported);
     }
 
     let postgres_data_dir = dir.join("postgres_data");
     debug!(?postgres_data_dir, "Using Postgres data directory");
 
-    let res = async {
-        std::fs::create_dir_all(&postgres_data_dir)?;
-        let img = PostgresImage
-            .with_mount(Mount::bind_mount(
-                postgres_data_dir.to_string_lossy(),
-                "/var/lib/postgresql/data",
-            ))
-            .start()
-            .await?;
-        Ok(img)
-    };
+    std::fs::create_dir_all(&postgres_data_dir)
+        .map_err(|e| CreatePostgresError::DockerError(e.into()))?;
 
-    Some(res.await)
+    let img = PostgresImage
+        .with_mount(Mount::bind_mount(
+            postgres_data_dir.to_string_lossy(),
+            "/var/lib/postgresql/data",
+        ))
+        .start()
+        .await
+        .map_err(|e| CreatePostgresError::DockerError(e.into()))?;
+    Ok(img)
 }
 
 fn should_skip_postgres() -> bool {

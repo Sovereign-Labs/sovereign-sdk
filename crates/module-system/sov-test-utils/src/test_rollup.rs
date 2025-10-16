@@ -9,6 +9,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use crate::postgres::create_postgres_container;
+use crate::postgres::CreatePostgresError;
 use crate::postgres::PostgresImage;
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
@@ -49,6 +50,7 @@ pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
 };
+use tempfile::TempDir;
 use testcontainers::ContainerAsync;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -118,32 +120,11 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
     genesis: GenesisSource<R::Spec, R::Runtime>,
     da_config: <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config,
     config: RollupBuilderConfig<R::Spec>,
-    postgres_container_opt: Option<Arc<ContainerAsync<PostgresImage>>>,
+    postgres_container_opt: Option<Arc<PostgresData>>,
     with_secondary_sequencer: Option<MockAddress>,
 }
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
-    /// Uses the preferred sequencer with Postgres as a database.
-    pub async fn with_postgres_sequencer(mut self) -> Option<Self> {
-        let postgres = create_postgres_container(&self.config.storage.path().join("postgres_data"))
-            .await?
-            .unwrap();
-
-        let postgres_connection_string = connection_string_from_postgres_container(&postgres)
-            .await
-            .expect("Failed to get postgres_connection_string");
-
-        match &mut self.config.sequencer_config {
-            SequencerKindConfig::Preferred(ref mut config) => {
-                config.postgres_connection_string = Some(postgres_connection_string);
-                self.postgres_container_opt = Some(Arc::new(postgres));
-            }
-            _ => panic!("Can't use Postgres with a non-preferred sequencer"),
-        }
-
-        Some(self)
-    }
-
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
     pub fn with_preferred_seq_min_profit_per_tx(mut self, minimum_profit_per_tx: u128) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
@@ -373,6 +354,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         finalization_blocks: u32,
         storage_path: StoragePath,
         is_replica: bool,
+        postgres_connection_string: Option<String>,
     ) -> RollupBuilderConfig<R::Spec> {
         RollupBuilderConfig {
             max_allowed_node_distance_behind: 10,
@@ -383,6 +365,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             automatic_batch_production: true,
             sequencer_config: SequencerKindConfig::Preferred(PreferredSequencerConfig {
                 is_replica,
+                postgres_connection_string,
                 ..Default::default()
             }),
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
@@ -404,22 +387,45 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 }
 
+pub struct PostgresData {
+    storage_path: TempDir,
+    postgres: ContainerAsync<PostgresImage>,
+    connection_string: String,
+}
+
+impl PostgresData {
+    pub async fn create_postgres() -> Result<Arc<PostgresData>, CreatePostgresError> {
+        let dir = tempfile::tempdir().unwrap();
+        let pg = create_postgres_container(&dir.path().join("postgres_data")).await?;
+
+        Ok(Arc::new(PostgresData {
+            storage_path: dir,
+            connection_string: connection_string_from_postgres_container(&pg).await?,
+            postgres: pg,
+        }))
+    }
+}
+
 impl<R> RollupBuilder<R>
 where
     R: FullNodeBlueprint<Native, DaService = StorableMockDaClient> + Default + 'static,
 {
-    pub fn new_with_external_da(
+    pub async fn new_with_external_da(
         is_replica: bool,
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
+        postgres_container_opt: Option<Arc<PostgresData>>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
+        let post_str = postgres_container_opt
+            .as_ref()
+            .map(|p| p.connection_string.clone());
 
         Self {
             genesis,
             da_config,
-            config: Self::default_config(0, storage_path, is_replica),
-            postgres_container_opt: None,
+            config: Self::default_config(0, storage_path, is_replica, post_str),
+            postgres_container_opt,
             with_secondary_sequencer: None,
         }
     }
@@ -477,7 +483,7 @@ where
             genesis,
             da_config,
             postgres_container_opt: None,
-            config: Self::default_config(finalization_blocks, storage_path, false),
+            config: Self::default_config(finalization_blocks, storage_path, false, None),
             with_secondary_sequencer: None,
         }
     }
