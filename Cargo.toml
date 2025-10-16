@@ -293,7 +293,7 @@ alloy-serde = { version = "1.0.37" }
 alloy-chains = { version = "0.2.14", default-features = false }
 alloy-primitives = { version = "1.4.0", default-features = false }
 alloy-sol-types = { version = "1.4.0", default-features = false }
-alloy-eips = { version = "1.0.37", default-features = false }
+alloy-eips = { version = "1.0.38", default-features = false }
 alloy-evm = { version = "0.21.2", default-features = false }
 alloy-consensus = { version = "1.0.37", default-features = false }
 alloy-contract = { version = "1.0.37", default-features = false }
