@@ -2,7 +2,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use sov_modules_api::Secp256k1CryptoSpec;
 use sov_rollup_interface::zk::CryptoSpec;
 
 use crate::evm::public_key::EthereumPublicKey;
@@ -53,15 +52,6 @@ impl CryptoSpec for EvmCryptoSpec {
             key_bytes: admin_pubkey_bytes.to_vec(),
         }
     }
-}
-
-/// EvmCryptoSpec uses secp256k1 crypto internally, therefore naturally implements
-/// Secp256k1CryptoSpec.
-impl Secp256k1CryptoSpec for EvmCryptoSpec {
-    type Signature = <Self as CryptoSpec>::Signature;
-    type PublicKey = <Self as CryptoSpec>::PublicKey;
-    #[cfg(feature = "native")]
-    type PrivateKey = <Self as CryptoSpec>::PrivateKey;
 }
 
 #[test]

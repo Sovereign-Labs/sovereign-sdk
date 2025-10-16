@@ -13,9 +13,12 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Runtime, Secp256k1CryptoSpec, Spec, TxHash,
+    ProvableStateReader, RawTx, Runtime, Spec, TxHash,
 };
 use sov_state::User;
+
+mod crypto_markers;
+use crate::crypto_markers::Secp256k1CryptoSpec;
 
 /// Trait for providing schema to the EIP-712 authenticator.
 pub trait SchemaProvider {

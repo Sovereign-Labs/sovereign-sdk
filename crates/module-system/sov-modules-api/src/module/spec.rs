@@ -148,23 +148,6 @@ where
 /// slightly more restrictive traits defined in the module system.
 impl<C: CryptoHelper> CryptoSpecExt for C {}
 
-/// Marker trait for CryptoSpec implementations which are compatible with secp256k1 signatures.
-/// Note that we cannot place static bounds on the logic of the implementation here - it is up to
-/// the user to ensure this trait is only implemented using types that genuinely implement
-/// secp256k1-based crypto.
-pub trait Secp256k1CryptoSpec: CryptoSpecExt {
-    /// The type implementing secp256k1-compatible digital signatures.
-    type Signature: SignatureExt;
-    /// The public key used for secp256k1 digital signature verification.
-    type PublicKey: PublicKeyExt;
-    /// The private key used for secp256k1 digital signing.
-    #[cfg(feature = "native")]
-    type PrivateKey: crate::PrivateKeyExt<
-        PublicKey = <Self as Secp256k1CryptoSpec>::PublicKey,
-        Signature = <Self as Secp256k1CryptoSpec>::Signature,
-    >;
-}
-
 /// The context in which a transaction executes
 
 #[derive(Clone, Debug)]
