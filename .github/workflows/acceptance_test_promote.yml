@@ -33,6 +33,7 @@ jobs:
         with:
           ref: ${{ github.event.client_payload.commit_sha }}
           fetch-depth: 0
+          ssh-key: ${{ secrets.ACCEPTANCE_TEST_DEPLOY_KEY }}
 
       - name: Verify commit exists
         run: |
