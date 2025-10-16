@@ -32,10 +32,12 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::macros::config_value;
+use sov_modules_api::VisibleSlotNumber;
 use sov_modules_api::{
     FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::{NativeStorage, Storage};
+use std::num::NonZero;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
@@ -207,114 +209,6 @@ where
 
     fn current_height(&self) -> RollupHeight {
         self.executor.checkpoint.rollup_height_to_access()
-    }
-
-    async fn foo(&mut self) {}
-
-    /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.
-    /// We can only create a new batch if we have a finalized slot available to use as our `visible_slot_number_after_increase`.
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn try_to_create_and_start_batch_if_none_in_progress(
-        &mut self,
-        leave_space_for_next_batch: bool,
-    ) -> Result<(), BatchCreationError> {
-        let visible_increase = match next_visible_slot_number_increase(
-            &self.executor.checkpoint,
-            &self.latest_info,
-            leave_space_for_next_batch,
-            self.seq_config
-                .sequencer_kind_config
-                .ideal_lag_behind_finalized_slot,
-        ) {
-            Ok(visible_increase) => visible_increase,
-            Err(e) => {
-                warn!(
-                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
-                    e
-                );
-                return Err(BatchCreationError::NoFinalizedSlotAvailable);
-            }
-        };
-
-        debug!(visible_increase, "No in-progress batch, starting a new one");
-
-        let visible_slot_number_after_increase = self
-            .executor
-            .checkpoint
-            .current_visible_slot_number()
-            .advance(visible_increase.get().into());
-
-        if self.executor.has_in_progress_batch() {
-            return Ok(());
-        }
-
-        if let Some(height_to_stop_at) = self.stop_at_rollup_height {
-            let current_height = self.current_height();
-            if current_height >= height_to_stop_at {
-                debug!(%current_height, %height_to_stop_at,"The sequencer is at stop height and tried to create a batch (aborted due to stop height).");
-                return Err(BatchCreationError::PreferredSequencerAtStopHeight {
-                    current_height,
-                    height_to_stop_at,
-                });
-            }
-        }
-
-        if self.blob_sender_busy().is_some() {
-            warn!("The blob sender is busy, no batch could be started at this time.");
-            return Err(BatchCreationError::BlobSenderBusy);
-        }
-
-        let node_state_root = self
-            .node_root_hash()
-            .map_err(BatchCreationError::DatabaseError)?;
-
-        // DB operations handled by replica-aware db implementation
-        let sequence_number = self.get_and_inc_next_sequence_number();
-        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
-
-        let start_block_data = StartBlockData {
-            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
-            visible_increase,
-            node_state_root: node_state_root.clone(),
-            minimum_profit_per_tx: min_profit_per_tx,
-        };
-
-        let old_checkpoint = self
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-
-        self.executor
-            .start_rollup_block(start_block_data.clone())
-            .await;
-
-        let state_roots = self.executor.state_roots.clone();
-
-        if state_roots.len() > 50 {
-            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
-        }
-
-        let notification = StartBlockNotification {
-            state_roots,
-            data: start_block_data,
-            checkpoint: old_checkpoint,
-        };
-
-        self.cache_warm_up_executor
-            .send_batch_start_notification(notification);
-
-        self.executor_events_sender
-            .start_batch(
-                visible_slot_number_after_increase,
-                visible_increase,
-                sequence_number,
-                self.executor
-                    .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache(),
-            )
-            .await;
-
-        Ok(())
     }
 
     fn current_sequence_number(&self) -> SequenceNumber {
@@ -645,6 +539,121 @@ where
             "LedgerAPI storage updated, notification has been sent");
 
         self.tx_cache_writer.prune(info.next_tx_number).await;
+    }
+
+    /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.
+    /// We can only create a new batch if we have a finalized slot available to use as our `visible_slot_number_after_increase`.
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn try_to_create_and_start_batch_if_none_in_progress(
+        &mut self,
+        leave_space_for_next_batch: bool,
+    ) -> Result<(), BatchCreationError> {
+        let visible_increase = match next_visible_slot_number_increase(
+            &self.executor.checkpoint,
+            &self.latest_info,
+            leave_space_for_next_batch,
+            self.seq_config
+                .sequencer_kind_config
+                .ideal_lag_behind_finalized_slot,
+        ) {
+            Ok(visible_increase) => visible_increase,
+            Err(e) => {
+                warn!(
+                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
+                    e
+                );
+                return Err(BatchCreationError::NoFinalizedSlotAvailable);
+            }
+        };
+
+        debug!(visible_increase, "No in-progress batch, starting a new one");
+
+        let visible_slot_number_after_increase = self
+            .executor
+            .checkpoint
+            .current_visible_slot_number()
+            .advance(visible_increase.get().into());
+
+        self.do_batch_start(visible_slot_number_after_increase, visible_increase)
+            .await
+    }
+
+    async fn do_batch_start(
+        &mut self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_increase: NonZero<u8>,
+    ) -> Result<(), BatchCreationError> {
+        if self.executor.has_in_progress_batch() {
+            return Ok(());
+        }
+
+        if let Some(height_to_stop_at) = self.stop_at_rollup_height {
+            let current_height = self.current_height();
+            if current_height >= height_to_stop_at {
+                debug!(%current_height, %height_to_stop_at,"The sequencer is at stop height and tried to create a batch (aborted due to stop height).");
+                return Err(BatchCreationError::PreferredSequencerAtStopHeight {
+                    current_height,
+                    height_to_stop_at,
+                });
+            }
+        }
+
+        if self.blob_sender_busy().is_some() {
+            warn!("The blob sender is busy, no batch could be started at this time.");
+            return Err(BatchCreationError::BlobSenderBusy);
+        }
+
+        let node_state_root = self
+            .node_root_hash()
+            .map_err(BatchCreationError::DatabaseError)?;
+
+        // DB operations handled by replica-aware db implementation
+        let sequence_number = self.get_and_inc_next_sequence_number();
+        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        let old_checkpoint = self
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+
+        self.executor
+            .start_rollup_block(start_block_data.clone())
+            .await;
+
+        let state_roots = self.executor.state_roots.clone();
+
+        if state_roots.len() > 50 {
+            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
+        }
+
+        let notification = StartBlockNotification {
+            state_roots,
+            data: start_block_data,
+            checkpoint: old_checkpoint,
+        };
+
+        self.cache_warm_up_executor
+            .send_batch_start_notification(notification);
+
+        self.executor_events_sender
+            .start_batch(
+                visible_slot_number_after_increase,
+                visible_increase,
+                sequence_number,
+                self.executor
+                    .checkpoint
+                    .clone_with_empty_witness_dropping_temp_cache(),
+            )
+            .await;
+
+        Ok(())
     }
 }
 

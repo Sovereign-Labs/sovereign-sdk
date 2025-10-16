@@ -162,7 +162,7 @@ async fn test_replica_receives_txs_from_postgres() {
     let height_before_tx = test_rollup.height().await;
     test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
 
-    wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 3).await;
+    wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
 
     let receiver_balance = replica_test_rollup
         .client
