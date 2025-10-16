@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 async-trait = { workspace = true }
 axum-server = { workspace = true }
 borsh = { workspace = true }
@@ -28,6 +29,8 @@ serde_json = { workspace = true }
 testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
+num_cpus = { workspace = true }
+
 
 ethereum-types = { workspace = true }
 ethers = { workspace = true }

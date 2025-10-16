@@ -16,6 +16,8 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
+use crate::preferred::replica::event_handler::ReplicaEventProcessor;
+use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -277,21 +279,25 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender,
+            shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
         });
 
-        // Launch replica sync task only for replicas
-        // This will block until the currently stored batches in the DB are replayed onto the
-        // state, then yield when it switches to processing postgres events live.
-        // This is necessary to prevent conflicts with the update_state task.
+        // Launch replica sync task only for replicas.
         if config.sequencer_kind_config.is_replica {
-            //handles.push(
-            //    spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
-            //        .await,
-            //);
+            if let Some(postgres_connection_string) =
+                &config.sequencer_kind_config.postgres_connection_string
+            {
+                let mut replica_task = ReplicaSyncTask::new(
+                    postgres_connection_string.clone(),
+                    shutdown_sender.clone(),
+                )
+                .await?;
+
+                handles.push(replica_task.start(ReplicaEventProcessor {}).await);
+            }
         }
         handles.push(tokio::spawn({
             update_state_task(

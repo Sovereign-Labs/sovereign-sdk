@@ -38,21 +38,60 @@ impl Image for PostgresImage {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+/// Error indicating problems when creating a Postgres container.
+pub enum CreatePostgresError {
+    #[error("Docker is not supported on this platform")]
+    /// Docker is not supported on this platform
+    DockerNotSupported,
+
+    #[error("Failed to create a Docker container: {0}")]
+    /// Failed to create a Docker container, maybe the Docker daemon is not running.
+    DockerError(#[from] anyhow::Error),
+}
+
 /// Creates a container with a PostgreSQL database.
 pub async fn create_postgres_container(
     dir: &Path,
-) -> anyhow::Result<ContainerAsync<PostgresImage>> {
+) -> Result<ContainerAsync<PostgresImage>, CreatePostgresError> {
+    if should_skip_postgres() {
+        return Err(CreatePostgresError::DockerNotSupported);
+    }
+
     let postgres_data_dir = dir.join("postgres_data");
     debug!(?postgres_data_dir, "Using Postgres data directory");
-    std::fs::create_dir_all(&postgres_data_dir)?;
 
-    Ok(PostgresImage
+    std::fs::create_dir_all(&postgres_data_dir)
+        .map_err(|e| CreatePostgresError::DockerError(e.into()))?;
+
+    let img = PostgresImage
         .with_mount(Mount::bind_mount(
             postgres_data_dir.to_string_lossy(),
             "/var/lib/postgresql/data",
         ))
         .start()
-        .await?)
+        .await
+        .map_err(|e| CreatePostgresError::DockerError(e.into()))?;
+    Ok(img)
+}
+
+fn should_skip_postgres() -> bool {
+    // We skip all docker (i.e. postgres) tests on our dev server due to firewall false positives
+    // bricking the machine.
+    // The dev machine has 96 threads, which we detect to disable postgres. Currently no dev or CI
+    // setup uses a machine of exactly this size, though if this ever changes this will cause
+    // false positives.
+    const DEV_SERVER_CPUS: usize = 96;
+
+    if num_cpus::get() == DEV_SERVER_CPUS {
+        return true;
+    }
+
+    if std::env::var("SOV_TEST_SKIP_DOCKER") == Ok("1".to_string()) {
+        return true;
+    }
+
+    false
 }
 
 /// Returns the connection string for the PostgreSQL.
