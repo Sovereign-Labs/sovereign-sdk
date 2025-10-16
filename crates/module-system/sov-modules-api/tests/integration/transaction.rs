@@ -1,8 +1,6 @@
 use sov_mock_zkvm::MockZkvmCryptoSpec;
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::transaction::{
-    Transaction, TxDetails, UnsignedTransaction, Version0, VersionedTx,
-};
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, Version0};
 use sov_modules_api::CryptoSpec;
 use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
 use sov_test_utils::TestSpec;
@@ -40,12 +38,10 @@ fn test_serde_serialize_tx() {
         uniqueness: uniq,
         details,
     };
-    let native = Transaction::<Runtime, TestSpec> {
-        versioned_tx: VersionedTx::V0(native_tx),
-    };
+    let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
     let native_json = serde_json::to_value(&native).unwrap();
-    let sig = &native_json["versioned_tx"]["V0"]["signature"];
-    let pub_key = &native_json["versioned_tx"]["V0"]["pub_key"];
+    let sig = &native_json["V0"]["signature"];
+    let pub_key = &native_json["V0"]["pub_key"];
 
     assert_eq!(sig, "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02");
     assert_eq!(
@@ -59,7 +55,7 @@ fn test_serde_serialize_tx() {
 #[test]
 fn test_schema_and_native_serialization_consistency() {
     let json = r#"
-        {"versioned_tx": { "V0": 
+        { "V0": 
             {
                 "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
                 "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
@@ -80,7 +76,7 @@ fn test_schema_and_native_serialization_consistency() {
                     "gas_limit": [500, 500],
                     "chain_id": 1337
                 }
-            }}
+            }
         }"#;
     let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
     let schema_bytes = schema.json_to_borsh(0, json).unwrap();
@@ -109,9 +105,7 @@ fn test_schema_and_native_serialization_consistency() {
         uniqueness: uniq,
         details,
     };
-    let native = Transaction::<Runtime, TestSpec> {
-        versioned_tx: VersionedTx::V0(native_tx),
-    };
+    let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
     let native_bytes = borsh::to_vec(&native).unwrap();
 
     assert_eq!(schema_bytes, native_bytes);
@@ -199,7 +193,7 @@ mod web3_compatibility {
     #[test]
     fn test_tx_wallet_serialization_some_gas_limit() {
         let json = r#"
-        {"versioned_tx": { "V0": 
+        {"V0": 
             {
                 "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
                 "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
@@ -220,7 +214,7 @@ mod web3_compatibility {
                     "gas_limit": [500, 500],
                     "chain_id": 1337
                 }
-            }}
+            }
         }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
 
@@ -230,7 +224,7 @@ mod web3_compatibility {
     #[test]
     fn test_tx_wallet_serialization_none_gas_limit() {
         let json = r#"
-        {"versioned_tx": {"V0":
+        {"V0":
             {
                 "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
                 "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
@@ -251,7 +245,7 @@ mod web3_compatibility {
                     "gas_limit": null,
                     "chain_id": 1337
                 }
-    }}
+            }
         }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
 
