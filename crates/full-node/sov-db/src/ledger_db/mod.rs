@@ -50,8 +50,6 @@ pub struct SlotCommit<S: SlotData, B, T: TxReceiptContents> {
     slot_data: S,
     batch_receipts: Vec<BatchReceipt<B, T>>,
     discarded_blobs: Vec<DiscardedBlob>,
-    num_txs: usize,
-    num_events: usize,
 }
 
 impl<S: SlotData, B, T: TxReceiptContents> SlotCommit<S, B, T> {
@@ -71,16 +69,11 @@ impl<S: SlotData, B, T: TxReceiptContents> SlotCommit<S, B, T> {
             slot_data,
             batch_receipts: vec![],
             discarded_blobs,
-            num_txs: 0,
-            num_events: 0,
         }
     }
     /// Add a `batch` (of transactions) to the commit
     pub fn add_batch(&mut self, batch: BatchReceipt<B, T>) {
-        self.num_txs += batch.tx_receipts.len();
-        let events_this_batch: usize = batch.tx_receipts.iter().map(|r| r.events.len()).sum();
         self.batch_receipts.push(batch);
-        self.num_events += events_this_batch;
     }
 }
 
