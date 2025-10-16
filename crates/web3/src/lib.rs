@@ -4,6 +4,8 @@ use sov_modules_api::{
     Amount, CallMessage, CryptoSpec, RuntimeDiscriminant, Spec, UnmanagedRuntimeCall,
 };
 
+mod not_native;
+
 #[derive(Debug)]
 pub enum TransactionBuilderError {
     PrivateKeyInvalid,
