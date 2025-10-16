@@ -4321,8 +4321,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.9.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
+source = "git+https://github.com/risc0/RustCrypto-hashes?tag=sha2-v0.9.9-risczero.0#c2b5d71c687cbccf9235069732c050486a01b1b2"
 dependencies = [
  "block-buffer 0.9.0",
  "cfg-if",
