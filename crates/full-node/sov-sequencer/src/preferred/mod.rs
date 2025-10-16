@@ -287,17 +287,19 @@ where
 
         // Launch replica sync task only for replicas.
         if config.sequencer_kind_config.is_replica {
-            if let Some(postgres_connection_string) =
+            let Some(postgres_connection_string) =
                 &config.sequencer_kind_config.postgres_connection_string
-            {
-                let mut replica_task = ReplicaSyncTask::new(
-                    postgres_connection_string.clone(),
-                    shutdown_sender.clone(),
-                )
-                .await?;
+            else {
+                anyhow::bail!("Postgres connection string is not set for replicas");
+            };
 
-                handles.push(replica_task.start(ReplicaEventProcessor {}).await);
-            }
+            let mut replica_task =
+                ReplicaSyncTask::new(postgres_connection_string.clone(), shutdown_sender.clone())
+                    .await?;
+
+            let replica_task_handle = replica_task.start(ReplicaEventProcessor {}).await;
+            handles.push(replica_task_handle.data_fetcher_handle);
+            handles.push(replica_task_handle.sync_task_handle);
         }
         handles.push(tokio::spawn({
             update_state_task(

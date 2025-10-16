@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 use std::collections::BTreeMap;
-use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -29,14 +28,12 @@ use crate::preferred::{
     PreferredSequencerReadBatch, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
-use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
-    VersionReader, VisibleSlotNumber,
+    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::{NativeStorage, Storage};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -306,64 +303,6 @@ where
             .start_batch(
                 visible_slot_number_after_increase,
                 visible_increase,
-                sequence_number,
-                self.executor
-                    .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache(),
-            )
-            .await;
-
-        Ok(())
-    }
-
-    /// Creates and starts a batch for replicas using the exact visible slot parameters from the master
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn try_start_batch_with_parameters_from_master(
-        &mut self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-    ) -> anyhow::Result<()> {
-        if self.executor.has_in_progress_batch() {
-            return Ok(());
-        }
-
-        // Calculate the correct visible_slots_to_advance for this replica based on its current state
-        let current_visible_slot_number = self.executor.checkpoint.current_visible_slot_number();
-        let replica_visible_slots_to_advance = visible_slot_number_after_increase.as_true()
-            .checked_sub(current_visible_slot_number.as_true().get())
-            .and_then(|diff| NonZero::new(diff.get().try_into().unwrap()))
-            .ok_or_else(|| {
-                error!(
-                    current_visible_slot_number = %current_visible_slot_number,
-                    target_visible_slot_number = %visible_slot_number_after_increase,
-                    "Cannot calculate visible slots to advance for replica: target is not greater than current"
-                );
-                anyhow!("Invalid visible slot number progression for replica".to_string())
-            })?;
-
-        assert_eq!(
-            visible_slots_to_advance,
-            replica_visible_slots_to_advance,
-            "Sanity check failed: replica visible_slots_to_advance calculation different from master."
-        );
-
-        let node_state_root = self.node_root_hash()?;
-        let sequence_number = self.get_and_inc_next_sequence_number();
-        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
-
-        let start_block_data = StartBlockData {
-            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
-            visible_increase: replica_visible_slots_to_advance,
-            node_state_root: node_state_root.clone(),
-            minimum_profit_per_tx: min_profit_per_tx,
-        };
-
-        self.executor.start_rollup_block(start_block_data).await;
-
-        self.executor_events_sender
-            .start_batch(
-                visible_slot_number_after_increase,
-                visible_slots_to_advance,
                 sequence_number,
                 self.executor
                     .checkpoint
@@ -680,6 +619,31 @@ where
         self.seq_config.sequencer_kind_config.is_replica
     }
 
+    pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
+        let start = std::time::Instant::now();
+        tracing::trace!(
+            slot_number = %info.slot_number,
+            latest_finalized_slot_number = %info.latest_finalized_slot_number,
+            "Starting LedgerAPI storage update");
+        self.api_ledger_db
+            .replace_reader(info.ledger_reader.clone());
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %info.slot_number,
+            latest_finalized_slot_number = %info.latest_finalized_slot_number,
+            "LedgerDb reader is replaced, sending notifications for the slot");
+        self.api_ledger_db
+            .send_notifications_for_slot(info.slot_number);
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %info.slot_number,
+            latest_finalized_slot_number = %info.latest_finalized_slot_number,
+            "LedgerAPI storage updated, notification has been sent");
+
+        self.tx_cache_writer.prune(info.next_tx_number).await;
+    }
+
+    /*
     async fn inner_do_batch_start(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
@@ -711,29 +675,64 @@ where
         Ok(())
     }
 
-    pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
-        let start = std::time::Instant::now();
-        tracing::trace!(
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "Starting LedgerAPI storage update");
-        self.api_ledger_db
-            .replace_reader(info.ledger_reader.clone());
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "LedgerDb reader is replaced, sending notifications for the slot");
-        self.api_ledger_db
-            .send_notifications_for_slot(info.slot_number);
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "LedgerAPI storage updated, notification has been sent");
+      /// Creates and starts a batch for replicas using the exact visible slot parameters from the master
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn try_start_batch_with_parameters_from_master(
+        &mut self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_slots_to_advance: NonZero<u8>,
+    ) -> anyhow::Result<()> {
+        if self.executor.has_in_progress_batch() {
+            return Ok(());
+        }
 
-        self.tx_cache_writer.prune(info.next_tx_number).await;
+        // Calculate the correct visible_slots_to_advance for this replica based on its current state
+        let current_visible_slot_number = self.executor.checkpoint.current_visible_slot_number();
+        let replica_visible_slots_to_advance = visible_slot_number_after_increase.as_true()
+            .checked_sub(current_visible_slot_number.as_true().get())
+            .and_then(|diff| NonZero::new(diff.get().try_into().unwrap()))
+            .ok_or_else(|| {
+                error!(
+                    current_visible_slot_number = %current_visible_slot_number,
+                    target_visible_slot_number = %visible_slot_number_after_increase,
+                    "Cannot calculate visible slots to advance for replica: target is not greater than current"
+                );
+                anyhow!("Invalid visible slot number progression for replica".to_string())
+            })?;
+
+        assert_eq!(
+            visible_slots_to_advance,
+            replica_visible_slots_to_advance,
+            "Sanity check failed: replica visible_slots_to_advance calculation different from master."
+        );
+
+        let node_state_root = self.node_root_hash()?;
+        let sequence_number = self.get_and_inc_next_sequence_number();
+        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase: replica_visible_slots_to_advance,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        self.executor.start_rollup_block(start_block_data).await;
+
+        self.executor_events_sender
+            .start_batch(
+                visible_slot_number_after_increase,
+                visible_slots_to_advance,
+                sequence_number,
+                self.executor
+                    .checkpoint
+                    .clone_with_empty_witness_dropping_temp_cache(),
+            )
+            .await;
+
+        Ok(())
     }
+    */
 }
 
 enum Message<S: Spec, Rt: Runtime<S>> {
@@ -780,21 +779,11 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         data: ProcessFinalCatchupData,
         reason: &'static str,
     },
-    DoBatchStartMsg {
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    },
     PruneSequencerDb {
         reason: &'static str,
     },
     ForceOverwriteStateForRecovery {
         info: StateUpdateInfo<S::Storage>,
-        reason: &'static str,
-    },
-    DoNewTx {
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
         reason: &'static str,
     },
     WaitNodeResync {
@@ -819,6 +808,19 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     SimpleStateUpdate {
         info: StateUpdateInfo<S::Storage>,
     },
+    /*
+      DoBatchStartMsg {
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_slots_to_advance: NonZero<u8>,
+        reason: &'static str,
+    },*/
+    /*
+    DoNewTx {
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        reason: &'static str,
+    },
+    */
 }
 
 impl<S: Spec, Rt: Runtime<S>> Message<S, Rt> {
@@ -1087,20 +1089,6 @@ where
         Ok((self.recv(recv).await?, start_time.elapsed()))
     }
 
-    pub(crate) async fn do_batch_start_msg(
-        &self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::DoBatchStartMsg {
-            visible_slot_number_after_increase,
-            visible_slots_to_advance,
-            reason,
-        })
-        .await
-    }
-
     pub(crate) async fn prune_sequencer_db_msg(
         &self,
         reason: &'static str,
@@ -1195,6 +1183,33 @@ where
         self.send(Message::CloseCurrentBatch { reason }).await
     }
 
+    pub(crate) async fn latest_slot_number_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::LatestSlotNumber { resp, reason })
+            .await?;
+
+        self.recv(recv).await
+    }
+
+    /*
+    pub(crate) async fn do_batch_start_msg(
+        &self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_slots_to_advance: NonZero<u8>,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::DoBatchStartMsg {
+            visible_slot_number_after_increase,
+            visible_slots_to_advance,
+            reason,
+            .await
+        })
+    }*/
+
+    /*
     pub(crate) async fn do_new_tx_msg(
         &self,
         tx_hash: TxHash,
@@ -1207,18 +1222,7 @@ where
             reason,
         })
         .await
-    }
-
-    pub(crate) async fn latest_slot_number_msg(
-        &self,
-        reason: &'static str,
-    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
-        let (resp, recv) = oneshot::channel();
-        self.send(Message::LatestSlotNumber { resp, reason })
-            .await?;
-
-        self.recv(recv).await
-    }
+    }*/
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -1452,31 +1456,12 @@ where
 
                 self.send_response(resp, ret, "final_catchup").await;
             }
-            Message::DoBatchStartMsg {
-                visible_slot_number_after_increase,
-                visible_slots_to_advance,
-                reason,
-            } => {
-                self.process_do_batch_start(
-                    visible_slot_number_after_increase,
-                    visible_slots_to_advance,
-                    reason,
-                )
-                .await;
-            }
             Message::PruneSequencerDb { reason } => {
                 self.process_prune_sequencer_db(reason).await;
             }
             Message::ForceOverwriteStateForRecovery { info, reason } => {
                 self.process_force_overwrite_state_for_recovery(info, reason)
                     .await;
-            }
-            Message::DoNewTx {
-                tx_hash,
-                baked_tx,
-                reason,
-            } => {
-                self.process_do_new_tx(tx_hash, baked_tx, reason).await;
             }
             Message::WaitNodeResync { info, reason } => {
                 self.process_wait_for_node_resync(info, reason).await;
@@ -1499,7 +1484,33 @@ where
             }
             Message::SimpleStateUpdate { info } => {
                 self.process_new_storage(info).await;
-            }
+            } /*
+
+                   Message::DoBatchStartMsg {
+                  visible_slot_number_after_increase,
+                  visible_slots_to_advance,
+                  reason,
+              } => {
+                  self.process_do_batch_start(
+                      visible_slot_number_after_increase,
+                      visible_slots_to_advance,
+                      reason,
+                  )
+                  .await;
+              }
+               */
+
+               /*
+
+
+
+                Message::DoNewTx {
+                    tx_hash,
+                    baked_tx,
+                    reason,
+                } => {
+                    self.process_do_new_tx(tx_hash, baked_tx, reason).await;
+                }*/
         }
 
         Ok(())
@@ -1955,25 +1966,6 @@ where
         Ok(data)
     }
 
-    async fn process_do_batch_start(
-        &mut self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    ) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        if let Err(err) = inner
-            .inner_do_batch_start(visible_slot_number_after_increase, visible_slots_to_advance)
-            .await
-        {
-            tracing::error!(
-                error = %err,
-                "Error: while calling inner_do_batch_start."
-            );
-            panic!("Error: while calling inner_do_batch_start. The sequencer can no longer accept transactions!");
-        }
-    }
-
     async fn process_prune_sequencer_db(&mut self, reason: &'static str) {
         let start_prune = std::time::Instant::now();
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -2014,31 +2006,6 @@ where
             .force_overwrite_state(info.clone(), recovery_executor)
             .await;
         inner.update_api_ledger(&info).await;
-    }
-
-    async fn process_do_new_tx(
-        &mut self,
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
-        reason: &'static str,
-    ) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        let execution_time_micros = inner.executor.replay_tx(tx_hash, baked_tx.clone()).await;
-        inner
-            .batch_size_tracker
-            .add_tx(baked_tx.data.len(), execution_time_micros);
-        inner
-            .executor_events_sender
-            .insert_tx_without_confirmation(baked_tx, tx_hash)
-            .await;
-        let checkpoint = inner
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-        inner
-            .executor_events_sender
-            .force_update_api_state(checkpoint)
-            .await;
     }
 
     async fn process_wait_for_node_resync(
@@ -2108,6 +2075,52 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         inner.close_current_batch().await;
     }
+
+    /*
+    async fn process_do_batch_start(
+        &mut self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_slots_to_advance: NonZero<u8>,
+        reason: &'static str,
+    ) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        if let Err(err) = inner
+            .inner_do_batch_start(visible_slot_number_after_increase, visible_slots_to_advance)
+            .await
+        {
+            tracing::error!(
+                error = %err,
+                "Error: while calling inner_do_batch_start."
+            );
+            panic!("Error: while calling inner_do_batch_start. The sequencer can no longer accept transactions!");
+        }
+    }*/
+
+    /*
+    async fn process_do_new_tx(
+        &mut self,
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        reason: &'static str,
+    ) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        let execution_time_micros = inner.executor.replay_tx(tx_hash, baked_tx.clone()).await;
+        inner
+            .batch_size_tracker
+            .add_tx(baked_tx.data.len(), execution_time_micros);
+        inner
+            .executor_events_sender
+            .insert_tx_without_confirmation(baked_tx, tx_hash)
+            .await;
+        let checkpoint = inner
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+        inner
+            .executor_events_sender
+            .force_update_api_state(checkpoint)
+            .await;
+    }*/
 }
 
 #[derive(Debug)]
