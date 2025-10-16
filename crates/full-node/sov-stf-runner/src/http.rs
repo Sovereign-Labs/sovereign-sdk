@@ -32,9 +32,8 @@ pub(crate) async fn start_http_server(
     let handle = tokio::spawn(async move {
         tracing::info!(%rest_address, "Starting HTTP server");
         let mut router = router.layer(axum::middleware::from_fn(measure_time));
-        if let CorsConfiguration::Permissive = cors_configuration {
-            router = router.layer(CorsLayer::permissive());
-        }
+        // CORS is applied inside `rpc_module_to_router` for `/rpc` routes to avoid
+        // duplicate `Access-Control-*` headers and conflicting policies.
         let router = router.nest("/rpc", rpc_router);
         let router = NormalizePathLayer::trim_trailing_slash().layer(router);
 
