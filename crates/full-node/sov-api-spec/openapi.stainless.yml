@@ -92,14 +92,15 @@ resources:
         methods:
           dedup: get /rollup/addresses/{credential_id}/dedup
 targets:
-  node:
+  typescript:
     production_repo: Sovereign-Labs/sovereign-sdk-client-js
     package_name: "@sovereign-sdk/client"
     publish:
       npm: true
     options:
-      browser:
-        state: allow
+      node_migration:
+        previous_version: "0.1.0-alpha.38"
+        migrated_version: "0.2.0"
 settings:
   license:
     name: Sovereign Labs Community Software License
