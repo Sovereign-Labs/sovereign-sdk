@@ -251,8 +251,11 @@ impl TwinkleClient {
         let blob = blob.to_vec();
 
         let _join_handle = tokio::task::spawn(async move {
-            tx.send(client.submit_blob_waiting_inclusion(blob, namespace).await)
-                .expect("Failed to propagate blob submission result into a channel");
+            if let Err(result) =
+                tx.send(client.submit_blob_waiting_inclusion(blob, namespace).await)
+            {
+                tracing::warn!(?result, "Failed to send result of submitting blob to the sender. Probably it is dropped. It is normal during shutdown");
+            }
         });
         rx
     }
@@ -425,5 +428,5 @@ async fn decode_on_success<T: DeserializeOwned>(response: reqwest::Response) -> 
         let text = response.text().await?;
         anyhow::bail!("Failed response to TwinkleAPI: {status:?}: {text}")
     }
-    Ok(response.json().await.expect("Failed to decode response"))
+    response.json().await.map_err(Into::into)
 }
