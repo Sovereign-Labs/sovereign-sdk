@@ -662,8 +662,8 @@ where
 
     async fn do_new_tx(
         &mut self,
-        tx_hash: TxHash,
         baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
     ) -> Result<
         (
             oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
@@ -2011,7 +2011,7 @@ where
             });
         };
 
-        let (rx, remaining_slot_gas) = inner.do_new_tx(tx_hash, baked_tx).await?;
+        let (rx, remaining_slot_gas) = inner.do_new_tx(baked_tx, tx_hash).await?;
 
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
 
@@ -2025,7 +2025,7 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let _ = inner.do_new_tx(tx_hash, baked_tx).await;
+        let _ = inner.do_new_tx(baked_tx, tx_hash).await;
     }
 }
 
