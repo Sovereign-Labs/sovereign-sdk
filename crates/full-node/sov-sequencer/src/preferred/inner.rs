@@ -1932,6 +1932,10 @@ where
         println!("process_wait_for_node_resync override info");
 
         inner.update_api_ledger(&info).await;
+
+        drop(inner);
+        self.process_force_overwrite_state_for_recovery(info, "xxx")
+            .await;
     }
 
     /// Closes the current batch
