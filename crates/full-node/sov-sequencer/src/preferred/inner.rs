@@ -777,21 +777,11 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         data: ProcessFinalCatchupData,
         reason: &'static str,
     },
-    DoBatchStartMsg {
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    },
     PruneSequencerDb {
         reason: &'static str,
     },
     ForceOverwriteStateForRecovery {
         info: StateUpdateInfo<S::Storage>,
-        reason: &'static str,
-    },
-    DoNewTx {
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
         reason: &'static str,
     },
     WaitNodeResync {
@@ -810,11 +800,21 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     TriggerBatchProductionIfConvenient {
         reason: &'static str,
     },
-    CloseCurrentBatch {
-        reason: &'static str,
-    },
     SimpleStateUpdate {
         info: StateUpdateInfo<S::Storage>,
+    },
+    DoBatchStartMsg {
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_slots_to_advance: NonZero<u8>,
+        reason: &'static str,
+    },
+    DoNewTx {
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        reason: &'static str,
+    },
+    CloseCurrentBatch {
+        reason: &'static str,
     },
 }
 
@@ -1403,26 +1403,6 @@ where
 
                 self.send_response(resp, ret, "check_readiness").await;
             }
-            Message::AcceptTx {
-                resp,
-                baked_tx,
-                tx_hash,
-                original_tx_queue_id,
-                reason,
-            } => {
-                let ret = self
-                    .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
-                    .await;
-                if let Err(AcceptTxError::ExecutorError(
-                    RollupBlockExecutorError::UnexpectedFailure,
-                )) = ret
-                {
-                    // Propagate the error to the spawner of this task.
-                    panic!("Unexpected in the rollup block executor. The sequencer can no longer accept transactions!");
-                }
-
-                self.send_response(resp, ret, "accept_tx").await;
-            }
             Message::LatestSlotNumber { resp, reason } => {
                 let ret = self.process_latest_slot_number(reason).await;
                 self.send_response(resp, ret, "latest_slot_number").await;
@@ -1468,29 +1448,54 @@ where
                 data,
                 reason,
             } => self.process_proof_blob(blob_id, data, reason).await,
+            Message::SimpleStateUpdate { info } => {
+                self.process_new_storage(info).await;
+            }
             Message::TriggerBatchProductionIfConvenient { reason } => {
                 self.process_trigger_batch_production_if_convenient(reason)
                     .await;
             }
-            Message::CloseCurrentBatch { reason } => {
-                self.process_close_current_batch(reason).await;
-            }
-            Message::SimpleStateUpdate { info } => {
-                self.process_new_storage(info).await;
-            }
-            Message::DoNewTx {
-                tx_hash: _,
-                baked_tx: _,
-                reason: _,
+            Message::AcceptTx {
+                resp,
+                baked_tx,
+                tx_hash,
+                original_tx_queue_id,
+                reason,
             } => {
-                todo!()
+                let ret = self
+                    .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
+                    .await;
+                if let Err(AcceptTxError::ExecutorError(
+                    RollupBlockExecutorError::UnexpectedFailure,
+                )) = ret
+                {
+                    // Propagate the error to the spawner of this task.
+                    panic!("Unexpected in the rollup block executor. The sequencer can no longer accept transactions!");
+                }
+
+                self.send_response(resp, ret, "accept_tx").await;
             }
             Message::DoBatchStartMsg {
-                visible_slot_number_after_increase: _,
-                visible_slots_to_advance: _,
-                reason: _,
+                visible_slot_number_after_increase,
+                visible_slots_to_advance,
+                reason,
             } => {
-                todo!()
+                self.process_do_batch_start(
+                    visible_slot_number_after_increase,
+                    visible_slots_to_advance,
+                    reason,
+                )
+                .await;
+            }
+            Message::DoNewTx {
+                baked_tx,
+                tx_hash,
+                reason,
+            } => {
+                self.process_do_new_tx(baked_tx, tx_hash, reason).await;
+            }
+            Message::CloseCurrentBatch { reason } => {
+                self.process_close_current_batch(reason).await;
             }
         }
 
@@ -1954,6 +1959,18 @@ where
         inner.close_current_batch().await;
     }
 
+    async fn process_do_batch_start(
+        &mut self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_increase: NonZero<u8>,
+        reason: &'static str,
+    ) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        let _ = inner
+            .do_batch_start(visible_slot_number_after_increase, visible_increase)
+            .await;
+    }
+
     async fn process_accept_tx(
         &mut self,
         baked_tx: FullyBakedTx,
@@ -1999,6 +2016,16 @@ where
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
 
         Ok(rx)
+    }
+
+    async fn process_do_new_tx(
+        &mut self,
+        baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
+        reason: &'static str,
+    ) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        let _ = inner.do_new_tx(tx_hash, baked_tx).await;
     }
 }
 

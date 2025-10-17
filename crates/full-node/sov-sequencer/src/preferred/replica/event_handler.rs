@@ -14,9 +14,21 @@ where
 {
     async fn on_da_event(&self, data: DbData) {
         match data {
-            DbData::BatchStart(_batch_to_store) => {}
-            DbData::Transaction(_tx) => {}
-            DbData::BatchEnd(_batch_to_store) => {}
+            DbData::BatchStart(batch_to_store) => {
+                let _ = self
+                    .do_batch_start_msg(
+                        batch_to_store.visible_slot_number_after_increase,
+                        batch_to_store.visible_slots_to_advance,
+                        "foo",
+                    )
+                    .await;
+            }
+            DbData::Transaction(_tx) => {
+                //let _ = self.do_new_tx_msg(tx, todo!(), "foo").await;
+            }
+            DbData::BatchEnd(_batch_to_store) => {
+                let _ = self.close_current_batch_msg("foo").await;
+            }
             DbData::NewProof => {}
         }
     }
