@@ -11,7 +11,7 @@ use sov_modules_api::macros::config_value;
 ///
 ///     let mut jsonrpsee_module = stf_declaration_crate::get_rpc_methods::<S>(api_state);
 ///     let stub_rpc = sov_eip712::stub_evm_rpc();
-///     jsonrpsee_module.merge(minimal_evm_rpc).expect(
+///     jsonrpsee_module.merge(stub_rpc).expect(
 ///         "Failed to merge minimal EVM RPC",
 ///     );
 ///     sov_modules_api::NodeEndpoints {

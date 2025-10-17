@@ -21,7 +21,7 @@ mod crypto_markers;
 mod secp256k1_transaction;
 mod stub_evm_rpc;
 
-pub use crate::crypto_markers::Secp256k1CryptoSpec;
+pub use crate::crypto_markers::{Secp256k1CryptoSpec, CryptoSpecWithSecp256k1};
 pub use secp256k1_transaction::{
     metered_secp256k1_credential, Secp256k1Transaction, Secp256k1Version0,
 };
