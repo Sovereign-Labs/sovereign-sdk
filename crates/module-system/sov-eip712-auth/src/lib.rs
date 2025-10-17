@@ -19,11 +19,13 @@ use sov_state::User;
 
 mod crypto_markers;
 mod secp256k1_transaction;
+mod stub_evm_rpc;
 
 pub use crate::crypto_markers::Secp256k1CryptoSpec;
 pub use secp256k1_transaction::{
     metered_secp256k1_credential, Secp256k1Transaction, Secp256k1Version0,
 };
+pub use stub_evm_rpc::stub_evm_rpc;
 
 /// Trait for providing schema to the EIP-712 authenticator.
 pub trait SchemaProvider {
