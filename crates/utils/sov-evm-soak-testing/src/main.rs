@@ -7,6 +7,7 @@ use alloy_primitives::U256;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
+use futures::StreamExt;
 use reqwest::Url;
 use std::net::SocketAddr;
 
