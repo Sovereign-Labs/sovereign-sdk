@@ -1,6 +1,9 @@
+use alloy::network::TransactionBuilder;
 use alloy::providers::{Provider, ProviderBuilder};
+use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
+use alloy_primitives::U256;
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use clap::Subcommand;
@@ -121,10 +124,25 @@ async fn main() -> Result<()> {
             if num_workers > 255 {
                 return Err(anyhow!("num_workers must be less than 256 because of our private key tweaking. This is an easy fix, but we haven't done it yet."));
             }
+            let root_signer: PrivateKeySigner = args.private_key.parse()?;
+            let root_client = alloy_client(args.rpc_addr, root_signer.clone())?;
+            let root_balance = root_client.get_balance(root_signer.address()).await?;
+            let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
+
+            // Fund all accounts equally
+            for i in 0..num_workers {
+                let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
+                let tx = TransactionRequest::default()
+                    .with_from(root_signer.address())
+                    .with_to(signer.address())
+                    .with_value(transfer_amount);
+                let _ = root_client.send_transaction(tx).await?.watch().await?;
+            }
+
             let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(num_workers);
             for i in 0..num_workers {
                 let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
-                let client = alloy_client(args.rpc_addr, signer)?;
+                let client = alloy_client(args.rpc_addr, signer.clone())?;
                 // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
                     match LogsSoakTest::new(client).await {
