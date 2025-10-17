@@ -5733,7 +5733,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.9.9"
-source = "git+https://github.com/sp1-patches/RustCrypto-hashes?rev=32cd33136ff22cc977ea6a95dd5a322a1de7283c#32cd33136ff22cc977ea6a95dd5a322a1de7283c"
+source = "git+https://github.com/sp1-patches/RustCrypto-hashes?tag=sha2-v0.9.9#e942f6f13a820a58716587f508fa50b6582cf34f"
 dependencies = [
  "block-buffer 0.9.0",
  "cfg-if",
@@ -5745,8 +5745,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
+source = "git+https://github.com/sp1-patches/RustCrypto-hashes?tag=sha2-v0.10.9#82c36a428f8d6f05f3bfccdedb243e9d1f85359d"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -8187,8 +8186,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "sha2"
-version = "0.10.8"
-source = "git+https://github.com/sp1-patches/RustCrypto-hashes?rev=1f224388fdede7cef649bce0d63876d1a9e3f515#1f224388fdede7cef649bce0d63876d1a9e3f515"

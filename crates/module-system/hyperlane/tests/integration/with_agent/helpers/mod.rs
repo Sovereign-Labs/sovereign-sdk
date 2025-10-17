@@ -197,7 +197,7 @@ impl HyperlaneBuilder {
 
         // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/integration-2025-09-17-rebase branch
         let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:integration-7".into());
+            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:integration-8".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));

@@ -110,9 +110,9 @@ Once a batch is submitted, the output should also contain the transaction hashes
 
 ```text
 2025-08-06T10:24:30.667058Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-08-06T10:24:30.687784Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321
+2025-08-06T10:24:30.687784Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f
 2025-08-06T10:24:30.687803Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
-2025-08-06T10:24:30.701577Z  INFO sov_node_client: Submitted tx hash="0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321"
+2025-08-06T10:24:30.701577Z  INFO sov_node_client: Submitted tx hash="0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f"
 2025-08-06T10:24:30.701604Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
 2025-08-06T10:24:32.758861Z  INFO sov_node_client: Rollup has processed the submitted batch!
 ```
@@ -122,7 +122,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f/events | jq
 [
   {
     "type": "event",
@@ -156,7 +156,7 @@ $ curl -sS http://127.0.0.1:12346/ledger/txs/0x0d6fd50888b9ea54acbb90cc9cb04e8f4
       "type": "moduleRef",
       "name": "Bank"
     },
-    "tx_hash": "0x0d6fd50888b9ea54acbb90cc9cb04e8f4448e9bab55c20f18e0716044077f321"
+    "tx_hash": "0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f"
   }
 ]
 ```
@@ -330,7 +330,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x0d3bbb13e3e00e9e8a9fce5690b21e3a543bfba4afdd30105c38eb8dd6a405bf",
+  "chain_hash": "0xb4a065c8537f4a9e915537de4b7ce10f70d943da7dbae1de34f8406f092cd6b3",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",

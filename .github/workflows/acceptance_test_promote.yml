@@ -6,11 +6,9 @@ on:
 
 permissions:
   contents: write
-  issues: write
 
 env:
-  # Use test branch for now, will change to dev/nightly later
-  NIGHTLY_BRANCH: 'theodore/acceptance-nightly-testing'
+  NIGHTLY_BRANCH: 'nightly'
 
 jobs:
   promote:
@@ -35,6 +33,7 @@ jobs:
         with:
           ref: ${{ github.event.client_payload.commit_sha }}
           fetch-depth: 0
+          ssh-key: ${{ secrets.ACCEPTANCE_TEST_DEPLOY_KEY }}
 
       - name: Verify commit exists
         run: |
@@ -92,3 +91,5 @@ jobs:
           echo "$ERROR_DETAILS"
           echo ""
           echo "TODO: Send Slack notification to configured channel"
+
+          exit 1

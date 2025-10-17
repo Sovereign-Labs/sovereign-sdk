@@ -15,7 +15,9 @@ const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
 const BOTH: &str = "user_and_kernel_state";
 
+#[cfg(debug_assertions)]
 const COMMIT_START_DELAY: std::time::Duration = std::time::Duration::from_millis(1);
+#[cfg(debug_assertions)]
 const COMMIT_RETRY_ATTEMPTS: usize = 26;
 
 /// Contains all the most recent rollup data.
@@ -99,8 +101,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let start_kernel = std::time::Instant::now();
         let write_attempts_kernel = {
             let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
-            try_commit_overlay_with_backoff(&self.kernel, kernel)
-                .context("kernel namespace commit")?
+            commit_nomt(&self.kernel, kernel).context("kernel namespace commit")?
         };
         let write_kernel = start_kernel.elapsed();
 
@@ -144,7 +145,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let start_user = std::time::Instant::now();
         let write_attempts_user = {
             let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
-            try_commit_overlay_with_backoff(&self.user, user).context("user namespace commit")?
+            commit_nomt(&self.user, user).context("user namespace commit")?
         };
         let write_user = start_user.elapsed();
 
@@ -444,6 +445,7 @@ where
 /// due to contention.
 /// This is necessary because another thread might be holding a lock on the NOMT.
 /// The function will attempt to commit a total of [`COMMIT_RETRY_ATTEMPTS`] times before giving up and returning an error.
+#[cfg(debug_assertions)]
 fn try_commit_overlay_with_backoff<H>(
     nomt: &Nomt<BinaryHasher<H>>,
     mut overlay: Overlay,
@@ -490,6 +492,23 @@ where
         "Failed to commit overlay after {} attempts",
         COMMIT_RETRY_ATTEMPTS
     );
+}
+
+/// Commits an overlay to NOMT, using blocking commit in release mode and
+/// non-blocking with backoff in debug mode.
+fn commit_nomt<H>(nomt: &Nomt<BinaryHasher<H>>, overlay: Overlay) -> anyhow::Result<usize>
+where
+    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
+{
+    #[cfg(not(debug_assertions))]
+    {
+        overlay.commit(nomt)?;
+        Ok(1)
+    }
+    #[cfg(debug_assertions)]
+    {
+        try_commit_overlay_with_backoff(nomt, overlay)
+    }
 }
 
 /// Begin a new user and kernel session with only data that has been written to disk
