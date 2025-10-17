@@ -21,13 +21,13 @@ const MAX_WORKERS: usize = 255;
 
 #[derive(Parser, Debug)]
 #[command(name = "sov-evm-soak-testing")]
-#[command(about = "EVM soak testing tool", long_about = None)]
+#[command(about = "EVM soak testing tool for Sovereign SDK", long_about = None)]
 struct Args {
-    /// RPC address
+    /// RPC server address
     #[arg(short, long, default_value = "127.0.0.1:12346")]
     rpc_addr: SocketAddr,
 
-    /// Private key for signing transactions
+    /// Private key for signing transactions (hex-encoded)
     #[arg(
         short,
         long,
@@ -41,9 +41,9 @@ struct Args {
 
 #[derive(Subcommand, Clone, Debug)]
 enum TestType {
-    /// Run Uniswap soak test
+    /// Run Uniswap soak test with multiple workers
     Uniswap {
-        /// Number of iterations
+        /// Number of iterations per worker
         #[arg(short, long, default_value = "100")]
         count: usize,
 
