@@ -8,7 +8,6 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use clap::Subcommand;
 use futures::future::try_join_all;
-use futures::StreamExt;
 use reqwest::Url;
 use std::net::SocketAddr;
 use tokio::task::JoinHandle;
@@ -169,16 +168,8 @@ async fn main() -> Result<()> {
 
             let subscription_handle = tokio::spawn(async move {
                 let filter = Filter::new().from_block(from_block).to_block(to_block);
-                let sub = root_client.subscribe_logs(&filter).await?;
-                let mut stream = sub.into_stream();
-                let mut counter = 0;
-                while let Some(_) = stream.next().await {
-                    counter += 1;
-                    if counter % 1000 == 0 {
-                        println!("{}", counter);
-                    }
-                }
-                Ok::<_, anyhow::Error>(counter)
+                let logs = root_client.get_logs(&filter).await?;
+                Ok::<_, anyhow::Error>(logs.len())
             });
             let logs_received = subscription_handle.await??;
             println!("{logs_received}");
