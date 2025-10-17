@@ -56,6 +56,9 @@ enum TestType {
         /// Number of logs per tx
         #[arg(short, long, default_value = "100")]
         logs_per_tx: usize,
+
+        #[arg(short, long, default_value = "1")]
+        num_workers: usize,
     },
 }
 
@@ -113,11 +116,31 @@ async fn main() -> Result<()> {
         TestType::Logs {
             tx_count,
             logs_per_tx,
+            num_workers,
         } => {
-            let signer: PrivateKeySigner = args.private_key.parse()?;
-            let client = alloy_client(args.rpc_addr, signer)?;
-            let test = LogsSoakTest::new(client).await?;
-            test.run(tx_count, logs_per_tx).await?;
+            if num_workers > 255 {
+                return Err(anyhow!("num_workers must be less than 256 because of our private key tweaking. This is an easy fix, but we haven't done it yet."));
+            }
+            let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(num_workers);
+            for i in 0..num_workers {
+                let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
+                let client = alloy_client(args.rpc_addr, signer)?;
+                // Spawn a new task for each worker
+                handles.push(tokio::spawn(async move {
+                    match LogsSoakTest::new(client).await {
+                        Ok(test) => {
+                            if let Err(e) = test.run(tx_count, logs_per_tx).await {
+                                println!("Worker {i} error during run: {e:?}");
+                            }
+                        }
+                        Err(e) => {
+                            println!("Worker {i} failed to deploy contracts: {e:?}");
+                        }
+                    }
+                    Ok(())
+                }));
+            }
+            try_join_all(handles).await?;
         }
     }
 
