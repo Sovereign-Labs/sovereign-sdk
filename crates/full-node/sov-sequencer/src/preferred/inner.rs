@@ -946,6 +946,7 @@ where
     shutdown_receiver: watch::Receiver<()>,
 }
 
+#[derive(Debug)]
 /// Describes errors that can occur when updating the sequencer state.
 /// This type intentionally does *not* implement `std::error::Error` or `std::fmt::Debug` so that it cannot be directly converted to an `anyhow::Error`.
 /// To convert to anyhow, first convert to a `StateUpdateError` or similar. This is done to ensure backward compatibility with existing code that
@@ -1194,8 +1195,8 @@ where
 
     pub(crate) async fn do_new_tx_msg(
         &self,
-        tx_hash: TxHash,
         baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::DoNewTx {
@@ -1968,7 +1969,8 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         let _ = inner
             .do_batch_start(visible_slot_number_after_increase, visible_increase)
-            .await;
+            .await
+            .unwrap();
     }
 
     async fn process_accept_tx(
@@ -2025,7 +2027,7 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let _ = inner.do_new_tx(baked_tx, tx_hash).await;
+        let _ = inner.do_new_tx(baked_tx, tx_hash).await.unwrap();
     }
 }
 

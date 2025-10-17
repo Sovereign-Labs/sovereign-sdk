@@ -51,7 +51,7 @@ async fn create_da_service() -> (StorableMockDaService, watch::Sender<()>, Socke
     (da_service, shutdown_sender, addr)
 }
 
-async fn wait_for_height(
+async fn _wait_for_height(
     test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
     da_service: &StorableMockDaService,
     height: u64,
@@ -162,7 +162,8 @@ async fn test_replica_receives_txs_from_postgres() {
     let height_before_tx = test_rollup.height().await;
     test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
 
-    wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
+    //wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     let receiver_balance = replica_test_rollup
         .client

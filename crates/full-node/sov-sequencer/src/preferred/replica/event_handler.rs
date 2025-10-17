@@ -19,15 +19,20 @@ where
                     .do_batch_start_msg(
                         batch_to_store.visible_slot_number_after_increase,
                         batch_to_store.visible_slots_to_advance,
-                        "foo",
+                        "replica_start_batch",
                     )
-                    .await;
+                    .await
+                    .unwrap();
             }
-            DbData::Transaction(_tx) => {
-                //let _ = self.do_new_tx_msg(tx, todo!(), "foo").await;
+            DbData::Transaction(tx, tx_hash) => {
+                self.do_new_tx_msg(tx, tx_hash, "replica_new_tx")
+                    .await
+                    .unwrap();
             }
             DbData::BatchEnd(_batch_to_store) => {
-                let _ = self.close_current_batch_msg("foo").await;
+                self.close_current_batch_msg("replica_close_batch")
+                    .await
+                    .unwrap();
             }
             DbData::NewProof => {}
         }
