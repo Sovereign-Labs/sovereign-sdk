@@ -303,7 +303,7 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
     let pub_key = tx_v0.pub_key.clone();
-    let credential_id = metered_credential(&pub_key, meter)
+    let credential_id = metered_credential(&*pub_key, meter)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     Ok(AuthorizationData {

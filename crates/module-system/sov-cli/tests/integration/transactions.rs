@@ -204,7 +204,7 @@ fn transaction_signed_properly_from_file() {
 
     match &signed_tx {
         Transaction::V0(inner) => {
-            assert_eq!(default_pubkey, &inner.pub_key);
+            assert_eq!(default_pubkey, &*inner.pub_key);
             assert_eq!(UniquenessData::Generation(generation), inner.uniqueness);
         }
         Transaction::V1(_inner) => {
@@ -326,7 +326,7 @@ fn transaction_signed_by_account_nickname() {
 
     match signed_tx {
         Transaction::V0(inner) => {
-            assert_eq!(&key2.pub_key, &inner.pub_key);
+            assert_eq!(&key2.pub_key, &*inner.pub_key);
         }
         Transaction::V1(_inner) => {
             panic!("V1 (multisig) transactions are not yet supported by the CLI tests");

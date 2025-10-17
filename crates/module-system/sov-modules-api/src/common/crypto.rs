@@ -11,6 +11,7 @@ use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::crypto::SigVerificationError;
 #[cfg(feature = "native")]
 use sov_rollup_interface::MaybeArbitrary;
+use sov_rollup_interface::{crypto::PublicKey, sov_universal_wallet::UniversalWallet};
 
 use crate::transaction::PubKeyAndSignature;
 use crate::Spec;
@@ -97,6 +98,90 @@ impl<
         P: sov_rollup_interface::crypto::PublicKey + BorshDeserialize + BorshSerialize + JsonSchema,
     > PublicKeyExt for P
 {
+}
+
+/// TODO
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet)]
+pub struct VarLengthPublicKey<T: PublicKey>(pub T);
+
+impl<T: PublicKey> From<T> for VarLengthPublicKey<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: PublicKey> AsRef<[u8]> for VarLengthPublicKey<T> {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl<T: PublicKey> AsRef<T> for VarLengthPublicKey<T> {
+    fn as_ref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: PublicKey> std::ops::Deref for VarLengthPublicKey<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: PublicKey> std::ops::DerefMut for VarLengthPublicKey<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+// Compare VarLengthPublicKey with the inner type T
+impl<T: PublicKey + PartialEq> PartialEq<T> for VarLengthPublicKey<T> {
+    fn eq(&self, other: &T) -> bool {
+        self.0 == *other
+    }
+}
+
+impl<T: PublicKey> BorshSerialize for VarLengthPublicKey<T> {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let buf = self.0.as_ref().to_vec();
+        buf.serialize(writer)
+    }
+}
+
+impl<T: PublicKey> BorshDeserialize for VarLengthPublicKey<T> {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let buf = Vec::deserialize_reader(reader)?;
+        let inner = T::try_from(buf)
+            .map_err(|_| std::io::Error::other("failed to deserialize public key"))?;
+        Ok(Self(inner))
+    }
+}
+
+impl<T: PublicKey> serde::Serialize for VarLengthPublicKey<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let s = hex::encode(self.0.as_ref());
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de, T: PublicKey> serde::Deserialize<'de> for VarLengthPublicKey<T>
+where
+    T: TryFrom<Vec<u8>>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let hex_string = <String as serde::Deserialize>::deserialize(deserializer)?;
+        let bytes = hex::decode(&hex_string).map_err(serde::de::Error::custom)?;
+        let inner = T::try_from(bytes).map_err(|_e| serde::de::Error::custom("invalid hex"))?;
+        Ok(Self(inner))
+    }
 }
 
 /// A PrivateKey used in the Module System. This extends the [`sov_rollup_interface::crypto::PrivateKey`] trait by requiring

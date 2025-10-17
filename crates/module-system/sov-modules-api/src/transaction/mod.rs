@@ -23,6 +23,7 @@ use crate::capabilities::UniquenessData;
 use crate::{
     Amount, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec, MeteredBorshDeserialize,
     MeteredBorshDeserializeError, MeteredSigVerificationError, MeteredSignature, Spec,
+    VarLengthPublicKey,
 };
 
 #[cfg(test)]
@@ -61,9 +62,8 @@ pub struct Version0<Call, S: Spec> {
     #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
     /// The public key of the sender of the transaction.
-    #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
-    pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+    #[sov_wallet(as_ty = "Vec<u8>", display = "hex")]
+    pub pub_key: VarLengthPublicKey<<S::CryptoSpec as CryptoSpec>::PublicKey>,
     /// The runtime call of the transaction.
     #[sov_wallet(
         bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
@@ -388,8 +388,10 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     }
 
     /// Creates a new transaction with the provided metadata.
-    pub fn new_with_details_v0(
-        pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+    pub fn new_with_details_v0<
+        P: Into<VarLengthPublicKey<<S::CryptoSpec as CryptoSpec>::PublicKey>>,
+    >(
+        pub_key: P,
         runtime_call: R::Call,
         signature: <S::CryptoSpec as CryptoSpec>::Signature,
         uniqueness: UniquenessData,
@@ -397,7 +399,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     ) -> Self {
         Self::V0(Version0 {
             signature,
-            pub_key,
+            pub_key: pub_key.into(),
             runtime_call,
             uniqueness,
             details,

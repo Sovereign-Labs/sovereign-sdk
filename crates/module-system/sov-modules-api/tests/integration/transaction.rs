@@ -33,7 +33,7 @@ fn test_serde_serialize_tx() {
     };
     let native_tx = Version0 {
         signature: native_sig,
-        pub_key: native_pub_key,
+        pub_key: native_pub_key.into(),
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
@@ -100,7 +100,7 @@ fn test_schema_and_native_serialization_consistency() {
     };
     let native_tx = Version0 {
         signature: native_sig,
-        pub_key: native_pub_key,
+        pub_key: native_pub_key.into(),
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
