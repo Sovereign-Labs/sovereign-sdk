@@ -1,6 +1,6 @@
 use alloy::network::TransactionBuilder;
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::rpc::types::TransactionRequest;
+use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::rpc::types::{Filter, TransactionRequest};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
@@ -8,6 +8,7 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use clap::Subcommand;
 use futures::future::try_join_all;
+use futures::StreamExt;
 use reqwest::Url;
 use std::net::SocketAddr;
 use tokio::task::JoinHandle;
@@ -72,11 +73,16 @@ fn derive_worker_key(root_key: &str, idx: usize) -> Result<String> {
     Ok(hex::encode(key_bytes))
 }
 
-pub(crate) fn alloy_client(socket: SocketAddr, signer: PrivateKeySigner) -> Result<DynProvider> {
-    let url = Url::parse(&format!("http://{socket}/rpc"))?;
+pub(crate) async fn alloy_client(
+    socket: SocketAddr,
+    signer: PrivateKeySigner,
+) -> Result<DynProvider> {
+    let url = Url::parse(&format!("ws://{socket}/rpc"))?;
+    let ws = WsConnect::new(url);
     let client = ProviderBuilder::new()
         .wallet(signer)
-        .connect_http(url)
+        .connect_ws(ws)
+        .await?
         .erased();
     Ok(client)
 }
@@ -93,7 +99,7 @@ async fn main() -> Result<()> {
             let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(num_workers);
             for i in 0..num_workers {
                 let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
-                let client = alloy_client(args.rpc_addr, signer.clone())?;
+                let client = alloy_client(args.rpc_addr, signer.clone()).await?;
                 // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
                     match UniSoakTest::new(client, signer.address()).await {
@@ -113,7 +119,7 @@ async fn main() -> Result<()> {
         }
         TestType::SimpleStorage => {
             let signer: PrivateKeySigner = args.private_key.parse()?;
-            let client = alloy_client(args.rpc_addr, signer)?;
+            let client = alloy_client(args.rpc_addr, signer).await?;
             simple_storage::run(client).await?;
         }
         TestType::Logs {
@@ -125,7 +131,7 @@ async fn main() -> Result<()> {
                 return Err(anyhow!("num_workers must be less than 256 because of our private key tweaking. This is an easy fix, but we haven't done it yet."));
             }
             let root_signer: PrivateKeySigner = args.private_key.parse()?;
-            let root_client = alloy_client(args.rpc_addr, root_signer.clone())?;
+            let root_client = alloy_client(args.rpc_addr, root_signer.clone()).await?;
             let root_balance = root_client.get_balance(root_signer.address()).await?;
             let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
 
@@ -138,11 +144,11 @@ async fn main() -> Result<()> {
                     .with_value(transfer_amount);
                 let _ = root_client.send_transaction(tx).await?.watch().await?;
             }
-
+            let from_block = root_client.get_block_number().await?;
             let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(num_workers);
             for i in 0..num_workers {
                 let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
-                let client = alloy_client(args.rpc_addr, signer.clone())?;
+                let client = alloy_client(args.rpc_addr, signer.clone()).await?;
                 // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
                     match LogsSoakTest::new(client, i).await {
@@ -159,6 +165,23 @@ async fn main() -> Result<()> {
                 }));
             }
             try_join_all(handles).await?;
+            let to_block = root_client.get_block_number().await?;
+
+            let subscription_handle = tokio::spawn(async move {
+                let filter = Filter::new().from_block(from_block).to_block(to_block);
+                let sub = root_client.subscribe_logs(&filter).await?;
+                let mut stream = sub.into_stream();
+                let mut counter = 0;
+                while let Some(_) = stream.next().await {
+                    counter += 1;
+                    if counter % 1000 == 0 {
+                        println!("{}", counter);
+                    }
+                }
+                Ok::<_, anyhow::Error>(counter)
+            });
+            let logs_received = subscription_handle.await??;
+            println!("{logs_received}");
         }
     }
 
