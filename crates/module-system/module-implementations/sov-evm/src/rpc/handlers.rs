@@ -1,4 +1,5 @@
 use crate::db::commit::FallibleDatabaseCommit;
+use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
@@ -14,8 +15,9 @@ use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec};
+use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
 use sov_rpc_eth_types::EthApiError;
+use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use tracing::debug;
 
 use crate::{apply_margins, Evm};
@@ -273,6 +275,23 @@ where
             .commit(changes)
             .expect("Impossible as gas meter is initialized with INF");
         let gas_used = result.gas_used();
+
+        // Charge for logs storage in the receipt
+        // Other receipt fields are small and covered by the constant margin
+        let logs = result.logs();
+        let logs_size = self
+            .receipts
+            .codec()
+            .value_codec()
+            .encode_to_vec(&logs)
+            .len();
+        charge_write(
+            state,
+            Accessory::NAMESPACE,
+            &self.receipts.slot_key(&u64::MAX),
+            logs_size as u32,
+        )
+        .map_err(into_rpc_error)?;
         let gas_meter = state.try_as_basic_gas_meter().unwrap();
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)

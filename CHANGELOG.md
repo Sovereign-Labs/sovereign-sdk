@@ -1,4 +1,5 @@
 # 2025-10-16
+- #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
         This was done because there's no guarantees that any field will remain common across all transaction versions (which was the original motiviation for this design).
 
