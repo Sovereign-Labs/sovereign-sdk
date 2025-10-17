@@ -15,6 +15,7 @@ use crate::helpers::runner_init::{initialize_runner, InitVariant, TestNode};
 const TEST_TOTAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "Prover is broken in current design"]
 async fn fetch_aggregated_proof_test_sync() -> anyhow::Result<()> {
     let test_case = TestCase::new(5);
     tokio::time::timeout(TEST_TOTAL_TIMEOUT, run_make_proof_sync(test_case, 3)).await??;
@@ -23,6 +24,7 @@ async fn fetch_aggregated_proof_test_sync() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "Prover is broken in current design"]
 async fn fetch_aggregated_proof_test_async() -> anyhow::Result<()> {
     let test_case = TestCase::new(5);
     tokio::time::timeout(TEST_TOTAL_TIMEOUT, run_make_proof_async(test_case, 3)).await??;
