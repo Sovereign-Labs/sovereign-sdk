@@ -145,7 +145,7 @@ async fn main() -> Result<()> {
                 let client = alloy_client(args.rpc_addr, signer.clone())?;
                 // Spawn a new task for each worker
                 handles.push(tokio::spawn(async move {
-                    match LogsSoakTest::new(client).await {
+                    match LogsSoakTest::new(client, i).await {
                         Ok(test) => {
                             if let Err(e) = test.run(tx_count, logs_per_tx).await {
                                 println!("Worker {i} error during run: {e:?}");
