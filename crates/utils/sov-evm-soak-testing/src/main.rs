@@ -5,12 +5,10 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
 use anyhow::{anyhow, Result};
-use clap::Parser;
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
-use tokio::task::JoinHandle;
 
 use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
 
@@ -18,15 +16,18 @@ mod logs;
 mod simple_storage;
 mod uniswap;
 
+/// Maximum number of concurrent workers supported due to private key derivation constraints.
+const MAX_WORKERS: usize = 255;
+
 #[derive(Parser, Debug)]
 #[command(name = "sov-evm-soak-testing")]
-#[command(about = "EVM soak testing tool", long_about = None)]
+#[command(about = "EVM soak testing tool for Sovereign SDK", long_about = None)]
 struct Args {
-    /// RPC address
+    /// RPC server address
     #[arg(short, long, default_value = "127.0.0.1:12346")]
     rpc_addr: SocketAddr,
 
-    /// Private key for signing transactions
+    /// Private key for signing transactions (hex-encoded)
     #[arg(
         short,
         long,
@@ -40,43 +41,61 @@ struct Args {
 
 #[derive(Subcommand, Clone, Debug)]
 enum TestType {
-    /// Run Uniswap soak test
+    /// Run Uniswap soak test with multiple workers
     Uniswap {
-        /// Number of iterations
+        /// Number of iterations per worker
         #[arg(short, long, default_value = "100")]
         count: usize,
 
+        /// Number of parallel workers to spawn
         #[arg(short, long, default_value = "1")]
         num_workers: usize,
     },
     /// Run SimpleStorage soak test
     SimpleStorage,
-    /// Run Logs soak test
+    /// Run logs generation and retrieval soak test
     Logs {
-        /// Number of txs
+        /// Number of transactions to send
         #[arg(short, long, default_value = "100")]
         tx_count: usize,
-        /// Number of logs per tx
+
+        /// Number of logs to emit per transaction
         #[arg(short, long, default_value = "100")]
         logs_per_tx: usize,
 
+        /// Number of parallel workers to spawn
         #[arg(short, long, default_value = "1")]
         num_workers: usize,
     },
 }
 
-// Tweak the private key to avoid conflicts between workers
-fn derive_worker_key(root_key: &str, idx: usize) -> Result<String> {
-    let mut key_bytes: [u8; 32] = hex::decode(root_key)?.try_into().unwrap();
-    key_bytes[0] = key_bytes[0].wrapping_add(idx as u8);
+/// Derives a unique private key for a worker by tweaking the root key.
+///
+/// This modifies the first byte of the root key to ensure each worker has a distinct
+/// account and avoids nonce conflicts when running parallel tests.
+///
+/// # Arguments
+/// * `root_key` - Hex-encoded private key to derive from
+/// * `worker_idx` - Worker index (0-254)
+fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
+    let mut key_bytes: [u8; 32] = hex::decode(root_key)?
+        .try_into()
+        .map_err(|_| anyhow!("Invalid private key length"))?;
+
+    key_bytes[0] = key_bytes[0].wrapping_add(worker_idx as u8);
     Ok(hex::encode(key_bytes))
 }
 
+/// Creates an Alloy WebSocket client connected to the specified RPC server.
+///
+/// # Arguments
+/// * `rpc_addr` - Socket address of the RPC server
+/// * `signer` - Private key signer for transaction signing
 pub(crate) async fn alloy_client(
-    socket: SocketAddr,
+    rpc_addr: SocketAddr,
     signer: PrivateKeySigner,
 ) -> Result<DynProvider> {
-    let url = Url::parse(&format!("ws://{socket}/rpc"))?;
+    let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
     let ws = WsConnect::new(url);
     let client = ProviderBuilder::new()
         .wallet(signer)
@@ -86,93 +105,155 @@ pub(crate) async fn alloy_client(
     Ok(client)
 }
 
+/// Validates that the number of workers doesn't exceed the maximum supported.
+fn validate_worker_count(num_workers: usize) -> Result<()> {
+    if num_workers > MAX_WORKERS {
+        return Err(anyhow!(
+            "num_workers must be at most {MAX_WORKERS} due to private key derivation constraints"
+        ));
+    }
+    Ok(())
+}
+
+/// Spawns multiple Uniswap test workers and waits for them to complete.
+async fn run_uniswap_test(
+    rpc_addr: SocketAddr,
+    private_key: &str,
+    count: usize,
+    num_workers: usize,
+) -> Result<()> {
+    validate_worker_count(num_workers)?;
+
+    let mut handles = Vec::with_capacity(num_workers);
+    for worker_idx in 0..num_workers {
+        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
+        let client = alloy_client(rpc_addr, signer.clone()).await?;
+
+        handles.push(tokio::spawn(async move {
+            match UniSoakTest::new(client, signer.address()).await {
+                Ok(test) => {
+                    if let Err(e) = test.run(count).await {
+                        eprintln!("Worker {worker_idx} error during run: {e:?}");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Worker {worker_idx} failed to deploy contracts: {e:?}");
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        }));
+    }
+
+    try_join_all(handles).await?;
+    Ok(())
+}
+
+/// Funds worker accounts from the root account.
+async fn fund_worker_accounts(
+    root_client: &DynProvider,
+    root_signer: &PrivateKeySigner,
+    private_key: &str,
+    num_workers: usize,
+) -> Result<()> {
+    let root_balance = root_client.get_balance(root_signer.address()).await?;
+    let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
+
+    for worker_idx in 0..num_workers {
+        let worker_signer: PrivateKeySigner =
+            derive_worker_key(private_key, worker_idx)?.parse()?;
+        let tx = TransactionRequest::default()
+            .with_from(root_signer.address())
+            .with_to(worker_signer.address())
+            .with_value(transfer_amount);
+
+        root_client.send_transaction(tx).await?.watch().await?;
+    }
+
+    Ok(())
+}
+
+/// Spawns multiple log test workers, runs them, and retrieves all generated logs.
+async fn run_logs_test(
+    rpc_addr: SocketAddr,
+    private_key: &str,
+    tx_count: usize,
+    logs_per_tx: usize,
+    num_workers: usize,
+) -> Result<()> {
+    validate_worker_count(num_workers)?;
+
+    // Set up root account and fund workers
+    let root_signer: PrivateKeySigner = private_key.parse()?;
+    let root_client = alloy_client(rpc_addr, root_signer.clone()).await?;
+
+    fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
+
+    let from_block = root_client.get_block_number().await?;
+
+    // Spawn workers
+    let mut handles = Vec::with_capacity(num_workers);
+    for worker_idx in 0..num_workers {
+        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
+        let client = alloy_client(rpc_addr, signer.clone()).await?;
+
+        handles.push(tokio::spawn(async move {
+            match LogsSoakTest::new(client, worker_idx).await {
+                Ok(test) => {
+                    if let Err(e) = test.run(tx_count, logs_per_tx).await {
+                        eprintln!("Worker {worker_idx} error during run: {e:?}");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Worker {worker_idx} failed to deploy contracts: {e:?}");
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        }));
+    }
+
+    try_join_all(handles).await?;
+
+    // Retrieve and count all logs
+    let to_block = root_client.get_block_number().await?;
+    let filter = Filter::new().from_block(from_block).to_block(to_block);
+    let logs = root_client.get_logs(&filter).await?;
+
+    println!("Total logs retrieved: {}", logs.len());
+
+    Ok(())
+}
+
+/// Runs the SimpleStorage soak test.
+async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
+    let signer: PrivateKeySigner = private_key.parse()?;
+    let client = alloy_client(rpc_addr, signer).await?;
+    simple_storage::run(client).await
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
 
     match args.test {
         TestType::Uniswap { count, num_workers } => {
-            if num_workers > 255 {
-                return Err(anyhow!("num_workers must be less than 256 because of our private key tweaking. This is an easy fix, but we haven't done it yet."));
-            }
-            let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(num_workers);
-            for i in 0..num_workers {
-                let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
-                let client = alloy_client(args.rpc_addr, signer.clone()).await?;
-                // Spawn a new task for each worker
-                handles.push(tokio::spawn(async move {
-                    match UniSoakTest::new(client, signer.address()).await {
-                        Ok(test) => {
-                            if let Err(e) = test.run(count).await {
-                                println!("Worker {i} error during run: {e:?}");
-                            }
-                        }
-                        Err(e) => {
-                            println!("Worker {i} failed to deploy contracts: {e:?}");
-                        }
-                    }
-                    Ok(())
-                }));
-            }
-            try_join_all(handles).await?;
+            run_uniswap_test(args.rpc_addr, &args.private_key, count, num_workers).await?;
         }
         TestType::SimpleStorage => {
-            let signer: PrivateKeySigner = args.private_key.parse()?;
-            let client = alloy_client(args.rpc_addr, signer).await?;
-            simple_storage::run(client).await?;
+            run_simple_storage_test(args.rpc_addr, &args.private_key).await?;
         }
         TestType::Logs {
             tx_count,
             logs_per_tx,
             num_workers,
         } => {
-            if num_workers > 255 {
-                return Err(anyhow!("num_workers must be less than 256 because of our private key tweaking. This is an easy fix, but we haven't done it yet."));
-            }
-            let root_signer: PrivateKeySigner = args.private_key.parse()?;
-            let root_client = alloy_client(args.rpc_addr, root_signer.clone()).await?;
-            let root_balance = root_client.get_balance(root_signer.address()).await?;
-            let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
-
-            // Fund all accounts equally
-            for i in 0..num_workers {
-                let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
-                let tx = TransactionRequest::default()
-                    .with_from(root_signer.address())
-                    .with_to(signer.address())
-                    .with_value(transfer_amount);
-                let _ = root_client.send_transaction(tx).await?.watch().await?;
-            }
-            let from_block = root_client.get_block_number().await?;
-            let mut handles: Vec<JoinHandle<Result<()>>> = Vec::with_capacity(num_workers);
-            for i in 0..num_workers {
-                let signer: PrivateKeySigner = derive_worker_key(&args.private_key, i)?.parse()?;
-                let client = alloy_client(args.rpc_addr, signer.clone()).await?;
-                // Spawn a new task for each worker
-                handles.push(tokio::spawn(async move {
-                    match LogsSoakTest::new(client, i).await {
-                        Ok(test) => {
-                            if let Err(e) = test.run(tx_count, logs_per_tx).await {
-                                println!("Worker {i} error during run: {e:?}");
-                            }
-                        }
-                        Err(e) => {
-                            println!("Worker {i} failed to deploy contracts: {e:?}");
-                        }
-                    }
-                    Ok(())
-                }));
-            }
-            try_join_all(handles).await?;
-            let to_block = root_client.get_block_number().await?;
-
-            let subscription_handle = tokio::spawn(async move {
-                let filter = Filter::new().from_block(from_block).to_block(to_block);
-                let logs = root_client.get_logs(&filter).await?;
-                Ok::<_, anyhow::Error>(logs.len())
-            });
-            let logs_received = subscription_handle.await??;
-            println!("{logs_received}");
+            run_logs_test(
+                args.rpc_addr,
+                &args.private_key,
+                tx_count,
+                logs_per_tx,
+                num_workers,
+            )
+            .await?;
         }
     }
 
