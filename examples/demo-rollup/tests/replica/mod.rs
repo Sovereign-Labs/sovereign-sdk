@@ -21,12 +21,23 @@ use sov_test_utils::test_rollup::TestRollup;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
+use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 
 fn random_address() -> <S as Spec>::Address {
     let pk = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
     pk.pub_key().credential_id().into()
+}
+
+async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
+    let da_service = StorableMockDaService::new_in_memory_manual(MockAddress::new([0; 32])).await;
+
+    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
+        .await
+        .unwrap();
+
+    (da_service, addr)
 }
 
 async fn create_da_service() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
@@ -38,6 +49,21 @@ async fn create_da_service() -> (StorableMockDaService, watch::Sender<()>, Socke
         .unwrap();
 
     (da_service, shutdown_sender, addr)
+}
+
+async fn wait_for_height(
+    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
+    da_service: &StorableMockDaService,
+    height: u64,
+) {
+    loop {
+        let h = test_rollup.height().await;
+        da_service.produce_block_now().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        if h.get() >= height {
+            break;
+        }
+    }
 }
 
 async fn start_rollup(
@@ -83,12 +109,7 @@ async fn test_replica_receives_txs_from_da() {
 
     let height_before_tx = test_rollup.height().await;
 
-    test_rollup
-        .client
-        .client
-        .send_txs_to_sequencer(&[tx])
-        .await
-        .unwrap();
+    test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
 
     test_rollup
         .wait_for_height(height_before_tx.get() + 5)
@@ -117,13 +138,15 @@ async fn test_replica_receives_txs_from_postgres() {
         }
     };
 
-    let (_, shutdown_sender, addr) = create_da_service().await;
+    let (da_service, addr) = create_da_service_manual().await;
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
     let test_rollup = start_rollup(false, addr, postgres.clone()).await;
     let replica_test_rollup = start_rollup(true, addr, postgres).await;
 
     let token_id = config_gas_token_id();
+
+    da_service.produce_n_blocks_now(20).await.unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let receiver_addr = random_address();
@@ -137,17 +160,9 @@ async fn test_replica_receives_txs_from_postgres() {
     );
 
     let height_before_tx = test_rollup.height().await;
+    test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
 
-    test_rollup
-        .client
-        .client
-        .send_txs_to_sequencer(&[tx])
-        .await
-        .unwrap();
-
-    test_rollup
-        .wait_for_height(height_before_tx.get() + 5)
-        .await;
+    wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
 
     let receiver_balance = replica_test_rollup
         .client
@@ -157,5 +172,4 @@ async fn test_replica_receives_txs_from_postgres() {
 
     assert_eq!(receiver_balance.0, 100);
     let _ = test_rollup.shutdown().await;
-    let _ = shutdown_sender.send(());
 }
