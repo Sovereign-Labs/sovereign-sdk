@@ -8,6 +8,7 @@ use sqlx::PgPool;
 use sqlx::Row;
 use std::str::FromStr;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
@@ -109,7 +110,7 @@ impl EventReceiver {
         }
     }
 
-    pub(crate) async fn spawn_db_data_fetcher(&mut self) {
+    pub(crate) async fn spawn_db_data_fetcher(&mut self) -> JoinHandle<()> {
         // Create a separate persistent connection pool for querying transaction data
         let query_pool = match PgPoolOptions::default()
             .max_connections(5) // Small pool since we're just doing simple queries
@@ -204,7 +205,7 @@ impl EventReceiver {
                     }
                 }
             }
-        });
+        })
     }
 
     pub(crate) async fn recv(&mut self) -> Option<DbData> {
