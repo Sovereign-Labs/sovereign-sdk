@@ -613,6 +613,7 @@ where
 
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
+
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
 
         let start_block_data = StartBlockData {
@@ -626,6 +627,13 @@ where
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
+
+        let next_visible_slot_number = old_checkpoint.current_visible_slot_number();
+
+        println!(
+            "DO BATCH START {} {}",
+            sequence_number, next_visible_slot_number
+        );
 
         self.executor
             .start_rollup_block(start_block_data.clone())
@@ -1920,6 +1928,8 @@ where
             .executor_events_sender
             .update_state_for_recovery(checkpoint)
             .await;
+
+        println!("process_wait_for_node_resync override info");
 
         inner.update_api_ledger(&info).await;
     }

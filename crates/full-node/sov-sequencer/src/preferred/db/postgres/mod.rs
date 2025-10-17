@@ -206,6 +206,13 @@ impl PostgresBackend {
 #[async_trait]
 impl PreferredSequencerDbBackend for PostgresBackend {
     async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> anyhow::Result<()> {
+        println!(
+            "Postgres: got batch start seq {:?}, visible_slot_number_after_increase {:?} {:?}",
+            batch_to_store.sequence_number,
+            batch_to_store.visible_slot_number_after_increase,
+            batch_to_store.visible_slots_to_advance
+        );
+
         let blob_data = borsh::to_vec(&StoredBlob::Batch {
             blob_id: batch_to_store.blob_id,
             visible_slot_number_after_increase: batch_to_store.visible_slot_number_after_increase,

@@ -15,6 +15,8 @@ where
     async fn on_da_event(&self, data: DbData) {
         match data {
             DbData::BatchStart(batch_to_store) => {
+                println!("");
+                println!("Replica: got batch start {batch_to_store:?}");
                 let _ = self
                     .do_batch_start_msg(
                         batch_to_store.visible_slot_number_after_increase,
@@ -25,11 +27,13 @@ where
                     .unwrap();
             }
             DbData::Transaction(tx, tx_hash) => {
+                println!("Replica: TX");
                 self.do_new_tx_msg(tx, tx_hash, "replica_new_tx")
                     .await
                     .unwrap();
             }
             DbData::BatchEnd(_batch_to_store) => {
+                println!("Replica: END");
                 self.close_current_batch_msg("replica_close_batch")
                     .await
                     .unwrap();

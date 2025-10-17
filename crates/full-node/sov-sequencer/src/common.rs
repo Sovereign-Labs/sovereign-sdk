@@ -354,6 +354,8 @@ pub async fn loop_call_update_state<Seq: Sequencer>(
         shutdown_receiver,
         "loop_call_update_state",
         |info| async {
+            println!("XXX loop_call_update_state");
+
             if cfg!(debug_assertions) {
                 let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
                 if skip_flag == Ok("1".to_string()) {

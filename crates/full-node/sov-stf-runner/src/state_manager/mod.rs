@@ -464,6 +464,7 @@ where
         // we don't need. It will also keep working even if there are no
         // receivers currently alive, which makes it easier to reason about the
         // code.
+        println!("Replacing state update sender");
         self.state_update_sender.send_replace(state_update_info);
 
         Ok(())

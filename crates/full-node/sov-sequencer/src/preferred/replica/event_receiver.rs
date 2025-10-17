@@ -135,6 +135,8 @@ impl EventReceiver {
             }
         };
 
+        dbg!(start_event_id);
+
         // Create a dedicated listener for PostgreSQL LISTEN/NOTIFY
         let mut listener = match PgListener::connect(&self.connection_string).await {
             Ok(listener) => listener,
