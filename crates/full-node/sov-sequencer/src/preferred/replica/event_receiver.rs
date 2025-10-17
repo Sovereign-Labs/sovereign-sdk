@@ -310,7 +310,7 @@ impl EventReceiver {
                     }
                     EventType::Transaction => {
                         let tx_data: Vec<u8> = row.get("data");
-                        let tx_hash = row.get("data");
+                        let tx_hash = row.get("hash");
                         let tx_hash: TxHash = TxHash::new(tx_hash);
 
                         let baked_tx = FullyBakedTx::new(tx_data);
