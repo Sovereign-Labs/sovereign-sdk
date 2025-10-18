@@ -516,6 +516,7 @@ where
             })?;
 
         let filtered_block_header = filtered_block.header().clone();
+        println!("RUNNER: {next_da_height:?}");
         if next_da_height != filtered_block_header.height() {
             debug!(
                 existing_next_da_height = next_da_height,

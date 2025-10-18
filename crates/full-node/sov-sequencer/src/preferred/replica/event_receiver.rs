@@ -3,6 +3,7 @@ use crate::preferred::exit_rollup;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::FullyBakedTx;
+use sov_modules_api::TxHash;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use sqlx::Row;
@@ -133,6 +134,8 @@ impl EventReceiver {
                 unreachable!("EventReceiver: impossible happened rollup didn't exit");
             }
         };
+
+        dbg!(start_event_id);
 
         // Create a dedicated listener for PostgreSQL LISTEN/NOTIFY
         let mut listener = match PgListener::connect(&self.connection_string).await {
@@ -309,9 +312,13 @@ impl EventReceiver {
                     }
                     EventType::Transaction => {
                         let tx_data: Vec<u8> = row.get("data");
+                        let tx_hash = row.get("hash");
+                        let tx_hash: TxHash = TxHash::new(tx_hash);
 
                         let baked_tx = FullyBakedTx::new(tx_data);
-                        let _ = db_data_sender.send(DbData::Transaction(baked_tx)).await;
+                        let _ = db_data_sender
+                            .send(DbData::Transaction(baked_tx, tx_hash))
+                            .await;
                     }
 
                     EventType::BatchEnd => {
@@ -336,7 +343,7 @@ impl EventReceiver {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DbData {
     BatchStart(BatchToStore),
-    Transaction(FullyBakedTx),
+    Transaction(FullyBakedTx, TxHash),
     BatchEnd(BatchToStore),
     NewProof,
 }

@@ -628,8 +628,23 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    let mut rt = Rt::default();
+
     let info =
         poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
+
+    let finalized_slot_number = info.latest_finalized_slot_number;
+    let slot_number = info.slot_number;
+    let next_sequence_number_according_to_node =
+        get_next_sequence_number_according_to_node(&info, &mut rt);
+
+    println!("");
+    if seq.config.sequencer_kind_config.is_replica {
+        //println!("REPLICA: got sequencer conditions {finalized_slot_number} {slot_number}, next seq {next_sequence_number_according_to_node}");
+    } else {
+        //println!("MASTER: got sequencer conditions {finalized_slot_number} {slot_number},  nextseq {next_sequence_number_according_to_node}");
+    }
+
     if cfg!(debug_assertions) {
         let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
         if skip_flag == Ok("1".to_string()) {
@@ -637,14 +652,8 @@ where
             return Ok(());
         }
     }
-    let finalized_slot_number = info.latest_finalized_slot_number;
-    let slot_number = info.slot_number;
 
-    let mut rt = Rt::default();
     let timer_start = std::time::Instant::now();
-
-    let next_sequence_number_according_to_node =
-        get_next_sequence_number_according_to_node(&info, &mut rt);
 
     let operation = seq
         .synchronized_state_updator
@@ -658,15 +667,18 @@ where
 
     match operation {
         PreferredSeqOperation::Unreachable => {
+            println!("Operation: {:?}", "Unreachable");
             panic!("The node has a higher sequence number than the sequencer, but the sequencer has some batches that it must replay (i.e. we're not just re-indexing a chain starting from an empty sequencer DB). This is an unusual scenario. It could mean you're running a competing preferred sequencer (which is not allowed!), or your sequencer DB data is corrupted... or it's just a bug. Please report it. You might attempt to recover by deleting the entire sequencer DB.")
         }
 
         PreferredSeqOperation::WaitForNodeResyncToTip => {
+            println!("Operation: {:?}", "WaitForNodeResyncToTip");
             seq.wait_for_node_resync_to_tip(state_update_receiver, shutdown_receiver, info)
                 .await?;
         }
 
         PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack => {
+            println!("Operation: {:?}", "WaitForNodeResyncWithAllowedSlack");
             seq.wait_for_node_resync_with_allowed_slack(
                 state_update_receiver,
                 shutdown_receiver,
@@ -675,6 +687,7 @@ where
             .await?;
         }
         PreferredSeqOperation::RecoverAndCatchUp => {
+            println!("Operation: {:?}", "RecoverAndCatchUp");
             seq.recover_and_catch_up(state_update_receiver, shutdown_receiver, info)
                 .await?;
         }
@@ -684,6 +697,11 @@ where
             time_spent_fetching_batches,
         ) => {
             if let Some(executor) = executor {
+                println!(
+                    "Operation X1:  {:?}",
+                    "ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary"
+                );
+
                 seq.replay_soft_confirmations_on_top_of_node_state(
                     info,
                     timer_start,
@@ -692,6 +710,10 @@ where
                 )
                 .await?;
             } else {
+                println!(
+                    "Operation X2:  {:?}",
+                    "ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary"
+                );
                 seq.do_simple_state_update(info).await?;
             }
         }
@@ -705,6 +727,26 @@ where
             slot_number,
             finalized_slot_number,
         });
+
+    let next_seq = seq
+        .synchronized_state_updator
+        .next_sequence_number_msg("??")
+        .await
+        .unwrap();
+
+    let latest_slot_number = seq
+        .synchronized_state_updator
+        .latest_slot_number_msg("??")
+        .await
+        .unwrap();
+
+    if seq.config.sequencer_kind_config.is_replica {
+        println!("END REPLICA: got sequencer conditions {finalized_slot_number} {slot_number}, {latest_slot_number} next seq {next_seq}");
+    } else {
+        println!("END MASTER: got sequencer conditions {finalized_slot_number} {slot_number},  {latest_slot_number} nextseq {next_seq}");
+    }
+
+    println!("");
 
     Ok(())
 }
