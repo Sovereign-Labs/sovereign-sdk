@@ -19,8 +19,9 @@ use thiserror::Error;
 
 use crate::capabilities::UniquenessData;
 use crate::{
-    Amount, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec, MeteredBorshDeserialize,
-    MeteredBorshDeserializeError, MeteredSigVerificationError, MeteredSignature, Spec,
+    Amount, CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec,
+    MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredSigVerificationError,
+    MeteredSignature, Spec,
 };
 
 #[cfg(test)]
@@ -50,15 +51,15 @@ impl<D: DispatchCall> TransactionCallable for D {
 )]
 #[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// V0 transaction.
-pub struct Version0<Call, S: Spec> {
+pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// The signature of the transaction.
     #[serde(with = "hex_field_format")]
     #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
-    pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
+    pub signature: C::Signature,
     /// The public key of the sender of the transaction.
     #[serde(with = "hex_field_format")]
     #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
-    pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+    pub pub_key: C::PublicKey,
     /// The runtime call of the transaction.
     #[sov_wallet(
         bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
@@ -81,13 +82,19 @@ pub struct Version0<Call, S: Spec> {
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
-pub enum Transaction<R: TransactionCallable, S: Spec> {
+pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// V0 Transaction type.
-    V0(Version0<R::Call, S>),
+    V0(
+        #[borsh(bound(
+            serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
+            deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
+        ))]
+        Version0<R::Call, S, C>,
+    ),
 }
 
 #[cfg(feature = "native")]
-impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Computes the transaction hash as it would be computed by the rollup.
     /// We do it so by computing the hash of the borsh-serialized transaction.
     pub fn hash(&self) -> TxHash {
@@ -99,7 +106,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
 
     /// Creates a new signed transaction using the provided private key.
     pub fn new_signed_tx(
-        priv_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+        priv_key: &C::PrivateKey,
         chain_hash: &[u8; 32],
         unsigned_tx: UnsignedTransaction<R, S>,
     ) -> Self {
@@ -114,15 +121,17 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     }
 }
 
-impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
-        let this = <Transaction<R, S> as borsh::BorshDeserialize>::deserialize(buf)?;
+        let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
         tracing::trace!(transaction = ?this, "Deserialized transaction");
         Ok(this)
     }
 }
 
-impl<R: TransactionCallable, S: Spec> MeteredBorshDeserialize<S> for Transaction<R, S> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> MeteredBorshDeserialize<S>
+    for Transaction<R, S, C>
+{
     fn bias_borsh_deserialization() -> <S as Spec>::Gas {
         S::tx_bias_borsh_deserialization()
     }
@@ -142,7 +151,7 @@ impl<R: TransactionCallable, S: Spec> MeteredBorshDeserialize<S> for Transaction
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
         Self::charge_gas_to_deserialize(buf, meter)?;
 
-        Transaction::<R, S>::unmetered_deserialize_inner(buf)
+        Transaction::<R, S, C>::unmetered_deserialize_inner(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
     }
 
@@ -150,7 +159,7 @@ impl<R: TransactionCallable, S: Spec> MeteredBorshDeserialize<S> for Transaction
     fn unmetered_deserialize(
         buf: &mut &[u8],
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        Transaction::<R, S>::unmetered_deserialize_inner(buf)
+        Transaction::<R, S, C>::unmetered_deserialize_inner(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
     }
 }
@@ -160,7 +169,7 @@ impl<R: TransactionCallable, S: Spec> MeteredBorshDeserialize<S> for Transaction
 // Thus we have to manually derive them, because the real bound is
 // `TransactionCallable::RuntimeCall: Eq` (aka `<Runtime as DispatchCall>::Decodable`) which is already
 // enforced in the trait definition.
-impl<R: TransactionCallable, S: Spec> PartialEq for Transaction<R, S> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> PartialEq for Transaction<R, S, C> {
     fn eq(&self, other: &Self) -> bool {
         match (&self, &other) {
             (Transaction::V0(self_inner), Transaction::V0(other_inner)) => {
@@ -174,7 +183,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for Transaction<R, S> {
     }
 }
 
-impl<R: TransactionCallable, S: Spec> Eq for Transaction<R, S> {}
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Eq for Transaction<R, S, C> {}
 
 /// Errors that can be raised by the [`Transaction::verify`] method.
 #[derive(Error, Debug)]
@@ -203,7 +212,7 @@ impl<GU: Gas> From<MeteredSigVerificationError<GU>> for TransactionVerificationE
     }
 }
 
-impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Returns a reference to the runtime call of the transaction.
     pub fn runtime_call(&self) -> &R::Call {
         match &self {
@@ -240,9 +249,9 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
 
     /// Creates a new transaction with the provided metadata.
     pub fn new_with_details_v0(
-        pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+        pub_key: C::PublicKey,
         runtime_call: R::Call,
-        signature: <S::CryptoSpec as CryptoSpec>::Signature,
+        signature: C::Signature,
         uniqueness: UniquenessData,
         details: TxDetails<S>,
     ) -> Self {
@@ -351,11 +360,11 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
 
     /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
     /// and a public key.
-    pub fn to_signed_tx(
+    pub fn to_signed_tx<C: CryptoSpecExt>(
         self,
-        pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
-        signature: <S::CryptoSpec as CryptoSpec>::Signature,
-    ) -> Transaction<R, S> {
+        pub_key: C::PublicKey,
+        signature: C::Signature,
+    ) -> Transaction<R, S, C> {
         Transaction::new_with_details_v0(
             pub_key,
             self.runtime_call,

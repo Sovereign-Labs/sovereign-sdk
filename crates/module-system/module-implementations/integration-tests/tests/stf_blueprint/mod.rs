@@ -245,7 +245,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         None,
     );
 
-    let signed_tx = Transaction::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
+    let signed_tx = Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
 
     // Create a signature for a different message so it won't verify in the stf.
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
