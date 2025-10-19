@@ -3,13 +3,13 @@ use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::capabilities::{
-    self, calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput,
-    AuthorizationData, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
+    self, calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
+    AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
     UnregisteredAuthenticationError,
 };
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, Credentials, TransactionVerificationError,
+    AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError,
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
@@ -18,13 +18,9 @@ use sov_modules_api::{
 use sov_state::User;
 
 mod crypto_markers;
-mod secp256k1_transaction;
 mod stub_evm_rpc;
 
 pub use crate::crypto_markers::{CryptoSpecWithSecp256k1, Secp256k1CryptoSpec};
-pub use secp256k1_transaction::{
-    metered_secp256k1_credential, Secp256k1Transaction, Secp256k1Version0,
-};
 pub use stub_evm_rpc::stub_evm_rpc;
 
 /// Trait for providing schema to the EIP-712 authenticator.
@@ -90,9 +86,16 @@ where
         })?;
 
         match auth_variant {
-            Eip712AuthenticatorInput::Standard(raw_tx)
-            | Eip712AuthenticatorInput::Eip712(raw_tx) => {
+            Eip712AuthenticatorInput::Standard(raw_tx) => {
                 let call = sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
+                Ok(call)
+            }
+            Eip712AuthenticatorInput::Eip712(raw_tx) => {
+                let call = sov_modules_api::capabilities::decode_sov_tx_with_cryptospec::<
+                    S,
+                    Rt,
+                    <<S as Spec>::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec,
+                >(&raw_tx.data)?;
                 Ok(call)
             }
         }
@@ -129,6 +132,8 @@ where
     ) -> anyhow::Result<sov_modules_api::TxHash> {
         let input: Eip712AuthenticatorInput = borsh::from_slice(&tx.data)?;
 
+        // Here we intentionally use S::CryptoSpec for hashing, as transaction hashes don't need to
+        // use the Secp256k1CryptoSpec
         match input {
             Eip712AuthenticatorInput::Eip712(tx) | Eip712AuthenticatorInput::Standard(tx) => {
                 Ok(sov_modules_api::capabilities::calculate_hash::<S>(&tx.data))
@@ -198,7 +203,7 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx = match <Secp256k1Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(
+    let tx = match <Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(
         &mut &raw_tx[..],
         state,
     ) {
@@ -225,14 +230,18 @@ fn verify_and_decode_tx<
     SP: SchemaProvider,
 >(
     raw_tx_hash: TxHash,
-    tx: Secp256k1Transaction<D, S>,
+    tx: Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     match &tx {
-        Secp256k1Transaction::V0(tx_v0) => {
+        Transaction::V0(tx_v0) => {
             verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
-            let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
+            let authorization_data = extract_authorization_data::<
+                S,
+                D,
+                <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec,
+            >(tx_v0, raw_tx_hash, meter)?;
 
             let runtime_call = tx_v0.runtime_call.clone();
             let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
@@ -245,33 +254,12 @@ fn verify_and_decode_tx<
     }
 }
 
-fn extract_authorization_data<
-    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
-    D: DispatchCall<Spec = S>,
->(
-    tx_v0: &Secp256k1Version0<D::Decodable, S>,
-    raw_tx_hash: TxHash,
-    meter: &mut impl GasMeter<Spec = S>,
-) -> Result<AuthorizationData<S>, AuthenticationError> {
-    let pub_key = tx_v0.pub_key.clone();
-    let credential_id = metered_secp256k1_credential(&pub_key, meter)
-        .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
-
-    Ok(AuthorizationData {
-        uniqueness: tx_v0.uniqueness,
-        tx_hash: raw_tx_hash,
-        credential_id,
-        credentials: Credentials::new(pub_key),
-        default_address: credential_id.into(),
-    })
-}
-
 fn verify_eip712_signature<
     S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
-    tx: &Secp256k1Transaction<D, S>,
+    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {

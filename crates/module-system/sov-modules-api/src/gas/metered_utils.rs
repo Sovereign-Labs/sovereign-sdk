@@ -5,11 +5,10 @@ use digest::consts::U32;
 use digest::Digest;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::crypto::{CredentialId, SigVerificationError, Signature};
-use sov_rollup_interface::zk::CryptoSpec;
 use thiserror::Error;
 
 use crate::gas::traits::{Gas, GasMeter};
-use crate::{as_u32_or_panic, GasMeteringError, GasSpec, PublicKey, Spec};
+use crate::{as_u32_or_panic, CryptoSpecExt, GasMeteringError, GasSpec, PublicKey, Spec};
 
 /// A metered hasher that charges gas for each operation.
 /// This data structure should be used in the module system to charge gas when hashing data.
@@ -271,8 +270,8 @@ pub fn charge_gas_to_deserialize_json<S: Spec>(
 }
 
 /// Calculates `CredentialId`
-pub fn metered_credential<S: Spec>(
-    pub_key: &<S::CryptoSpec as CryptoSpec>::PublicKey,
+pub fn metered_credential<S: Spec, C: CryptoSpecExt>(
+    pub_key: &C::PublicKey,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<CredentialId, GasMeteringError<S::Gas>> {
     let cost = S::gas_to_charge_for_credential();

@@ -16,6 +16,7 @@ use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
     TxDetails,
 };
+use crate::CryptoSpecExt;
 use crate::GetGasPrice;
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
@@ -297,13 +298,13 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 }
 
 /// Extracts authorization data from a verified transaction.
-pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
-    tx_v0: &crate::transaction::Version0<D::Decodable, S>,
+pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
+    tx_v0: &crate::transaction::Version0<D::Decodable, S, C>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
     let pub_key = tx_v0.pub_key.clone();
-    let credential_id = metered_credential(&pub_key, meter)
+    let credential_id = metered_credential::<S, C>(&pub_key, meter)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     Ok(AuthorizationData {
@@ -330,7 +331,8 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
         Transaction::V0(tx_v0) => {
             verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
-            let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
+            let authorization_data =
+                extract_authorization_data::<S, D, S::CryptoSpec>(tx_v0, raw_tx_hash, meter)?;
 
             let runtime_call = tx_v0.runtime_call.clone();
             let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
@@ -383,10 +385,19 @@ pub fn authenticate<
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
 #[cfg(feature = "native")]
 pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx: &[u8],
+) -> Result<D::Decodable, FatalError> {
+    decode_sov_tx_with_cryptospec::<S, D, <S as Spec>::CryptoSpec>(raw_tx)
+}
+/// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
+/// Allows decoding `Transaction`s with non-default `CryptoSpec` generics.
+#[cfg(feature = "native")]
+pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
-    let tx = <Transaction<D, S> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
-        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+    let tx =
+        <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
+            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(tx.call())
 }
