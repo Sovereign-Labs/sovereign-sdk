@@ -190,3 +190,10 @@ mod tests {
         shutdown_snd.send(()).unwrap();
     }
 }
+
+// 1. Data start with Transaction
+// 2. Data start with EndBatch
+// Check that
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_notifications_start_event_id() {}
