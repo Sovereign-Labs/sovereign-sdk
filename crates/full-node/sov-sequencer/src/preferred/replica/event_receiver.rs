@@ -14,7 +14,7 @@ use tracing::{error, trace};
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
 
 // Process events in pages to avoid excessive memory consumption
-const PAGE_SIZE: i64 = 2000;
+pub(crate) const PAGE_SIZE: usize = 2000;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum EventReceiverError {
@@ -34,14 +34,16 @@ pub(crate) struct EventReceiver {
     shutdown_sender: watch::Sender<()>,
     listener: PgListener,
     query_pool: PgPool,
+    page_size: usize,
 }
 
 impl EventReceiver {
     pub(crate) async fn new(
         connection_string: String,
         shutdown_sender: watch::Sender<()>,
+        page_size: usize,
     ) -> (Self, tokio::sync::mpsc::Receiver<DbData>) {
-        let (db_data_sender, db_data_receiver) = tokio::sync::mpsc::channel(PAGE_SIZE as usize);
+        let (db_data_sender, db_data_receiver) = tokio::sync::mpsc::channel(page_size);
 
         // Create a separate persistent connection pool for querying transaction data
         let query_pool = match PgPoolOptions::default()
@@ -80,6 +82,7 @@ impl EventReceiver {
                 shutdown_sender,
                 listener,
                 query_pool,
+                page_size,
             },
             db_data_receiver,
         )
@@ -213,7 +216,7 @@ impl EventReceiver {
         // After analyzing real-world workloads, we can revisit this optimization. Implementing it would only affect
         // the contents of this method and would not require significant refactoring.
         while current_event_id <= target_event_id {
-            let page_end = std::cmp::min(current_event_id + PAGE_SIZE as u64, target_event_id);
+            let page_end = std::cmp::min(current_event_id + self.page_size as u64, target_event_id);
 
             trace!(
                 "Processing backfill page: events {} to {}",

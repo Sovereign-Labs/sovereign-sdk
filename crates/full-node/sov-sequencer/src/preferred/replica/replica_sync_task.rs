@@ -1,5 +1,5 @@
 use crate::preferred::replica::db_data::DbData;
-use crate::preferred::replica::event_receiver::EventReceiver;
+use crate::preferred::replica::event_receiver::{EventReceiver, PAGE_SIZE};
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -17,6 +17,7 @@ pub(crate) struct ReplicaTaskHandles {
 pub(crate) struct ReplicaSyncTask {
     shutdown_sender: watch::Sender<()>,
     postgres_connection_string: String,
+    page_size: usize,
 }
 
 impl ReplicaSyncTask {
@@ -24,9 +25,18 @@ impl ReplicaSyncTask {
         postgres_connection_string: String,
         shutdown_sender: watch::Sender<()>,
     ) -> anyhow::Result<Self> {
+        Self::new_with_page_size(postgres_connection_string, shutdown_sender, PAGE_SIZE).await
+    }
+
+    pub(crate) async fn new_with_page_size(
+        postgres_connection_string: String,
+        shutdown_sender: watch::Sender<()>,
+        page_size: usize,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             postgres_connection_string,
             shutdown_sender,
+            page_size,
         })
     }
 
@@ -34,6 +44,7 @@ impl ReplicaSyncTask {
         let (event_receiver, mut db_data_receiver) = EventReceiver::new(
             self.postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
+            self.page_size,
         )
         .await;
 
@@ -234,9 +245,10 @@ mod tests {
             .unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
-        let mut sync_task = ReplicaSyncTask::new(postgres_connection_string, shutdown_snd)
-            .await
-            .unwrap();
+        let mut sync_task =
+            ReplicaSyncTask::new_with_page_size(postgres_connection_string, shutdown_snd, 8)
+                .await
+                .unwrap();
 
         let (test_handler, mut recv) = TestHandler::new();
         sync_task.start(test_handler).await;
