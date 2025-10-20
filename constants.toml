@@ -12,11 +12,13 @@ CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
 
 # The namespace used by the rollup to store its data.
-# This is "\0\0sov-test" encoded as ASCII bytes
-BATCH_NAMESPACE = { const = [0, 0, 115, 111, 118, 45, 116, 101, 115, 116] }
+# This is "sov-test-b" encoded as ASCII bytes:
+# `python3 -c "import sys; print('0x' + sys.argv[1].encode().hex())" "sov-test-b"`
+BATCH_NAMESPACE = { hex = "0x736f762d746573742d62", type = "[u8; 10]" }
 # The namespace used by the rollup to store aggregated ZK proofs.
-# This is "sov-test-p" encoded as ASCII bytes
-PROOF_NAMESPACE = { const = [115, 111, 118, 45, 116, 101, 115, 116, 45, 112] }
+# This is "sov-test-p" encoded as ASCII bytes:
+# `python3 -c "import sys; print('0x' + sys.argv[1].encode().hex())" "sov-test-p"`
+PROOF_NAMESPACE = { hex = "0x736f762d746573742d70", type = "[u8; 10]" }
 
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
