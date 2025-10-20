@@ -1,5 +1,4 @@
 use celestia_types::nmt::Namespace;
-use sov_modules_api::macros::config_value;
 
 use crate::types::APP_VERSION;
 use crate::verifier::address::CelestiaAddress;
