@@ -469,7 +469,7 @@ dependencies = [
  "lru 0.13.0",
  "parking_lot",
  "pin-project",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "thiserror 2.0.16",
@@ -537,7 +537,7 @@ dependencies = [
  "alloy-transport-ws",
  "futures",
  "pin-project",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "tokio",
@@ -786,7 +786,7 @@ checksum = "a2f8a6338d594f6c6481292215ee8f2fd7b986c80aba23f3f44e761a8658de78"
 dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde_json",
  "tower 0.5.2",
  "tracing",
@@ -2095,7 +2095,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2115,7 +2115,7 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3566,7 +3566,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3641,7 +3641,7 @@ dependencies = [
  "progenitor",
  "progenitor-client",
  "regress 0.4.1",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "sov-address",
@@ -3962,7 +3962,7 @@ dependencies = [
  "digest 0.10.7",
  "futures",
  "rand 0.8.5",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -5713,7 +5713,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -6430,7 +6430,7 @@ dependencies = [
  "percent-encoding",
  "referencing",
  "regex-syntax",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "uuid-simd",
@@ -6599,7 +6599,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.53.3",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -8682,7 +8682,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "percent-encoding",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -8955,7 +8955,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.31",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -8992,7 +8992,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.0",
+ "socket2 0.5.10",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -9324,9 +9324,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.23"
+version = "0.12.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d429f34c8092b2d42c7c93cec323bb4adeb7c67698f70839adec842ec10c7ceb"
+checksum = "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -9373,7 +9373,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "tokio",
 ]
 
@@ -11471,7 +11471,7 @@ dependencies = [
  "openapiv3",
  "progenitor",
  "regress 0.4.1",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "sov-modules-api",
@@ -11546,7 +11546,7 @@ dependencies = [
  "futures",
  "humantime",
  "prettytable-rs",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "risc0",
  "serde",
  "sov-address",
@@ -11730,7 +11730,7 @@ dependencies = [
  "directories 5.0.1",
  "futures",
  "hex",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "semver 1.0.26",
  "serde",
  "serde_json",
@@ -11814,7 +11814,7 @@ dependencies = [
  "prometheus_exporter",
  "proptest",
  "rand 0.8.5",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "reth-primitives",
  "risc0",
  "schemars 0.8.22",
@@ -12065,7 +12065,7 @@ dependencies = [
  "anyhow",
  "clap",
  "rand 0.8.5",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "sov-eth-client",
  "sov-test-utils",
  "tokio",
@@ -12086,7 +12086,7 @@ dependencies = [
  "k256",
  "proptest",
  "proptest-derive 0.5.1",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "ruint",
  "schemars 0.8.22",
  "secp256k1 0.30.0",
@@ -12141,7 +12141,7 @@ dependencies = [
  "hex",
  "insta",
  "openapiv3",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "serde_with",
@@ -12205,7 +12205,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "schemars 0.8.22",
  "sea-orm",
  "serde",
@@ -12289,7 +12289,7 @@ dependencies = [
  "openapiv3",
  "proptest",
  "proptest-derive 0.5.1",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -12418,7 +12418,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "futures",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "sov-api-spec",
  "sov-bank",
@@ -12590,7 +12590,7 @@ dependencies = [
  "derive_more 1.0.0",
  "hex",
  "openapiv3",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "serde_with",
@@ -12763,7 +12763,7 @@ dependencies = [
  "demo-stf",
  "derivative",
  "rand 0.8.5",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "schemars 0.8.22",
  "serde",
  "sov-address",
@@ -12824,7 +12824,7 @@ dependencies = [
  "derive_more 1.0.0",
  "hex",
  "jsonrpsee",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -13031,7 +13031,7 @@ dependencies = [
  "hex",
  "jsonschema",
  "num_cpus",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "rockbound",
  "schemars 0.8.22",
  "serde",
@@ -15205,7 +15205,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.7.0",
  "prost",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -15557,7 +15557,7 @@ dependencies = [
  "axum 0.7.9",
  "mime_guess",
  "regex",
- "reqwest 0.12.23",
+ "reqwest 0.12.24",
  "rust-embed",
  "serde",
  "serde_json",
@@ -15883,7 +15883,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
