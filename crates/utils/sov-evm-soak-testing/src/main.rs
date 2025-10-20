@@ -15,8 +15,11 @@ use std::time::Instant;
 use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
 
 mod logs;
+mod logs_with_cursor;
 mod simple_storage;
 mod uniswap;
+
+use logs_with_cursor::LogsWithCursorProvider;
 
 /// Maximum number of concurrent workers supported due to private key derivation constraints.
 const MAX_WORKERS: usize = 255;
@@ -217,7 +220,7 @@ async fn run_logs_test(
         .from_block(from_block)
         .to_block(BlockNumberOrTag::Pending);
     let fetch_logs = Instant::now();
-    let logs = root_client.get_logs(&filter).await?;
+    let logs = root_client.get_all_logs_with_cursor(&filter).await?;
     println!(
         "Retrieved {} logs in {:?}",
         logs.len(),

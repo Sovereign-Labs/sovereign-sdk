@@ -19,6 +19,8 @@ rand = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
+serde = { workspace = true }
+async-trait = { workspace = true }
 
 [lints]
 workspace = true
