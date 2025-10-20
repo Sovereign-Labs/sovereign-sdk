@@ -7,6 +7,8 @@ use std::io;
 use borsh::{BorshDeserialize, BorshSerialize};
 use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native")]
+use sov_rollup_interface::stf::GenesisParams;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
@@ -52,7 +54,7 @@ pub trait Runtime<S: Spec>:
     const CHAIN_HASH: [u8; 32];
 
     /// GenesisConfig type.
-    type GenesisConfig: Clone + Send + Sync;
+    type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
     /// GenesisInput type.
     type GenesisInput: std::fmt::Debug + Clone + Send + Sync;

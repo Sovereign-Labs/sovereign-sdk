@@ -2989,10 +2989,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
-name = "const-rollup-config"
-version = "0.3.0"
-
-[[package]]
 name = "const_format"
 version = "0.2.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7254,7 +7250,7 @@ dependencies = [
 [[package]]
 name = "nomt"
 version = "1.0.0-preview"
-source = "git+https://github.com/thrumdev/nomt.git?rev=ff4491440d401f32e18fe91041c4344b2bacb068#ff4491440d401f32e18fe91041c4344b2bacb068"
+source = "git+https://github.com/thrumdev/nomt.git?rev=24b8e4132f20c7c8083b83dd51c52098225cf6a9#24b8e4132f20c7c8083b83dd51c52098225cf6a9"
 dependencies = [
  "ahash",
  "anyhow",
@@ -7283,7 +7279,7 @@ dependencies = [
 [[package]]
 name = "nomt-core"
 version = "1.0.0-preview"
-source = "git+https://github.com/thrumdev/nomt.git?rev=ff4491440d401f32e18fe91041c4344b2bacb068#ff4491440d401f32e18fe91041c4344b2bacb068"
+source = "git+https://github.com/thrumdev/nomt.git?rev=24b8e4132f20c7c8083b83dd51c52098225cf6a9#24b8e4132f20c7c8083b83dd51c52098225cf6a9"
 dependencies = [
  "arrayvec",
  "bitvec",
@@ -11800,7 +11796,6 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "clap",
- "const-rollup-config",
  "criterion",
  "demo-stf",
  "demo-stf-json-client",
@@ -12341,6 +12336,7 @@ dependencies = [
  "serde",
  "sov-address",
  "sov-bank",
+ "sov-chain-state",
  "sov-metrics",
  "sov-modules-api",
  "sov-modules-macros",

@@ -16,7 +16,7 @@ use sov_modules_api::{
 use sov_state::SlotValue;
 mod proof_processing;
 use sov_modules_api::{PrivilegedKernelAccessor, SlotGasMeter};
-use sov_rollup_interface::stf::{DiscardedBlob, ProofReceipt};
+use sov_rollup_interface::stf::{DiscardedBlob, GenesisParams as GenesisParamsTrait, ProofReceipt};
 mod sequencer_mode;
 use sov_modules_api::{IterableBatchWithId, TxReceiptContents};
 #[cfg(feature = "test-utils")]
@@ -69,6 +69,12 @@ pub struct ApplyTxResult<S: Spec> {
 pub struct GenesisParams<RuntimeConfig> {
     /// The runtime genesis parameters
     pub runtime: RuntimeConfig,
+}
+
+impl<RuntimeConfig: GenesisParamsTrait> GenesisParamsTrait for GenesisParams<RuntimeConfig> {
+    fn genesis_slot_number(&self) -> u64 {
+        self.runtime.genesis_slot_number()
+    }
 }
 
 impl<S, RT> StfBlueprint<S, RT>
@@ -250,6 +256,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     type StateRoot = <S::Storage as Storage>::Root;
 
@@ -380,6 +387,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
     fn select_and_validate_blobs<CF: InjectedControlFlow<S> + Clone>(
@@ -404,6 +412,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     /// Run a state transition using the STF blueprint.
     // Similar to `apply_slot`, but enables the injection of a custom `InjectedControlFlow`.

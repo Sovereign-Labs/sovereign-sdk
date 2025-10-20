@@ -29,7 +29,6 @@ use crate::preferred::{
     PreferredSequencerReadBatch, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
-use anyhow::anyhow;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
@@ -210,168 +209,6 @@ where
 
     fn current_height(&self) -> RollupHeight {
         self.executor.checkpoint.rollup_height_to_access()
-    }
-
-    /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.
-    /// We can only create a new batch if we have a finalized slot available to use as our `visible_slot_number_after_increase`.
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn try_to_create_and_start_batch_if_none_in_progress(
-        &mut self,
-        leave_space_for_next_batch: bool,
-    ) -> Result<(), BatchCreationError> {
-        if self.executor.has_in_progress_batch() {
-            return Ok(());
-        }
-
-        if let Some(height_to_stop_at) = self.stop_at_rollup_height {
-            let current_height = self.current_height();
-            if current_height >= height_to_stop_at {
-                debug!(%current_height, %height_to_stop_at,"The sequencer is at stop height and tried to create a batch (aborted due to stop height).");
-                return Err(BatchCreationError::PreferredSequencerAtStopHeight {
-                    current_height,
-                    height_to_stop_at,
-                });
-            }
-        }
-
-        if self.blob_sender_busy().is_some() {
-            warn!("The blob sender is busy, no batch could be started at this time.");
-            return Err(BatchCreationError::BlobSenderBusy);
-        }
-
-        let visible_increase = match next_visible_slot_number_increase(
-            &self.executor.checkpoint,
-            &self.latest_info,
-            leave_space_for_next_batch,
-            self.seq_config
-                .sequencer_kind_config
-                .ideal_lag_behind_finalized_slot,
-        ) {
-            Ok(visible_increase) => visible_increase,
-            Err(e) => {
-                warn!(
-                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
-                    e
-                );
-                return Err(BatchCreationError::NoFinalizedSlotAvailable);
-            }
-        };
-
-        debug!(visible_increase, "No in-progress batch, starting a new one");
-        let node_state_root = self
-            .node_root_hash()
-            .map_err(BatchCreationError::DatabaseError)?;
-        let visible_slot_number_after_increase = self
-            .executor
-            .checkpoint
-            .current_visible_slot_number()
-            .advance(visible_increase.get().into());
-
-        // DB operations handled by replica-aware db implementation
-        let sequence_number = self.get_and_inc_next_sequence_number();
-        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
-
-        let start_block_data = StartBlockData {
-            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
-            visible_increase,
-            node_state_root: node_state_root.clone(),
-            minimum_profit_per_tx: min_profit_per_tx,
-        };
-
-        let old_checkpoint = self
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-
-        self.executor
-            .start_rollup_block(start_block_data.clone())
-            .await;
-
-        let state_roots = self.executor.state_roots.clone();
-
-        if state_roots.len() > 50 {
-            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
-        }
-
-        let notification = StartBlockNotification {
-            state_roots,
-            data: start_block_data,
-            checkpoint: old_checkpoint,
-        };
-
-        self.cache_warm_up_executor
-            .send_batch_start_notification(notification);
-
-        self.executor_events_sender
-            .start_batch(
-                visible_slot_number_after_increase,
-                visible_increase,
-                sequence_number,
-                self.executor
-                    .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache(),
-            )
-            .await;
-
-        Ok(())
-    }
-
-    /// Creates and starts a batch for replicas using the exact visible slot parameters from the master
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn try_start_batch_with_parameters_from_master(
-        &mut self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-    ) -> anyhow::Result<()> {
-        if self.executor.has_in_progress_batch() {
-            return Ok(());
-        }
-
-        // Calculate the correct visible_slots_to_advance for this replica based on its current state
-        let current_visible_slot_number = self.executor.checkpoint.current_visible_slot_number();
-        let replica_visible_slots_to_advance = visible_slot_number_after_increase.as_true()
-            .checked_sub(current_visible_slot_number.as_true().get())
-            .and_then(|diff| NonZero::new(diff.get().try_into().unwrap()))
-            .ok_or_else(|| {
-                error!(
-                    current_visible_slot_number = %current_visible_slot_number,
-                    target_visible_slot_number = %visible_slot_number_after_increase,
-                    "Cannot calculate visible slots to advance for replica: target is not greater than current"
-                );
-                anyhow!("Invalid visible slot number progression for replica".to_string())
-            })?;
-
-        assert_eq!(
-            visible_slots_to_advance,
-            replica_visible_slots_to_advance,
-            "Sanity check failed: replica visible_slots_to_advance calculation different from master."
-        );
-
-        let node_state_root = self.node_root_hash()?;
-        let sequence_number = self.get_and_inc_next_sequence_number();
-        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
-
-        let start_block_data = StartBlockData {
-            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
-            visible_increase: replica_visible_slots_to_advance,
-            node_state_root: node_state_root.clone(),
-            minimum_profit_per_tx: min_profit_per_tx,
-        };
-
-        self.executor.start_rollup_block(start_block_data).await;
-
-        self.executor_events_sender
-            .start_batch(
-                visible_slot_number_after_increase,
-                visible_slots_to_advance,
-                sequence_number,
-                self.executor
-                    .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache(),
-            )
-            .await;
-
-        Ok(())
     }
 
     fn current_sequence_number(&self) -> SequenceNumber {
@@ -680,37 +517,6 @@ where
         self.seq_config.sequencer_kind_config.is_replica
     }
 
-    async fn inner_do_batch_start(
-        &mut self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-    ) -> anyhow::Result<()> {
-        if self.executor.has_in_progress_batch() {
-            return Err(anyhow!(
-                "Received open batch notification, but replica already has an open batch"
-            ));
-        }
-
-        // Query the master's batch metadata to get the exact visible slot parameters used
-        // let batch_metadata =
-        //     query_batch_metadata_from_db(query_pool, sequence_number).await?;
-        self.try_start_batch_with_parameters_from_master(
-            visible_slot_number_after_increase,
-            visible_slots_to_advance,
-        )
-        .await?;
-
-        // Ensure the batch was successfully started
-        if !self.executor.has_in_progress_batch() {
-            panic!(
-                "Replica: no batch in progress, and no batch could be started. This should not be possible under any circumstances as the master was able to create a batch at this point. Please report this bug. {:?} {:?}",
-                &self.executor.checkpoint, self.latest_info
-            );
-        }
-
-        Ok(())
-    }
-
     pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
         let start = std::time::Instant::now();
         tracing::trace!(
@@ -733,6 +539,197 @@ where
             "LedgerAPI storage updated, notification has been sent");
 
         self.tx_cache_writer.prune(info.next_tx_number).await;
+    }
+
+    /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.
+    /// We can only create a new batch if we have a finalized slot available to use as our `visible_slot_number_after_increase`.
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn try_to_create_and_start_batch_if_none_in_progress(
+        &mut self,
+        leave_space_for_next_batch: bool,
+    ) -> Result<(), BatchCreationError> {
+        if self.executor.has_in_progress_batch() {
+            return Ok(());
+        }
+
+        let visible_increase = match next_visible_slot_number_increase(
+            &self.executor.checkpoint,
+            &self.latest_info,
+            leave_space_for_next_batch,
+            self.seq_config
+                .sequencer_kind_config
+                .ideal_lag_behind_finalized_slot,
+        ) {
+            Ok(visible_increase) => visible_increase,
+            Err(e) => {
+                warn!(
+                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
+                    e
+                );
+                return Err(BatchCreationError::NoFinalizedSlotAvailable);
+            }
+        };
+
+        debug!(visible_increase, "No in-progress batch, starting a new one");
+
+        let visible_slot_number_after_increase = self
+            .executor
+            .checkpoint
+            .current_visible_slot_number()
+            .advance(visible_increase.get().into());
+
+        self.do_batch_start(visible_slot_number_after_increase, visible_increase)
+            .await
+    }
+
+    async fn do_batch_start(
+        &mut self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_increase: NonZero<u8>,
+    ) -> Result<(), BatchCreationError> {
+        if self.executor.has_in_progress_batch() {
+            return Ok(());
+        }
+
+        if let Some(height_to_stop_at) = self.stop_at_rollup_height {
+            let current_height = self.current_height();
+            if current_height >= height_to_stop_at {
+                debug!(%current_height, %height_to_stop_at,"The sequencer is at stop height and tried to create a batch (aborted due to stop height).");
+                return Err(BatchCreationError::PreferredSequencerAtStopHeight {
+                    current_height,
+                    height_to_stop_at,
+                });
+            }
+        }
+
+        if self.blob_sender_busy().is_some() {
+            warn!("The blob sender is busy, no batch could be started at this time.");
+            return Err(BatchCreationError::BlobSenderBusy);
+        }
+
+        let node_state_root = self
+            .node_root_hash()
+            .map_err(BatchCreationError::DatabaseError)?;
+
+        // DB operations handled by replica-aware db implementation
+        let sequence_number = self.get_and_inc_next_sequence_number();
+        let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+
+        let start_block_data = StartBlockData {
+            sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
+            visible_increase,
+            node_state_root: node_state_root.clone(),
+            minimum_profit_per_tx: min_profit_per_tx,
+        };
+
+        let old_checkpoint = self
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+
+        self.executor
+            .start_rollup_block(start_block_data.clone())
+            .await;
+
+        let state_roots = self.executor.state_roots.clone();
+
+        if state_roots.len() > 50 {
+            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
+        }
+
+        let notification = StartBlockNotification {
+            state_roots,
+            data: start_block_data,
+            checkpoint: old_checkpoint,
+        };
+
+        self.cache_warm_up_executor
+            .send_batch_start_notification(notification);
+
+        self.executor_events_sender
+            .start_batch(
+                visible_slot_number_after_increase,
+                visible_increase,
+                sequence_number,
+                self.executor
+                    .checkpoint
+                    .clone_with_empty_witness_dropping_temp_cache(),
+            )
+            .await;
+
+        Ok(())
+    }
+
+    async fn do_new_tx(
+        &mut self,
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+    ) -> Result<
+        (
+            oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
+            <S as Spec>::Gas,
+        ),
+        AcceptTxError<S>,
+    > {
+        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            tracing::info!("The sequencer is shutting down. Cannot accept transactions");
+            return Err(AcceptTxError::Shutdown);
+        }
+
+        if !self.executor.has_in_progress_batch() {
+            panic!(
+                "No batch in progress, and no batch could be started. Please report this bug. {:?} {:?}",
+                &self.executor.checkpoint, self.latest_info
+            );
+        }
+
+        let sequence_number = self.current_sequence_number();
+        let Inner {
+            executor,
+            batch_size_tracker,
+            executor_events_sender,
+            cache_warm_up_executor,
+            ..
+        } = &mut *self;
+
+        let tx_len = baked_tx.data.len();
+        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
+            return Err(AcceptTxError::TxTooBig {
+                current_batch_size: batch_size_tracker.current_batch_size,
+                max_batch_size: batch_size_tracker.max_batch_size,
+            });
+        }
+
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
+        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+
+        let (
+            AcceptedTxWithBudgetInfo {
+                accepted_tx,
+                remaining_slot_gas,
+                execution_time_micros,
+            },
+            tx_changes,
+        ) = match apply_tx_res {
+            Ok(res) => {
+                assert_eq!(
+                    tx_hash, res.0.accepted_tx.tx_hash,
+                    "The executor returned a different tx hash than expected"
+                );
+                res
+            }
+            Err(err) => {
+                tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
+                return Err(AcceptTxError::ExecutorError(err));
+            }
+        };
+
+        batch_size_tracker.add_tx(tx_len, execution_time_micros);
+        let rx = executor_events_sender
+            .send_accept_tx(accepted_tx, tx_changes, sequence_number)
+            .await;
+
+        Ok((rx, remaining_slot_gas))
     }
 }
 
@@ -1452,31 +1449,12 @@ where
 
                 self.send_response(resp, ret, "final_catchup").await;
             }
-            Message::DoBatchStartMsg {
-                visible_slot_number_after_increase,
-                visible_slots_to_advance,
-                reason,
-            } => {
-                self.process_do_batch_start(
-                    visible_slot_number_after_increase,
-                    visible_slots_to_advance,
-                    reason,
-                )
-                .await;
-            }
             Message::PruneSequencerDb { reason } => {
                 self.process_prune_sequencer_db(reason).await;
             }
             Message::ForceOverwriteStateForRecovery { info, reason } => {
                 self.process_force_overwrite_state_for_recovery(info, reason)
                     .await;
-            }
-            Message::DoNewTx {
-                tx_hash,
-                baked_tx,
-                reason,
-            } => {
-                self.process_do_new_tx(tx_hash, baked_tx, reason).await;
             }
             Message::WaitNodeResync { info, reason } => {
                 self.process_wait_for_node_resync(info, reason).await;
@@ -1499,6 +1477,20 @@ where
             }
             Message::SimpleStateUpdate { info } => {
                 self.process_new_storage(info).await;
+            }
+            Message::DoNewTx {
+                tx_hash: _,
+                baked_tx: _,
+                reason: _,
+            } => {
+                todo!()
+            }
+            Message::DoBatchStartMsg {
+                visible_slot_number_after_increase: _,
+                visible_slots_to_advance: _,
+                reason: _,
+            } => {
+                todo!()
             }
         }
 
@@ -1752,109 +1744,6 @@ where
             .await
     }
 
-    async fn process_accept_tx(
-        &mut self,
-        baked_tx: FullyBakedTx,
-        tx_hash: TxHash,
-        original_tx_queue_id: u64,
-        reason: &'static str,
-    ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
-        let mut inner = self.get_inner_with_timing(reason).await;
-
-        // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
-        // we've effectively jumped the line
-        let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
-        if new_tx_queue_id != original_tx_queue_id {
-            tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
-            return Err(AcceptTxError::SequencerOverloaded503);
-        }
-
-        inner
-            .check_readiness(
-                inner.seq_config.max_concurrent_blobs,
-                inner.stop_at_rollup_height,
-            )
-            .await
-            .map_err(AcceptTxError::NotFullySynced)?;
-
-        if let Err(batch_creation_error) = inner
-            .try_to_create_and_start_batch_if_none_in_progress(false)
-            .await
-        {
-            // On all errors, we treat the sequencer as having had downtime and clear out the transaction queue.
-            // Note that we'll increment the queue ID once per rejected tx. This is totally fine - we have 2**64 ids to play with
-            // and atomic increments are very cheap relative to the cost of executing the tx
-            inner.tx_queue_id.fetch_add(1, Ordering::AcqRel);
-
-            return Err(AcceptTxError::BatchError {
-                batch_creation_error,
-                nb_of_concurrent_blob_submissions: inner.nb_of_concurrent_blob_submissions(),
-            });
-        };
-
-        if inner.shutdown_receiver.has_changed().unwrap_or(true) {
-            tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-            return Err(AcceptTxError::Shutdown);
-        }
-
-        if !inner.executor.has_in_progress_batch() {
-            panic!(
-                "No batch in progress, and no batch could be started. Please report this bug. {:?} {:?}",
-                &inner.executor.checkpoint, inner.latest_info
-            );
-        }
-
-        let sequence_number = inner.current_sequence_number();
-        let Inner {
-            executor,
-            batch_size_tracker,
-            executor_events_sender,
-            cache_warm_up_executor,
-            ..
-        } = &mut *inner;
-
-        let tx_len = baked_tx.data.len();
-        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
-            return Err(AcceptTxError::TxTooBig {
-                current_batch_size: batch_size_tracker.current_batch_size,
-                max_batch_size: batch_size_tracker.max_batch_size,
-            });
-        }
-
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
-
-        let (
-            AcceptedTxWithBudgetInfo {
-                accepted_tx,
-                remaining_slot_gas,
-                execution_time_micros,
-            },
-            tx_changes,
-        ) = match apply_tx_res {
-            Ok(res) => {
-                assert_eq!(
-                    tx_hash, res.0.accepted_tx.tx_hash,
-                    "The executor returned a different tx hash than expected"
-                );
-                res
-            }
-            Err(err) => {
-                tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
-                return Err(AcceptTxError::ExecutorError(err));
-            }
-        };
-
-        batch_size_tracker.add_tx(tx_len, execution_time_micros);
-        let rx = executor_events_sender
-            .send_accept_tx(accepted_tx, tx_changes, sequence_number)
-            .await;
-
-        inner.close_batch_if_nearly_full(remaining_slot_gas).await;
-
-        Ok(rx)
-    }
-
     async fn process_latest_slot_number(&mut self, reason: &'static str) -> SlotNumber {
         let inner = self.get_inner_with_timing(reason).await;
         inner.latest_info.slot_number
@@ -1955,25 +1844,6 @@ where
         Ok(data)
     }
 
-    async fn process_do_batch_start(
-        &mut self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    ) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        if let Err(err) = inner
-            .inner_do_batch_start(visible_slot_number_after_increase, visible_slots_to_advance)
-            .await
-        {
-            tracing::error!(
-                error = %err,
-                "Error: while calling inner_do_batch_start."
-            );
-            panic!("Error: while calling inner_do_batch_start. The sequencer can no longer accept transactions!");
-        }
-    }
-
     async fn process_prune_sequencer_db(&mut self, reason: &'static str) {
         let start_prune = std::time::Instant::now();
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -2014,31 +1884,6 @@ where
             .force_overwrite_state(info.clone(), recovery_executor)
             .await;
         inner.update_api_ledger(&info).await;
-    }
-
-    async fn process_do_new_tx(
-        &mut self,
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
-        reason: &'static str,
-    ) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        let execution_time_micros = inner.executor.replay_tx(tx_hash, baked_tx.clone()).await;
-        inner
-            .batch_size_tracker
-            .add_tx(baked_tx.data.len(), execution_time_micros);
-        inner
-            .executor_events_sender
-            .insert_tx_without_confirmation(baked_tx, tx_hash)
-            .await;
-        let checkpoint = inner
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-        inner
-            .executor_events_sender
-            .force_update_api_state(checkpoint)
-            .await;
     }
 
     async fn process_wait_for_node_resync(
@@ -2107,6 +1952,53 @@ where
     async fn process_close_current_batch(&mut self, reason: &'static str) {
         let mut inner = self.get_inner_with_timing(reason).await;
         inner.close_current_batch().await;
+    }
+
+    async fn process_accept_tx(
+        &mut self,
+        baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
+        original_tx_queue_id: u64,
+        reason: &'static str,
+    ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
+        let mut inner = self.get_inner_with_timing(reason).await;
+
+        // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
+        // we've effectively jumped the line
+        let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
+        if new_tx_queue_id != original_tx_queue_id {
+            tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
+            return Err(AcceptTxError::SequencerOverloaded503);
+        }
+
+        inner
+            .check_readiness(
+                inner.seq_config.max_concurrent_blobs,
+                inner.stop_at_rollup_height,
+            )
+            .await
+            .map_err(AcceptTxError::NotFullySynced)?;
+
+        if let Err(batch_creation_error) = inner
+            .try_to_create_and_start_batch_if_none_in_progress(false)
+            .await
+        {
+            // On all errors, we treat the sequencer as having had downtime and clear out the transaction queue.
+            // Note that we'll increment the queue ID once per rejected tx. This is totally fine - we have 2**64 ids to play with
+            // and atomic increments are very cheap relative to the cost of executing the tx
+            inner.tx_queue_id.fetch_add(1, Ordering::AcqRel);
+
+            return Err(AcceptTxError::BatchError {
+                batch_creation_error,
+                nb_of_concurrent_blob_submissions: inner.nb_of_concurrent_blob_submissions(),
+            });
+        };
+
+        let (rx, remaining_slot_gas) = inner.do_new_tx(tx_hash, baked_tx).await?;
+
+        inner.close_batch_if_nearly_full(remaining_slot_gas).await;
+
+        Ok(rx)
     }
 }
 
