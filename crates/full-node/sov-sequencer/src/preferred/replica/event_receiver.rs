@@ -100,9 +100,9 @@ impl EventReceiver {
                 }
 
                 match self.fetch_data(start_event_id, prev_event_type).await {
-                    Ok((next_event_id, event_type)) => {
+                    Ok((event_id, event_type)) => {
                         nb_of_consecutive_db_errors = 0;
-                        start_event_id = Some(next_event_id + 1);
+                        start_event_id = Some(event_id + 1);
                         prev_event_type = event_type;
                     }
                     Err(err) => {
