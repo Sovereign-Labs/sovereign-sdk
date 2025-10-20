@@ -176,7 +176,7 @@ impl EventReceiver {
             // and use its event_id as the target.
             Some(start_id) => {
                 let notify = self.recv_notifications().await?;
-                assert!(notify.event_id > start_id);
+                assert!(notify.event_id >= start_id);
                 (start_id, notify.event_id)
             }
             // Otherwise, `None` indicates the replica has just started.
