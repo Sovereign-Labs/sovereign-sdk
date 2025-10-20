@@ -21,13 +21,13 @@ const MAX_WORKERS: usize = 255;
 
 #[derive(Parser, Debug)]
 #[command(name = "sov-evm-soak-testing")]
-#[command(about = "EVM soak testing tool for Sovereign SDK", long_about = None)]
+#[command(about = "EVM soak testing tool", long_about = None)]
 struct Args {
-    /// RPC server address
+    /// RPC address
     #[arg(short, long, default_value = "127.0.0.1:12346")]
     rpc_addr: SocketAddr,
 
-    /// Private key for signing transactions (hex-encoded)
+    /// Private key for signing transactions
     #[arg(
         short,
         long,
@@ -41,9 +41,9 @@ struct Args {
 
 #[derive(Subcommand, Clone, Debug)]
 enum TestType {
-    /// Run Uniswap soak test with multiple workers
+    /// Run Uniswap soak test
     Uniswap {
-        /// Number of iterations per worker
+        /// Number of iterations
         #[arg(short, long, default_value = "100")]
         count: usize,
 
@@ -53,7 +53,7 @@ enum TestType {
     },
     /// Run SimpleStorage soak test
     SimpleStorage,
-    /// Run logs generation and retrieval soak test
+    /// Run logs soak test
     Logs {
         /// Number of transactions to send
         #[arg(short, long, default_value = "100")]
@@ -73,10 +73,6 @@ enum TestType {
 ///
 /// This modifies the first byte of the root key to ensure each worker has a distinct
 /// account and avoids nonce conflicts when running parallel tests.
-///
-/// # Arguments
-/// * `root_key` - Hex-encoded private key to derive from
-/// * `worker_idx` - Worker index (0-254)
 fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
     let mut key_bytes: [u8; 32] = hex::decode(root_key)?
         .try_into()
@@ -87,10 +83,6 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
 }
 
 /// Creates an Alloy WebSocket client connected to the specified RPC server.
-///
-/// # Arguments
-/// * `rpc_addr` - Socket address of the RPC server
-/// * `signer` - Private key signer for transaction signing
 pub(crate) async fn alloy_client(
     rpc_addr: SocketAddr,
     signer: PrivateKeySigner,
