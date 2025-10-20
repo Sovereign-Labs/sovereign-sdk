@@ -46,6 +46,7 @@ pub(crate) enum EventType {
 }
 
 impl EventType {
+    #[allow(clippy::match_same_arms)]
     pub(crate) fn is_event_sequence_valid(prev: Option<Self>, current: Self) -> bool {
         match (prev, current) {
             (Some(EventType::BatchStart), EventType::BatchStart) => false,
