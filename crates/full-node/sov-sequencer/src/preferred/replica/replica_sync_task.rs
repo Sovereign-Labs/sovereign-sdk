@@ -1,8 +1,11 @@
-use crate::preferred::replica::event_receiver::DbData;
+use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+
+// Process events in pages to avoid excessive memory consumption
+const PAGE_SIZE: usize = 2000;
 
 #[async_trait]
 pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
@@ -17,6 +20,7 @@ pub(crate) struct ReplicaTaskHandles {
 pub(crate) struct ReplicaSyncTask {
     shutdown_sender: watch::Sender<()>,
     postgres_connection_string: String,
+    page_size: usize,
 }
 
 impl ReplicaSyncTask {
@@ -24,16 +28,26 @@ impl ReplicaSyncTask {
         postgres_connection_string: String,
         shutdown_sender: watch::Sender<()>,
     ) -> anyhow::Result<Self> {
+        Self::new_with_page_size(postgres_connection_string, shutdown_sender, PAGE_SIZE).await
+    }
+
+    pub(crate) async fn new_with_page_size(
+        postgres_connection_string: String,
+        shutdown_sender: watch::Sender<()>,
+        page_size: usize,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             postgres_connection_string,
             shutdown_sender,
+            page_size,
         })
     }
 
     pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) -> ReplicaTaskHandles {
-        let mut event_receiver = EventReceiver::new(
+        let (event_receiver, mut db_data_receiver) = EventReceiver::new(
             self.postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
+            self.page_size,
         )
         .await;
 
@@ -46,7 +60,7 @@ impl ReplicaSyncTask {
                     break;
                 }
 
-                if let Some(data) = event_receiver.recv().await {
+                if let Some(data) = db_data_receiver.recv().await {
                     handler.on_da_event(data).await;
                 }
             }
@@ -73,6 +87,7 @@ mod tests {
     };
 
     use std::num::NonZero;
+    use std::vec;
     use tokio::sync::mpsc;
 
     #[derive(Clone)]
@@ -90,54 +105,129 @@ mod tests {
     #[async_trait]
     impl ReplicaEventHandler for TestHandler {
         async fn on_da_event(&self, data: DbData) {
-            self.send.send(data).await.unwrap();
+            let _ = self.send.send(data).await;
         }
     }
 
-    fn create_test_data(test_case: Vec<usize>) -> Vec<DbData> {
-        let mut data = Vec::new();
-
-        for (seq_nr, nb_of_txs) in test_case.into_iter().enumerate() {
-            let stored_batch = BatchToStore {
-                sequence_number: (seq_nr as u64),
-                blob_id: (seq_nr + 99) as u128,
-                visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
-                visible_slots_to_advance: NonZero::new(1).unwrap(),
-            };
-
-            data.push(DbData::BatchStart(stored_batch.clone()));
-
-            for i in 0..nb_of_txs {
-                data.push(DbData::Transaction(FullyBakedTx::new(vec![i as u8])));
-            }
-
-            data.push(DbData::BatchEnd(stored_batch));
+    fn new_batch_to_store(sequence_number: u64) -> BatchToStore {
+        BatchToStore {
+            sequence_number,
+            blob_id: (sequence_number + 99) as u128,
+            visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
+            visible_slots_to_advance: NonZero::new(1).unwrap(),
         }
-
-        data
     }
 
-    async fn execute(mut db: PostgresBackend, data: Vec<DbData>) {
+    #[derive(Debug, Clone)]
+    enum TestCase {
+        CompleteBatch(u64, usize),
+        BatchStart(u64),
+        Transaction,
+        BatchEnd(u64),
+    }
+
+    async fn execute(mut db: PostgresBackend, data: Vec<TestCase>) {
+        let mut index = 0;
+        let mut sequence_nr = 0;
         for db_data in data {
             match db_data {
-                DbData::BatchStart(stored_batch) => {
-                    db.begin_rollup_block(stored_batch).await.unwrap();
-                }
-                DbData::Transaction(tx) => {
-                    db.add_tx(1, 0, tx, TxHash::new([1; 32])).await.unwrap();
-                }
-                DbData::BatchEnd(stored_batch) => {
+                TestCase::CompleteBatch(seq_nr, nb_of_txs) => {
+                    index = 0;
+                    let stored_batch = new_batch_to_store(seq_nr);
+                    db.begin_rollup_block(stored_batch.clone()).await.unwrap();
+
+                    for i in 0..nb_of_txs {
+                        let tx = FullyBakedTx::new(vec![i as u8]);
+                        db.add_tx(seq_nr, i as u64, tx, TxHash::new([1; 32]))
+                            .await
+                            .unwrap();
+                    }
+
                     db.end_rollup_block(stored_batch).await.unwrap();
                 }
-                DbData::NewProof => {
-                    unimplemented!()
+                TestCase::BatchStart(seq_nr) => {
+                    sequence_nr = seq_nr;
+                    index = 0;
+                    let stored_batch = new_batch_to_store(seq_nr);
+                    db.begin_rollup_block(stored_batch).await.unwrap();
                 }
-            }
+                TestCase::Transaction => {
+                    let tx = FullyBakedTx::new(vec![index as u8]);
+                    db.add_tx(sequence_nr, index, tx, TxHash::new([1; 32]))
+                        .await
+                        .unwrap();
+                    index += 1;
+                }
+                TestCase::BatchEnd(seq_nr) => {
+                    let stored_batch = new_batch_to_store(seq_nr);
+                    db.end_rollup_block(stored_batch).await.unwrap();
+                }
+            };
         }
+    }
+
+    fn to_db_data(test_cases: &Vec<TestCase>) -> Vec<DbData> {
+        let mut data = Vec::new();
+        let mut index = 0;
+        for test_case in test_cases {
+            match test_case {
+                TestCase::CompleteBatch(seq_nr, nb_of_txs) => {
+                    data.push(DbData::BatchStart(new_batch_to_store(*seq_nr)));
+                    for i in 0..*nb_of_txs {
+                        data.push(DbData::Transaction(FullyBakedTx::new(vec![i as u8])));
+                    }
+                    data.push(DbData::BatchEnd(new_batch_to_store(*seq_nr)));
+                }
+                TestCase::BatchStart(seq_nr) => {
+                    index = 0;
+                    data.push(DbData::BatchStart(new_batch_to_store(*seq_nr)));
+                }
+                TestCase::Transaction => {
+                    data.push(DbData::Transaction(FullyBakedTx::new(vec![index as u8])));
+                    index += 1;
+                }
+                TestCase::BatchEnd(seq_nr) => {
+                    data.push(DbData::BatchEnd(new_batch_to_store(*seq_nr)));
+                }
+            };
+        }
+        data
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications() {
+        let test_data = vec![
+            TestCase::BatchStart(1),
+            TestCase::Transaction,
+            TestCase::Transaction,
+            TestCase::Transaction,
+            TestCase::BatchEnd(1),
+            TestCase::CompleteBatch(2, 0),
+            TestCase::CompleteBatch(3, 1000),
+            TestCase::CompleteBatch(4, 2),
+        ];
+
+        let expected = to_db_data(&test_data);
+        run(test_data, expected).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_notifications_start_event_id() {
+        let test_data = vec![
+            TestCase::Transaction,
+            TestCase::Transaction,
+            TestCase::Transaction,
+            TestCase::CompleteBatch(7, 3),
+            TestCase::BatchStart(8),
+            TestCase::Transaction,
+            TestCase::Transaction,
+        ];
+
+        let expected = to_db_data(&test_data).into_iter().skip(3).collect();
+        run(test_data, expected).await;
+    }
+
+    async fn run(test_cases: Vec<TestCase>, expected: Vec<DbData>) {
         let dir = tempfile::tempdir().unwrap();
 
         let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
@@ -157,36 +247,20 @@ mod tests {
             .await
             .unwrap();
 
-        let (sync_task_ready_snd, mut sync_task_ready_rcv) = mpsc::channel(1);
-
-        let test_data = create_test_data(vec![1, 0, 1000, 2]);
-        {
-            let test_data = test_data.clone();
-            tokio::spawn(async move {
-                sync_task_ready_rcv.recv().await.unwrap();
-                execute(db, test_data).await;
-            });
-        }
-
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
+        let mut sync_task =
+            ReplicaSyncTask::new_with_page_size(postgres_connection_string, shutdown_snd, 8)
+                .await
+                .unwrap();
+
         let (test_handler, mut recv) = TestHandler::new();
-        {
-            let conn_str = postgres_connection_string.clone();
-            let test_handler = test_handler.clone();
-            let shutdown_snd = shutdown_snd.clone();
-            tokio::spawn(async move {
-                let mut sync_task = ReplicaSyncTask::new(conn_str, shutdown_snd).await.unwrap();
-                sync_task.start(test_handler).await;
-                sync_task_ready_snd.send(()).await.unwrap();
-            });
-        }
+        sync_task.start(test_handler).await;
 
-        // Check if replica sync task received the notification.
-        for data in test_data {
+        execute(db, test_cases).await;
+
+        for data in expected {
             let recv_data = recv.recv().await.unwrap();
-            assert_eq!(recv_data, data);
+            assert_eq!(recv_data, data, "Expected: {data:?}, got: {recv_data:?}");
         }
-
-        shutdown_snd.send(()).unwrap();
     }
 }
