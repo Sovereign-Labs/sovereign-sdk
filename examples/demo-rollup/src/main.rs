@@ -31,7 +31,7 @@ struct Args {
     da_layer: SupportedDaLayer,
 
     /// The storage implementation
-    #[arg(long, default_value = "jmt")]
+    #[arg(long, default_value = "nomt")]
     storage: SupportedStorage,
 
     /// The path to the rollup config.
