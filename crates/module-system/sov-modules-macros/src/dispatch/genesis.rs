@@ -49,7 +49,7 @@ impl GenesisMacro {
             &type_generics,
             where_clause,
             &config_attributes,
-        );
+        )?;
         let genesis_fn_body = Self::make_genesis_fn_body(&fields);
 
         // Implements the Genesis trait
@@ -120,7 +120,8 @@ impl GenesisMacro {
         type_generics: &TypeGenerics,
         where_clause: Option<&WhereClause>,
         attributes: &[proc_macro2::TokenStream],
-    ) -> proc_macro2::TokenStream {
+    ) -> Result<proc_macro2::TokenStream, syn::Error> {
+        let chain_state_field_name = fields.iter().find(|field| field.ident == "chain_state").ok_or_else(|| syn::Error::new(Span::call_site(), "Chain state field not found. The Genesis macro may only be used if your runtime contains the `sov_chain_state::ChainState` module with the name `chain_state`. If you need a custom chain name, reach out to the SDK developers for support."))?.ident.clone();
         let field_names = fields.iter().map(|field| &field.ident);
 
         let fields: &Vec<proc_macro2::TokenStream> = &fields
@@ -135,7 +136,7 @@ impl GenesisMacro {
             })
             .collect();
 
-        quote::quote! {
+        Ok(quote::quote! {
             #[doc = "Initial configuration for the rollup."]
             #(#attributes)*
             pub struct GenesisConfig #impl_generics #where_clause{
@@ -151,6 +152,12 @@ impl GenesisMacro {
                     }
                 }
             }
-        }
+
+            impl #impl_generics ::sov_modules_api::GenesisParamsTrait for GenesisConfig #type_generics #where_clause {
+                fn genesis_slot_number(&self) -> u64 {
+                    self.#chain_state_field_name.genesis_da_height as u64
+                }
+            }
+        })
     }
 }

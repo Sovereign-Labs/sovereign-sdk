@@ -142,7 +142,7 @@ async fn spawn(
     };
     let init_variant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params: vec![1],
+        genesis_params: vec![1].into(),
     };
 
     let da_service =

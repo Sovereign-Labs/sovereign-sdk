@@ -16,7 +16,7 @@ use sov_modules_api::{
 use sov_state::SlotValue;
 mod proof_processing;
 use sov_modules_api::{PrivilegedKernelAccessor, SlotGasMeter};
-use sov_rollup_interface::stf::{DiscardedBlob, ProofReceipt};
+use sov_rollup_interface::stf::{DiscardedBlob, GenesisParams as GenesisParamsTrait, ProofReceipt};
 mod sequencer_mode;
 use sov_modules_api::{IterableBatchWithId, TxReceiptContents};
 #[cfg(feature = "test-utils")]
@@ -69,6 +69,12 @@ pub struct ApplyTxResult<S: Spec> {
 pub struct GenesisParams<RuntimeConfig> {
     /// The runtime genesis parameters
     pub runtime: RuntimeConfig,
+}
+
+impl<RuntimeConfig: GenesisParamsTrait> GenesisParamsTrait for GenesisParams<RuntimeConfig> {
+    fn genesis_slot_number(&self) -> u64 {
+        self.runtime.genesis_slot_number()
+    }
 }
 
 impl<S, RT> StfBlueprint<S, RT>

@@ -86,7 +86,7 @@ async fn test_simple_reorg_case() {
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params,
+        genesis_params: genesis_params.into(),
     };
 
     check_runner(da_service, &tmp_dir, init_variant, expected_state_root).await;
@@ -143,7 +143,7 @@ async fn test_runner_with_background_da_service(
 
     sync_status_receiver.mark_unchanged();
 
-    let genesis_params = vec![1, 2, 3, 4, 5];
+    let genesis_params = vec![1, 2, 3, 4, 5].into();
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block,
@@ -306,7 +306,7 @@ async fn test_instant_finality_data_stored() -> anyhow::Result<()> {
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params,
+        genesis_params: genesis_params.into(),
     };
 
     check_runner(da_service, &tmp_dir, init_variant, expected_state_root).await;
@@ -387,7 +387,7 @@ fn get_result_from_blocks(
             &stf,
             &Default::default(),
             storage,
-            genesis_params.to_vec(),
+            genesis_params.to_vec().into(),
         );
     storage_manager.commit(change_set);
 
