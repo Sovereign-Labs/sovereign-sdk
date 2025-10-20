@@ -51,9 +51,14 @@ pub mod first_test_module {
         FirstModuleEnum3(Vec<u8>),
     }
 
+    #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, Default)]
+    pub struct Config {
+        pub genesis_da_height: u64,
+    }
+
     impl<S: Spec> Module for FirstTestStruct<S> {
         type Spec = S;
-        type Config = ();
+        type Config = Config;
         type CallMessage = u8;
         type Event = Event;
 
@@ -249,7 +254,7 @@ mod custom_attributes {
     use super::*;
     #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
     struct Runtime<S: Spec> {
-        pub first: first_test_module::FirstTestStruct<S>,
+        pub chain_state: first_test_module::FirstTestStruct<S>,
         pub second: second_test_module::SecondTestStruct<S>,
     }
     #[test]
@@ -266,7 +271,7 @@ mod derive_event {
     use super::*;
     #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
     struct Runtime<S: Spec> {
-        pub first: first_test_module::FirstTestStruct<S>,
+        pub chain_state: first_test_module::FirstTestStruct<S>,
         pub second: second_test_module::SecondTestStruct<S>,
     }
 
@@ -274,10 +279,14 @@ mod derive_event {
     fn derive_event() {
         // Check to see if the runtime events are getting initialized correctly
         let _event =
-            RuntimeEvent::<TestSpec>::First(first_test_module::Event::FirstModuleEnum1(10));
-        let _event = RuntimeEvent::<TestSpec>::First(first_test_module::Event::FirstModuleEnum2);
+            RuntimeEvent::<TestSpec>::ChainState(first_test_module::Event::FirstModuleEnum1(10));
         let _event =
-            RuntimeEvent::<TestSpec>::First(first_test_module::Event::FirstModuleEnum3(vec![1; 3]));
+            RuntimeEvent::<TestSpec>::ChainState(first_test_module::Event::FirstModuleEnum2);
+        let _event =
+            RuntimeEvent::<TestSpec>::ChainState(first_test_module::Event::FirstModuleEnum3(vec![
+                1;
+                3
+            ]));
         let event = RuntimeEvent::<TestSpec>::Second(second_test_module::Event::SecondModuleEnum);
         let discriminant: &'static str = event.discriminant().into();
         assert_eq!(discriminant, "Second");
@@ -294,7 +303,7 @@ mod derive_genesis {
         S: Spec,
         T: ModuleThreeStorable,
     {
-        pub first: first_test_module::FirstTestStruct<S>,
+        pub chain_state: first_test_module::FirstTestStruct<S>,
         pub second: second_test_module::SecondTestStruct<S>,
         pub third: third_test_module::ThirdTestStruct<S, T>,
     }
@@ -305,7 +314,7 @@ mod derive_genesis {
         let mut state =
             sov_modules_api::StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
         let runtime = &mut Runtime::<ZkTestSpec, u32>::default();
-        let config = GenesisConfig::new((), (), ());
+        let config = GenesisConfig::new(Default::default(), (), ());
         let mut genesis_state =
             state.to_genesis_state_accessor::<Runtime<ZkTestSpec, u32>>(&config);
         runtime
@@ -315,7 +324,7 @@ mod derive_genesis {
 
         {
             let response = runtime
-                .first
+                .chain_state
                 .get_state_value(&mut working_set)
                 .expect("The working set should be unmetered");
             assert_eq!(response, 1);
@@ -351,7 +360,7 @@ mod derive_dispatch {
         S: Spec,
         T: ModuleThreeStorable,
     {
-        pub first: first_test_module::FirstTestStruct<S>,
+        pub chain_state: first_test_module::FirstTestStruct<S>,
         pub second: second_test_module::SecondTestStruct<S>,
         pub third: third_test_module::ThirdTestStruct<S, T>,
     }
@@ -367,7 +376,7 @@ mod derive_dispatch {
 
         let mut state =
             sov_modules_api::StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
-        let config = GenesisConfig::new((), (), ());
+        let config = GenesisConfig::new(Default::default(), (), ());
         let mut genesis_state =
             state.to_genesis_state_accessor::<Runtime<ZkTestSpec, u32>>(&config);
         runtime
@@ -392,7 +401,7 @@ mod derive_dispatch {
             )
             .unwrap();
 
-            assert_eq!(runtime.module_id(&module), runtime.first.id());
+            assert_eq!(runtime.module_id(&module), runtime.chain_state.id());
             runtime
                 .dispatch_call(module, &mut working_set, &context)
                 .unwrap();
@@ -400,7 +409,7 @@ mod derive_dispatch {
 
         {
             let response = runtime
-                .first
+                .chain_state
                 .get_state_value(&mut working_set)
                 .expect("The working set should be unmetered");
             assert_eq!(response, value);

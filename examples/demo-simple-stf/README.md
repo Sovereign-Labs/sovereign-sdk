@@ -174,7 +174,7 @@ fn test_stf_success() {
     let address = MockAddress::from([1; 32]);
 
     let stf = &mut CheckHashPreimageStf::default();
-    StateTransitionFunction::<MockZkvm, MockZkvm, MockDaSpec>::init_chain(stf, &Default::default(), (), ());
+    StateTransitionFunction::<MockZkvm, MockZkvm, MockDaSpec>::init_chain(stf, &Default::default(), (), Default::default());
 
     let mut batch_blobs = {
         let incorrect_preimage = vec![1; 32];

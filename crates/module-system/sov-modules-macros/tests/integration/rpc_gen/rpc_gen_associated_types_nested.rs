@@ -124,6 +124,7 @@ pub mod my_module {
 #[expose_rpc]
 #[derive(Default, Genesis, DispatchCall, MessageCodec)]
 struct Runtime<S: Spec, T: TestSpec> {
+    pub chain_state: sov_chain_state::ChainState<S>,
     pub first: my_module::QueryModule<S, <<T as TestSpec>::Message as Message>::Data>,
 }
 
@@ -148,7 +149,15 @@ fn associated_types_nested() {
     let storage = ZkStorage::new();
     let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default());
     let runtime = &mut Runtime::<S, ActualSpec>::default();
-    let config = GenesisConfig::new(22);
+    let chain_state_config = sov_chain_state::ChainStateConfig::<S> {
+        current_time: sov_rollup_interface::da::Time::from_secs(0),
+        operating_mode: sov_modules_api::OperatingMode::Zk,
+        inner_code_commitment: Default::default(),
+        outer_code_commitment: Default::default(),
+        genesis_da_height: 0,
+        admin: None,
+    };
+    let config = GenesisConfig::new(chain_state_config, 22);
     let mut genesis_state = state.to_genesis_state_accessor::<RT>(&config);
     runtime
         .genesis(&Default::default(), &config, &mut genesis_state)

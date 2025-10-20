@@ -1,3 +1,11 @@
+error: Chain state field not found. The Genesis macro may only be used if your runtime contains the `sov_chain_state::ChainState` module with the name `chain_state`. If you need a custom chain name, reach out to the SDK developers for support.
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:19
+    |
+107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+    |                   ^^^^^^^
+    |
+    = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
+
 error[E0310]: the parameter type `T` may not live long enough
    --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
     |
