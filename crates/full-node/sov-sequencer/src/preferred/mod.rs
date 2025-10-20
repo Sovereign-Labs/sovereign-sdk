@@ -16,7 +16,6 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
-use crate::preferred::replica::event_handler::ReplicaEventProcessor;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use async_trait::async_trait;
 use axum::http::StatusCode;
@@ -89,7 +88,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    synchronized_state_updator: SequencerStateUpdator<S, Rt>,
+    synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
     api_state: ApiState<S>,
@@ -270,8 +269,9 @@ where
         .spawn();
         handles.push(side_effects_task);
 
+        let synchronized_state_updator = Arc::new(synchronized_state_updator);
         let seq = Arc::new(PreferredSequencer {
-            synchronized_state_updator,
+            synchronized_state_updator: synchronized_state_updator.clone(),
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
             blobs_sender_channel,
@@ -296,7 +296,9 @@ where
                 )
                 .await?;
 
-                handles.push(replica_task.start(ReplicaEventProcessor {}).await);
+                let replica_task_handle = replica_task.start(synchronized_state_updator).await;
+                handles.push(replica_task_handle.data_fetcher_handle);
+                handles.push(replica_task_handle.sync_task_handle);
             }
         }
         handles.push(tokio::spawn({

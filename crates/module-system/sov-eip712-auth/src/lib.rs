@@ -4,23 +4,25 @@ use std::sync::OnceLock;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::capabilities::{
     self, calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
-    AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
-    UnregisteredAuthenticationError,
+    AuthenticationOutput, AuthorizationData, BatchFromUnregisteredSequencer, FatalError,
+    TransactionAuthenticator, UnregisteredAuthenticationError,
 };
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError,
+    AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
 };
 use sov_modules_api::{
-    DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Runtime, Spec, TxHash,
+    CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize,
+    MeteredBorshDeserializeError, Multisig, ProvableStateReader, RawTx, Runtime, Spec, TxHash,
 };
 use sov_state::User;
 
 mod crypto_markers;
-mod stub_evm_rpc;
-
 pub use crate::crypto_markers::{CryptoSpecWithSecp256k1, Secp256k1CryptoSpec};
+
+#[cfg(feature = "native")]
+mod stub_evm_rpc;
+#[cfg(feature = "native")]
 pub use stub_evm_rpc::stub_evm_rpc;
 
 /// Trait for providing schema to the EIP-712 authenticator.
@@ -251,18 +253,53 @@ fn verify_and_decode_tx<
 
             Ok((tx_and_raw_hash, authorization_data, runtime_call))
         }
+        Transaction::V1(tx_v1) => {
+            verify_chain_id(&tx_v1.details, raw_tx_hash)?;
+            let multisig = Multisig::new(
+                tx_v1.min_signers,
+                tx_v1
+                    .signatures
+                    .iter()
+                    .map(|s| s.pub_key.clone())
+                    .chain(tx_v1.unused_pub_keys.iter().cloned())
+                    .collect::<Vec<_>>(),
+            );
+            let msg = eip_712_msg::<S, D, SP>(&tx, raw_tx_hash)?;
+            multisig
+                .verify_signature(&msg, &tx_v1.signatures)
+                .map_err(|e| {
+                    AuthenticationError::FatalError(
+                        FatalError::SigVerificationFailed(e.to_string()),
+                        raw_tx_hash,
+                    )
+                })?;
+            let credential_id = multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
+            let authorization_data = AuthorizationData {
+                uniqueness: tx_v1.uniqueness,
+                tx_hash: raw_tx_hash,
+                credential_id,
+                credentials: Credentials::new(multisig),
+                default_address: credential_id.into(),
+            };
+            let runtime_call = tx_v1.runtime_call.clone();
+            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+                raw_tx_hash,
+                authenticated_tx: tx_v1.details.clone().into(),
+            };
+
+            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+        }
     }
 }
 
-fn verify_eip712_signature<
+fn eip_712_msg<
     S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
     tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
-    meter: &mut impl GasMeter<Spec = S>,
-) -> Result<(), AuthenticationError> {
+) -> Result<[u8; 66], AuthenticationError> {
     // Convert the transaction to unsigned transaction (removes signature)
     let unsigned_tx = tx.to_unsigned_transaction();
 
@@ -279,10 +316,10 @@ fn verify_eip712_signature<
     // Use the schema provider to get the schema and calculate the EIP712 signing hash
     let schema = SP::get_schema();
     let transaction_type_index = schema.rollup_expected_index(sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction)
-        .map_err(|e| AuthenticationError::FatalError(
-            FatalError::SigVerificationFailed(format!("Cannot verify EIP712 signature. Failed to get UnsignedTransaction type from schema: {e}")),
-            raw_tx_hash,
-        ))?;
+         .map_err(|e| AuthenticationError::FatalError(
+             FatalError::SigVerificationFailed(format!("Cannot verify EIP712 signature. Failed to get UnsignedTransaction type from schema: {e}")),
+             raw_tx_hash,
+         ))?;
 
     let eip712_hash = schema
         .eip712_signing_digest(transaction_type_index, &unsigned_tx_bytes)
@@ -292,6 +329,20 @@ fn verify_eip712_signature<
                 raw_tx_hash,
             )
         })?;
+
+    Ok(eip712_hash)
+}
+
+fn verify_eip712_signature<
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
+    D: DispatchCall<Spec = S>,
+    SP: SchemaProvider,
+>(
+    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<(), AuthenticationError> {
+    let eip712_hash = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
 
     tx.verify_signature(&eip712_hash, meter)
         .map_err(|e| match e {

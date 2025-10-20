@@ -112,7 +112,7 @@ fn test_display_unsigned_tx() {
 fn test_display_signed_tx() {
     let unsigned_tx = make_unsigned_tx();
     let signer = TestUser::<S>::generate(Amount::ZERO);
-    let signed_tx = Transaction::new_signed_tx(signer.private_key(), &CHAIN_HASH, unsigned_tx);
+    let signed_tx = Transaction::<Runtime, S>::new_signed_tx(signer.private_key(), &CHAIN_HASH, unsigned_tx);
     let signed_data = borsh::to_vec(&signed_tx).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
@@ -127,6 +127,7 @@ fn test_display_signed_tx() {
 
     let signature_display = match signed_tx {
         Transaction::V0(inner) => hex::encode(borsh::to_vec(&inner.signature).unwrap()),
+        _ => panic!("Expected V0 transaction"),
     };
 
     let pubkey_display = hex::encode(borsh::to_vec(&signer.private_key.pub_key()).unwrap());

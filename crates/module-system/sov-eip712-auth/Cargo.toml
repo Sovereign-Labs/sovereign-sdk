@@ -22,7 +22,7 @@ sov-universal-wallet = { workspace = true, features = ["eip712"] }
 anyhow = { workspace = true }
 borsh = { workspace = true }
 derive_more = { workspace = true, default-features = true, features = [ "debug" ] }
-jsonrpsee = { workspace = true, features = [ "jsonrpsee-types" ] }
+jsonrpsee = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 # For the stub RPC for chains not using EVM. Not needed for those using EVM,

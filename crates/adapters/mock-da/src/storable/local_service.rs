@@ -229,6 +229,23 @@ impl StorableMockDaService {
     }
 
     /// Creates new [`StorableMockDaService`] with a given address.
+    /// Manual block production.
+    pub async fn new_in_memory_manual(sequencer_da_address: MockAddress) -> Self {
+        let da_layer = StorableMockDaLayer::new_in_memory(0)
+            .await
+            .expect("Failed to initialize StorableMockDaLayer");
+        let producing = BlockProducingConfig::OnBatchSubmit {
+            block_wait_timeout_ms: None,
+        };
+        Self::new(
+            sequencer_da_address,
+            Arc::new(RwLock::new(da_layer)),
+            producing,
+        )
+        .await
+    }
+
+    /// Creates new [`StorableMockDaService`] with a given address.
     /// - Periodic block production.
     /// - Data is stored only in memory.
     pub async fn new_in_memory_periodic(

@@ -581,7 +581,7 @@ pub trait PrivilegedKernelAccessor: StateWriter<namespaces::Kernel> {
 }
 
 /// Amount to pay for access to a storage value.
-fn charge_storage_access<Accessor: UniversalStateAccessor + GasMeter>(
+fn charge_storage_access<Accessor: GasMeter>(
     accessor: &mut Accessor,
     key: &SlotKey,
 ) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
@@ -654,7 +654,8 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
     Ok(metric)
 }
 
-fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
+/// Charge gas for state write
+pub fn charge_write<Accessor: GasMeter>(
     accessor: &mut Accessor,
     _namespace: Namespace,
     key: &SlotKey,

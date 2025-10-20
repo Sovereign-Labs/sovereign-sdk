@@ -161,7 +161,7 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
 pub struct SP1PublicKey {
     #[schemars(
         flatten,
