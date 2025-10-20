@@ -72,7 +72,8 @@ native = [
 	"sov-rollup-interface/native",
 	"sov-state/native",
 	"sov-address/native",
-	"sov-metrics?/native"
+	"sov-metrics?/native",
+	"sov-chain-state/native"
 ]
 arbitrary = [
 	"sov-modules-macros/arbitrary",
