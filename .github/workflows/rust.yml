@@ -431,7 +431,7 @@ jobs:
         run: git diff --exit-code
 
   check-demo-rollup-bash-commands:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     timeout-minutes: 60
@@ -463,7 +463,7 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-demo-rollup-bash-commands-mock-da:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     timeout-minutes: 60

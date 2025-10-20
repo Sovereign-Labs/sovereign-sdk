@@ -48,6 +48,11 @@ backoff_max_times = 10
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
+user_commit_concurrency = 4 # Number of concurrent commit workers for user state
+user_hashtable_buckets = 200_000 # Expected state size, cannot be changed after creation
+kernel_commit_concurrency = 2 # Number of concurrent commit workers for kernel state
+pruner_block_interval = 100 # How often to run pruner measured by DA blocks
+pruner_versions_to_keep = 20 # Number of versions available for historical querying
 
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
