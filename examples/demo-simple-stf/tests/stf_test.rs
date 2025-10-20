@@ -14,7 +14,7 @@ fn test_stf_success() {
         stf,
         &MockBlockHeader::default(),
         (),
-        (),
+        demo_simple_stf::GenesisParams,
     );
 
     let mut batch_blobs = {

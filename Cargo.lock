@@ -12340,6 +12340,7 @@ dependencies = [
  "serde",
  "sov-address",
  "sov-bank",
+ "sov-chain-state",
  "sov-metrics",
  "sov-modules-api",
  "sov-modules-macros",

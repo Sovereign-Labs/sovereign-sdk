@@ -1,3 +1,6 @@
+# 2025-10-20
+- #1925 removes the `genesis_height` param from the rollup_config.toml file. Genesis height is now *only* read from the genesis config file (usually `genesis.json`).
+
 # 2025-10-16
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.

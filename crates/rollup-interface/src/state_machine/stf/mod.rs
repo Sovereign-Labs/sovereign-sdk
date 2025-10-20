@@ -278,7 +278,7 @@ pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
     type Address: Serialize + DeserializeOwned + Clone + Debug;
 
     /// The initial params of the rollup.
-    type GenesisParams;
+    type GenesisParams: GenesisParams;
 
     /// State of the rollup before transition.
     type PreState;
@@ -335,4 +335,10 @@ pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
         relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
     ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self>;
+}
+
+/// The parameters for the genesis block.
+pub trait GenesisParams {
+    /// Returns the slot number (aka DA block number) at which the genesis block should be applied.
+    fn genesis_slot_number(&self) -> u64;
 }
