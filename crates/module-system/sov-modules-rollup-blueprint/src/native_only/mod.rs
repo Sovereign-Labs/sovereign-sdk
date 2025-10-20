@@ -9,13 +9,13 @@ use std::sync::Arc;
 use anyhow::Context;
 use async_trait::async_trait;
 pub use endpoints::*;
-use sov_modules_api::GenesisParamsTrait;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::GenesisParamsTrait;
 use sov_modules_api::{
     DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
     SyncStatus, VersionReader, ZkVerifier,

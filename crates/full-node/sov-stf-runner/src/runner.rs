@@ -780,8 +780,7 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
 
     debug!(%last_slot_processed_before_shutdown);
-    let da_height_processed =
-        genesis_da_height + last_slot_processed_before_shutdown.get();
+    let da_height_processed = genesis_da_height + last_slot_processed_before_shutdown.get();
 
     let target_da_height = get_target_block(da_service, &stop_at_rollup_height)
         .await?
