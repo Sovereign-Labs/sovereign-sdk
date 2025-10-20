@@ -334,7 +334,7 @@ pub fn toml_hex_value_to_rust(
 ) -> syn::Result<syn::Expr> {
     let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
     let bytes = hex::decode(hex_str)
-        .map_err(|e| syn::Error::new(constant_name.span(), format!("Invalid hex string: {}", e)))?;
+        .map_err(|e| syn::Error::new(constant_name.span(), format!("Invalid hex string: {e}")))?;
 
     bytes_to_array_expr(constant_name, &bytes, type_str)
 }
@@ -364,7 +364,7 @@ fn bytes_to_array_expr(
             if bytes.len() != expected {
                 return Err(syn::Error::new(
                     constant_name.span(),
-                    format!("Has {} bytes, expected {}", bytes.len(), expected),
+                    format!("Has {} bytes, expected {expected}", bytes.len()),
                 ));
             }
         }
