@@ -183,7 +183,7 @@ pub async fn initialize_runner(
     let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
 
     let da_sync_state = make_da_sync_state(
-        &rollup_config.runner,
+        0,
         None,
         &ledger_db,
         da_service.as_ref(),
@@ -396,7 +396,6 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     RollupConfig {
         storage: RollupDbConfig::default_in_path(path.to_path_buf()),
         runner: RunnerConfig {
-            genesis_height: 0,
             da_polling_interval_ms: get_da_polling_interval_ms(&da_config),
             da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),

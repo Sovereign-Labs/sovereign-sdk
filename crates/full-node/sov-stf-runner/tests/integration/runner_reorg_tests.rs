@@ -128,7 +128,7 @@ async fn test_runner_with_background_da_service(
     let (sync_sender, mut sync_status_receiver) = watch::channel(SyncStatus::START);
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
     let da_sync_state = make_da_sync_state(
-        &rollup_config.runner,
+        0,
         None,
         &ledger_db,
         da_service.as_ref(),
@@ -143,11 +143,12 @@ async fn test_runner_with_background_da_service(
 
     sync_status_receiver.mark_unchanged();
 
-    let genesis_params = vec![1, 2, 3, 4, 5].into();
+    let genesis_params = vec![1, 2, 3, 4, 5];
+    let genesis_da_height = 0;
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block,
-        genesis_params,
+        genesis_params: genesis_params.into(),
     };
     let (prev_state_root, _genesis_state_root) =
         init_variant.initialize(&stf, &mut storage_manager).await?;
@@ -171,7 +172,7 @@ async fn test_runner_with_background_da_service(
     .await?;
 
     let runner_task = tokio::spawn(async move {
-        runner.run_in_process().await.map_err(|error| {
+        runner.run_in_process(genesis_da_height).await.map_err(|error| {
             tracing::warn!(?error, "Runner return execution with error");
             error
         })
@@ -325,7 +326,7 @@ async fn check_runner(
     let (mut runner, test_node) =
         initialize_runner(da_service, tmpdir.path(), init_variant, 1, None).await;
     let before = *runner.get_state_root();
-    let end = runner.run_in_process().await;
+    let end = runner.run_in_process(0).await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
     let after = *runner.get_state_root();
