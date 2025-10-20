@@ -39,7 +39,7 @@ impl Display for Root {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
 /// Genesis parameters for the rollup.
 pub struct GenesisParams;
 

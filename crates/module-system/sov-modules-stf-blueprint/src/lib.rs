@@ -256,6 +256,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     type StateRoot = <S::Storage as Storage>::Root;
 
