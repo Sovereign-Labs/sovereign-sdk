@@ -73,7 +73,6 @@ members = [
     # Hyperlane
     "crates/module-system/hyperlane",
     # Examples
-    "examples/const-rollup-config",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-rollup/stf",

@@ -1,4 +1,5 @@
 # 2025-10-20
+- #1924 **Breaking change** rollup's batch and proof namespace needs to be specified in `constants.toml` as `BATCH_NAMESPACE` and `PROOF_NAMESPACE`.
 - #1925 removes the `genesis_height` param from the rollup_config.toml file. Genesis height is now *only* read from the genesis config file (usually `genesis.json`).
 
 # 2025-10-16
