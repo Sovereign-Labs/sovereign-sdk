@@ -1,3 +1,4 @@
+use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
 use alloy::providers::{Provider, ProviderBuilder, WsConnect};
 use alloy::rpc::types::{Filter, TransactionRequest};
@@ -206,8 +207,9 @@ async fn run_logs_test(
     try_join_all(handles).await?;
 
     // Retrieve and count all logs
-    let to_block = root_client.get_block_number().await?;
-    let filter = Filter::new().from_block(from_block).to_block(to_block);
+    let filter: Filter = Filter::new()
+        .from_block(from_block)
+        .to_block(BlockNumberOrTag::Pending);
     let logs = root_client.get_logs(&filter).await?;
 
     println!("Total logs retrieved: {}", logs.len());
