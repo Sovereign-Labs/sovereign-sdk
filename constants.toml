@@ -10,6 +10,14 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+
+# The namespace used by the rollup to store its data.
+# This is "\0\0sov-test" encoded as ASCII bytes
+BATCH_NAMESPACE = { const = [0, 0, 115, 111, 118, 45, 116, 101, 115, 116] }
+# The namespace used by the rollup to store aggregated ZK proofs.
+# This is "sov-test-p" encoded as ASCII bytes
+PROOF_NAMESPACE = { const = [115, 111, 118, 45, 116, 101, 115, 116, 45, 112] }
+
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
