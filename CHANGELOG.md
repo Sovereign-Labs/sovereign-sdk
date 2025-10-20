@@ -1,3 +1,6 @@
+# 2025-10-20
+- #1924 **Breaking change** rollup's batch and proof namespace needs to be specified in `constants.toml` as `BATCH_NAMESPACE` and `PROOF_NAMESPACE`.
+
 # 2025-10-16
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
