@@ -13,13 +13,11 @@ use std::net::SocketAddr;
 use std::time::Instant;
 
 use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
+use sov_eth_client::LogsWithCursorProvider;
 
 mod logs;
-mod logs_with_cursor;
 mod simple_storage;
 mod uniswap;
-
-use logs_with_cursor::LogsWithCursorProvider;
 
 /// Maximum number of concurrent workers supported due to private key derivation constraints.
 const MAX_WORKERS: usize = 255;
