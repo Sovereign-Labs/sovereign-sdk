@@ -514,7 +514,7 @@ jobs:
       - run: git diff --exit-code
 
   check-web3-js-sdk-integration:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     # There exists a circular dependency between repos where web3 JS needs changes from a PR
