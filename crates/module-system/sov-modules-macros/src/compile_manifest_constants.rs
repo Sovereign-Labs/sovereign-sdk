@@ -76,6 +76,12 @@ pub struct TomlHexValue {
     r#type: String,
 }
 
+#[derive(serde::Deserialize)]
+pub struct TomlByteStringValue {
+    byte_string: String,
+    r#type: String,
+}
+
 pub enum AllowedTomlValue {
     Bool(bool),
     Integer(i64),
@@ -83,6 +89,7 @@ pub enum AllowedTomlValue {
     Array(Vec<AllowedTomlValue>),
     Bech32(TomlBech32Value),
     Hex(TomlHexValue),
+    ByteString(TomlByteStringValue),
 }
 
 pub struct ParsedConstant {
@@ -141,6 +148,12 @@ fn parse_constant(value: &toml::Value, span: Span) -> syn::Result<ParsedConstant
             value: AllowedTomlValue::Hex(hex_value),
             make_const: true,
         })
+    } else if let Ok(byte_string_value) = value.clone().try_into::<TomlByteStringValue>() {
+        // Byte string values are always const (no runtime overrides)
+        Ok(ParsedConstant {
+            value: AllowedTomlValue::ByteString(byte_string_value),
+            make_const: true,
+        })
     } else {
         Ok(ParsedConstant {
             value: parse_constant_inner(value, span)?,
@@ -182,6 +195,11 @@ fn allowed_toml_value_to_const_expr(
             toml_bech32_value_to_rust(constant_name, &bech32.bech32, &bech32_type)?
         }
         AllowedTomlValue::Hex(hex) => toml_hex_value_to_rust(constant_name, &hex.hex, &hex.r#type)?,
+        AllowedTomlValue::ByteString(byte_string) => toml_byte_string_value_to_rust(
+            constant_name,
+            &byte_string.byte_string,
+            &byte_string.r#type,
+        )?,
     })
 }
 
@@ -198,13 +216,15 @@ fn allowed_toml_value_to_expr_with_override_logic(value: &AllowedTomlValue) -> T
             // leaked once? See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2510>.
             &*env_value.leak()
         }),
-        AllowedTomlValue::Array(_) | AllowedTomlValue::Hex(_) => quote::quote!({
-            use sov_modules_api::prelude::{serde, toml};
+        AllowedTomlValue::Array(_) | AllowedTomlValue::Hex(_) | AllowedTomlValue::ByteString(_) => {
+            quote::quote!({
+                use sov_modules_api::prelude::{serde, toml};
 
-            let deserializer = toml::de::ValueDeserializer::new(&env_value);
-            let owned: Vec<_> = serde::Deserialize::deserialize(deserializer).unwrap();
-            owned.try_into().unwrap()
-        }),
+                let deserializer = toml::de::ValueDeserializer::new(&env_value);
+                let owned: Vec<_> = serde::Deserialize::deserialize(deserializer).unwrap();
+                owned.try_into().unwrap()
+            })
+        }
     }
 }
 
@@ -316,6 +336,23 @@ pub fn toml_hex_value_to_rust(
     let bytes = hex::decode(hex_str)
         .map_err(|e| syn::Error::new(constant_name.span(), format!("Invalid hex string: {}", e)))?;
 
+    bytes_to_array_expr(constant_name, &bytes, type_str)
+}
+
+pub fn toml_byte_string_value_to_rust(
+    constant_name: &syn::LitStr,
+    string: &str,
+    type_str: &str,
+) -> syn::Result<syn::Expr> {
+    let bytes = string.as_bytes();
+    bytes_to_array_expr(constant_name, bytes, type_str)
+}
+
+fn bytes_to_array_expr(
+    constant_name: &syn::LitStr,
+    bytes: &[u8],
+    type_str: &str,
+) -> syn::Result<syn::Expr> {
     // Validate array length if type is [u8; N]
     if let Ok(syn::Type::Array(arr)) = syn::parse_str::<syn::Type>(type_str) {
         if let syn::Expr::Lit(syn::ExprLit {
@@ -327,7 +364,7 @@ pub fn toml_hex_value_to_rust(
             if bytes.len() != expected {
                 return Err(syn::Error::new(
                     constant_name.span(),
-                    format!("Hex has {} bytes, expected {}", bytes.len(), expected),
+                    format!("Has {} bytes, expected {}", bytes.len(), expected),
                 ));
             }
         }
