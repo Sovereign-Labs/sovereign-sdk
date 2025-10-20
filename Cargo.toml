@@ -239,7 +239,7 @@ serde = { version = "1.0.208", default-features = false, features = [
     "alloc",
     "derive",
 ] }
-serde_arrays = "0.1"
+serde_arrays = "0.2"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_yaml = { version = "0.9", default-features = false }
 serde_with = { version = "3.12", features = ["schemars_0_8"] }
