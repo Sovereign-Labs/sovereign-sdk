@@ -2,19 +2,14 @@ use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log};
 use alloy::transports::TransportResult;
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use sov_rpc_eth_types::LogsWithMaybeCursor;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LogsWithCursorParams {
     pub filter: Filter,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LogsWithCursorResponse {
-    pub logs: Vec<Log>,
-    pub next_cursor: Option<String>,
 }
 
 /// Extension trait for custom eth_getLogsWithCursor RPC method
@@ -32,7 +27,7 @@ pub trait LogsWithCursorProvider: Provider {
         &self,
         filter: &Filter,
         cursor: Option<String>,
-    ) -> TransportResult<LogsWithCursorResponse>
+    ) -> TransportResult<LogsWithMaybeCursor>
     where
         Self: Sized,
     {
@@ -63,9 +58,9 @@ pub trait LogsWithCursorProvider: Provider {
         let mut all_logs = vec![];
 
         loop {
-            let LogsWithCursorResponse {
+            let LogsWithMaybeCursor {
                 logs: logs_page,
-                next_cursor,
+                cursor: next_cursor,
             } = self.get_logs_with_cursor(filter, cursor).await?;
 
             all_logs.extend(logs_page);

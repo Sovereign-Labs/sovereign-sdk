@@ -15,7 +15,7 @@ use std::sync::Arc;
 mod provider_ext;
 mod rpc;
 
-pub use provider_ext::{LogsWithCursorProvider, LogsWithCursorResponse};
+pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
 const GAS: u64 = 9000000u64;
