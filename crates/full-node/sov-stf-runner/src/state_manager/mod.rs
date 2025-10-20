@@ -22,7 +22,7 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 
-use crate::da_utils::DaHeaderProvider;
+use crate::da_utils::DaFinalizedHeaderProvider;
 use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
 use crate::query_state_update_info;
 
@@ -99,7 +99,7 @@ where
     da_sync_state: Arc<DaSyncState>,
     da_polling_interval: std::time::Duration,
     da_total_timeout: std::time::Duration,
-    da_header_provider: DaHeaderProvider<Da::Spec>,
+    da_header_provider: DaFinalizedHeaderProvider<Da>,
 }
 
 impl<StateRoot, Witness, Sm, Da> StateManager<StateRoot, Witness, Sm, Da>
@@ -125,7 +125,7 @@ where
         da_sync_state: Arc<DaSyncState>,
         da_polling_interval: std::time::Duration,
         da_total_timeout: std::time::Duration,
-        da_header_provider: DaHeaderProvider<Da::Spec>,
+        da_header_provider: DaFinalizedHeaderProvider<Da>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             storage_manager,
@@ -263,7 +263,6 @@ where
         T: TxReceiptContents,
     >(
         &mut self,
-        da_service: &Da,
         da_height_at_genesis: u64,
         stf_changes: Sm::StfChangeSet,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
@@ -323,7 +322,7 @@ where
         // ----
 
         let processing_finalized_transitions_start = std::time::Instant::now();
-        let finalized_transitions = self.process_finalized_state_transitions(da_service).await?;
+        let finalized_transitions = self.process_finalized_state_transitions().await?;
         let processing_finalized_transitions_time =
             processing_finalized_transitions_start.elapsed();
         tracing::trace!(
@@ -486,7 +485,7 @@ where
         // 0. Short circuit
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
-            let finalized = self.da_header_provider.get_last_finalize()?;
+            let finalized = self.da_header_provider.get_last_finalized()?;
             // Simple case
             if block_header.prev_hash() == finalized.hash()
                 || block_header.hash() == finalized.hash()
@@ -566,7 +565,7 @@ where
     // the next incremental continuation of that fork that hasn't been processed should be found.
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
         if self.state_on_block.is_empty() {
-            let last_finalized = self.da_header_provider.get_last_finalize()?;
+            let last_finalized = self.da_header_provider.get_last_finalized()?;
             let adjacent = da_service.get_block_at(last_finalized.height() + 1).await?;
             // reorg can happen between these 2 calls, right now just panic, improve handling in the future.
             // TODO: This can be iterated and included in attempts.
@@ -800,13 +799,11 @@ where
     /// and relevant LedgerDb changes.
     async fn process_finalized_state_transitions(
         &mut self,
-        da_service: &Da,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
         let mut da_service_calls = 0;
 
         // Step 1: Determine the finalization boundary
-        let (last_seen_finalized_header, calls) =
-            self.determine_finalization_boundary(da_service).await?;
+        let (last_seen_finalized_header, calls) = self.determine_finalization_boundary().await?;
         da_service_calls += calls;
 
         // Step 2: Prune orphaned branches that don't descend from finalized header
@@ -814,7 +811,7 @@ where
 
         // Step 3: Extract finalized transitions from seen blocks
         let (finalized_transitions, calls) = self
-            .extract_finalized_transitions(da_service, &last_seen_finalized_header)
+            .extract_finalized_transitions(&last_seen_finalized_header)
             .await?;
         da_service_calls += calls;
 
@@ -830,12 +827,11 @@ where
     /// Returns the header and the number of DA service calls made.
     async fn determine_finalization_boundary(
         &self,
-        da_service: &Da,
     ) -> anyhow::Result<(<Da::Spec as DaSpec>::BlockHeader, u32)> {
         let mut da_service_calls = 0;
 
         // Using DaHeaderProvider instead of DaService call
-        let last_finalized_header = self.da_header_provider.get_last_finalize()?;
+        let last_finalized_header = self.da_header_provider.get_last_finalized()?;
 
         let earliest_seen_height = self
             .get_earliest_seen_height()
@@ -851,9 +847,8 @@ where
 
         // If finalized height is beyond what we've seen, cap it at highest seen
         let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_height {
-            // DaService call # 2
             da_service_calls += 1;
-            da_service
+            self.da_header_provider
                 .get_block_header_at(highest_seen_height)
                 .await?
                 .clone()
@@ -939,7 +934,6 @@ where
     /// Returns the finalized transitions and the number of DA service calls made.
     async fn extract_finalized_transitions(
         &mut self,
-        da_service: &Da,
         last_seen_finalized_header: &<Da::Spec as DaSpec>::BlockHeader,
     ) -> anyhow::Result<(Vec<StateOnBlock<Da::Spec, StateRoot>>, u32)> {
         let mut da_service_calls = 0;
@@ -963,7 +957,8 @@ where
 
         for height in range {
             // DaService call # 3 + n (this is the performance bottleneck)
-            let finalized_header_at_height = da_service.get_block_header_at(height).await?;
+            let finalized_header_at_height =
+                self.da_header_provider.get_block_header_at(height).await?;
             da_service_calls += 1;
 
             tracing::trace!(

@@ -93,22 +93,32 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     }
 }
 
+/// Helper struct that make getting finalized block headers more efficient, by caching them.
 #[derive(Clone)]
-pub struct DaHeaderProvider<Da: DaSpec> {
-    head: tokio::sync::watch::Receiver<Da::BlockHeader>,
-    last_finalized: tokio::sync::watch::Receiver<Da::BlockHeader>,
-    is_running: std::sync::Arc<AtomicBool>,
+pub struct DaFinalizedHeaderProvider<Da: DaService> {
+    da_service: std::sync::Arc<Da>,
+    head: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
+    last_finalized: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
+    is_background_running: std::sync::Arc<AtomicBool>,
 }
 
-impl<Da: DaSpec> DaHeaderProvider<Da> {
-    pub fn get_head(&self) -> anyhow::Result<Da::BlockHeader> {
+impl<Da: DaService> DaFinalizedHeaderProvider<Da> {
+    pub fn get_head(&self) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
         // TODO: Check if is running and return error
         Ok(self.head.borrow().clone())
     }
 
-    pub fn get_last_finalize(&self) -> anyhow::Result<Da::BlockHeader> {
+    pub fn get_last_finalized(&self) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
         // TODO: Check if is running and return error
         Ok(self.last_finalized.borrow().clone())
+    }
+
+    // Currently just a wrapper, but will add checks of cached blocks
+    pub async fn get_block_header_at(
+        &self,
+        height: u64,
+    ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
+        self.da_service.get_block_header_at(height).await
     }
 
     // TODO: Can be used
@@ -118,12 +128,14 @@ impl<Da: DaSpec> DaHeaderProvider<Da> {
 pub async fn initialize_da_header_provider<Da: DaService>(
     da_service: std::sync::Arc<Da>,
     polling_interval: std::time::Duration,
-) -> anyhow::Result<DaHeaderProvider<Da::Spec>> {
+) -> anyhow::Result<DaFinalizedHeaderProvider<Da>> {
     // TODO: unwraps
     let head_header = da_service.get_head_block_header().await.unwrap();
     let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     let (head_sender, head_receiver) = tokio::sync::watch::channel(head_header);
     let (finalized_sender, finalized_receiver) = tokio::sync::watch::channel(finalized_header);
+
+    let own_da_service = da_service.clone();
 
     let is_running_for_reader = std::sync::Arc::new(AtomicBool::new(true));
     let is_running_for_writer = is_running_for_reader.clone();
@@ -150,9 +162,10 @@ pub async fn initialize_da_header_provider<Da: DaService>(
         is_running_for_writer.store(false, Ordering::Release);
     });
 
-    Ok(DaHeaderProvider {
+    Ok(DaFinalizedHeaderProvider {
+        da_service: own_da_service,
         head: head_receiver,
         last_finalized: finalized_receiver,
-        is_running: is_running_for_reader,
+        is_background_running: is_running_for_reader,
     })
 }

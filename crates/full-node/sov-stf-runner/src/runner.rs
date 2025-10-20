@@ -632,7 +632,6 @@ where
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
             .process_stf_changes(
-                &self.da_service,
                 self.da_height_at_genesis,
                 slot_result.change_set,
                 transition_data,
