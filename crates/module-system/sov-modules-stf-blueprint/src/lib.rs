@@ -387,6 +387,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
     fn select_and_validate_blobs<CF: InjectedControlFlow<S> + Clone>(
@@ -411,6 +412,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     /// Run a state transition using the STF blueprint.
     // Similar to `apply_slot`, but enables the injection of a custom `InjectedControlFlow`.
