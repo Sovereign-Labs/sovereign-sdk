@@ -3,9 +3,7 @@ use std::sync::Arc;
 
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, TxChangeSet, TxHash, VisibleSlotNumber,
-};
+use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet, VisibleSlotNumber};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -221,14 +219,6 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             batch_to_close,
         })
         .await;
-    }
-
-    pub(crate) async fn insert_tx_without_confirmation(
-        &mut self,
-        tx: FullyBakedTx,
-        tx_hash: TxHash,
-    ) {
-        self.cache.insert_tx(tx, tx_hash).await;
     }
 
     pub(crate) async fn update_state_for_recovery(&mut self, checkpoint: StateCheckpoint<S>) {

@@ -9,6 +9,11 @@ pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
     async fn on_da_event(&self, batch: DbData);
 }
 
+pub(crate) struct ReplicaTaskHandles {
+    pub(crate) data_fetcher_handle: JoinHandle<()>,
+    pub(crate) sync_task_handle: JoinHandle<()>,
+}
+
 pub(crate) struct ReplicaSyncTask {
     shutdown_sender: watch::Sender<()>,
     postgres_connection_string: String,
@@ -25,17 +30,17 @@ impl ReplicaSyncTask {
         })
     }
 
-    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) -> JoinHandle<()> {
+    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) -> ReplicaTaskHandles {
         let mut event_receiver = EventReceiver::new(
             self.postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
         )
         .await;
 
-        event_receiver.spawn_db_data_fetcher().await;
+        let data_fetcher_handle = event_receiver.spawn_db_data_fetcher().await;
         let shutdown_receiver = self.shutdown_sender.subscribe();
 
-        tokio::spawn(async move {
+        let sync_task_handle = tokio::spawn(async move {
             loop {
                 if shutdown_receiver.has_changed().unwrap_or(true) {
                     break;
@@ -45,7 +50,12 @@ impl ReplicaSyncTask {
                     handler.on_da_event(data).await;
                 }
             }
-        })
+        });
+
+        ReplicaTaskHandles {
+            data_fetcher_handle,
+            sync_task_handle,
+        }
     }
 }
 
