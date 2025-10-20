@@ -57,7 +57,7 @@ da_polling_interval_ms = 50
 
 [runner.http_config]
 bind_host = "127.0.0.1"
-bind_port = 12346
+bind_port = 12347
 # In case of the arollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
 # cors = "permissive" # CORS configuration: "permissive" or "restrictive"

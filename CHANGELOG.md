@@ -1,3 +1,6 @@
+# 2025-10-20
+- #1912 Add multi-worker support to EVM logs soak tests with log retrieval via `eth_getLogs`. Workers are automatically funded from root account and use WebSocket connections for better real-time performance.
+
 # 2025-10-16
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
