@@ -13,9 +13,6 @@ use tracing::{error, trace};
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
 
-// Process events in pages to avoid excessive memory consumption
-pub(crate) const PAGE_SIZE: usize = 2000;
-
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum EventReceiverError {
     #[error("Error while querying for  db data: {0}")]

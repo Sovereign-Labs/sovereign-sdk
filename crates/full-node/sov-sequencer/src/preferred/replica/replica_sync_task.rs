@@ -1,8 +1,11 @@
 use crate::preferred::replica::db_data::DbData;
-use crate::preferred::replica::event_receiver::{EventReceiver, PAGE_SIZE};
+use crate::preferred::replica::event_receiver::EventReceiver;
 use async_trait::async_trait;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+
+// Process events in pages to avoid excessive memory consumption
+const PAGE_SIZE: usize = 2000;
 
 #[async_trait]
 pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
