@@ -1,3 +1,5 @@
+use std::ops::DerefMut;
+
 use alloy_consensus::Sealed;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_eips::BlockNumberOrTag;
@@ -26,9 +28,12 @@ use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::Evm;
+use maybe_archival_state::MaybeArchivalState;
 
 pub(crate) mod error;
 pub(crate) mod handlers;
+pub(crate) mod maybe_archival_state;
+
 mod trace;
 
 /// Result of String => BlockNr conversion
@@ -353,32 +358,6 @@ where
                 .expect("The impossible happened: block_env is not set."),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
         })
-    }
-}
-
-use std::ops::{Deref, DerefMut};
-
-enum MaybeArchivalState<'a, S: Spec> {
-    Current(&'a mut ApiStateAccessor<S>),
-    Archival(Box<ApiStateAccessor<S>>),
-}
-
-impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
-    type Target = ApiStateAccessor<S>;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Current(a) => a,
-            Self::Archival(a) => a,
-        }
-    }
-}
-
-impl<'a, S: Spec> DerefMut for MaybeArchivalState<'a, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Current(a) => a,
-            Self::Archival(a) => a,
-        }
     }
 }
 
