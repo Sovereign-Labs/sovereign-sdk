@@ -629,12 +629,11 @@ where
         highest_seen_height: u64,
     ) -> anyhow::Result<ForkPointSearchResult<Da, StateRoot>> {
         let mut low = earliest_seen_height;
-        let mut high = std::cmp::min(highest_seen_height, head.height()).saturating_add(1);
+        // With async finalized header caching, the cached head might lag behind highest_seen_height.
+        // Use the max to ensure we search the full range even if the cached head is stale.
+        let mut high = std::cmp::max(highest_seen_height, head.height()).saturating_add(1);
 
-        // But what if low above head???
-        // This is only possible if the earliest seen transition is not a direct descendant of the finalized block
-        // Which means bug in another method.
-
+        // Sanity check: low should always be less than high
         assert!(
             low < high,
             "Error in `low` earliest_seen={}, highest_seen={}, head_height={} ",
@@ -831,7 +830,6 @@ where
         let mut da_service_calls = 0;
 
         // Using DaHeaderProvider instead of DaService call
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let last_finalized_header = self.da_header_provider.get_last_finalized()?;
         tracing::info!("LAST FINALIZED HEADER {last_finalized_header:?}");
 
