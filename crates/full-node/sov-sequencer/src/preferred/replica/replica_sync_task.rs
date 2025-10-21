@@ -15,7 +15,7 @@ pub(crate) enum DBDataRejected {
 
 #[async_trait]
 pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
-    async fn on_da_event(&self, batch: DbData) -> Result<(), DBDataRejected>;
+    async fn on_db_event(&self, batch: DbData) -> Result<(), DBDataRejected>;
 }
 
 pub(crate) struct ReplicaTaskHandles {
@@ -85,7 +85,7 @@ impl ReplicaSyncTask {
             };
 
             'inner: loop {
-                match handler.on_da_event(data).await {
+                match handler.on_db_event(data).await {
                     Ok(_) => {
                         // The data was applied on the executor.
                         break 'inner;
@@ -165,7 +165,7 @@ mod tests {
 
     #[async_trait]
     impl ReplicaEventHandler for TestHandler {
-        async fn on_da_event(&self, data: DbData) -> Result<(), DBDataRejected> {
+        async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
             if data.sequence_number() < self.seq_nr() {
                 return Err(DBDataRejected::ExecutorAhead(self.seq_nr()));
             }
@@ -371,7 +371,7 @@ mod tests {
         let seq_nr = 3;
         let test_cases = to_db_data(&test_cases);
         // We skip batch 1,2 and 3 so 15 db messages in total.
-        let expected = test_cases.iter().cloned().skip(15).collect();
+        let expected = test_cases.iter().skip(15).cloned().collect();
         check_sync_task(test_cases.clone(), expected, seq_nr).await;
     }
 

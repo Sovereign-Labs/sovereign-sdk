@@ -13,7 +13,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    async fn on_da_event(&self, data: DbData) -> Result<(), DBDataRejected> {
+    async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
             DbData::BatchStart(_batch_to_store) => {}
             DbData::Transaction(_, _tx) => {}
