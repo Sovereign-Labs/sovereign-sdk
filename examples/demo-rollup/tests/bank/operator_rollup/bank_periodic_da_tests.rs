@@ -1,12 +1,12 @@
-use std::str::FromStr;
-use std::sync::Arc;
-
+use futures::StreamExt;
 use sov_bank::config_gas_token_id;
 use sov_bank::derived_holder::DerivedHolder;
 use sov_cli::NodeClient;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::{OperatingMode, Spec};
 use sov_test_utils::TestSpec;
+use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
@@ -35,6 +35,7 @@ async fn send_test_bank_txs(
     client: &NodeClient,
     da_service: Arc<StorableMockDaService>,
 ) -> anyhow::Result<()> {
+    let mut slots_subscription = client.client.subscribe_slots().await?;
     let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
     let token_id_response = client
         .get_token_id::<DemoRollupSpec>(TOKEN_NAME, Some(TOKEN_DECIMALS), &user_address)
@@ -61,6 +62,10 @@ async fn send_test_bank_txs(
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
     let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
+    let mut processed_slot = slots_subscription.next().await.unwrap()?;
+    while processed_slot.number < slot_number {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
 
     // Will cause a batch to be produced.
     da_service.produce_n_blocks_now(1).await.unwrap();
@@ -73,6 +78,9 @@ async fn send_test_bank_txs(
         let tx = build_transfer_token_tx(&key, token_id, recipient_address, 10, nonce);
 
         let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
+        while processed_slot.number < slot_number {
+            processed_slot = slots_subscription.next().await.unwrap()?;
+        }
 
         assert_slot_finality(client, slot_number, test_case.expected_head_finality()).await;
         assert_balance(

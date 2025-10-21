@@ -70,6 +70,16 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
     )
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mixed_nonce_and_generation_transactions_inner() {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(90),
+        test_mixed_nonce_and_generation_transactions(),
+    )
+    .await
+    .unwrap();
+}
+
 /// Test demonstrating how nonce and generation can be used independently.
 /// This test shows that:
 /// 1. Nonces and generations are tracked separately per account
@@ -77,7 +87,6 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 /// 3. Nonces must be sequential (0 -> 1 -> 2...), skipping is not allowed
 /// 4. You cannot reuse a nonce or generation that was already consumed
 /// 5. Both mechanisms can be used interchangeably for the same account
-#[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
     // Keep it commented out in case of debug.
     sov_test_utils::logging::initialize_or_change_logging_with_filter(
