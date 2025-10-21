@@ -13,11 +13,13 @@ CHAIN_NAME = "TestChain"
 
 # The namespace used by the rollup to store its data.
 # Using byte_string to convert "sov-test-b" to ASCII bytes
+# Should be 10 bytes long for Celestia
 BATCH_NAMESPACE = { byte_string = "sov-test-b" }
 # The namespace used by the rollup to store aggregated ZK proofs.
 # This is "sov-test-p" encoded as ASCII bytes.
 # "hex" format is used as an example, that it is possible to define namespace as any sequence of bytes.
 # `python3 -c "import sys; print('0x' + sys.argv[1].encode().hex())" "sov-test-p"`
+# Should be 10 bytes long for Celestia
 PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
 
 # We will keep only this many blocks in the EVM module.
