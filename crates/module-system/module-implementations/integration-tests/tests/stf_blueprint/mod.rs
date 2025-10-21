@@ -252,7 +252,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
 
     match signed_tx {
         Transaction::V0(inner) => Transaction::new_with_details_v0(
-            inner.pub_key,
+            inner.pub_key.0,
             inner.runtime_call,
             bad_signature,
             inner.uniqueness,

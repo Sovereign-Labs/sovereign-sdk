@@ -1,7 +1,7 @@
 use sov_mock_zkvm::MockZkvmCryptoSpec;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, Version0};
-use sov_modules_api::CryptoSpec;
+use sov_modules_api::{CryptoSpec, VarLengthPublicKey};
 use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
 use sov_test_utils::TestSpec;
 use sov_universal_wallet::schema::Schema;
@@ -33,7 +33,7 @@ fn test_serde_serialize_tx() {
     };
     let native_tx = Version0 {
         signature: native_sig,
-        pub_key: native_pub_key.into(),
+        pub_key: VarLengthPublicKey(native_pub_key),
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
@@ -100,7 +100,7 @@ fn test_schema_and_native_serialization_consistency() {
     };
     let native_tx = Version0 {
         signature: native_sig,
-        pub_key: native_pub_key.into(),
+        pub_key: VarLengthPublicKey(native_pub_key),
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,

@@ -100,13 +100,40 @@ impl<
 {
 }
 
-/// TODO
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet)]
+/// A wrapper around an inner [`PublicKey`] that forces particular serialization formats.
+///
+/// This is needed particularly for the [`crate::transaction::Transaction`] structs `pub_key` field so that serde
+/// serialization is predictable instead of relying on the serializatioon of the generic type,
+/// which could be anything. If the type serializes to anything then it makes it impossible to know
+/// how to construct a transaction in client-side libraries like the web3 SDK.
+///
+/// We attempted to add support for this purely using attributes on the
+/// [`crate::transaction::Transaction`] struct but run into limitations in
+/// [`sov_universal_wallet`]s `as_ty` field attribute. It does not support generics and thus there
+/// is no way to be able to know the length of a public key (it could be 32 or 33 bytes with our
+/// currently supported key types). Adding support for this seems tricky so we decided on this
+/// wrapper approach.
+///
+/// Because of the need to know the length of the public key we use this wrapper type that borsh
+/// serializes as a `Vec<u8>` instead of a slice. Thus the length of the public key is prefixed in
+/// the serialization.
+///
+/// Additionally this type also serde serializes as a hex string which provides a predictable &
+/// readable output.
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
 pub struct VarLengthPublicKey<T: PublicKey>(pub T);
 
-impl<T: PublicKey> From<T> for VarLengthPublicKey<T> {
-    fn from(value: T) -> Self {
-        Self(value)
+impl<T: PublicKey> PublicKey for VarLengthPublicKey<T> {
+    fn credential_id(&self) -> CredentialId {
+        self.0.credential_id()
+    }
+}
+
+impl<T: PublicKey> TryFrom<Vec<u8>> for VarLengthPublicKey<T> {
+    type Error = T::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        T::try_from(value).map(Self)
     }
 }
 
@@ -136,7 +163,6 @@ impl<T: PublicKey> std::ops::DerefMut for VarLengthPublicKey<T> {
     }
 }
 
-// Compare VarLengthPublicKey with the inner type T
 impl<T: PublicKey + PartialEq> PartialEq<T> for VarLengthPublicKey<T> {
     fn eq(&self, other: &T) -> bool {
         self.0 == *other
@@ -146,7 +172,7 @@ impl<T: PublicKey + PartialEq> PartialEq<T> for VarLengthPublicKey<T> {
 impl<T: PublicKey> BorshSerialize for VarLengthPublicKey<T> {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         let buf = self.0.as_ref().to_vec();
-        buf.serialize(writer)
+        BorshSerialize::serialize(&buf, writer)
     }
 }
 
@@ -164,8 +190,12 @@ impl<T: PublicKey> serde::Serialize for VarLengthPublicKey<T> {
     where
         S: serde::Serializer,
     {
-        let s = hex::encode(self.0.as_ref());
-        serializer.serialize_str(&s)
+        if serializer.is_human_readable() {
+            let s = hex::encode(self.0.as_ref());
+            serializer.serialize_str(&s)
+        } else {
+            self.0.serialize(serializer)
+        }
     }
 }
 
@@ -177,9 +207,25 @@ where
     where
         D: serde::Deserializer<'de>,
     {
-        let hex_string = <String as serde::Deserialize>::deserialize(deserializer)?;
-        let bytes = hex::decode(&hex_string).map_err(serde::de::Error::custom)?;
-        let inner = T::try_from(bytes).map_err(|_e| serde::de::Error::custom("invalid hex"))?;
+        if deserializer.is_human_readable() {
+            let hex_string = <String as serde::Deserialize>::deserialize(deserializer)?;
+            let bytes = hex::decode(&hex_string).map_err(serde::de::Error::custom)?;
+            let inner = T::try_from(bytes).map_err(|_e| serde::de::Error::custom("invalid hex"))?;
+            Ok(Self(inner))
+        } else {
+            let inner = T::deserialize(deserializer)?;
+            Ok(Self(inner))
+        }
+    }
+}
+
+impl<T: PublicKey> std::str::FromStr for VarLengthPublicKey<T> {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use anyhow::anyhow;
+        let bytes = hex::decode(s)?;
+        let inner = T::try_from(bytes).map_err(|_| anyhow!("failed to parse bytes"))?;
         Ok(Self(inner))
     }
 }

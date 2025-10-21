@@ -12,9 +12,9 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PubKeyAndSignature;
 use sov_modules_api::transaction::TxDetails;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
-use sov_modules_api::CryptoSpec;
 use sov_modules_api::Multisig;
 use sov_modules_api::SkippedTxContents;
+use sov_modules_api::{CryptoSpec, VarLengthPublicKey};
 use sov_modules_api::{FullyBakedTx, PrivateKey, RawTx, Runtime, Spec, SuccessfulTxContents};
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_rollup_interface::stf::{TxEffect, TxReceiptContents};
@@ -317,7 +317,7 @@ fn test_multisig_signature_verification() {
         tx.signatures
             .try_push(PubKeyAndSignature {
                 signature: random_signature.clone(),
-                pub_key: random_private_key.pub_key(),
+                pub_key: VarLengthPublicKey(random_private_key.pub_key()),
             })
             .unwrap();
         Transaction::<RT, S>::from(tx)
@@ -338,7 +338,7 @@ fn test_multisig_signature_verification() {
         tx.signatures
             .try_push(PubKeyAndSignature {
                 signature: signatures[0].clone(),
-                pub_key: multisig_keys[0].pub_key(),
+                pub_key: VarLengthPublicKey(multisig_keys[0].pub_key()),
             })
             .unwrap();
         Transaction::<RT, S>::from(tx)

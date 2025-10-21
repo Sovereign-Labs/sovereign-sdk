@@ -31,6 +31,7 @@ mod tests;
 
 /// The maximum number of signers allowed in a multisig.
 pub const MAX_SIGNERS: usize = 21;
+type TxPublicKey<S> = VarLengthPublicKey<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey>;
 
 /// Structures that implement this trait represent a call message that can be included in a
 /// transaction.
@@ -92,12 +93,12 @@ pub struct PubKeyAndSignature<S: Spec> {
     /// The signature.
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
     /// The public key
-    pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+    pub pub_key: TxPublicKey<S>,
 }
 
 impl<S: Spec> PubKeyAndSignature<S> {
     /// Returns a reference to the public key.
-    pub fn key(&self) -> &<S::CryptoSpec as CryptoSpec>::PublicKey {
+    pub fn key(&self) -> &TxPublicKey<S> {
         &self.pub_key
     }
 }
@@ -120,7 +121,7 @@ pub struct Version1<Call, S: Spec> {
     pub signatures: SafeVec<PubKeyAndSignature<S>, MAX_SIGNERS>,
     /// The credential IDs that are part of the multisig but not used to sign the transaction.
     // This is used to compute the credential ID statelessly
-    pub unused_pub_keys: SafeVec<<S::CryptoSpec as CryptoSpec>::PublicKey, MAX_SIGNERS>,
+    pub unused_pub_keys: SafeVec<TxPublicKey<S>, MAX_SIGNERS>,
     /// The minimum number of signers required to sign the transaction. In a 3/5 multisig, this would be 3.
     /// Note that...
     ///  - The transaction will be valid if at least `min_signers` signers have signed the transaction, but more signers are allowed. (This is useful for record keeping in case of, say, a unanimous decision)
@@ -160,7 +161,7 @@ impl<Call: BorshSerialize, S: Spec> Version1<Call, S> {
         self.add_signature(signature, key.pub_key())
     }
 
-    /// Serializes only the `UnsignedTransaction` part of the transaction and appens the chain_hash
+    /// Serializes only the `UnsignedTransaction` part of the transaction and appends the chain_hash
     pub fn serialize_for_signing(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
         let mut out = Vec::with_capacity(64); // Preallocate a little capacity to avoid excessive reallocations
         BorshSerialize::serialize(&self.runtime_call, &mut out)
@@ -182,7 +183,10 @@ impl<Call: BorshSerialize, S: Spec> Version1<Call, S> {
         use crate::prelude::anyhow::Context;
         if let Some(index) = self.unused_pub_keys.iter().position(|k| k == &pub_key) {
             self.signatures
-                .try_push(PubKeyAndSignature { signature, pub_key })
+                .try_push(PubKeyAndSignature {
+                    signature,
+                    pub_key: VarLengthPublicKey(pub_key),
+                })
                 .context("Too many signatures in multisig")?;
             self.unused_pub_keys.remove(index);
             Ok(())
@@ -388,10 +392,8 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     }
 
     /// Creates a new transaction with the provided metadata.
-    pub fn new_with_details_v0<
-        P: Into<VarLengthPublicKey<<S::CryptoSpec as CryptoSpec>::PublicKey>>,
-    >(
-        pub_key: P,
+    pub fn new_with_details_v0(
+        pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
         runtime_call: R::Call,
         signature: <S::CryptoSpec as CryptoSpec>::Signature,
         uniqueness: UniquenessData,
@@ -399,7 +401,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     ) -> Self {
         Self::V0(Version0 {
             signature,
-            pub_key: pub_key.into(),
+            pub_key: VarLengthPublicKey(pub_key),
             runtime_call,
             uniqueness,
             details,
@@ -545,10 +547,14 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         self,
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
     ) -> Version1<R::Call, S> {
+        let unused_pub_keys = multisig
+            .signers
+            .into_iter()
+            .map(VarLengthPublicKey)
+            .collect::<Vec<_>>();
         Version1 {
             signatures: SafeVec::new(),
-            unused_pub_keys: multisig
-                .signers
+            unused_pub_keys: unused_pub_keys
                 .try_into()
                 .expect("Too many signers in multisig"),
             min_signers: multisig.required_signers,

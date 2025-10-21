@@ -2,6 +2,7 @@ use sov_accounts::{Accounts, CallMessage, Response};
 use sov_modules_api::transaction::{UnsignedTransaction, Version1};
 use sov_modules_api::{
     CryptoSpec, Error, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+    VarLengthPublicKey,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -307,7 +308,7 @@ fn test_setup_multisig_and_act() {
             tx.signatures
                 .try_push(PubKeyAndSignature {
                     signature: non_member_sig,
-                    pub_key: non_member_key.pub_key(),
+                    pub_key: VarLengthPublicKey(non_member_key.pub_key()),
                 })
                 .unwrap();
         }
@@ -358,7 +359,7 @@ fn test_setup_multisig_and_act() {
             tx.signatures
                 .try_push(PubKeyAndSignature {
                     signature: duplicate_sig,
-                    pub_key: multisig_keys[0].pub_key(),
+                    pub_key: VarLengthPublicKey(multisig_keys[0].pub_key()),
                 })
                 .unwrap();
         }
