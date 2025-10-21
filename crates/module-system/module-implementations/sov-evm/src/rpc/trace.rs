@@ -132,7 +132,7 @@ where
 
         // Replay previous transactions in the block
         for tx in txs_to_replay {
-            // Skip the transaction we're tracing
+            // As soon as we reach target tx - exit the loop
             if *tx.signed_transaction.hash() == tx_hash {
                 break;
             }
