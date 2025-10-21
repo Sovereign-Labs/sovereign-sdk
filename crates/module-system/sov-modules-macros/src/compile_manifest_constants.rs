@@ -73,13 +73,11 @@ pub struct TomlBech32Value {
 #[derive(serde::Deserialize)]
 pub struct TomlHexValue {
     hex: String,
-    r#type: String,
 }
 
 #[derive(serde::Deserialize)]
 pub struct TomlByteStringValue {
     byte_string: String,
-    r#type: String,
 }
 
 pub enum AllowedTomlValue {
@@ -111,6 +109,8 @@ fn parse_constant_inner(value: &toml::Value, span: Span) -> syn::Result<AllowedT
                 Ok(AllowedTomlValue::Bech32(bech32_table))
             } else if let Ok(hex_table) = value.clone().try_into::<TomlHexValue>() {
                 Ok(AllowedTomlValue::Hex(hex_table))
+            } else if let Ok(byte_string_table) = value.clone().try_into::<TomlByteStringValue>() {
+                Ok(AllowedTomlValue::ByteString(byte_string_table))
             } else {
                 Err(error("table"))
             }
@@ -194,12 +194,10 @@ fn allowed_toml_value_to_const_expr(
             let bech32_type = format_ident!("{}", bech32.r#type);
             toml_bech32_value_to_rust(constant_name, &bech32.bech32, &bech32_type)?
         }
-        AllowedTomlValue::Hex(hex) => toml_hex_value_to_rust(constant_name, &hex.hex, &hex.r#type)?,
-        AllowedTomlValue::ByteString(byte_string) => toml_byte_string_value_to_rust(
-            constant_name,
-            &byte_string.byte_string,
-            &byte_string.r#type,
-        )?,
+        AllowedTomlValue::Hex(hex) => toml_hex_value_to_rust(constant_name, &hex.hex)?,
+        AllowedTomlValue::ByteString(byte_string) => {
+            toml_byte_string_value_to_rust(constant_name, &byte_string.byte_string)?
+        }
     })
 }
 
@@ -330,49 +328,25 @@ pub fn toml_bech32_value_to_rust(
 pub fn toml_hex_value_to_rust(
     constant_name: &syn::LitStr,
     hex_str: &str,
-    type_str: &str,
 ) -> syn::Result<syn::Expr> {
     let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
     let bytes = hex::decode(hex_str)
         .map_err(|e| syn::Error::new(constant_name.span(), format!("Invalid hex string: {e}")))?;
 
-    bytes_to_array_expr(constant_name, &bytes, type_str)
+    bytes_to_array_expr(&bytes)
 }
 
 pub fn toml_byte_string_value_to_rust(
-    constant_name: &syn::LitStr,
+    _constant_name: &syn::LitStr,
     string: &str,
-    type_str: &str,
 ) -> syn::Result<syn::Expr> {
-    let bytes = string.as_bytes();
-    bytes_to_array_expr(constant_name, bytes, type_str)
+    bytes_to_array_expr(string.as_bytes())
 }
 
-fn bytes_to_array_expr(
-    constant_name: &syn::LitStr,
-    bytes: &[u8],
-    type_str: &str,
-) -> syn::Result<syn::Expr> {
-    // Validate array length if type is [u8; N]
-    if let Ok(syn::Type::Array(arr)) = syn::parse_str::<syn::Type>(type_str) {
-        if let syn::Expr::Lit(syn::ExprLit {
-            lit: syn::Lit::Int(len),
-            ..
-        }) = &arr.len
-        {
-            let expected: usize = len.base10_parse()?;
-            if bytes.len() != expected {
-                return Err(syn::Error::new(
-                    constant_name.span(),
-                    format!("Has {} bytes, expected {expected}", bytes.len()),
-                ));
-            }
-        }
-    }
-
-    // Generate [b1, b2, b3, ...]
+fn bytes_to_array_expr(bytes: &[u8]) -> syn::Result<syn::Expr> {
+    // Generate [1u8, 2u8, 3u8, ...] with u8 suffix for type inference
     let elems = bytes.iter().map(|b| {
-        let lit = syn::LitInt::new(&b.to_string(), Span::call_site());
+        let lit = syn::LitInt::new(&format!("{b}u8"), Span::call_site());
         syn::Expr::Lit(syn::ExprLit {
             attrs: Vec::new(),
             lit: syn::Lit::Int(lit),

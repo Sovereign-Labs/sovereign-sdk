@@ -196,7 +196,45 @@ ARRAY_OF_U8 = [
     11,
 ]
 
+# --- Hex constants (valid) ---
+# Short hex (2 bytes)
+HEX_SHORT = { hex = "0xaabb" }
+# Medium hex (10 bytes, like namespace)
+HEX_MEDIUM = { hex = "0x736f762d746573742d70" }
+# Long hex (32 bytes, like hash)
+HEX_LONG = { hex = "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20" }
+# Hex without 0x prefix (also valid)
+HEX_NO_PREFIX = { hex = "aabbccdd" }
+# Empty hex (0 bytes)
+HEX_EMPTY = { hex = "0x" }
+# Const hex (cannot be overridden at runtime)
+CONST_HEX_ARRAY = { const = { hex = "0x0102030405" } }
 
+# --- Hex constants (invalid - for trybuild tests) ---
+# Invalid hex character 'z'
+HEX_INVALID_STRING = { hex = "0xzzzz" }
+# Odd length hex string (incomplete byte)
+HEX_ODD_LENGTH = { hex = "0xaaa" }
+
+# --- Byte string constants (valid) ---
+# ASCII string (10 bytes)
+BYTE_STRING_ASCII = { byte_string = "sov-test-b" }
+# Short ASCII (5 bytes)
+BYTE_STRING_SHORT = { byte_string = "hello" }
+# UTF-8 with Cyrillic - exactly 10 bytes (5 cyrillic chars × 2 bytes each)
+BYTE_STRING_UTF8 = { byte_string = "абвгд" }
+# UTF-8 with emoji + ASCII - exactly 10 bytes (🎉=4 + "hello"=5 + "!"=1)
+BYTE_STRING_EMOJI = { byte_string = "🎉hello!" }
+# UTF-8 mixed - exactly 10 bytes (Hi!=3 + мир=6 + !=1)
+BYTE_STRING_MIXED = { byte_string = "Hi!мир!" }
+# Empty string (0 bytes)
+BYTE_STRING_EMPTY = { byte_string = "" }
+# Single character
+BYTE_STRING_SINGLE = { byte_string = "a" }
+# Const byte string (cannot be overridden at runtime)
+CONST_BYTE_STRING = { const = { byte_string = "constant" } }
+
+# --- Byte string constants (invalid - for trybuild tests) ---
 
 
 BANK_DISCRIMINANT = 0
@@ -238,7 +276,7 @@ TEST_ACCESSORY_MODULE_DISCRIMINANT = 245
 MY_MODULE_DISCRIMINANT = 246
 TEST_MODULE_DISCRIMINANT = 247
 ROUTING_RECIPIENT_DISCRIMINANT = 248
-EXAMPLE_MODULE_DISCRIMINANT = 249 
+EXAMPLE_MODULE_DISCRIMINANT = 249
 SYNTHETIC_LOAD_DISCRIMINANT = 250
 TEST_RECIPIENT_DISCRIMINANT = 251
 ACCESS_PATTERN_DISCRIMINANT = 252
