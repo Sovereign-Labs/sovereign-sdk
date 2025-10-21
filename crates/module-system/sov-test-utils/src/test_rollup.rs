@@ -11,6 +11,7 @@ use std::sync::Arc;
 use crate::postgres::create_postgres_container;
 use crate::postgres::CreatePostgresError;
 use crate::postgres::PostgresImage;
+use crate::Transaction;
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
     TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
@@ -18,6 +19,7 @@ use crate::{
 use anyhow::Context;
 use derivative::Derivative;
 use serde::Deserialize;
+use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
@@ -307,7 +309,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         RollupConfig {
             storage: RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf()),
             runner: RunnerConfig {
-                genesis_height: 0,
                 da_polling_interval_ms: 30,
                 da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
@@ -852,6 +853,14 @@ where
         let current_height = get_height(&self.client).await.unwrap();
         let end_height = current_height.get() + delta;
         self.wait_for_height(end_height).await;
+    }
+
+    pub async fn send_tx_to_sequencer(
+        &self,
+        tx: &Transaction<R::Runtime, R::Spec>,
+    ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
+        let resp = self.client.client.send_txs_to_sequencer(&[tx]).await?;
+        Ok(resp[0].clone())
     }
 }
 

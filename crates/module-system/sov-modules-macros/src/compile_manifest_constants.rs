@@ -70,12 +70,24 @@ pub struct TomlBech32Value {
     r#type: String,
 }
 
+#[derive(serde::Deserialize)]
+pub struct TomlHexValue {
+    hex: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct TomlByteStringValue {
+    byte_string: String,
+}
+
 pub enum AllowedTomlValue {
     Bool(bool),
     Integer(i64),
     String(String),
     Array(Vec<AllowedTomlValue>),
     Bech32(TomlBech32Value),
+    Hex(TomlHexValue),
+    ByteString(TomlByteStringValue),
 }
 
 pub struct ParsedConstant {
@@ -95,6 +107,10 @@ fn parse_constant_inner(value: &toml::Value, span: Span) -> syn::Result<AllowedT
         Value::Table(_) => {
             if let Ok(bech32_table) = value.clone().try_into::<TomlBech32Value>() {
                 Ok(AllowedTomlValue::Bech32(bech32_table))
+            } else if let Ok(hex_table) = value.clone().try_into::<TomlHexValue>() {
+                Ok(AllowedTomlValue::Hex(hex_table))
+            } else if let Ok(byte_string_table) = value.clone().try_into::<TomlByteStringValue>() {
+                Ok(AllowedTomlValue::ByteString(byte_string_table))
             } else {
                 Err(error("table"))
             }
@@ -124,6 +140,18 @@ fn parse_constant(value: &toml::Value, span: Span) -> syn::Result<ParsedConstant
     if let Ok(with_custom_override) = value.clone().try_into::<TomlConstValue>() {
         Ok(ParsedConstant {
             value: parse_constant_inner(&with_custom_override.const_value, span)?,
+            make_const: true,
+        })
+    } else if let Ok(hex_value) = value.clone().try_into::<TomlHexValue>() {
+        // Hex values are always const (no runtime overrides)
+        Ok(ParsedConstant {
+            value: AllowedTomlValue::Hex(hex_value),
+            make_const: true,
+        })
+    } else if let Ok(byte_string_value) = value.clone().try_into::<TomlByteStringValue>() {
+        // Byte string values are always const (no runtime overrides)
+        Ok(ParsedConstant {
+            value: AllowedTomlValue::ByteString(byte_string_value),
             make_const: true,
         })
     } else {
@@ -166,6 +194,10 @@ fn allowed_toml_value_to_const_expr(
             let bech32_type = format_ident!("{}", bech32.r#type);
             toml_bech32_value_to_rust(constant_name, &bech32.bech32, &bech32_type)?
         }
+        AllowedTomlValue::Hex(hex) => toml_hex_value_to_rust(constant_name, &hex.hex)?,
+        AllowedTomlValue::ByteString(byte_string) => {
+            toml_byte_string_value_to_rust(constant_name, &byte_string.byte_string)?
+        }
     })
 }
 
@@ -182,13 +214,15 @@ fn allowed_toml_value_to_expr_with_override_logic(value: &AllowedTomlValue) -> T
             // leaked once? See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2510>.
             &*env_value.leak()
         }),
-        AllowedTomlValue::Array(_) => quote::quote!({
-            use sov_modules_api::prelude::{serde, toml};
+        AllowedTomlValue::Array(_) | AllowedTomlValue::Hex(_) | AllowedTomlValue::ByteString(_) => {
+            quote::quote!({
+                use sov_modules_api::prelude::{serde, toml};
 
-            let deserializer = toml::de::ValueDeserializer::new(&env_value);
-            let owned: Vec<_> = serde::Deserialize::deserialize(deserializer).unwrap();
-            owned.try_into().unwrap()
-        }),
+                let deserializer = toml::de::ValueDeserializer::new(&env_value);
+                let owned: Vec<_> = serde::Deserialize::deserialize(deserializer).unwrap();
+                owned.try_into().unwrap()
+            })
+        }
     }
 }
 
@@ -289,4 +323,39 @@ pub fn toml_bech32_value_to_rust(
     };
 
     syn::parse2(const_expr_tokens)
+}
+
+pub fn toml_hex_value_to_rust(
+    constant_name: &syn::LitStr,
+    hex_str: &str,
+) -> syn::Result<syn::Expr> {
+    let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    let bytes = hex::decode(hex_str)
+        .map_err(|e| syn::Error::new(constant_name.span(), format!("Invalid hex string: {e}")))?;
+
+    bytes_to_array_expr(&bytes)
+}
+
+pub fn toml_byte_string_value_to_rust(
+    _constant_name: &syn::LitStr,
+    string: &str,
+) -> syn::Result<syn::Expr> {
+    bytes_to_array_expr(string.as_bytes())
+}
+
+fn bytes_to_array_expr(bytes: &[u8]) -> syn::Result<syn::Expr> {
+    // Generate [1u8, 2u8, 3u8, ...] with u8 suffix for type inference
+    let elems = bytes.iter().map(|b| {
+        let lit = syn::LitInt::new(&format!("{b}u8"), Span::call_site());
+        syn::Expr::Lit(syn::ExprLit {
+            attrs: Vec::new(),
+            lit: syn::Lit::Int(lit),
+        })
+    });
+
+    Ok(syn::Expr::Array(syn::ExprArray {
+        attrs: Vec::new(),
+        bracket_token: syn::token::Bracket::default(),
+        elems: Punctuated::from_iter(elems),
+    }))
 }

@@ -14,8 +14,6 @@ pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 /// Configuration for StateTransitionRunner.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct RunnerConfig {
-    /// DA start height.
-    pub genesis_height: u64,
     /// Polling interval for the DA service to check the sync status (in milliseconds).
     pub da_polling_interval_ms: u64,
     /// How much total time DA service has to provide block, including re-orgs, retries, etc.

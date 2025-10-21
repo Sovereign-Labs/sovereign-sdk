@@ -38,9 +38,15 @@ pub mod first_test_module {
         phantom: std::marker::PhantomData<S>,
     }
 
+    #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+    #[serde(transparent)]
+    pub struct MockGenesisParams {
+        pub genesis_da_height: u64,
+    }
+
     impl<S: Spec> Module for FirstTestStruct<S> {
         type Spec = S;
-        type Config = ();
+        type Config = MockGenesisParams;
         type CallMessage = MyStruct;
         type Event = ();
 
@@ -129,7 +135,7 @@ pub mod second_test_module {
 
 #[derive(Default, Genesis, PartialEq, Eq, DispatchCall, MessageCodec, CliWallet)]
 pub struct Runtime<S: Spec> {
-    pub first: first_test_module::FirstTestStruct<S>,
+    pub chain_state: first_test_module::FirstTestStruct<S>,
     pub second: second_test_module::SecondTestStruct<S>,
 }
 
@@ -137,14 +143,14 @@ pub struct Runtime<S: Spec> {
 fn build_runtime_call() {
     use sov_modules_api::prelude::clap::Parser;
 
-    let expected_foo = RuntimeCall::First(first_test_module::MyStruct {
+    let expected_foo = RuntimeCall::ChainState(first_test_module::MyStruct {
         first_field: 1,
         str_field: SizedSafeString::<10>::try_from("hello").unwrap(),
     });
     let foo_from_cli: RuntimeSubcommand<JsonStringArg, TestSpec> =
         <RuntimeSubcommand<JsonStringArg, TestSpec>>::try_parse_from([
             "main",
-            "first",
+            "chain-state",
             "--json",
             r#"{"first_field": 1, "str_field": "hello"}"#,
             "--chain-id",

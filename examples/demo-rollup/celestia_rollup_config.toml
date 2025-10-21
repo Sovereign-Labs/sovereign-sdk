@@ -49,10 +49,7 @@ backoff_max_times = 10
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
 
-# We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
-# any blocks before this height, and any blobs at this height will not be processed
 [runner]
-genesis_height = 3
 # Block time for celestia is configured in `docker/run-validator.sh` and we try to set this one to be lower,
 # So status is updated more frequently.
 da_polling_interval_ms = 500

@@ -44,9 +44,9 @@ help: consider further restricting type parameter `T` with trait `Spec`
     |                            +++++++++++++++++++++++
 
 error[E0277]: `ActualSpec` doesn't implement `std::fmt::Debug`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:119:19
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:120:19
     |
-119 | impl TestSpec for ActualSpec {
+120 | impl TestSpec for ActualSpec {
     |                   ^^^^^^^^^^ `ActualSpec` cannot be formatted using `{:?}`
     |
     = help: the trait `std::fmt::Debug` is not implemented for `ActualSpec`
@@ -60,8 +60,8 @@ note: required by a bound in `TestSpec`
     |                             ^^^^^^^^^^^^^^^ required by this bound in `TestSpec`
 help: consider annotating `ActualSpec` with `#[derive(Debug)]`
     |
-117 + #[derive(Debug)]
-118 | struct ActualSpec;
+118 + #[derive(Debug)]
+119 | struct ActualSpec;
     |
 
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
@@ -117,6 +117,23 @@ note: expected this to be `T`
     = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
     = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
     = note: required for the cast from `&QueryModule<S, <T as TestSpec>::Data>` to `&dyn sov_modules_api::ModuleInfo<Spec = T>`
+    = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0271]: type mismatch resolving `<ChainState<S> as ModuleInfo>::Spec == T`
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:19
+    |
+111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+    |                   ^^^^^^^ expected type parameter `T`, found type parameter `S`
+112 | struct Runtime<T: TestSpec, S: Spec> {
+    |                -            - found type parameter
+    |                |
+    |                expected type parameter
+    |
+    = note: expected type parameter `T`
+               found type parameter `S`
+    = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+    = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+    = note: required for the cast from `&sov_chain_state::ChainState<S>` to `&dyn sov_modules_api::ModuleInfo<Spec = T>`
     = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `impl ::sov_modules_api::GenesisState<<Self as ::sov_modules_api::Genesis>::Spec>: GenesisState<S>` is not satisfied
@@ -226,6 +243,23 @@ note: expected this to be `T`
     = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
     = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
     = note: required for the cast from `&QueryModule<S, <T as TestSpec>::Data>` to `&dyn sov_modules_api::ModuleInfo<Spec = T>`
+    = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0271]: type mismatch resolving `<ChainState<S> as ModuleInfo>::Spec == T`
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+    |
+111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+    |                            ^^^^^^^^^^^^ expected type parameter `T`, found type parameter `S`
+112 | struct Runtime<T: TestSpec, S: Spec> {
+    |                -            - found type parameter
+    |                |
+    |                expected type parameter
+    |
+    = note: expected type parameter `T`
+               found type parameter `S`
+    = note: a type parameter was expected, but a different one was found; you might be missing a type parameter or trait bound
+    = note: for more information, visit https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters
+    = note: required for the cast from `&sov_chain_state::ChainState<S>` to `&dyn sov_modules_api::ModuleInfo<Spec = T>`
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0599]: the method `clone` exists for struct `ApiState<T>`, but its trait bounds were not satisfied

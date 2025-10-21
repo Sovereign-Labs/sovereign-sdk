@@ -1,0 +1,5 @@
+error: Invalid hex string: Invalid character 'z' at position 0
+ --> tests/integration/trybuild/constants/hex_invalid_string.rs:3:43
+  |
+3 | const NAMESPACE: [u8; 10] = config_value!("HEX_INVALID_STRING");
+  |                                           ^^^^^^^^^^^^^^^^^^^^

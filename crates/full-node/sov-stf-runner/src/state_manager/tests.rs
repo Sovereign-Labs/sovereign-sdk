@@ -6,6 +6,7 @@ use std::sync::Arc;
 use futures::StreamExt;
 use proptest::prelude::*;
 use rand::SeedableRng;
+use serde::Deserialize;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
@@ -19,6 +20,7 @@ use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{DaSpec, RelevantBlobIters};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::stf::GenesisParams;
 use sov_rollup_interface::stf::{
     ApplySlotOutput, BatchReceipt, ExecutionContext, StateTransitionFunction,
 };
@@ -28,6 +30,15 @@ use sov_state::{
 };
 
 use super::*;
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MockGenesisParams;
+
+impl GenesisParams for MockGenesisParams {
+    fn genesis_slot_number(&self) -> u64 {
+        0
+    }
+}
 
 /// A mock implementation of the [`StateTransitionFunction`]
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -39,7 +50,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
     type Address = Vec<u8>;
     type StateRoot = <ProverStorage<S> as Storage>::Root;
     type GasPrice = ();
-    type GenesisParams = ();
+    type GenesisParams = MockGenesisParams;
     type PreState = ();
     type ChangeSet = ();
     type StorageProof = ();

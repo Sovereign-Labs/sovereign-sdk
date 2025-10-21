@@ -1,7 +1,10 @@
+use crate::evm::evm_test_helper::alloy_client;
+use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
+use alloy_provider::Provider;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
@@ -11,6 +14,30 @@ use sov_rpc_eth_types::FilterWithCursor;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 use sov_sequencer::SeqConfigExtension;
 use sov_test_utils::test_rollup::TestRollup;
+use sov_test_utils::SimpleStorage;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_log_from_pending_block() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    let client = alloy_client(rollup.http_addr);
+    let contract = SimpleStorage::deploy(client.clone()).await?;
+    let tx = contract.emitLogs(U256::ZERO, U256::from(1)).send().await?;
+    rollup.pause_preferred_batches().await;
+    let receipt = tx.get_receipt().await?;
+
+    let filter = Filter::new()
+        .from_block(BlockNumberOrTag::Pending)
+        .to_block(BlockNumberOrTag::Pending);
+    let logs = client.get_logs(&filter).await?;
+    let receipt_logs = receipt.inner.into_logs();
+    assert_eq!(receipt_logs, logs);
+    assert_eq!(receipt_logs.len(), 1);
+    assert_eq!(receipt_logs[0].block_hash, None);
+    assert_eq!(receipt_logs[0].block_timestamp, Some(0));
+
+    Ok(())
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs() {

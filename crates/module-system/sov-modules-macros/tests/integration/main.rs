@@ -34,6 +34,10 @@ fn trybuild() {
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_not_a_string.rs");
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_prefix_too_short.rs");
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_prefix_too_long.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_invalid_string.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_odd_length.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_too_long.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_too_short.rs");
 
     t.compile_fail("tests/integration/trybuild/module_info/derive_on_enum_not_supported.rs");
     t.compile_fail("tests/integration/trybuild/module_info/field_missing_attribute.rs");
