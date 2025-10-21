@@ -22,14 +22,14 @@ impl<S: Spec> Accounts<S> {
                 // Case 1: The requested address is the default address
                 if requested_address == default_address {
                     return Ok(default_address.clone());
-                } else {
-                    if let Some(account) = self.accounts.get(requested_address, state)? {
-                        // Case 2: The requested address is not the default address
-                        if account.allowed_credentials.contains(credential_id) {
-                            return Ok(requested_address.clone());
-                        }
+                } else if let Some(account) = self.accounts.get(requested_address, state)? {
+                    // Case 2: The requested address is not the default address
+                    if account.allowed_credentials.contains(credential_id) {
+                        return Ok(requested_address.clone());
                     }
+                    // fall through to the error   
                 }
+                // Fall through to the error
             }
             // Case 3: No address was requested (so the default address is used)
             None => return Ok(default_address.clone()),

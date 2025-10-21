@@ -186,7 +186,7 @@ fn test_setup_multisig_and_act() {
             )),
             sov_modules_api::capabilities::UniquenessData::Generation(0),
             default_test_tx_details::<S>(),
-            Some(address.clone()),
+            Some(address),
         )
         .to_multisig_tx(multisig.clone())
     };

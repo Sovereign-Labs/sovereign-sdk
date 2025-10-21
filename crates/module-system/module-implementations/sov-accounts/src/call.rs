@@ -34,7 +34,7 @@ impl<S: Spec> Accounts<S> {
         // Insert the new credential id -> account mapping
         let mut account = self
             .accounts
-            .get(&context.sender(), state)?
+            .get(context.sender(), state)?
             .unwrap_or_default();
         if account.allowed_credentials.contains(&new_credential_id) {
             bail!("Credential already exists in account");
