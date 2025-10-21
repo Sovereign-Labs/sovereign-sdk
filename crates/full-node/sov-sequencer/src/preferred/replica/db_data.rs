@@ -114,7 +114,7 @@ impl EventsNotificationPayload {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DbData {
     BatchStart(BatchToStore),
-    Transaction(FullyBakedTx),
+    Transaction(u64, FullyBakedTx),
     BatchEnd(BatchToStore),
     NewProof,
 }
@@ -122,6 +122,16 @@ pub(crate) enum DbData {
 impl DbData {
     pub(crate) fn is_batch_end(&self) -> bool {
         matches!(self, DbData::BatchEnd(_))
+    }
+
+    pub(crate) fn sequence_number(&self) -> u64 {
+        match self {
+            DbData::BatchStart(batch_to_store) | DbData::BatchEnd(batch_to_store) => {
+                batch_to_store.sequence_number
+            }
+            DbData::Transaction(sequence_number, _) => *sequence_number,
+            DbData::NewProof => 0,
+        }
     }
 }
 
@@ -154,7 +164,7 @@ pub(crate) fn row_to_event(row: PgRow) -> Result<(DbData, EventType), ParsingErr
         }
         EventType::Transaction => {
             let baked_tx = FullyBakedTx::new(data);
-            DbData::Transaction(baked_tx)
+            DbData::Transaction(sequence_number, baked_tx)
         }
 
         EventType::BatchEnd => {
