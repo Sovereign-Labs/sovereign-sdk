@@ -191,7 +191,7 @@ pub const TEST_DEFAULT_MOCK_DA_ON_ANY_SUBMIT: BlockProducingConfig =
     };
 
 /// Generates a default [`TxDetails`] for testing.
-pub fn default_test_tx_details<S: Spec>() -> TxDetails<S> {
+pub fn default_test_tx_details<S: Spec>() -> TxDetails<S::Gas> {
     TxDetails {
         max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
         max_fee: TEST_DEFAULT_MAX_FEE,
@@ -206,7 +206,7 @@ pub fn default_test_signed_transaction<T: TransactionCallable, S: Spec>(
     msg: &T::Call,
     generation: u64,
     chain_hash: &[u8; 32],
-) -> Transaction<T, S> {
+) -> Transaction<T, S::Gas, S::CryptoSpec> {
     let tx_details = default_test_tx_details::<S>();
     test_signed_transaction(key, msg, generation, chain_hash, tx_details)
 }
@@ -218,8 +218,8 @@ pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
     generation: u64,
     chain_hash: &[u8; 32],
     tx_details: TxDetails<S>,
-) -> Transaction<T, S> {
-    Transaction::<T, S>::new_signed_tx(
+) -> Transaction<T, S::Gas, S::CryptoSpec> {
+    Transaction::<T, S::Gas, S::CryptoSpec>::new_signed_tx(
         key,
         chain_hash,
         UnsignedTransaction::new(

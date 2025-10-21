@@ -7,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::proof_metadata::{ProofType, SerializeProofWithDetails};
 use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
-use sov_modules_api::{Amount, ProofSender, Spec};
+use sov_modules_api::{Amount, Gas, ProofSender, Spec};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -109,7 +109,7 @@ pub fn serialize_proof_blob_with_metadata<S: Spec>(
     Ok(borsh::to_vec(&proof_with_details)?.into())
 }
 
-fn make_details<S: Spec>(max_fee: Amount) -> TxDetails<S> {
+fn make_details<G: Gas>(max_fee: Amount) -> TxDetails<G> {
     TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee,

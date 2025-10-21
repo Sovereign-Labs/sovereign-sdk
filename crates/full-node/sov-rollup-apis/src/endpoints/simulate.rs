@@ -250,7 +250,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         Self::axum_router(std::sync::Arc::new(self))
     }
 
-    fn tx_details(&self, partial: TxDetailsParameter) -> Result<TxDetails<S>, SimulateError> {
+    fn tx_details(&self, partial: TxDetailsParameter) -> Result<TxDetails<S::Gas>, SimulateError> {
         let gas_limit = partial
             .gas_limit
             .map(TryInto::try_into)

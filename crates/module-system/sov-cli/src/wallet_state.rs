@@ -24,7 +24,7 @@ where
     Tx: DispatchCall,
 {
     /// The accumulated transactions to be submitted to the DA layer.
-    pub unsent_transactions: Vec<UnsignedTransactionWithoutUniqueness<S, Tx>>,
+    pub unsent_transactions: Vec<UnsignedTransactionWithoutUniqueness<S::Gas, Tx>>,
     /// The addresses in the wallet
     pub addresses: AddressList<S>,
     /// The REST API URL
@@ -131,7 +131,7 @@ This discrepancy may result in data layout inconsistency. Consider one of the fo
                 let generation = generation
                     .checked_add(offset as u64)
                     .expect("Generation number overflow");
-                sign_tx(signing_key, &tx, generation).expect("Tx signing failed")
+                sign_tx::<S, Tx>(signing_key, &tx, generation).expect("Tx signing failed")
             })
             .collect()
     }
@@ -160,14 +160,14 @@ This discrepancy may result in data layout inconsistency. Consider one of the fo
 /// Returns borsh serialized [`Transaction`].
 pub(crate) fn sign_tx<S, Tx>(
     signing_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
-    tx: &UnsignedTransactionWithoutUniqueness<S, Tx>,
+    tx: &UnsignedTransactionWithoutUniqueness<S::Gas, Tx>,
     generation: u64,
 ) -> anyhow::Result<Vec<u8>>
 where
     S: sov_modules_api::Spec,
     Tx: DispatchCall,
 {
-    let tx = Transaction::<Tx, S>::new_signed_tx(
+    let tx = Transaction::<Tx, S::Gas, S::CryptoSpec>::new_signed_tx(
         signing_key,
         &tx.chain_hash.into(),
         tx.with_generation(generation),

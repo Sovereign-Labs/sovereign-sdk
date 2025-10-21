@@ -8,7 +8,7 @@ use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 pub use sov_modules_api::clap;
 use sov_modules_api::transaction::{PriorityFeeBips, TxDetails, UnsignedTransaction};
-use sov_modules_api::{Amount, DispatchCall, HexHash, HexString, Spec};
+use sov_modules_api::{Amount, DispatchCall, Gas, HexHash, HexString};
 use sov_node_client as node_client;
 
 /// Types and functionality storing and loading the persistent state of the wallet
@@ -39,7 +39,7 @@ pub fn wallet_dir() -> anyhow::Result<impl AsRef<Path>> {
 /// An unsent transaction with the required data to be submitted to the DA layer
 #[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 #[serde(bound = "Tx::Decodable: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct UnsignedTransactionWithoutUniqueness<S: Spec, Tx>
+pub struct UnsignedTransactionWithoutUniqueness<G: Gas, Tx>
 where
     Tx: DispatchCall,
 {
@@ -48,10 +48,10 @@ where
     // The chain root hash
     chain_hash: HexHash,
     // Details related to fees and gas handling.
-    details: TxDetails<S>,
+    details: TxDetails<G>,
 }
 
-impl<S: Spec, Tx> UnsignedTransactionWithoutUniqueness<S, Tx>
+impl<G: Gas, Tx> UnsignedTransactionWithoutUniqueness<G, Tx>
 where
     Tx: DispatchCall,
 {
@@ -62,7 +62,7 @@ where
         chain_hash: [u8; 32],
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
-        gas_limit: Option<S::Gas>,
+        gas_limit: Option<G>,
     ) -> Self {
         Self {
             tx,
@@ -78,7 +78,7 @@ where
 
     /// Creates a new [`UnsignedTransaction`] from this [`UnsignedTransactionWithoutUniqueness`] when
     /// given generation number.
-    pub fn with_generation(&self, generation: u64) -> UnsignedTransaction<Tx, S> {
+    pub fn with_generation(&self, generation: u64) -> UnsignedTransaction<Tx, G> {
         UnsignedTransaction::new(
             self.tx.clone(),
             self.details.chain_id,

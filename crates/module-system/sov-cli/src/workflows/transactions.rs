@@ -103,7 +103,7 @@ where
                 generation,
                 json_output,
             } => {
-                let tx: UnsignedTransactionWithoutUniqueness<S, RT> = transaction.load()?;
+                let tx: UnsignedTransactionWithoutUniqueness<S::Gas, RT> = transaction.load()?;
                 let id = key_nickname.map(|nickname| KeyIdentifier::<S>::ByNickname { nickname });
                 let account = wallet_state.resolve_account(id.as_ref())?;
 
@@ -111,10 +111,10 @@ where
                     format!("Unable to load key {}", account.location.display())
                 })?;
 
-                let signed_tx = HexString::new(sign_tx(&private_key, &tx, generation)?);
+                let signed_tx = HexString::new(sign_tx::<S, RT>(&private_key, &tx, generation)?);
 
                 if json_output {
-                    let output = SignTransactionOutput {
+                    let output = SignTransactionOutput::<S, RT> {
                         generation,
                         input_tx: tx,
                         signed_tx,
@@ -161,7 +161,7 @@ where
     /// Parse from a file or a json string
     pub fn load<RT: CliWallet + Runtime<S>, S: sov_modules_api::Spec, U, E1, E2, E3>(
         self,
-    ) -> anyhow::Result<UnsignedTransactionWithoutUniqueness<S, RT>>
+    ) -> anyhow::Result<UnsignedTransactionWithoutUniqueness<S::Gas, RT>>
     where
         Json: CliFrontEnd<RT> + CliTxImportArg,
         File: CliFrontEnd<RT> + CliTxImportArg,
@@ -220,6 +220,6 @@ where
 #[serde(bound = "Tx::Decodable: serde::Serialize + serde::de::DeserializeOwned")]
 struct SignTransactionOutput<S: Spec, Tx: DispatchCall> {
     generation: u64,
-    input_tx: UnsignedTransactionWithoutUniqueness<S, Tx>,
+    input_tx: UnsignedTransactionWithoutUniqueness<S::Gas, Tx>,
     signed_tx: HexString,
 }
