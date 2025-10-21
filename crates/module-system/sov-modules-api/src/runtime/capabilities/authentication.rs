@@ -16,12 +16,12 @@ use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
     TxDetails,
 };
-use crate::{CryptoSpecExt, Gas};
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
     GasMeteringError, GasSpec, MeteredBorshDeserialize, MeteredBorshDeserializeError,
     MeteredHasher, ProvableStateReader, RawTx, Runtime, Spec,
 };
+use crate::{CryptoSpecExt, Gas};
 use crate::{GetGasPrice, Multisig};
 
 /// The chain ID of the rollup.
@@ -407,7 +407,10 @@ pub fn authenticate<
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     let tx =
-        match <Transaction<D, S::Gas, S::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
+        match <Transaction<D, S::Gas, S::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(
+            &mut raw_tx,
+            state,
+        ) {
             Ok(ok) => ok,
 
             Err(MeteredBorshDeserializeError::GasError(e)) => {
@@ -439,9 +442,10 @@ pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
-    let tx =
-        <Transaction<D, S::Gas, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+    let tx = <Transaction<D, S::Gas, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(
+        &mut raw_tx,
+    )
+    .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(tx.call())
 }

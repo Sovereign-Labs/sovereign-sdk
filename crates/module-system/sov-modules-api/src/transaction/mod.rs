@@ -198,13 +198,17 @@ impl<Call: BorshSerialize, G: Gas, C: CryptoSpecExt> Version1<Call, G, C> {
     }
 }
 
-impl<R: TransactionCallable, G: Gas, C: CryptoSpecExt> From<Version0<R::Call, G, C>> for Transaction<R, G, C> {
+impl<R: TransactionCallable, G: Gas, C: CryptoSpecExt> From<Version0<R::Call, G, C>>
+    for Transaction<R, G, C>
+{
     fn from(value: Version0<R::Call, G, C>) -> Self {
         Transaction::V0(value)
     }
 }
 
-impl<R: TransactionCallable, G: Gas, C: CryptoSpecExt> From<Version1<R::Call, G, C>> for Transaction<R, G, C> {
+impl<R: TransactionCallable, G: Gas, C: CryptoSpecExt> From<Version1<R::Call, G, C>>
+    for Transaction<R, G, C>
+{
     fn from(value: Version1<R::Call, G, C>) -> Self {
         Transaction::V1(value)
     }
@@ -302,9 +306,7 @@ impl<S: Spec<Gas = G>, R: TransactionCallable, G: Gas, C: CryptoSpecExt> Metered
     }
 
     #[cfg(feature = "native")]
-    fn unmetered_deserialize(
-        buf: &mut &[u8],
-    ) -> Result<Self, MeteredBorshDeserializeError<G>> {
+    fn unmetered_deserialize(buf: &mut &[u8]) -> Result<Self, MeteredBorshDeserializeError<G>> {
         Transaction::<R, G, C>::unmetered_deserialize_inner(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
     }
