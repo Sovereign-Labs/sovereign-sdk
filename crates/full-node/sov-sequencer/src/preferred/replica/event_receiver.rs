@@ -5,6 +5,7 @@ use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
+use sqlx::postgres::PgNotification;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use tokio::sync::watch;
@@ -183,7 +184,8 @@ impl EventReceiver {
             // Keep listening for events until a `BatchStart` notification is received,
             // then use that event's ID as both the starting and target event ID.
             None => loop {
-                let notify = self.recv_notifications().await?;
+                let notify = self.listener.recv().await?;
+                let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
                 if matches!(notify.event_type, EventType::BatchStart) {
                     break (notify.event_id, notify.event_id);
                 }
