@@ -8,7 +8,7 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
-use derive_more::{Deref, DerefMut};
+use derive_more::{Deref, DerefMut, From};
 use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
@@ -171,6 +171,7 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 
 #[cfg(feature = "native")]
 /// Sealed or pending block.
+#[derive(From, Debug)]
 pub enum MaybeSealedBlock {
     /// SealedBlock
     Sealed(SealedBlock),
