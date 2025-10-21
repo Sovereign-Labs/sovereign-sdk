@@ -34,6 +34,7 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     assert_eq!(receipt_logs, logs);
     assert_eq!(receipt_logs.len(), 1);
     assert_eq!(receipt_logs[0].block_hash, None);
+    assert_eq!(receipt_logs[0].block_timestamp, Some(0));
 
     Ok(())
 }
