@@ -102,23 +102,23 @@ impl<
 
 /// A wrapper around an inner [`PublicKey`] that forces particular serialization formats.
 ///
-/// This is needed particularly for the [`crate::transaction::Transaction`] structs `pub_key` field so that serde
-/// serialization is predictable instead of relying on the serializatioon of the generic type,
+/// This is needed particularly for the [`crate::transaction::Transaction`] struct's `pub_key` field so that serde
+/// serialization is predictable instead of relying on the serialization of the generic type,
 /// which could be anything. If the type serializes to anything then it makes it impossible to know
 /// how to construct a transaction in client-side libraries like the web3 SDK.
 ///
 /// We attempted to add support for this purely using attributes on the
-/// [`crate::transaction::Transaction`] struct but run into limitations in
-/// [`sov_universal_wallet`]s `as_ty` field attribute. It does not support generics and thus there
-/// is no way to be able to know the length of a public key (it could be 32 or 33 bytes with our
+/// [`crate::transaction::Transaction`] struct but ran into limitations in
+/// [`sov_universal_wallet`]'s `as_ty` field attribute. It does not support generics and thus there
+/// is no way to know the length of a public key (it could be 32 or 33 bytes with our
 /// currently supported key types). Adding support for this seems tricky so we decided on this
 /// wrapper approach.
 ///
-/// Because of the need to know the length of the public key we use this wrapper type that borsh
+/// Because of the need to know the length of the public key, we use this wrapper type that borsh
 /// serializes as a `Vec<u8>` instead of a slice. Thus the length of the public key is prefixed in
 /// the serialization.
 ///
-/// Additionally this type also serde serializes as a hex string which provides a predictable &
+/// Additionally, this type also serde serializes as a hex string which provides a predictable and
 /// readable output.
 #[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
 pub struct VarLengthPublicKey<T: PublicKey>(pub T);
