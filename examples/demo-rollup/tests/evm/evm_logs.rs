@@ -22,12 +22,10 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client.clone()).await?;
-    let receipt = contract
-        .emitLogs(U256::ZERO, U256::from(1))
-        .send()
-        .await?
-        .get_receipt()
-        .await?;
+    let tx = contract.emitLogs(U256::ZERO, U256::from(1)).send().await?;
+    rollup.pause_preferred_batches().await;
+    let receipt = tx.get_receipt().await?;
+
     let filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
         .to_block(BlockNumberOrTag::Pending);
