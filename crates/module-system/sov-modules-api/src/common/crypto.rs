@@ -260,7 +260,10 @@ impl<Pubkey: PublicKeyExt> Multisig<Pubkey> {
         let mut sorted_signers = self.signers.clone();
         sorted_signers.sort();
         hasher.update(self.required_signers.to_le_bytes());
-        hasher.update(borsh::to_vec(&sorted_signers).expect("Serialization to vec is infallible"));
+        hasher.update((sorted_signers.len() as u32).to_le_bytes());
+        for signer in sorted_signers.iter() {
+            hasher.update(borsh::to_vec(&signer.as_ref()).expect("Serialization to vec is infalliable"));
+        }
         CredentialId::from_bytes(hasher.finalize().into())
     }
 
