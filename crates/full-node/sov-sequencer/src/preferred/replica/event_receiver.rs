@@ -5,7 +5,6 @@ use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
-use sqlx::postgres::PgNotification;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use tokio::sync::watch;
