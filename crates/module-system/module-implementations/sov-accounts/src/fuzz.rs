@@ -1,5 +1,5 @@
 use arbitrary::{Arbitrary, Unstructured};
-use sov_modules_api::{CryptoSpec, DaSpec, Module, Spec, StateCheckpoint};
+use sov_modules_api::{CryptoSpec, DaSpec, Module, SafeVec, Spec, StateCheckpoint};
 
 use crate::{Account, AccountConfig, AccountData, Accounts, CallMessage};
 
@@ -9,14 +9,21 @@ impl<'a> Arbitrary<'a> for CallMessage {
     }
 }
 
-impl<'a, S> Arbitrary<'a> for Account<S>
-where
-    S: Spec,
-    S::Address: Arbitrary<'a>,
-{
+impl<'a> Arbitrary<'a> for Account {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        let mut allowed_credentials = SafeVec::new();
+        let mut iter = u.arbitrary_iter()?;
+        while let Some(credential_id) = iter.next() {
+            let credential_id = credential_id?;
+            if let Err(_) = allowed_credentials.try_push(credential_id) {
+                return Ok(Self {
+                    allowed_credentials,
+                });
+            }
+        }
+
         Ok(Self {
-            addr: u.arbitrary()?,
+            allowed_credentials,
         })
     }
 }

@@ -1,3 +1,6 @@
+# 2025-10-21
+-  **Breaking change** Adds an optional `address_override` field in the transaction. If (and only if) this field is set, the rollup will use the provided address to execute the transaction (assuming the signer is authorized). If the field is not set, the "default" address generated from the signing key will be used. After this change, the same credential may be used to control multiple logical accounts on the chain - so the chain cannot infer which account you intend to use unless you provide the address. ***This is a breaking change to tx serialization; chains from before the upgrade cannot be synced!***
+
 # 2025-10-20
 - #1925 removes the `genesis_height` param from the rollup_config.toml file. Genesis height is now *only* read from the genesis config file (usually `genesis.json`).
 

@@ -1,11 +1,10 @@
-use anyhow::bail;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use anyhow::{bail, Context as _};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
-use sov_state::namespaces::User;
+use sov_modules_api::{Context, CredentialId, Spec, TxState};
 
-use crate::{Account, Accounts};
+use crate::Accounts;
 
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
@@ -32,29 +31,25 @@ impl<S: Spec> Accounts<S> {
             bail!("Custom account mappings are disabled");
         }
 
-        self.exit_if_credential_exists(&new_credential_id, state)?;
-
         // Insert the new credential id -> account mapping
-        let account = Account {
-            addr: context.sender().clone(),
-        };
-        self.accounts.set(&new_credential_id, &account, state)?;
+        let mut account = self
+            .accounts
+            .get(&context.sender(), state)?
+            .unwrap_or_default();
+        if account.allowed_credentials.contains(&new_credential_id) {
+            bail!("Credential already exists in account");
+        }
+        account
+            .allowed_credentials
+            .try_push(new_credential_id)
+            .with_context(|| {
+                format!(
+                    "Maximum number of allowed credentials for address {} exceeded",
+                    context.sender()
+                )
+            })?;
+        self.accounts.set(context.sender(), &account, state)?;
 
-        Ok(())
-    }
-
-    fn exit_if_credential_exists(
-        &self,
-        new_credential_id: &CredentialId,
-        state: &mut impl StateReader<User>,
-    ) -> Result<()> {
-        anyhow::ensure!(
-            self.accounts
-                .get(new_credential_id, state)
-                .map_err(|err| anyhow!("Error raised while getting account: {err:?}"))?
-                .is_none(),
-            "New CredentialId already exists"
-        );
         Ok(())
     }
 }

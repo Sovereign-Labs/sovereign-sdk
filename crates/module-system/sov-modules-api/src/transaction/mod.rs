@@ -64,6 +64,9 @@ pub struct Version0<Call, S: Spec> {
     #[serde(with = "hex_field_format")]
     #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
     pub pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+    /// The address of the target of the transaction. If no address is provided, the transaction is sent to the default address associated with the public key.
+    #[serde(default)]
+    pub address_override: Option<S::Address>,
     /// The runtime call of the transaction.
     #[sov_wallet(
         bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
@@ -127,6 +130,9 @@ pub struct Version1<Call, S: Spec> {
     ///  - If an invalid signature is detected, the transaction will be invalid. This allows us to use batch verification.
     // This is used to compute the credential ID statelessly.
     pub min_signers: u8,
+    /// The address of the target of the transaction. If no address is provided, the transaction is sent to the default address associated with the public key.
+    #[serde(default)]
+    pub address_override: Option<S::Address>,
     /// The runtime call of the transaction.
     #[sov_wallet(
         bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
@@ -163,6 +169,8 @@ impl<Call: BorshSerialize, S: Spec> Version1<Call, S> {
     /// Serializes only the `UnsignedTransaction` part of the transaction and appens the chain_hash
     pub fn serialize_for_signing(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
         let mut out = Vec::with_capacity(64); // Preallocate a little capacity to avoid excessive reallocations
+        BorshSerialize::serialize(&self.address_override, &mut out)
+            .expect("Serialization to vec is infallible");
         BorshSerialize::serialize(&self.runtime_call, &mut out)
             .expect("Serialization to vec is infallible");
         BorshSerialize::serialize(&self.uniqueness, &mut out)
@@ -396,6 +404,7 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
         details: TxDetails<S>,
     ) -> Self {
         Self::V0(Version0 {
+            address_override: None,
             signature,
             pub_key,
             runtime_call,
@@ -449,15 +458,17 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
     /// Converts the transaction to an unsigned transaction.
     pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self {
-            Transaction::V0(inner) => UnsignedTransaction::new_with_details(
+            Transaction::V0(inner) => UnsignedTransaction::new_with_details_and_address_override(
                 inner.runtime_call.clone(),
                 inner.uniqueness,
                 inner.details.clone(),
+                inner.address_override.clone(),
             ),
-            Transaction::V1(inner) => UnsignedTransaction::new_with_details(
+            Transaction::V1(inner) => UnsignedTransaction::new_with_details_and_address_override(
                 inner.runtime_call.clone(),
                 inner.uniqueness,
                 inner.details.clone(),
+                inner.address_override.clone(),
             ),
         }
     }
@@ -469,6 +480,9 @@ impl<R: TransactionCallable, S: Spec> Transaction<R, S> {
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
+    /// The address of the target of the transaction. If no address is provided, the transaction is sent to the default address associated with the public key.
+    #[serde(default)]
+    pub address_override: Option<S::Address>,
     /// The runtime call
     pub runtime_call: R::Call,
     /// The uniqueness identifier
@@ -498,6 +512,30 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         gas_limit: Option<S::Gas>,
     ) -> Self {
         Self {
+            address_override: None,
+            runtime_call,
+            uniqueness,
+            details: TxDetails {
+                max_priority_fee_bips,
+                max_fee,
+                gas_limit,
+                chain_id,
+            },
+        }
+    }
+
+    /// Creates a new [`UnsignedTransaction`] with the given arguments.
+    pub const fn new_with_address_override(
+        runtime_call: R::Call,
+        chain_id: u64,
+        max_priority_fee_bips: PriorityFeeBips,
+        max_fee: Amount,
+        uniqueness: UniquenessData,
+        gas_limit: Option<S::Gas>,
+        address_override: Option<S::Address>,
+    ) -> Self {
+        Self {
+            address_override,
             runtime_call,
             uniqueness,
             details: TxDetails {
@@ -510,16 +548,27 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     }
 
     /// Creates a new unsigned transaction with the provided metadata.
+    pub const fn new_with_details_and_address_override(
+        runtime_call: R::Call,
+        uniqueness: UniquenessData,
+        details: TxDetails<S>,
+        address_override: Option<S::Address>,
+    ) -> Self {
+        Self {
+            address_override,
+            runtime_call,
+            uniqueness,
+            details,
+        }
+    }
+
+    /// Creates a new unsigned transaction with the provided metadata.
     pub const fn new_with_details(
         runtime_call: R::Call,
         uniqueness: UniquenessData,
         details: TxDetails<S>,
     ) -> Self {
-        Self {
-            runtime_call,
-            uniqueness,
-            details,
-        }
+        Self::new_with_details_and_address_override(runtime_call, uniqueness, details, None)
     }
 
     /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
@@ -544,6 +593,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
     ) -> Version1<R::Call, S> {
         Version1 {
+            address_override: self.address_override,
             signatures: SafeVec::new(),
             unused_pub_keys: multisig
                 .signers

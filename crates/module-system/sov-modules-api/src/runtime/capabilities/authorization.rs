@@ -16,7 +16,7 @@ use crate::{Context, Spec, StateAccessor};
 /// Authorizes transactions to be executed.
 pub trait TransactionAuthorizer<S: Spec> {
     /// Resolves the [`Context`] for a transaction.
-    fn resolve_context(
+    fn resolve_context_and_authorize(
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
@@ -91,4 +91,7 @@ pub struct AuthorizationData<S: Spec> {
 
     /// The default address.
     pub default_address: S::Address,
+
+    /// The address requested by the sender, if any.
+    pub requested_address: Option<S::Address>,
 }

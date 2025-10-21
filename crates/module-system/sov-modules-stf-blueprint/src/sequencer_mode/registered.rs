@@ -170,12 +170,14 @@ where
     let _ = pre_exec_working_set.metrics().take();
 
     metrics.timings.resolve_context_timer.start();
-    let maybe_ctx = runtime.transaction_authorizer().resolve_context(
-        &auth_data,
-        sequencer_da_address,
-        sequencer_rollup_address,
-        &mut pre_exec_working_set,
-    );
+    let maybe_ctx = runtime
+        .transaction_authorizer()
+        .resolve_context_and_authorize(
+            &auth_data,
+            sequencer_da_address,
+            sequencer_rollup_address,
+            &mut pre_exec_working_set,
+        );
     metrics.timings.resolve_context_timer.end();
     metrics.timings.resolve_context_access_metrics = pre_exec_working_set.metrics().take();
 

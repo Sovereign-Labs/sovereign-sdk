@@ -259,7 +259,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
     }
 
     /// Resolves the context for a transaction.
-    fn resolve_context(
+    fn resolve_context_and_authorize(
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
@@ -267,8 +267,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<Context<S>> {
         // This should be resolved by the sequencer registry during blob selection
-        let sender = self.accounts.resolve_sender_address(
+        let sender = self.accounts.resolve_sender_address_and_authorize(
             &auth_data.default_address,
+            &auth_data.requested_address,
             &auth_data.credential_id,
             state,
         )?;
@@ -286,8 +287,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<Context<S>> {
-        let sender = self.accounts.resolve_sender_address(
+        let sender = self.accounts.resolve_sender_address_and_authorize(
             &auth_data.default_address,
+            &auth_data.requested_address,
             &auth_data.credential_id,
             state,
         )?;

@@ -37,6 +37,7 @@ fn test_serde_serialize_tx() {
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
+        address_override: None,
     };
     let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
     let native_json = serde_json::to_value(&native).unwrap();
@@ -75,7 +76,8 @@ fn test_schema_and_native_serialization_consistency() {
                     "max_fee": 10000,
                     "gas_limit": [500, 500],
                     "chain_id": 1337
-                }
+                },
+                "address_override": null
             }
         }"#;
     let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
@@ -104,6 +106,7 @@ fn test_schema_and_native_serialization_consistency() {
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
+        address_override: None,
     };
     let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
     let native_bytes = borsh::to_vec(&native).unwrap();

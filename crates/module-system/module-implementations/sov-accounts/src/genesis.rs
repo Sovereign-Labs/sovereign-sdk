@@ -4,7 +4,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use sov_modules_api::prelude::*;
 use sov_modules_api::{CredentialId, GenesisState};
 
-use crate::{Account, Accounts};
+use crate::{Accounts};
 
 /// Account data for the genesis.
 #[serde_as]
@@ -49,15 +49,9 @@ impl<S: Spec> Accounts<S> {
         }
 
         for acc in &config.accounts {
-            if self.accounts.get(&acc.credential_id, state)?.is_some() {
-                bail!("Account already exists")
-            }
-
-            let new_account = Account {
-                addr: acc.address.clone(),
-            };
-
-            self.accounts.set(&acc.credential_id, &new_account, state)?;
+            let mut account = self.accounts.get(&acc.address, state)?.unwrap_or_default();
+            account.allowed_credentials.try_push(acc.credential_id)?;
+            self.accounts.set(&acc.address, &account, state)?;
         }
 
         Ok(())
