@@ -1,11 +1,10 @@
-#![allow(dead_code)]
 //! Helper utilities for interacting with the DA layer.
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::DaSyncState;
+use sov_rollup_interface::node::{future_or_shutdown, DaSyncState, FutureOrShutdownOutput};
 
 const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 
@@ -93,7 +92,10 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     }
 }
 
-/// Helper struct that make getting finalized block headers more efficient, by caching them.
+/// Helper struct that makes getting finalized block headers more efficient, by caching them.
+///
+/// This provider maintains a background task that periodically polls the DA service for
+/// the latest head and finalized block headers, caching them for efficient access.
 #[derive(Clone)]
 pub struct DaFinalizedHeaderProvider<Da: DaService> {
     da_service: std::sync::Arc<Da>,
@@ -103,35 +105,88 @@ pub struct DaFinalizedHeaderProvider<Da: DaService> {
 }
 
 impl<Da: DaService> DaFinalizedHeaderProvider<Da> {
+    /// Returns the current cached head block header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the background polling task has stopped.
     pub fn get_head(&self) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
-        // TODO: Check if is running and return error
+        if !self.is_background_running.load(Ordering::Acquire) {
+            anyhow::bail!("DA header provider background task has stopped");
+        }
         Ok(self.head.borrow().clone())
     }
 
+    /// Returns the current cached last finalized block header.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the background polling task has stopped.
     pub fn get_last_finalized(&self) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
-        // TODO: Check if is running and return error
+        if !self.is_background_running.load(Ordering::Acquire) {
+            anyhow::bail!("DA header provider background task has stopped");
+        }
         Ok(self.last_finalized.borrow().clone())
     }
 
-    // Currently just a wrapper, but will add checks of cached blocks
+    /// Fetches a block header at the specified height from the DA service.
+    ///
+    /// This is a direct passthrough to the underlying DA service.
     pub async fn get_block_header_at(
         &self,
         height: u64,
     ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
         self.da_service.get_block_header_at(height).await
     }
-
-    // TODO: Can be used
-    // pub fn subscribe_to_head(&self) ->
 }
 
+/// Initializes a DA header provider with a background polling task.
+///
+/// This function fetches the initial head and finalized headers, then spawns a background
+/// task to continuously poll for updates at the specified interval. The background task
+/// will automatically stop when the `shutdown_rx` channel signals shutdown or when all
+/// provider instances are dropped.
+///
+/// # Arguments
+///
+/// * `da_service` - The DA service to poll for headers
+/// * `polling_interval` - How frequently to poll for new headers
+/// * `shutdown_rx` - Watch receiver that signals when to shutdown the background task
+///
+/// # Returns
+///
+/// Returns a `DaFinalizedHeaderProvider` which can be cloned and used to access cached headers.
+///
+/// # Errors
+///
+/// Returns an error if the initial header fetch fails or if `polling_interval` is zero.
 pub async fn initialize_da_header_provider<Da: DaService>(
     da_service: std::sync::Arc<Da>,
     polling_interval: std::time::Duration,
+    shutdown_rx: tokio::sync::watch::Receiver<()>,
 ) -> anyhow::Result<DaFinalizedHeaderProvider<Da>> {
-    // TODO: unwraps
-    let head_header = da_service.get_head_block_header().await.unwrap();
-    let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
+    // Validate parameters
+    if polling_interval.is_zero() {
+        anyhow::bail!("polling_interval must be greater than zero");
+    }
+
+    // Fetch initial headers with proper error handling
+    let head_header = da_service
+        .get_head_block_header()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to fetch initial head header: {:?}", e))?;
+
+    let finalized_header = da_service
+        .get_last_finalized_block_header()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to fetch initial finalized header: {:?}", e))?;
+
+    tracing::info!(
+        head_height = %head_header.height(),
+        finalized_height = %finalized_header.height(),
+        "Initialized DA header provider"
+    );
+
     let (head_sender, head_receiver) = tokio::sync::watch::channel(head_header);
     let (finalized_sender, finalized_receiver) = tokio::sync::watch::channel(finalized_header);
 
@@ -141,31 +196,101 @@ pub async fn initialize_da_header_provider<Da: DaService>(
     let is_running_for_writer = is_running_for_reader.clone();
 
     let _handle = tokio::task::spawn(async move {
-        loop {
-            // Naive implementation to see the effect on the main loop.
-            // Better to bring back subscriptions and use them
-            let Ok(head_header) = da_service.get_head_block_header().await else {
-                break;
-            };
-            if head_sender.send(head_header).is_err() {
-                break;
-            }
-            let Ok(finalized_header) = da_service.get_last_finalized_block_header().await else {
-                break;
-            };
-            if finalized_sender.send(finalized_header).is_err() {
-                break;
-            }
-            tokio::time::sleep(polling_interval).await;
-        }
-
-        is_running_for_writer.store(false, Ordering::Release);
+        background_header_fetch_task(
+            da_service,
+            head_sender,
+            finalized_sender,
+            polling_interval,
+            shutdown_rx,
+            is_running_for_writer,
+        )
+        .await;
     });
 
-    Ok(DaFinalizedHeaderProvider {
+    let provider = DaFinalizedHeaderProvider {
         da_service: own_da_service,
         head: head_receiver,
         last_finalized: finalized_receiver,
         is_background_running: is_running_for_reader,
-    })
+    };
+
+    Ok(provider)
+}
+
+async fn background_header_fetch_task<Da: DaService>(
+    da_service: std::sync::Arc<Da>,
+    head_sender: tokio::sync::watch::Sender<<Da::Spec as DaSpec>::BlockHeader>,
+    finalized_sender: tokio::sync::watch::Sender<<Da::Spec as DaSpec>::BlockHeader>,
+    polling_interval: std::time::Duration,
+    shutdown_rx: tokio::sync::watch::Receiver<()>,
+    is_running_for_writer: std::sync::Arc<AtomicBool>,
+) {
+    let mut interval = tokio::time::interval(polling_interval);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        // Wait for next tick or shutdown
+        match future_or_shutdown(interval.tick(), &shutdown_rx).await {
+            FutureOrShutdownOutput::Shutdown => {
+                tracing::info!("DA header provider received shutdown signal");
+                break;
+            }
+            FutureOrShutdownOutput::Output(_) => {
+                // Fetch head header
+                match future_or_shutdown(da_service.get_head_block_header(), &shutdown_rx).await {
+                    FutureOrShutdownOutput::Shutdown => {
+                        tracing::info!("DA header provider received shutdown signal");
+                        break;
+                    }
+                    FutureOrShutdownOutput::Output(Ok(head_header)) => {
+                        let height = head_header.height();
+                        if head_sender.send(head_header).is_err() {
+                            tracing::debug!(
+                                "All DA header provider receivers dropped, shutting down"
+                            );
+                            break;
+                        }
+                        tracing::trace!(head_height = %height, "Updated cached head header");
+                    }
+                    FutureOrShutdownOutput::Output(Err(e)) => {
+                        tracing::warn!(
+                            ?e,
+                            "Failed to fetch head header, will retry on next interval"
+                        );
+                        continue;
+                    }
+                }
+
+                // Fetch finalized header
+                match future_or_shutdown(da_service.get_last_finalized_block_header(), &shutdown_rx)
+                    .await
+                {
+                    FutureOrShutdownOutput::Shutdown => {
+                        tracing::info!("DA header provider received shutdown signal");
+                        break;
+                    }
+                    FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
+                        let height = finalized_header.height();
+                        if finalized_sender.send(finalized_header).is_err() {
+                            tracing::debug!(
+                                "All DA header provider receivers dropped, shutting down"
+                            );
+                            break;
+                        }
+                        tracing::trace!(finalized_height = %height, "Updated cached finalized header");
+                    }
+                    FutureOrShutdownOutput::Output(Err(e)) => {
+                        tracing::warn!(
+                            ?e,
+                            "Failed to fetch finalized header, will retry on next interval"
+                        );
+                        // Don't continue here - we already updated head, which is acceptable
+                    }
+                }
+            }
+        }
+    }
+
+    is_running_for_writer.store(false, Ordering::Release);
+    tracing::info!("DA header provider background task stopped");
 }

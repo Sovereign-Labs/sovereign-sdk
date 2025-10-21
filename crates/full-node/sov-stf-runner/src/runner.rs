@@ -215,8 +215,13 @@ where
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
         let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
-        let da_header_provider =
-            initialize_da_header_provider(da_service.clone(), da_polling_interval).await?;
+        let shutdown_receiver_for_da_header_provider = secondary_shutdown_receiver.clone();
+        let da_header_provider = initialize_da_header_provider(
+            da_service.clone(),
+            da_polling_interval,
+            shutdown_receiver_for_da_header_provider,
+        )
+        .await?;
 
         let state_manager = StateManager::new(
             storage_manager,

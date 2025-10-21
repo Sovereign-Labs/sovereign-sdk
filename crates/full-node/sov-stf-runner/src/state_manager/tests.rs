@@ -111,7 +111,8 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
     let tempdir = tempfile::tempdir()?;
     let finality = 1000;
     let da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality));
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     da_service.send_transaction(&[10; 10]).await.await??;
     let filtered_block = da_service.get_block_at(1).await?;
@@ -135,7 +136,8 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
 async fn test_instant_finality() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
     let da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS));
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
         state_manager.ledger_db.clone(),
@@ -198,7 +200,8 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         ))
         .await?;
     let da_service = Arc::new(da_service);
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let state_update_receiver = state_manager.state_update_sender.subscribe();
 
@@ -263,7 +266,8 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     let tempdir = tempfile::tempdir()?;
     let finality = 10;
     let da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality));
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let chain_length = 5;
     // Fill some seen transitions without finalizing.
@@ -356,7 +360,8 @@ async fn test_progressing_with_shuffle(
     .await;
 
     let da_service = Arc::new(da_service);
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let mut rng = rand::rngs::SmallRng::from_seed(seed);
 
@@ -583,7 +588,8 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
     .await;
     let da_service = Arc::new(da_service);
 
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     {
         let spammer = da_service.clone();
@@ -674,7 +680,8 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
     )
     .await;
     let da_service = Arc::new(da_service);
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let mut rng = rand::rngs::SmallRng::from_seed(seed);
 
@@ -867,7 +874,7 @@ async fn test_change_in_finalized_header() {
 
     let da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality));
 
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone())
+    let (mut state_manager, _shutdown_tx) = setup_state_manager(tempdir.path(), da_service.clone())
         .await
         .unwrap();
 
@@ -919,7 +926,8 @@ async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result
     let finality = 5;
 
     let da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality));
-    let mut state_manager = setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_tx) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     for height in 1..=chain_length {
         da_service
@@ -998,7 +1006,7 @@ async fn setup_storage_manager(
 async fn setup_state_manager<Da>(
     path: &std::path::Path,
     da_service: std::sync::Arc<Da>,
-) -> anyhow::Result<TestStateManager<Da>>
+) -> anyhow::Result<(TestStateManager<Da>, tokio::sync::watch::Sender<()>)>
 where
     Da: DaService<Error = anyhow::Error, Spec = MockDaSpec>,
 {
@@ -1008,6 +1016,8 @@ where
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
     let (sync_status_sender, _rec) = tokio::sync::watch::channel(SyncStatus::START);
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
+    shutdown_rx.mark_unchanged();
 
     let sync_state = Arc::new(DaSyncState {
         synced_da_height: AtomicU64::new(0),
@@ -1022,6 +1032,7 @@ where
     let da_header_provider = crate::da_utils::initialize_da_header_provider(
         da_service,
         std::time::Duration::from_millis(10),
+        shutdown_rx,
     )
     .await?;
 
@@ -1039,7 +1050,7 @@ where
     )?;
     state_manager.startup().await?;
 
-    Ok(state_manager)
+    Ok((state_manager, shutdown_tx))
 }
 
 // Writes to user space concatenation of block height bytes and block hash
