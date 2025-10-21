@@ -1,3 +1,6 @@
+# 2025-10-21
+- #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+
 # 2025-10-20
 - #1912 Add multi-worker support to EVM logs soak tests with log retrieval via `eth_getLogs`. Workers are automatically funded from root account and use WebSocket connections for better real-time performance.
 - #1924 **Breaking change** rollup's batch and proof namespace needs to be specified in `constants.toml` as `BATCH_NAMESPACE` and `PROOF_NAMESPACE`.
