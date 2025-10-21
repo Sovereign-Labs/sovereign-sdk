@@ -234,8 +234,6 @@ BYTE_STRING_SINGLE = { byte_string = "a" }
 # Const byte string (cannot be overridden at runtime)
 CONST_BYTE_STRING = { const = { byte_string = "constant" } }
 
-# --- Byte string constants (invalid - for trybuild tests) ---
-
 
 BANK_DISCRIMINANT = 0
 ACCOUNTS_DISCRIMINANT = 1
