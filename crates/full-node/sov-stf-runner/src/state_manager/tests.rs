@@ -145,6 +145,9 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_instant_finality() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "debug,sov_stf_runner=trace,jmt=info",
+    );
     let tempdir = tempfile::tempdir()?;
     let da_service = Arc::new(MockDaService::new(SEQUENCER_ADDRESS));
     let (mut state_manager, _shutdown_tx) =
@@ -160,6 +163,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
 
     let mut state_root = *state_manager.get_state_root();
     for height in 1..4 {
+        tracing::info!("START LOOP: H={height}");
         da_service
             .send_transaction(&[height as u8; 10])
             .await
@@ -167,7 +171,6 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         let filtered_block = da_service.get_block_at(height).await?;
         process_continuous_transition(&mut state_manager, filtered_block.clone(), &da_service, 0)
             .await?;
-        // TODO: Check how state manager internal state looks like on instant finality.
         let finalized = receiver.read_next().await?.unwrap();
 
         if let Some(sender) = state_manager.stf_info_sender.as_ref() {
@@ -574,7 +577,6 @@ async fn test_shuffle_with_deeper_reorgs() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
-    // sov_test_utils::initialize_logging();
     let tempdir = tempfile::tempdir()?;
 
     let (sender, mut receiver) = tokio::sync::watch::channel(());
@@ -599,7 +601,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
     .await;
     let da_service = Arc::new(da_service);
 
-    let (mut state_manager, _shutdown_tx) =
+    let (mut state_manager, shutdown_tx) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     {
@@ -663,6 +665,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
     }
 
     sender.send(())?;
+    shutdown_tx.send(())?;
     Ok(())
 }
 
@@ -928,7 +931,7 @@ async fn test_change_in_finalized_header() {
         .unwrap();
 }
 
-// On empty internal state, state manager should check if passed block is finalized
+// On empty internal state, state manager should check if a passed block is finalized
 // And return last finalized.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result<()> {
@@ -948,7 +951,7 @@ async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result
     }
 
     let last_finalized_header = da_service.get_last_finalized_block_header().await?;
-    // Should be allowed, because storage has continuous data
+    // Should be allowed because storage has continuous data
     let next_to_finalized = da_service
         .get_block_at(last_finalized_header.height() + 1)
         .await?;
@@ -957,6 +960,7 @@ async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result
         .get_block_at(last_finalized_header.height() + 2)
         .await?;
 
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     let (_prover_storage, returned_block_1) = state_manager
         .prepare_storage(next_to_finalized.clone(), &da_service)
         .await?;
@@ -1089,6 +1093,7 @@ async fn produce_synthetic_state_transition_witness<Da: DaService>(
     initial_state_root: <ProverStorage<S> as Storage>::Root,
     prover_storage: ProverStorage<S>,
     da_service: &Da,
+    // TODO: Possible to just get reference
     filtered_block: Da::FilteredBlock,
 ) -> (
     NativeChangeSet,
@@ -1123,6 +1128,7 @@ async fn process_continuous_transition(
     da_service: &MockDaService,
     finality: u32,
 ) -> anyhow::Result<()> {
+    tracing::info!("R: 1");
     let (prover_storage, returned_block) = state_manager
         .prepare_storage(filtered_block.clone(), da_service)
         .await?;
@@ -1137,10 +1143,14 @@ async fn process_continuous_transition(
     )
     .await;
 
+    tracing::info!("PROCESSING {}", filtered_block.header().height());
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
+
     state_manager
         .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
         .await?;
+    tracing::info!("-----------------");
+    tracing::info!("-----------------");
     check_internal_consistency(state_manager, finality as usize);
 
     Ok(())

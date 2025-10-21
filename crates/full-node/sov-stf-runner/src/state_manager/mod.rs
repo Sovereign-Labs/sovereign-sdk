@@ -831,7 +831,9 @@ where
         let mut da_service_calls = 0;
 
         // Using DaHeaderProvider instead of DaService call
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let last_finalized_header = self.da_header_provider.get_last_finalized()?;
+        tracing::info!("LAST FINALIZED HEADER {last_finalized_header:?}");
 
         let earliest_seen_height = self
             .get_earliest_seen_height()
