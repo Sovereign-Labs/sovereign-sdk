@@ -9,6 +9,25 @@ use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 
 #[tokio::test(flavor = "multi_thread")]
+async fn debug_trace_pending_tx() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let client = alloy_client(rollup.http_addr);
+    let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
+    let mint_tx = usdc.mint(Address::ZERO, parse_ether("1")?).send().await?;
+    rollup.pause_preferred_batches().await;
+
+    let opts = GethDebugTracingOptions::call_tracer(CallConfig::default());
+    let trace = client
+        .debug_trace_transaction(*mint_tx.tx_hash(), opts.clone())
+        .await?;
+    dbg!(trace);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn debug_trace_block_by_number() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
