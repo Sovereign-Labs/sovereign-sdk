@@ -94,7 +94,7 @@ impl Block {
     }
 }
 
-/// Block with seald header.
+/// Block with sealed header.
 #[derive(Debug, PartialEq, Clone, Deref, DerefMut)]
 pub struct SealedBlock {
     /// Block header.

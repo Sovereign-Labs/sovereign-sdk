@@ -12,7 +12,10 @@ use sov_test_utils::LegacySimpleStorage;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+mod provider_ext;
 mod rpc;
+
+pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
 const GAS: u64 = 9000000u64;

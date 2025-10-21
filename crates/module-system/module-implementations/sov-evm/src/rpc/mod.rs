@@ -420,10 +420,7 @@ where
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
             number: pending_block_number,
-            timestamp: current_block_env
-                .timestamp
-                .try_into()
-                .expect("The impossible happened: timestamp overflow u64"),
+            timestamp: 0, // Pending block does not have a timestamp yet
             excess_blob_gas: current_block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),

@@ -1,3 +1,4 @@
+use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
 use alloy::providers::{Provider, ProviderBuilder, WsConnect};
 use alloy::rpc::types::{Filter, TransactionRequest};
@@ -9,8 +10,10 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
+use std::time::Instant;
 
 use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
+use sov_eth_client::LogsWithCursorProvider;
 
 mod logs;
 mod simple_storage;
@@ -183,6 +186,7 @@ async fn run_logs_test(
     let from_block = root_client.get_block_number().await?;
 
     // Spawn workers
+    let produce_logs = Instant::now();
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
@@ -202,15 +206,24 @@ async fn run_logs_test(
             Ok::<(), anyhow::Error>(())
         }));
     }
-
     try_join_all(handles).await?;
+    println!(
+        "Produced {} logs in {:?}",
+        num_workers * tx_count * logs_per_tx,
+        produce_logs.elapsed()
+    );
 
     // Retrieve and count all logs
-    let to_block = root_client.get_block_number().await?;
-    let filter = Filter::new().from_block(from_block).to_block(to_block);
-    let logs = root_client.get_logs(&filter).await?;
-
-    println!("Total logs retrieved: {}", logs.len());
+    let filter: Filter = Filter::new()
+        .from_block(from_block)
+        .to_block(BlockNumberOrTag::Pending);
+    let fetch_logs = Instant::now();
+    let logs = root_client.get_all_logs_with_cursor(&filter).await?;
+    println!(
+        "Retrieved {} logs in {:?}",
+        logs.len(),
+        fetch_logs.elapsed()
+    );
 
     Ok(())
 }

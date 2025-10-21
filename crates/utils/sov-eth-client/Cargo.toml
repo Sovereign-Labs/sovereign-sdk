@@ -16,12 +16,14 @@ alloy-primitives = { workspace = true }
 alloy-rpc-types  = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-pubsub = "1.0"
+async-trait = { workspace = true }
 derive_more = { workspace = true }
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
 reth-primitives = { workspace = true }
+serde = { workspace = true }
 sov-cli = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true }
