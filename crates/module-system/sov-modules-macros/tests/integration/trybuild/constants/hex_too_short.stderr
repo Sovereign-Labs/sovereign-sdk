@@ -1,0 +1,9 @@
+error[E0308]: mismatched types
+ --> tests/integration/trybuild/constants/hex_too_short.rs:4:29
+  |
+4 | const NAMESPACE: [u8; 32] = config_value!("HEX_SHORT");
+  |                       --    ^^^^^^^^^^^^^^^^^^^^^^^^^^ expected an array with a size of 32, found one with a size of 2
+  |                       |
+  |                       help: consider specifying the actual array length: `2`
+  |
+  = note: this error originates in the macro `config_value` (in Nightly builds, run with -Z macro-backtrace for more info)
