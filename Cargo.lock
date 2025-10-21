@@ -12059,6 +12059,7 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "clap",
+ "futures",
  "rand 0.8.5",
  "reqwest 0.12.23",
  "sov-eth-client",
