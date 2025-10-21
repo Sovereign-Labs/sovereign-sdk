@@ -30,7 +30,7 @@ pub struct Message<S: Spec, Mod: Module> {
     /// The message content.
     pub content: Mod::CallMessage,
     /// Data related to fees and gas handling.
-    pub details: TxDetails<S>,
+    pub details: TxDetails<S::Gas>,
     /// The message generation number.
     pub generation: u64,
 }
@@ -61,8 +61,8 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
     /// Converts a [`Message`] into a [`Transaction`] using the [`TxDetails`] provided by the [`Message`].
     pub fn to_tx<RT: EncodeCall<Mod> + Runtime<S>>(
         self,
-    ) -> sov_modules_api::transaction::Transaction<RT, S> {
-        Transaction::<RT, S>::new_signed_tx(
+    ) -> sov_modules_api::transaction::Transaction<RT, S::Gas, S::CryptoSpec> {
+        Transaction::<RT, S::Gas, S::CryptoSpec>::new_signed_tx(
             &self.sender_key,
             &RT::CHAIN_HASH,
             UnsignedTransaction::new(

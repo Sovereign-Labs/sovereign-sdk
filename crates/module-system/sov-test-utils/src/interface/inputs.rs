@@ -27,14 +27,14 @@ pub enum TransactionType<RT: Runtime<S>, S: Spec> {
         /// The private key of the sender.
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         /// The details of the transaction.
-        details: TxDetails<S>,
+        details: TxDetails<S::Gas>,
     },
 }
 
 impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
     /// Get a mutable reference to the [`TxDetails`] if self is [`TransactionType::Plain`].
     /// Otherwise returns [`None`].
-    pub fn details_mut(&mut self) -> Option<&mut TxDetails<S>> {
+    pub fn details_mut(&mut self) -> Option<&mut TxDetails<S::Gas>> {
         Some(match self {
             TransactionType::PreAuthenticated(_) | TransactionType::PreSigned { .. } => {
                 return None
@@ -44,7 +44,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
     }
 
     /// Override the details of the transaction. This method panics if called with [`TransactionType::PreSigned`].
-    pub fn with_details(self, details: TxDetails<S>) -> Self {
+    pub fn with_details(self, details: TxDetails<S::Gas>) -> Self {
         match self {
             TransactionType::Plain { message, key, .. } => TransactionType::Plain {
                 message,
@@ -121,16 +121,11 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
 
     /// Creates a [`TransactionType`] from an [`UnsignedTransaction`].
     pub fn pre_signed(
-        unsigned_tx: UnsignedTransaction<RT, S>,
+        unsigned_tx: UnsignedTransaction<RT, S::Gas>,
         key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
     ) -> Self {
-        let tx = borsh::to_vec(&Transaction::<RT, S>::new_signed_tx(
-            key,
-            chain_hash,
-            unsigned_tx,
-        ))
-        .unwrap();
+        let tx = borsh::to_vec(&Transaction::<RT, S::Gas, S::CryptoSpec>::new_signed_tx(key, chain_hash, unsigned_tx)).unwrap();
         Self::PreSigned(RawTx { data: tx })
     }
 
@@ -139,13 +134,13 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         msg: <RT as DispatchCall>::Decodable,
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
-        details: TxDetails<S>,
+        details: TxDetails<S::Gas>,
         generation_numbers: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
-    ) -> Transaction<RT, S> {
+    ) -> Transaction<RT, S::Gas, S::CryptoSpec> {
         let pub_key = key.pub_key();
         let generation = *generation_numbers.get(&pub_key).unwrap_or(&0);
         generation_numbers.insert(pub_key, generation + 1);
-        Transaction::<RT, S>::new_signed_tx(
+        Transaction::<RT, S::Gas, S::CryptoSpec>::new_signed_tx(
             &key,
             chain_hash,
             UnsignedTransaction::new(
@@ -164,7 +159,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         msg: <RT as DispatchCall>::Decodable,
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
-        details: TxDetails<S>,
+        details: TxDetails<S::Gas>,
         generations: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
     ) -> RawTx {
         let tx = Self::sign(msg, key, chain_hash, details, generations);

@@ -113,7 +113,7 @@ macro_rules! generate_runtime_without_capabilities {
         impl<S> $crate::runtime::Runtime<S> for $id<S>
         where
             S: ::sov_modules_api::Spec,
-            ::sov_modules_api::transaction::Transaction::<Self, S>: $crate::sov_universal_wallet::schema::UniversalWallet,
+            ::sov_modules_api::transaction::Transaction::<Self, S::Gas, S::CryptoSpec>: $crate::sov_universal_wallet::schema::UniversalWallet,
             <Self as ::sov_modules_api::DispatchCall>::Decodable: $crate::sov_universal_wallet::schema::UniversalWallet,
             $($runtime_trait_impl_bounds)*
         {
@@ -138,8 +138,8 @@ macro_rules! generate_runtime_without_capabilities {
                 let axum_router = axum_router.merge(dedup_endpoint.axum_router());
 
                 let schema = Schema::of_rollup_types_with_chain_data::<
-                Transaction<Self, S>,
-                UnsignedTransaction<Self, S>,
+                Transaction<Self, S::Gas, S::CryptoSpec>,
+                UnsignedTransaction<Self, S::Gas>,
                 <Self as ::sov_modules_api::DispatchCall>::Decodable,
                 S::Address,
                 >(ChainData {

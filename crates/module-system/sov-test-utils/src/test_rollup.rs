@@ -858,7 +858,7 @@ where
 
     pub async fn send_tx_to_sequencer(
         &self,
-        tx: &Transaction<R::Runtime, R::Spec>,
+        tx: &Transaction<R::Runtime, <R::Spec as Spec>::Gas, <R::Spec as Spec>::CryptoSpec>,
     ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
         let resp = self.client.client.send_txs_to_sequencer(&[tx]).await?;
         Ok(resp[0].clone())

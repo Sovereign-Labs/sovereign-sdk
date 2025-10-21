@@ -208,7 +208,7 @@ pub fn default_test_signed_transaction<T: TransactionCallable, S: Spec>(
     chain_hash: &[u8; 32],
 ) -> Transaction<T, S::Gas, S::CryptoSpec> {
     let tx_details = default_test_tx_details::<S>();
-    test_signed_transaction(key, msg, generation, chain_hash, tx_details)
+    test_signed_transaction::<T, S>(key, msg, generation, chain_hash, tx_details)
 }
 
 /// Creates signed transaction.
@@ -217,7 +217,7 @@ pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
     msg: &T::Call,
     generation: u64,
     chain_hash: &[u8; 32],
-    tx_details: TxDetails<S>,
+    tx_details: TxDetails<S::Gas>,
 ) -> Transaction<T, S::Gas, S::CryptoSpec> {
     Transaction::<T, S::Gas, S::CryptoSpec>::new_signed_tx(
         key,
