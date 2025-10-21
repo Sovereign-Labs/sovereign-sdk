@@ -168,7 +168,7 @@ fn test_setup_multisig_and_act() {
                 &multisig_credential_id,
                 state,
             );
-           
+
             assert_ne!(multisig_credential_id, user.credential_id());
         }),
     });
@@ -206,7 +206,11 @@ fn test_setup_multisig_and_act() {
         runner.execute_transaction(TransactionTestCase {
             input: multisig_tx,
             assert: Box::new(move |result, _state| {
-                assert!(result.tx_receipt.is_successful(), "Transaction failed. Expected success but got: {:?}", result.tx_receipt);
+                assert!(
+                    result.tx_receipt.is_successful(),
+                    "Transaction failed. Expected success but got: {:?}",
+                    result.tx_receipt
+                );
             }),
         });
     };
