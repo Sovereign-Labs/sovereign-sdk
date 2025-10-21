@@ -262,7 +262,9 @@ impl<Pubkey: PublicKeyExt> Multisig<Pubkey> {
         hasher.update(self.required_signers.to_le_bytes());
         hasher.update((sorted_signers.len() as u32).to_le_bytes());
         for signer in sorted_signers.iter() {
-            hasher.update(borsh::to_vec(&signer.as_ref()).expect("Serialization to vec is infalliable"));
+            hasher.update(
+                borsh::to_vec(&signer.as_ref()).expect("Serialization to vec is infalliable"),
+            );
         }
         CredentialId::from_bytes(hasher.finalize().into())
     }
