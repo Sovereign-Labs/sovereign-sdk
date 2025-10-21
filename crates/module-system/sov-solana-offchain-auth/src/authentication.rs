@@ -13,7 +13,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSignature,
-    ProvableStateReader, SafeString, Spec, TxHash,
+    ProvableStateReader, SafeString, Spec, TxHash, VarLengthPublicKey,
 };
 
 /// The payload for a solana offchain message.
@@ -284,7 +284,7 @@ where
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
         signature: unpacked_message.signature,
-        pub_key: unpacked_message.pub_key,
+        pub_key: VarLengthPublicKey(unpacked_message.pub_key),
     };
 
     if unpacked_message.chain_hash != *runtime_chain_hash {
