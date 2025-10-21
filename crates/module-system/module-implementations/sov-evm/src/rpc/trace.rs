@@ -1,3 +1,5 @@
+use std::ops::DerefMut;
+
 use alloy_eips::BlockId;
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::B256;
@@ -12,6 +14,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::EthApiError;
 
+use super::maybe_archival_state::MaybeArchivalState;
 use crate::conversions::replay_tx_env;
 use crate::db::commit::FallibleDatabaseCommit;
 use crate::db::EvmDb;
@@ -44,8 +47,15 @@ where
         &'a self,
         block_number: u64,
         state: &'a mut ApiStateAccessor<S>,
-        archival_storage: &'a mut Option<ApiStateAccessor<S>>,
-    ) -> Result<(MaybeSealedBlock, Vec<TxSignedAndRecovered>, crate::db::EvmDb<ApiStateAccessor<S>, S>, BlockEnv, CfgEnv), EthApiError> {
+    ) -> Result<
+        (
+            MaybeArchivalState<'a, S>,
+            Vec<TxSignedAndRecovered>,
+            BlockEnv,
+            CfgEnv,
+        ),
+        EthApiError,
+    > {
         // Get the block - could be pending or sealed
         let maybe_block = self
             .get_maybe_sealed_block(block_number, state)
@@ -56,20 +66,19 @@ where
 
         let is_pending = matches!(maybe_block, MaybeSealedBlock::Pending(_));
 
-        let exec_state: &'a mut ApiStateAccessor<S> = if is_pending {
-            state
+        let mut maybe_archival_state: MaybeArchivalState<'a, S> = if is_pending {
+            state.into()
         } else {
-            *archival_storage = Some(self.archival_state_pre_block(maybe_block.number(), state)?);
-            archival_storage.as_mut().unwrap()
+            let archival = self.archival_state_pre_block(maybe_block.number(), state)?;
+            Box::new(archival).into()
         };
+        let state = maybe_archival_state.deref_mut();
 
-        let block_env = self.block_env(exec_state)?;
-        let cfg = self.cfg(exec_state)?;
+        let block_env = self.block_env(state)?;
+        let cfg = self.cfg(state)?;
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
-        let evm_db = self.db(exec_state);
-
-        Ok((maybe_block, transactions, evm_db, block_env, cfg_env))
+        Ok((maybe_archival_state, transactions, block_env, cfg_env))
     }
 
     pub(super) fn trace_block_by_number(
@@ -81,9 +90,9 @@ where
         let block_number = self.resolve_block_number(block, state);
 
         // Setup execution environment (fetches block, preloads transactions, sets up state)
-        let mut archival_storage = None;
-        let (_maybe_block, txs_to_trace, mut evm_db, block_env, cfg_env) =
-            self.setup_trace_execution(block_number, state, &mut archival_storage)?;
+        let (mut state, txs_to_trace, block_env, cfg_env) =
+            self.setup_trace_execution(block_number, state)?;
+        let mut evm_db = self.db(state.deref_mut());
 
         // Trace all transactions in the block
         let mut traces = vec![];
@@ -117,9 +126,9 @@ where
             .ok_or(EthApiError::PrunedHistoryUnavailable)?;
 
         // Setup execution environment (fetches block, preloads transactions, sets up state)
-        let mut archival_storage = None;
-        let (_maybe_block, txs_to_replay, mut evm_db, block_env, cfg_env) =
-            self.setup_trace_execution(traced_tx.block_number, state, &mut archival_storage)?;
+        let (mut state, txs_to_replay, block_env, cfg_env) =
+            self.setup_trace_execution(traced_tx.block_number, state)?;
+        let mut evm_db = self.db(state.deref_mut());
 
         // Replay previous transactions in the block
         for tx in txs_to_replay {
