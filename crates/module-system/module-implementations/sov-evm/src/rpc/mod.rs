@@ -8,13 +8,9 @@ use alloy_rpc_types::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
-use alloy_rpc_types_trace::geth::GethTrace;
-use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
-use alloy_rpc_types_trace::geth::{GethDebugTracingOptions, TraceResult};
 use jsonrpsee::core::RpcResult;
-use revm::context::result::{ExecResultAndState, ResultAndState};
-use revm::context::{BlockEnv, CfgEnv, TxEnv};
-use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
+use revm::context::result::ResultAndState;
+use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -22,19 +18,18 @@ use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
-use crate::conversions::replay_tx_env;
-use crate::db::commit::FallibleDatabaseCommit;
 use crate::db::EvmDb;
 use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
-use crate::executor::{get_cfg_env, inspect, transact_commit};
+use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::Evm;
 
 pub(crate) mod error;
 pub(crate) mod handlers;
+mod trace;
 
 /// Result of String => BlockNr conversion
 #[derive(Debug)]
@@ -173,130 +168,6 @@ where
             .map(|index| self.get_receipt_by_index(index, state))
             .collect::<Option<Vec<_>>>()?;
         Some(receipts)
-    }
-
-    fn trace_block_by_number(
-        &self,
-        block: BlockNumberOrTag,
-        opts: GethDebugTracingOptions,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<Vec<TraceResult>, EthApiError> {
-        let block_number = self.resolve_block_number(block, state);
-        // Get transaction and block data
-        let block = self.block(block_number, state)?;
-        let mut archival_state = self.archival_state_pre_block(block_number, state)?;
-
-        let block_env = self.block_env(&mut archival_state)?;
-
-        let cfg = self.cfg(&mut archival_state)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        // Replay previous transactions in the block
-        let mut evm_db = self.db(&mut archival_state);
-
-        let mut traces = vec![];
-        for tx_idx in block.transactions {
-            let tx = self
-                .transaction(tx_idx, state)
-                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-            let result = self.trace_transaction_inner(
-                &block_env,
-                replay_tx_env(&tx),
-                cfg_env.clone(),
-                &mut evm_db,
-                &opts,
-            )?;
-            traces.push(TraceResult::new_success(result, Some(*tx.hash())));
-        }
-        Ok(traces)
-    }
-
-    fn trace_transaction(
-        &self,
-        tx_hash: B256,
-        opts: GethDebugTracingOptions,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<GethTrace, EthApiError> {
-        // Get transaction and block data
-        let traced_tx = self.tx(tx_hash, state)?;
-        let block = self.block(traced_tx.block_number, state)?;
-
-        let mut archival_state = self.archival_state_pre_block(traced_tx.block_number, state)?;
-
-        let block_env = self.block_env(&mut archival_state)?;
-
-        let cfg = self.cfg(&mut archival_state)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        // Replay previous transactions in the block
-        let mut evm_db = self.db(&mut archival_state);
-
-        for tx_idx in block.transactions {
-            let tx = self
-                .transaction(tx_idx, state)
-                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-            // Skip the transaction we're tracing
-            if *tx.signed_transaction.hash() == tx_hash {
-                break;
-            }
-
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(EthApiError::from)?;
-        }
-
-        // Trace the target transaction
-        self.trace_transaction_inner(
-            &block_env,
-            replay_tx_env(&traced_tx),
-            cfg_env,
-            &mut evm_db,
-            &opts,
-        )
-    }
-
-    fn trace_transaction_inner(
-        &self,
-        block_env: &BlockEnv,
-        tx_env: TxEnv,
-        cfg: CfgEnv,
-        db: &mut EvmDb<ApiStateAccessor<S>, S>,
-        opts: &GethDebugTracingOptions,
-    ) -> Result<GethTrace, EthApiError> {
-        let GethDebugTracingOptions {
-            tracer,
-            tracer_config,
-            ..
-        } = opts;
-        if let Some(tracer) = tracer {
-            return match tracer {
-                GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
-                    let call_config = tracer_config
-                        .clone()
-                        .into_call_config()
-                        .map_err(|_| EthApiError::InvalidTracerConfig)?;
-
-                    let inspector_config =
-                        TracingInspectorConfig::from_geth_call_config(&call_config);
-                    let mut inspector = TracingInspector::new(inspector_config);
-
-                    let gas_limit = tx_env.gas_limit;
-                    let ExecResultAndState { result, state } =
-                        inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
-                    db.commit(state)?;
-
-                    inspector.set_transaction_gas_limit(gas_limit);
-                    let frame = inspector
-                        .geth_builder()
-                        .geth_call_traces(call_config, result.gas_used());
-
-                    return Ok(frame.into());
-                }
-                _ => Err(EthApiError::Unsupported("unsupported tracer")),
-            };
-        };
-        Err(EthApiError::Unsupported("unsupported tracer"))
     }
 
     fn call(
