@@ -6,7 +6,7 @@ use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChalleng
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 
 use crate::transaction::TxDetails;
-use crate::{GasMeter, GasSpec, MeteredBorshDeserialize, MeteredBorshDeserializeError, Spec};
+use crate::{Gas, GasMeter, GasSpec, MeteredBorshDeserialize, MeteredBorshDeserializeError, Spec};
 
 /// Proof type supported by the rollup.
 
@@ -36,18 +36,18 @@ pub enum ProofType {
     feature = "native",
     derive(borsh::BorshSerialize, serde::Serialize, serde::Deserialize,)
 )]
-#[cfg_attr(feature = "native", serde(bound = "S: Spec"))]
-pub struct SerializeProofWithDetails<S: Spec> {
+#[cfg_attr(feature = "native", serde(bound = "G: Gas"))]
+pub struct SerializeProofWithDetails<G: Gas> {
     /// The serialized aggregated proof.
     pub proof: ProofType,
     /// The transaction metadata.
-    pub details: TxDetails<S>,
+    pub details: TxDetails<G>,
 }
 
-impl<S: Spec> SerializeProofWithDetails<S> {
+impl<G: Gas> SerializeProofWithDetails<G> {
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
         let signature = <ProofType as BorshDeserialize>::deserialize(buf)?;
-        let pub_key = <TxDetails<S> as BorshDeserialize>::deserialize(buf)?;
+        let pub_key = <TxDetails<G> as BorshDeserialize>::deserialize(buf)?;
 
         Ok(Self {
             proof: signature,
@@ -56,12 +56,12 @@ impl<S: Spec> SerializeProofWithDetails<S> {
     }
 }
 
-impl<S: Spec> MeteredBorshDeserialize<S> for SerializeProofWithDetails<S> {
-    fn bias_borsh_deserialization() -> <S as Spec>::Gas {
+impl<S: Spec<Gas = G>, G: Gas> MeteredBorshDeserialize<S> for SerializeProofWithDetails<G> {
+    fn bias_borsh_deserialization() -> G {
         S::proof_bias_borsh_deserialization()
     }
 
-    fn gas_to_charge_per_byte_borsh_deserialization() -> <S as Spec>::Gas {
+    fn gas_to_charge_per_byte_borsh_deserialization() -> G {
         S::proof_gas_to_charge_per_byte_borsh_deserialization()
     }
 
@@ -76,7 +76,7 @@ impl<S: Spec> MeteredBorshDeserialize<S> for SerializeProofWithDetails<S> {
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
         Self::charge_gas_to_deserialize(buf, meter)?;
 
-        SerializeProofWithDetails::<S>::unmetered_deserialize_inner(buf)
+        SerializeProofWithDetails::<G>::unmetered_deserialize_inner(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
     }
 
@@ -84,7 +84,7 @@ impl<S: Spec> MeteredBorshDeserialize<S> for SerializeProofWithDetails<S> {
     fn unmetered_deserialize(
         buf: &mut &[u8],
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        SerializeProofWithDetails::<S>::unmetered_deserialize_inner(buf)
+        SerializeProofWithDetails::<G>::unmetered_deserialize_inner(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
     }
 }

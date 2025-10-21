@@ -91,8 +91,8 @@ impl PriorityFeeBips {
     serde::Deserialize,
     sov_rollup_interface::sov_universal_wallet::UniversalWallet,
 )]
-#[serde(bound = "S: Spec")]
-pub struct TxDetails<S: Spec> {
+#[serde(bound = "G: Gas")]
+pub struct TxDetails<G: Gas> {
     /// The maximum priority fee that can be paid for this transaction expressed as a basis point percentage of the gas consumed by the transaction.
     /// Ie if the transaction has consumed `100` gas tokens, and the priority fee is set to `100_000` (10%), the
     /// gas tip will be `10` tokens.
@@ -106,30 +106,9 @@ pub struct TxDetails<S: Spec> {
     /// If the scalar product of the gas limit and the gas price is greater than the `max_fee`, the transaction will be rejected.
     /// Then up to `gas_limit *_scalar gas_price` gas tokens can be spent on gas execution in the transaction execution - if the
     /// transaction spends more than that amount, it will run out of gas and be reverted.
-    pub gas_limit: Option<S::Gas>,
+    pub gas_limit: Option<G>,
     /// The ID of the target chain.
     pub chain_id: u64,
-}
-
-pub mod sol_struct {
-    use alloy_sol_types::sol;
-
-    sol! {
-        #[derive(Debug)]
-        struct TxDetails {
-            uint64 chain_id;
-        }
-    }
-}
-
-impl<S: Spec> TxDetails<S> {
-    /// Converts the `TxDetails` to a SolStruct representation.
-    /// This is useful for EIP-712 signing.
-    pub fn as_sol_struct(&self) -> sol_struct::TxDetails {
-        sol_struct::TxDetails {
-            chain_id: self.chain_id,
-        }
-    }
 }
 
 /// Holds the original credentials to authenticate the transaction.
@@ -167,7 +146,7 @@ impl Credentials {
 /// Transaction data that has been authenticated.
 /// This is the output of the `TransactionAuthenticator`.
 #[derive(From)]
-pub struct AuthenticatedTransactionData<S: Spec>(pub TxDetails<S>);
+pub struct AuthenticatedTransactionData<S: Spec>(pub TxDetails<S::Gas>);
 
 impl<S: Spec> AuthenticatedTransactionData<S> {
     /// Creates a new [`BasicGasMeter`] from the transaction data.

@@ -16,7 +16,7 @@ use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
     TxDetails,
 };
-use crate::CryptoSpecExt;
+use crate::{CryptoSpecExt, Gas};
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
     GasMeteringError, GasSpec, MeteredBorshDeserialize, MeteredBorshDeserializeError,
@@ -265,8 +265,8 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
 }
 
 /// Verifies that the transaction has the correct chain ID.
-pub fn verify_chain_id<S: Spec>(
-    tx_details: &TxDetails<S>,
+pub fn verify_chain_id<G: Gas>(
+    tx_details: &TxDetails<G>,
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
     if tx_details.chain_id != config_chain_id() {
@@ -282,8 +282,8 @@ pub fn verify_chain_id<S: Spec>(
 }
 
 /// Verifies the transaction signature.
-fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
-    tx: &Transaction<D, S>,
+fn verify_signature<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
+    tx: &Transaction<D, S::Gas, C>,
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
@@ -299,7 +299,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 
 /// Extracts authorization data from a verified transaction.
 pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
-    tx_v0: &crate::transaction::Version0<D::Decodable, S, C>,
+    tx_v0: &crate::transaction::Version0<D::Decodable, S::Gas, C>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
@@ -318,7 +318,7 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>, C: CryptoS
 
 /// Extracts authorization data from a verified transaction.
 pub fn extract_authorization_data_v1<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
-    tx_v1: &crate::transaction::Version1<D::Decodable, S, C>,
+    tx_v1: &crate::transaction::Version1<D::Decodable, S::Gas, C>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
@@ -353,7 +353,7 @@ pub fn extract_authorization_data_v1<S: Spec, D: DispatchCall<Spec = S>, C: Cryp
 /// signature cannot be verified.
 pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
-    tx: Transaction<D, S>,
+    tx: Transaction<D, S::Gas, S::CryptoSpec>,
     chain_hash: &[u8; 32],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
@@ -407,7 +407,7 @@ pub fn authenticate<
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     let tx =
-        match <Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
+        match <Transaction<D, S::Gas, S::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
             Ok(ok) => ok,
 
             Err(MeteredBorshDeserializeError::GasError(e)) => {
@@ -440,7 +440,7 @@ pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: Cryp
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
     let tx =
-        <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
+        <Transaction<D, S::Gas, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(tx.call())
