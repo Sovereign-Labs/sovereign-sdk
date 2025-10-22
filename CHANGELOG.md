@@ -1,4 +1,5 @@
 # 2025-10-22
+- #1950 Adds a new new config option storage.separate_archival_state. If set to true, archival state will go into its own db at {storage_path}/archival-state-db. This option is false by default for backwards compatibility. When not set, the old database layout is used.
 - #1937 Reject log subscriptions with block filters.
 - #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
 The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
