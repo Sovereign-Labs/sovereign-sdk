@@ -5,7 +5,7 @@ use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::MockAddress;
+use sov_mock_da::{MockAddress, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
@@ -24,6 +24,7 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
+const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
 
 fn random_address() -> <S as Spec>::Address {
     let pk = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
@@ -31,7 +32,7 @@ fn random_address() -> <S as Spec>::Address {
 }
 
 async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
-    let da_service = StorableMockDaService::new_in_memory_manual(MockAddress::new([0; 32])).await;
+    let da_service = StorableMockDaService::new_in_memory(TEST_SEQ_DA_ADDRESS, 0).await;
 
     let addr = start_server(da_service.clone(), "127.0.0.1", 0)
         .await
@@ -40,9 +41,11 @@ async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
     (da_service, addr)
 }
 
-async fn create_da_service() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
-    let (da_service, shutdown_sender) =
-        StorableMockDaService::new_in_memory_periodic(300, MockAddress::new([0; 32])).await;
+async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
+    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
+    let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
+    da_config.block_producing = sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+    let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
 
     let addr = start_server(da_service.clone(), "127.0.0.1", 0)
         .await
@@ -88,7 +91,7 @@ async fn start_rollup(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_receives_txs_from_da() {
-    let (_, shutdown_sender, addr) = create_da_service().await;
+    let (_, shutdown_sender, addr) = create_da_service_periodic().await;
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
     let test_rollup = start_rollup(false, addr, None).await;
