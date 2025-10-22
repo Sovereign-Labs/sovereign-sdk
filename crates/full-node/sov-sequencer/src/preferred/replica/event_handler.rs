@@ -22,17 +22,20 @@ where
                 let _ = self
                     .do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
                     .await
+                    .unwrap()
                     .unwrap();
+                //       .unwrap();
             }
             DbData::Transaction(_, tx, tx_hash) => {
                 self.do_new_tx_msg_replica(tx_hash, tx, "replica_new_tx")
                     .await
+                    .unwrap()
                     .unwrap();
+                //.unwrap();
             }
             DbData::BatchEnd(_batch_to_store) => {
-                self.close_current_batch_msg("replica_close_batch")
-                    .await
-                    .unwrap();
+                self.close_current_batch_msg("replica_close_batch").await;
+                //.unwrap();
             }
             DbData::NewProof => {}
         };

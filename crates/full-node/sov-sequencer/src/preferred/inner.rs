@@ -2058,7 +2058,7 @@ where
         }
 
         if let Err(e) = &inner.is_ready {
-            return Err(ReplicaError::NotReady(e.clone()));
+            // return Err(ReplicaError::NotReady(e.clone()));
         }
 
         inner
