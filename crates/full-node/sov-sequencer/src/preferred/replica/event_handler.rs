@@ -18,7 +18,6 @@ where
         match data {
             DbData::BatchStart(_) => {}
             DbData::Transaction(_, _, _) => {}
-            DbData::BatchStart(_) => {}
             DbData::BatchEnd(_) => {}
             DbData::NewProof => {}
         };
