@@ -173,6 +173,22 @@ pub async fn initialize_runner(
 
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
 
+    let mut tasks = JoinSet::new();
+    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
+    shutdown_receiver.mark_unchanged();
+    let receiver_for_metrics = shutdown_receiver.clone();
+
+    let monitoring_config = rollup_config.monitoring.clone();
+    tasks.spawn(async move {
+        if let Some(handle) =
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+        {
+            handle.await.expect("Metrics task errored");
+        } else {
+            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+        };
+    });
+
     let mut storage_manager: StorageManager = NativeStorageManager::new(path).unwrap();
 
     let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
@@ -191,15 +207,10 @@ pub async fn initialize_runner(
             .unwrap(),
     );
 
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
-
     let (prev_state_root, genesis_state_root) = init_variant
         .initialize(&stf, &mut storage_manager)
         .await
         .unwrap();
-
-    let mut tasks = JoinSet::new();
 
     tasks.spawn({
         let ledger_updates = ledger_db.clone();
@@ -233,7 +244,6 @@ pub async fn initialize_runner(
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
-        rollup_config.monitoring.clone(),
         None,
         None,
         da_sync_state,
