@@ -115,6 +115,9 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     let transfer_amounts: Vec<u128> = (10u128..20).collect();
     let txs = build_multiple_transfers(&transfer_amounts, &key, token_id, recipient_address, 3);
     let slot_batch_n = send_tx_and_wait_for_status(&txs, client).await?;
+    while processed_slot.number < slot_batch_n {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
     assert_slot_finality(client, slot_batch_n, test_case.expected_head_finality()).await;
 
     // FIXME(@neysofu,
