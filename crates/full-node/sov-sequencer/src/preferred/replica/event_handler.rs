@@ -16,6 +16,7 @@ where
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
             DbData::BatchStart(batch_to_store) => {
+                /*
                 let _ = self
                     .do_batch_start_msg(
                         batch_to_store.visible_slot_number_after_increase,
@@ -23,17 +24,19 @@ where
                         "replica_start_batch",
                     )
                     .await
-                    .unwrap();
+                    .unwrap();*/
             }
-            DbData::Transaction(_, _tx) => {
+            DbData::Transaction(_, _tx, _tx_hash) => {
                 //self.do_new_tx_msg(tx, tx_hash, "replica_new_tx")
                 //    .await
                 //    .unwrap();
             }
             DbData::BatchEnd(_batch_to_store) => {
+                /*
                 self.close_current_batch_msg("replica_close_batch")
                     .await
                     .unwrap();
+                */
             }
             DbData::NewProof => {}
         };
