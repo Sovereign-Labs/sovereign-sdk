@@ -60,7 +60,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   # Except in `dev`, `nightly` and `stable` branches! Any cancelled job will cause the
   # CI run to fail, and we want to keep a clean history for major branches.
-  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') }}
+  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') && (github.ref != 'refs/heads/dev') }}
 
 jobs:
   check-aggregate:
