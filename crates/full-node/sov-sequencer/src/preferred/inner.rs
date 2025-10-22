@@ -16,7 +16,7 @@ use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
-use crate::preferred::db::latest_finalized_sequence_number;
+use crate::preferred::db::{latest_finalized_sequence_number, BatchToStore};
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::RollupBlockExecutorConfig;
@@ -453,25 +453,6 @@ where
         self.close_current_batch().await;
     }
 
-    /// Closes the current batch.
-    ///
-    /// This should be called only when...
-    /// 1. There's no more capacity to accept txs in the current batch.
-    /// 2. We're absolutely sure we want to close the batch early even though we don't need to.
-    ///
-    /// Case 2 only happens when we've just finished updating the state *and* we have more than our ideal number of finalized slots available.
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn close_current_batch(&mut self) {
-        // Terminate the batch.
-        self.executor.end_rollup_block().await;
-        self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
-        let checkpoint = self
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-        self.executor_events_sender.close_batch(checkpoint).await;
-    }
-
     async fn check_readiness(
         &self,
         max_concurrent_blobs: usize,
@@ -581,7 +562,14 @@ where
         self.do_batch_start(visible_slot_number_after_increase, visible_increase)
             .await
     }
+}
 
+// Methods in this block are shared between Master and Replica.
+impl<S, Rt> Inner<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
     async fn do_batch_start(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
@@ -669,11 +657,11 @@ where
             oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
             <S as Spec>::Gas,
         ),
-        AcceptTxError<S>,
+        DoNewTxError<S>,
     > {
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-            return Err(AcceptTxError::Shutdown);
+            return Err(DoNewTxError::Shutdown);
         }
 
         if !self.executor.has_in_progress_batch() {
@@ -694,7 +682,7 @@ where
 
         let tx_len = baked_tx.data.len();
         if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
-            return Err(AcceptTxError::TxTooBig {
+            return Err(DoNewTxError::TxTooBig {
                 current_batch_size: batch_size_tracker.current_batch_size,
                 max_batch_size: batch_size_tracker.max_batch_size,
             });
@@ -720,7 +708,7 @@ where
             }
             Err(err) => {
                 tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
-                return Err(AcceptTxError::ExecutorError(err));
+                return Err(DoNewTxError::ExecutorError(err));
             }
         };
 
@@ -731,6 +719,35 @@ where
 
         Ok((rx, remaining_slot_gas))
     }
+
+    /// Closes the current batch.
+    ///
+    /// This should be called only when...
+    /// 1. There's no more capacity to accept txs in the current batch.
+    /// 2. We're absolutely sure we want to close the batch early even though we don't need to.
+    ///
+    /// Case 2 only happens when we've just finished updating the state *and* we have more than our ideal number of finalized slots available.
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn close_current_batch(&mut self) {
+        // Terminate the batch.
+        self.executor.end_rollup_block().await;
+        self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
+        let checkpoint = self
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+        self.executor_events_sender.close_batch(checkpoint).await;
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum DoNewTxError<S: Spec> {
+    TxTooBig {
+        current_batch_size: usize,
+        max_batch_size: usize,
+    },
+    ExecutorError(RollupBlockExecutorError<S>),
+    Shutdown,
 }
 
 enum Message<S: Spec, Rt: Runtime<S>> {
@@ -777,21 +794,11 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         data: ProcessFinalCatchupData,
         reason: &'static str,
     },
-    DoBatchStartMsg {
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    },
     PruneSequencerDb {
         reason: &'static str,
     },
     ForceOverwriteStateForRecovery {
         info: StateUpdateInfo<S::Storage>,
-        reason: &'static str,
-    },
-    DoNewTx {
-        tx_hash: TxHash,
-        baked_tx: FullyBakedTx,
         reason: &'static str,
     },
     WaitNodeResync {
@@ -810,11 +817,21 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     TriggerBatchProductionIfConvenient {
         reason: &'static str,
     },
-    CloseCurrentBatch {
-        reason: &'static str,
-    },
+
     SimpleStateUpdate {
         info: StateUpdateInfo<S::Storage>,
+    },
+    DoBatchStartMsg {
+        batch_from_master: BatchToStore,
+        reason: &'static str,
+    },
+    DoNewTx {
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        reason: &'static str,
+    },
+    CloseCurrentBatch {
+        reason: &'static str,
     },
 }
 
@@ -844,12 +861,7 @@ pub(crate) enum AcceptTxError<S: Spec> {
         batch_creation_error: BatchCreationError,
         nb_of_concurrent_blob_submissions: usize,
     },
-    TxTooBig {
-        current_batch_size: usize,
-        max_batch_size: usize,
-    },
-    ExecutorError(RollupBlockExecutorError<S>),
-    Shutdown,
+    NewTxError(DoNewTxError<S>),
 }
 
 #[derive(Debug)]
@@ -1084,20 +1096,6 @@ where
         Ok((self.recv(recv).await?, start_time.elapsed()))
     }
 
-    pub(crate) async fn do_batch_start_msg(
-        &self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::DoBatchStartMsg {
-            visible_slot_number_after_increase,
-            visible_slots_to_advance,
-            reason,
-        })
-        .await
-    }
-
     pub(crate) async fn prune_sequencer_db_msg(
         &self,
         reason: &'static str,
@@ -1185,14 +1183,30 @@ where
         }
     }
 
-    pub(crate) async fn close_current_batch_msg(
+    pub(crate) async fn latest_slot_number_msg(
         &self,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::CloseCurrentBatch { reason }).await
+    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::LatestSlotNumber { resp, reason })
+            .await?;
+
+        self.recv(recv).await
     }
 
-    pub(crate) async fn do_new_tx_msg(
+    pub(crate) async fn do_batch_start_msg_replica(
+        &self,
+        batch_from_master: BatchToStore,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::DoBatchStartMsg {
+            batch_from_master,
+            reason,
+        })
+        .await
+    }
+
+    pub(crate) async fn do_new_tx_msg_replica(
         &self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
@@ -1206,15 +1220,11 @@ where
         .await
     }
 
-    pub(crate) async fn latest_slot_number_msg(
+    pub(crate) async fn close_current_batch_msg(
         &self,
         reason: &'static str,
-    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
-        let (resp, recv) = oneshot::channel();
-        self.send(Message::LatestSlotNumber { resp, reason })
-            .await?;
-
-        self.recv(recv).await
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await
     }
 }
 
@@ -1413,9 +1423,9 @@ where
                 let ret = self
                     .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
                     .await;
-                if let Err(AcceptTxError::ExecutorError(
+                if let Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                     RollupBlockExecutorError::UnexpectedFailure,
-                )) = ret
+                ))) = ret
                 {
                     // Propagate the error to the spawner of this task.
                     panic!("Unexpected in the rollup block executor. The sequencer can no longer accept transactions!");
@@ -1472,25 +1482,30 @@ where
                 self.process_trigger_batch_production_if_convenient(reason)
                     .await;
             }
-            Message::CloseCurrentBatch { reason } => {
-                self.process_close_current_batch(reason).await;
-            }
             Message::SimpleStateUpdate { info } => {
                 self.process_new_storage(info).await;
             }
-            Message::DoNewTx {
-                tx_hash: _,
-                baked_tx: _,
-                reason: _,
-            } => {
-                todo!()
-            }
+
             Message::DoBatchStartMsg {
-                visible_slot_number_after_increase: _,
-                visible_slots_to_advance: _,
-                reason: _,
+                batch_from_master,
+                reason,
             } => {
-                todo!()
+                let _ = self
+                    .process_do_batch_start_replica(batch_from_master, reason)
+                    .await;
+            }
+
+            Message::DoNewTx {
+                tx_hash,
+                baked_tx,
+                reason,
+            } => {
+                let _ = self
+                    .process_do_new_tx_replica(baked_tx, tx_hash, reason)
+                    .await;
+            }
+            Message::CloseCurrentBatch { reason } => {
+                self.process_close_current_batch(reason).await;
             }
         }
 
@@ -1949,11 +1964,6 @@ where
         inner.trigger_batch_production_if_convenient().await;
     }
 
-    async fn process_close_current_batch(&mut self, reason: &'static str) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        inner.close_current_batch().await;
-    }
-
     async fn process_accept_tx(
         &mut self,
         baked_tx: FullyBakedTx,
@@ -1994,11 +2004,46 @@ where
             });
         };
 
-        let (rx, remaining_slot_gas) = inner.do_new_tx(tx_hash, baked_tx).await?;
+        let (rx, remaining_slot_gas) = inner
+            .do_new_tx(tx_hash, baked_tx)
+            .await
+            .map_err(AcceptTxError::NewTxError)?;
 
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
 
         Ok(rx)
+    }
+
+    async fn process_do_batch_start_replica(
+        &mut self,
+        batch_from_master: BatchToStore,
+        reason: &'static str,
+    ) -> Result<(), BatchCreationError> {
+        let mut inner = self.get_inner_with_timing(reason).await;
+
+        inner
+            .do_batch_start(
+                batch_from_master.visible_slot_number_after_increase,
+                batch_from_master.visible_slots_to_advance,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn process_do_new_tx_replica(
+        &mut self,
+        baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
+        reason: &'static str,
+    ) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        let _ = inner.do_new_tx(tx_hash, baked_tx).await.unwrap();
+    }
+
+    async fn process_close_current_batch(&mut self, reason: &'static str) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        inner.close_current_batch().await;
     }
 }
 

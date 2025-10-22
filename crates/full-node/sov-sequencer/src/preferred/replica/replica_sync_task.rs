@@ -8,6 +8,7 @@ use tokio::time::Duration;
 // Process events in pages to avoid excessive memory consumption
 const PAGE_SIZE: usize = 2000;
 
+#[derive(Debug)]
 pub(crate) enum DBDataRejected {
     ExecutorBehind(DbData),
     ExecutorAhead(u64),
@@ -250,6 +251,7 @@ mod tests {
                         data.push(DbData::Transaction(
                             seq_nr,
                             FullyBakedTx::new(vec![i as u8]),
+                            TxHash::new([1; 32]),
                         ));
                     }
                     data.push(DbData::BatchEnd(new_batch_to_store(seq_nr)));
@@ -262,6 +264,7 @@ mod tests {
                     data.push(DbData::Transaction(
                         seq_nr,
                         FullyBakedTx::new(vec![index as u8]),
+                        TxHash::new([1; 32]),
                     ));
                     index += 1;
                 }
