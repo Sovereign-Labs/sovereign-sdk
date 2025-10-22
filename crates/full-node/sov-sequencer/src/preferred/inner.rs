@@ -1191,9 +1191,6 @@ where
     pub(crate) async fn do_batch_start_msg_replica(
         &self,
         batch_from_master: BatchToStore,
-        // seq_nr_from_master: u64,
-        // visible_slot_number_after_increase: VisibleSlotNumber,
-        // visible_slots_to_advance: NonZero<u8>,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::DoBatchStartMsg {
