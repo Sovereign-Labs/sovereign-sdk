@@ -962,6 +962,7 @@ where
     shutdown_receiver: watch::Receiver<()>,
 }
 
+#[derive(Debug)]
 /// Describes errors that can occur when updating the sequencer state.
 /// This type intentionally does *not* implement `std::error::Error` or `std::fmt::Debug` so that it cannot be directly converted to an `anyhow::Error`.
 /// To convert to anyhow, first convert to a `StateUpdateError` or similar. This is done to ensure backward compatibility with existing code that
@@ -1202,14 +1203,15 @@ where
         &self,
         batch_from_master: BatchToStore,
         reason: &'static str,
-    ) -> Result<Result<(), ReplicaError<S>>, SequencerStateUpdatorError> {
+    ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
-        self.send(Message::DoBatchStartMsg {
-            resp,
-            batch_from_master,
-            reason,
-        })
-        .await?;
+        match self
+            .send(Message::DoBatchStartMsg {
+                resp,
+                batch_from_master,
+                reason,
+            })
+            .await {};
         self.recv(recv).await
     }
 

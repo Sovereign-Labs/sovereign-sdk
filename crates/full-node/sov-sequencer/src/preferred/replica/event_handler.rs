@@ -4,6 +4,7 @@ use crate::preferred::replica::replica_sync_task::DBDataRejected;
 use crate::preferred::replica::replica_sync_task::ReplicaEventHandler;
 use crate::preferred::BatchCreationError;
 use crate::preferred::DoNewTxError;
+use crate::preferred::SequencerStateUpdatorError;
 use crate::SequencerNotReadyDetails;
 use async_trait::async_trait;
 use sov_modules_api::Runtime;
@@ -23,6 +24,11 @@ pub(crate) enum ReplicaError<S: Spec> {
 
     #[error("Failed to apply a new transaction on the replica.")]
     NewTx(DoNewTxError<S>),
+
+    #[error("TODO")]
+    Shutdown,
+    #[error("TODO")]
+    Unexpected,
 }
 
 #[async_trait]
