@@ -1,4 +1,10 @@
 #![allow(dead_code)]
+use super::batch_size_tracker::BatchSizeTracker;
+use crate::metrics::{
+    track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
+    PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics,
+};
+use crate::preferred::replica::db_data::DbData;
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::ops::Deref;
@@ -6,17 +12,12 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::batch_size_tracker::BatchSizeTracker;
-use crate::metrics::{
-    track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
-    PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics,
-};
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
-use crate::preferred::db::latest_finalized_sequence_number;
+use crate::preferred::db::{latest_finalized_sequence_number, BatchToStore};
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::RollupBlockExecutorConfig;
@@ -809,8 +810,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         info: StateUpdateInfo<S::Storage>,
     },
     DoBatchStartMsg {
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
+        batch_from_master: BatchToStore,
         reason: &'static str,
     },
     DoNewTx {
@@ -1190,13 +1190,14 @@ where
 
     pub(crate) async fn do_batch_start_msg_replica(
         &self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
+        batch_from_master: BatchToStore,
+        // seq_nr_from_master: u64,
+        // visible_slot_number_after_increase: VisibleSlotNumber,
+        // visible_slots_to_advance: NonZero<u8>,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::DoBatchStartMsg {
-            visible_slot_number_after_increase,
-            visible_slots_to_advance,
+            batch_from_master,
             reason,
         })
         .await
@@ -1482,23 +1483,19 @@ where
                 self.process_new_storage(info).await;
             }
             Message::DoBatchStartMsg {
-                visible_slot_number_after_increase,
-                visible_slots_to_advance,
+                batch_from_master,
                 reason,
             } => {
-                self.process_do_batch_start_replica(
-                    visible_slot_number_after_increase,
-                    visible_slots_to_advance,
-                    reason,
-                )
-                .await;
+                self.process_do_batch_start_replica(batch_from_master, reason)
+                    .await;
             }
             Message::DoNewTx {
                 baked_tx,
                 tx_hash,
                 reason,
             } => {
-                self.process_do_new_tx(baked_tx, tx_hash, reason).await;
+                self.process_do_new_tx_replica(baked_tx, tx_hash, reason)
+                    .await;
             }
             Message::CloseCurrentBatch { reason } => {
                 self.process_close_current_batch(reason).await;
@@ -1964,19 +1961,6 @@ where
         inner.trigger_batch_production_if_convenient().await;
     }
 
-    async fn process_do_batch_start_replica(
-        &mut self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_increase: NonZero<u8>,
-        reason: &'static str,
-    ) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        let _ = inner
-            .do_batch_start(visible_slot_number_after_increase, visible_increase)
-            .await
-            .unwrap();
-    }
-
     async fn process_accept_tx(
         &mut self,
         baked_tx: FullyBakedTx,
@@ -2024,7 +2008,38 @@ where
         Ok(rx)
     }
 
-    async fn process_do_new_tx(
+    async fn process_do_batch_start_replica(
+        &mut self,
+        batch_from_master: BatchToStore,
+        reason: &'static str,
+    ) -> Result<(), ReplicaBatchStartError> {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        let current_seq_nr = inner.current_sequence_number();
+
+        let seq_nr_from_master = batch_from_master.sequence_number;
+        if current_seq_nr > seq_nr_from_master + 1 {
+            return Err(ReplicaBatchStartError::X(DBDataRejected::ExecutorAhead(
+                current_seq_nr,
+            )));
+        }
+
+        if current_seq_nr < seq_nr_from_master + 1 {
+            return Err(ReplicaBatchStartError::X(DBDataRejected::ExecutorBehind(
+                DbData::BatchStart(batch_from_master),
+            )));
+        }
+
+        inner
+            .do_batch_start(
+                batch_from_master.visible_slot_number_after_increase,
+                batch_from_master.visible_slots_to_advance,
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn process_do_new_tx_replica(
         &mut self,
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
@@ -2038,6 +2053,16 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         inner.close_current_batch().await;
     }
+}
+
+use crate::preferred::replica::replica_sync_task::DBDataRejected;
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ReplicaBatchStartError {
+    #[error("TODO")]
+    X(DBDataRejected),
+    #[error("TODO")]
+    Creation(#[from] BatchCreationError),
 }
 
 #[derive(Debug)]

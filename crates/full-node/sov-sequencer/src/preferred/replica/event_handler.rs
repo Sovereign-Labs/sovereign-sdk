@@ -18,8 +18,10 @@ where
             DbData::BatchStart(batch_to_store) => {
                 let _ = self
                     .do_batch_start_msg_replica(
-                        batch_to_store.visible_slot_number_after_increase,
-                        batch_to_store.visible_slots_to_advance,
+                        batch_to_store,
+                        //batch_to_store.sequence_number,
+                        //batch_to_store.visible_slot_number_after_increase,
+                        //batch_to_store.visible_slots_to_advance,
                         "replica_start_batch",
                     )
                     .await

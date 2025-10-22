@@ -8,6 +8,7 @@ use tokio::time::Duration;
 // Process events in pages to avoid excessive memory consumption
 const PAGE_SIZE: usize = 2000;
 
+#[derive(Debug)]
 pub(crate) enum DBDataRejected {
     ExecutorBehind(DbData),
     ExecutorAhead(u64),
