@@ -1,5 +1,6 @@
 # 2025-10-21
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+- #1936 Fixes warnings about metrics during rollup startup
 
 # 2025-10-20
 - #1917 Add support for logs from pending blocks in `eth_getLogs` and introduce `LogsWithCursorProvider` trait in `sov-eth-client` for paginated log retrieval with `eth_getLogsWithCursor`.
