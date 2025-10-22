@@ -3,11 +3,13 @@
 
 use std::sync::Arc;
 
+use rockbound::Schema;
 use rockbound::{
     default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB, SchemaBatch,
 };
 
 use crate::metrics::nomt::FlatStateCommitMetric;
+use crate::schema::namespace::{NomtCommittedVersion, NomtHistoricalState, NomtPruningState};
 use crate::{
     historical_state::StateChanges,
     namespaces::{KernelNamespace, UserNamespace},
@@ -20,26 +22,71 @@ pub struct FlatStateDb {
     pub(crate) user: VersionedDB<NomtStateValues<UserNamespace>>,
     pub(crate) kernel: VersionedDB<NomtStateValues<KernelNamespace>>,
     pub(crate) other: Arc<rockbound::DB>,
+    #[allow(dead_code)]
+    // We don't technically need to store the archival db here - it's only accessed through the user/kernel versioned DB wrappers.
+    // We keep it here so that the internal structure is more legible by glancing at this struct. Note that unless the user has set the config to separate out the archival db, 
+    // this will point to the same rockbound::DB as the `other` field.
+    pub(crate) archival: Arc<rockbound::DB>,
+}
+
+pub struct FlatDbCommitData {
+    pub user_archival: SchemaBatch,
+    pub kernel_archival: SchemaBatch,
+    pub flat: SchemaBatch,
 }
 
 impl FlatStateDb {
     const DB_NAME: &'static str = "state";
     const DB_PATH_SUFFIX: &'static str = "state-db";
+    const ARCHIVAL_DB_PATH_SUFFIX: &'static str = "archival-state-db";
 
     /// Create a new [`FlatStateDb`] from a path.
-    pub fn new(path: std::path::PathBuf, cache_size: usize) -> anyhow::Result<Self> {
-        let mut columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
-        VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
-        VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(&mut columns)?;
+    pub fn new(
+        path: std::path::PathBuf,
+        cache_size: usize,
+        separate_archival: bool,
+    ) -> anyhow::Result<Self> {
+        let mut columns: Vec<ColumnFamilyDescriptor> =
+            vec![default_cf_descriptor(StateRootHashes::table_name())];
+        VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(
+            &mut columns,
+            separate_archival,
+        )?;
+        VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(
+            &mut columns,
+            separate_archival,
+        )?;
         let other = Self::get_rockbound_options(columns)
-            .setup_db_in_path_with_column_descriptors(path, cache_size)?;
+            .setup_db_in_path_with_column_descriptors(path.clone(), cache_size)?;
         let other = Arc::new(other);
-        let user = VersionedDB::<NomtStateValues<UserNamespace>>::from_db(other.clone())?;
-        let kernel = VersionedDB::<NomtStateValues<KernelNamespace>>::from_db(other.clone())?;
+        let archival = if separate_archival {
+            let archival_path = path.join(Self::ARCHIVAL_DB_PATH_SUFFIX);
+            let archival_columns = vec![
+                default_cf_descriptor(NomtHistoricalState::<UserNamespace>::COLUMN_FAMILY_NAME),
+                default_cf_descriptor(NomtHistoricalState::<KernelNamespace>::COLUMN_FAMILY_NAME),
+                default_cf_descriptor(NomtPruningState::<UserNamespace>::COLUMN_FAMILY_NAME),
+                default_cf_descriptor(NomtPruningState::<KernelNamespace>::COLUMN_FAMILY_NAME),
+                default_cf_descriptor(NomtCommittedVersion::<UserNamespace>::COLUMN_FAMILY_NAME),
+                default_cf_descriptor(NomtCommittedVersion::<KernelNamespace>::COLUMN_FAMILY_NAME),
+            ];
+            let archival = Self::get_rockbound_options(archival_columns);
+            Arc::new(archival.setup_db_in_path_with_column_descriptors(archival_path, 0)?)
+        } else {
+            other.clone()
+        };
+        let user = VersionedDB::<NomtStateValues<UserNamespace>>::from_dbs(
+            other.clone(),
+            archival.clone(),
+        )?;
+        let kernel = VersionedDB::<NomtStateValues<KernelNamespace>>::from_dbs(
+            other.clone(),
+            archival.clone(),
+        )?;
         Ok(Self {
             user,
             kernel,
             other,
+            archival,
         })
     }
 
@@ -72,7 +119,7 @@ impl FlatStateDb {
     /// Coalesce all the changes into a single schema batch.
     /// Assumption: only a single thread is committing at a time. Calling prepare_commit multiple times
     /// will result in a version mismatch.
-    fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<SchemaBatch> {
+    fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<FlatDbCommitData> {
         let StateChanges {
             user,
             kernel,
@@ -93,11 +140,16 @@ impl FlatStateDb {
                 .unwrap_or(0);
             assert_eq!(user_version, version);
         }
-        self.user.materialize(&user, &mut other_changes, version)?;
-        self.kernel
+        let user_archival = self.user.materialize(&user, &mut other_changes, version)?;
+        let kernel_archival = self
+            .kernel
             .materialize(&kernel, &mut other_changes, version)?;
 
-        Ok(other_changes)
+        Ok(FlatDbCommitData {
+            user_archival,
+            kernel_archival,
+            flat: other_changes,
+        })
     }
 
     /// Coalesce all the changes into a single schema batch and write it atomically.
@@ -106,7 +158,16 @@ impl FlatStateDb {
         let commit = self.prepare_commit(state)?;
         let prepare = start_prepare.elapsed();
         let start_write = std::time::Instant::now();
-        self.other.write_schemas(commit)?;
+        // TODO: We can write the archival batches to disk in parallel
+        self.get_kernel_db()
+            .commit_archival(commit.kernel_archival)?;
+        self.get_user_db().commit_archival(commit.user_archival)?;
+        if cfg!(debug_assertions) {
+            if std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
+                panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
+            }
+        }
+        self.other.write_schemas(commit.flat)?;
         let write = start_write.elapsed();
         Ok(FlatStateCommitMetric { prepare, write })
     }
