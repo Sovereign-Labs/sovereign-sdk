@@ -80,7 +80,7 @@ pub enum CallMessage<S: Spec> {
         token_id: TokenId,
     },
     /// Transfers a specified amount of tokens to the specified address.
-    #[sov_wallet(show_as = "Transfer to address {} {} with memo {}.")]
+    #[sov_wallet(show_as = "Transfer to address {} {} with memo `{}`.")]
     TransferWithMemo {
         /// The address to which the tokens will be transferred.
         to: S::Address,
