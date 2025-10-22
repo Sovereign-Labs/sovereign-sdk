@@ -46,7 +46,7 @@ pub fn build_transfer_token_tx<S>(
     recipient: <S as Spec>::Address,
     amount: u128,
     nonce: u64,
-) -> Transaction<Runtime<S>, S>
+) -> Transaction<Runtime<S>, S::Gas, S::CryptoSpec>
 where
     S: Spec,
     <S as Spec>::Address: FromVmAddress<EthereumAddress>,
@@ -58,5 +58,5 @@ where
             token_id,
         },
     });
-    default_test_signed_transaction(key, &msg, nonce, &CHAIN_HASH)
+    default_test_signed_transaction::<Runtime<S>, S>(key, &msg, nonce, &CHAIN_HASH)
 }

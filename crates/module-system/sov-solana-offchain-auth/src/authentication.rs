@@ -12,8 +12,8 @@ use sov_modules_api::transaction::{
     self, AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
 };
 use sov_modules_api::{
-    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSignature,
-    ProvableStateReader, SafeString, Spec, TxHash,
+    charge_gas_to_deserialize_json, CryptoSpec, CryptoSpecExt, DispatchCall, Gas, GasMeter,
+    MeteredSignature, ProvableStateReader, SafeString, Spec, TxHash,
 };
 
 /// The payload for a solana offchain message.
@@ -24,26 +24,26 @@ use sov_modules_api::{
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize, UniversalWallet)]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct SolanaOffchainUnsignedTransaction<R: TransactionCallable, S: Spec> {
+pub struct SolanaOffchainUnsignedTransaction<R: TransactionCallable, G: Gas> {
     /// The runtime call
     pub runtime_call: R::Call,
     /// The uniqueness identifier
     pub uniqueness: UniquenessData,
     /// Data related to fees and gas handling.
-    pub details: TxDetails<S>,
+    pub details: TxDetails<G>,
     /// The chain name, so that users can verify the destination chain and avoid replay attacks
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
 }
 
-impl<R, S> SolanaOffchainUnsignedTransaction<R, S>
+impl<R, G> SolanaOffchainUnsignedTransaction<R, G>
 where
-    S: Spec,
+    G: Gas,
     R: TransactionCallable,
     <R as TransactionCallable>::Call: Serialize + DeserializeOwned,
 {
-    fn into_unsigned_tx(self) -> UnsignedTransaction<R, S> {
+    fn into_unsigned_tx(self) -> UnsignedTransaction<R, G> {
         UnsignedTransaction {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
@@ -52,17 +52,17 @@ where
     }
 
     fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice::<SolanaOffchainUnsignedTransaction<R, S>>(buf)
+        serde_json::from_slice::<SolanaOffchainUnsignedTransaction<R, G>>(buf)
     }
 }
 
 /// The envelope for a signed spec-compliant solana offchain message, where the signed message
 /// includes the preamble.
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct SolanaOffchainSpecCompliantMessage<S: Spec> {
+pub struct SolanaOffchainSpecCompliantMessage<C: CryptoSpecExt> {
     /// The message is a JSON-serialized SolanaOffchainUnsignedTransaction with the standard preamble prepended.
     pub signed_message_with_preamble: Vec<u8>,
-    pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
+    pub signature: C::Signature,
 }
 
 /// The envelope for a message signed "raw", without the preable included.
@@ -70,12 +70,12 @@ pub struct SolanaOffchainSpecCompliantMessage<S: Spec> {
 /// start with an ASCII character (normally, '{'), allowing us to unambiguously differentiate them.
 /// Without the preamble present, we need to include the pubkey explicitly.
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct SolanaOffchainSimpleMessage<S: Spec> {
+pub struct SolanaOffchainSimpleMessage<C: CryptoSpecExt> {
     /// The message is a JSON-serialized SolanaOffchainUnsignedTransaction, unaltered.
     pub signed_message: Vec<u8>,
     pub chain_hash: [u8; 32],
-    pub pubkey: <S::CryptoSpec as CryptoSpec>::PublicKey,
-    pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
+    pub pubkey: C::PublicKey,
+    pub signature: C::Signature,
 }
 
 /// The length of a preamble with a single 32-byte signer. This is just the sum of the lengths of
@@ -132,15 +132,15 @@ impl RawSolanaOffchainMessagePreamble {
     }
 }
 
-struct UnpackedSolanaMessage<S: Spec> {
-    pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
-    signature: <S::CryptoSpec as CryptoSpec>::Signature,
+struct UnpackedSolanaMessage<C: CryptoSpecExt> {
+    pub_key: C::PublicKey,
+    signature: C::Signature,
     chain_hash: [u8; 32],
     signed_bytes: Vec<u8>,
     json_start: usize,
 }
 
-impl<S: Spec> UnpackedSolanaMessage<S> {
+impl<C: CryptoSpecExt> UnpackedSolanaMessage<C> {
     fn json_bytes(&self) -> &[u8] {
         &self.signed_bytes[self.json_start..]
     }
@@ -171,7 +171,9 @@ fn verify_solana_signature<S: Spec>(
         })
 }
 
-fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage<S>, FatalError> {
+fn unpack_solana_message<C: CryptoSpecExt>(
+    raw_tx: &[u8],
+) -> Result<UnpackedSolanaMessage<C>, FatalError> {
     // First 4 bytes are the length of the Vec<u8> as u32 (borsh encoding)
     if raw_tx.len() < 5 {
         return Err(FatalError::DeserializationFailed(
@@ -182,7 +184,7 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
     // The fifth byte tells us which format we're dealing with
     if raw_tx[4] == 0xff {
         // Spec-compliant message with preamble
-        let envelope: SolanaOffchainSpecCompliantMessage<S> = borsh::from_slice(raw_tx)
+        let envelope: SolanaOffchainSpecCompliantMessage<C> = borsh::from_slice(raw_tx)
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
         // Verify preamble is present and valid
@@ -202,7 +204,7 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
         // Validate the preamble
         preamble.validate(actual_message_length)?;
 
-        let signer: <S::CryptoSpec as CryptoSpec>::PublicKey = borsh::from_slice(&preamble.signer)
+        let signer: C::PublicKey = borsh::from_slice(&preamble.signer)
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
         Ok(UnpackedSolanaMessage {
@@ -214,7 +216,7 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
         })
     } else {
         // Raw message without preamble (should start with ASCII character, typically '{')
-        let raw_message: SolanaOffchainSimpleMessage<S> = borsh::from_slice(raw_tx)
+        let raw_message: SolanaOffchainSimpleMessage<C> = borsh::from_slice(raw_tx)
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
         Ok(UnpackedSolanaMessage {
@@ -234,8 +236,8 @@ where
     D: DispatchCall<Spec = S>,
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
-    let unpacked_message = unpack_solana_message::<S>(raw_tx)?;
-    let solana_unsigned_tx: SolanaOffchainUnsignedTransaction<D, S> =
+    let unpacked_message = unpack_solana_message::<S::CryptoSpec>(raw_tx)?;
+    let solana_unsigned_tx: SolanaOffchainUnsignedTransaction<D, S::Gas> =
         serde_json::from_slice(unpacked_message.json_bytes())
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
     Ok(solana_unsigned_tx.into_unsigned_tx().call())
@@ -256,7 +258,7 @@ where
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let unpacked_message = unpack_solana_message::<S>(raw_tx)
+    let unpacked_message = unpack_solana_message::<S::CryptoSpec>(raw_tx)
         .map_err(|e| AuthenticationError::FatalError(e, raw_tx_hash))?;
 
     let json_slice = unpacked_message.json_bytes();
@@ -265,7 +267,7 @@ where
             "Transaction deserialization run out of gas: {e}, tx hash {raw_tx_hash}"
         ))
     })?;
-    let solana_unsigned_tx = SolanaOffchainUnsignedTransaction::<D, S>::unmetered_deserialize(
+    let solana_unsigned_tx = SolanaOffchainUnsignedTransaction::<D, S::Gas>::unmetered_deserialize(
         json_slice,
     )
     .map_err(|e| {
@@ -362,14 +364,14 @@ pub mod test {
         signed_message.extend_from_slice(&preamble);
         signed_message.extend_from_slice(message);
 
-        let envelope = SolanaOffchainSpecCompliantMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantMessage::<<TestSpec as Spec>::CryptoSpec> {
             signed_message_with_preamble: signed_message.clone(),
             signature: signature.clone(),
         };
 
         let serialized = borsh::to_vec(&envelope).unwrap();
 
-        let result = unpack_solana_message::<TestSpec>(&serialized);
+        let result = unpack_solana_message::<<TestSpec as Spec>::CryptoSpec>(&serialized);
         assert!(result.is_ok());
 
         let unpacked = result.unwrap();
@@ -388,7 +390,7 @@ pub mod test {
         let pubkey = Ed25519PrivateKey::generate().pub_key();
         let signature: Ed25519Signature = [4u8; 64].as_slice().try_into().unwrap();
 
-        let raw_message = SolanaOffchainSimpleMessage::<TestSpec> {
+        let raw_message = SolanaOffchainSimpleMessage::<<TestSpec as Spec>::CryptoSpec> {
             signed_message: message.to_vec(),
             chain_hash: TEST_CHAIN_HASH,
             pubkey: pubkey.clone(),
@@ -397,7 +399,7 @@ pub mod test {
 
         let serialized = borsh::to_vec(&raw_message).unwrap();
 
-        let result = unpack_solana_message::<TestSpec>(&serialized);
+        let result = unpack_solana_message::<<TestSpec as Spec>::CryptoSpec>(&serialized);
         assert!(result.is_ok());
 
         let unpacked = result.unwrap();
@@ -429,7 +431,7 @@ pub mod test {
         signed_message.extend_from_slice(&header);
         signed_message.extend_from_slice(message);
 
-        let envelope = SolanaOffchainSpecCompliantMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantMessage::<<TestSpec as Spec>::CryptoSpec> {
             signed_message_with_preamble: signed_message,
             signature: signature.clone(),
         };
@@ -437,7 +439,7 @@ pub mod test {
         let serialized = borsh::to_vec(&envelope).unwrap();
 
         // Should fail validation
-        let result = unpack_solana_message::<TestSpec>(&serialized);
+        let result = unpack_solana_message::<<TestSpec as Spec>::CryptoSpec>(&serialized);
         assert!(result.is_err());
         assert!(matches!(result, Err(FatalError::DeserializationFailed(_))));
     }

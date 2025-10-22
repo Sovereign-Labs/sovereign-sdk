@@ -19,7 +19,9 @@ use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
 
 type TestSpec = DemoRollupSpec;
-type TestPrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
+type G = <TestSpec as Spec>::Gas;
+type C = <TestSpec as Spec>::CryptoSpec;
+type TestPrivateKey = <C as CryptoSpec>::PrivateKey;
 
 const MAX_TX_FEE: Amount = Amount::new(100_000_000);
 const UNREGISTERED_SENDER: MockAddress = MockAddress::new([121; 32]);
@@ -115,7 +117,7 @@ async fn forced_sequencer_registration_test_case(
 fn build_register_sequencer_tx(
     key: &TestPrivateKey,
     nonce: u64,
-) -> Transaction<Runtime<TestSpec>, TestSpec> {
+) -> Transaction<Runtime<TestSpec>, G, C> {
     let msg =
         RuntimeCall::<TestSpec>::SequencerRegistry(sov_sequencer_registry::CallMessage::Register {
             da_address: UNREGISTERED_SENDER,
@@ -125,7 +127,7 @@ fn build_register_sequencer_tx(
     let max_priority_fee_bips = PriorityFeeBips::ZERO;
     let max_fee = MAX_TX_FEE;
     let gas_limit = None;
-    Transaction::<Runtime<TestSpec>, TestSpec>::new_signed_tx(
+    Transaction::<Runtime<TestSpec>, G, C>::new_signed_tx(
         key,
         &CHAIN_HASH,
         UnsignedTransaction::new(
@@ -139,7 +141,7 @@ fn build_register_sequencer_tx(
     )
 }
 
-fn transaction_into_blob(transaction: Transaction<Runtime<TestSpec>, TestSpec>) -> Vec<u8> {
+fn transaction_into_blob(transaction: Transaction<Runtime<TestSpec>, G, C>) -> Vec<u8> {
     borsh::to_vec(
         &<Runtime<TestSpec> as RuntimeT<TestSpec>>::Auth::encode_with_standard_auth(RawTx {
             data: borsh::to_vec(&transaction).unwrap(),

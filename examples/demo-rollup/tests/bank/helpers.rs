@@ -27,6 +27,8 @@ use super::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
 
 type TestSpec = DemoRollupSpec;
+type G = <TestSpec as Spec>::Gas;
+type C = <TestSpec as Spec>::CryptoSpec;
 
 pub(crate) struct TestCase {
     pub(crate) wait_for_aggregated_proof: bool,
@@ -69,10 +71,10 @@ pub(crate) fn create_keys_and_addresses() -> (
 }
 
 pub(crate) fn build_create_token_tx(
-    key: &<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    key: &<C as CryptoSpec>::PrivateKey,
     nonce: u64,
     initial_balance: u128,
-) -> Transaction<Runtime<TestSpec>, TestSpec> {
+) -> Transaction<Runtime<TestSpec>, G, C> {
     let user_address: Address = key.pub_key().credential_id().into();
     let msg = RuntimeCall::<TestSpec>::Bank(sov_bank::CallMessage::<TestSpec>::CreateToken {
         token_name: TOKEN_NAME.try_into().unwrap(),
@@ -82,16 +84,16 @@ pub(crate) fn build_create_token_tx(
         admins: SafeVec::new(),
         supply_cap: None,
     });
-    default_test_signed_transaction(key, &msg, nonce, &CHAIN_HASH)
+    default_test_signed_transaction::<Runtime<TestSpec>, TestSpec>(key, &msg, nonce, &CHAIN_HASH)
 }
 
 pub(crate) fn build_multiple_transfers(
     amounts: &[u128],
-    signer_key: &<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    signer_key: &<C as CryptoSpec>::PrivateKey,
     token_id: TokenId,
     recipient: <TestSpec as Spec>::Address,
     start_nonce: u64,
-) -> Vec<Transaction<Runtime<TestSpec>, TestSpec>> {
+) -> Vec<Transaction<Runtime<TestSpec>, G, C>> {
     let mut txs = vec![];
     let mut nonce = start_nonce;
     for amt in amounts {
@@ -196,7 +198,7 @@ pub(crate) async fn assert_bank_event<S: Spec>(
 }
 
 pub(crate) async fn send_tx_and_wait_for_status(
-    txs: &[Transaction<Runtime<TestSpec>, TestSpec>],
+    txs: &[Transaction<Runtime<TestSpec>, G, C>],
     client: &NodeClient,
 ) -> anyhow::Result<u64> {
     let rsps = client.client.send_txs_to_sequencer(txs).await?;

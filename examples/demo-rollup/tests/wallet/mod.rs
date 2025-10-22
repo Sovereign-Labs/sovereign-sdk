@@ -14,8 +14,10 @@ use sov_test_utils::{
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 
 type S = DemoRollupSpec;
+type G = <DemoRollupSpec as Spec>::Gas;
+type C = <DemoRollupSpec as Spec>::CryptoSpec;
 
-fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
+fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, G> {
     let msg: RuntimeCall<S> = RuntimeCall::Bank(CallMessage::Mint {
         mint_to_address: <S as Spec>::Address::from_str(
             "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
@@ -29,7 +31,7 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
             .unwrap(),
         },
     });
-    UnsignedTransaction::<_, S>::new(
+    UnsignedTransaction::<_, G>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -62,8 +64,8 @@ fn test_transfer_template() {
         "token_id": [23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 6]
     }"#;
     let schema = Schema::of_rollup_types_with_chain_data::<
-        Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        Transaction<Runtime<S>, G, C>,
+        UnsignedTransaction<Runtime<S>, G>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -86,8 +88,8 @@ fn test_display_unsigned_tx() {
     let unsigned_tx = make_unsigned_tx();
     let unsigned_data = borsh::to_vec(&unsigned_tx).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
-        Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        Transaction<Runtime<S>, G, C>,
+        UnsignedTransaction<Runtime<S>, G>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -112,12 +114,15 @@ fn test_display_unsigned_tx() {
 fn test_display_signed_tx() {
     let unsigned_tx = make_unsigned_tx();
     let signer = TestUser::<S>::generate(Amount::ZERO);
-    let signed_tx =
-        Transaction::<Runtime<S>, S>::new_signed_tx(signer.private_key(), &CHAIN_HASH, unsigned_tx);
+    let signed_tx = Transaction::<Runtime<S>, G, C>::new_signed_tx(
+        signer.private_key(),
+        &CHAIN_HASH,
+        unsigned_tx,
+    );
     let signed_data = borsh::to_vec(&signed_tx).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
-        Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        Transaction<Runtime<S>, G, C>,
+        UnsignedTransaction<Runtime<S>, G>,
         RuntimeCall<S>,
         Address,
     >(ChainData {

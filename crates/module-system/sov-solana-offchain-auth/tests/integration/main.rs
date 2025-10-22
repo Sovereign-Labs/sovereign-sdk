@@ -85,6 +85,8 @@ impl<S: Spec> SolanaOffchainAuthenticatorTrait<S> for TestRuntime<S> {
 
 type RT = TestRuntime<SolanaTestSpec>;
 type S = SolanaTestSpec;
+type G = <SolanaTestSpec as Spec>::Gas;
+type C = <SolanaTestSpec as Spec>::CryptoSpec;
 
 async fn create_test_rollup() -> anyhow::Result<(
     TestRollup<SolanaOffchainAuthBlueprint<SolanaTestSpec, RT>>,
@@ -181,7 +183,7 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, G>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -189,7 +191,7 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
         UniquenessData::Generation(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
     );
-    let solana_unsigned_tx = SolanaOffchainUnsignedTransaction::<RT, S> {
+    let solana_unsigned_tx = SolanaOffchainUnsignedTransaction::<RT, G> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -261,7 +263,7 @@ async fn test_submit_ledger_signed_transaction() {
         let pubkey = signer.pub_key();
         let signature = signer.sign(&encoded_tx);
 
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleMessage::<C> {
             signed_message: encoded_tx,
             chain_hash: RT::CHAIN_HASH,
             pubkey,
@@ -304,7 +306,7 @@ async fn test_submit_ledger_signed_transaction() {
         make_preamble_for_message(&pubkey, &RT::CHAIN_HASH, encoded_tx.len() as u16).to_vec();
     signed_message_with_preamble.extend_from_slice(&encoded_tx);
 
-    let message = SolanaOffchainSpecCompliantMessage::<S> {
+    let message = SolanaOffchainSpecCompliantMessage::<C> {
         signed_message_with_preamble,
         signature,
     };
@@ -348,7 +350,7 @@ async fn test_submit_raw_signed_message_transaction() {
     let pubkey = signer.pub_key();
     let signature = signer.sign(&encoded_tx);
 
-    let message = SolanaOffchainSimpleMessage::<S> {
+    let message = SolanaOffchainSimpleMessage::<C> {
         signed_message: encoded_tx,
         chain_hash: RT::CHAIN_HASH,
         pubkey,
@@ -384,7 +386,7 @@ async fn test_submit_invalid_raw_signed_message_transaction() {
     signature_bytes[5] = signature_bytes[5].wrapping_add(1);
     let signature: Ed25519Signature = signature_bytes.as_slice().try_into().unwrap();
 
-    let message = SolanaOffchainSimpleMessage::<S> {
+    let message = SolanaOffchainSimpleMessage::<C> {
         signed_message: encoded_tx,
         chain_hash: RT::CHAIN_HASH,
         pubkey,

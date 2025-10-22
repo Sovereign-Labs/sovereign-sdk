@@ -5,9 +5,13 @@ use ethereum_types::Address;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::Spec;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
+
 type TestSpec = DemoRollupSpec;
+type G = <TestSpec as Spec>::Gas;
+type C = <TestSpec as Spec>::CryptoSpec;
 
 use crate::evm::evm_test_helper::{setup_with_simple_storage, EVM_EXTENSION};
 
@@ -39,7 +43,7 @@ async fn send_insert_credentials(
 fn create_insert_credentials(
     from_addr: Address,
     chain_id: u64,
-) -> Transaction<Runtime<TestSpec>, TestSpec> {
+) -> Transaction<Runtime<TestSpec>, G, C> {
     let nonce = 0;
     let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
     let key = key_and_address.private_key;
@@ -54,7 +58,7 @@ fn create_insert_credentials(
     let max_priority_fee_bips = TEST_DEFAULT_MAX_PRIORITY_FEE;
     let max_fee = TEST_DEFAULT_MAX_FEE;
     let gas_limit = None;
-    Transaction::<Runtime<TestSpec>, TestSpec>::new_signed_tx(
+    Transaction::<Runtime<TestSpec>, G, C>::new_signed_tx(
         &key,
         &CHAIN_HASH,
         UnsignedTransaction::new(

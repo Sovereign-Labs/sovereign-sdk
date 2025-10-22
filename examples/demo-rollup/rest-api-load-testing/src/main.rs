@@ -129,8 +129,10 @@ mod helpers {
             Self(client)
         }
 
-        pub async fn send_transactions<S>(&self, transactions: &[Transaction<Runtime<S>, S>])
-        where
+        pub async fn send_transactions<S>(
+            &self,
+            transactions: &[Transaction<Runtime<S>, S::Gas, S::CryptoSpec>],
+        ) where
             S: Spec,
             S::Address: FromVmAddress<EthereumAddress>,
         {
@@ -154,7 +156,8 @@ mod helpers {
         key: &<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
         nonce: u64,
         initial_balance: Amount,
-    ) -> Transaction<Runtime<TestSpec>, TestSpec> {
+    ) -> Transaction<Runtime<TestSpec>, <TestSpec as Spec>::Gas, <TestSpec as Spec>::CryptoSpec>
+    {
         let user_address: Address = key.pub_key().credential_id().into();
 
         let msg = RuntimeCall::Bank(sov_bank::CallMessage::<TestSpec>::CreateToken {

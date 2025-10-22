@@ -189,7 +189,7 @@ impl SimpleStorageClient {
 impl SimpleStorageClient {
     pub async fn send_transactions_and_wait_slot<S: Spec, Rt: Runtime<S>>(
         &self,
-        transactions: &[sov_modules_api::transaction::Transaction<Rt, S>],
+        transactions: &[sov_modules_api::transaction::Transaction<Rt, S::Gas, S::CryptoSpec>],
     ) -> anyhow::Result<()> {
         let mut slot_subscription = self.node_client.client.subscribe_slots().await?;
 
