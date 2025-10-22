@@ -2016,18 +2016,19 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         let current_seq_nr = inner.current_sequence_number();
 
+        /*
         let seq_nr_from_master = batch_from_master.sequence_number;
         if current_seq_nr > seq_nr_from_master + 1 {
-            return Err(ReplicaBatchStartError::X(DBDataRejected::ExecutorAhead(
-                current_seq_nr,
-            )));
+            return Err(ReplicaBatchStartError::Rejected(
+                DBDataRejected::ExecutorAhead(current_seq_nr),
+            ));
         }
 
         if current_seq_nr < seq_nr_from_master + 1 {
-            return Err(ReplicaBatchStartError::X(DBDataRejected::ExecutorBehind(
-                DbData::BatchStart(batch_from_master),
-            )));
-        }
+            return Err(ReplicaBatchStartError::Creation(
+                DBDataRejected::ExecutorBehind(DbData::BatchStart(batch_from_master)),
+            ));
+        }*/
 
         inner
             .do_batch_start(
@@ -2060,7 +2061,7 @@ use crate::preferred::replica::replica_sync_task::DBDataRejected;
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ReplicaBatchStartError {
     #[error("TODO")]
-    X(DBDataRejected),
+    Rejected(DBDataRejected),
     #[error("TODO")]
     Creation(#[from] BatchCreationError),
 }
