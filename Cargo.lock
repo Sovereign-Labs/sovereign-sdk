@@ -12376,6 +12376,7 @@ dependencies = [
  "sov-cli",
  "sov-db",
  "sov-ledger-apis",
+ "sov-metrics",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-rollup-apis",
