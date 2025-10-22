@@ -113,7 +113,8 @@ where
         Some(Block {
             header,
             transactions,
-            ..Default::default()
+            uncles: vec![],
+            withdrawals: None,
         })
     }
 
@@ -302,7 +303,7 @@ where
                 .map(|blob_gas| blob_gas.excess_blob_gas),
             base_fee_per_gas: Some(current_block_env.basefee),
 
-            ..Default::default()
+            ..Default::default() // TODO
         };
 
         crate::Block {

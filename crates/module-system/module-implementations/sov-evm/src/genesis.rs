@@ -109,7 +109,7 @@ fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
         timestamp: config.genesis_timestamp,
         excess_blob_gas: Some(EXCESS_BLOB_GAS),
         base_fee_per_gas: Some(base_fee),
-        ..Default::default()
+        ..Default::default() // TODO
     };
 
     Block {

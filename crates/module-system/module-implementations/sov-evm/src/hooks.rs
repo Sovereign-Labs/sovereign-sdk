@@ -139,7 +139,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
                 .map(|blob_gas| blob_gas.excess_blob_gas),
 
             base_fee_per_gas: Some(block_env.basefee),
-            ..Default::default()
+            ..Default::default() // TODO
         };
 
         let end_tx_index = start_tx_index

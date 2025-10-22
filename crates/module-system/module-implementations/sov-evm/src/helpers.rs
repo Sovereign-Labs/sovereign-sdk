@@ -40,7 +40,7 @@ pub(crate) fn prepare_call_env(
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
         access_list: access_list.unwrap_or_default(),
-        ..Default::default()
+        ..Default::default() // TODO
     };
 
     Ok(env)
@@ -58,7 +58,7 @@ pub(crate) fn from_recovered_with_block_context(
         block_hash,
         block_number: Some(block_number),
         index,
-        ..Default::default()
+        ..Default::default() // TODO
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }
