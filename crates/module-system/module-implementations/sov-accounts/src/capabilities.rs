@@ -27,7 +27,7 @@ impl<S: Spec> Accounts<S> {
                     if account.allowed_credentials.contains(credential_id) {
                         return Ok(requested_address.clone());
                     }
-                    // fall through to the error   
+                    // fall through to the error
                 }
                 // Fall through to the error
             }
