@@ -1,6 +1,7 @@
-# 2025-10-20
-- #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
-The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives.
+# 2025-10-22
+- #1940 **Breaking change**: Refactors the `Transaction` type's generics, from `Transaction<Runtime, Spec>` to `Transaction<Runtime, Gas, CryptoSpec>`. Similarly `UnsignedTransaction<Runtime, Gas>` and `TxDetails<Gas>` have the former `Spec` generic replaced.
+Most usages of the `Transaction` type will simply want to use `Transaction<Runtime<S>, <S as Spec>::Gas, <S as Spec>::CryptoSpec>`. This change allows specific context to override the CryptoSpec to something different from the rollup runtime's `Spec`, enabling the use of transaction authenticators using non-default signature schemes (e.g. secp256k1-based EIP712 transaction signing on ED25519-based rollups).
+
 # 2025-10-21
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
 - #1933 Cleans up demo-rollup tests
