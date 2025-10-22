@@ -260,8 +260,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
         assert!(
             response.to_string().starts_with(&(9 - (i - 6)).to_string()),
-            "Balance after set-value: {}",
-            response
+            "Balance after set-value: {response}",
         );
     }
 
@@ -281,8 +280,8 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         test_rollup.da_service.produce_block_now().await.unwrap();
         test_rollup
             .wait_for_rollup_to_crash(std::time::Duration::from_secs(10))
-            .await?
-    };
+            .await?;
+    }
     std::env::remove_var("SOV_CRASH_ON_COMMIT");
 
     // Restart the rollup and check that no writes have been lost due to the crash on commit.
@@ -327,8 +326,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     // Check that the balance is what we expect - i.e. no writes have been lost due to the crash on commit.
     assert!(
         response.to_string().starts_with("5"),
-        "Balance after set-value: {}",
-        response
+        "Balance after set-value: {response}",
     );
     Ok(())
 }
