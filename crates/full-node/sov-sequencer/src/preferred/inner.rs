@@ -958,6 +958,7 @@ where
     shutdown_receiver: watch::Receiver<()>,
 }
 
+#[derive(Debug)]
 /// Describes errors that can occur when updating the sequencer state.
 /// This type intentionally does *not* implement `std::error::Error` or `std::fmt::Debug` so that it cannot be directly converted to an `anyhow::Error`.
 /// To convert to anyhow, first convert to a `StateUpdateError` or similar. This is done to ensure backward compatibility with existing code that
@@ -1931,6 +1932,10 @@ where
             .await;
 
         inner.update_api_ledger(&info).await;
+
+        drop(inner);
+        self.process_force_overwrite_state_for_recovery(info, "xxx")
+            .await;
     }
 
     /// Closes the current batch
