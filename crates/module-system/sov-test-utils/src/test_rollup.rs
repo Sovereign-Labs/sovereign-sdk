@@ -113,6 +113,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
     pub num_cache_warmup_workers: usize,
+    pub separate_archival_db: bool,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -306,8 +307,13 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
+        let mut rollup_db_config =
+            RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
+        if self.config.separate_archival_db {
+            rollup_db_config.separate_archival_state = true;
+        }
         RollupConfig {
-            storage: RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf()),
+            storage: rollup_db_config,
             runner: RunnerConfig {
                 da_polling_interval_ms: 30,
                 da_total_timeout_secs: 3_600,
@@ -384,6 +390,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_log_limit: 20000,
             }),
             num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
+            separate_archival_db: true,
         }
     }
 }
@@ -673,6 +680,15 @@ where
             .await
             .expect("Failed to join rollup task before timeout.")
             .expect("Rollup task panicked.")
+    }
+
+    /// Waits for the rollup to shutdown.
+    pub async fn wait_for_rollup_to_crash(self, t: tokio::time::Duration) -> anyhow::Result<()> {
+        timeout(t, self.rollup_task)
+            .await
+            .expect("Failed to join rollup task before timeout.")
+            .expect_err("Rollup task should have crashed");
+        Ok(())
     }
 
     /// Shuts down the rollup and waits for all background tasks to finish.

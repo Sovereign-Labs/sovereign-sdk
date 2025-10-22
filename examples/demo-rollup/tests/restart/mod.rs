@@ -4,27 +4,58 @@ use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::test_helpers::test_genesis_source;
 use anyhow::Context;
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use futures::StreamExt;
 use rand::Rng;
+use sov_api_spec::types as api_types;
+use sov_bank::{config_gas_token_id, Coins};
+use sov_db::storage_manager::NomtStorageManager;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::BlockProducingConfig;
+use sov_mock_da::MockHash;
+use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::Amount;
+use sov_modules_api::CryptoSpec;
+use sov_modules_api::DispatchCall;
 use sov_modules_api::OperatingMode;
+use sov_modules_api::PrivateKey;
+use sov_modules_api::RawTx;
+use sov_modules_api::Runtime;
+use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
 use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::node::ledger_api::IncludeChildren;
 use sov_sequencer::SequencerKindConfig;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_stf_runner::processes::RollupProverConfig;
+use sov_test_utils::default_test_signed_transaction;
+use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::logging::LogCollector;
+use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
+use sov_test_utils::runtime::GenesisParams;
+use sov_test_utils::test_rollup::GenesisSource;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
+use sov_test_utils::MockDaSpec;
+use sov_test_utils::RtAgnosticBlueprint;
+use sov_test_utils::TestNomtSpec as TestSpec;
+use sov_test_utils::TestPrivateKey;
+use sov_test_utils::TestUser;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, registry, EnvFilter, Layer};
 
-use crate::test_helpers::test_genesis_source;
+generate_operator_runtime_with_kernel!(
+    kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
+    TestRuntime <=
+);
 
 const ROLLUP_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const ROLLUP_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -131,6 +162,205 @@ async fn start_stop_empty(
     // We could've checked `.is_empty`, but in case of failure, we will see errors immediately.
     assert_eq!(HashSet::<(Level, String)>::new(), recorded_errors_warnings);
     Ok(())
+}
+
+type StorageManager = NomtStorageManager<
+    MockDaSpec,
+    <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+    NomtProverStorage<
+        DefaultStorageSpec<<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+        MockHash,
+    >,
+>;
+
+/// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_stop_with_crash() -> anyhow::Result<()> {
+    // Use a very large balance so that gas can be safely ignored.
+    const INITIAL_BALANCE: u128 = 1000000000000000000;
+    let reward_user =
+        TestUser::<TestSpec>::new(TestPrivateKey::generate(), Amount::new(INITIAL_BALANCE));
+    let genesis_config = HighLevelOperatorGenesisConfig::generate(reward_user)
+        .add_additional_accounts(1, Amount::new(INITIAL_BALANCE));
+    let admin = genesis_config.additional_accounts()[1].clone();
+
+    let rt_genesis_config =
+        <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
+            genesis_config.into(),
+            ValueSetterConfig {
+                admin: admin.address(),
+            },
+        );
+
+    let genesis_params = GenesisParams {
+        runtime: rt_genesis_config.clone(),
+    };
+    let sequencer_address = genesis_params
+        .runtime
+        .sequencer_registry
+        .sequencer_config
+        .seq_da_address;
+    let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
+
+    let test_rollup = tokio::time::timeout(
+        ROLLUP_START_TIMEOUT,
+        RollupBuilder::<RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>, StorageManager>>::new(
+            GenesisSource::CustomParams(genesis_params.clone()),
+            BlockProducingConfig::Manual,
+            0,
+        )
+        .set_config(|c| {
+            c.max_concurrent_blobs = 65536;
+            c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
+            if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
+                sequencer_conf.disable_state_root_consistency_checks = true;
+            }
+            c.aggregated_proof_block_jump = 40;
+            c.separate_archival_db = true;
+        })
+        .set_da_config(|c| c.sender_address = sequencer_address)
+        .set_persistent_da()
+        .start(),
+    )
+    .await
+    .context("Starting rollup failed")??;
+
+    // Wait for rollup to start
+    let mut slot_subscription = test_rollup
+        .client
+        .client
+        .subscribe_slots_with_children(IncludeChildren::new(true))
+        .await?;
+    for _ in 0..5 {
+        test_rollup.da_service.produce_block_now().await?;
+        let _ = slot_subscription.next().await.unwrap().unwrap();
+    }
+
+    // Send enough that each tx will change the leading digit of our balance. Use a large buffer so that gas can be ignored.
+    const AMOUNT_TO_SEND: u128 = (INITIAL_BALANCE / 100) * 9;
+
+    // Send some transactions in a loop. This ensures that each slot has a batch, so there will be a non-empty db update when we eventually crash.
+    for i in 6..=9 {
+        let tx = tx_send_transfer(AMOUNT_TO_SEND, admin.private_key(), i);
+        test_rollup
+            .api_client()
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&tx),
+            })
+            .await
+            .unwrap();
+        test_rollup.force_close_batch().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        let slot = slot_subscription.next().await.unwrap().unwrap();
+        assert_eq!(slot.number, i);
+        assert!(slot.batches[0].tx_range.end == i - 5);
+
+        let response = test_rollup
+            .client
+            .get_balance::<TestSpec>(&admin.address(), &config_gas_token_id(), None)
+            .await?;
+
+        assert!(
+            response.to_string().starts_with(&(9 - (i - 6)).to_string()),
+            "Balance after set-value: {}",
+            response
+        );
+    }
+
+    // Send one more transaction which should crash on commit.
+    {
+        std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
+        let tx = tx_send_transfer(AMOUNT_TO_SEND, admin.private_key(), 10);
+        test_rollup
+            .api_client()
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&tx),
+            })
+            .await
+            .unwrap();
+        test_rollup.force_close_batch().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        test_rollup
+            .wait_for_rollup_to_crash(std::time::Duration::from_secs(10))
+            .await?
+    };
+    std::env::remove_var("SOV_CRASH_ON_COMMIT");
+
+    // Restart the rollup and check that no writes have been lost due to the crash on commit.
+    let test_rollup = tokio::time::timeout(
+        ROLLUP_START_TIMEOUT,
+        RollupBuilder::<RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>, StorageManager>>::new(
+            GenesisSource::CustomParams(genesis_params.clone()),
+            BlockProducingConfig::Manual,
+            0,
+        )
+        .set_config(|c| {
+            c.max_concurrent_blobs = 65536;
+            c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
+            if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
+                sequencer_conf.disable_state_root_consistency_checks = true;
+            }
+            c.aggregated_proof_block_jump = 40;
+            c.separate_archival_db = true;
+        })
+        .set_da_config(|c| c.sender_address = sequencer_address)
+        .set_persistent_da()
+        .start(),
+    )
+    .await
+    .context("Starting rollup failed")??;
+
+    let mut slot_subscription = test_rollup
+        .client
+        .client
+        .subscribe_slots_with_children(IncludeChildren::new(true))
+        .await?;
+    for _ in 0..2 {
+        test_rollup.da_service.produce_block_now().await?;
+        let _ = slot_subscription.next().await.unwrap().unwrap();
+    }
+
+    let response = test_rollup
+        .client
+        .get_balance::<TestSpec>(&admin.address(), &config_gas_token_id(), None)
+        .await?;
+
+    // Check that the balance is what we expect - i.e. no writes have been lost due to the crash on commit.
+    assert!(
+        response.to_string().starts_with("5"),
+        "Balance after set-value: {}",
+        response
+    );
+    Ok(())
+}
+
+fn tx_send_transfer(value_to_set: u128, key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
+    // let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+    //     sov_value_setter::CallMessage::SetValueAndSleep {
+    //         value: value_to_set,
+    //         sleep_millis: 0,
+    //     },
+    // );
+
+    let msg =
+        <TestRuntime<TestSpec> as DispatchCall>::Decodable::Bank(sov_bank::CallMessage::Transfer {
+            to: "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+                .parse()
+                .unwrap(),
+            coins: Coins {
+                amount: Amount::new(value_to_set),
+                token_id: config_gas_token_id(),
+            },
+        });
+    let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
+        key,
+        &msg,
+        nonce,
+        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
+    );
+    RawTx::new(borsh::to_vec(&tx).unwrap())
 }
 
 #[tokio::test(flavor = "multi_thread")]

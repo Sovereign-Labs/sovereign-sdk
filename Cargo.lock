@@ -10217,6 +10217,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "1.0.0"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=80c3490d8104bcf19e6ad7f026669549c21ec7a3#80c3490d8104bcf19e6ad7f026669549c21ec7a3"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -11849,6 +11850,7 @@ dependencies = [
  "sov-universal-wallet",
  "sov-zkvm-utils",
  "sp1",
+ "strum 0.26.3",
  "tempfile",
  "tokio",
  "tracing",

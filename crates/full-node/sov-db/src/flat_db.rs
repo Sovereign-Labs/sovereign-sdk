@@ -24,7 +24,7 @@ pub struct FlatStateDb {
     pub(crate) other: Arc<rockbound::DB>,
     #[allow(dead_code)]
     // We don't technically need to store the archival db here - it's only accessed through the user/kernel versioned DB wrappers.
-    // We keep it here so that the internal structure is more legible by glancing at this struct. Note that unless the user has set the config to separate out the archival db, 
+    // We keep it here so that the internal structure is more legible by glancing at this struct. Note that unless the user has set the config to separate out the archival db,
     // this will point to the same rockbound::DB as the `other` field.
     pub(crate) archival: Arc<rockbound::DB>,
 }
@@ -158,14 +158,14 @@ impl FlatStateDb {
         let commit = self.prepare_commit(state)?;
         let prepare = start_prepare.elapsed();
         let start_write = std::time::Instant::now();
-        // TODO: We can write the archival batches to disk in parallel
+        // Potential optimization: We can write the archival batches to disk in parallel
+        // We don't bother for now because the kernel write is usually very small.
         self.get_kernel_db()
             .commit_archival(commit.kernel_archival)?;
         self.get_user_db().commit_archival(commit.user_archival)?;
-        if cfg!(debug_assertions) {
-            if std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
-                panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
-            }
+        #[cfg(feature = "test-utils")]
+        if cfg!(debug_assertions) && std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
+            panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
         }
         self.other.write_schemas(commit.flat)?;
         let write = start_write.elapsed();
