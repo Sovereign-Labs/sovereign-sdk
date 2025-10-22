@@ -111,12 +111,12 @@ async fn test_mixed_nonce_and_generation_transactions() {
             token_id: config_gas_token_id(),
         },
     });
-    let details = default_test_tx_details();
+    let details = default_test_tx_details::<TestSpec>();
 
     let construct_tx = |uniqueness: UniquenessData| {
         let unsigned_tx =
             UnsignedTransaction::new_with_details(msg.clone(), uniqueness, details.clone());
-        Transaction::<RT, TestSpec>::new_signed_tx(
+        Transaction::<RT, <TestSpec as Spec>::Gas, <TestSpec as Spec>::CryptoSpec>::new_signed_tx(
             &test_user.private_key,
             &RT::CHAIN_HASH,
             unsigned_tx,

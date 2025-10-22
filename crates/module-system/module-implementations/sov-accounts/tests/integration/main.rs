@@ -14,6 +14,8 @@ use sov_modules_api::transaction::PubKeyAndSignature;
 use sov_modules_api::transaction::Transaction;
 
 type S = sov_test_utils::TestSpec;
+type G = <S as Spec>::Gas;
+type C = <S as Spec>::CryptoSpec;
 
 generate_optimistic_runtime!(TestAccountsRuntime <=);
 
@@ -207,7 +209,7 @@ fn test_setup_multisig_and_act() {
     // - Submitting the transaction and asserting it is skipped
     let generate_multisig_tx = || {
         let key = TestPrivateKey::generate();
-        UnsignedTransaction::<RT, S>::new_with_details(
+        UnsignedTransaction::<RT, G>::new_with_details(
             TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(
                 key.pub_key().credential_id(),
             )),
@@ -217,15 +219,15 @@ fn test_setup_multisig_and_act() {
         .to_multisig_tx(multisig.clone())
     };
 
-    let sign = |tx: &mut Version1<TestAccountsRuntimeCall<S>, S>, key: &TestPrivateKey| {
+    let sign = |tx: &mut Version1<TestAccountsRuntimeCall<S>, G, C>, key: &TestPrivateKey| {
         use sov_modules_api::Runtime;
         let chain_hash = &<RT as Runtime<S>>::CHAIN_HASH;
         tx.sign(key, chain_hash).unwrap();
     };
 
-    let assert_tx_success = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
+    let assert_tx_success = |tx: Version1<TestAccountsRuntimeCall<S>, G, C>,
                              runner: &mut TestRunner<RT, S>| {
-        let tx = Transaction::<RT, S>::from(tx);
+        let tx = Transaction::<RT, G, C>::from(tx);
         let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
             data: borsh::to_vec(&tx).unwrap(),
         });
@@ -237,10 +239,10 @@ fn test_setup_multisig_and_act() {
         });
     };
 
-    let assert_tx_skip = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
+    let assert_tx_skip = |tx: Version1<TestAccountsRuntimeCall<S>, G, C>,
                           runner: &mut TestRunner<RT, S>,
                           reason: &'static str| {
-        let tx = Transaction::<RT, S>::from(tx);
+        let tx = Transaction::<RT, G, C>::from(tx);
         let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
             data: borsh::to_vec(&tx).unwrap(),
         });

@@ -27,6 +27,8 @@ use sov_value_setter::CallMessage;
 type TestSpec =
     ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, EvmCryptoSpec>;
 type S = TestSpec;
+type G = <TestSpec as Spec>::Gas;
+type C = <TestSpec as Spec>::CryptoSpec;
 
 type TestPrivateKey = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
 
@@ -125,7 +127,9 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
     (runner, admin)
 }
 
-pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
+pub fn create_utx<S: Spec, RT: Runtime<S>>(
+    message: RT::Decodable,
+) -> UnsignedTransaction<RT, S::Gas> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
@@ -136,7 +140,7 @@ pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTr
 }
 
 pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
-    utx: &UnsignedTransaction<RT, S>,
+    utx: &UnsignedTransaction<RT, S::Gas>,
     private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
 ) -> <S::CryptoSpec as CryptoSpec>::Signature {
     let schema = TestSchemaProvider::get_schema();
@@ -156,9 +160,9 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 }
 
 pub fn sign_utx<S: Spec, RT: Runtime<S>>(
-    utx: UnsignedTransaction<RT, S>,
+    utx: UnsignedTransaction<RT, S::Gas>,
     signer: &TestUser<S>,
-) -> Transaction<RT, S> {
+) -> Transaction<RT, S::Gas, S::CryptoSpec> {
     let signature = sign_utx_in_place(&utx, signer.private_key());
     utx.to_signed_tx(signer.private_key().pub_key(), signature)
 }
@@ -166,7 +170,7 @@ pub fn sign_utx<S: Spec, RT: Runtime<S>>(
 pub fn create_tx<S: Spec, RT: Runtime<S>>(
     message: RT::Decodable,
     signer: &TestUser<S>,
-) -> Transaction<RT, S> {
+) -> Transaction<RT, S::Gas, S::CryptoSpec> {
     let utx = create_utx::<S, RT>(message);
     sign_utx::<S, RT>(utx, signer)
 }
@@ -180,7 +184,7 @@ pub fn encode_message<S: Spec, RT: Runtime<S> + EncodeCall<ValueSetter<S>>>() ->
 }
 
 pub fn encode<S: Spec, RT: Runtime<S> + Eip712AuthenticatorTrait<S>>(
-    tx: Transaction<RT, S>,
+    tx: Transaction<RT, S::Gas, S::CryptoSpec>,
 ) -> FullyBakedTx {
     let raw_tx = RawTx::new(borsh::to_vec(&tx).unwrap());
     <RT as Eip712AuthenticatorTrait<S>>::encode_with_eip712_auth(raw_tx)
@@ -188,7 +192,7 @@ pub fn encode<S: Spec, RT: Runtime<S> + Eip712AuthenticatorTrait<S>>(
 
 fn execute_tx(
     runner: &mut TestRunner<RT, S>,
-    tx: Transaction<RT, S>,
+    tx: Transaction<RT, <S as Spec>::Gas, <S as Spec>::CryptoSpec>,
 ) -> TxEffect<
     impl TxReceiptContents<Successful = SuccessfulTxContents<S>, Skipped = SkippedTxContents<S>>,
 > {
@@ -256,14 +260,14 @@ fn test_multisig_signature_verification() {
     let tx = utx.to_multisig_tx(multisig);
 
     // Helper functions to assert the expected behavior of the transaction
-    let assert_tx_success = |tx: Transaction<RT, S>, runner: &mut TestRunner<RT, S>| {
+    let assert_tx_success = |tx: Transaction<RT, G, C>, runner: &mut TestRunner<RT, S>| {
         let receipt = execute_tx(runner, tx);
         let TxEffect::Successful(SuccessfulTxContents { .. }) = receipt else {
             panic!("Expected transaction to succeed, got: {receipt:?}");
         };
     };
     let assert_tx_skipped =
-        |tx: Transaction<RT, S>, runner: &mut TestRunner<RT, S>, reason: &'static str| {
+        |tx: Transaction<RT, G, C>, runner: &mut TestRunner<RT, S>, reason: &'static str| {
             let receipt = execute_tx(runner, tx);
             let TxEffect::Skipped(SkippedTxContents { error, .. }) = receipt else {
                 panic!("Expected transaction to be skipped, got: {receipt:?}");
@@ -281,7 +285,7 @@ fn test_multisig_signature_verification() {
         for (key, signature) in multisig_keys.iter().zip(signatures.iter()) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
-        Transaction::<RT, S>::from(tx)
+        Transaction::<RT, G, C>::from(tx)
     };
     assert_tx_success(tx_with_three_sigs, &mut runner);
 
@@ -291,7 +295,7 @@ fn test_multisig_signature_verification() {
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(2)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
-        Transaction::<RT, S>::from(tx)
+        Transaction::<RT, G, C>::from(tx)
     };
     assert_tx_success(tx_with_two_sigs, &mut runner);
 
@@ -301,7 +305,7 @@ fn test_multisig_signature_verification() {
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(1)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
-        Transaction::<RT, S>::from(tx)
+        Transaction::<RT, G, C>::from(tx)
     };
     assert_tx_skipped(
         tx_with_one_sig,
@@ -320,7 +324,7 @@ fn test_multisig_signature_verification() {
                 pub_key: random_private_key.pub_key(),
             })
             .unwrap();
-        Transaction::<RT, S>::from(tx)
+        Transaction::<RT, G, C>::from(tx)
     };
     // Since the random signature is not part of the multisig, this changes the computed credential ID yielding a gas error. If we were to add a paymaster,
     // The tx would succeed on a different account. In that case, this test case would need refinement to distinguish between the two cases.
@@ -341,7 +345,7 @@ fn test_multisig_signature_verification() {
                 pub_key: multisig_keys[0].pub_key(),
             })
             .unwrap();
-        Transaction::<RT, S>::from(tx)
+        Transaction::<RT, G, C>::from(tx)
     };
     assert_tx_skipped(
         tx_with_duplicate_sig,
@@ -359,7 +363,7 @@ fn test_multisig_signature_verification() {
             multisig_keys[1].pub_key(),
         )
         .unwrap();
-        Transaction::<RT, S>::from(tx)
+        Transaction::<RT, G, C>::from(tx)
     };
     assert_tx_skipped(tx_with_bad_sig, &mut runner, "signature error");
 }

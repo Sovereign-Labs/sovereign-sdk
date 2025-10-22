@@ -89,7 +89,7 @@ pub fn wrap_with_auth(raw_tx: RawTx) -> FullyBakedTx {
 #[derive(Debug, Clone)]
 pub struct GeneratedTx {
     pub tx_hash: TxHash,
-    pub tx_object: Transaction<RT, TestSpec>,
+    pub tx_object: Transaction<RT, <TestSpec as Spec>::Gas, <TestSpec as Spec>::CryptoSpec>,
     pub raw_tx: RawTx,
     pub fully_baked_tx: FullyBakedTx,
 }
@@ -134,7 +134,7 @@ pub fn generate_paymaster_tx<RT: Runtime<TestSpec> + EncodeCall<Paymaster<TestSp
             authorized_sequencers: AuthorizedSequencers::All,
         },
     };
-    let details = TxDetails::<TestSpec> {
+    let details = TxDetails::<<TestSpec as Spec>::Gas> {
         max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: Some(TEST_DEFAULT_GAS_LIMIT.into()),
@@ -265,7 +265,7 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     call_message: &<RT as DispatchCall>::Decodable,
     max_fee: Amount,
 ) -> RawTx {
-    let mut tx_details = default_test_tx_details();
+    let mut tx_details = default_test_tx_details::<TestSpec>();
     tx_details.max_fee = max_fee;
     let tx = test_signed_transaction::<RT, TestSpec>(
         key,

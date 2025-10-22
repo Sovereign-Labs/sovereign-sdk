@@ -27,7 +27,7 @@ generate_runtime! {
 impl<S: Spec> sov_evm::EthereumAuthenticator<S> for TestRuntime<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
-    Transaction<Self, S>: UniversalWallet,
+    Transaction<Self, <S as Spec>::Gas, <S as Spec>::CryptoSpec>: UniversalWallet,
 {
     fn add_ethereum_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
         EvmAuthenticatorInput::Evm(tx)

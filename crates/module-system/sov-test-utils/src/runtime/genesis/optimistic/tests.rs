@@ -106,7 +106,7 @@ fn run_value_setter_txs_with_assertions(
                     sov_value_setter::CallMessage::SetValue { value, gas: None },
                 ),
             key: admin_pkey.clone(),
-            details: default_test_tx_details(),
+            details: default_test_tx_details::<TestSpec>(),
         };
         runner.execute_transaction(TransactionTestCase { input, assert });
     }

@@ -98,7 +98,7 @@ impl<S: Spec> AssertOutcome<S> for MaxFeeOutcome {
 
 impl MaxFeeOutcome {
     const DIFF: Amount = Amount::new(2000);
-    fn set_max_fee<S: Spec>(&self, gas_used: Amount, details: &mut TxDetails<S>) {
+    fn set_max_fee<S: Spec>(&self, gas_used: Amount, details: &mut TxDetails<S::Gas>) {
         details.max_fee = match self {
             MaxFeeOutcome::Insufficient => gas_used
                 .checked_sub(Self::DIFF)
@@ -119,7 +119,7 @@ pub enum GasLimitOutcome {
 }
 
 impl GasLimitOutcome {
-    fn set_gas_limit<S: Spec>(&self, gas_used: S::Gas, details: &mut TxDetails<S>) {
+    fn set_gas_limit<S: Spec>(&self, gas_used: S::Gas, details: &mut TxDetails<S::Gas>) {
         let gas_limit = match self {
             GasLimitOutcome::Insufficient => gas_used.scalar_sub(2000),
             GasLimitOutcome::Excess => gas_used.scalar_add(2000),
@@ -188,10 +188,10 @@ where
 
         match &*self.outcome {
             TransactionOutcome::MaxFee(max_fee_outcome) => {
-                max_fee_outcome.set_max_fee(gas_used_value, tx_details);
+                max_fee_outcome.set_max_fee::<S>(gas_used_value, tx_details);
             }
             TransactionOutcome::GasLimit(gas_limit_outcome) => {
-                gas_limit_outcome.set_gas_limit(gas_used, tx_details);
+                gas_limit_outcome.set_gas_limit::<S>(gas_used, tx_details);
             }
         }
     }

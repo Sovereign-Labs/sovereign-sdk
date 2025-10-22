@@ -10,7 +10,7 @@ use sov_test_utils::generators::value_setter::{ValueSetterMessage, ValueSetterMe
 use sov_test_utils::{MessageGenerator, TestPrivateKey};
 
 use super::optimistic_rt::IntegTestRuntime;
-use crate::stf_blueprint::S;
+use crate::stf_blueprint::{C, G, S};
 
 pub fn simulate_da(admin: TestPrivateKey) -> Vec<FullyBakedTx> {
     let mut messages = Vec::default();
@@ -45,7 +45,7 @@ pub fn simulate_da_with_revert_msg(admin: TestPrivateKey) -> Vec<FullyBakedTx> {
 pub fn simulate_da_with_bad_sig(key: TestPrivateKey) -> Vec<FullyBakedTx> {
     let bank_generator: BankMessageGenerator<S> = BankMessageGenerator::with_minter(key.clone());
     let create_token_message = bank_generator.create_default_messages().remove(0);
-    let tx = Transaction::<IntegTestRuntime<S>, S>::new_with_details_v0(
+    let tx = Transaction::<IntegTestRuntime<S>, G, C>::new_with_details_v0(
         create_token_message.sender_key.pub_key(),
         <IntegTestRuntime<S> as EncodeCall<Bank<S>>>::to_decodable(create_token_message.content),
         // Use the signature of an empty message
@@ -77,10 +77,10 @@ pub fn simulate_da_with_bad_nonce(key: TestPrivateKey) -> Vec<FullyBakedTx> {
 pub fn simulate_da_with_bad_serialization(key: TestPrivateKey) -> Vec<FullyBakedTx> {
     let bank_generator: BankMessageGenerator<S> = BankMessageGenerator::with_minter(key);
     let create_token_message = bank_generator.create_default_messages().remove(0);
-    let tx = Transaction::<IntegTestRuntime<S>, S>::new_signed_tx(
+    let tx = Transaction::<IntegTestRuntime<S>, G, C>::new_signed_tx(
         &create_token_message.sender_key,
         &IntegTestRuntime::<S>::CHAIN_HASH,
-        UnsignedTransaction::<IntegTestRuntime<S>, S>::new_with_details(
+        UnsignedTransaction::<IntegTestRuntime<S>, G>::new_with_details(
             <IntegTestRuntime<S> as EncodeCall<Bank<S>>>::to_decodable(
                 create_token_message.content,
             ),
@@ -94,7 +94,7 @@ pub fn simulate_da_with_bad_serialization(key: TestPrivateKey) -> Vec<FullyBaked
     vec![FullyBakedTx::new(serialized.to_vec())]
 }
 
-fn encode_with_auth(tx: Transaction<IntegTestRuntime<S>, S>) -> FullyBakedTx {
+fn encode_with_auth(tx: Transaction<IntegTestRuntime<S>, G, C>) -> FullyBakedTx {
     let tx_bytes = RawTx::new(borsh::to_vec(&tx).unwrap());
     <IntegTestRuntime<S> as Runtime<S>>::Auth::encode_with_standard_auth(tx_bytes)
 }

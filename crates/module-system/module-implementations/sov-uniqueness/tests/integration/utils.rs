@@ -22,7 +22,7 @@ use sov_test_utils::{
     TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_USER_BALANCE,
 };
 
-use crate::runtime::{GenesisConfig, TestNonceRuntime, RT, S};
+use crate::runtime::{GenesisConfig, TestNonceRuntime, C, G, RT, S};
 
 pub(crate) struct EvmAccount(SecretKey);
 
@@ -100,7 +100,7 @@ pub(crate) fn generate_value_setter_tx(
         None,
     );
 
-    let transaction = Transaction::<RT, S>::new_signed_tx(
+    let transaction = Transaction::<RT, G, C>::new_signed_tx(
         admin.private_key(),
         &<TestNonceRuntime<S> as Runtime<S>>::CHAIN_HASH,
         transaction,

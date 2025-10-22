@@ -21,6 +21,8 @@ use sov_test_utils::{
 type Runtime = TestOptimisticRuntime<TestSpec>;
 type RuntimeCall = TestOptimisticRuntimeCall<TestSpec>;
 type RuntimeSubcommand<A> = TestRuntimeSubcommand<A, TestSpec>;
+type G = <TestSpec as Spec>::Gas;
+type C = <TestSpec as Spec>::CryptoSpec;
 
 #[test]
 fn test_import_transaction_from_string() {
@@ -92,9 +94,8 @@ fn transaction_is_serialized_correctly() {
     let chain_hash = <Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH;
 
     for (i, tx) in txs.into_iter().enumerate() {
-        let tx =
-            Transaction::<Runtime, TestSpec>::unmetered_deserialize(&mut tx.as_slice()).unwrap();
-        let tx_p = Transaction::<Runtime, TestSpec>::new_signed_tx(
+        let tx = <Transaction::<Runtime, G, C> as MeteredBorshDeserialize::<TestSpec>>::unmetered_deserialize(&mut tx.as_slice()).unwrap();
+        let tx_p = Transaction::<Runtime, G, C>::new_signed_tx(
             &key,
             &chain_hash,
             UnsignedTransaction::new(
@@ -107,7 +108,7 @@ fn transaction_is_serialized_correctly() {
             ),
         );
 
-        tx.verify(&chain_hash, &mut new_test_gas_meter())
+        tx.verify(&chain_hash, &mut new_test_gas_meter::<TestSpec>())
             .expect("the computed signature is incorrect");
 
         assert_eq!(
@@ -191,12 +192,15 @@ fn transaction_signed_properly_from_file() {
     assert!(last_line.starts_with("0x"));
     let raw_signed_tx = hex::decode(&last_line[2..]).unwrap();
 
-    let signed_tx: Transaction<Runtime, TestSpec> =
-        Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
+    let signed_tx: Transaction<Runtime, G, C> =
+        <Transaction<Runtime, G, C> as MeteredBorshDeserialize<TestSpec>>::unmetered_deserialize(
+            &mut raw_signed_tx.as_slice(),
+        )
+        .unwrap();
     signed_tx
         .verify(
             &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+            &mut new_test_gas_meter::<TestSpec>(),
         )
         .unwrap();
 
@@ -246,12 +250,15 @@ fn transaction_signed_properly_from_json_string() {
     let last_line: &str = output.lines().last().unwrap();
 
     let raw_signed_tx = hex::decode(&last_line[2..]).unwrap();
-    let signed_tx: Transaction<Runtime, TestSpec> =
-        Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
+    let signed_tx: Transaction<Runtime, G, C> =
+        <Transaction<Runtime, G, C> as MeteredBorshDeserialize<TestSpec>>::unmetered_deserialize(
+            &mut raw_signed_tx.as_slice(),
+        )
+        .unwrap();
     signed_tx
         .verify(
             &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+            &mut new_test_gas_meter::<TestSpec>(),
         )
         .unwrap();
     assert_eq!(&runtime_call, signed_tx.runtime_call());
@@ -307,12 +314,15 @@ fn transaction_signed_by_account_nickname() {
     let last_line: &str = output.lines().last().unwrap();
 
     let raw_signed_tx = hex::decode(&last_line[2..]).unwrap();
-    let signed_tx: Transaction<Runtime, TestSpec> =
-        Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
+    let signed_tx: Transaction<Runtime, G, C> =
+        <Transaction<Runtime, G, C> as MeteredBorshDeserialize<TestSpec>>::unmetered_deserialize(
+            &mut raw_signed_tx.as_slice(),
+        )
+        .unwrap();
     signed_tx
         .verify(
             &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+            &mut new_test_gas_meter::<TestSpec>(),
         )
         .unwrap();
 
@@ -366,12 +376,15 @@ fn transaction_outputs_json() {
         _ => panic!("Should be string at signed_tx"),
     };
     let mut raw_signed_tx: &[u8] = &hex::decode(&hex_tx[2..]).unwrap();
-    let signed_tx: Transaction<Runtime, TestSpec> =
-        Transaction::unmetered_deserialize(&mut raw_signed_tx).unwrap();
+    let signed_tx: Transaction<Runtime, G, C> =
+        <Transaction<Runtime, G, C> as MeteredBorshDeserialize<TestSpec>>::unmetered_deserialize(
+            &mut raw_signed_tx,
+        )
+        .unwrap();
     signed_tx
         .verify(
             &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+            &mut new_test_gas_meter::<TestSpec>(),
         )
         .unwrap();
 }

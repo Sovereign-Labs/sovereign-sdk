@@ -310,7 +310,7 @@ async fn test_stream_of_transactions(
                 generated_message.message,
                 generated_message.sender,
                 &RT::CHAIN_HASH,
-                default_test_tx_details(),
+                default_test_tx_details::<S>(),
                 &mut harness.nonces,
             );
 

@@ -205,7 +205,7 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx = match <Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(
+    let tx = match <Transaction<D, S::Gas, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(
         &mut &raw_tx[..],
         state,
     ) {
@@ -232,7 +232,7 @@ fn verify_and_decode_tx<
     SP: SchemaProvider,
 >(
     raw_tx_hash: TxHash,
-    tx: Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    tx: Transaction<D, S::Gas, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     match &tx {
@@ -297,7 +297,7 @@ fn eip_712_msg<
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
-    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    tx: &Transaction<D, S::Gas, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
 ) -> Result<[u8; 66], AuthenticationError> {
     // Convert the transaction to unsigned transaction (removes signature)
@@ -338,7 +338,7 @@ fn verify_eip712_signature<
     D: DispatchCall<Spec = S>,
     SP: SchemaProvider,
 >(
-    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    tx: &Transaction<D, S::Gas, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {

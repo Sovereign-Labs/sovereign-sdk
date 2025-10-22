@@ -16,7 +16,7 @@ use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::{EncodeCall, TestUser};
 
 use super::optimistic_rt::setup;
-use crate::stf_blueprint::{get_balance, get_seq_bond, reset_constants, TxStatus, S};
+use crate::stf_blueprint::{get_balance, get_seq_bond, reset_constants, TxStatus, C, G, S};
 
 const BOND_AMOUNT: Amount = Amount::new(100);
 
@@ -288,7 +288,7 @@ mod helpers {
         max_priority_fee_bips: PriorityFeeBips,
         chain_id: u64,
         message: IntegTestRuntimeCall<S>,
-    ) -> Transaction<IntegTestRuntime<S>, S> {
+    ) -> Transaction<IntegTestRuntime<S>, G, C> {
         let utx = UnsignedTransaction::new(
             message,
             chain_id,
@@ -299,7 +299,7 @@ mod helpers {
         );
 
         let signer = TestUser::<S>::generate(Amount::ZERO);
-        Transaction::<IntegTestRuntime<S>, S>::new_signed_tx(
+        Transaction::<IntegTestRuntime<S>, G, C>::new_signed_tx(
             signer.private_key(),
             &IntegTestRuntime::<S>::CHAIN_HASH,
             utx,
@@ -313,7 +313,7 @@ mod helpers {
         signer: &TestUser<S>,
         da_address: <<S as Spec>::Da as DaSpec>::Address,
         chain_id: u64,
-    ) -> Transaction<IntegTestRuntime<S>, S> {
+    ) -> Transaction<IntegTestRuntime<S>, G, C> {
         // Here, we attempt to bond more funds than are available for a given user, causing the transaction to be reverted.
         let encoded_message = encode_message(
             da_address,
@@ -332,7 +332,7 @@ mod helpers {
             None,
         );
 
-        Transaction::<IntegTestRuntime<S>, S>::new_signed_tx(
+        Transaction::<IntegTestRuntime<S>, G, C>::new_signed_tx(
             signer.private_key(),
             &IntegTestRuntime::<S>::CHAIN_HASH,
             utx,
@@ -421,7 +421,7 @@ mod helpers {
         )
     }
 
-    fn encode_tx(tx: Transaction<IntegTestRuntime<S>, S>) -> FullyBakedTx {
+    fn encode_tx(tx: Transaction<IntegTestRuntime<S>, G, C>) -> FullyBakedTx {
         let tx_data = borsh::to_vec(&tx).unwrap();
         <IntegTestRuntime<S> as Runtime<S>>::Auth::encode_with_standard_auth(RawTx {
             data: tx_data,

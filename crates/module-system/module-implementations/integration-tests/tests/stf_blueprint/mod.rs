@@ -18,6 +18,8 @@ use sov_test_utils::runtime::traits::MinimalGenesis;
 use sov_test_utils::runtime::{config_gas_token_id, Payable, TestRunner};
 
 type S = sov_test_utils::TestSpec;
+type G = <S as Spec>::Gas;
+type C = <S as Spec>::CryptoSpec;
 
 use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{PrivateKey, RawTx};
@@ -235,8 +237,8 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
     signer: &TestUser<S>,
     chain_id: u64,
     message: RT::Decodable,
-) -> Transaction<RT, S> {
-    let utx = UnsignedTransaction::<RT, S>::new(
+) -> Transaction<RT, G, C> {
+    let utx = UnsignedTransaction::<RT, G>::new(
         message,
         chain_id,
         max_priority_fee_bips,
@@ -245,7 +247,8 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         None,
     );
 
-    let signed_tx = Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
+    let signed_tx =
+        Transaction::<RT, G, C>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
 
     // Create a signature for a different message so it won't verify in the stf.
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
@@ -275,7 +278,7 @@ pub fn create_tx_bad_sender<RT: Runtime<S>>(
     chain_id: u64,
     message: RT::Decodable,
     chain_hash: &[u8; 32],
-) -> Transaction<RT, S> {
+) -> Transaction<RT, G, C> {
     let utx = UnsignedTransaction::new(
         message,
         chain_id,
@@ -286,7 +289,7 @@ pub fn create_tx_bad_sender<RT: Runtime<S>>(
     );
 
     let signer = TestUser::<S>::generate(Amount::ZERO);
-    Transaction::<RT, S>::new_signed_tx(signer.private_key(), chain_hash, utx)
+    Transaction::<RT, G, C>::new_signed_tx(signer.private_key(), chain_hash, utx)
 }
 
 pub fn create_tx_valid<RT: Runtime<S>>(
@@ -295,7 +298,7 @@ pub fn create_tx_valid<RT: Runtime<S>>(
     signer: &TestUser<S>,
     chain_id: u64,
     message: RT::Decodable,
-) -> Transaction<RT, S> {
+) -> Transaction<RT, G, C> {
     let utx = UnsignedTransaction::new(
         message,
         chain_id,
@@ -305,7 +308,7 @@ pub fn create_tx_valid<RT: Runtime<S>>(
         None,
     );
 
-    Transaction::<RT, S>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
+    Transaction::<RT, G, C>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
 }
 
 // Transaction with zero gas limit.
@@ -315,7 +318,7 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
     signer: &TestUser<S>,
     chain_id: u64,
     message: RT::Decodable,
-) -> Transaction<RT, S> {
+) -> Transaction<RT, G, C> {
     let utx = UnsignedTransaction::new(
         message,
         chain_id,
@@ -325,7 +328,7 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
         Some(<<S as Spec>::Gas as Gas>::zero()),
     );
 
-    Transaction::<RT, S>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
+    Transaction::<RT, G, C>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
 }
 
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
@@ -435,6 +438,6 @@ pub fn encode_message<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
     <RT as EncodeCall<ValueSetter<S>>>::to_decodable(CallMessage::SetValue { value: 8, gas })
 }
 
-pub fn encode<RT: Runtime<S>>(tx: Transaction<RT, S>) -> FullyBakedTx {
+pub fn encode<RT: Runtime<S>>(tx: Transaction<RT, G, C>) -> FullyBakedTx {
     <RT as Runtime<S>>::Auth::encode_with_standard_auth(RawTx::new(borsh::to_vec(&tx).unwrap()))
 }
