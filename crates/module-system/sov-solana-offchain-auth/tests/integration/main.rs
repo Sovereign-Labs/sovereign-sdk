@@ -194,6 +194,7 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
+        address_override: None,
     };
 
     serde_json::to_string(&solana_unsigned_tx).unwrap()
@@ -283,7 +284,7 @@ async fn test_submit_ledger_signed_transaction() {
     // updated.)
     assert_eq!(
         transfer_json_tx,
-        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_name":"TestChain"}"#
+        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_name":"TestChain","address_override":null}"#
     );
     let encoded_tx = transfer_json_tx.as_bytes().to_vec();
     let pubkey: [u8; 32] = bs58::decode(LEDGER_ADDRESS)
