@@ -822,10 +822,12 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         info: StateUpdateInfo<S::Storage>,
     },
     DoBatchStartMsg {
+        resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         batch_from_master: BatchToStore,
         reason: &'static str,
     },
     DoNewTx {
+        resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
@@ -1199,12 +1201,15 @@ where
         &self,
         batch_from_master: BatchToStore,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
+    ) -> Result<Result<(), ReplicaError<S>>, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
         self.send(Message::DoBatchStartMsg {
+            resp,
             batch_from_master,
             reason,
         })
-        .await
+        .await?;
+        self.recv(recv).await
     }
 
     pub(crate) async fn do_new_tx_msg_replica(
@@ -1212,13 +1217,16 @@ where
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
+    ) -> Result<Result<(), ReplicaError<S>>, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
         self.send(Message::DoNewTx {
+            resp,
             tx_hash,
             baked_tx,
             reason,
         })
-        .await
+        .await?;
+        self.recv(recv).await
     }
 
     pub(crate) async fn close_current_batch_msg(
@@ -1488,21 +1496,29 @@ where
             }
 
             Message::DoBatchStartMsg {
+                resp,
                 batch_from_master,
                 reason,
             } => {
-                let _ = self
+                let ret = self
                     .process_do_batch_start_replica(batch_from_master, reason)
+                    .await;
+
+                self.send_response(resp, ret, "process_do_batch_start_replica")
                     .await;
             }
 
             Message::DoNewTx {
+                resp,
                 tx_hash,
                 baked_tx,
                 reason,
             } => {
-                let _ = self
+                let ret = self
                     .process_do_new_tx_replica(baked_tx, tx_hash, reason)
+                    .await;
+
+                self.send_response(resp, ret, "process_do_new_tx_replica")
                     .await;
             }
             Message::CloseCurrentBatch { reason } => {
@@ -2023,7 +2039,7 @@ where
         &mut self,
         batch_from_master: BatchToStore,
         reason: &'static str,
-    ) -> Result<(), ReplicaError> {
+    ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
 
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
@@ -2060,9 +2076,13 @@ where
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         reason: &'static str,
-    ) {
+    ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let _ = inner.do_new_tx(tx_hash, baked_tx).await.unwrap();
+        let _ = inner
+            .do_new_tx(tx_hash, baked_tx)
+            .await
+            .map_err(ReplicaError::NewTx)?;
+        Ok(())
     }
 
     async fn process_close_current_batch(&mut self, reason: &'static str) {
@@ -2075,14 +2095,15 @@ use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
 
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum ReplicaError {
+pub(crate) enum ReplicaError<S: Spec> {
     #[error("TODO")]
     Rejected(DBDataRejected),
     #[error("TODO")]
     NotReady(SequencerNotReadyDetails),
-
     #[error("TODO")]
     Creation(#[from] BatchCreationError),
+    #[error("TODO")]
+    NewTx(DoNewTxError<S>),
 }
 
 #[derive(Debug)]
