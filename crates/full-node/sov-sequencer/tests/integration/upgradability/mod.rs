@@ -214,7 +214,7 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
         .produce_n_blocks_now(10)
         .await
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let mut current_height = get_height(&client).await.unwrap();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
@@ -306,7 +306,11 @@ async fn assert_rollup_processes_only_finalized_blocks(client: &NodeClient) {
     let last_finalized_block_height = get_last_finalized_block_height(client).await;
     let last_block_height = get_last_block_height(client).await;
     // During the upgrade procedure rollup processes only finalized blocks.
-    assert_eq!(last_finalized_block_height, last_block_height);
+    // Since finalized blocks are pulled in the background with delay, we allow it to lag for up to 1 block
+    let diff = last_block_height
+        .checked_sub(last_finalized_block_height)
+        .unwrap();
+    assert!(diff <= 1);
 }
 
 async fn send_tx(

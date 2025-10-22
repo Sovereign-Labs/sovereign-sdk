@@ -1,5 +1,6 @@
 use crate::test_helpers::build_transfer_token_tx;
 use crate::test_helpers::test_genesis_source;
+use sov_api_spec::types::TxStatus;
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_mock_da::storable::rpc::start_server;
@@ -21,7 +22,6 @@ use sov_test_utils::test_rollup::TestRollup;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
-use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 
@@ -49,21 +49,6 @@ async fn create_da_service() -> (StorableMockDaService, watch::Sender<()>, Socke
         .unwrap();
 
     (da_service, shutdown_sender, addr)
-}
-
-async fn wait_for_height(
-    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
-    da_service: &StorableMockDaService,
-    height: u64,
-) {
-    loop {
-        let h = test_rollup.height().await;
-        da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        if h.get() >= height {
-            break;
-        }
-    }
 }
 
 async fn start_rollup(
@@ -128,6 +113,7 @@ async fn test_replica_receives_txs_from_da() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_receives_txs_from_postgres() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("warn");
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -160,9 +146,11 @@ async fn test_replica_receives_txs_from_postgres() {
     );
 
     let height_before_tx = test_rollup.height().await;
-    test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
-
-    wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
+    let tx_result = test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
+    assert_eq!(tx_result.status, TxStatus::Processed);
+    test_rollup
+        .wait_for_height(height_before_tx.get() + 5)
+        .await;
 
     let receiver_balance = replica_test_rollup
         .client

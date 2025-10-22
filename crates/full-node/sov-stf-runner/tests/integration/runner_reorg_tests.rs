@@ -91,9 +91,19 @@ async fn test_simple_reorg_case() {
     let (_expected_committed_block1, expected_committed_hash_block1) =
         get_expected_execution_hash_from(&genesis_params, vec![batch(vec![1, 1, 1, 1])]);
     let (_expected_committed_block2, expected_committed_hash_block2) =
-        get_expected_execution_hash_from(&genesis_params, vec![batch(vec![1, 1, 1, 1]), batch(vec![2, 2, 2, 2])]);
+        get_expected_execution_hash_from(
+            &genesis_params,
+            vec![batch(vec![1, 1, 1, 1]), batch(vec![2, 2, 2, 2])],
+        );
     let (_expected_committed_fork1, expected_committed_hash_fork1) =
-        get_expected_execution_hash_from(&genesis_params, vec![batch(vec![1, 1, 1, 1]), batch(vec![2, 2, 2, 2]), batch(vec![13, 13, 13, 13])]);
+        get_expected_execution_hash_from(
+            &genesis_params,
+            vec![
+                batch(vec![1, 1, 1, 1]),
+                batch(vec![2, 2, 2, 2]),
+                batch(vec![13, 13, 13, 13]),
+            ],
+        );
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block: genesis_block,
@@ -113,12 +123,12 @@ async fn test_simple_reorg_case() {
         ("fork block 1", expected_committed_hash_fork1),
     ];
 
-    let matches = acceptable_hashes.iter().any(|(_, hash)| *hash == committed_root_hash);
+    let matches = acceptable_hashes
+        .iter()
+        .any(|(_, hash)| *hash == committed_root_hash);
     assert!(
         matches,
-        "Committed root hash {:?} doesn't match any expected state. Expected one of: {:?}",
-        committed_root_hash,
-        acceptable_hashes
+        "Committed root hash {committed_root_hash:?} doesn't match any expected state. Expected one of: {acceptable_hashes:?}",
     );
 }
 
