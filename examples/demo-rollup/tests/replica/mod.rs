@@ -31,6 +31,7 @@ fn random_address() -> <S as Spec>::Address {
     pk.pub_key().credential_id().into()
 }
 
+// Actually creates DA service that produces block on batch submitted.
 async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
     let da_service = StorableMockDaService::new_in_memory(TEST_SEQ_DA_ADDRESS, 0).await;
 
