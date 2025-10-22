@@ -2,9 +2,8 @@ use crate::conversions::create_block_env;
 use crate::evm::primitive_types::{Block, TransactionSigned};
 use crate::{Evm, PendingTransaction};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
-use alloy_consensus::TxReceipt;
-use alloy_primitives::Bloom;
-use alloy_primitives::B256;
+use alloy_consensus::{TxReceipt, EMPTY_OMMER_ROOT_HASH};
+use alloy_primitives::{Bloom, Bytes, B256, B64, U256};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -137,9 +136,16 @@ impl<S: Spec> BlockHooks for Evm<S> {
             excess_blob_gas: block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
-
             base_fee_per_gas: Some(block_env.basefee),
-            ..Default::default()
+            // Default values
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            difficulty: U256::ZERO,
+            extra_data: Bytes::default(),
+            nonce: B64::ZERO,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            parent_beacon_block_root: None,
+            requests_hash: None,
         };
 
         let end_tx_index = start_tx_index

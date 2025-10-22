@@ -1,9 +1,9 @@
 use std::ops::DerefMut;
 
-use alloy_consensus::Sealed;
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
+use alloy_consensus::{Sealed, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{Address, BlockNumber};
+use alloy_primitives::{Address, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
@@ -113,7 +113,8 @@ where
         Some(Block {
             header,
             transactions,
-            ..Default::default()
+            uncles: vec![],
+            withdrawals: None,
         })
     }
 
@@ -301,8 +302,23 @@ where
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
             base_fee_per_gas: Some(current_block_env.basefee),
-
-            ..Default::default()
+            // Default values
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            beneficiary: Address::ZERO,
+            state_root: EMPTY_ROOT_HASH,
+            transactions_root: EMPTY_ROOT_HASH,
+            receipts_root: EMPTY_ROOT_HASH,
+            logs_bloom: Bloom::default(),
+            difficulty: U256::ZERO,
+            gas_limit: 0,
+            gas_used: 0,
+            extra_data: Bytes::default(),
+            mix_hash: B256::ZERO,
+            nonce: B64::ZERO,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            parent_beacon_block_root: None,
+            requests_hash: None,
         };
 
         crate::Block {
