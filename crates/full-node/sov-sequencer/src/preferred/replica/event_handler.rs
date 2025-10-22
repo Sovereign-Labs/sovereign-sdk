@@ -15,9 +15,9 @@ where
 {
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
-            DbData::BatchStart(_batch_to_store) => {}
-            DbData::Transaction(_, _tx) => {}
-            DbData::BatchEnd(_batch_to_store) => {}
+            DbData::BatchStart(_) => {}
+            DbData::Transaction(_, _, _) => {}
+            DbData::BatchEnd(_) => {}
             DbData::NewProof => {}
         };
 
