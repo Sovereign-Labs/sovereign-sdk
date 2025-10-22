@@ -1,5 +1,6 @@
 use crate::preferred::inner::SequencerStateUpdator;
 use crate::preferred::replica::db_data::DbData;
+use crate::preferred::replica::replica_sync_task::DBDataRejected;
 use crate::preferred::replica::replica_sync_task::ReplicaEventHandler;
 use async_trait::async_trait;
 use sov_modules_api::Runtime;
@@ -12,12 +13,14 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    async fn on_da_event(&self, data: DbData) {
+    async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
             DbData::BatchStart(_batch_to_store) => {}
-            DbData::Transaction(_tx) => {}
+            DbData::Transaction(_, _tx) => {}
             DbData::BatchEnd(_batch_to_store) => {}
             DbData::NewProof => {}
-        }
+        };
+
+        Ok(())
     }
 }

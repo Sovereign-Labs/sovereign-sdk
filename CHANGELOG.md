@@ -1,3 +1,7 @@
+# 2025-10-21
+- #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+- #1933 Cleans up demo-rollup tests
+
 # 2025-10-20
 - #1917 Add support for logs from pending blocks in `eth_getLogs` and introduce `LogsWithCursorProvider` trait in `sov-eth-client` for paginated log retrieval with `eth_getLogsWithCursor`.
 - #1912 Add multi-worker support to EVM logs soak tests with log retrieval via `eth_getLogs`. Workers are automatically funded from root account and use WebSocket connections for better real-time performance.

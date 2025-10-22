@@ -3,7 +3,7 @@ use sov_bank::config_gas_token_id;
 use sov_bank::derived_holder::DerivedHolder;
 use sov_cli::NodeClient;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_modules_api::{OperatingMode, Spec};
+use sov_modules_api::{Amount, OperatingMode, Spec};
 use sov_test_utils::TestSpec;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -43,8 +43,7 @@ async fn send_test_bank_txs(
 
     let reward_addr = <TestSpec as Spec>::Address::from_str(
         "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
-    )
-    .unwrap();
+    )?;
 
     {
         let reward_amount = client
@@ -92,15 +91,14 @@ async fn send_test_bank_txs(
         )
         .await?;
 
-        da_service.produce_n_blocks_now(1).await.unwrap();
+        da_service.produce_n_blocks_now(1).await?;
     }
 
     {
         let reward_amount = client
             .get_balance::<TestSpec>(&reward_addr, &config_gas_token_id(), None)
-            .await
-            .unwrap();
-        assert!(reward_amount > 0);
+            .await?;
+        assert_ne!(reward_amount, Amount::ZERO);
     }
 
     // Check the derive holder api
