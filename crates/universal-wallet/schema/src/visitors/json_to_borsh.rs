@@ -30,7 +30,6 @@ pub enum EncodeError {
     #[error(transparent)]
     UnresolvedType(#[from] ResolutionError),
     #[error("Expected type or field {name}, but it was not present")]
-    // Optional fields are synthesized as JSON nulls in visit_struct; other patterns still error until explicitly supported.
     MissingType { name: String },
     #[error("Type {container_name} did not have serde metadata present in the schema. The schema is either malformed or does not support JSON parsing.")]
     MissingMetadata { container_name: String },
