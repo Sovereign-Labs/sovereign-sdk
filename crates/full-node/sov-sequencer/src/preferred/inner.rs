@@ -946,6 +946,7 @@ where
     shutdown_receiver: watch::Receiver<()>,
 }
 
+#[derive(Debug)]
 /// Describes errors that can occur when updating the sequencer state.
 /// This type intentionally does *not* implement `std::error::Error` or `std::fmt::Debug` so that it cannot be directly converted to an `anyhow::Error`.
 /// To convert to anyhow, first convert to a `StateUpdateError` or similar. This is done to ensure backward compatibility with existing code that
@@ -1954,11 +1955,6 @@ where
         inner.trigger_batch_production_if_convenient().await;
     }
 
-    async fn process_close_current_batch(&mut self, reason: &'static str) {
-        let mut inner = self.get_inner_with_timing(reason).await;
-        inner.close_current_batch().await;
-    }
-
     async fn process_do_batch_start(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
@@ -2027,6 +2023,11 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
         let _ = inner.do_new_tx(baked_tx, tx_hash).await.unwrap();
+    }
+
+    async fn process_close_current_batch(&mut self, reason: &'static str) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        inner.close_current_batch().await;
     }
 }
 

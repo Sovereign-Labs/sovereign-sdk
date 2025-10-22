@@ -15,12 +15,28 @@ where
 {
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
-            DbData::BatchStart(_batch_to_store) => {}
-            DbData::Transaction(_, _tx) => {}
-            DbData::BatchEnd(_batch_to_store) => {}
+            DbData::BatchStart(batch_to_store) => {
+                let _ = self
+                    .do_batch_start_msg(
+                        batch_to_store.visible_slot_number_after_increase,
+                        batch_to_store.visible_slots_to_advance,
+                        "replica_start_batch",
+                    )
+                    .await
+                    .unwrap();
+            }
+            DbData::Transaction(_, _tx) => {
+                //self.do_new_tx_msg(tx, tx_hash, "replica_new_tx")
+                //    .await
+                //    .unwrap();
+            }
+            DbData::BatchEnd(_batch_to_store) => {
+                self.close_current_batch_msg("replica_close_batch")
+                    .await
+                    .unwrap();
+            }
             DbData::NewProof => {}
         };
-
         Ok(())
     }
 }
