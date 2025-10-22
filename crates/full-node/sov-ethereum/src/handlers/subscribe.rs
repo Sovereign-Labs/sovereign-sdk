@@ -3,7 +3,8 @@ use crate::Ethereum;
 use alloy_rpc_types::pubsub::Params;
 use alloy_rpc_types::pubsub::SubscriptionKind;
 use alloy_rpc_types::Filter;
-use jsonrpsee::types::{ErrorObjectOwned, Params as JRpcParams};
+use alloy_rpc_types::FilterBlockOption;
+use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::PendingSubscriptionSink;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::{Extensions, SubscriptionSink};
@@ -14,6 +15,7 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
+use thiserror::Error;
 
 use crate::handlers::ETH_RPC_ERROR;
 
@@ -35,10 +37,12 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let log_filter = match validate_params_for_log_subscription(parameters) {
+    let eth_subscribe = parameters.parse::<EthSubscribe>()?;
+    let log_filter = match validate_params_for_log_subscription(eth_subscribe) {
         Ok(log_filter) => log_filter,
         Err(e) => {
-            pending.reject(ErrorObjectOwned::from(e)).await;
+            let rpc_err = to_jsonrpsee_error_object(e, ETH_RPC_ERROR);
+            pending.reject(rpc_err).await;
             return Ok(());
         }
     };
@@ -144,49 +148,31 @@ async fn stream_logs<S, Seq>(
     }
 }
 
+#[derive(Error, Debug)]
+enum ParamsValidationError {
+    #[error("Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor")]
+    BlockOptionParam,
+    #[error("Boolean parameters are not supported in LOG subscriptions")]
+    BoolParam,
+    #[error("Only LOG subscriptions are supported")]
+    OnlyLogSubscription,
+}
+
 fn validate_params_for_log_subscription(
-    parameters: JRpcParams<'static>,
-) -> Result<Box<Filter>, ErrorObjectOwned> {
-    let eth_subscribe = parameters.parse::<EthSubscribe>()?;
-
-    let log_filter = match &eth_subscribe.kind {
-        SubscriptionKind::Logs => match eth_subscribe.params {
-            Params::Logs(filter) => {
-                match filter.block_option {
-                    alloy_rpc_types::FilterBlockOption::Range {
-                        from_block,
-                        to_block,
-                    } => {
-                        if from_block.is_some() || to_block.is_some() {
-                            tracing::warn!(
-                                "Block Option parameters are not supported in LOG subscriptions: Range"
-                            );
-                        }
-                    }
-                    alloy_rpc_types::FilterBlockOption::AtBlockHash(_) => {
-                        tracing::warn!(
-                            "Block Option parameters are not supported in LOG subscriptions: AtBlockHash"
-                        );
-                    }
-                }
-
-                filter
+    eth_subscribe: EthSubscribe,
+) -> Result<Box<Filter>, ParamsValidationError> {
+    if eth_subscribe.kind != SubscriptionKind::Logs {
+        return Err(ParamsValidationError::OnlyLogSubscription);
+    }
+    match eth_subscribe.params {
+        Params::Logs(filter) => {
+            if filter.block_option == FilterBlockOption::default() {
+                Ok(filter)
+            } else {
+                Err(ParamsValidationError::BlockOptionParam)
             }
-            Params::Bool(_) => {
-                return Err(to_jsonrpsee_error_object(
-                    "Boolean parameters are not supported in LOG subscriptions.",
-                    ETH_RPC_ERROR,
-                ));
-            }
-            _ => Default::default(),
-        },
-        _ => {
-            return Err(to_jsonrpsee_error_object(
-                "Only LOG subscriptions are supported.",
-                ETH_RPC_ERROR,
-            ))
         }
-    };
-
-    Ok(log_filter)
+        Params::Bool(_) => Err(ParamsValidationError::BoolParam),
+        Params::None => Ok(Default::default()),
+    }
 }

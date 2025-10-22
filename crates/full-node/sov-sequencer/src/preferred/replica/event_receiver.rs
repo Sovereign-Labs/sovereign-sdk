@@ -23,6 +23,9 @@ pub(crate) enum EventReceiverError {
 
     #[error("Invalid event sequence in the db: {0:?} {1:?}. Replica shutting down.")]
     InvalidEventSequence(Option<EventType>, EventType),
+
+    #[error("DB row does not exist: {0}")]
+    DbRowDoesNotExist(u64),
 }
 
 pub(crate) struct EventReceiver {
@@ -138,6 +141,12 @@ impl EventReceiver {
                                 error!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?}. Replica shutting down.");
                                 exit_rollup(&self.shutdown_sender).await;
                             }
+                            EventReceiverError::DbRowDoesNotExist(event_id) => {
+                                error!(
+                                    "Db row does not exist for event id: {event_id:?}. Replica shutting down."
+                                );
+                                exit_rollup(&self.shutdown_sender).await;
+                            }
                         }
                     }
                 }
@@ -183,7 +192,8 @@ impl EventReceiver {
             // Keep listening for events until a `BatchStart` notification is received,
             // then use that event's ID as both the starting and target event ID.
             None => loop {
-                let notify = self.recv_notifications().await?;
+                let notify = self.listener.recv().await?;
+                let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
                 if matches!(notify.event_type, EventType::BatchStart) {
                     break (notify.event_id, notify.event_id);
                 }
@@ -224,6 +234,10 @@ impl EventReceiver {
 
             // Query and process events for this page
             let db_rows = rows(&self.query_pool, page_end, current_event_id).await?;
+
+            if db_rows.is_empty() {
+                return Err(EventReceiverError::DbRowDoesNotExist(current_event_id));
+            }
 
             for row in db_rows {
                 let (event, event_type) = row_to_event(row)?;

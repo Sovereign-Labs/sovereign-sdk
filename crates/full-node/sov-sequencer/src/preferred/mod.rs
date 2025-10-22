@@ -923,23 +923,24 @@ where
                         ));
                     }
                 },
-                AcceptTxError::TxTooBig {
-                    current_batch_size,
-                    max_batch_size,
-                } => {
-                    return Err(err_cant_fit_tx(
+                AcceptTxError::NewTxError(err) => match err {
+                    DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
-                        baked_tx.data.len(),
-                    ))
-                }
-                AcceptTxError::ExecutorError(err) => {
-                    return Err(RollupBlockExecutorError::into_http_error(err));
-                }
-
-                AcceptTxError::Shutdown => {
-                    return Err(shut_down_error());
-                }
+                    } => {
+                        return Err(err_cant_fit_tx(
+                            current_batch_size,
+                            max_batch_size,
+                            baked_tx.data.len(),
+                        ))
+                    }
+                    DoNewTxError::ExecutorError(err) => {
+                        return Err(RollupBlockExecutorError::into_http_error(err));
+                    }
+                    DoNewTxError::Shutdown => {
+                        return Err(shut_down_error());
+                    }
+                },
             },
         }
     }
