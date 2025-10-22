@@ -187,9 +187,6 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     let rt_genesis_config =
         <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
             genesis_config.into(),
-            ValueSetterConfig {
-                admin: admin.address(),
-            },
         );
 
     let genesis_params = GenesisParams {
