@@ -21,7 +21,6 @@ use sov_test_utils::test_rollup::TestRollup;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
-use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
@@ -53,21 +52,6 @@ async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<(
         .unwrap();
 
     (da_service, shutdown_sender, addr)
-}
-
-async fn wait_for_height(
-    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
-    da_service: &StorableMockDaService,
-    height: u64,
-) {
-    loop {
-        let h = test_rollup.height().await;
-        da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        if h.get() >= height {
-            break;
-        }
-    }
 }
 
 async fn start_rollup(
@@ -165,8 +149,19 @@ async fn test_replica_receives_txs_from_postgres() {
 
     let height_before_tx = test_rollup.height().await;
     test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
+    let gap = 5;
+    // producing blocks, like it is standard periodic production
+    for _ in 0..gap {
+        da_service.produce_block_now().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(
+            sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+        ))
+        .await;
+    }
 
-    wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
+    test_rollup
+        .wait_for_height(height_before_tx.get() + gap)
+        .await;
 
     let receiver_balance = replica_test_rollup
         .client
