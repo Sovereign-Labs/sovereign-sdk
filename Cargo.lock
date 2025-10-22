@@ -2989,10 +2989,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
-name = "const-rollup-config"
-version = "0.3.0"
-
-[[package]]
 name = "const_format"
 version = "0.2.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11800,7 +11796,6 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "clap",
- "const-rollup-config",
  "criterion",
  "demo-stf",
  "demo-stf-json-client",
@@ -11917,12 +11912,14 @@ dependencies = [
  "alloy-pubsub",
  "alloy-rpc-types",
  "anyhow",
+ "async-trait",
  "derive_more 1.0.0",
  "ethereum-types",
  "ethers",
  "futures",
  "jsonrpsee",
  "reth-primitives",
+ "serde",
  "sov-cli",
  "sov-modules-api",
  "sov-rpc-eth-types",
@@ -12064,6 +12061,7 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "clap",
+ "futures",
  "rand 0.8.5",
  "reqwest 0.12.23",
  "sov-eth-client",
@@ -12340,6 +12338,7 @@ dependencies = [
  "serde",
  "sov-address",
  "sov-bank",
+ "sov-chain-state",
  "sov-metrics",
  "sov-modules-api",
  "sov-modules-macros",

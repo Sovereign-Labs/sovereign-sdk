@@ -142,7 +142,7 @@ async fn spawn(
     };
     let init_variant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params: vec![1],
+        genesis_params: vec![1].into(),
     };
 
     let da_service =
@@ -158,7 +158,7 @@ async fn spawn(
     .await;
 
     let join_handle = tokio::spawn(async move {
-        runner.run_in_process().await.map_err(|error| {
+        runner.run_in_process(0).await.map_err(|error| {
             tracing::warn!(?error, "Runner returned a error during execution");
             error
         })
