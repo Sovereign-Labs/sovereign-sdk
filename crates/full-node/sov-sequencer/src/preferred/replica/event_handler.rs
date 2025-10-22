@@ -15,7 +15,7 @@ where
 {
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
-            DbData::BatchStart(batch_to_store) => {
+            DbData::BatchStart(_batch_to_store) => {
                 /*
                 let _ = self
                     .do_batch_start_msg(

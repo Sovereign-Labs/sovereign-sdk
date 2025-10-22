@@ -63,6 +63,8 @@ async fn wait_for_height(
         if h.get() >= height {
             break;
         }
+        da_service.produce_block_now().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
 
@@ -171,5 +173,99 @@ async fn test_replica_receives_txs_from_postgres() {
         .unwrap();
 
     assert_eq!(receiver_balance.0, 100);
+    let _ = test_rollup.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_receives_txs_from_postgres_xx() {
+    let postgres = PostgresData::create_postgres().await;
+
+    let postgres = match postgres {
+        Ok(pg) => Some(pg),
+        Err(CreatePostgresError::DockerNotSupported) => return,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
+    let (da_service, addr) = create_da_service_manual().await;
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+
+    let test_rollup = start_rollup(false, addr, postgres.clone()).await;
+
+    let token_id = config_gas_token_id();
+
+    println!("");
+    dbg!("X1");
+    //da_service.produce_n_blocks_now(20).await.unwrap();
+    wait_for_height(&test_rollup, &da_service, 1).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(3000)).await;
+
+    println!("");
+    dbg!("X3");
+
+    let replica_test_rollup = start_rollup(true, addr, postgres).await;
+
+    //let h = test_rollup.height().await;
+    //wait_for_height(&test_rollup, &da_service, h.get() + 1).await;
+    //wait_for_height(&replica_test_rollup, &da_service, h.get() + 1).await;
+
+    tokio::time::sleep(Duration::from_millis(5000)).await;
+
+    println!("");
+    dbg!("X4");
+
+    let h = test_rollup.height().await;
+    dbg!(h);
+
+    let rep = replica_test_rollup.height().await;
+    dbg!(rep);
+
+    let receiver_addr = random_address();
+
+    let tx = build_transfer_token_tx::<S>(
+        &key_and_address.private_key,
+        token_id,
+        receiver_addr,
+        100,
+        0,
+    );
+
+    let h = test_rollup.height().await;
+    dbg!(h);
+
+    let rep = replica_test_rollup.height().await;
+    dbg!(rep);
+
+    test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
+
+    let h = test_rollup.height().await;
+    dbg!(h);
+
+    let rep = replica_test_rollup.height().await;
+    dbg!(rep);
+
+    //wait_for_height(&test_rollup, &da_service, height_before_tx.get() + 5).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    let h = test_rollup.height().await;
+    dbg!(h);
+
+    let rep = replica_test_rollup.height().await;
+    dbg!(rep);
+
+    let receiver_balance = replica_test_rollup
+        .client
+        .get_balance::<S>(&receiver_addr, &token_id, None)
+        .await
+        .unwrap();
+
+    assert_eq!(receiver_balance.0, 100);
+
+    println!("Extra");
+    wait_for_height(&test_rollup, &da_service, h.get() + 15).await;
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+
     let _ = test_rollup.shutdown().await;
 }
