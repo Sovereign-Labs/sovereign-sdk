@@ -4,13 +4,17 @@ use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
     Context, EventEmitter, SafeString, SafeVec, Spec, StateAccessor, StateReader, TxState,
 };
-use sov_state::User;
+use sov_rollup_interface::common::SizedSafeString;
+use sov_state::{EventContainer, User};
 use strum::{EnumDiscriminants, EnumIs, EnumIter, VariantArray};
 
 use crate::event::Event;
 use crate::token::unique_holders;
 use crate::utils::{get_token_id_metered, Payable, TokenHolderRef};
 use crate::{Amount, Bank, Coins, Token, TokenId};
+
+/// The maximum length of the memo field for a transfer, in bytes.
+pub const MAX_MEMO_LENGTH: usize = 512;
 
 /// The maximum number of addresses that can be authorized to mint or freeze a token.
 pub const MAX_ADMINS: usize = 20;
@@ -48,7 +52,6 @@ pub enum CallMessage<S: Spec> {
         /// The amount of tokens to transfer.
         coins: Coins,
     },
-
     /// Burns a specified amount of tokens.
     Burn {
         /// The amount of tokens to burn.
@@ -75,6 +78,16 @@ pub enum CallMessage<S: Spec> {
         new_admin: Option<S::Address>,
         /// The ID of the token whose admin list is being updated.
         token_id: TokenId,
+    },
+    /// Transfers a specified amount of tokens to the specified address.
+    #[sov_wallet(show_as = "Transfer to address {} {} with memo {}.")]
+    TransferWithMemo {
+        /// The address to which the tokens will be transferred.
+        to: S::Address,
+        /// The amount of tokens to transfer.
+        coins: Coins,
+        /// The message included with the transfer
+        memo: SizedSafeString<MAX_MEMO_LENGTH>,
     },
 }
 
@@ -176,6 +189,18 @@ impl<S: Spec> Bank<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
+        self.transfer_with_memo(to, coins, None, context, state)
+    }
+
+    /// Transfers the set of `coins` to the address specified by `to` with an optional memo.
+    pub fn transfer_with_memo(
+        &mut self,
+        to: impl Payable<S>,
+        coins: Coins,
+        memo: Option<String>,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<()> {
         tracing::trace!("Transfer token request");
 
         let to = to.as_token_holder();
@@ -196,6 +221,7 @@ impl<S: Spec> Bank<S> {
                 from: sender.as_token_holder().into(),
                 to: to.into(),
                 coins,
+                memo,
             },
         );
         Ok(())
@@ -450,6 +476,36 @@ impl<S: Spec> Bank<S> {
 
         self.do_transfer(from, to, &coins.token_id, coins.amount, state)
             .with_context(|| format!("Failed to transfer token_id={}", &coins.token_id))?;
+
+        Ok(())
+    }
+
+    /// Transfers the set of `coins` from the address `from` to the address `to` with an optional memo.
+    ///
+    /// Returns an error if the token ID doesn't exist.
+    pub fn transfer_from_with_memo(
+        &mut self,
+        from: impl Payable<S>,
+        to: impl Payable<S>,
+        coins: Coins,
+        memo: Option<String>,
+        state: &mut (impl StateAccessor + EventContainer),
+    ) -> Result<()> {
+        let from = from.as_token_holder();
+        let to = to.as_token_holder();
+
+        self.do_transfer(from, to, &coins.token_id, coins.amount, state)
+            .with_context(|| format!("Failed to transfer token_id={}", &coins.token_id))?;
+
+        self.emit_event(
+            state,
+            Event::TokenTransferred {
+                from: from.into(),
+                to: to.into(),
+                coins,
+                memo,
+            },
+        );
 
         Ok(())
     }
