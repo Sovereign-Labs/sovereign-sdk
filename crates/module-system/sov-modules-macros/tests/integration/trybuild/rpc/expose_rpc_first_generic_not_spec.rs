@@ -111,6 +111,7 @@ pub mod my_module {
 #[derive(Default, Genesis, DispatchCall, MessageCodec)]
 struct Runtime<T: TestSpec, S: Spec> {
     pub first: my_module::QueryModule<S, T::Data>,
+    pub chain_state: sov_chain_state::ChainState<S>,
 }
 
 #[derive(Default, Clone, PartialEq, Eq)]

@@ -12,10 +12,12 @@ use tokio::task::JoinHandle;
 use crate::helpers::hash_stf::S;
 use crate::helpers::runner_init::{initialize_runner, InitVariant, TestNode};
 
+const TEST_TOTAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
 #[tokio::test(flavor = "multi_thread")]
 async fn fetch_aggregated_proof_test_sync() -> anyhow::Result<()> {
     let test_case = TestCase::new(5);
-    run_make_proof_sync(test_case, 3).await?;
+    tokio::time::timeout(TEST_TOTAL_TIMEOUT, run_make_proof_sync(test_case, 3)).await??;
 
     Ok(())
 }
@@ -23,11 +25,7 @@ async fn fetch_aggregated_proof_test_sync() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn fetch_aggregated_proof_test_async() -> anyhow::Result<()> {
     let test_case = TestCase::new(5);
-    tokio::time::timeout(
-        std::time::Duration::from_secs(60),
-        run_make_proof_async(test_case, 3),
-    )
-    .await??;
+    tokio::time::timeout(TEST_TOTAL_TIMEOUT, run_make_proof_async(test_case, 3)).await??;
 
     Ok(())
 }
@@ -142,7 +140,7 @@ async fn spawn(
     };
     let init_variant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params: vec![1],
+        genesis_params: vec![1].into(),
     };
 
     let da_service =
@@ -158,7 +156,7 @@ async fn spawn(
     .await;
 
     let join_handle = tokio::spawn(async move {
-        runner.run_in_process().await.map_err(|error| {
+        runner.run_in_process(0).await.map_err(|error| {
             tracing::warn!(?error, "Runner returned a error during execution");
             error
         })

@@ -5,6 +5,7 @@ use std::fmt::Display;
 use sha2::Digest;
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, RelevantBlobIters};
+use sov_rollup_interface::stf::GenesisParams as GenesisParamsTrait;
 use sov_rollup_interface::stf::{ApplySlotOutput, BatchReceipt, StateTransitionFunction};
 use sov_rollup_interface::zk::Zkvm;
 
@@ -38,6 +39,16 @@ impl Display for Root {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+/// Genesis parameters for the rollup.
+pub struct GenesisParams;
+
+impl GenesisParamsTrait for GenesisParams {
+    fn genesis_slot_number(&self) -> u64 {
+        0
+    }
+}
+
 impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
     for CheckHashPreimageStf
 {
@@ -49,7 +60,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
     type GasPrice = ();
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
-    type GenesisParams = ();
+    type GenesisParams = GenesisParams;
     type PreState = ();
     type ChangeSet = ();
 

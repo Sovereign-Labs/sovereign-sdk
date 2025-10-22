@@ -309,7 +309,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         RollupConfig {
             storage: RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf()),
             runner: RunnerConfig {
-                genesis_height: 0,
                 da_polling_interval_ms: 30,
                 da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
