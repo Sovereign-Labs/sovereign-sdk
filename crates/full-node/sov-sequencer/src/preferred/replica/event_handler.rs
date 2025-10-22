@@ -17,7 +17,7 @@ where
         match data {
             DbData::BatchStart(batch_to_store) => {
                 let _ = self
-                    .do_batch_start_msg(
+                    .do_batch_start_msg_replica(
                         batch_to_store.visible_slot_number_after_increase,
                         batch_to_store.visible_slots_to_advance,
                         "replica_start_batch",
@@ -26,7 +26,7 @@ where
                     .unwrap();
             }
             DbData::Transaction(_, tx, tx_hash) => {
-                self.do_new_tx_msg(tx_hash, tx, "replica_new_tx")
+                self.do_new_tx_msg_replica(tx_hash, tx, "replica_new_tx")
                     .await
                     .unwrap();
             }

@@ -453,25 +453,6 @@ where
         self.close_current_batch().await;
     }
 
-    /// Closes the current batch.
-    ///
-    /// This should be called only when...
-    /// 1. There's no more capacity to accept txs in the current batch.
-    /// 2. We're absolutely sure we want to close the batch early even though we don't need to.
-    ///
-    /// Case 2 only happens when we've just finished updating the state *and* we have more than our ideal number of finalized slots available.
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn close_current_batch(&mut self) {
-        // Terminate the batch.
-        self.executor.end_rollup_block().await;
-        self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
-        let checkpoint = self
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-        self.executor_events_sender.close_batch(checkpoint).await;
-    }
-
     async fn check_readiness(
         &self,
         max_concurrent_blobs: usize,
@@ -581,7 +562,13 @@ where
         self.do_batch_start(visible_slot_number_after_increase, visible_increase)
             .await
     }
+}
 
+impl<S, Rt> Inner<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
     async fn do_batch_start(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
@@ -731,8 +718,26 @@ where
 
         Ok((rx, remaining_slot_gas))
     }
-}
 
+    /// Closes the current batch.
+    ///
+    /// This should be called only when...
+    /// 1. There's no more capacity to accept txs in the current batch.
+    /// 2. We're absolutely sure we want to close the batch early even though we don't need to.
+    ///
+    /// Case 2 only happens when we've just finished updating the state *and* we have more than our ideal number of finalized slots available.
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn close_current_batch(&mut self) {
+        // Terminate the batch.
+        self.executor.end_rollup_block().await;
+        self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
+        let checkpoint = self
+            .executor
+            .checkpoint
+            .clone_with_empty_witness_dropping_temp_cache();
+        self.executor_events_sender.close_batch(checkpoint).await;
+    }
+}
 enum Message<S: Spec, Rt: Runtime<S>> {
     NextSequenceNumber {
         resp: oneshot::Sender<SequenceNumber>,
@@ -1085,20 +1090,6 @@ where
         Ok((self.recv(recv).await?, start_time.elapsed()))
     }
 
-    pub(crate) async fn do_batch_start_msg(
-        &self,
-        visible_slot_number_after_increase: VisibleSlotNumber,
-        visible_slots_to_advance: NonZero<u8>,
-        reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::DoBatchStartMsg {
-            visible_slot_number_after_increase,
-            visible_slots_to_advance,
-            reason,
-        })
-        .await
-    }
-
     pub(crate) async fn prune_sequencer_db_msg(
         &self,
         reason: &'static str,
@@ -1186,14 +1177,32 @@ where
         }
     }
 
-    pub(crate) async fn close_current_batch_msg(
+    pub(crate) async fn latest_slot_number_msg(
         &self,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::CloseCurrentBatch { reason }).await
+    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::LatestSlotNumber { resp, reason })
+            .await?;
+
+        self.recv(recv).await
     }
 
-    pub(crate) async fn do_new_tx_msg(
+    pub(crate) async fn do_batch_start_msg_replica(
+        &self,
+        visible_slot_number_after_increase: VisibleSlotNumber,
+        visible_slots_to_advance: NonZero<u8>,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::DoBatchStartMsg {
+            visible_slot_number_after_increase,
+            visible_slots_to_advance,
+            reason,
+        })
+        .await
+    }
+
+    pub(crate) async fn do_new_tx_msg_replica(
         &self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
@@ -1207,15 +1216,11 @@ where
         .await
     }
 
-    pub(crate) async fn latest_slot_number_msg(
+    pub(crate) async fn close_current_batch_msg(
         &self,
         reason: &'static str,
-    ) -> Result<SlotNumber, SequencerStateUpdatorError> {
-        let (resp, recv) = oneshot::channel();
-        self.send(Message::LatestSlotNumber { resp, reason })
-            .await?;
-
-        self.recv(recv).await
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await
     }
 }
 
@@ -1481,7 +1486,7 @@ where
                 visible_slots_to_advance,
                 reason,
             } => {
-                self.process_do_batch_start(
+                self.process_do_batch_start_replica(
                     visible_slot_number_after_increase,
                     visible_slots_to_advance,
                     reason,
@@ -1959,7 +1964,7 @@ where
         inner.trigger_batch_production_if_convenient().await;
     }
 
-    async fn process_do_batch_start(
+    async fn process_do_batch_start_replica(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_increase: NonZero<u8>,
