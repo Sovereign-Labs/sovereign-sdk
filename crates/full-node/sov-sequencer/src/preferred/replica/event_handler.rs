@@ -31,6 +31,15 @@ pub(crate) enum ReplicaError<S: Spec> {
     Unexpected,
 }
 
+impl<S: Spec> From<SequencerStateUpdatorError> for ReplicaError<S> {
+    fn from(value: SequencerStateUpdatorError) -> Self {
+        match value {
+            SequencerStateUpdatorError::Shutdown => Self::Shutdown,
+            SequencerStateUpdatorError::Unexpected => Self::Unexpected,
+        }
+    }
+}
+
 #[async_trait]
 impl<S, Rt> ReplicaEventHandler for Arc<SequencerStateUpdator<S, Rt>>
 where

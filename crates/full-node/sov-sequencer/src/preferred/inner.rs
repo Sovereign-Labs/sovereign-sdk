@@ -1205,14 +1205,15 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
-        match self
-            .send(Message::DoBatchStartMsg {
-                resp,
-                batch_from_master,
-                reason,
-            })
-            .await {};
-        self.recv(recv).await
+        self.send(Message::DoBatchStartMsg {
+            resp,
+            batch_from_master,
+            reason,
+        })
+        .await?;
+
+        self.recv(recv).await??;
+        Ok(())
     }
 
     pub(crate) async fn do_new_tx_msg_replica(
@@ -1220,7 +1221,7 @@ where
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
-    ) -> Result<Result<(), ReplicaError<S>>, SequencerStateUpdatorError> {
+    ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::DoNewTx {
             resp,
@@ -1229,7 +1230,9 @@ where
             reason,
         })
         .await?;
-        self.recv(recv).await
+
+        self.recv(recv).await??;
+        Ok(())
     }
 
     pub(crate) async fn close_current_batch_msg(
