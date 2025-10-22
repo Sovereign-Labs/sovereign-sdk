@@ -11896,10 +11896,15 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "derive_more 1.0.0",
+ "jsonrpsee",
+ "serde",
+ "serde_json",
  "sov-address",
  "sov-modules-api",
  "sov-state",
  "sov-universal-wallet",
+ "tracing",
 ]
 
 [[package]]
