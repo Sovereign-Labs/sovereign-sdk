@@ -1,12 +1,16 @@
 use std::ops::Range;
 use std::sync::Arc;
 
+use crate::evm::evm_test_helper::alloy_ws_client;
+use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
+use alloy::transports::RpcError;
 use alloy_primitives::Address;
 use alloy_primitives::TxHash;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
+use alloy_provider::Provider;
 use alloy_rpc_types_eth::Filter;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
@@ -116,6 +120,22 @@ async fn evm_test_log_subscription_with_pending_blcok() {
         assert_eq!(log.block_number.unwrap(), block_nr);
         assert!(log.block_timestamp.unwrap() == 0);
     }
+}
+
+// Tests for block range.
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_log_subscription_with_block_range_returns_an_error() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_ws_client(rollup.http_addr).await;
+    let filter = Filter::new().select(0..=0);
+    let err = client.subscribe_logs(&filter).await.unwrap_err();
+    let RpcError::ErrorResp(payload) = err else {
+        panic!("Expected subscription error")
+    };
+    let data = payload.data.unwrap();
+    assert_eq!(data.get(), "\"Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor\"");
+
+    Ok(())
 }
 
 // Subscription test with filtering.
