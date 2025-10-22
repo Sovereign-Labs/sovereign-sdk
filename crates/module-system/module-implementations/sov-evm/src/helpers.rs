@@ -40,7 +40,10 @@ pub(crate) fn prepare_call_env(
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
         access_list: access_list.unwrap_or_default(),
-        ..Default::default() // TODO
+        // Default values
+        blob_hashes: vec![],
+        max_fee_per_blob_gas: 0,
+        authorization_list: vec![],
     };
 
     Ok(env)
@@ -58,7 +61,9 @@ pub(crate) fn from_recovered_with_block_context(
         block_hash,
         block_number: Some(block_number),
         index,
-        ..Default::default() // TODO
+        // Default values
+        hash: None,
+        base_fee: None,
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }

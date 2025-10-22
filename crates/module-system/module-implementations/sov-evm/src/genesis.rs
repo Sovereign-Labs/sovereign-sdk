@@ -1,5 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_primitives::{Address, B256, U256};
+use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_primitives::{Address, Bloom, B256, B64, U256};
 use alloy_primitives::{BlockNumber, Bytes};
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
@@ -109,7 +110,22 @@ fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
         timestamp: config.genesis_timestamp,
         excess_blob_gas: Some(EXCESS_BLOB_GAS),
         base_fee_per_gas: Some(base_fee),
-        ..Default::default() // TODO
+        // Default values
+        parent_hash: B256::ZERO,
+        ommers_hash: EMPTY_OMMER_ROOT_HASH,
+        transactions_root: EMPTY_ROOT_HASH,
+        receipts_root: EMPTY_ROOT_HASH,
+        logs_bloom: Bloom::default(),
+        difficulty: U256::ZERO,
+        number: 0,
+        gas_used: 0,
+        extra_data: Bytes::default(),
+        mix_hash: B256::ZERO,
+        nonce: B64::ZERO,
+        withdrawals_root: None,
+        blob_gas_used: None,
+        parent_beacon_block_root: None,
+        requests_hash: None,
     };
 
     Block {
