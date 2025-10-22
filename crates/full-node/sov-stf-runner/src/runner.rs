@@ -8,7 +8,7 @@ use full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerCon
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_metrics::{MonitoringConfig, RunnerMetrics};
+use sov_metrics::RunnerMetrics;
 
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
@@ -154,7 +154,6 @@ where
         prev_state_root: Stf::StateRoot,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         shutdown_receiver: watch::Receiver<()>,
-        monitoring_config: MonitoringConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
@@ -166,19 +165,6 @@ where
         // But when REST and RPC handlers start, sender is used to get another subscription.
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
-        let receiver_for_metrics = secondary_shutdown_receiver.clone();
-        let metrics_handle = tokio::spawn(async move {
-            if let Some(handle) =
-                sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
-            {
-                handle.await?;
-            } else {
-                tracing::warn!("Metics have been initialized outside of runner, some measurements can be lost on shutdown");
-            };
-
-            Ok(())
-        });
-        background_handles.push(metrics_handle);
 
         let axum_config = &runner_config.http_config;
 

@@ -3,6 +3,7 @@
 
 # 2025-10-21
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+- #1936 Fixes warnings about metrics during rollup startup
 - #1933 Cleans up demo-rollup tests
 
 # 2025-10-20

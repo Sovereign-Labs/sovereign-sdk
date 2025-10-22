@@ -285,6 +285,17 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
             tokio::sync::watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
+        let mut background_handles = vec![];
+
+        let receiver_for_metrics = secondary_shutdown_receiver.clone();
+        let monitoring_config = rollup_config.monitoring.clone();
+        if let Some(metrics_handle) =
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+        {
+            background_handles.push(metrics_handle);
+        } else {
+            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+        };
 
         let operating_mode =
             <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
@@ -413,7 +424,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let (state_update_sender, state_update_receiver) =
             tokio::sync::watch::channel(state_update_info);
 
-        let mut background_handles = vec![];
         if let Some(handle) = da_service_handle {
             background_handles.push(handle);
         }
@@ -437,7 +447,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             prev_state_root,
             visible_state_height_tracker,
             main_shutdown_receiver.clone(),
-            rollup_config.monitoring.clone(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
