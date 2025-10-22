@@ -1,6 +1,7 @@
 # 2025-10-22
 - #1940 **Breaking change**: Refactors the `Transaction` type's generics, from `Transaction<Runtime, Spec>` to `Transaction<Runtime, Gas, CryptoSpec>`. Similarly `UnsignedTransaction<Runtime, Gas>` and `TxDetails<Gas>` have the former `Spec` generic replaced.
 Most usages of the `Transaction` type will simply want to use `Transaction<Runtime<S>, <S as Spec>::Gas, <S as Spec>::CryptoSpec>`. This change allows specific context to override the CryptoSpec to something different from the rollup runtime's `Spec`, enabling the use of transaction authenticators using non-default signature schemes (e.g. secp256k1-based EIP712 transaction signing on ED25519-based rollups).
+- #1937 Reject log subscriptions with block filters.
 
 # 2025-10-21
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
