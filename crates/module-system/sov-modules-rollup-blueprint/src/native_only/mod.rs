@@ -15,6 +15,7 @@ use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, 
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::GenesisParamsTrait;
 use sov_modules_api::{
     DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
     SyncStatus, VersionReader, ZkVerifier,
@@ -284,6 +285,17 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
             tokio::sync::watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
+        let mut background_handles = vec![];
+
+        let receiver_for_metrics = secondary_shutdown_receiver.clone();
+        let monitoring_config = rollup_config.monitoring.clone();
+        if let Some(metrics_handle) =
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+        {
+            background_handles.push(metrics_handle);
+        } else {
+            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+        };
 
         let operating_mode =
             <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
@@ -329,15 +341,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Recovering the state root"
         );
         let native_stf = StfBlueprint::new();
+        let genesis_slot_number = genesis_params.genesis_slot_number();
         let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
             // Missing prev_root means need for initialization
             None => {
                 info!(
-                    rollup_genesis_height = rollup_config.runner.genesis_height,
+                    rollup_genesis_height = genesis_params.genesis_slot_number(),
                     "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
                 );
                 let rollup_genesis_block = da_service
-                    .get_block_at(rollup_config.runner.genesis_height)
+                    .get_block_at(genesis_params.genesis_slot_number())
                     .await?;
 
                 let genesis_header = rollup_genesis_block.header().clone();
@@ -379,7 +392,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             tokio::sync::watch::channel(SyncStatus::START);
 
         let da_sync_state = make_da_sync_state(
-            &rollup_config.runner,
+            genesis_slot_number,
             stop_at_rollup_height,
             &ledger_db,
             da_service.as_ref(),
@@ -411,7 +424,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let (state_update_sender, state_update_receiver) =
             tokio::sync::watch::channel(state_update_info);
 
-        let mut background_handles = vec![];
         if let Some(handle) = da_service_handle {
             background_handles.push(handle);
         }
@@ -435,7 +447,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             prev_state_root,
             visible_state_height_tracker,
             main_shutdown_receiver.clone(),
-            rollup_config.monitoring.clone(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
@@ -531,6 +542,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             shutdown_sender: main_shutdown_sender,
             secondary_shutdown_sender,
             background_handles,
+            genesis_slot_number,
         })
     }
 }
@@ -589,6 +601,9 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     /// A way to gracefully shut down background tasks.
     pub shutdown_sender: tokio::sync::watch::Sender<()>,
 
+    /// The genesis slot number.
+    pub genesis_slot_number: u64,
+
     // Trigger after the runner has finished.
     secondary_shutdown_sender: tokio::sync::watch::Sender<()>,
 
@@ -625,7 +640,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         let monitoring_task =
             spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);
 
-        runner.run_in_process().await?;
+        runner.run_in_process(self.genesis_slot_number).await?;
         tracing::info!("STF Runner has completed execution");
 
         if self.shutdown_sender.send(()).is_err() {

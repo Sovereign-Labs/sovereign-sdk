@@ -1418,10 +1418,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
-name = "const-rollup-config"
-version = "0.3.0"
-
-[[package]]
 name = "const_format"
 version = "0.2.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6004,7 +6000,6 @@ dependencies = [
 name = "sov-demo-prover-guest-celestia-sp1"
 version = "0.3.0"
 dependencies = [
- "const-rollup-config",
  "demo-stf",
  "sov-address",
  "sov-celestia-adapter",

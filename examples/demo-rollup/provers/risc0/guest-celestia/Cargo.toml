@@ -14,7 +14,6 @@ demo-stf = { path = "../../../stf" }
 sov-risc0-adapter = { path = "../../../../../crates/adapters/risc0" }
 sov-rollup-interface = { path = "../../../../../crates/rollup-interface" }
 sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm" }
-const-rollup-config = { path = "../../../../const-rollup-config" }
 sov-celestia-adapter = { path = "../../../../../crates/adapters/celestia" }
 sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api" }
 sov-address = { path = "../../../../../crates/module-system/sov-address" }

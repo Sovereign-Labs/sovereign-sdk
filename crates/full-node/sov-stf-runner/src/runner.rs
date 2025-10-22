@@ -8,7 +8,7 @@ use full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerCon
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_metrics::{MonitoringConfig, RunnerMetrics};
+use sov_metrics::RunnerMetrics;
 
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
@@ -51,7 +51,6 @@ where
     da_polling_interval: Duration,
     da_total_timeout: Duration,
     da_service: Arc<Da>,
-    da_height_at_genesis: u64,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
     listen_address_http: SocketAddr,
@@ -155,7 +154,6 @@ where
         prev_state_root: Stf::StateRoot,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         shutdown_receiver: watch::Receiver<()>,
-        monitoring_config: MonitoringConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
@@ -167,19 +165,6 @@ where
         // But when REST and RPC handlers start, sender is used to get another subscription.
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
-        let receiver_for_metrics = secondary_shutdown_receiver.clone();
-        let metrics_handle = tokio::spawn(async move {
-            if let Some(handle) =
-                sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
-            {
-                handle.await?;
-            } else {
-                tracing::warn!("Metics have been initialized outside of runner, some measurements can be lost on shutdown");
-            };
-
-            Ok(())
-        });
-        background_handles.push(metrics_handle);
 
         let axum_config = &runner_config.http_config;
 
@@ -193,7 +178,6 @@ where
             .expect("The impossible happened  first_unprocessed_height_at_startup overflowed");
 
         debug!(
-            %runner_config.genesis_height,
             %first_unprocessed_height_at_startup,
             proof_manager_config = ?pm_config,
             "Initializing StfRunner");
@@ -240,7 +224,6 @@ where
             da_polling_interval,
             da_total_timeout,
             da_service: da_service.clone(),
-            da_height_at_genesis: runner_config.genesis_height,
             stf,
             state_manager,
             listen_address_http,
@@ -373,7 +356,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run_in_process(&mut self) -> anyhow::Result<()> {
+    pub async fn run_in_process(&mut self, genesis_da_height: u64) -> anyhow::Result<()> {
         self.state_manager.startup().await?;
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
@@ -403,6 +386,7 @@ where
                     next_da_height,
                     &start_at_rollup_height,
                     &stop_at_rollup_height,
+                    genesis_da_height,
                 ),
                 &shutdown_receiver,
             )
@@ -472,6 +456,7 @@ where
         mut next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
+        genesis_da_height: u64,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
         let prev_state_root = self.get_state_root().clone();
@@ -628,7 +613,7 @@ where
         self.state_manager
             .process_stf_changes(
                 &self.da_service,
-                self.da_height_at_genesis,
+                genesis_da_height,
                 slot_result.change_set,
                 transition_data,
                 data_to_commit,
@@ -771,7 +756,7 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
 
 /// Creates a new `DaSyncState`
 pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
-    runner_config: &RunnerConfig,
+    genesis_da_height: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     ledger_db: &LedgerDb,
     da_service: &Da,
@@ -781,8 +766,7 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
 
     debug!(%last_slot_processed_before_shutdown);
-    let da_height_processed =
-        runner_config.genesis_height + last_slot_processed_before_shutdown.get();
+    let da_height_processed = genesis_da_height + last_slot_processed_before_shutdown.get();
 
     let target_da_height = get_target_block(da_service, &stop_at_rollup_height)
         .await?

@@ -47,8 +47,6 @@ state_cache_size = 4294967296 # 4GB. Default is 1GB.
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
 [runner]
-genesis_height = 0
-
 # da.block_time is 1s, so status updater will try to poll it 20 times during it.
 da_polling_interval_ms = 50
 # da_total_timeout_secs = 600 # Total timeout for DA service including re-orgs and retries

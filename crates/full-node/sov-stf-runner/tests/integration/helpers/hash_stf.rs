@@ -7,7 +7,7 @@ use sov_modules_api::{
 };
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec, RelevantBlobIters};
-use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
+use sov_rollup_interface::stf::{ApplySlotOutput, GenesisParams, StateTransitionFunction};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{ZkVerifier, Zkvm};
 use sov_state::namespaces::User;
@@ -62,12 +62,29 @@ impl HashStf {
     }
 }
 
+#[derive(Default, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(transparent)]
+/// The genesis params for the HashStf. This is a simple wrapper around a vector of bytes.
+pub struct HashStfGenesisParams(pub Vec<u8>);
+
+impl GenesisParams for HashStfGenesisParams {
+    fn genesis_slot_number(&self) -> u64 {
+        0
+    }
+}
+
+impl From<Vec<u8>> for HashStfGenesisParams {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
 impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
     for HashStf
 {
     type Address = MockAddress;
     type StateRoot = StorageRoot<S>;
-    type GenesisParams = Vec<u8>;
+    type GenesisParams = HashStfGenesisParams;
     type PreState = ProverStorage<S>;
     type ChangeSet = NativeChangeSet;
     type TxReceiptContents = ();
@@ -84,7 +101,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         params: Self::GenesisParams,
     ) -> (Self::StateRoot, Self::ChangeSet) {
         let mut hasher = sha2::Sha256::new();
-        hasher.update(params);
+        hasher.update(params.0);
 
         HashStf::save_from_hasher(
             hasher,

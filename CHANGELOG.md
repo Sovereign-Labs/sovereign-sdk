@@ -1,6 +1,19 @@
-# 2025-10-20
+# 2025-10-22
+- #1937 Reject log subscriptions with block filters.
 - #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
-The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives.
+The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
+
+# 2025-10-21
+- #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+- #1936 Fixes warnings about metrics during rollup startup
+- #1933 Cleans up demo-rollup tests
+
+# 2025-10-20
+- #1917 Add support for logs from pending blocks in `eth_getLogs` and introduce `LogsWithCursorProvider` trait in `sov-eth-client` for paginated log retrieval with `eth_getLogsWithCursor`.
+- #1912 Add multi-worker support to EVM logs soak tests with log retrieval via `eth_getLogs`. Workers are automatically funded from root account and use WebSocket connections for better real-time performance.
+- #1924 **Breaking change** rollup's batch and proof namespace needs to be specified in `constants.toml` as `BATCH_NAMESPACE` and `PROOF_NAMESPACE`.
+- #1925 Simplifies batch and proof namespace declaration: `BATCH_NAMESPACE = { byte_string = "sov-test-b" }` or `PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }`
+- #1925 removes the `genesis_height` param from the rollup_config.toml file. Genesis height is now *only* read from the genesis config file (usually `genesis.json`).
 
 # 2025-10-16
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.

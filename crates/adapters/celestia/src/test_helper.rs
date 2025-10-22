@@ -67,7 +67,6 @@ pub(crate) mod files {
     pub const ROLLUP_PROOF_NAMESPACE_EXAMPLES: Namespace =
         Namespace::const_v0(ROLLUP_PROOF_NAMESPACE_EXAMPLES_RAW);
 
-    // From `examples/const-rollup-config`. Used from blocks that were produced on devnet/testnet
     pub const ROLLUP_PARAMS_EXAMPLES: RollupParams = RollupParams {
         rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE_EXAMPLES,
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE_EXAMPLES,

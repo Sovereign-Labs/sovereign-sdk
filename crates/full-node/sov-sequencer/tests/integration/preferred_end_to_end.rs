@@ -2264,12 +2264,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     let fourth_tx = tx_set_value(&admin.private_key, 2, 9);
 
     // Submit the first tx. This should succeed. This verifies that our initialization works fine *and* causes the sequencer to be close out its current batch.
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&first_tx),
-        })
-        .await
-        .unwrap();
+    client.send_raw_tx_to_sequencer(&first_tx).await.unwrap();
 
     // Produce a new block that includes this first tx.
     test_rollup
@@ -2282,10 +2277,9 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
 
     // Produce a second large delay tx and a second block since - for some reason - the sequencer seems to be holding one extra finalized slot in reserve.
     // This is now needed to exhaust the sequencer's buffer and prevent flakiness allowing us to test the downtime.
+    let second_large_tx = tx_set_value_and_sleep(&admin.private_key, 1, 0, 1200);
     client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(tx_set_value_and_sleep(&admin.private_key, 1, 0, 1200)),
-        })
+        .send_raw_tx_to_sequencer_with_retry(&second_large_tx)
         .await
         .unwrap();
 
@@ -2298,14 +2292,12 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     // Wait until the new batch is almost processed
     sleep(Duration::from_millis(1000)).await;
 
-    // Send off the delayed tx. It should arrive at the seqeuncer immediately and begin sleeping.
+    // Send off the delayed tx. It should arrive at the sequencer immediately and begin sleeping.
     let delayed_tx_handle = tokio::spawn({
         let client = client.clone();
         async move {
             let response = client
-                .accept_tx(&api_types::AcceptTxBody {
-                    body: BASE64_STANDARD.encode(&delayed_tx),
-                })
+                .send_raw_tx_to_sequencer(&delayed_tx)
                 .await
                 .unwrap_err()
                 .to_string();
@@ -2320,9 +2312,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     // This is the "downtime" that we're testing for.
     tokio::time::sleep(Duration::from_millis(50)).await;
     let third_tx_response = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&third_tx),
-        })
+        .send_raw_tx_to_sequencer(&third_tx)
         .await
         .unwrap_err()
         .to_string();
