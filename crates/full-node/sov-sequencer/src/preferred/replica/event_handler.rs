@@ -13,10 +13,12 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    #[allow(clippy::match_same_arms)]
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         match data {
             DbData::BatchStart(_) => {}
             DbData::Transaction(_, _, _) => {}
+            DbData::BatchStart(_) => {}
             DbData::BatchEnd(_) => {}
             DbData::NewProof => {}
         };
