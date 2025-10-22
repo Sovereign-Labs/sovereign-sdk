@@ -1,3 +1,6 @@
+# 2025-10-22
+- #1937 Reject log subscriptions with block filters.
+
 # 2025-10-21
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
 - #1933 Cleans up demo-rollup tests
