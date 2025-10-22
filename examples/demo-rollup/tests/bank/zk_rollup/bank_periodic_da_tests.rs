@@ -155,6 +155,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
                 amount: Amount::new(100),
                 token_id,
             },
+            memo: None,
         },
     )
     .await?;
@@ -169,6 +170,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
                 amount: Amount::new(200),
                 token_id,
             },
+            memo: None,
         },
     )
     .await?;
