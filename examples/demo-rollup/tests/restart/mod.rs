@@ -313,7 +313,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         ),
         (
             Level::WARN,
-            "Metics have been initialized outside of rollup blueprint, some measurements can be lost on shutdown".to_string(),
+            "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string(),
         ),
     ];
     recorded_errors_warnings.retain(|e| !known.contains(e));
