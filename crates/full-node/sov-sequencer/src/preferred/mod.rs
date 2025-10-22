@@ -1135,10 +1135,10 @@ async fn exit_rollup_inner(
     if shutdown_sender.send(()).is_err() {
         tracing::error!("Failed to send shutdown signal: {location}");
     }
-    sleep(Duration::from_secs(5)).await;
     let msg = format!("Calling std::process::exit(1): {location}");
     tracing::error!(msg);
     println!("{msg}");
+    sleep(Duration::from_secs(5)).await;
     std::process::exit(1);
 }
 

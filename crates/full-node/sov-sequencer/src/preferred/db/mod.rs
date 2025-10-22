@@ -534,8 +534,9 @@ impl PreferredSequencerDb {
         prune_up_to_including: SequenceNumber,
     ) -> anyhow::Result<()> {
         if let Some(backend) = &mut self.backend {
-            let prune_up_to_including = prune_up_to_including.saturating_sub(PRUNING_LAG);
-            backend.prune(prune_up_to_including).await?;
+            let x = prune_up_to_including.saturating_sub(PRUNING_LAG);
+            println!("prune_db {} {}", x, prune_up_to_including);
+            backend.prune(x).await?;
         }
         Ok(())
     }
