@@ -2016,19 +2016,20 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         let current_seq_nr = inner.current_sequence_number();
 
-        /*
         let seq_nr_from_master = batch_from_master.sequence_number;
-        if current_seq_nr > seq_nr_from_master + 1 {
+        if current_seq_nr + 1 > seq_nr_from_master {
+            println!("Rejected1 Current seq nr: {current_seq_nr}, seq nr from master: {seq_nr_from_master}");
             return Err(ReplicaBatchStartError::Rejected(
                 DBDataRejected::ExecutorAhead(current_seq_nr),
             ));
         }
 
-        if current_seq_nr < seq_nr_from_master + 1 {
-            return Err(ReplicaBatchStartError::Creation(
+        if current_seq_nr + 1 < seq_nr_from_master {
+            println!("Rejected2 Current seq nr: {current_seq_nr}, seq nr from master: {seq_nr_from_master}");
+            return Err(ReplicaBatchStartError::Rejected(
                 DBDataRejected::ExecutorBehind(DbData::BatchStart(batch_from_master)),
             ));
-        }*/
+        }
 
         inner
             .do_batch_start(
