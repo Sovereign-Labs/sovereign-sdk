@@ -13,7 +13,7 @@ use sov_rollup_interface::crypto::SigVerificationError;
 use sov_rollup_interface::MaybeArbitrary;
 
 use crate::transaction::PubKeyAndSignature;
-use crate::Spec;
+use crate::CryptoSpecExt;
 
 /// An extended digital signature.
 /// This extends the [`sov_rollup_interface::crypto::Signature`] trait by requiring [`JsonSchema`] and
@@ -134,10 +134,10 @@ impl<Pubkey: PublicKeyExt> Multisig<Pubkey> {
     }
 
     /// Verifies the signature
-    pub fn verify_signature<S: Spec>(
+    pub fn verify_signature<C: CryptoSpecExt>(
         &self,
         msg: &[u8],
-        signatures: &[PubKeyAndSignature<S>],
+        signatures: &[PubKeyAndSignature<C>],
     ) -> Result<(), SigVerificationError> {
         use sov_rollup_interface::crypto::PublicKey;
         use sov_rollup_interface::crypto::Signature;

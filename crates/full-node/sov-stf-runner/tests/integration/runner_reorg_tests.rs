@@ -1,8 +1,13 @@
 use std::sync::Arc;
 
+use crate::helpers::hash_stf::{HashStf, S};
+use crate::helpers::runner_init::{
+    bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
+};
 use anyhow::Context;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NativeStorageManager;
+use sov_metrics::MonitoringConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
@@ -23,11 +28,6 @@ use sov_stf_runner::StateTransitionRunner;
 use sov_test_utils::storage::SimpleStorageManager;
 use tempfile::TempDir;
 use tokio::sync::watch;
-
-use crate::helpers::hash_stf::{HashStf, S};
-use crate::helpers::runner_init::{
-    bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
-};
 
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
 
@@ -99,9 +99,6 @@ async fn test_runner_with_background_da_service(
     target_height: u64,
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
-    // std::env::set_var("RUST_LOG", "info,sov_stf_runner=trace,sov_mock_da=debug");
-    // std::env::set_var("RUST_LOG", "info");
-    // sov_test_utils::initialize_logging();
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
     shutdown_receiver.mark_unchanged();
 
@@ -127,9 +124,8 @@ async fn test_runner_with_background_da_service(
 
     let (sync_sender, mut sync_status_receiver) = watch::channel(SyncStatus::START);
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
-    let da_sync_state = make_da_sync_state(0, None, &ledger_db, da_service.as_ref(), sync_sender)
-        .await
-        .unwrap();
+    let da_sync_state =
+        make_da_sync_state(0, None, &ledger_db, da_service.as_ref(), sync_sender).await?;
 
     let (state_update_sender, _state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
@@ -147,6 +143,9 @@ async fn test_runner_with_background_da_service(
     let (prev_state_root, _genesis_state_root) =
         init_variant.initialize(&stf, &mut storage_manager).await?;
 
+    let _ =
+        sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_receiver.clone());
+
     let mut runner: HashStfRunner<StorableMockDaService> = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         None,
@@ -158,7 +157,6 @@ async fn test_runner_with_background_da_service(
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
-        rollup_config.monitoring.clone(),
         None,
         None,
         da_sync_state,

@@ -3,6 +3,7 @@ use crate::preferred::db::StoredBlob;
 use crate::Serialize;
 use serde::Deserialize;
 use sov_modules_api::FullyBakedTx;
+use sov_modules_api::TxHash;
 use sqlx::postgres::PgRow;
 use sqlx::PgPool;
 use sqlx::Row;
@@ -114,7 +115,7 @@ impl EventsNotificationPayload {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DbData {
     BatchStart(BatchToStore),
-    Transaction(u64, FullyBakedTx),
+    Transaction(u64, FullyBakedTx, TxHash),
     BatchEnd(BatchToStore),
     NewProof,
 }
@@ -129,7 +130,7 @@ impl DbData {
             DbData::BatchStart(batch_to_store) | DbData::BatchEnd(batch_to_store) => {
                 batch_to_store.sequence_number
             }
-            DbData::Transaction(sequence_number, _) => *sequence_number,
+            DbData::Transaction(sequence_number, _, _) => *sequence_number,
             DbData::NewProof => 0,
         }
     }
@@ -164,7 +165,8 @@ pub(crate) fn row_to_event(row: PgRow) -> Result<(DbData, EventType), ParsingErr
         }
         EventType::Transaction => {
             let baked_tx = FullyBakedTx::new(data);
-            DbData::Transaction(sequence_number, baked_tx)
+            let tx_hash: TxHash = TxHash::new(row.get("hash"));
+            DbData::Transaction(sequence_number, baked_tx, tx_hash)
         }
 
         EventType::BatchEnd => {
