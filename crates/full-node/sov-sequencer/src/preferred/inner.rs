@@ -2039,6 +2039,13 @@ where
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
 
+        if let Err(e) = &inner.is_ready {
+            return Err(ReplicaError::NotReady(
+                e.clone(),
+                DbData::BatchStart(batch_from_master),
+            ));
+        }
+
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
@@ -2052,13 +2059,6 @@ where
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
                 DbData::BatchStart(batch_from_master),
             )));
-        }
-
-        if let Err(e) = &inner.is_ready {
-            return Err(ReplicaError::NotReady(
-                e.clone(),
-                DbData::BatchStart(batch_from_master),
-            ));
         }
 
         inner
