@@ -86,6 +86,10 @@ impl ReplicaSyncTask {
             };
 
             'inner: loop {
+                if shutdown_receiver.has_changed().unwrap_or(true) {
+                    break 'outer;
+                }
+
                 match handler.on_db_event(data).await {
                     Ok(_) => {
                         // The data was applied on the executor.
