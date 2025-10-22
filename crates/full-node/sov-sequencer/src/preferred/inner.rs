@@ -1197,6 +1197,13 @@ where
         self.recv(recv).await
     }
 
+    pub(crate) async fn close_current_batch_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await
+    }
+
     pub(crate) async fn do_batch_start_msg_replica(
         &self,
         batch_from_master: BatchToStore,
@@ -1229,11 +1236,12 @@ where
         self.recv(recv).await
     }
 
-    pub(crate) async fn close_current_batch_msg(
+    pub(crate) async fn close_current_batch_msg_replica(
         &self,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::CloseCurrentBatch { reason }).await
+    ) -> Result<Result<(), ReplicaError<S>>, SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await?;
+        Ok(Ok(()))
     }
 }
 
