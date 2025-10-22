@@ -217,8 +217,13 @@ pub mod pause_update_state {
     }
 }
 
+pub enum TestSequencerDbBackend {
+    RocksDb,
+    Postgres { allow_skip: bool },
+}
+
 #[allow(clippy::too_many_arguments)]
-pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
+pub async fn new_test_rollup_with_backend<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     dir: Arc<tempfile::TempDir>,
     seq_da_address: MockAddress,
     genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
@@ -231,8 +236,9 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
-) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
-    let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
+    backend: TestSequencerDbBackend,
+) -> Option<TestRollup<RtAgnosticBlueprint<TestSpec, RT>>> {
+    let mut builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
         GenesisSource::CustomParams(genesis_params),
         block_producing_config,
         finalization_blocks,
@@ -256,7 +262,86 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
     .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave);
 
-    builder.start().await.unwrap()
+    match backend {
+        TestSequencerDbBackend::RocksDb => {}
+        TestSequencerDbBackend::Postgres { allow_skip } => {
+            const DEV_SERVER_CPUS: usize = 96;
+
+            if std::env::var("SOV_TEST_SKIP_DOCKER")
+                .map_or(false, |value| value == "1")
+            {
+                tracing::warn!(
+                    "Skipping Postgres-backed rollup: SOV_TEST_SKIP_DOCKER=1 was set"
+                );
+                return None;
+            }
+
+            if num_cpus::get() == DEV_SERVER_CPUS {
+                tracing::warn!(
+                    "Skipping Postgres-backed rollup: detected machine with {DEV_SERVER_CPUS} threads (dev server heuristic)"
+                );
+                return None;
+            }
+
+            builder = match builder.with_postgres_sequencer().await {
+                Ok(builder) => builder,
+                Err(error) => {
+                    if allow_skip {
+                        tracing::warn!(
+                            ?error,
+                            "Skipping Postgres-backed rollup: failed to start Postgres container"
+                        );
+                        return None;
+                    }
+
+                    eprintln!("Error starting rollup builder: {error:?}");
+                    eprintln!(
+                        "To skip docker based tests run with the env var SOV_TEST_SKIP_DOCKER=1"
+                    );
+                    panic!("Unable to proceed without docker");
+                }
+            };
+        }
+    }
+
+    Some(builder.start().await.unwrap())
+}
+
+/// Builds a rollup backed by RocksDb.
+/// Call [`new_test_rollup_with_backend`] with [`TestSequencerDbBackend::Postgres`]
+/// for tests that require the Postgres-backed sequencer.
+#[allow(clippy::too_many_arguments)]
+pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
+    dir: Arc<tempfile::TempDir>,
+    seq_da_address: MockAddress,
+    genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
+    minimum_profit_per_tx: u128,
+    automatic_batch_production: bool,
+    max_batch_size_bytes: usize,
+    block_producing_config: BlockProducingConfig,
+    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    blob_processing_timeout_secs: u64,
+    max_batch_execution_time_millis: u64,
+    stop_at_rollup_height: Option<RollupHeight>,
+    finalization_blocks: u32,
+) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
+    new_test_rollup_with_backend(
+        dir,
+        seq_da_address,
+        genesis_params,
+        minimum_profit_per_tx,
+        automatic_batch_production,
+        max_batch_size_bytes,
+        block_producing_config,
+        rollup_prover_config,
+        blob_processing_timeout_secs,
+        max_batch_execution_time_millis,
+        stop_at_rollup_height,
+        finalization_blocks,
+        TestSequencerDbBackend::RocksDb,
+    )
+    .await
+    .expect("RocksDb backend should always be available")
 }
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(

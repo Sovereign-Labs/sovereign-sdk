@@ -2,8 +2,9 @@
 //! thus test sequencer + node interactions.
 
 use crate::utils::{
-    generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
-    tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
+    generate_paymaster_tx, generate_txs, new_test_rollup, new_test_rollup_with_backend,
+    pause_update_state, tempdir_inside_codebase_dir, tx_set_value_with_gas,
+    ModuleWithVersionedStateAccessInSlotHook, TestSequencerDbBackend,
     MAX_BATCH_EXECUTION_TIME_MILLIS,
 };
 use backon::Retryable;
@@ -569,7 +570,10 @@ async fn sequencer_filled_up_block() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+    let max_batch_size = TEST_MAX_BATCH_SIZE;
+    let blob_processing_timeout_secs = TEST_BLOB_PROCESSING_TIMEOUT;
+
+    let Some(test_rollup) = new_test_rollup_with_backend::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -579,15 +583,19 @@ async fn sequencer_filled_up_block() {
         genesis_params,
         0,
         true,
-        TEST_MAX_BATCH_SIZE,
+        max_batch_size,
         BlockProducingConfig::Manual,
         None,
-        60,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        blob_processing_timeout_secs,
+        400, // Set the batch time limit to twice the block time
         None,
         TEST_FINALIZATION_BLOCKS,
+        TestSequencerDbBackend::Postgres { allow_skip: true },
     )
-    .await;
+    .await
+    else {
+        return;
+    };
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
