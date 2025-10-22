@@ -2023,8 +2023,27 @@ where
         &mut self,
         batch_from_master: BatchToStore,
         reason: &'static str,
-    ) -> Result<(), BatchCreationError> {
+    ) -> Result<(), ReplicaError> {
         let mut inner = self.get_inner_with_timing(reason).await;
+
+        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
+        let seq_nr_from_master = batch_from_master.sequence_number;
+
+        if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
+                seq_nr_of_next_blob_for_this_executor,
+            )));
+        }
+
+        if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
+                DbData::BatchStart(batch_from_master),
+            )));
+        }
+
+        if let Err(e) = &inner.is_ready {
+            return Err(ReplicaError::NotReady(e.clone()));
+        }
 
         inner
             .do_batch_start(
@@ -2050,6 +2069,20 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         inner.close_current_batch().await;
     }
+}
+
+use crate::preferred::replica::db_data::DbData;
+use crate::preferred::replica::replica_sync_task::DBDataRejected;
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum ReplicaError {
+    #[error("TODO")]
+    Rejected(DBDataRejected),
+    #[error("TODO")]
+    NotReady(SequencerNotReadyDetails),
+
+    #[error("TODO")]
+    Creation(#[from] BatchCreationError),
 }
 
 #[derive(Debug)]
