@@ -956,7 +956,7 @@ where
 {
     channel_size: Arc<AtomicU32>,
     message_sender: mpsc::Sender<Message<S, Rt>>,
-    shutdown_sender: watch::Sender<()>,
+    pub(crate) shutdown_sender: watch::Sender<()>,
     shutdown_receiver: watch::Receiver<()>,
 }
 
@@ -2066,7 +2066,10 @@ where
         }
 
         if let Err(e) = &inner.is_ready {
-            // return Err(ReplicaError::NotReady(e.clone()));
+            //return Err(ReplicaError::NotReady(
+            //    e.clone(),
+            //    DbData::BatchStart(batch_from_master),
+            // ));
         }
 
         inner
@@ -2107,7 +2110,7 @@ pub(crate) enum ReplicaError<S: Spec> {
     #[error("TODO")]
     Rejected(DBDataRejected),
     #[error("TODO")]
-    NotReady(SequencerNotReadyDetails),
+    NotReady(SequencerNotReadyDetails, DbData),
     #[error("TODO")]
     Creation(#[from] BatchCreationError),
     #[error("TODO")]

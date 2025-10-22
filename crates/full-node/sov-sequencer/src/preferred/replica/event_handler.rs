@@ -1,3 +1,4 @@
+use crate::preferred::exit_rollup;
 use crate::preferred::inner::ReplicaError;
 use crate::preferred::inner::SequencerStateUpdator;
 use crate::preferred::replica::db_data::DbData;
@@ -20,7 +21,6 @@ where
         let res = match data {
             DbData::BatchStart(batch_to_store) => {
                 println!("Batch start {}", batch_to_store.sequence_number);
-
                 self.do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
                     .await
             }
@@ -36,24 +36,29 @@ where
         };
 
         match res {
-            Ok(Ok(())) => {}
+            Ok(Ok(())) => Ok(()),
             Ok(Err(e)) => match e {
                 ReplicaError::Rejected(db_data_rejected) => return Err(db_data_rejected),
-                ReplicaError::NotReady(sequencer_not_ready_details) => {
-                    //DBDataRejected::ExecutorBehind(())
-                    todo!()
+                ReplicaError::NotReady(_sequencer_not_ready_details, db_data_rejected) => {
+                    return Err(DBDataRejected::ExecutorBehind(db_data_rejected))
                 }
-                ReplicaError::Creation(batch_creation_error) => panic!("TODO"),
-                ReplicaError::NewTx(do_new_tx_error) => panic!("TODO"),
+                ReplicaError::Creation(batch_creation_error) => panic_and_error(format!(
+                    "Replica batch creation error: {batch_creation_error:?}"
+                )),
+                ReplicaError::NewTx(do_new_tx_error) => panic_and_error(format!(
+                    "Replica new transaction error: {do_new_tx_error:?}"
+                )),
             },
-            Err(e) => match e {
-                SequencerStateUpdatorError::Shutdown => {
-                    todo!()
-                }
-                SequencerStateUpdatorError::Unexpected => panic!("TODO"),
-            },
-        };
 
-        Ok(())
+            Err(SequencerStateUpdatorError::Shutdown) => Ok(()),
+            Err(SequencerStateUpdatorError::Unexpected) => panic_and_error(format!(
+                "Replica got `SequencerStateUpdatorError::Unexpected` error"
+            )),
+        }
     }
+}
+
+fn panic_and_error(panic_str: String) -> ! {
+    tracing::error!("{}", panic_str);
+    panic!("{}", panic_str);
 }
