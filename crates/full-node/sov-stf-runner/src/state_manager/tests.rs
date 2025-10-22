@@ -25,6 +25,7 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::{
     ArrayWitness, NativeStorage, ProverStorage, SlotKey, SlotValue, StateAccesses, Storage,
+    StorageRoot,
 };
 
 use super::*;
@@ -248,6 +249,103 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             assert_eq!(returned_storage_root, received_storage_root);
         }
     }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_heals_cached_state_on_block_after_reorg() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let mut state_manager = setup_state_manager(tempdir.path()).await?;
+
+    let fork_point = 3;
+    let fork_happens_at = 6;
+    let finality = 5;
+
+    let mut da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+    da_service
+        .set_planned_fork(PlannedFork::new(
+            fork_happens_at,
+            fork_point,
+            vec![vec![11], vec![22], vec![33], vec![44]],
+        ))
+        .await?;
+
+    let mut fork_parent_hash = None;
+    let mut authoritative_root = None;
+
+    for da_height in 1..fork_happens_at {
+        da_service
+            .send_transaction(&[da_height as u8; 10])
+            .await
+            .await??;
+        let filtered_block = da_service.get_block_at(da_height).await?;
+        process_continuous_transition(
+            &mut state_manager,
+            filtered_block.clone(),
+            &da_service,
+            finality,
+        )
+        .await?;
+        if da_height == fork_point {
+            let block_hash = filtered_block.header().hash();
+            fork_parent_hash = Some(block_hash);
+            authoritative_root = state_manager
+                .state_on_block
+                .get(&block_hash)
+                .map(|state| state.post_state_root);
+        }
+    }
+
+    let fork_parent_hash = fork_parent_hash.expect("Fork parent should be set");
+    let authoritative_root = authoritative_root.expect("Expected cached parent post-state root");
+    let authoritative_bytes = authoritative_root.as_ref();
+    let mut user_root = [0u8; 32];
+    user_root.copy_from_slice(&authoritative_bytes[..32]);
+    user_root[0] ^= 0xFF;
+    let mut kernel_root = [0u8; 32];
+    kernel_root.copy_from_slice(&authoritative_bytes[32..]);
+    let stale_root = StorageRoot::<S>::new(user_root, kernel_root);
+
+    {
+        // Intentionally corrupt cached metadata to verify healing logic.
+        let parent_state = state_manager
+            .state_on_block
+            .get_mut(&fork_parent_hash)
+            .expect("Cached parent state should exist before reorg");
+        parent_state.post_state_root = stale_root;
+    }
+    assert_ne!(
+        state_manager
+            .state_on_block
+            .get(&fork_parent_hash)
+            .unwrap()
+            .post_state_root,
+        authoritative_root
+    );
+
+    da_service
+        .send_transaction(&[fork_happens_at as u8; 10])
+        .await
+        .await??;
+    let stale_branch_block = da_service.get_block_at(fork_happens_at).await?;
+    let (_prover_storage, returned_block) = state_manager
+        .prepare_storage(stale_branch_block.clone(), &da_service)
+        .await?;
+
+    assert_ne!(returned_block, stale_branch_block);
+    assert_eq!(fork_point + 1, returned_block.header().height());
+    assert_eq!(fork_parent_hash, returned_block.header().prev_hash());
+
+    let healed_root = state_manager
+        .state_on_block
+        .get(&fork_parent_hash)
+        .expect("Cached parent state should remain present after healing")
+        .post_state_root;
+
+    assert_eq!(healed_root, authoritative_root);
+    assert_eq!(healed_root, *state_manager.get_state_root());
+    assert_ne!(healed_root, stale_root);
+
     Ok(())
 }
 

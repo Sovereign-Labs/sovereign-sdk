@@ -25,6 +25,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{StateTransitionWitness, Zkvm};
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
+use sov_state::storage::NativeStorage;
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
@@ -133,7 +134,7 @@ where
         LedgerChangeSet = SchemaBatch,
         LedgerState = DeltaReader,
     >,
-    Sm::StfState: Clone,
+    Sm::StfState: Clone + NativeStorage<Root = Stf::StateRoot>,
     Stf: StateTransitionFunction<
         InnerVm,
         OuterVm,

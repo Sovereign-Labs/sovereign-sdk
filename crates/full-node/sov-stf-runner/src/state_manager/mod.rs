@@ -17,6 +17,7 @@ use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::stf::TxReceiptContents;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
+use sov_state::storage::NativeStorage;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
@@ -110,7 +111,7 @@ where
         LedgerChangeSet = SchemaBatch,
         LedgerState = DeltaReader,
     >,
-    Sm::StfState: Clone,
+    Sm::StfState: Clone + NativeStorage<Root = StateRoot>,
 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -165,6 +166,9 @@ where
     /// it should be updated after the call of this method.
     /// If a given block continues in the current fork, it is simply returned to the caller.
     /// If reorg happened, it will return block following the last seen transition.
+    /// The storage snapshot returned by [`HierarchicalStorageManager::create_state_for`] is treated
+    /// as authoritative, so `self.state_root` and any cached [`StateOnBlock`] entries are reconciled
+    /// with it opportunistically when rewinding.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn prepare_storage(
         &mut self,
@@ -182,6 +186,11 @@ where
             .await?;
         tracing::trace!(reorg_happened, "Checked if reorg happened");
 
+        let mut fork_expectation: Option<(
+            <<Da as DaService>::Spec as DaSpec>::SlotHash,
+            StateRoot,
+        )> = None;
+
         if reorg_happened {
             let ForkPoint {
                 block: new_block,
@@ -192,7 +201,8 @@ where
                 new_block = %new_block.header().display(),
                 old_pre_state_root = hex::encode(self.state_root.as_ref()),
                 new_pre_state_root = hex::encode(pre_state_root.as_ref()),
-                "Reorg happened, updating variables");
+                "Reorg happened, updating variables"
+            );
 
             // Self check
             {
@@ -223,14 +233,53 @@ where
                 time = ?start.elapsed(),
                 "Chosen fork point"
             );
+            let fork_parent_hash = new_block.header().prev_hash();
+            fork_expectation = Some((fork_parent_hash, pre_state_root));
             filtered_block = new_block;
-            self.state_root = pre_state_root;
         }
 
         let (stf_pre_state, ledger_state) = self
             .storage_manager
             .create_state_for(filtered_block.header())?;
-        // Second condition, we only update channels with new state before returning in case of reorg
+
+        let storage_pre_state_root = stf_pre_state.get_latest_root_hash()?;
+        let storage_pre_state_root_hex = hex::encode(storage_pre_state_root.as_ref());
+        let cached_state_root_hex = hex::encode(self.state_root.as_ref());
+        let authoritative_pre_state_root = if let Some((fork_parent_hash, expected_root)) =
+            &fork_expectation
+        {
+            let expected_root_hex = hex::encode(expected_root.as_ref());
+            tracing::debug!(
+                fork_parent_hash = ?fork_parent_hash,
+                cached_state_root = %cached_state_root_hex,
+                expected_pre_state_root = %expected_root_hex,
+                storage_pre_state_root = %storage_pre_state_root_hex,
+                "Reorg reconciliation details"
+            );
+            if storage_pre_state_root.as_ref() != expected_root.as_ref() {
+                tracing::info!(
+                    fork_parent_hash = ?fork_parent_hash,
+                    cached_state_root = %cached_state_root_hex,
+                    expected_pre_state_root = %expected_root_hex,
+                    storage_pre_state_root = %storage_pre_state_root_hex,
+                    "Reconciling cached fork metadata with storage snapshot"
+                );
+            }
+            self.heal_cached_state_on_block(fork_parent_hash, storage_pre_state_root.clone());
+            storage_pre_state_root.clone()
+        } else {
+            if self.state_root.as_ref() != storage_pre_state_root.as_ref() {
+                tracing::info!(
+                    cached_state_root = %cached_state_root_hex,
+                    storage_pre_state_root = %storage_pre_state_root_hex,
+                    "Updating cached state root from storage snapshot"
+                );
+            }
+            storage_pre_state_root.clone()
+        };
+
+        self.state_root = authoritative_pre_state_root.clone();
+
         if reorg_happened {
             tracing::trace!(
                 "Reorg has happened, updating API and Ledger storage before returning Stf state"
@@ -241,11 +290,14 @@ where
                 .await?;
         }
 
+        let reconciled_state_root_hex = hex::encode(authoritative_pre_state_root.as_ref());
         tracing::trace!(
             block_header = %filtered_block.header().display(),
             reorg_happened,
+            reconciled_state_root = %reconciled_state_root_hex,
             time = ?start.elapsed(),
-            "Returning STF state for block");
+            "Returning STF state for block"
+        );
         Ok((stf_pre_state, filtered_block))
     }
 
@@ -283,9 +335,12 @@ where
             );
         }
         let aggregated_proofs_count = aggregated_proofs.len();
+        let witness_initial_state_root = transition_witness.initial_state_root.clone();
         tracing::debug!(
             %slot_number,
-            current_state_root = hex::encode(self.get_state_root().as_ref()),
+            parent_hash = ?block_header.prev_hash(),
+            cached_state_root = hex::encode(self.get_state_root().as_ref()),
+            witness_pre_state_root = hex::encode(witness_initial_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
             "Saving changes after applying slot"
@@ -419,6 +474,18 @@ where
         }
         let sending_to_prover_time = sending_to_prover_start.elapsed();
 
+        tracing::debug!(
+            parent_hash = ?block_header.prev_hash(),
+            cached_state_root = hex::encode(self.state_root.as_ref()),
+            witness_pre_state_root = hex::encode(witness_initial_state_root.as_ref()),
+            new_state_root = hex::encode(new_state_root.as_ref()),
+            "Committing STF changes to canonical state root"
+        );
+        debug_assert_eq!(
+            self.state_root.as_ref(),
+            witness_initial_state_root.as_ref(),
+            "StateManager state_root diverged from transition witness prior to commit"
+        );
         self.state_root = new_state_root;
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(RunnerProcessStfChangesMetrics {
@@ -537,6 +604,29 @@ where
         self.state_on_block
             .get(&block_header.prev_hash())
             .map(|state| state.post_state_root.clone())
+    }
+
+    fn heal_cached_state_on_block(
+        &mut self,
+        parent_hash: &<<Da as DaService>::Spec as DaSpec>::SlotHash,
+        authoritative_post_state_root: StateRoot,
+    ) {
+        if let Some(state) = self.state_on_block.get_mut(parent_hash) {
+            let stale_root = hex::encode(state.post_state_root.as_ref());
+            state.post_state_root = authoritative_post_state_root;
+            let corrected_root = hex::encode(state.post_state_root.as_ref());
+            tracing::info!(
+                parent_block = %state.block_header.display(),
+                stale_root = %stale_root,
+                corrected_root = %corrected_root,
+                "Corrected cached post-state root after storage reconciliation"
+            );
+        } else {
+            tracing::debug!(
+                parent_hash = ?parent_hash,
+                "No cached StateOnBlock entry found while attempting to heal metadata"
+            );
+        }
     }
 
     fn get_earliest_seen_height(&self) -> Option<u64> {
