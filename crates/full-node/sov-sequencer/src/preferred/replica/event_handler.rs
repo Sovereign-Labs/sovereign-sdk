@@ -48,13 +48,29 @@ where
 {
     #[allow(clippy::match_same_arms)]
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
-        match data {
-            DbData::BatchStart(_) => {}
-            DbData::Transaction(_, _, _) => {}
-            DbData::BatchEnd(_) => {}
-            DbData::NewProof => {}
+        let res: Result<(), ReplicaError<S>> = match data {
+            DbData::BatchStart(_) => Ok(()),
+            DbData::Transaction(_, _, _) => Ok(()),
+            DbData::BatchEnd(_) => Ok(()),
+            DbData::NewProof => Ok(()),
         };
 
-        Ok(())
+        match res {
+            Ok(_) => return Ok(()),
+            Err(ReplicaError::Rejected(db_data_rejected)) => return Err(db_data_rejected),
+            Err(ReplicaError::NotReady(_sequencer_not_ready_details, db_data_rejected)) => {
+                return Err(DBDataRejected::ExecutorBehind(db_data_rejected))
+            }
+            Err(ReplicaError::Creation(batch_creation_error)) => {
+                panic!("Replica failed to create a new batch. Error: {batch_creation_error:?}");
+            }
+            Err(ReplicaError::NewTx(error)) => {
+                panic!("Replica failed to apply a new transaction. Error: {error:?}");
+            }
+            Err(ReplicaError::Shutdown) => return Ok(()),
+            Err(ReplicaError::UnexpectedShutdown) => {
+                panic!("Replica unexpectedly shut down");
+            }
+        };
     }
 }
