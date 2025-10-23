@@ -264,6 +264,9 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         );
     }
 
+    // Sleep to ensure that any pending commits have finished
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Send one more transaction which should crash on commit.
     {
         std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
