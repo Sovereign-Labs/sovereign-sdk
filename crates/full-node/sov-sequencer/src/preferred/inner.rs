@@ -1963,6 +1963,12 @@ where
 
         inner.update_api_ledger(&info).await;
 
+        // ===== TODO
+
+        if info.sync_status.target_da_height() - info.sync_status.synced_da_height() <= 1 {
+            inner.is_ready = Ok(());
+        }
+
         drop(inner);
         self.process_force_overwrite_state_for_recovery(info, "xxx")
             .await;
@@ -2057,10 +2063,10 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if let Err(e) = &inner.is_ready {
-            // return Err(ReplicaError::NotReady(
-            //     e.clone(),
-            //     DbData::BatchStart(batch_from_master),
-            // ));
+            return Err(ReplicaError::NotReady(
+                e.clone(),
+                DbData::BatchStart(batch_from_master),
+            ));
         }
 
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
