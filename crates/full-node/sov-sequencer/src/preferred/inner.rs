@@ -276,6 +276,11 @@ where
     }
 
     async fn trigger_recovery(&mut self, info: &StateUpdateInfo<S::Storage>) {
+        println!(
+            "XXX Recovering from preferred sequencer {}",
+            self.is_replica()
+        );
+
         if self.is_replica() {
             // Replicas don't run recovery. We let the main sequencer run catchup. If we fail-over
             // midway, update_state() will automatically re-trigger recovery on this instance if
