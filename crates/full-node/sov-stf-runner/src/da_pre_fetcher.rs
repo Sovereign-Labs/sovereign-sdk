@@ -1,13 +1,10 @@
 //! Utilities for parallel fetching of the finalized blocks.
 
-use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::da::bulk_finalized_fetcher::BlockFetcher;
-use futures::stream::FuturesOrdered;
+use crate::da::bulk_finalized_blocks_fetcher::BlockFetcher;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::sync::mpsc::Receiver;
 use tracing::{info_span, Instrument as _};
 
@@ -16,6 +13,7 @@ const MAX_BLOCKS: usize = 1_000;
 
 /// Service that pre-fetcher blocks from given start height up to last finalized height at the moment of construction.
 /// After that it proxies all requests to underlying DaService.
+/// Makes sync faster.
 pub struct FinalizedBlocksBulkFetcher<Da: DaService> {
     da_service: Arc<Da>,
     blocks: Receiver<Da::FilteredBlock>,
@@ -77,6 +75,7 @@ where
     #[tracing::instrument(skip(self))]
     pub async fn get_block_at(&mut self, height: u64) -> Result<Da::FilteredBlock, Da::Error> {
         if height > self.last_finalized_height || height < self.start_height {
+            // TODO: Do reorg aware call here
             tracing::trace!(
                 height,
                 start_height = self.start_height,
