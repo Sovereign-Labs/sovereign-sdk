@@ -249,7 +249,9 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         let data = borsh::to_vec(&self).unwrap();
         <S::CryptoSpec as CryptoSpec>::Hasher::digest(&data).into()
     }
+}
 
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Creates a new signed transaction using the provided private key.
     pub fn new_signed_tx(
         priv_key: &C::PrivateKey,
@@ -265,9 +267,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
 
         unsigned_tx.to_signed_tx(pub_key, signature)
     }
-}
 
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Convenience function to return the transaction bytes in the correct format ready for submission.
     pub fn tx_bytes(&self) -> Vec<u8> {
         borsh::to_vec(self).expect("Serialization should be never fail")

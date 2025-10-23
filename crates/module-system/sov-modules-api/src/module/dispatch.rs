@@ -88,5 +88,4 @@ pub trait DispatchCall: Send + Sync {
         &self,
         discriminant: <Self::Decodable as NestedEnumUtils>::Discriminants,
     ) -> &dyn ModuleInfo<Spec = Self::Spec>;
-
 }
