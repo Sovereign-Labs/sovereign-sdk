@@ -398,10 +398,10 @@ pub(crate) fn build_rpc_receipt(
 
     let block_hash = block.hash();
     let block_number = Some(block.number());
-    // Safety: The transaction cannot have a lower number than the block start
+    #[allow(clippy::expect_used)]
     let transaction_index = tx_number
-        .checked_sub(block.transactions_start())
-        .expect("The impossible happened: overflow while subtracting block start from tx number.");
+        .checked_sub(block.tx_range().start)
+        .expect("tx_number is within block.tx_range()");
 
     let transaction_hash = receipt.transaction_hash;
     let logs_bloom = receipt.receipt.bloom();
