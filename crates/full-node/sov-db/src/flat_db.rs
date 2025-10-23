@@ -30,8 +30,7 @@ pub struct FlatStateDb {
 }
 
 pub struct FlatDbCommitData {
-    pub user_archival: SchemaBatch,
-    pub kernel_archival: SchemaBatch,
+    pub archival: SchemaBatch,
     pub flat: SchemaBatch,
 }
 
@@ -140,14 +139,14 @@ impl FlatStateDb {
                 .unwrap_or(0);
             assert_eq!(user_version, version);
         }
-        let user_archival = self.user.materialize(&user, &mut other_changes, version)?;
-        let kernel_archival = self
-            .kernel
-            .materialize(&kernel, &mut other_changes, version)?;
+        let mut archival_data = SchemaBatch::default();
+        self.user
+            .materialize(&user, &mut other_changes, &mut archival_data, version)?;
+        self.kernel
+            .materialize(&kernel, &mut other_changes, &mut archival_data, version)?;
 
         Ok(FlatDbCommitData {
-            user_archival,
-            kernel_archival,
+            archival: archival_data,
             flat: other_changes,
         })
     }
@@ -158,11 +157,7 @@ impl FlatStateDb {
         let commit = self.prepare_commit(state)?;
         let prepare = start_prepare.elapsed();
         let start_write = std::time::Instant::now();
-        // Potential optimization: We can write the archival batches to disk in parallel
-        // We don't bother for now because the kernel write is usually very small.
-        self.get_kernel_db()
-            .commit_archival(commit.kernel_archival)?;
-        self.get_user_db().commit_archival(commit.user_archival)?;
+        self.archival.write_schemas(commit.archival)?;
         #[cfg(feature = "test-utils")]
         if cfg!(debug_assertions) && std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
             panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
