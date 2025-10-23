@@ -1,11 +1,10 @@
 //! Provides finalized headers
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use tracing::{info_span, Instrument};
 
 const MAX_RECENT_HEADERS: usize = 30;
 

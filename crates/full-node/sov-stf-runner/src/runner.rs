@@ -28,7 +28,7 @@ use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
-use crate::da_pre_fetcher::FinalizedBlocksBulkFetcher;
+use crate::da::FinalizedBlocksBulkFetcher;
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
 
@@ -493,7 +493,7 @@ where
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
             // Requests height might re-org
-            crate::da_utils::fetch_block_reorg_aware(
+            crate::da::fetch_block_reorg_aware(
                 self.da_service.as_ref(),
                 self.sync_state.as_ref(),
                 next_da_height,

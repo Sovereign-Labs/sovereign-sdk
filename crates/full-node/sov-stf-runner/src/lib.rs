@@ -2,11 +2,9 @@
 #![doc = include_str!("../README.md")]
 
 mod config;
-mod da_pre_fetcher;
 pub mod processes;
 
 mod da;
-pub(crate) mod da_utils;
 mod http;
 mod runner;
 mod state_manager;

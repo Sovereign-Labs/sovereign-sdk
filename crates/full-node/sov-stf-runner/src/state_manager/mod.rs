@@ -768,7 +768,7 @@ where
                     .expect("end of chain");
                 let (this_candidate, this_head) = tokio::try_join!(
                     // Need fetch re-org aware if the chain rewinds here.
-                    crate::da_utils::fetch_block_reorg_aware(
+                    crate::da::fetch_block_reorg_aware(
                         da_service,
                         self.da_sync_state.as_ref(),
                         next_candidate_height,
