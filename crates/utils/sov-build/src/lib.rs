@@ -200,6 +200,8 @@ impl Options {
             "#[allow(dead_code)]\npub const SCHEMA_JSON: &str = r#\"{schema_json}\"#;\n"
         )?;
 
+        file.flush()?;
+
         Ok(())
     }
 
