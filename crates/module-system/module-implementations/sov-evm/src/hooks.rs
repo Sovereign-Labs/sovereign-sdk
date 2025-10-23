@@ -37,7 +37,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let cfg = self.cfg_infallible(state);
 
-        #[allow(clippy::expect_used)]
         let new_block_number = parent_block
             .header
             .number
@@ -131,7 +130,6 @@ impl<S: Spec> BlockHooks for Evm<S> {
             requests_hash: None,
         };
 
-        #[allow(clippy::expect_used)]
         let end_tx_index = start_tx_index
             .checked_add(pending_transactions.len() as u64)
             .expect("We will never have that many transactions");
@@ -169,7 +167,6 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         root_hash: &<S::Storage as Storage>::Root,
         state: &mut impl AccessoryStateReaderAndWriter,
     ) {
-        #[allow(clippy::expect_used)]
         let mut block = self
             .pending_head
             .get(state)
@@ -219,7 +216,6 @@ impl<S: Spec> Evm<S> {
                 crate_range_from(block_numbers.clone(), None, Some(last_to_remove));
 
             for block_number in block_numbers_to_remove {
-                #[allow(clippy::expect_used)]
                 self.prune_block(block_number, state).expect(
                     "Prunning block should succeed as block_numbers indicate - block exists",
                 );
@@ -243,7 +239,6 @@ impl<S: Spec> Evm<S> {
         self.block_hashes.remove(&hash, state).unwrap_infallible()?;
 
         for tx_idx in block.transactions {
-            #[allow(clippy::expect_used)]
             self.prune_tx(tx_idx, state)
                 .expect("Cascade tx delete should succeed as each tx belongs to a single block");
         }

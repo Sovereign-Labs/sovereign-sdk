@@ -272,7 +272,6 @@ where
     pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
         let block_numbers = self.block_numbers(state);
 
-        #[allow(clippy::expect_used)]
         let head_block = self
             .blocks
             .get(block_numbers.end(), state)
@@ -389,7 +388,6 @@ pub(crate) fn build_rpc_receipt(
 
     let block_hash = block.hash();
     let block_number = Some(block.number());
-    #[allow(clippy::expect_used)]
     let transaction_index = tx_number
         .checked_sub(block.tx_range().start)
         .expect("tx_number is within block.tx_range()");

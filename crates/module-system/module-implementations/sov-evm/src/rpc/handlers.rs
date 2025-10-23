@@ -271,7 +271,6 @@ where
             result,
             state: changes,
         } = self.call(request, block_number, state)?;
-        #[allow(clippy::expect_used)]
         self.db(state)
             .commit(changes)
             .expect("Gas meter is initialized with INF");
@@ -293,11 +292,9 @@ where
             logs_size as u32,
         )
         .map_err(into_rpc_error)?;
-        #[allow(clippy::expect_used)]
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("ApiState has BasicGasMeter");
-        #[allow(clippy::expect_used)]
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
             .expect("Gas meter is initialized with INF");

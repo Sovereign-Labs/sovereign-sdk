@@ -36,7 +36,6 @@ where
     fn step_end(&mut self, interp: &mut Interpreter, _: &mut CTX) {
         match gas_metering_mode() {
             GasMeteringMode::Rollup => {
-                #[allow(clippy::expect_used)]
                 let gas_remaining = self
                     .last_gas_remaining
                     .take()

@@ -118,7 +118,7 @@ where
         start_timer!(get_head_t);
         // Fetch `head` and `pending_len` before the `native` code block.
         // This ensures consistent gas charges between native and non-native execution.
-        #[allow(unused_variables, clippy::expect_used)]
+        #[allow(unused_variables)]
         let head = self
             .head
             .get(state)?
@@ -159,11 +159,9 @@ where
     }
 
     fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
-        #[allow(clippy::expect_used)]
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("TxState should have BasicGasMeter");
-        #[allow(clippy::expect_used)]
         let funds = gas_meter
             .remaining_funds
             .expect("TxState gas meter has funds set")
@@ -181,7 +179,6 @@ where
     }
 
     fn sequencer_gas_used(&self, state: &mut impl TxState<S>) -> u64 {
-        #[allow(clippy::expect_used)]
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("TxState should have BasicGasMeter");
@@ -189,7 +186,6 @@ where
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         let evm_gas_to_sequencer_gas_ratio =
             <S as GasSpec>::gas_to_charge_per_evm_gas().as_ref()[0];
-        #[allow(clippy::expect_used)]
         sequencer_gas_used
             .checked_div(evm_gas_to_sequencer_gas_ratio)
             .expect("gas_to_charge_per_evm_gas() should not be zero")
@@ -208,7 +204,6 @@ where
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
 
         let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
-            #[allow(clippy::expect_used)]
             tx.receipt
                 .log_index_start
                 .checked_add(tx.receipt.receipt.logs.len() as u64)
@@ -279,7 +274,6 @@ where
         assert!(pending_tx_len > 0);
         let first_tx_index = head.transactions.end;
 
-        #[allow(clippy::expect_used)]
         let tx_index = first_tx_index
             .checked_add(pending_tx_len - 1)
             .expect("We will never have that many transactions");
@@ -324,13 +318,9 @@ fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
 pub(crate) fn get_spec_id(spec: &[(u64, SpecId)], block_number: u64) -> SpecId {
     let index = match spec.binary_search_by_key(&block_number, |&(k, _)| k) {
         Ok(index) => index,
-        Err(index) =>
-        {
-            #[allow(clippy::expect_used)]
-            index
-                .checked_sub(1)
-                .expect("EVM spec must start from block 0")
-        }
+        Err(index) => index
+            .checked_sub(1)
+            .expect("EVM spec must start from block 0"),
     };
     spec[index].1
 }
