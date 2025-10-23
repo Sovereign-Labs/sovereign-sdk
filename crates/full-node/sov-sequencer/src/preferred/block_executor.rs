@@ -237,6 +237,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         tracing::debug!(old = %self.id, new = %other.id, "Replacing state for block executor");
 
+        println!(
+            "replace_state Override execuror rollup_block_task_state {}",
+            self.rollup_block_task_state.is_none()
+        );
         if let Some(task_state) = self.rollup_block_task_state.take() {
             task_state.shutdown().abort();
         }
@@ -362,6 +366,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Done replaying txs");
 
         if !batch.is_in_progress {
+            println!("Rep batch Ending rollup block");
             self.end_rollup_block().await;
         } else {
             trace!("The batch is still in progress; will keep the background task running");

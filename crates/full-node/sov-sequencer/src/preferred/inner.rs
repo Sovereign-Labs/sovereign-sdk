@@ -642,7 +642,7 @@ where
             .send_batch_start_notification(notification);
 
         self.executor_events_sender
-            .start_batch(
+            .start_batch_x2(
                 visible_slot_number_after_increase,
                 visible_increase,
                 sequence_number,
@@ -737,6 +737,9 @@ where
     #[tracing::instrument(skip_all, level = "trace")]
     async fn close_current_batch(&mut self) {
         // Terminate the batch.
+        if self.is_replica() {
+            println!("XXX close_current_batch");
+        }
         self.executor.end_rollup_block().await;
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
@@ -828,6 +831,9 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     SimpleStateUpdate {
         info: StateUpdateInfo<S::Storage>,
     },
+    CloseCurrentBatch {
+        reason: &'static str,
+    },
     DoBatchStartMsg {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         batch_from_master: BatchToStore,
@@ -839,7 +845,9 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         baked_tx: FullyBakedTx,
         reason: &'static str,
     },
-    CloseCurrentBatch {
+    DoCloseCurrentBatch {
+        resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
+        batch_from_master: BatchToStore,
         reason: &'static str,
     },
 }
@@ -1249,9 +1257,18 @@ where
 
     pub(crate) async fn close_current_batch_msg_replica(
         &self,
+        batch_from_master: BatchToStore,
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
-        self.send(Message::CloseCurrentBatch { reason }).await?;
+        println!("Replica Message::CloseCurrentBatch");
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::DoCloseCurrentBatch {
+            resp,
+            batch_from_master,
+            reason,
+        })
+        .await?;
+        self.recv(recv).await??;
         Ok(())
     }
 }
@@ -1514,6 +1531,10 @@ where
                 self.process_new_storage(info).await;
             }
 
+            Message::CloseCurrentBatch { reason } => {
+                self.process_close_current_batch(reason).await;
+            }
+
             Message::DoBatchStartMsg {
                 resp,
                 batch_from_master,
@@ -1540,8 +1561,17 @@ where
                 self.send_response(resp, ret, "process_do_new_tx_replica")
                     .await;
             }
-            Message::CloseCurrentBatch { reason } => {
-                self.process_close_current_batch(reason).await;
+
+            Message::DoCloseCurrentBatch {
+                resp,
+                batch_from_master,
+                reason,
+            } => {
+                let ret = self
+                    .process_close_current_batch_replica(batch_from_master, reason)
+                    .await;
+                self.send_response(resp, ret, "process_do_batch_start_replica")
+                    .await;
             }
         }
 
@@ -1693,8 +1723,27 @@ where
             condition_are_there_batches_to_replay,
             condition_node_is_unsynced_and_doesnt_know_it,
         ) {
-            (true, _, _, true, _) => PreferredSeqOperation::Unreachable,
+            (true, _, _, true, _) => {
+                println!(
+                    "XXX Unreachable replica {} batches_to_replay {} next_sequence_number_according_to_node {}",
+                    inner.is_replica(),
+                    batches_to_replay.len(),
+                    next_sequence_number_according_to_node,
+                );
+
+                if inner.is_replica() {
+                    inner.executor_events_sender.clean_all_batches_from_cache();
+                    PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
+                } else {
+                    // TODO
+                    PreferredSeqOperation::Unreachable
+                }
+            }
             (true, _, false, false, _) => {
+                if inner.is_replica() {
+                    println!("XXX Replica WaitForNodeResyncToTip, next_sequence_number_according_to_node {next_sequence_number_according_to_node}");
+                }
+
                 warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
@@ -1703,6 +1752,10 @@ where
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
             (_, _, true, _, _) => {
+                if inner.is_replica() {
+                    println!("XXX Replica WaitForNodeResyncWithAllowedSlack, next_sequence_number_according_to_node {next_sequence_number_according_to_node}");
+                }
+
                 warn!(?distance, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
@@ -1711,6 +1764,9 @@ where
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
             (false, true, false, _, _) => {
+                if inner.is_replica() {
+                    println!("XXX Replica RecoverAndCatchUp, next_sequence_number_according_to_node {next_sequence_number_according_to_node}");
+                }
                 error!(
                     slot_number_according_to_node=%info.slot_number,
                     %current_visible_slot_number,
@@ -1722,6 +1778,10 @@ where
             }
             // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
             (_, _, _, _, true) => {
+                if inner.is_replica() {
+                    println!("XXX Replica WaitForNodeResyncToTip_1, next_sequence_number_according_to_node {next_sequence_number_according_to_node}");
+                }
+
                 // Check for this condition after all of the normal "out-of-sync" conditions have been checked, because it may be possible for other unsynced conditions to trip this check
                 // and we'd rather report the real root cause if there's a different one.
                 warn!("The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.");
@@ -1733,6 +1793,10 @@ where
             }
             (false, false, false, _, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
+
+                if inner.is_replica() {
+                    println!("XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node {next_sequence_number_according_to_node} {should_flush_tx_cache}");
+                }
 
                 // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
                 // In all other cases, we can just accept the new storage and move on.
@@ -1780,6 +1844,7 @@ where
                 )
             }
         };
+
         operation
     }
 
@@ -2077,13 +2142,17 @@ where
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
+        let in_prog = inner.executor.has_in_progress_batch();
+        println!("in_prog batch {in_prog}");
         if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
+            println!(" >>>>> Replica Start ExecutorAhead {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master} ");
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
                 seq_nr_of_next_blob_for_this_executor,
             )));
         }
 
         if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
+            println!(">>>> Replica Start ExecutorBehind {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
                 DbData::BatchStart(batch_from_master),
             )));
@@ -2110,6 +2179,46 @@ where
             .do_new_tx(tx_hash, baked_tx)
             .await
             .map_err(ReplicaError::NewTx)?;
+        Ok(())
+    }
+
+    async fn process_close_current_batch_replica(
+        &mut self,
+        batch_from_master: BatchToStore,
+        reason: &'static str,
+    ) -> Result<(), ReplicaError<S>> {
+        let mut inner = self.get_inner_with_timing(reason).await;
+
+        let hasprog = inner.executor.has_in_progress_batch();
+        println!(">>>>> Replica Close in_prog batch {hasprog}");
+        if let Err(e) = &inner.is_ready {
+            return Err(ReplicaError::NotReady(
+                e.clone(),
+                DbData::BatchStart(batch_from_master),
+            ));
+        }
+
+        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
+        let seq_nr_from_master = batch_from_master.sequence_number;
+
+        let seq = inner.sequence_number_of_next_blob;
+
+        if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
+            println!(" >>>>> Replica Close ExecutorAhead {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
+                seq_nr_of_next_blob_for_this_executor,
+            )));
+        }
+
+        if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
+            println!(">>>> Replica Close ExecutorBehind {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
+                DbData::BatchStart(batch_from_master),
+            )));
+        }
+
+        inner.close_current_batch().await;
+
         Ok(())
     }
 

@@ -137,7 +137,11 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         .await;
     }
 
-    pub(crate) async fn start_batch(
+    pub fn clean_all_batches_from_cache(&mut self) {
+        self.cache.clean_all_batches();
+    }
+
+    pub(crate) async fn start_batch_x2(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_slots_to_advance: NonZero<u8>,
@@ -146,7 +150,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     ) {
         let blob_id = self
             .cache
-            .start_batch(
+            .start_batch2(
                 visible_slot_number_after_increase,
                 visible_slots_to_advance,
                 sequence_number,

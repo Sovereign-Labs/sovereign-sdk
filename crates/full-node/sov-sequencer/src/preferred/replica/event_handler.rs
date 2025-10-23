@@ -50,16 +50,20 @@ where
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         let res = match data {
             DbData::BatchStart(batch_to_store) => {
+                println!("");
+                println!("");
                 println!("Batch start {}", batch_to_store.sequence_number);
                 self.do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
                     .await
             }
-            DbData::Transaction(_, tx, tx_hash) => {
+            DbData::Transaction(seq, tx, tx_hash) => {
+                println!("Tx {}", seq);
                 self.do_new_tx_msg_replica(tx_hash, tx, "replica_new_tx")
                     .await
             }
-            DbData::BatchEnd(_batch_to_store) => {
-                self.close_current_batch_msg_replica("replica_close_batch")
+            DbData::BatchEnd(batch_to_store) => {
+                println!("Batch End {}", batch_to_store.sequence_number);
+                self.close_current_batch_msg_replica(batch_to_store, "replica_close_batch")
                     .await
             }
             DbData::NewProof => Ok(()),
@@ -84,3 +88,27 @@ where
         };
     }
 }
+
+/*
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 0 false
+
+
+Batch start 0
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 1 false
+XXX Unreachable replica true batches_to_replay 1 next_sequence_number_according_to_node 2
+Batch End 0
+Replica Message::CloseCurrentBatch
+ >>>>> Replica Close ExecutorAhead 2 0
+
+
+Batch start 1
+ >>>>> Replica Start ExecutorAhead 2 1
+Batch End 1
+Replica Message::CloseCurrentBatch
+ >>>>> Replica Close ExecutorAhead 2 1
+
+
+Batch start 2
+Calling std::process::exit(1): /Users/blaze/programming/sovereign-labs/workspce/sovereign-sdk/crates/full-node/sov-sequencer/src/preferred/db/mod.rs:271:13
+
+*/

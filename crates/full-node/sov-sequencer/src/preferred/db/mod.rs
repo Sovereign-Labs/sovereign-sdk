@@ -258,7 +258,7 @@ impl PreferredSequencerCache {
     }
 
     #[must_use]
-    pub async fn start_batch(
+    pub async fn start_batch2(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_slots_to_advance: NonZero<u8>,
@@ -287,6 +287,13 @@ impl PreferredSequencerCache {
         })
         .await;
         blob_id
+    }
+
+    pub fn clean_all_batches(&mut self) {
+        println!("CLEAN ALL BATCHES");
+
+        self.completed_blobs.clear();
+        self.in_progress_batch = None;
     }
 
     pub async fn insert_proof_blob(
@@ -587,3 +594,46 @@ where
         .next_sequence_number(&mut state)
         .checked_sub(1)
 }
+
+/*
+
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 0 false
+
+
+Batch start 0
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 1 false
+Batch End 0
+Replica Message::CloseCurrentBatch
+ >>>>> Replica Close ExecutorAhead 1 0
+
+
+Batch start 1
+Batch End 1
+Replica Message::CloseCurrentBatch
+XXX close_current_batch
+XXX Replica WaitForNodeResyncToTip, next_sequence_number_according_to_node 2
+
+
+Batch start 2
+Batch End 2
+Replica Message::CloseCurrentBatch
+ >>>>> Replica Close ExecutorAhead 3 2
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 3 false
+
+
+Batch start 3
+Batch End 3
+Replica Message::CloseCurrentBatch
+XXX close_current_batch
+XXX Replica WaitForNodeResyncToTip, next_sequence_number_according_to_node 4
+
+
+Batch start 4
+Batch End 4
+Replica Message::CloseCurrentBatch
+ >>>>> Replica Close ExecutorAhead 5 4
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 5 false
+XXX Replica ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary, next_sequence_number_according_to_node 5 false
+X4
+X5
+*/

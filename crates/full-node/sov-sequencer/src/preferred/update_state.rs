@@ -239,6 +239,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
             *batch_is_in_progress = true;
         }
         DbEvent::BatchClosed(_) => {
+            println!("XXX Done replaying txs do_next_event");
             tracing::trace!("Done replaying txs");
             executor.end_rollup_block().await;
             *batch_is_in_progress = false;
