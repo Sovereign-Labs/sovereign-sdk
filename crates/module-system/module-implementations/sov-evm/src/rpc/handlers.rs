@@ -271,9 +271,10 @@ where
             result,
             state: changes,
         } = self.call(request, block_number, state)?;
+        #[allow(clippy::expect_used)]
         self.db(state)
             .commit(changes)
-            .expect("Impossible as gas meter is initialized with INF");
+            .expect("Gas meter is initialized with INF");
         let gas_used = result.gas_used();
 
         // Charge for logs storage in the receipt
@@ -292,10 +293,14 @@ where
             logs_size as u32,
         )
         .map_err(into_rpc_error)?;
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        #[allow(clippy::expect_used)]
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter");
+        #[allow(clippy::expect_used)]
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
-            .expect("No underflow is possible here as we init EVM gas with gas meter gas");
+            .expect("Gas meter is initialized with INF");
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         Ok(U64::from(apply_margins(total_gas_used)?))
