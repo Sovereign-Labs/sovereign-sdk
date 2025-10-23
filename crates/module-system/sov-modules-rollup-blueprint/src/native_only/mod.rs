@@ -406,9 +406,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         let mut rt = Self::Runtime::default();
 
-        #[cfg(feature = "validate-discriminants")]
-        sov_modules_api::DispatchCall::validate_discriminants(&rt);
-
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 

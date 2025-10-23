@@ -82,4 +82,3 @@ native = [
 	"tracing-opentelemetry",
 	"sov-metrics?/native"
 ]
-validate-discriminants = []
