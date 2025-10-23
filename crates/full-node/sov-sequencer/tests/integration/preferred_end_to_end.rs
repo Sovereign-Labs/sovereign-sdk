@@ -2598,8 +2598,9 @@ async fn heavy_blob_submission_long_delay() {
     let spam_start = std::time::Instant::now();
     let workers = (0..50)
         .map(|_| {
-            let client = client.clone();
-            let key = key.clone();
+            let client = test_rollup.api_client().clone();
+            let nonce = nonce.clone();
+            let key = admin.private_key.clone();
             let nonce = nonce.clone();
             tokio::spawn(async move {
                 let start = std::time::Instant::now();
