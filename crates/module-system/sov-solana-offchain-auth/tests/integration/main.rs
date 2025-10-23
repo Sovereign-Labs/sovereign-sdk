@@ -247,17 +247,19 @@ async fn test_rollup_initialization() {
     );
 }
 
+// Originally, this test used a public key and signature produced by a hardware Ledger wallet
+// to test the original integration with Ledger. Since that work has been completed and the
+// Ledger app for Solana keeps changing, we've replaced the hard-coded public key and signature
+// with a hard-coded private key and programmatically generated public key and signature.
+// However, `_ledger_` remains in the test name.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_ledger_signed_transaction() {
-    // Generate a deterministic test keypair for the "ledger" account
-    // Use raw bytes for the private key seed
     let private_key_bytes: [u8; 32] = [
         0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
         0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
         0xcd, 0xef,
     ];
 
-    // Create an Ed25519 keypair using ed25519-dalek directly
     use ed25519_dalek::{Signer, SigningKey};
     let signing_key = SigningKey::from_bytes(&private_key_bytes);
     let verifying_key = signing_key.verifying_key();
@@ -285,7 +287,7 @@ async fn test_submit_ledger_signed_transaction() {
         let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
         assert!(
             response.status().is_success(),
-            "Expected funding transaction to succeed"
+            "Expected funding transaction to succeed: {response:?}"
         );
     }
 
