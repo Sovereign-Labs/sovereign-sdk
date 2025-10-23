@@ -24,12 +24,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
         pre_state_user_root: &<S::Storage as Storage>::Root,
         state: &mut StateCheckpoint<S>,
     ) {
-        let mut parent_block = self
-            .head
-            .get(state)
-            .unwrap_infallible()
-            // This is justified. We set the head at genesis and never remove it — only overwrite it.
-            .expect("The impossible happened: Head block is empty");
+        let mut parent_block = self.head(state);
 
         let pre_state_user_root: [u8; 32] =
             pre_state_user_root.namespace_root(ProvableNamespace::User);
@@ -42,12 +37,12 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let cfg = self.cfg_infallible(state);
 
+        #[allow(clippy::expect_used)]
         let new_block_number = parent_block
             .header
             .number
             .checked_add(1)
-            // This is justified. We will never have so many blocks.
-            .expect("The impossible happened: Block number overflow");
+            .expect("We will never have so many blocks");
 
         let new_timestamp = self
             .chain_state_module
@@ -78,14 +73,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .unwrap_infallible()
             // This is justified. We set `pending_head` in `end_rollup_block_hook`.
             .expect("The impossible happened: Pending block is empty");
-
-        let parent_block = self
-            .head
-            .get(state)
-            .unwrap_infallible()
-            // This is justified. We set the head at genesis and never remove it — only overwrite it.
-            .expect("The impossible happened: Head block is empty")
-            .seal();
+        let parent_block = self.head(state).seal();
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);
         assert_eq!(
@@ -148,10 +136,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
             requests_hash: None,
         };
 
+        #[allow(clippy::expect_used)]
         let end_tx_index = start_tx_index
             .checked_add(pending_transactions.len() as u64)
-            // This is justified. We will never have that many txs.
-            .expect("The impossible happened: Tx count overflow");
+            .expect("We will never have that many transactions");
 
         let block = Block {
             header,

@@ -118,12 +118,11 @@ where
         start_timer!(get_head_t);
         // Fetch `head` and `pending_len` before the `native` code block.
         // This ensures consistent gas charges between native and non-native execution.
-        #[allow(unused_variables)]
+        #[allow(unused_variables, clippy::expect_used)]
         let head = self
             .head
             .get(state)?
-            // Justified, we set it at `genesis` and leter only override it.
-            .expect("Impossible happened: Head must be set.");
+            .expect("Head is set in genesis and never deleted");
         save_elapsed!(get_head_time SINCE get_head_t);
 
         #[cfg(feature = "native")]
@@ -160,13 +159,14 @@ where
     }
 
     fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
+        #[allow(clippy::expect_used)]
         let gas_meter = state
             .try_as_basic_gas_meter()
-            // Justified, `impl TxState` has access to `BasicGasState`.
-            .expect("The impossible happened: BasicGasState is absent.");
+            .expect("TxState should have BasicGasMeter");
+        #[allow(clippy::expect_used)]
         let funds = gas_meter
             .remaining_funds
-            .expect("This method is used in the context where the amount is set")
+            .expect("TxState gas meter has funds set")
             .0;
         let gas = gas_meter.remaining_gas.as_ref()[0];
         let price = gas_meter.gas_price.as_ref()[0].0;
@@ -181,14 +181,18 @@ where
     }
 
     fn sequencer_gas_used(&self, state: &mut impl TxState<S>) -> u64 {
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        #[allow(clippy::expect_used)]
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("TxState should have BasicGasMeter");
         let sequencer_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         let evm_gas_to_sequencer_gas_ratio =
             <S as GasSpec>::gas_to_charge_per_evm_gas().as_ref()[0];
+        #[allow(clippy::expect_used)]
         sequencer_gas_used
             .checked_div(evm_gas_to_sequencer_gas_ratio)
-            .expect("gas_to_charge_per_evm_gas() is zero")
+            .expect("gas_to_charge_per_evm_gas() should not be zero")
     }
 
     fn create_receipt(
@@ -204,11 +208,11 @@ where
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
 
         let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
+            #[allow(clippy::expect_used)]
             tx.receipt
                 .log_index_start
                 .checked_add(tx.receipt.receipt.logs.len() as u64)
-                // Justified, we will never have that many logs.
-                .expect("Impossible happened: Log index overflow.")
+                .expect("we will never have that many logs")
         });
         let is_success = result.is_success();
         let gas_used = result.gas_used()
@@ -275,12 +279,10 @@ where
         assert!(pending_tx_len > 0);
         let first_tx_index = head.transactions.end;
 
+        #[allow(clippy::expect_used)]
         let tx_index = first_tx_index
-            .checked_add(pending_tx_len)
-            .expect("The impossible happened: Tx index overflow.")
-            .checked_sub(1)
-            // Justified, can't underflow because `pending_tx_len` is greater than 0.
-            .expect("The impossible happened: Tx index underflow.");
+            .checked_add(pending_tx_len - 1)
+            .expect("We will never have that many transactions");
 
         self.transactions
             .set(&tx_index, &pending_transaction.transaction, state)?;
@@ -320,15 +322,17 @@ fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
 pub(crate) fn get_spec_id(spec: &[(u64, SpecId)], block_number: u64) -> SpecId {
-    match spec.binary_search_by_key(&block_number, |&(k, _)| k) {
-        Ok(index) => spec[index].1,
-        Err(index) => {
-            spec[index
+    let index = match spec.binary_search_by_key(&block_number, |&(k, _)| k) {
+        Ok(index) => index,
+        Err(index) =>
+        {
+            #[allow(clippy::expect_used)]
+            index
                 .checked_sub(1)
-                .expect("EVM spec must start from block 0")]
-            .1
+                .expect("EVM spec must start from block 0")
         }
-    }
+    };
+    spec[index].1
 }
 
 #[cfg(test)]

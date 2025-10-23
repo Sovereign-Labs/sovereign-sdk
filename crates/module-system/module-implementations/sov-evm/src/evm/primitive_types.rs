@@ -119,10 +119,10 @@ impl SealedBlock {
 
     /// EIP1559 base fee.
     pub fn base_fee(&self) -> u64 {
+        #[allow(clippy::expect_used)]
         self.header
             .base_fee_per_gas
-            // This is justified. We set it at genesis and never remove it — only overwrite it.
-            .expect("The base_fee_per_gas must be set.")
+            .expect("We set it at genesis and never remove it — only overwrite it")
     }
 }
 

@@ -108,9 +108,9 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<BlockEnv, Accessor::Error> {
-        Ok(self.block_env.get(state)?.expect(
-            "The impossible happened: block_env should be set in `begin_rollup_block_hook`",
-        ))
+        let block_env = self.block_env.get(state)?;
+        #[allow(clippy::expect_used)]
+        Ok(block_env.expect("block_env should be set in `begin_rollup_block_hook`"))
     }
 
     /// Get the Evm chain config.
@@ -118,11 +118,9 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<EvmRuntimeConfig, Accessor::Error> {
-        let cfg = self
-            .cfg
-            .get(state)? // The config must be set at genesis.
-            .expect("The impossible happened: EVM config is not set");
-        Ok(cfg)
+        let cfg = self.cfg.get(state)?;
+        #[allow(clippy::expect_used)]
+        Ok(cfg.expect("EVM config must be set in genesis"))
     }
 }
 
@@ -190,10 +188,9 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> RangeInclusive<u64> {
-        self.block_numbers
-            .get(state)
-            .unwrap_infallible()
-            .expect("Block numbers must be set in genesis")
+        let block_numbers = self.block_numbers.get(state).unwrap_infallible();
+        #[allow(clippy::expect_used)]
+        block_numbers.expect("Block numbers must be set in genesis")
     }
 
     /// Get the Evm chain config.
@@ -201,10 +198,15 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> EvmRuntimeConfig {
-        self.cfg
-            .get(state)
-            .unwrap_infallible()
-            // The config must be set at genesis.
-            .expect("EVM config must be set in genesis")
+        let cfg = self.cfg.get(state).unwrap_infallible();
+        #[allow(clippy::expect_used)]
+        cfg.expect("EVM config must be set in genesis")
+    }
+
+    /// Get head block
+    pub fn head<Accessor: InfallibleStateAccessor>(&self, state: &mut Accessor) -> Block {
+        let head = self.head.get(state).unwrap_infallible();
+        #[allow(clippy::expect_used)]
+        head.expect("Head is set in genesis and never deleted")
     }
 }

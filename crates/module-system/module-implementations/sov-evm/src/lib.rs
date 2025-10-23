@@ -1,5 +1,6 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used))]
 
 mod account_storage_key;
 mod call;
