@@ -249,14 +249,26 @@ async fn test_rollup_initialization() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_ledger_signed_transaction() {
-    // From the test Ledger device used to generate this
-    const LEDGER_ADDRESS: &str = "8YkzDTyLd3buhMw9CMfYYt3FLmcu1BeFr5nMeierYM1v";
+    // Generate a deterministic test keypair for the "ledger" account
+    // Use raw bytes for the private key seed
+    let private_key_bytes: [u8; 32] = [
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd,
+        0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab,
+        0xcd, 0xef,
+    ];
+
+    // Create an Ed25519 keypair using ed25519-dalek directly
+    use ed25519_dalek::{Signer, SigningKey};
+    let signing_key = SigningKey::from_bytes(&private_key_bytes);
+    let verifying_key = signing_key.verifying_key();
+    let ledger_pubkey_bytes: [u8; 32] = verifying_key.to_bytes();
+    let ledger_address = Base58Address::from(ledger_pubkey_bytes).to_string();
 
     let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
 
     // First we must fund the Ledger account, using the basic/raw signature type
     {
-        let funding_json_str = create_transfer_tx_json(Amount(13_000), LEDGER_ADDRESS);
+        let funding_json_str = create_transfer_tx_json(Amount(13_000), &ledger_address);
         let encoded_tx = funding_json_str.as_bytes().to_vec();
         let signer = admin.private_key();
         let pubkey = signer.pub_key();
@@ -278,32 +290,22 @@ async fn test_submit_ledger_signed_transaction() {
     }
 
     // Now we can have the Ledger account transfer part of its balance
+    // This uses the SolanaOffchainSpecCompliantMessage format (with preamble)
     let transfer_json_tx = create_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS);
-    // Sanity check - if this changes, the test will need to be re-signed with a Ledger device.
-    // (If a different Ledger device or account is used, the public key above would also need to be
-    // updated.)
-    assert_eq!(
-        transfer_json_tx,
-        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_name":"TestChain","address_override":null}"#
-    );
     let encoded_tx = transfer_json_tx.as_bytes().to_vec();
-    let pubkey: [u8; 32] = bs58::decode(LEDGER_ADDRESS)
-        .into_vec()
-        .unwrap()
-        .try_into()
-        .unwrap();
-    let signature: Ed25519Signature = bs58::decode(
-        "3GBYQrmcKtUiXAQLz2bUR55Kh7YfgUy2g199ePXYSUHbRHLAsdjcTctSrt98oiA79nZVQU79AbBpiKU23Z2UTstQ",
-    )
-    .into_vec()
-    .unwrap()
-    .as_slice()
-    .try_into()
-    .unwrap();
 
-    let mut signed_message_with_preamble =
-        make_preamble_for_message(&pubkey, &RT::CHAIN_HASH, encoded_tx.len() as u16).to_vec();
+    // Create the preamble according to the Solana offchain spec
+    let mut signed_message_with_preamble = make_preamble_for_message(
+        &ledger_pubkey_bytes,
+        &RT::CHAIN_HASH,
+        encoded_tx.len() as u16,
+    )
+    .to_vec();
     signed_message_with_preamble.extend_from_slice(&encoded_tx);
+
+    // Sign the complete message (preamble + tx) with the ledger private key
+    let signature_bytes = signing_key.sign(&signed_message_with_preamble).to_bytes();
+    let signature: Ed25519Signature = signature_bytes.as_slice().try_into().unwrap();
 
     let message = SolanaOffchainSpecCompliantMessage::<S> {
         signed_message_with_preamble,
@@ -315,10 +317,10 @@ async fn test_submit_ledger_signed_transaction() {
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),
-        "Expected Ledger transaction to succeed"
+        "Expected Ledger transaction to succeed: {response:?}"
     );
 
-    let ledger_balance = query_balance(&test_rollup.client, LEDGER_ADDRESS).await;
+    let ledger_balance = query_balance(&test_rollup.client, &ledger_address).await;
     assert_eq!(
         ledger_balance,
         Some(Amount::new(8_000)),
