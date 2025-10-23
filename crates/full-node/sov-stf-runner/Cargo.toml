@@ -35,7 +35,6 @@ async-trait = { workspace = true }
 rayon = { workspace = true }
 sov-db = { workspace = true }
 sov-rollup-interface = { workspace = true }
-sov-state = { workspace = true, features = ["native"] }
 sov-metrics = { workspace = true }
 tower-http = { workspace = true, features = ["normalize-path", "cors"] }
 tower-layer = "0.3.3"
@@ -52,8 +51,8 @@ jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 rand = { workspace = true, features = ["small_rng"] }
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
 
-sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
+sov-sequencer = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }

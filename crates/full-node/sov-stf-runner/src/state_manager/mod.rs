@@ -17,7 +17,6 @@ use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::stf::TxReceiptContents;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_state::storage::NativeStorage;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
@@ -37,6 +36,7 @@ struct ForkPoint<Da: DaService, StateRoot> {
 }
 
 /// Structure that holds a block header and a pre-state root that was on this block header
+#[derive(Clone)]
 struct StateOnBlock<Da: DaSpec, StateRoot> {
     block_header: Da::BlockHeader,
     pre_state_root: StateRoot,
@@ -111,7 +111,7 @@ where
         LedgerChangeSet = SchemaBatch,
         LedgerState = DeltaReader,
     >,
-    Sm::StfState: Clone + NativeStorage<Root = StateRoot>,
+    Sm::StfState: Clone,
 {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -166,9 +166,7 @@ where
     /// it should be updated after the call of this method.
     /// If a given block continues in the current fork, it is simply returned to the caller.
     /// If reorg happened, it will return block following the last seen transition.
-    /// The storage snapshot returned by [`HierarchicalStorageManager::create_state_for`] is treated
-    /// as authoritative, so `self.state_root` and any cached [`StateOnBlock`] entries are reconciled
-    /// with it opportunistically when rewinding.
+    /// Cached fork metadata remains authoritative for the pre-state root, and additional tracing records any divergence while pruning stale branches.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn prepare_storage(
         &mut self,
@@ -186,27 +184,26 @@ where
             .await?;
         tracing::trace!(reorg_happened, "Checked if reorg happened");
 
-        let mut fork_expectation: Option<(
-            <<Da as DaService>::Spec as DaSpec>::SlotHash,
-            StateRoot,
-        )> = None;
-
         if reorg_happened {
             let ForkPoint {
                 block: new_block,
                 pre_state_root,
             } = self.choose_fork_point(da_service).await?;
+            let new_block_header = new_block.header().clone();
+            let fork_parent_hash = new_block_header.prev_hash();
+            let new_block_hash = new_block_header.hash();
+            let new_block_height = new_block_header.height();
             tracing::trace!(
                 old_block = %filtered_block.header().display(),
-                new_block = %new_block.header().display(),
+                new_block = %new_block_header.display(),
                 old_pre_state_root = hex::encode(self.state_root.as_ref()),
                 new_pre_state_root = hex::encode(pre_state_root.as_ref()),
-                "Reorg happened, updating variables"
+                "Reorg detected, updating cached state"
             );
 
             // Self check
             {
-                if let Some(prev_state) = self.state_on_block.get(&new_block.header().prev_hash()) {
+                if let Some(prev_state) = self.state_on_block.get(&fork_parent_hash) {
                     assert_eq!(
                         prev_state.post_state_root.as_ref(),
                         pre_state_root.as_ref(),
@@ -214,91 +211,123 @@ where
                     );
                     assert_eq!(
                         prev_state.block_header.hash(),
-                        new_block.header().prev_hash(),
+                        fork_parent_hash,
                         "Mismatch in block hashes after transition",
                     );
                     assert!(
-                        !self.state_on_block.contains_key(&new_block.header().hash()),
+                        !self.state_on_block.contains_key(&new_block_hash),
                         "We are return already seen block. how come?"
                     );
                 }
                 assert!(
-                    !self.state_on_block.contains_key(&new_block.header().hash()),
+                    !self.state_on_block.contains_key(&new_block_hash),
                     "trying to return previously seen state"
                 );
             }
+
+            self.trace_cached_parent_alignment(&fork_parent_hash, "reorg_before_update");
+
+            if self.state_root.as_ref() != pre_state_root.as_ref() {
+                tracing::info!(
+                    old_state_root = %hex::encode(self.state_root.as_ref()),
+                    fork_parent_hash = ?fork_parent_hash,
+                    cached_pre_state_root = %hex::encode(pre_state_root.as_ref()),
+                    "Updating cached state root from fork metadata"
+                );
+            }
+
+            self.state_root = pre_state_root.clone();
+
+            if let Some(parent_state) = self.state_on_block.get_mut(&fork_parent_hash) {
+                let stale_root = hex::encode(parent_state.post_state_root.as_ref());
+                parent_state.post_state_root = pre_state_root.clone();
+                let updated_root = hex::encode(parent_state.post_state_root.as_ref());
+                tracing::debug!(
+                    parent_hash = ?fork_parent_hash,
+                    stale_root = %stale_root,
+                    updated_root = %updated_root,
+                    "Updated cached parent post-state root after reorg"
+                );
+            } else {
+                tracing::debug!(
+                    parent_hash = ?fork_parent_hash,
+                    "No cached parent entry to update after reorg"
+                );
+            }
+
+            let pruned_entries = self.prune_orphaned_state_cache(new_block_height);
+            if pruned_entries > 0 {
+                tracing::info!(
+                    pruned_entries,
+                    prune_from_height = new_block_height,
+                    "Pruned cached entries above fork height after reorg"
+                );
+            } else {
+                tracing::trace!(
+                    prune_from_height = new_block_height,
+                    "No cached entries pruned for reorg"
+                );
+            }
+
+            self.trace_cached_parent_alignment(&fork_parent_hash, "reorg_after_update");
+
             tracing::info!(
-                old_blok = %filtered_block.header().display(),
-                new_block = %new_block.header().display(),
+                old_block = %filtered_block.header().display(),
+                new_block = %new_block_header.display(),
+                pruned_entries,
                 time = ?start.elapsed(),
                 "Chosen fork point"
             );
-            let fork_parent_hash = new_block.header().prev_hash();
-            fork_expectation = Some((fork_parent_hash, pre_state_root));
+
             filtered_block = new_block;
+        } else {
+            let parent_hash = filtered_block.header().prev_hash();
+            self.trace_cached_parent_alignment(&parent_hash, "steady_state");
         }
 
         let (stf_pre_state, ledger_state) = self
             .storage_manager
             .create_state_for(filtered_block.header())?;
 
-        let storage_pre_state_root = stf_pre_state.get_latest_root_hash()?;
-        let storage_pre_state_root_hex = hex::encode(storage_pre_state_root.as_ref());
-        let cached_state_root_hex = hex::encode(self.state_root.as_ref());
-        let authoritative_pre_state_root = if let Some((fork_parent_hash, expected_root)) =
-            &fork_expectation
-        {
-            let expected_root_hex = hex::encode(expected_root.as_ref());
-            tracing::debug!(
-                fork_parent_hash = ?fork_parent_hash,
-                cached_state_root = %cached_state_root_hex,
-                expected_pre_state_root = %expected_root_hex,
-                storage_pre_state_root = %storage_pre_state_root_hex,
-                "Reorg reconciliation details"
-            );
-            if storage_pre_state_root.as_ref() != expected_root.as_ref() {
-                tracing::info!(
-                    fork_parent_hash = ?fork_parent_hash,
-                    cached_state_root = %cached_state_root_hex,
-                    expected_pre_state_root = %expected_root_hex,
-                    storage_pre_state_root = %storage_pre_state_root_hex,
-                    "Reconciling cached fork metadata with storage snapshot"
-                );
-            }
-            self.heal_cached_state_on_block(fork_parent_hash, storage_pre_state_root.clone());
-            storage_pre_state_root.clone()
-        } else {
-            if self.state_root.as_ref() != storage_pre_state_root.as_ref() {
-                tracing::info!(
-                    cached_state_root = %cached_state_root_hex,
-                    storage_pre_state_root = %storage_pre_state_root_hex,
-                    "Updating cached state root from storage snapshot"
-                );
-            }
-            storage_pre_state_root.clone()
-        };
-
-        self.state_root = authoritative_pre_state_root.clone();
+        #[cfg(feature = "native")]
+        self.assert_cached_root_matches_snapshot(&stf_pre_state);
 
         if reorg_happened {
             tracing::trace!(
                 "Reorg has happened, updating API and Ledger storage before returning Stf state"
             );
-            // In case if reorg happened, we want to keep ledger and API storages in sync.
-            // Otherwise, the API storage and LedgerDb have been updated in [`Self::update_api_and_ledger_storage`]
             self.update_channels(stf_pre_state.clone(), ledger_state)
                 .await?;
         }
 
-        let reconciled_state_root_hex = hex::encode(authoritative_pre_state_root.as_ref());
         tracing::trace!(
             block_header = %filtered_block.header().display(),
             reorg_happened,
-            reconciled_state_root = %reconciled_state_root_hex,
+            state_root = %hex::encode(self.state_root.as_ref()),
             time = ?start.elapsed(),
             "Returning STF state for block"
         );
         Ok((stf_pre_state, filtered_block))
+    }
+
+    #[cfg(feature = "native")]
+    fn assert_cached_root_matches_snapshot(&self, stf_pre_state: &Sm::StfState)
+    where
+        Sm::StfState: sov_state::storage::NativeStorage,
+    {
+        use sov_state::storage::NativeStorage;
+
+        if cfg!(debug_assertions) {
+            let snapshot_root = stf_pre_state
+                .get_latest_root_hash_unbound()
+                .expect("Failed to fetch root hash from native storage snapshot");
+
+            debug_assert_eq!(
+                snapshot_root.as_ref(),
+                self.state_root.as_ref(),
+                "Native storage snapshot root diverged from cached state root"
+            );
+        }
     }
 
     /// Performs all necessary operations on data that has been processed by the rollup.
@@ -606,25 +635,87 @@ where
             .map(|state| state.post_state_root.clone())
     }
 
-    fn heal_cached_state_on_block(
-        &mut self,
+    fn prune_orphaned_state_cache(&mut self, start_height: u64) -> usize {
+        let mut removed = 0usize;
+        let stale = self.seen_on_height.split_off(&start_height);
+        for (height, hashes) in stale {
+            for hash in hashes {
+                match self.state_on_block.remove(&hash) {
+                    Some(state) => {
+                        let stale_root = hex::encode(state.post_state_root.as_ref());
+                        tracing::debug!(
+                            stale_height = height,
+                            stale_hash = ?hash,
+                            stale_root = %stale_root,
+                            "Removed cached state entry from stale fork"
+                        );
+                    }
+                    None => {
+                        tracing::debug!(
+                            stale_height = height,
+                            stale_hash = ?hash,
+                            "Removed stale hash without cached state entry"
+                        );
+                    }
+                }
+                removed += 1;
+            }
+        }
+
+        let additional: Vec<_> = self
+            .state_on_block
+            .iter()
+            .filter_map(|(hash, state)| {
+                (state.block_header.height() >= start_height).then(|| hash.clone())
+            })
+            .collect();
+        for hash in additional {
+            if let Some(state) = self.state_on_block.remove(&hash) {
+                let stale_height = state.block_header.height();
+                let stale_root = hex::encode(state.post_state_root.as_ref());
+                tracing::debug!(
+                    stale_height,
+                    stale_hash = ?hash,
+                    stale_root = %stale_root,
+                    "Removed cached state entry above fork height"
+                );
+                removed += 1;
+            }
+        }
+
+        removed
+    }
+
+    fn trace_cached_parent_alignment(
+        &self,
         parent_hash: &<<Da as DaService>::Spec as DaSpec>::SlotHash,
-        authoritative_post_state_root: StateRoot,
+        context: &str,
     ) {
-        if let Some(state) = self.state_on_block.get_mut(parent_hash) {
-            let stale_root = hex::encode(state.post_state_root.as_ref());
-            state.post_state_root = authoritative_post_state_root;
-            let corrected_root = hex::encode(state.post_state_root.as_ref());
-            tracing::info!(
-                parent_block = %state.block_header.display(),
-                stale_root = %stale_root,
-                corrected_root = %corrected_root,
-                "Corrected cached post-state root after storage reconciliation"
-            );
+        let live_root_hex = hex::encode(self.state_root.as_ref());
+        if let Some(parent_state) = self.state_on_block.get(parent_hash) {
+            let cached_root_hex = hex::encode(parent_state.post_state_root.as_ref());
+            if parent_state.post_state_root.as_ref() != self.state_root.as_ref() {
+                tracing::warn!(
+                    context = %context,
+                    parent_hash = ?parent_hash,
+                    cached_parent_root = %cached_root_hex,
+                    live_state_root = %live_root_hex,
+                    "Cached parent post-state root diverges from live state root"
+                );
+            } else {
+                tracing::trace!(
+                    context = %context,
+                    parent_hash = ?parent_hash,
+                    state_root = %live_root_hex,
+                    "Cached parent post-state root matches live state root"
+                );
+            }
         } else {
             tracing::debug!(
+                context = %context,
                 parent_hash = ?parent_hash,
-                "No cached StateOnBlock entry found while attempting to heal metadata"
+                state_root = %live_root_hex,
+                "No cached parent entry found while preparing storage"
             );
         }
     }

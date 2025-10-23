@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 1d6a2dd54bc060b6e87ed820d43395d35ac6b7ccbf4570bffc4e8dd117f45183 # shrinks to finality = 0, loop_blocks = 1, batches = 1, reshuffle_after = 1, seed = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 cc e0bbfa807cefc6c34f175fa5aad5c25107050efebbe5e0ef69fd96bece9d232a # shrinks to finality = 0, loop_blocks = 1, batches = 2, reshuffle_after = 1, seed = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+cc ef5b03ee6947d737c227521fc040ff5fdfa5976b49bb75a0946f630433c7354a # shrinks to finality = 5, loop_blocks = 5, batches = 2, reshuffle_after = 1, seed = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
