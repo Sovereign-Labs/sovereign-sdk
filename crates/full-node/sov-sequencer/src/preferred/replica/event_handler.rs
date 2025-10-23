@@ -25,17 +25,17 @@ pub(crate) enum ReplicaError<S: Spec> {
     #[error("Failed to apply a new transaction on the replica.")]
     NewTx(DoNewTxError<S>),
 
-    #[error("TODO")]
+    #[error("The replica is shutting down.")]
     Shutdown,
-    #[error("TODO")]
-    Unexpected,
+    #[error("The replica encountered an unexpected shutdown.")]
+    UnexpectedShutdown,
 }
 
 impl<S: Spec> From<SequencerStateUpdatorError> for ReplicaError<S> {
     fn from(value: SequencerStateUpdatorError) -> Self {
         match value {
             SequencerStateUpdatorError::Shutdown => Self::Shutdown,
-            SequencerStateUpdatorError::Unexpected => Self::Unexpected,
+            SequencerStateUpdatorError::Unexpected => Self::UnexpectedShutdown,
         }
     }
 }

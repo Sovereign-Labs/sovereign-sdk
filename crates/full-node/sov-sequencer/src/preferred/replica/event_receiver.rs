@@ -53,9 +53,7 @@ impl EventReceiver {
         {
             Ok(pool) => pool,
             Err(e) => {
-                error!("Failed to connect to PostgreSQL: {e:?}. Replica shutting down.");
-                exit_rollup(&shutdown_sender).await;
-                unreachable!("EventReceiver: impossible happened rollup didn't exit");
+                panic!("Failed to connect to PostgreSQL: {e:?}. Replica shutting down.");
             }
         };
 
@@ -63,16 +61,12 @@ impl EventReceiver {
         let mut listener = match PgListener::connect(&connection_string).await {
             Ok(listener) => listener,
             Err(e) => {
-                error!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
-                exit_rollup(&shutdown_sender).await;
-                unreachable!("EventReceiver: impossible happened rollup didn't exit");
+                panic!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
             }
         };
 
         if let Err(e) = listener.listen("events_changes").await {
-            error!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
-            exit_rollup(&shutdown_sender).await;
-            unreachable!("EventReceiver: impossible happened rollup didn't exit");
+            panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
         }
 
         (
