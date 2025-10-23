@@ -44,7 +44,7 @@ async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
 async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
-    da_config.block_producing = sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+    da_config.block_producing = sov_mock_da::BlockProducingConfig::Periodic { block_time_ms: 500 }; //sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
     let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
 
     let addr = start_server(da_service.clone(), "127.0.0.1", 0)
@@ -187,12 +187,12 @@ async fn wait_for_height(
 ) {
     loop {
         let h = test_rollup.height().await;
-        da_service.produce_block_now().await.unwrap();
+        //da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(Duration::from_millis(100)).await;
         if h.get() >= height {
             break;
         }
-        da_service.produce_block_now().await.unwrap();
+        //da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
@@ -253,4 +253,81 @@ async fn test_replica_receives_txs_from_postgres_3() {
 
     wait_for_height(&test_rollup, &da_service, h.get() + 1).await;
     let _ = test_rollup.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_receives_txs_from_postgres_4() {
+    let postgres = PostgresData::create_postgres().await;
+
+    let postgres = match postgres {
+        Ok(pg) => Some(pg),
+        Err(CreatePostgresError::DockerNotSupported) => return,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
+    let (da_service, s, addr) = create_da_service_periodic().await;
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+    let token_id = config_gas_token_id();
+    let receiver_addr = random_address();
+
+    println!("X1");
+    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
+
+    //println!("X2");
+    let test_rollup = start_rollup(false, addr, postgres.clone()).await;
+    println!("X3");
+    //wait_for_height(&test_rollup, &da_service, 1).await;
+    println!("X4");
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    println!("X5");
+
+    //da_service.produce_n_blocks_now(100).await.unwrap();
+
+    wait_for_height(&test_rollup, &da_service, 3).await;
+
+    tokio::task::spawn(async move {
+        for i in 0..10000 {
+            let tx = build_transfer_token_tx::<S>(
+                &key_and_address.private_key,
+                token_id,
+                receiver_addr,
+                10,
+                i,
+            );
+
+            test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        //test_rollup.shutdown().await.unwrap();
+    });
+
+    for i in 0..20000 {
+        //let h = test_rollup.height().await;
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &token_id, None)
+            .await;
+
+        println!("receiver_balance {receiver_balance:?} {i}");
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // assert_eq!(receiver_balance.0, 100);
+    }
+    println!("End==== ");
+
+    //tokio::time::sleep(Duration::from_millis(10000)).await;
+    /*let h = test_rollup.height().await;
+    let receiver_balance = replica_test_rollup
+        .client
+        .get_balance::<S>(&receiver_addr, &token_id, None)
+        .await
+        .unwrap();
+
+    assert_eq!(receiver_balance.0, 100);*/
+
+    //wait_for_height(&test_rollup, &da_service, h.get() + 1).await;
+    //let _ = test_rollup.shutdown().await;
 }

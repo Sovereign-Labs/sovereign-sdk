@@ -57,7 +57,7 @@ where
                     .await
             }
             DbData::Transaction(seq, tx, tx_hash) => {
-                println!("Tx {}", seq);
+                //println!("Tx {}", seq);
                 self.do_new_tx_msg_replica(seq, tx_hash, tx, "replica_new_tx")
                     .await
             }

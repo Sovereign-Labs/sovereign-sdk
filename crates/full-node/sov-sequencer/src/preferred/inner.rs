@@ -1647,6 +1647,11 @@ where
 
         debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
+
+        if inner.is_replica() {
+            println!(">>>>> XXX Replica next_sequence_number_according_to_node {next_sequence_number_according_to_node}");
+        }
+
         let next_sequence_number = inner.sequence_number_of_next_blob;
         let ((batches_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
             (
@@ -2182,6 +2187,7 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if let Err(e) = &inner.is_ready {
+            println!("TX Not ready");
             return Err(ReplicaError::NotReady(
                 e.clone(),
                 DbData::Transaction(seq_nr_from_master, baked_tx, tx_hash),
@@ -2190,24 +2196,31 @@ where
 
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
 
-        if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
-            println!(" >>>>> Replica Start ExecutorAhead {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master} ");
+        if seq_nr_of_next_blob_for_this_executor - 1 > seq_nr_from_master {
+            println!(
+                "TX ExecutorAhead {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master} "
+            );
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
                 seq_nr_of_next_blob_for_this_executor,
             )));
         }
 
-        if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
-            println!(">>>> Replica Start ExecutorBehind {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
+        if seq_nr_of_next_blob_for_this_executor - 1 < seq_nr_from_master {
+            println!("TX ExecutorBehind");
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
                 DbData::Transaction(seq_nr_from_master, baked_tx, tx_hash),
             )));
         }
 
-        inner
+        let x = inner
             .do_new_tx(tx_hash, baked_tx)
             .await
-            .map_err(ReplicaError::NewTx)?;
+            .map_err(ReplicaError::NewTx)?
+            .0
+            .await;
+
+        // println!("Tx seq_nr_from_master {}", seq_nr_from_master);
+
         Ok(())
     }
 
@@ -2232,14 +2245,14 @@ where
 
         let seq = inner.sequence_number_of_next_blob;
 
-        if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
+        if seq_nr_of_next_blob_for_this_executor - 1 > seq_nr_from_master {
             println!(" >>>>> Replica Close ExecutorAhead {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
                 seq_nr_of_next_blob_for_this_executor,
             )));
         }
 
-        if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
+        if seq_nr_of_next_blob_for_this_executor - 1 < seq_nr_from_master {
             println!(">>>> Replica Close ExecutorBehind {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
                 DbData::BatchEnd(batch_from_master),

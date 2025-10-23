@@ -239,7 +239,11 @@ impl PreferredSequencerDbBackend for PostgresBackend {
     ) -> anyhow::Result<()> {
         let start = i64::try_from(tx_idx_within_batch)?;
         let end = start + txs.len() as i64;
+
+        //println!("Add tx in PG {sequence_number} {tx_idx_within_batch}");
+
         let sequence_number = vec![i64::try_from(sequence_number)?; txs.len()];
+
         let event_types = vec!["transaction"; txs.len()];
         let tx_indexes = (start..end).collect::<Vec<_>>();
         let hashes = txs.iter().map(|(_, hash)| hash.0).collect::<Vec<_>>();
