@@ -113,7 +113,8 @@ where
         let latest_state_update = state_update_receiver.borrow().clone();
         let checkpoint =
             StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
-        let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
+        let (checkpoint_sender, checkpoint_receiver) =
+            watch::channel(checkpoint.clone_with_empty_witness_dropping_temp_cache());
 
         let api_state = ApiState::build(
             Arc::new(()),
@@ -123,8 +124,6 @@ where
         );
 
         let txsm = TxStatusManager::default();
-        let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
 
         let da_address = da.get_signer().await;
 
@@ -163,7 +162,7 @@ where
             inner: inner.into(),
             txsm,
             api_state,
-            runtime: Rt::default(),
+            runtime,
             checkpoint_sender,
             config: config.clone(),
             api_ledger_db,
