@@ -308,34 +308,16 @@ where
         };
 
         let (tx_and_raw_hash, auth_data, runtime_call) =
-            sov_modules_api::capabilities::authenticate::<_, S, Rt>(
+            sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
                 &input.data,
-                &Rt::CHAIN_HASH,
                 state,
-            )
-            .map_err(|e| match e {
-                AuthenticationError::FatalError(err, hash) => {
-                    UnregisteredAuthenticationError::FatalError(err, hash)
-                }
-                AuthenticationError::OutOfGas(err) => {
-                    UnregisteredAuthenticationError::OutOfGas(err)
-                }
-            })?;
+            )?;
 
-        if Rt::allow_unregistered_tx(&runtime_call) {
-            Ok((
-                tx_and_raw_hash,
-                auth_data,
-                EvmAuthenticatorInput::Standard(runtime_call),
-            ))
-        } else {
-            Err(UnregisteredAuthenticationError::FatalError(
-                FatalError::Other(
-                    "The runtime call included in the transaction was invalid.".to_string(),
-                ),
-                tx_and_raw_hash.raw_tx_hash,
-            ))?
-        }
+        Ok((
+            tx_and_raw_hash,
+            auth_data,
+            EvmAuthenticatorInput::Standard(runtime_call),
+        ))
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {
