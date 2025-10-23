@@ -65,7 +65,9 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
     /// # Errors
     ///
     /// Returns an error if the background polling task has stopped.
-    pub fn get_last_finalized(&self) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
+    pub fn get_last_finalized_block_header(
+        &self,
+    ) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
         if self.finalized_headers_task.is_finished() {
             anyhow::bail!("DA header provider background task has stopped");
         }

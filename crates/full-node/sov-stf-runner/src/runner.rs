@@ -28,7 +28,7 @@ use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
-use crate::da::FinalizedBlocksBulkFetcher;
+use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
 
@@ -212,6 +212,13 @@ where
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
         let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
+        let finalized_header_provider = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            shutdown_receiver.clone(),
+            da_polling_interval,
+        )
+        .await?;
+
         let state_manager = StateManager::new(
             storage_manager,
             ledger_db,
@@ -222,6 +229,7 @@ where
             sync_state.clone(),
             da_polling_interval,
             da_total_timeout,
+            finalized_header_provider,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
@@ -626,7 +634,6 @@ where
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
             .process_stf_changes(
-                &self.da_service,
                 genesis_da_height,
                 slot_result.change_set,
                 transition_data,

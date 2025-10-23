@@ -324,14 +324,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     state_manager
-        .process_stf_changes(
-            &da_service,
-            0,
-            change_set,
-            transition_witness,
-            slot_commit,
-            Vec::new(),
-        )
+        .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
 
@@ -446,14 +439,7 @@ async fn test_progressing_with_shuffle(
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(
-                &da_service,
-                0,
-                change_set,
-                transition_witness,
-                slot_commit,
-                Vec::new(),
-            )
+            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -657,14 +643,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(
-                &da_service,
-                0,
-                change_set,
-                transition_witness,
-                slot_commit,
-                Vec::new(),
-            )
+            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
         seen_transitions.insert(returned_block.header().hash(), state_root_hash);
@@ -754,14 +733,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(
-                &da_service,
-                0,
-                change_set,
-                transition_witness,
-                slot_commit,
-                Vec::new(),
-            )
+            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -1138,14 +1110,7 @@ async fn process_continuous_transition(
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     state_manager
-        .process_stf_changes(
-            da_service,
-            0,
-            change_set,
-            transition_witness,
-            slot_commit,
-            Vec::new(),
-        )
+        .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
         .await?;
     check_internal_consistency(state_manager, finality as usize);
 
