@@ -67,12 +67,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
     /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
     /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_rollup_block_hook of the next slot.
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<S>) {
-        let block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            // This is justified. We set `pending_head` in `end_rollup_block_hook`.
-            .expect("The impossible happened: Pending block is empty");
+        let block_env = self.block_env(state).unwrap_infallible();
         let parent_block = self.head(state).seal();
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);

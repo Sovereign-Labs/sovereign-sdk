@@ -278,12 +278,7 @@ where
             .unwrap_infallible()
             // This is justified, as we just fetched `block_numbers`.
             .expect("The impossible happened: parent_block was not set.");
-
-        let current_block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            .unwrap_or_default();
+        let current_block_env = self.block_env(state).unwrap_infallible();
 
         assert_eq!(&head_block.header.number, block_numbers.end());
 
@@ -364,11 +359,7 @@ where
             .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
 
         Ok(match maybe_blcok {
-            MaybeSealedBlock::Pending(_) => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .expect("The impossible happened: block_env is not set."),
+            MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
         })
     }
