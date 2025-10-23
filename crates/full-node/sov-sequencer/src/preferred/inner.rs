@@ -841,6 +841,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     },
     DoNewTx {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
+        sequence_number: u64,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
@@ -1238,6 +1239,7 @@ where
 
     pub(crate) async fn do_new_tx_msg_replica(
         &self,
+        sequence_number: u64,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
@@ -1246,6 +1248,7 @@ where
         self.send(Message::DoNewTx {
             resp,
             tx_hash,
+            sequence_number,
             baked_tx,
             reason,
         })
@@ -1551,11 +1554,12 @@ where
             Message::DoNewTx {
                 resp,
                 tx_hash,
+                sequence_number,
                 baked_tx,
                 reason,
             } => {
                 let ret = self
-                    .process_do_new_tx_replica(baked_tx, tx_hash, reason)
+                    .process_do_new_tx_replica(sequence_number, baked_tx, tx_hash, reason)
                     .await;
 
                 self.send_response(resp, ret, "process_do_new_tx_replica")
@@ -2170,12 +2174,37 @@ where
 
     async fn process_do_new_tx_replica(
         &mut self,
+        seq_nr_from_master: u64,
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let _ = inner
+
+        if let Err(e) = &inner.is_ready {
+            return Err(ReplicaError::NotReady(
+                e.clone(),
+                DbData::Transaction(seq_nr_from_master, baked_tx, tx_hash),
+            ));
+        }
+
+        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
+
+        if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
+            println!(" >>>>> Replica Start ExecutorAhead {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master} ");
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
+                seq_nr_of_next_blob_for_this_executor,
+            )));
+        }
+
+        if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
+            println!(">>>> Replica Start ExecutorBehind {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
+                DbData::Transaction(seq_nr_from_master, baked_tx, tx_hash),
+            )));
+        }
+
+        inner
             .do_new_tx(tx_hash, baked_tx)
             .await
             .map_err(ReplicaError::NewTx)?;
@@ -2213,7 +2242,7 @@ where
         if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
             println!(">>>> Replica Close ExecutorBehind {seq_nr_of_next_blob_for_this_executor} {seq_nr_from_master}");
             return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
-                DbData::BatchStart(batch_from_master),
+                DbData::BatchEnd(batch_from_master),
             )));
         }
 
