@@ -507,7 +507,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
 
-#[feature = "native"]
+#[cfg(feature = "native")]
 impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
     pub fn sign(
