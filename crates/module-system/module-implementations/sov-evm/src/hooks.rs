@@ -169,12 +169,12 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         root_hash: &<S::Storage as Storage>::Root,
         state: &mut impl AccessoryStateReaderAndWriter,
     ) {
+        #[allow(clippy::expect_used)]
         let mut block = self
             .pending_head
             .get(state)
             .unwrap_infallible()
-            // Justified, we set `pending_head` in `end_rollup_block_hook`.
-            .expect("The impossible happened: the pending block should always be set.");
+            .expect("We set `pending_head` in `end_rollup_block_hook`");
 
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);
         block.header.state_root = user_space_root_hash.into();

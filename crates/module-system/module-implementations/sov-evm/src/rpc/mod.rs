@@ -272,12 +272,12 @@ where
     pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
         let block_numbers = self.block_numbers(state);
 
+        #[allow(clippy::expect_used)]
         let head_block = self
             .blocks
             .get(block_numbers.end(), state)
             .unwrap_infallible()
-            // This is justified, as we just fetched `block_numbers`.
-            .expect("The impossible happened: parent_block was not set.");
+            .expect("Block should exist as index is inside block_numbers");
         let current_block_env = self.block_env(state).unwrap_infallible();
 
         assert_eq!(&head_block.header.number, block_numbers.end());
