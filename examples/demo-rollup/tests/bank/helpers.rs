@@ -195,14 +195,16 @@ pub(crate) async fn assert_bank_event<S: Spec>(
     Ok(())
 }
 
+/// Submits all transactions to the sequencers, blocks till the first transaction is processed.
+/// Returns slot number, where the result of the first transaction should be visible.
 pub(crate) async fn send_tx_and_wait_for_status(
     txs: &[Transaction<Runtime<TestSpec>, TestSpec>],
     client: &NodeClient,
 ) -> anyhow::Result<u64> {
-    let rsps = client.client.send_txs_to_sequencer(txs).await?;
+    let responses = client.client.send_txs_to_sequencer(txs).await?;
 
     // Wait for the last transaction.
-    let tx_hash = &rsps[rsps.len() - 1].id;
+    let tx_hash = &responses[responses.len() - 1].id;
 
     let mut tx_subscription = client
         .client
@@ -255,6 +257,7 @@ pub async fn start_test_rollup(
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
+        println!("A: {}", c.max_allowed_node_distance_behind);
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
                 * std::cmp::max(1, test_case.finalization_blocks as u64);
