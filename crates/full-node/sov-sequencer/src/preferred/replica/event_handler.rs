@@ -67,7 +67,10 @@ where
             Err(ReplicaError::NewTx(error)) => {
                 panic!("Replica failed to apply a new transaction. Error: {error:?}");
             }
-            Err(ReplicaError::Shutdown) => return Ok(()),
+            Err(ReplicaError::Shutdown) => {
+                // Replica shut down gracefully, this case is handled by the caller.
+                return Ok(());
+            }
             Err(ReplicaError::UnexpectedShutdown) => {
                 panic!("Replica unexpectedly shut down");
             }
