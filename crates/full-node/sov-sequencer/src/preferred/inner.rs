@@ -823,6 +823,11 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     SimpleStateUpdate {
         info: StateUpdateInfo<S::Storage>,
     },
+
+    CloseCurrentBatch {
+        reason: &'static str,
+    },
+
     DoBatchStartMsg {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         batch_from_master: BatchToStore,
@@ -830,11 +835,15 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     },
     DoNewTx {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
+        seq_nr_from_master: u64,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
     },
-    CloseCurrentBatch {
+
+    DoCloseCurrentBatch {
+        resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
+        batch_from_master: BatchToStore,
         reason: &'static str,
     },
 }
@@ -1187,6 +1196,12 @@ where
             Err(SequencerStateUpdatorError::Unexpected)
         }
     }
+    pub(crate) async fn close_current_batch_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await
+    }
 
     pub(crate) async fn latest_slot_number_msg(
         &self,
@@ -1218,12 +1233,14 @@ where
 
     pub(crate) async fn do_new_tx_msg_replica(
         &self,
+        seq_nr_from_master: u64,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::DoNewTx {
+            seq_nr_from_master,
             resp,
             tx_hash,
             baked_tx,
@@ -1235,11 +1252,20 @@ where
         Ok(())
     }
 
-    pub(crate) async fn close_current_batch_msg(
+    pub(crate) async fn close_current_batch_msg_replica(
         &self,
+        batch_from_master: BatchToStore,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::CloseCurrentBatch { reason }).await
+    ) -> Result<(), ReplicaError<S>> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::DoCloseCurrentBatch {
+            resp,
+            batch_from_master,
+            reason,
+        })
+        .await?;
+        self.recv(recv).await??;
+        Ok(())
     }
 }
 
@@ -1500,7 +1526,9 @@ where
             Message::SimpleStateUpdate { info } => {
                 self.process_new_storage(info).await;
             }
-
+            Message::CloseCurrentBatch { reason } => {
+                self.process_close_current_batch(reason).await;
+            }
             Message::DoBatchStartMsg {
                 resp,
                 batch_from_master,
@@ -1513,22 +1541,30 @@ where
                 self.send_response(resp, ret, "process_do_batch_start_replica")
                     .await;
             }
-
             Message::DoNewTx {
                 resp,
+                seq_nr_from_master,
                 tx_hash,
                 baked_tx,
                 reason,
             } => {
                 let ret = self
-                    .process_do_new_tx_replica(baked_tx, tx_hash, reason)
+                    .process_do_new_tx_replica(seq_nr_from_master, baked_tx, tx_hash, reason)
                     .await;
 
                 self.send_response(resp, ret, "process_do_new_tx_replica")
                     .await;
             }
-            Message::CloseCurrentBatch { reason } => {
-                self.process_close_current_batch(reason).await;
+            Message::DoCloseCurrentBatch {
+                resp,
+                batch_from_master,
+                reason,
+            } => {
+                let ret = self
+                    .process_close_current_batch_replica(batch_from_master, reason)
+                    .await;
+                self.send_response(resp, ret, "process_do_batch_start_replica")
+                    .await;
             }
         }
 
@@ -2036,6 +2072,10 @@ where
 
         Ok(rx)
     }
+    async fn process_close_current_batch(&mut self, reason: &'static str) {
+        let mut inner = self.get_inner_with_timing(reason).await;
+        inner.close_current_batch().await;
+    }
 
     async fn process_do_batch_start_replica(
         &mut self,
@@ -2043,28 +2083,15 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-
-        if let Err(e) = &inner.is_ready {
-            return Err(ReplicaError::NotReady(
-                e.clone(),
-                DbData::BatchStart(batch_from_master),
-            ));
-        }
-
-        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
+        let seq_nr_of_next_blob_for_this_executor = inner.current_sequence_number() + 1;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
-        if seq_nr_of_next_blob_for_this_executor > seq_nr_from_master {
-            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
-                seq_nr_of_next_blob_for_this_executor,
-            )));
-        }
-
-        if seq_nr_of_next_blob_for_this_executor < seq_nr_from_master {
-            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(
-                DbData::BatchStart(batch_from_master),
-            )));
-        }
+        validate_db_data_from_replica(
+            &inner.is_ready,
+            DbData::BatchStart(batch_from_master),
+            seq_nr_of_next_blob_for_this_executor,
+            seq_nr_from_master,
+        )?;
 
         inner
             .do_batch_start(
@@ -2078,22 +2105,72 @@ where
 
     async fn process_do_new_tx_replica(
         &mut self,
+        seq_nr_from_master: u64,
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
+        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
+
+        validate_db_data_from_replica(
+            &inner.is_ready,
+            DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash),
+            seq_nr_of_current_blob_for_this_executor,
+            seq_nr_from_master,
+        )?;
+
         let _ = inner
             .do_new_tx(tx_hash, baked_tx)
             .await
-            .map_err(ReplicaError::NewTx)?;
+            .map_err(ReplicaError::NewTx)?
+            .0
+            .await;
         Ok(())
     }
 
-    async fn process_close_current_batch(&mut self, reason: &'static str) {
+    async fn process_close_current_batch_replica(
+        &mut self,
+        batch_from_master: BatchToStore,
+        reason: &'static str,
+    ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
+        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number() + 1;
+        let seq_nr_from_master = batch_from_master.sequence_number;
+
+        validate_db_data_from_replica(
+            &inner.is_ready,
+            DbData::BatchEnd(batch_from_master),
+            seq_nr_of_current_blob_for_this_executor,
+            seq_nr_from_master,
+        )?;
         inner.close_current_batch().await;
+
+        Ok(())
     }
+}
+
+fn validate_db_data_from_replica<S: Spec>(
+    is_ready: &Result<(), SequencerNotReadyDetails>,
+    ret: DbData,
+    seq_nr_for_this_executor: u64,
+    seq_nr_from_master: u64,
+) -> Result<(), ReplicaError<S>> {
+    if let Err(err) = is_ready {
+        return Err(ReplicaError::NotReady(err.clone(), ret));
+    }
+
+    if seq_nr_for_this_executor > seq_nr_from_master {
+        return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
+            seq_nr_for_this_executor,
+        )));
+    }
+
+    if seq_nr_for_this_executor < seq_nr_from_master {
+        return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(ret)));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]
