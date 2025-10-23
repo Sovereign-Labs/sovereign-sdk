@@ -43,6 +43,7 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
 use std::future::Future;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 use test_strategy::Arbitrary;
@@ -2590,6 +2591,8 @@ async fn heavy_blob_submission_long_delay() {
     let client = test_rollup.api_client();
     let key = &admin.private_key;
 
+    let nonce = Arc::new(AtomicU64::new(0));
+
     let workers_timeout = Duration::from_secs(worker_timeout_secs);
     // Spawn 20 workers to spam the sequencer with transactions.
     let spam_start = std::time::Instant::now();
@@ -2597,6 +2600,7 @@ async fn heavy_blob_submission_long_delay() {
         .map(|_| {
             let client = client.clone();
             let key = key.clone();
+            let nonce = nonce.clone();
             tokio::spawn(async move {
                 let start = std::time::Instant::now();
                 let mut success = 0;
@@ -2605,10 +2609,7 @@ async fn heavy_blob_submission_long_delay() {
                     if start.elapsed() > workers_timeout {
                         break;
                     }
-                    let generation = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
+                    let generation = nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     let tx = tx_set_many_values(&key, generation, vec![generation as u8; 1024]);
 
                     let resp = client.send_raw_tx_to_sequencer(&tx).await;
