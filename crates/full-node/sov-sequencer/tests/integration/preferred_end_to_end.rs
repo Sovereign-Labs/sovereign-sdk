@@ -43,7 +43,6 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 use test_strategy::Arbitrary;
@@ -2568,6 +2567,7 @@ async fn heavy_blob_submission_long_delay() {
         0,
         true,
         max_batch_size,
+        // Block time is intentionally low to put extra pressure on Node and Sequencer.
         BlockProducingConfig::Periodic { block_time_ms: 200 },
         None,
         blob_processing_timeout_secs,
@@ -2579,7 +2579,6 @@ async fn heavy_blob_submission_long_delay() {
 
     test_rollup.da_service.set_delay_blobs_by(30).await;
 
-    let nonce = Arc::new(AtomicU64::new(0));
     let timeout_handle = tokio::spawn(async move {
         let timeout = worker_timeout_secs + 10;
         tokio::time::timeout(Duration::from_secs(timeout), task_completed_receiver)
@@ -2587,40 +2586,38 @@ async fn heavy_blob_submission_long_delay() {
             .unwrap()
     });
 
-    // Spawn 20 workers to spam the sequencer with load.
-    let workers = (0..50)
-        .map(|_| {
-            let client = test_rollup.api_client().clone();
-            let nonce = nonce.clone();
-            let key = admin.private_key.clone();
-            tokio::spawn(async move {
-                let start = std::time::Instant::now();
-                loop {
-                    if start.elapsed() > Duration::from_secs(worker_timeout_secs) {
-                        break;
-                    }
-                    let nonce = nonce.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    let tx = tx_set_many_values(&key, nonce, vec![nonce as u8; 1024]);
+    let client = test_rollup.api_client();
+    let key = &admin.private_key;
 
-                    let resp = client
-                        .accept_tx(&api_types::AcceptTxBody {
-                            body: BASE64_STANDARD.encode(&tx),
-                        })
-                        .await;
-                    if let Err(e) = resp {
-                        tracing::warn!("Error sending tx: {:?}", e);
-                    }
-                }
-            })
-        })
-        .collect::<Vec<_>>();
+    let workers_timeout = Duration::from_secs(worker_timeout_secs);
+    // Spawn 20 workers to spam the sequencer with transactions.
+    let spam_start = std::time::Instant::now();
+    let workers = (0..50).map(|_| async {
+        let start = std::time::Instant::now();
+        loop {
+            if start.elapsed() > workers_timeout {
+                break;
+            }
+            let generation = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let tx = tx_set_many_values(key, generation, vec![generation as u8; 1024]);
+
+            let resp = client.send_raw_tx_to_sequencer(&tx).await;
+            if let Err(e) = resp {
+                tracing::warn!("Error sending tx: {:?}", e);
+            }
+        }
+    });
 
     // Wait for the workers to finish.
     futures::future::join_all(workers).await;
+    let spam_duration = spam_start.elapsed();
 
     tokio::select! {
         _ = timeout_handle => {
-            panic!("Test timed out! This means the sequencer has regressed!");
+            panic!("Test timed out! This means the sequencer has regressed! Spam took {spam_duration:?}.");
         }
         shutdown_result = test_rollup.shutdown() => {
             shutdown_result.unwrap();
@@ -3301,11 +3298,11 @@ fn tx_delayed_call(key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
     encode_call(key, nonce, &msg)
 }
 
-fn tx_set_many_values(key: &Ed25519PrivateKey, nonce: u64, values_to_set: Vec<u8>) -> RawTx {
+fn tx_set_many_values(key: &Ed25519PrivateKey, generation: u64, values_to_set: Vec<u8>) -> RawTx {
     let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
         sov_value_setter::CallMessage::SetManyValues(values_to_set),
     );
-    encode_call(key, nonce, &msg)
+    encode_call(key, generation, &msg)
 }
 
 fn tx_set_value_and_sleep(
@@ -3360,13 +3357,13 @@ fn tx_assert_state_root(
 
 fn encode_call(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
 ) -> RawTx {
     let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce,
+        generation,
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
     );
 
