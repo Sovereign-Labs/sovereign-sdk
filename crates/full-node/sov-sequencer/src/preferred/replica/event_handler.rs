@@ -48,13 +48,39 @@ where
 {
     #[allow(clippy::match_same_arms)]
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
-        match data {
-            DbData::BatchStart(_) => {}
-            DbData::Transaction(_, _, _) => {}
-            DbData::BatchEnd(_) => {}
-            DbData::NewProof => {}
+        let res = match data {
+            DbData::BatchStart(batch_to_store) => {
+                println!("Batch start {}", batch_to_store.sequence_number);
+                self.do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
+                    .await
+            }
+            DbData::Transaction(_, tx, tx_hash) => {
+                self.do_new_tx_msg_replica(tx_hash, tx, "replica_new_tx")
+                    .await
+            }
+            DbData::BatchEnd(_batch_to_store) => {
+                self.close_current_batch_msg_replica("replica_close_batch")
+                    .await
+            }
+            DbData::NewProof => Ok(()),
         };
 
-        Ok(())
+        match res {
+            Ok(_) => return Ok(()),
+            Err(ReplicaError::Rejected(db_data_rejected)) => return Err(db_data_rejected),
+            Err(ReplicaError::NotReady(_sequencer_not_ready_details, db_data_rejected)) => {
+                return Err(DBDataRejected::ExecutorBehind(db_data_rejected))
+            }
+            Err(ReplicaError::Creation(batch_creation_error)) => {
+                panic!("Replica failed to create a new batch. Error: {batch_creation_error:?}");
+            }
+            Err(ReplicaError::NewTx(error)) => {
+                panic!("Replica failed to apply a new transaction. Error: {error:?}");
+            }
+            Err(ReplicaError::Shutdown) => return Ok(()),
+            Err(ReplicaError::UnexpectedShutdown) => {
+                panic!("Replica unexpectedly shut down");
+            }
+        };
     }
 }

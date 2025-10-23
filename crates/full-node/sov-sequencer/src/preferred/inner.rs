@@ -1199,6 +1199,13 @@ where
         self.recv(recv).await
     }
 
+    pub(crate) async fn close_current_batch_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<(), SequencerStateUpdatorError> {
+        self.send(Message::CloseCurrentBatch { reason }).await
+    }
+
     pub(crate) async fn do_batch_start_msg_replica(
         &self,
         batch_from_master: BatchToStore,
@@ -1235,11 +1242,12 @@ where
         Ok(())
     }
 
-    pub(crate) async fn close_current_batch_msg(
+    pub(crate) async fn close_current_batch_msg_replica(
         &self,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::CloseCurrentBatch { reason }).await
+    ) -> Result<(), ReplicaError<S>> {
+        self.send(Message::CloseCurrentBatch { reason }).await?;
+        Ok(())
     }
 }
 
@@ -1954,6 +1962,10 @@ where
             .await;
 
         inner.update_api_ledger(&info).await;
+
+        drop(inner);
+        self.process_force_overwrite_state_for_recovery(info, "xxx")
+            .await;
     }
 
     /// Closes the current batch
@@ -2045,10 +2057,10 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if let Err(e) = &inner.is_ready {
-            return Err(ReplicaError::NotReady(
-                e.clone(),
-                DbData::BatchStart(batch_from_master),
-            ));
+            // return Err(ReplicaError::NotReady(
+            //     e.clone(),
+            //     DbData::BatchStart(batch_from_master),
+            // ));
         }
 
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
