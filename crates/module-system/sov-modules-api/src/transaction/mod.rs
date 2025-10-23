@@ -249,9 +249,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         let data = borsh::to_vec(&self).unwrap();
         <S::CryptoSpec as CryptoSpec>::Hasher::digest(&data).into()
     }
-}
 
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Creates a new signed transaction using the provided private key.
     pub fn new_signed_tx(
         priv_key: &C::PrivateKey,
@@ -267,7 +265,9 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
 
         unsigned_tx.to_signed_tx(pub_key, signature)
     }
+}
 
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Convenience function to return the transaction bytes in the correct format ready for submission.
     pub fn tx_bytes(&self) -> Vec<u8> {
         borsh::to_vec(self).expect("Serialization should be never fail")
@@ -507,6 +507,18 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
 
+#[feature = "native"]
+impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
+    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
+    pub fn sign(
+        self,
+        private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+        chain_hash: &[u8; 32],
+    ) -> Transaction<R, S> {
+        Transaction::new_signed_tx(private_key, chain_hash, self)
+    }
+}
+
 impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     /// Creates a new [`UnsignedTransaction`] with the given arguments.
     pub const fn new(
@@ -540,15 +552,6 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
             uniqueness,
             details,
         }
-    }
-
-    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
-    pub fn sign(
-        self,
-        private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
-        chain_hash: &[u8; 32],
-    ) -> Transaction<R, S> {
-        Transaction::new_signed_tx(private_key, chain_hash, self)
     }
 
     /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
