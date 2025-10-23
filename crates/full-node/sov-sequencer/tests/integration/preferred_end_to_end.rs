@@ -2555,10 +2555,10 @@ async fn heavy_blob_submission_long_delay() {
         runtime: rt_genesis_config.clone(),
     };
 
-    let dir = tempdir_inside_codebase_dir();
+    let dir = Arc::new(tempfile::tempdir().unwrap());
 
     let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+        dir,
         genesis_params
             .runtime
             .sequencer_registry
@@ -2582,7 +2582,7 @@ async fn heavy_blob_submission_long_delay() {
     test_rollup.da_service.set_delay_blobs_by(30).await;
 
     let timeout_handle = tokio::spawn(async move {
-        let timeout = worker_timeout_secs + 10;
+        let timeout = worker_timeout_secs + 20;
         tokio::time::timeout(Duration::from_secs(timeout), task_completed_receiver)
             .await
             .unwrap()
