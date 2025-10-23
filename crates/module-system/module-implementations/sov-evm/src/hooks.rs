@@ -224,38 +224,10 @@ impl<S: Spec> Evm<S> {
                 crate_range_from(block_numbers.clone(), None, Some(last_to_remove));
 
             for block_number in block_numbers_to_remove {
-                let block = self
-                    .blocks
-                    .remove(&block_number, state)?
-                    // Safe because we already checked block_numbers.len()
-                    .expect("Impossible happened: no block available to prune");
-
-                let block_hash = block.header.hash();
-                self.block_hashes
-                    .remove(&block_hash, state)?
-                    // Safe, since we keep one block_hash per block.
-                    .expect("Impossible happened: no block_hasha available to prune");
-
-                for tx_idx in block.transactions {
-                    let transaction = self
-                        .transactions
-                        .remove(&tx_idx, state)?
-                        // Safe because we already checked transactions.len()
-                        // Safe, since we keep one tx_hash per tx.
-                        .expect("Impossible happened: no transaction_hashes available to prune");
-
-                    let tx_hash = transaction.signed_transaction.hash();
-
-                    self.transaction_hashes
-                        .remove(tx_hash, state)?
-                        // Safe, since we keep one tx_hash per tx.
-                        .expect("Impossible happened: no transaction_hashes available to prune");
-
-                    self.receipts
-                        .remove(&tx_idx, state)?
-                        // Safe because we already checked receipts.len()
-                        .expect("Impossible happened: no receipts available to prune");
-                }
+                #[allow(clippy::expect_used)]
+                self.prune_block(block_number, state).expect(
+                    "Prunning block should succeed as block_numbers indicate - block exists",
+                );
             }
 
             let new_block_numbers = crate_range_from(block_numbers, Some(last_to_remove + 1), None);
@@ -264,6 +236,33 @@ impl<S: Spec> Evm<S> {
         }
 
         Ok(())
+    }
+
+    fn prune_block(
+        &mut self,
+        number: u64,
+        state: &mut impl AccessoryStateReaderAndWriter,
+    ) -> Option<()> {
+        let block = self.blocks.remove(&number, state).unwrap_infallible()?;
+        let hash = block.header.hash();
+        self.block_hashes.remove(&hash, state).unwrap_infallible()?;
+
+        for tx_idx in block.transactions {
+            #[allow(clippy::expect_used)]
+            self.prune_tx(tx_idx, state)
+                .expect("Cascade tx delete should succeed as each tx belongs to a single block");
+        }
+        Some(())
+    }
+
+    fn prune_tx(&mut self, idx: u64, state: &mut impl AccessoryStateReaderAndWriter) -> Option<()> {
+        let transaction = self.transactions.remove(&idx, state).unwrap_infallible()?;
+        let tx_hash = transaction.signed_transaction.hash();
+        self.transaction_hashes
+            .remove(tx_hash, state)
+            .unwrap_infallible()?;
+        self.receipts.remove(&idx, state).unwrap_infallible()?;
+        Some(())
     }
 }
 
