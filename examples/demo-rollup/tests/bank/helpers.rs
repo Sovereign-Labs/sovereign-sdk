@@ -195,20 +195,24 @@ pub(crate) async fn assert_bank_event<S: Spec>(
     Ok(())
 }
 
-/// Submits all transactions to the sequencers, blocks till the first transaction is processed.
-/// Returns slot number, where the result of the first transaction should be visible.
+/// Submits all transactions to the sequencers, blocks till the last transaction is processed.
+/// Returns slot number, where the result of the last transaction should be visible.
 pub(crate) async fn send_tx_and_wait_for_status(
     txs: &[Transaction<Runtime<TestSpec>, TestSpec>],
     client: &NodeClient,
 ) -> anyhow::Result<u64> {
+    assert!(!txs.is_empty(),);
     let responses = client.client.send_txs_to_sequencer(txs).await?;
 
     // Wait for the last transaction.
-    let tx_hash = &responses[responses.len() - 1].id;
+    let last_tx_hash = responses
+        .last()
+        .map(|response| &response.id)
+        .expect("There should be at least one response");
 
     let mut tx_subscription = client
         .client
-        .subscribe_to_tx_status_updates(tx_hash.parse()?)
+        .subscribe_to_tx_status_updates(last_tx_hash.parse()?)
         .await
         .context("Failed to subscribe to tx status")?;
 
@@ -221,7 +225,7 @@ pub(crate) async fn send_tx_and_wait_for_status(
         // The condition below is never met, but it's included as a sanity check
         // in case something goes terribly wrong and we receive an unexpectedly large number of status updates (which should be impossible).
         if c > 5 {
-            panic!("Invalid status {info:?}")
+            panic!("Invalid status {info:?}, too many status transitions!")
         }
         c += 1;
     }
