@@ -88,6 +88,7 @@ impl<S: Spec> Evm<S> {
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
+            self.block_hashes.clone(),
             state,
             self.bank_module.clone(),
         )
@@ -167,7 +168,9 @@ impl<S: Spec> Evm<S> {
         block_hash: &B256,
         state: &mut Accessor,
     ) -> Option<u64> {
-        self.block_hashes.get(block_hash, state).unwrap_infallible()
+        self.block_hash_to_number
+            .get(block_hash, state)
+            .unwrap_infallible()
     }
 
     /// Get the currently pending head block.

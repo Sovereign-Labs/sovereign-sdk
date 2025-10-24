@@ -1,4 +1,5 @@
 # 2025-10-24
+- #1968 Implement EVM `BLOCKHASH` opcode with support for querying the last 256 block hashes.
 - #1966 **Resync breaking change**: Updates the schema generated for the `signature` and `public_key` fields on `Transaction` variants (both V0 and V1) to be byte arrays of the correct length. This is a follow-up on #1877, affecting only the web3 SDK functionality. However, this is a breaking change to the `CHAIN_HASH`, and therefore will invalidate existing transactions.
 
 # 2025-10-22
