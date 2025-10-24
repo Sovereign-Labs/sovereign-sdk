@@ -1,3 +1,6 @@
+# 2025-10-24
+- #1968 Implement EVM `BLOCKHASH` opcode with support for querying the last 256 block hashes.
+
 # 2025-10-22
 - #1937 Reject log subscriptions with block filters.
 - #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
