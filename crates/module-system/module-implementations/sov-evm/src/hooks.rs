@@ -4,6 +4,7 @@ use crate::{Evm, PendingTransaction};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::{TxReceipt, EMPTY_OMMER_ROOT_HASH};
 use alloy_primitives::{Bloom, Bytes, B256, B64, U256};
+use revm::primitives::constants::BLOCK_HASH_HISTORY;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -34,6 +35,15 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // We have to force the conversion to [u8;32] to prevent the `from_slice` method from panicking
             B256::from_slice(&pre_state_user_root);
         self.head.set(&parent_block, state).unwrap_infallible();
+        let parent_header = &parent_block.header;
+        self.block_hashes
+            .set(&(parent_header.number), &parent_header.hash_slow(), state)
+            .unwrap_infallible();
+        if parent_header.number >= BLOCK_HASH_HISTORY {
+            self.block_hashes
+                .delete(&(parent_header.number - BLOCK_HASH_HISTORY), state)
+                .unwrap_infallible();
+        }
 
         let cfg = self.cfg_infallible(state);
 

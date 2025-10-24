@@ -88,6 +88,7 @@ impl<S: Spec> Evm<S> {
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
+            self.block_hashes.clone(),
             state,
             self.bank_module.clone(),
         )

@@ -33,8 +33,8 @@ mod authenticate;
 #[cfg(feature = "native")]
 mod helpers;
 
-use alloy_primitives::U256;
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{Address, BlockHash, B256};
+use alloy_primitives::{BlockNumber, U256};
 pub use authenticate::{
     authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
 };
@@ -81,6 +81,10 @@ pub struct Evm<S: Spec> {
     /// Mapping from code hash to code. Used for lazy-loading code into a contract account.
     #[state]
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
+
+    /// Mapping from block number to block hash. Used by EVM blockhash opcode. Contains only last 256 values.
+    #[state]
+    pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
 
     /// Chain configuration. This field is set in genesis.
     #[state]
