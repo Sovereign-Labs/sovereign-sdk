@@ -3,6 +3,7 @@ use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
@@ -13,7 +14,7 @@ use sov_modules_api::{Context, GasSpec, Spec, TxState};
 use std::convert::Infallible;
 
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
-use crate::db::{self, commit::FallibleDatabaseCommit, metrics::MetricsDb};
+use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::{get_cfg_env, transact};
@@ -94,7 +95,7 @@ where
         save_elapsed!(execution_time SINCE execution);
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
-        db.commit(state_changes)
+        db.try_commit(state_changes)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
