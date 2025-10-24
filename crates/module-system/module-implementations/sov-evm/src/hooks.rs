@@ -246,7 +246,9 @@ impl<S: Spec> Evm<S> {
     ) -> Option<()> {
         let block = self.blocks.remove(&number, state).unwrap_infallible()?;
         let hash = block.header.hash();
-        self.block_hash_to_number.remove(&hash, state).unwrap_infallible()?;
+        self.block_hash_to_number
+            .remove(&hash, state)
+            .unwrap_infallible()?;
 
         for tx_idx in block.transactions {
             self.prune_tx(tx_idx, state)
