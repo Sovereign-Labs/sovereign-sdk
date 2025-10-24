@@ -312,11 +312,16 @@ pub trait ByteDisplayable {
     }
 }
 
-impl<T: OverrideSchema<Output = Vec<u8>>> ByteDisplayable for T {
+// Blanket impl that delegates to the Output type's ByteDisplayable impl
+impl<T: OverrideSchema> ByteDisplayable for T
+where
+    T::Output: ByteDisplayable
+{
     fn with_display(display: ByteDisplay) -> Link {
-        Link::Immediate(Primitive::ByteVec { display })
+        T::Output::with_display(display)
     }
 }
+
 impl ByteDisplayable for Vec<u8> {
     fn with_display(display: ByteDisplay) -> Link {
         Link::Immediate(Primitive::ByteVec { display })
