@@ -315,7 +315,7 @@ pub trait ByteDisplayable {
 // Blanket impl that delegates to the Output type's ByteDisplayable impl
 impl<T: OverrideSchema> ByteDisplayable for T
 where
-    T::Output: ByteDisplayable
+    T::Output: ByteDisplayable,
 {
     fn with_display(display: ByteDisplay) -> Link {
         T::Output::with_display(display)
