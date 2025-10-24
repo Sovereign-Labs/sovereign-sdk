@@ -1716,7 +1716,15 @@ where
             condition_are_there_batches_to_replay,
             condition_node_is_unsynced_and_doesnt_know_it,
         ) {
-            (true, _, _, true, _) => PreferredSeqOperation::Unreachable,
+            (true, _, _, true, _) => {
+                if inner.is_replica() {
+                    inner.executor_events_sender.clean_all_batches_from_cache();
+                    PreferredSeqOperation::WaitForNodeResyncToTip
+                } else {
+                    PreferredSeqOperation::Unreachable
+                }
+            }
+
             (true, _, false, false, _) => {
                 warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
@@ -1990,6 +1998,15 @@ where
             .await;
 
         inner.update_api_ledger(&info).await;
+
+        // TODO
+        if info.sync_status.target_da_height() - info.sync_status.synced_da_height() <= 1 {
+            inner.is_ready = Ok(());
+        }
+
+        drop(inner);
+        self.process_force_overwrite_state_for_recovery(info, "xxx")
+            .await;
     }
 
     /// Closes the current batch
@@ -2083,7 +2100,8 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_next_blob_for_this_executor = inner.current_sequence_number() + 1;
+
+        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         validate_db_data_from_replica(
@@ -2126,6 +2144,7 @@ where
             .map_err(ReplicaError::NewTx)?
             .0
             .await;
+
         Ok(())
     }
 

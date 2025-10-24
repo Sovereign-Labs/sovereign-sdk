@@ -129,7 +129,8 @@ async fn test_replica_receives_txs_from_postgres() {
     let (da_service, addr) = create_da_service_manual().await;
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
-    let test_rollup = start_rollup(false, addr, postgres.clone()).await;
+    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
+    let test_rollup = start_rollup(false, addr, postgres).await;
 
     for _ in 0..20 {
         da_service.produce_block_now().await.unwrap();
@@ -141,7 +142,6 @@ async fn test_replica_receives_txs_from_postgres() {
 
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let replica_test_rollup = start_rollup(true, addr, postgres).await;
     let token_id = config_gas_token_id();
 
     let receiver_addr = random_address();
@@ -154,21 +154,9 @@ async fn test_replica_receives_txs_from_postgres() {
         0,
     );
 
-    let height_before_tx = test_rollup.height().await;
     test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
-    let gap = 5;
-    // producing blocks, like it is standard periodic production
-    for _ in 0..gap {
-        da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(
-            sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
-        ))
-        .await;
-    }
 
-    test_rollup
-        .wait_for_height(height_before_tx.get() + gap)
-        .await;
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     let receiver_balance = replica_test_rollup
         .client
