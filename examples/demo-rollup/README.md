@@ -109,12 +109,13 @@ $ make test-create-token
 Once a batch is submitted, the output should also contain the transaction hashes that have been submitted. For example -
 
 ```text
-2025-08-06T10:24:30.667058Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-08-06T10:24:30.687784Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f
-2025-08-06T10:24:30.687803Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
-2025-08-06T10:24:30.701577Z  INFO sov_node_client: Submitted tx hash="0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f"
-2025-08-06T10:24:30.701604Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
-2025-08-06T10:24:32.758861Z  INFO sov_node_client: Rollup has processed the submitted batch!
+2025-10-23T22:53:16.991354Z  INFO sov_cli::workflows::node: Executing node workflow
+2025-10-23T22:53:16.998040Z DEBUG sov_node_client: Queried nonce url="http://127.0.0.1:12346/modules/nonces/state/nonces/items/0xf8ad2437a279e1c8932c07358c91dc4fe34864a98c6c25f298e2a0199c1509ff" nonce=0
+2025-10-23T22:53:16.998509Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x467e93ad9c5328612c98c7704fd00a8bb03b22ffa917ae5a3f2623bf96b6787a
+2025-10-23T22:53:16.998538Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
+2025-10-23T22:53:17.032009Z  INFO sov_node_client: Submitted tx hash="0x467e93ad9c5328612c98c7704fd00a8bb03b22ffa917ae5a3f2623bf96b6787a"
+2025-10-23T22:53:17.032069Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
+2025-10-23T22:53:19.546387Z  INFO sov_node_client: Rollup has processed the submitted batch!
 ```
 
 The transaction hash can be used to query the REST API endpoint to fetch events belonging to the transaction, which should in
@@ -122,7 +123,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0x0a3aff182ff4337c866a6141c06f090ffe6e6125a916c7d523333c60dee8775f/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x467e93ad9c5328612c98c7704fd00a8bb03b22ffa917ae5a3f2623bf96b6787a/events | jq
 [
   {
     "type": "event",
