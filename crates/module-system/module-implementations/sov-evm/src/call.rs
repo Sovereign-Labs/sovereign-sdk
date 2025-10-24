@@ -207,7 +207,7 @@ where
             tx.receipt
                 .log_index_start
                 .checked_add(tx.receipt.receipt.logs.len() as u64)
-                .expect("we will never have that many logs")
+                .expect("We should never have more than u64::MAX logs")
         });
         let is_success = result.is_success();
         let gas_used = result.gas_used()
@@ -276,7 +276,7 @@ where
 
         let tx_index = first_tx_index
             .checked_add(pending_tx_len - 1)
-            .expect("We will never have that many transactions");
+            .expect("We should never have more than u64::MAX transactions");
 
         self.transactions
             .set(&tx_index, &pending_transaction.transaction, state)?;

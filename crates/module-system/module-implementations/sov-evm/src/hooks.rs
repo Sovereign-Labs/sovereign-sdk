@@ -41,7 +41,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .header
             .number
             .checked_add(1)
-            .expect("We will never have so many blocks");
+            .expect("We should never have more than u64::MAX blocks");
 
         let new_timestamp = self
             .chain_state_module
@@ -132,7 +132,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let end_tx_index = start_tx_index
             .checked_add(pending_transactions.len() as u64)
-            .expect("We will never have that many transactions");
+            .expect("We should never have more than u64::MAX transactions");
 
         let block = Block {
             header,
