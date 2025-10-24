@@ -137,10 +137,6 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         .await;
     }
 
-    pub fn clean_all_batches_from_cache(&mut self) {
-        self.cache.clean_all_batches();
-    }
-
     pub(crate) async fn start_batch(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
@@ -284,6 +280,10 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             })
             .chain(maybe_in_progress_batch)
             .collect::<Vec<_>>()
+    }
+
+    pub fn clean_all_batches_from_cache(&mut self) {
+        self.cache.clean_all_batches();
     }
 }
 

@@ -311,13 +311,9 @@ where
 
         // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
-        let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
-            info,
-            self.tx_cache_writer.clone(), // Recovery executor fills the cache
-            self.rollup_exec_config.clone(),
-            self.seq_config.clone(),
-            Default::default(), // Since we're entering recovery, we don't re-use any of the uncommitted changes
-        );
+
+        // Since we're entering recovery, we don't re-use any of the uncommitted changes
+        let recovery_executor = self.new_executor_with_empty_uncommitted_changes(info);
 
         self.force_overwrite_state(info.clone(), recovery_executor)
             .await;
@@ -564,6 +560,20 @@ where
         self.do_batch_start(visible_slot_number_after_increase, visible_increase)
             .await
     }
+
+    fn new_executor_with_empty_uncommitted_changes(
+        &self,
+        info: &StateUpdateInfo<S::Storage>,
+    ) -> RollupBlockExecutor<S, Rt> {
+        let transaction_cache_write_handle = self.tx_cache_writer.clone();
+        RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
+            info,
+            transaction_cache_write_handle,
+            self.rollup_exec_config.clone(),
+            self.seq_config.clone(),
+            Default::default(),
+        )
+    }
 }
 
 // Methods in this block are shared between Master and Replica.
@@ -805,6 +815,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
     },
     WaitNodeResync {
         info: StateUpdateInfo<S::Storage>,
+        distance: u64,
         reason: &'static str,
     },
     #[cfg(feature = "test-utils")]
@@ -828,12 +839,12 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         reason: &'static str,
     },
 
-    DoBatchStartMsg {
+    ReplicaBatchStartMsg {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         batch_from_master: BatchToStore,
         reason: &'static str,
     },
-    DoNewTx {
+    ReplicaNewTx {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         seq_nr_from_master: u64,
         tx_hash: TxHash,
@@ -841,7 +852,7 @@ enum Message<S: Spec, Rt: Runtime<S>> {
         reason: &'static str,
     },
 
-    DoCloseCurrentBatch {
+    ReplicaCloseCurrentBatch {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         batch_from_master: BatchToStore,
         reason: &'static str,
@@ -1129,9 +1140,15 @@ where
     pub(crate) async fn wait_for_node_resync_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
+        distance: u64,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::WaitNodeResync { info, reason }).await
+        self.send(Message::WaitNodeResync {
+            info,
+            distance,
+            reason,
+        })
+        .await
     }
 
     /// Closes the current batch
@@ -1220,7 +1237,7 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
-        self.send(Message::DoBatchStartMsg {
+        self.send(Message::ReplicaBatchStartMsg {
             resp,
             batch_from_master,
             reason,
@@ -1239,7 +1256,7 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
-        self.send(Message::DoNewTx {
+        self.send(Message::ReplicaNewTx {
             seq_nr_from_master,
             resp,
             tx_hash,
@@ -1258,7 +1275,7 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let (resp, recv) = oneshot::channel();
-        self.send(Message::DoCloseCurrentBatch {
+        self.send(Message::ReplicaCloseCurrentBatch {
             resp,
             batch_from_master,
             reason,
@@ -1507,8 +1524,13 @@ where
                 self.process_force_overwrite_state_for_recovery(info, reason)
                     .await;
             }
-            Message::WaitNodeResync { info, reason } => {
-                self.process_wait_for_node_resync(info, reason).await;
+            Message::WaitNodeResync {
+                info,
+                distance,
+                reason,
+            } => {
+                self.process_wait_for_node_resync(info, distance, reason)
+                    .await;
             }
             #[cfg(feature = "test-utils")]
             Message::ForceCloseCurrentBatch { reason: _reason } => {
@@ -1529,7 +1551,7 @@ where
             Message::CloseCurrentBatch { reason } => {
                 self.process_close_current_batch(reason).await;
             }
-            Message::DoBatchStartMsg {
+            Message::ReplicaBatchStartMsg {
                 resp,
                 batch_from_master,
                 reason,
@@ -1541,7 +1563,7 @@ where
                 self.send_response(resp, ret, "process_do_batch_start_replica")
                     .await;
             }
-            Message::DoNewTx {
+            Message::ReplicaNewTx {
                 resp,
                 seq_nr_from_master,
                 tx_hash,
@@ -1555,7 +1577,7 @@ where
                 self.send_response(resp, ret, "process_do_new_tx_replica")
                     .await;
             }
-            Message::DoCloseCurrentBatch {
+            Message::ReplicaCloseCurrentBatch {
                 resp,
                 batch_from_master,
                 reason,
@@ -1780,15 +1802,9 @@ where
                         .await;
 
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
-                    let tx_cache_writer = inner.tx_cache_writer.clone();
                     Some(Box::new(
-                        RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
-                            info,
-                            tx_cache_writer,
-                            inner.rollup_exec_config.clone(),
-                            inner.seq_config.clone(),
-                            Default::default(), // Since we're replaying from the node state, don't reuse any uncommitted changes
-                        ),
+                        // Since we're replaying from the node state, don't reuse any uncommitted changes
+                        inner.new_executor_with_empty_uncommitted_changes(info),
                     ))
                 } else {
                     let rollup_height =
@@ -1951,16 +1967,8 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        // Creates a new executor for recovery. This must *not* be called to create executors
-        // under other circumstances, since it causes side effects on the transaction cache.
-        let transaction_cache_write_handle = inner.tx_cache_writer.clone();
-        let recovery_executor = RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
-            &info,
-            transaction_cache_write_handle,
-            inner.rollup_exec_config.clone(),
-            inner.seq_config.clone(),
-            Default::default(), // Since we're entering recovery, we don't re-use any of the uncommitted changes
-        );
+        // Since we're entering recovery, we don't re-use any of the uncommitted changes
+        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
 
         inner
             .force_overwrite_state(info.clone(), recovery_executor)
@@ -1971,6 +1979,7 @@ where
     async fn process_wait_for_node_resync(
         &mut self,
         info: StateUpdateInfo<S::Storage>,
+        distance: u64,
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -1997,16 +2006,17 @@ where
             .update_state_for_recovery(checkpoint)
             .await;
 
+        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
+
+        inner
+            .force_overwrite_state(info.clone(), recovery_executor)
+            .await;
+
         inner.update_api_ledger(&info).await;
 
-        // TODO
-        if info.sync_status.target_da_height() - info.sync_status.synced_da_height() <= 1 {
+        if inner.is_replica() && info.sync_status.distance() <= distance {
             inner.is_ready = Ok(());
         }
-
-        drop(inner);
-        self.process_force_overwrite_state_for_recovery(info, "xxx")
-            .await;
     }
 
     /// Closes the current batch
