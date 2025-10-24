@@ -73,7 +73,7 @@ where
         );
 
         let block_number_hex = self
-            .block_hashes
+            .block_hash_to_number
             .get(&block_hash, state)
             .unwrap_infallible()
             .map(|number| hex::encode(number.to_be_bytes()));

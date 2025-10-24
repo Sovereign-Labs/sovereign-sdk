@@ -192,7 +192,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             .set(&sealed_block.header.number, &sealed_block, state)
             .unwrap_infallible();
 
-        self.block_hashes
+        self.block_hash_to_number
             .set(
                 &sealed_block.header.seal(),
                 &sealed_block.header.number,
@@ -236,7 +236,7 @@ impl<S: Spec> Evm<S> {
     ) -> Option<()> {
         let block = self.blocks.remove(&number, state).unwrap_infallible()?;
         let hash = block.header.hash();
-        self.block_hashes.remove(&hash, state).unwrap_infallible()?;
+        self.block_hash_to_number.remove(&hash, state).unwrap_infallible()?;
 
         for tx_idx in block.transactions {
             self.prune_tx(tx_idx, state)

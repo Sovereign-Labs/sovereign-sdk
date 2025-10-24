@@ -127,7 +127,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]
-    pub block_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+    pub block_hash_to_number: AccessoryStateMap<B256, u64, BcsCodec>,
 
     /// Used only by the RPC: transaction_hash => transaction_index mapping.
     #[state]
