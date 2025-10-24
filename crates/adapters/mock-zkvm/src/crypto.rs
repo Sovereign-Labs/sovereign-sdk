@@ -10,7 +10,7 @@ use ed25519_dalek::{
 use schemars::JsonSchema;
 use sov_rollup_interface::common::HexString;
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema;
 
 /// Defines private key types and operations
 #[cfg(feature = "native")]
@@ -132,10 +132,9 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair.
-#[derive(PartialEq, Eq, Clone, Debug, Hash, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash, JsonSchema)]
 pub struct Ed25519PublicKey {
     #[schemars(with = "&[u8]", length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH"))]
-    #[sov_wallet(as_ty = "[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]")]
     pub(crate) pub_key: DalekPublicKey,
 }
 
@@ -183,6 +182,10 @@ impl sov_rollup_interface::crypto::PublicKey for Ed25519PublicKey {
     }
 }
 
+impl OverrideSchema for Ed25519PublicKey {
+    type Output = [u8; PUBLIC_KEY_LENGTH];
+}
+
 impl BorshDeserialize for Ed25519PublicKey {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
@@ -202,13 +205,10 @@ impl BorshSerialize for Ed25519PublicKey {
 
 /// An ed25519 signature. Wraps the optimized Risc0 fork of the ed25519-dalek crate.
 
-#[derive(
-    PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema, UniversalWallet,
-)]
+#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema)]
 pub struct Ed25519Signature {
     /// The inner signature.
     #[schemars(with = "&[u8]", length(equal = "ed25519_dalek::Signature::BYTE_SIZE"))]
-    #[sov_wallet(as_ty = "[u8; ed25519_dalek::Signature::BYTE_SIZE]")]
     pub msg_sig: DalekSignature,
     pub(crate) bytes: Vec<u8>,
 }
@@ -222,6 +222,11 @@ impl Ed25519Signature {
         }
     }
 }
+
+impl OverrideSchema for Ed25519Signature {
+    type Output = [u8; ed25519_dalek::Signature::BYTE_SIZE];
+}
+
 impl BorshDeserialize for Ed25519Signature {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; DalekSignature::BYTE_SIZE];

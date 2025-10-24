@@ -59,11 +59,9 @@ impl<D: DispatchCall> TransactionCallable for D {
 pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// The signature of the transaction.
     #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
     pub signature: C::Signature,
     /// The public key of the sender of the transaction.
     #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
     pub pub_key: C::PublicKey,
     /// The runtime call of the transaction.
     #[sov_wallet(
