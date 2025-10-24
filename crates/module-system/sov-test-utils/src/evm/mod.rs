@@ -5,8 +5,10 @@ use anyhow::Result;
 use ethers::contract::BaseContract;
 use ethers::core::abi::Abi;
 
+mod block_hash;
 mod fake_uni;
 mod simple_storage;
+pub use block_hash::BlockHash;
 pub use fake_uni::{Erc20, Router};
 pub use simple_storage::{LegacySimpleStorage, SimpleStorage};
 
