@@ -1,7 +1,6 @@
 use alloy_eips::BlockId;
 use alloy_rpc_types::error::EthRpcErrorCode;
 use alloy_rpc_types::request::TransactionInputError;
-use reth_primitives_traits::transaction::signed::RecoveryError;
 use revm::context::result::InvalidTransaction;
 use revm::context_interface::result::{EVMError, InvalidHeader};
 use std::convert::Infallible;
@@ -100,11 +99,6 @@ impl EthApiError {
     pub fn other<E: ToRpcError>(err: E) -> Self {
         Self::Other(Box::new(err))
     }
-
-    /// Converts this error into the rpc error object.
-    pub fn into_rpc_err(self) -> jsonrpsee_types::error::ErrorObject<'static> {
-        self.into()
-    }
 }
 
 impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
@@ -164,12 +158,6 @@ where
             EVMError::Database(err) => err.into(),
             EVMError::Custom(err) => Self::EvmCustom(err),
         }
-    }
-}
-
-impl From<RecoveryError> for EthApiError {
-    fn from(_: RecoveryError) -> Self {
-        Self::InvalidTransactionSignature
     }
 }
 
