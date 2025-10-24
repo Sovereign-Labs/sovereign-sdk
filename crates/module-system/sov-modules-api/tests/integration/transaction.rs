@@ -258,4 +258,35 @@ mod web3_compatibility {
         let result = schema.json_to_borsh(0, json);
         assert!(result.is_ok(), "{ASSERT_MSG}. Error: {result:?}");
     }
+
+    #[test]
+    fn test_tx_wallet_serialization_missing_gas_field() {
+        let json = r#"
+        {"versioned_tx": {"V0":
+            {
+                "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
+                "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
+                "runtime_call": {
+                    "value_setter": {
+                        "set_value": {
+                            "value": 4
+                        }
+                    }
+                },
+                "uniqueness": {
+                    "generation": 2
+                },
+                "details": {
+                    "max_priority_fee_bips": 1,
+                    "max_fee": 10000,
+                    "gas_limit": null,
+                    "chain_id": 1337
+                }
+    }}
+        }"#;
+        let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
+
+        let result = schema.json_to_borsh(0, json);
+        assert!(result.is_ok(), "{ASSERT_MSG}. Error: {result:?}");
+    }
 }
