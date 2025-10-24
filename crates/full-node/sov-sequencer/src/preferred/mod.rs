@@ -480,7 +480,7 @@ where
             let is_synced = info.sync_status.distance() <= distance_to_tip;
 
             self.synchronized_state_updator
-                .wait_for_node_resync_msg(info, "wait_for_node_resync")
+                .wait_for_node_resync_msg(info, distance_to_tip, "wait_for_node_resync")
                 .await
                 .map_err(|e| e.into_state_update_error())?;
 
