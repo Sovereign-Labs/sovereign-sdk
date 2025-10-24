@@ -1,5 +1,5 @@
 use crate::{to_rollup_address, AccountStorageKey};
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, BlockHash, BlockNumber, B256, U256};
 use derive_more::Debug;
 use derive_more::{Deref, Into};
 use derive_new::new;
@@ -22,8 +22,8 @@ pub enum Error<Ws: StateAccessor> {
     State(<Ws as StateReader<User>>::Error),
     #[error("selfdestruct unsupported")]
     SelfDestructUnsupported,
-    #[error("blockhash unsupported")]
-    BlockHashUnsupported,
+    #[error("No block hash for block {0}")]
+    BlockHashNotFound(BlockNumber),
 }
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
@@ -38,6 +38,7 @@ pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) accounts: StateMap<Address, DbAccount, BcsCodec>,
     pub(crate) account_storage: StateMap<AccountStorageKey, U256, BcsCodec>,
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
+    pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
     pub(crate) state: &'a mut Ws,
     pub(crate) bank_module: sov_bank::Bank<S>,
 }
@@ -115,8 +116,13 @@ where
         Ok(storage_value)
     }
 
-    fn block_hash(&mut self, _number: u64) -> Result<B256, Self::Error> {
-        Err(Error::BlockHashUnsupported)
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
+        let block_hash = self
+            .block_hashes
+            .get(&number, self.state)
+            .map_err(Error::State)?
+            .ok_or(Error::BlockHashNotFound(number))?;
+        Ok(block_hash)
     }
 }
 
