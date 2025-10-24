@@ -7,6 +7,7 @@ use std::hash;
 use derive_more::derive::Display;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::schema::UniversalWallet as UniversalWalletSchema;
+use sov_universal_wallet::ty::ByteDisplayable;
 use sov_universal_wallet::UniversalWallet;
 
 use super::CredentialId;
@@ -33,6 +34,7 @@ pub trait Signature:
     + Serialize
     + for<'a> Deserialize<'a>
     + UniversalWalletSchema
+    + ByteDisplayable
 {
     /// The public key associated with the signature.
     type PublicKey;
@@ -56,6 +58,7 @@ pub trait PublicKey:
     + TryFrom<Vec<u8>>
     + AsRef<[u8]>
     + UniversalWalletSchema
+    + ByteDisplayable
 {
     /// Returns hashed public key.
     fn credential_id(&self) -> CredentialId;
