@@ -7,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_consensus::{Error, Signature, VerificationKey};
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
 use sov_rollup_interface::reexports::schemars::{self, JsonSchema};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema;
 
 /// Defines private key types and operations
 #[cfg(feature = "native")]
@@ -161,14 +161,13 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, PartialOrd, Ord)]
 pub struct SP1PublicKey {
     #[schemars(
         flatten,
         with = "String",
         length(equal = "ed25519_consensus::VerificationKey::LENGTH * 2")
     )]
-    #[sov_wallet(as_ty = "[u8; 32]")] // the LENGTH property doesn't seem to exist
     pub(crate) pub_key: VerificationKey,
 }
 
@@ -202,6 +201,10 @@ impl sov_rollup_interface::crypto::PublicKey for SP1PublicKey {
     }
 }
 
+impl OverrideSchema for SP1PublicKey {
+    type Output = [u8; 32];
+}
+
 impl BorshDeserialize for SP1PublicKey {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0u8; 32];
@@ -220,9 +223,7 @@ impl BorshSerialize for SP1PublicKey {
 }
 
 /// An ed25519 signature. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(
-    PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema, UniversalWallet,
-)]
+#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema)]
 pub struct SP1Signature {
     /// The inner signature.
     #[schemars(
@@ -230,7 +231,6 @@ pub struct SP1Signature {
         with = "String",
         length(equal = "ed25519_consensus::Signature::LENGTH * 2")
     )]
-    #[sov_wallet(as_ty = "[u8; 64]")] // the LENGTH property doesn't seem to exist
     pub msg_sig: Signature,
     bytes: Vec<u8>,
 }
@@ -243,6 +243,10 @@ impl SP1Signature {
             bytes: s.to_bytes().to_vec(),
         }
     }
+}
+
+impl OverrideSchema for SP1Signature {
+    type Output = [u8; 64];
 }
 
 impl BorshDeserialize for SP1Signature {

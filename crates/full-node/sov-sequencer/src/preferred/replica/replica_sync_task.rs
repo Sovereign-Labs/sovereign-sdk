@@ -86,6 +86,10 @@ impl ReplicaSyncTask {
             };
 
             'inner: loop {
+                if shutdown_receiver.has_changed().unwrap_or(true) {
+                    break 'outer;
+                }
+
                 match handler.on_db_event(data).await {
                     Ok(_) => {
                         // The data was applied on the executor.
@@ -208,7 +212,7 @@ mod tests {
                 TestCase::CompleteBatch(seq_nr, nb_of_txs) => {
                     index = 0;
                     let stored_batch = new_batch_to_store(seq_nr);
-                    db.begin_rollup_block(stored_batch.clone()).await.unwrap();
+                    db.begin_rollup_block(stored_batch).await.unwrap();
 
                     for i in 0..nb_of_txs {
                         let tx = FullyBakedTx::new(vec![i as u8]);

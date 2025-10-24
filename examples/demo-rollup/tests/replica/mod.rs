@@ -130,12 +130,19 @@ async fn test_replica_receives_txs_from_postgres() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
     let test_rollup = start_rollup(false, addr, postgres.clone()).await;
-    let replica_test_rollup = start_rollup(true, addr, postgres).await;
 
-    let token_id = config_gas_token_id();
+    for _ in 0..20 {
+        da_service.produce_block_now().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(
+            sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+        ))
+        .await;
+    }
 
-    da_service.produce_n_blocks_now(20).await.unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let replica_test_rollup = start_rollup(true, addr, postgres).await;
+    let token_id = config_gas_token_id();
 
     let receiver_addr = random_address();
 

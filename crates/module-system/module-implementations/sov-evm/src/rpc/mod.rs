@@ -276,14 +276,8 @@ where
             .blocks
             .get(block_numbers.end(), state)
             .unwrap_infallible()
-            // This is justified, as we just fetched `block_numbers`.
-            .expect("The impossible happened: parent_block was not set.");
-
-        let current_block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            .unwrap_or_default();
+            .expect("Block should exist as index is inside block_numbers");
+        let current_block_env = self.block_env(state).unwrap_infallible();
 
         assert_eq!(&head_block.header.number, block_numbers.end());
 
@@ -364,11 +358,7 @@ where
             .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
 
         Ok(match maybe_blcok {
-            MaybeSealedBlock::Pending(_) => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .expect("The impossible happened: block_env is not set."),
+            MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
         })
     }
@@ -398,10 +388,9 @@ pub(crate) fn build_rpc_receipt(
 
     let block_hash = block.hash();
     let block_number = Some(block.number());
-    // Safety: The transaction cannot have a lower number than the block start
     let transaction_index = tx_number
-        .checked_sub(block.transactions_start())
-        .expect("The impossible happened: overflow while subtracting block start from tx number.");
+        .checked_sub(block.tx_range().start)
+        .expect("tx_number is within block.tx_range()");
 
     let transaction_hash = receipt.transaction_hash;
     let logs_bloom = receipt.receipt.bloom();

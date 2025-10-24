@@ -1,3 +1,6 @@
+# 2025-10-24
+- #1966 **Resync breaking change**: Updates the schema generated for the `signature` and `public_key` fields on `Transaction` variants (both V0 and V1) to be byte arrays of the correct length. This is a follow-up on #1877, affecting only the web3 SDK functionality. However, this is a breaking change to the `CHAIN_HASH`, and therefore will invalidate existing transactions.
+
 # 2025-10-22
 - #1951 *Minor breaking change* Adds a new memo field to `Bank::TokenTransfer` events and a new callmessage which can set that field. This change requires resyncing any existing nodes due to the change in event serialization.
 - #1937 Reject log subscriptions with block filters.
