@@ -321,8 +321,11 @@ where
         state,
     )?;
 
-    let authorization_data =
-        extract_authorization_data::<S, D>(&reconstructed_tx_v0, raw_tx_hash, state)?;
+    let authorization_data = extract_authorization_data::<S, D, S::CryptoSpec>(
+        &reconstructed_tx_v0,
+        raw_tx_hash,
+        state,
+    )?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,

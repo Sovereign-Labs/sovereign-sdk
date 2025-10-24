@@ -1,4 +1,3 @@
-use crate::preferred::exit_rollup;
 use crate::preferred::replica::db_data::row_to_event;
 use crate::preferred::replica::db_data::rows;
 use crate::preferred::replica::db_data::DbData;
@@ -53,9 +52,7 @@ impl EventReceiver {
         {
             Ok(pool) => pool,
             Err(e) => {
-                error!("Failed to connect to PostgreSQL: {e:?}. Replica shutting down.");
-                exit_rollup(&shutdown_sender).await;
-                unreachable!("EventReceiver: impossible happened rollup didn't exit");
+                panic!("Failed to connect to PostgreSQL: {e:?}. Replica shutting down.");
             }
         };
 
@@ -63,16 +60,12 @@ impl EventReceiver {
         let mut listener = match PgListener::connect(&connection_string).await {
             Ok(listener) => listener,
             Err(e) => {
-                error!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
-                exit_rollup(&shutdown_sender).await;
-                unreachable!("EventReceiver: impossible happened rollup didn't exit");
+                panic!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
             }
         };
 
         if let Err(e) = listener.listen("events_changes").await {
-            error!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
-            exit_rollup(&shutdown_sender).await;
-            unreachable!("EventReceiver: impossible happened rollup didn't exit");
+            panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
         }
 
         (
@@ -90,7 +83,6 @@ impl EventReceiver {
 
     pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
-        let shutdown_sender = self.shutdown_sender.clone();
         let shutdown_receiver = self.shutdown_sender.subscribe();
 
         tokio::spawn(async move {
@@ -112,10 +104,9 @@ impl EventReceiver {
                         match err {
                             EventReceiverError::ParsingError(e) => {
                                 // This should never happen, so we shut down the replica immediately
-                                error!(
+                                panic!(
                                     "Failed to parse notification: {e:?}. Shutting down replica."
                                 );
-                                exit_rollup(&shutdown_sender).await;
                             }
                             EventReceiverError::DbError(e) => {
                                 error!("Failed to receive notifications from database: {e:?}. Shutting down replica.");
@@ -126,8 +117,7 @@ impl EventReceiver {
 
                                 // Since network errors can occur, we will retry receiving a few times before initiating replica shutdown.
                                 if nb_of_consecutive_db_errors >= MAX_DB_ERRORS_ALLOWED {
-                                    error!("Failed to connect to the database after {nb_of_consecutive_db_errors} attempts. Shutting down replica.");
-                                    exit_rollup(&shutdown_sender).await;
+                                    panic!("Failed to connect to the database after {nb_of_consecutive_db_errors} attempts. Shutting down replica.");
                                 }
 
                                 nb_of_consecutive_db_errors += 1;
@@ -138,14 +128,12 @@ impl EventReceiver {
                                 prev_event_type,
                                 event_type,
                             ) => {
-                                error!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?}. Replica shutting down.");
-                                exit_rollup(&self.shutdown_sender).await;
+                                panic!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?}. Replica shutting down.");
                             }
                             EventReceiverError::DbRowDoesNotExist(event_id) => {
-                                error!(
+                                panic!(
                                     "Db row does not exist for event id: {event_id:?}. Replica shutting down."
                                 );
-                                exit_rollup(&self.shutdown_sender).await;
                             }
                         }
                     }

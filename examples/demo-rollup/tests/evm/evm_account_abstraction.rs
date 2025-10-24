@@ -29,9 +29,9 @@ async fn send_insert_credentials(
     from_addr: Address,
     chain_id: u64,
 ) {
-    let tx = vec![create_insert_credentials(from_addr, chain_id)];
+    let tx = create_insert_credentials(from_addr, chain_id);
     test_client
-        .send_transactions_and_wait_slot(&tx)
+        .send_transaction_and_wait_slot(&tx)
         .await
         .unwrap();
 }

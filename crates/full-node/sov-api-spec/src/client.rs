@@ -134,7 +134,7 @@ impl Client {
         let mut receipts = Vec::with_capacity(txs.len());
 
         for tx in txs {
-            let res = self.send_tx_to_sequencer(tx).await?;
+            let res = self.send_tx_to_sequencer_with_retry(tx).await?;
             receipts.push(res);
         }
 

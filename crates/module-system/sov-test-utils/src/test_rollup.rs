@@ -859,8 +859,8 @@ where
         &self,
         tx: &Transaction<R::Runtime, R::Spec>,
     ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
-        let resp = self.client.client.send_txs_to_sequencer(&[tx]).await?;
-        Ok(resp[0].clone())
+        let resp = self.client.client.send_tx_to_sequencer(&tx).await?;
+        Ok(resp.into_inner())
     }
 }
 
