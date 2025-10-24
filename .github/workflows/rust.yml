@@ -544,7 +544,7 @@ jobs:
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
-          ref: "8eef971f7bd3e353930d4802463e8b5535027b23"
+          ref: "3d69ae2d470dfc6270f0b477a650af6bd17200af"
       - name: Run web3-js SDK tests against demo-rollup
         # See the script for more details about what to do if job
         run: |
