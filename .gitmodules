@@ -1,0 +1,12 @@
+[submodule "crates/module-system/sov-test-utils/lib/openzeppelin-contracts"]
+	path = crates/module-system/sov-test-utils/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts.git
+[submodule "crates/module-system/sov-test-utils/lib/solidity-lib"]
+	path = crates/module-system/sov-test-utils/lib/solidity-lib
+	url = https://github.com/ethereum/solidity.git
+[submodule "crates/module-system/sov-test-utils/lib/v2-core"]
+	path = crates/module-system/sov-test-utils/lib/v2-core
+	url = https://github.com/Uniswap/v2-core.git
+[submodule "crates/module-system/sov-test-utils/lib/v2-periphery"]
+	path = crates/module-system/sov-test-utils/lib/v2-periphery
+	url = https://github.com/Uniswap/v2-periphery.git

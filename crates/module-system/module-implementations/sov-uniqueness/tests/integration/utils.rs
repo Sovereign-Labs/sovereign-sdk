@@ -18,7 +18,7 @@ use sov_modules_api::{EncodeCall, RawTx};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{Runtime, TestRunner, ValueSetter, ValueSetterConfig};
 use sov_test_utils::{
-    SimpleStorageContract, TestUser, TransactionType, TEST_DEFAULT_MAX_FEE,
+    LegacySimpleStorage, TestUser, TransactionType, TEST_DEFAULT_MAX_FEE,
     TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_USER_BALANCE,
 };
 
@@ -56,7 +56,7 @@ pub(crate) fn generate_default_tx(
 ) -> TransactionType<RT, S> {
     match uniqueness {
         UniquenessData::Nonce(nonce) => {
-            let contract = SimpleStorageContract::default();
+            let contract = LegacySimpleStorage::default();
             let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
                 chain_id: config_value!("CHAIN_ID"),
                 nonce,
@@ -131,9 +131,9 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
             code: Default::default(),
         }],
         chain_spec: EvmChainSpec {
-            // SHANGHAI instead of LATEST
+            // CANCUN instead of LATEST
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-            hardforks: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
+            hardforks: vec![(0, SpecId::CANCUN)].into_iter().collect(),
             ..Default::default()
         },
         ..Default::default()

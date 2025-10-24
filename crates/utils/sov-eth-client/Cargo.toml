@@ -11,16 +11,21 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
+alloy = { workspace = true, features = ["reqwest"] }
 alloy-primitives = { workspace = true }
+alloy-rpc-types  = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-pubsub = "1.0"
+async-trait = { workspace = true }
+derive_more = { workspace = true }
 ethereum-types = { workspace = true }
-ethers-core = { workspace = true }
-ethers-providers = { workspace = true }
-ethers-signers = { workspace = true }
-ethers-middleware = { workspace = true }
+ethers = { workspace = true }
 futures = { workspace = true }
 jsonrpsee = { workspace = true }
 reth-primitives = { workspace = true }
+serde = { workspace = true }
 sov-cli = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true }
 tracing = { workspace = true }
+sov-rpc-eth-types = { workspace = true}

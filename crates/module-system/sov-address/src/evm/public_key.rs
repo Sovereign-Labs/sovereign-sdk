@@ -72,11 +72,30 @@ mod serde_array {
 }
 
 /// The public key of a secp256k1 keypair.
-#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
 pub struct EthereumPublicKey {
     #[schemars(flatten, with = "String", length(equal = "PUBLIC_KEY_SIZE * 2"))]
     #[sov_wallet(as_ty = "[u8; PUBLIC_KEY_SIZE]")]
     pub(crate) pub_key: k256::PublicKey,
+    pub(crate) key_bytes: Vec<u8>,
+}
+
+impl TryFrom<Vec<u8>> for EthereumPublicKey {
+    type Error = k256::elliptic_curve::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let pub_key = k256::PublicKey::from_sec1_bytes(value.as_slice())?;
+        Ok(Self {
+            pub_key,
+            key_bytes: value,
+        })
+    }
+}
+
+impl AsRef<[u8]> for EthereumPublicKey {
+    fn as_ref(&self) -> &[u8] {
+        self.key_bytes.as_slice()
+    }
 }
 
 impl EthereumPublicKey {
@@ -109,7 +128,10 @@ impl BorshDeserialize for EthereumPublicKey {
 
         let pub_key = k256::PublicKey::from_sec1_bytes(&buffer).map_err(std::io::Error::other)?;
 
-        Ok(Self { pub_key })
+        Ok(Self {
+            pub_key,
+            key_bytes: buffer.to_vec(),
+        })
     }
 }
 
@@ -159,7 +181,10 @@ impl<'de> serde::Deserialize<'de> for EthereumPublicKey {
             let bytes = serde_array::deserialize(deserializer)?;
             let pub_key =
                 k256::PublicKey::from_sec1_bytes(&bytes).map_err(serde::de::Error::custom)?;
-            Ok(EthereumPublicKey { pub_key })
+            Ok(EthereumPublicKey {
+                pub_key,
+                key_bytes: bytes.to_vec(),
+            })
         }
     }
 }
@@ -189,7 +214,10 @@ impl TryFrom<&PublicKeyHex> for EthereumPublicKey {
         let pub_key = k256::PublicKey::from_sec1_bytes(&bytes)
             .map_err(|e| anyhow::anyhow!("Invalid public key: {}", e))?;
 
-        Ok(Self { pub_key })
+        Ok(Self {
+            pub_key,
+            key_bytes: bytes.to_vec(),
+        })
     }
 }
 
@@ -214,6 +242,7 @@ mod tests {
         let k256_public_key = k256::PublicKey::from_sec1_bytes(&serialized_direct).unwrap();
         let from_secp_pub_key_0 = EthereumPublicKey {
             pub_key: k256_public_key,
+            key_bytes: serialized_direct.to_vec(),
         };
 
         // The same, but

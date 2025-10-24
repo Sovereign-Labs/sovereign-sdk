@@ -45,13 +45,12 @@ on:
   merge_group:
     types: ["checks_requested"]
   push:
-    branches: ["nightly", "stable"]
+    branches: ["nightly", "stable", "dev"]
   pull_request: {}
   workflow_dispatch: {}
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
   CARGO_NET_GIT_FETCH_WITH_CLI: true
   NO_COLOR: 1
 
@@ -59,9 +58,9 @@ env:
 # Source: <https://stackoverflow.com/a/72408109/5148606>
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Except in `nightly` and `stable` branches! Any cancelled job will cause the
+  # Except in `dev`, `nightly` and `stable` branches! Any cancelled job will cause the
   # CI run to fail, and we want to keep a clean history for major branches.
-  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') }}
+  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') && (github.ref != 'refs/heads/dev') }}
 
 jobs:
   check-aggregate:
@@ -103,12 +102,17 @@ jobs:
     name: check
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     timeout-minutes: 60
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
           path: ./crates/fuzz/target
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Run lint
         env:
           CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -133,11 +137,16 @@ jobs:
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: cargo bench --no-run
         env:
           SOV_BENCH_BLOCKS: 1
@@ -151,7 +160,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -175,15 +184,19 @@ jobs:
         partition: [1, 2, 3]
     timeout-minutes: 120
     env:
+      RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
       CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
@@ -202,15 +215,19 @@ jobs:
         partition: [1, 2, 3]
     timeout-minutes: 120
     env:
+      RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
       CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: cargo hack
         run: make check-features-default-targets
 
@@ -225,10 +242,13 @@ jobs:
       RUST_BACKTRACE: 1
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: make test-default-features
 
   nextest_all_features:
@@ -241,10 +261,13 @@ jobs:
       SP1_PROVER: "mock"
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: make test-all
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -254,13 +277,17 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 60
     env:
+      RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       # `cargo-nextest` does not support doctests (yet?), so we have to run them separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
       - run: make doctest
@@ -274,11 +301,13 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
       RUST_BACKTRACE: 1
+      CARGO_BUILD_JOBS: 4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # Coverage is intentionally run without heavy crates, like demo-rollup.
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -296,10 +325,13 @@ jobs:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: taiki-e/install-action@cargo-deny
         with:
           tool: cargo-deny@0.18.4
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - run: make cargo-deny-check-licenses
 
   # Temporarily disabled until AWS credentials can be re-issued
@@ -316,7 +348,7 @@ jobs:
   #     S3_BUCKET_NAME: "sovlabs-ci-rustdoc-artifacts"
   #     AWS_REGION: "us-east-1"
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v5
   #     - uses: namespacelabs/nscloud-cache-action@v1
   #       with:
   #         cache: rust
@@ -383,7 +415,7 @@ jobs:
   check-demo-rollup-table-of-contents:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v3
       - run: npm install -g doctoc
       - name: Update table of contents for mock-da
@@ -408,7 +440,11 @@ jobs:
       SKIP_GUEST_BUILD: "sp1"
       RUST_LOG: "debug,sov_sequencer=trace,sov-celestia-adapter=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
+
       - name: Login to Docker Hub
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: docker/login-action@v3
@@ -418,6 +454,9 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
@@ -433,10 +472,13 @@ jobs:
       SKIP_GUEST_BUILD: "sp1"
       RUST_LOG: "debug,sov_stf_runner=trace,sov_sequencer=trace,hyper=info,risc0_zkvm=warn,jmt=info,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
@@ -446,7 +488,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -455,7 +497,7 @@ jobs:
   validate-packages-to-publish-yml:
     runs-on: nscloud-ubuntu-22.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: ./scripts/validate_packages_to_publish_yml.sh
         shell: bash
         working-directory: .
@@ -463,7 +505,7 @@ jobs:
   cargo-switcheroo-default:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -485,7 +527,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
@@ -498,11 +540,11 @@ jobs:
         with:
           version: 9
       - name: Checkout web3-js SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: "Sovereign-Labs/sovereign-sdk-web3-js"
           path: "examples/demo-rollup/web3-js-sdk"
-          ref: "49f2f0a9b876adfda609e321f9c6a19840710730"
+          ref: "8eef971f7bd3e353930d4802463e8b5535027b23"
       - name: Run web3-js SDK tests against demo-rollup
         # See the script for more details about what to do if job
         run: |

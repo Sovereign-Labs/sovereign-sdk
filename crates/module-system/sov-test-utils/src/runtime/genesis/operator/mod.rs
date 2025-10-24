@@ -131,8 +131,8 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
 
                 // unused in operator mode
                 attester_incentives: AttesterIncentivesConfig {
-                    minimum_attester_bond: default_user_stake.clone(),
-                    minimum_challenger_bond: default_user_stake.clone(),
+                    minimum_attester_bond: default_user_stake,
+                    minimum_challenger_bond: default_user_stake,
                     initial_attesters: vec![(
                         placeholder.as_user().address().clone(),
                         Amount::ZERO,
@@ -143,12 +143,8 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
                 },
                 // unused in operator mode
                 prover_incentives: ProverIncentivesConfig {
-                    minimum_bond: default_user_stake.clone(),
-                    proving_penalty: {
-                        let mut user_stake = default_user_stake;
-                        user_stake.scalar_division(2);
-                        user_stake
-                    },
+                    minimum_bond: default_user_stake,
+                    proving_penalty: { default_user_stake.scalar_division(2) },
                     initial_provers: vec![(placeholder.address().clone(), placeholder.balance())],
                 },
 

@@ -13,10 +13,10 @@ use sov_modules_api::{
     KernelStateAccessor, NoOpControlFlow, SelectedBlob, TransactionReceipt, VersionReader,
 };
 #[cfg(feature = "native")]
-use sov_state::{SlotValue, StateAccesses};
+use sov_state::SlotValue;
 mod proof_processing;
 use sov_modules_api::{PrivilegedKernelAccessor, SlotGasMeter};
-use sov_rollup_interface::stf::{DiscardedBlob, ProofReceipt};
+use sov_rollup_interface::stf::{DiscardedBlob, GenesisParams as GenesisParamsTrait, ProofReceipt};
 mod sequencer_mode;
 use sov_modules_api::{IterableBatchWithId, TxReceiptContents};
 #[cfg(feature = "test-utils")]
@@ -71,6 +71,12 @@ pub struct GenesisParams<RuntimeConfig> {
     pub runtime: RuntimeConfig,
 }
 
+impl<RuntimeConfig: GenesisParamsTrait> GenesisParamsTrait for GenesisParams<RuntimeConfig> {
+    fn genesis_slot_number(&self) -> u64 {
+        self.runtime.genesis_slot_number()
+    }
+}
+
 impl<S, RT> StfBlueprint<S, RT>
 where
     S: Spec,
@@ -86,22 +92,17 @@ where
     pub fn materialize_accessory_state(
         &self,
         runtime: &mut RT,
-        checkpoint: StateCheckpoint<S>,
-    ) -> (
-        AccessoryDelta<S::Storage>,
-        StateAccesses,
-        <S::Storage as Storage>::Witness,
+        checkpoint: &mut StateCheckpoint<S>,
     ) {
         let rollup_height = checkpoint.rollup_height_to_access();
-        let (accesses, mut accessory_delta, witness) = checkpoint.freeze();
+        let mut accessory_delta = checkpoint.take_accessory_delta();
         let next_visible_hash =
             Self::next_visible_root(runtime, &mut accessory_delta, rollup_height);
 
         tracing::trace_span!("runtime_finalize_hook").in_scope(|| {
             runtime.finalize_hook(&next_visible_hash, &mut accessory_delta);
         });
-
-        (accessory_delta, accesses, witness)
+        checkpoint.set_accessory_delta(accessory_delta);
     }
 
     /// Compute the new state root and change set after running a batch.
@@ -187,7 +188,8 @@ where
             runtime.finalize_hook(&next_visible_hash, &mut accessory_delta);
         }
         state_update.add_accessory_items(accessory_delta.freeze());
-        let change_set = storage.materialize_changes(state_update);
+        let change_set: <<S as Spec>::Storage as Storage>::ChangeSet =
+            storage.materialize_changes(state_update);
         (next_root_hash, witness, change_set)
     }
 
@@ -254,6 +256,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     type StateRoot = <S::Storage as Storage>::Root;
 
@@ -282,7 +285,7 @@ where
         let mut runtime = RT::default();
         // Sanity checks.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
-            .dim_is_less_than(&<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
+            .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
         let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel());
 
         let mut genesis_accessor =
@@ -385,6 +388,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
     fn select_and_validate_blobs<CF: InjectedControlFlow<S> + Clone>(
@@ -410,6 +414,7 @@ where
     S: Spec,
     RT: Runtime<S>,
     RT: HasKernel<S>,
+    GenesisParams<<RT as Genesis>::Config>: GenesisParamsTrait,
 {
     /// Run a state transition using the STF blueprint.
     // Similar to `apply_slot`, but enables the injection of a custom `InjectedControlFlow`.
@@ -429,7 +434,7 @@ where
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
-            .dim_is_less_than(&<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
+            .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
 
         start_timer!(start_slot);
 
@@ -656,8 +661,7 @@ where
         // The slot gas meter differentiates gas usage between preferred and standard transaction batches/proofs.
         // It ensures that preferred transactions cannot consume the entire slot gas limit, preventing the preferred sequencer
         // from censoring other types of transactions, such as standard transactions or emergency registrations.
-        let mut slot_gas_meter =
-            SlotGasMeter::<S>::new(block_gas_limit.clone(), preferred_sequencer);
+        let mut slot_gas_meter = SlotGasMeter::<S>::new(block_gas_limit, preferred_sequencer);
 
         trace!(
             blob_count = blob_selector_output.selected_blobs.len(),
@@ -702,7 +706,7 @@ where
                         blob_idx,
                         &sender,
                         sequencer_bond,
-                        &gas_price,
+                        gas_price,
                         execution_context,
                     );
 
@@ -731,18 +735,19 @@ where
                     let (batch_receipt, next_checkpoint) = unregistered::apply_batch::<S, RT>(
                         runtime,
                         state,
-                        slot_gas,
+                        &slot_gas,
                         BatchFromUnregisteredSequencer { tx, id },
                         blob_idx,
                         &sender,
                         &gas_price,
+                        execution_context,
                     );
 
                     let gas_used = &batch_receipt.inner.gas_used;
 
                     // SAFETY: Within `unregistered::apply_batch`, we always ensure tx gas meter is initialized with less than the remaining gas in the slot gas meter.
                     slot_gas_meter
-                        .charge_gas(gas_used, &sender)
+                        .charge_gas(*gas_used, &sender)
                         .expect("The slot gas meter should be able to charge the gas");
 
                     batch_receipts.push(batch_receipt);
@@ -759,18 +764,18 @@ where
                     let (receipt, next_checkpoint, gas_used) = self.process_proof(
                         runtime,
                         id,
-                        slot_gas,
+                        &slot_gas,
                         &sender,
                         &sequencer_address,
                         sequencer_bond,
-                        &gas_price,
+                        gas_price,
                         proof,
                         state,
                     );
 
                     // SAFETY: Within `process_proof`, we always ensure the pre execution and tx gas meters are initialized with less than the remaining gas in the slot gas meter.
                     slot_gas_meter
-                        .charge_gas(&gas_used, &sender)
+                        .charge_gas(gas_used, &sender)
                         .expect("The slot gas meter should be able to charge the gas");
 
                     state = next_checkpoint;

@@ -41,7 +41,7 @@ pub fn compute_hash_for_signatures<S: Spec>(
 }
 
 /// Decodes [`RecoverableSignature`] out of a slice of bytes.
-// See <https://github.com/eigerco/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/rust/sealevel/libraries/ecdsa-signature/src/lib.rs#L40>
+// See <https://github.com/Sovereign-Labs/hyperlane-monorepo/blob/b68fe264b3585ecd9d95a5ec2ec2d7defbe907d2/rust/sealevel/libraries/ecdsa-signature/src/lib.rs#L40>
 pub fn decode_signature(bytes: &[u8]) -> Result<RecoverableSignature> {
     ensure!(
         bytes.len() == 65,
@@ -88,7 +88,7 @@ pub fn ec_recover<S: Spec>(
     signature: &RecoverableSignature,
     gas_meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<EcdsaPubKeyBytes> {
-    gas_meter.charge_gas(&<S as GasSpec>::fixed_gas_to_charge_per_signature_verification())?;
+    gas_meter.charge_gas(<S as GasSpec>::fixed_gas_to_charge_per_signature_verification())?;
 
     let public_key = VerifyingKey::recover_from_prehash(
         &digest.into(),
@@ -273,9 +273,9 @@ pub(crate) fn charge_gas_for_hashing<S: Spec>(
     let gas_multiplier = <<<S as GasSpec>::Gas as GasArray>::Scalar>::try_from(bytes_to_hash)
         .context("Overflow creating scalar from amount of bytes to hash")?;
 
-    gas_meter.charge_gas(&<S as GasSpec>::gas_to_charge_hash_update())?;
+    gas_meter.charge_gas(<S as GasSpec>::gas_to_charge_hash_update())?;
     gas_meter.charge_gas(
-        &<S as GasSpec>::gas_to_charge_per_byte_hash_update()
+        <S as GasSpec>::gas_to_charge_per_byte_hash_update()
             .checked_scalar_product(gas_multiplier)
             .context("Overflow calculating gas to charge")?,
     )?;

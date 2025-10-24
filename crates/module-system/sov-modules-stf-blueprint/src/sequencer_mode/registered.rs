@@ -32,12 +32,12 @@ type TxAndError = (TxProcessingError, FullyBakedTx);
 pub fn process_tx_and_reward_prover<S, R, I, C>(
     runtime: &mut R,
     pre_exec_working_set: PreExecWorkingSet<S, I>,
-    slot_gas: &S::Gas,
+    slot_gas: S::Gas,
     validated_output: AuthTxOutput<S, R>,
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_rollup_address: S::Address,
-    #[allow(unused_variables)] execution_context: ExecutionContext,
+    execution_context: ExecutionContext,
     injected_control_flow: &C,
     operating_mode: OperatingMode,
     mut metrics: AuthAndProcessMetrics,
@@ -75,6 +75,7 @@ where
         injected_control_flow,
         operating_mode,
         &mut metrics,
+        &execution_context,
     );
 
     #[cfg(feature = "native")]
@@ -141,7 +142,7 @@ fn track_transaction_metrics<S: Spec>(
 fn process_tx_and_reward_prover_inner<S, R, I, C>(
     runtime: &mut R,
     mut pre_exec_working_set: PreExecWorkingSet<S, I>,
-    slot_gas: &S::Gas,
+    slot_gas: S::Gas,
     validated_output: AuthTxOutput<S, R>,
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
@@ -149,6 +150,7 @@ fn process_tx_and_reward_prover_inner<S, R, I, C>(
     injected_control_flow: &C,
     operating_mode: OperatingMode,
     metrics: &mut AuthAndProcessMetrics,
+    execution_context: &ExecutionContext,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -209,6 +211,7 @@ where
     if let Err(err) = runtime.transaction_authorizer().check_uniqueness(
         &auth_data,
         &ctx,
+        execution_context,
         &mut pre_exec_working_set,
     ) {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
@@ -244,11 +247,11 @@ where
     metrics.timings.mark_tx_attempted_access_metrics = pre_exec_working_set.metrics().take();
 
     metrics.timings.reserve_gas_timer.start();
-    let gas_price = pre_exec_working_set.gas_price().clone();
+    let gas_price = pre_exec_working_set.gas_price();
     if let Err(err) =
         runtime
             .gas_enforcer()
-            .try_reserve_gas(tx, &gas_price, &mut ctx, &mut pre_exec_working_set)
+            .try_reserve_gas(tx, gas_price, &mut ctx, &mut pre_exec_working_set)
     {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
         return (
@@ -265,11 +268,11 @@ where
     // The transaction will execute until one of the following conditions is met:
     // 1. It consumes more funds than `tx.max_fee`.
     // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-    let working_set_gas_meter = tx.gas_meter(&pre_exec_gas_meter.gas_info().gas_price, slot_gas);
+    let working_set_gas_meter = tx.gas_meter(pre_exec_gas_meter.gas_info().gas_price, slot_gas);
     let mut working_set = WorkingSet::create_working_set(scratchpad, tx, working_set_gas_meter);
 
     // Recover the authentication cost from the user.
-    if let Err(err) = working_set.charge_gas(&pre_exec_gas_meter.gas_info().gas_used) {
+    if let Err(err) = working_set.charge_gas(pre_exec_gas_meter.gas_info().gas_used) {
         let (mut scratchpad, transaction_consumption) = working_set.revert();
 
         // Refund the remaining gas to the sender.
@@ -361,7 +364,7 @@ pub(crate) fn apply_batch<S, RT, B>(
     blob_idx: usize,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_bond: Amount,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     execution_context: ExecutionContext,
 ) -> (IncrementalBatchReceipt<S>, StateCheckpoint<S>)
 where
@@ -430,7 +433,25 @@ where
 
     let mut clean_scratchpad = checkpoint.to_tx_scratchpad();
 
-    for (idx, (raw_tx, injected_control_flow)) in batch_with_id.enumerate() {
+    // Optimistically execute each transaction in the batch.
+    // We need...
+    // - A pool of threads that can "run ahead" of the main thread
+    // - To periodically update the checkpoint that the worker threads are using
+    // - For each worker...
+    //   - Grab the next tx from the queue
+    //   - Update state from the broadcast channel
+    //   - Run the tx
+    //   - Send the result back to the main thread.
+    //
+    // For the main thread:
+    //   - For each tx...
+    //     - Check if optimistic results are available
+    //     - If so, do a consistency check (each read needs to match the latest value)
+    //        - If the check passes, apply the tx to the state
+    //        - If the check fails, discard the result and execute the tx on the main thread
+    for (idx, (raw_tx, mut injected_control_flow)) in batch_with_id.enumerate() {
+        injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
+
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.
         // The caller is responsible for maintaining the global gas limit.
         let AuthAndProcessOutput {
@@ -474,14 +495,7 @@ where
                     gas_used
                         .checked_value(gas_price)
                         .expect("gas_used value overflowed"),
-                    create_tx_receipt(
-                        SkippedTxContents {
-                            error,
-                            gas_used: gas_used.clone(),
-                        },
-                        tx_hash,
-                        tx_body.data,
-                    ),
+                    create_tx_receipt(SkippedTxContents { error, gas_used }, tx_hash, tx_body.data),
                 )
             }
             AuthAndProcessOutcome::Applied {
@@ -500,13 +514,14 @@ where
             dirty_scratchpad,
             slot_gas_meter,
             &gas_used,
+            execution_context,
         );
         match outcome {
             TxControlFlow::ContinueProcessing(receipt) => {
                 new_checkpoint.commit_revertable_storage_cache();
                 // SAFETY: It is safe to unwrap here because the total gas used is guaranteed to be less than the slot gas limit.
                 slot_gas_meter
-                    .charge_gas(&gas_used, sequencer_da_address)
+                    .charge_gas(gas_used, sequencer_da_address)
                     .expect("Impossible happened: SlotGasMeter underflows when charging gas.");
 
                 // SAFETY: This won't overflow because rewards/penalties cannot exceed `TOKEN::total_supply` value, which is of type u128.
@@ -523,7 +538,7 @@ where
                     new_checkpoint.commit_revertable_storage_cache();
                     // SAFETY: It is safe to unwrap here because the total gas used is guaranteed to be less than the slot gas limit.
                     slot_gas_meter
-                        .charge_gas(&gas_used, sequencer_da_address)
+                        .charge_gas(gas_used, sequencer_da_address)
                         .expect("Impossible happened: SlotGasMeter underflows when charging gas.");
 
                     // SAFETY: This won't overflow because rewards and penalties cannot exceed `TOKEN::total_supply`, which is of type `u128`.
@@ -567,7 +582,7 @@ where
 
     let total_gas_used_in_batch = slot_gas_meter
         .total_gas_used()
-        .checked_sub(&initial_slot_gas_used)
+        .checked_sub(initial_slot_gas_used)
         // SAFETY: During batch execution, gas is consumed. This means that the total gas used after execution is always greater than before.
         .expect("initial_slot_gas_used can't be bigger than gas used after batch execution");
 
@@ -581,7 +596,7 @@ where
         ignored_tx_receipts,
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
-            gas_price: gas_price.clone(),
+            gas_price,
             gas_used: total_gas_used_in_batch,
             outcome: BatchSequencerOutcome {
                 rewards: rewards.clone(),
@@ -649,11 +664,11 @@ fn penalize_sequencer<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     runtime: &mut RT,
     scratchpad: TxScratchpad<S, I>,
-    slot_gas: &S::Gas,
+    slot_gas: S::Gas,
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_rollup_address: S::Address,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     execution_context: ExecutionContext,
     sequencer_bond: SequencerBondForTx,
     idx: usize,
@@ -666,7 +681,7 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
-    let mut timings = AuthAndProcessTimings::default();
+    let mut timings = AuthAndProcessTimings::new_with_defaults(execution_context);
     timings.total_timer.start();
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
@@ -698,12 +713,12 @@ where
     }
 
     // 3. The slot gas is higher than the gas needed to validate the transaction.
-    if slot_gas.dim_is_less_or_eq(&max_tx_check_costs) {
+    if slot_gas.dim_is_less_or_eq(max_tx_check_costs) {
         return AuthAndProcessOutput {
             outcome: AuthAndProcessOutcome::IllegalSequencer {
                 reason: OutOfFundsReason::SlotGasLimitExhausted {
                     max_tx_check_gas: max_tx_check_costs,
-                    remaining_slot_gas: slot_gas.clone(),
+                    remaining_slot_gas: slot_gas,
                 },
             },
             scratchpad,
@@ -713,7 +728,7 @@ where
 
     // In the conditions above, we ensured that both the sequencer bond and the remaining gas in the slot gas meter exceed `max_tx_check_costs`.
     // Initialize `pre_exec_gas_meter` with `max_tx_check_costs` gas.
-    let pre_exec_gas_meter = BasicGasMeter::new_with_gas(max_tx_check_costs, gas_price.clone());
+    let pre_exec_gas_meter = BasicGasMeter::new_with_gas(max_tx_check_costs, gas_price);
 
     let mut pre_exec_working_set: PreExecWorkingSet<S, _> =
         scratchpad.to_pre_exec_working_set(pre_exec_gas_meter);
@@ -721,7 +736,7 @@ where
     // Charge gas for all the checks in the `process_tx_and_reward_prover`.
     // SAFETY: We can unwrap here because, we asserted that max_tx_check_costs > process_tx_pre_exec_checks_gas.
     pre_exec_working_set
-        .charge_gas(&<S as GasSpec>::process_tx_pre_exec_checks_gas())
+        .charge_gas(<S as GasSpec>::process_tx_pre_exec_checks_gas())
         .expect("The gas meter should be able to charge the pre-execution checks");
 
     timings.auth.start();

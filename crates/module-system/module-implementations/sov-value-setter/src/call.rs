@@ -70,7 +70,7 @@ impl<S: Spec> ValueSetter<S> {
         state: &mut impl TxState<S>,
     ) -> Result<()> {
         let gas = gas.unwrap_or(<S::Gas as Gas>::zero());
-        state.charge_gas(&gas)?;
+        state.charge_gas(gas)?;
         // If admin is not then early return:
         let admin = self.admin.get_or_err(state)??;
 

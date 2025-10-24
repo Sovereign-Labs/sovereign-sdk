@@ -165,6 +165,13 @@ impl<VmAddress> From<Address> for MultiAddress<VmAddress> {
         Self::Standard(value)
     }
 }
+
+impl<VmAddress> FromVmAddress<VmAddress> for VmAddress {
+    fn from_vm_address(value: VmAddress) -> Self {
+        value
+    }
+}
+
 pub trait Not28Bytes {}
 pub trait FromVmAddress<VmAddress> {
     fn from_vm_address(value: VmAddress) -> Self;

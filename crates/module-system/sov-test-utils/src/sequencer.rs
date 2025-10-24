@@ -7,7 +7,7 @@ use sov_api_spec::Client;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::SchemaBatch;
 use sov_db::storage_manager::NativeStorageManager;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockBlock, MockDaSpec};
 use sov_modules_api::{DaSyncState, Runtime, SlotData, Spec, SyncStatus};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -155,6 +155,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
             blob_processing_timeout_secs: 60,
+            extension: None,
             batch_encryption: None,
         };
 

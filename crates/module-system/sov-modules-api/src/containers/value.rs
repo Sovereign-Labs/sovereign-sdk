@@ -95,6 +95,7 @@ where
         Writer: StateWriter<N>,
     {
         let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Setting state value");
         state.set(&key, self.slot_value(value))
     }
@@ -105,6 +106,7 @@ where
         state: &mut Reader,
     ) -> Result<Option<V>, Reader::Error> {
         let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Getting state value");
         state.get_decoded(&key, self.codec())
     }
@@ -118,6 +120,7 @@ where
         Reader: StateReader<N>,
     {
         let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Borrowing state value");
         Ok(Borrowed::new(state.get_decoded(&key, self.codec())?, self))
     }
@@ -131,6 +134,7 @@ where
         Reader: StateReader<N>,
     {
         let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Borrowing mut state value");
         let val = state.get_decoded(&key, self.codec())?;
         Ok(BorrowedMut::new(key, val, self))
@@ -143,7 +147,7 @@ where
     ) -> Result<ValueOrError<V, N>, Reader::Error> {
         Ok(self
             .get(state)?
-            .ok_or_else(|| StateValueError::<N>::MissingValue(self.prefix().clone(), PhantomData)))
+            .ok_or_else(|| StateValueError::<N>::MissingValue(*self.prefix(), PhantomData)))
     }
 
     /// Removes the value from state, returning the value (or None if the key is absent).
@@ -152,6 +156,7 @@ where
         state: &mut ReaderAndWriter,
     ) -> Result<Option<V>, <ReaderAndWriter as StateWriter<N>>::Error> {
         let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Removing state value");
         state.remove_decoded(&key, self.codec())
     }
@@ -163,7 +168,7 @@ where
     ) -> Result<ValueOrError<V, N>, <ReaderAndWriter as StateWriter<N>>::Error> {
         Ok(self
             .remove(state)?
-            .ok_or_else(|| StateValueError::<N>::MissingValue(self.prefix().clone(), PhantomData)))
+            .ok_or_else(|| StateValueError::<N>::MissingValue(*self.prefix(), PhantomData)))
     }
 
     /// Deletes a value from state.
@@ -172,6 +177,7 @@ where
         state: &mut Writer,
     ) -> Result<(), Writer::Error> {
         let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Deleting state value");
         state.delete(&key)
     }

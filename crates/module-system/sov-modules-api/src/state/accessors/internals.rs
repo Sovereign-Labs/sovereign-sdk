@@ -2,12 +2,19 @@ use core::fmt;
 use std::collections::HashMap;
 
 use crate::state::accessors::StateMetricsProvider;
+use crate::{Spec, StateCheckpoint, TxChangeSet};
 use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_rollup_interface::stf::ExecutionContext;
+pub(crate) use sov_state::AccessoryWrite;
+#[cfg(feature = "native")]
+use sov_state::StateGetter;
 use sov_state::{
     namespaces, AccessSize, IsValueCached, Namespace, ProvableStorageCache, SlotKey, SlotValue,
     StateAccesses, Storage,
 };
+use sov_state::{NodeLeafAndMaybeValue, DEFAULT_CACHE_CAPACITY};
 
+#[cfg(feature = "native")]
 use super::checkpoints::ChangeSet;
 use super::temp_cache::{CacheLookup, TempCache};
 use super::UniversalStateAccessor;
@@ -23,9 +30,12 @@ use crate::state::traits::PerBlockCache;
 pub(super) struct Delta<S: Storage> {
     pub(super) inner: S,
     witness: S::Witness,
+    #[cfg(feature = "native")]
+    // Changes that are not yet committed to the underlying storage that should be taken into account when querying the storage
+    pub(crate) uncomitted_changes: Option<Box<dyn StateGetter>>,
     pub(crate) kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     pub(crate) user_cache: ProvableStorageCache<namespaces::User>,
-    pub(crate) accessory_writes: HashMap<SlotKey, Option<SlotValue>>,
+    pub(crate) accessory_writes: HashMap<SlotKey, AccessoryWrite>,
 }
 
 impl<S: Storage> Delta<S> {
@@ -34,6 +44,7 @@ impl<S: Storage> Delta<S> {
         Self {
             inner: self.inner.clone(),
             witness: Default::default(),
+            uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
             kernel_cache: self.kernel_cache.clone(),
             user_cache: self.user_cache.clone(),
             accessory_writes: self.accessory_writes.clone(),
@@ -49,10 +60,31 @@ impl<S: Storage> Delta<S> {
         Self {
             inner,
             witness,
+            #[cfg(feature = "native")]
+            uncomitted_changes: None,
             user_cache: Default::default(),
             kernel_cache: Default::default(),
-            accessory_writes: Default::default(),
+            accessory_writes: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
         }
+    }
+
+    #[cfg(feature = "native")]
+    pub(super) fn take_accessory_delta(&mut self) -> AccessoryDelta<S> {
+        AccessoryDelta {
+            writes: std::mem::replace(
+                &mut self.accessory_writes,
+                HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+            ),
+            #[cfg(feature = "native")]
+            uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
+            storage: self.inner.clone(),
+            metrics: StateMetrics::default(),
+        }
+    }
+
+    #[cfg(feature = "native")]
+    pub(super) fn set_accessory_delta(&mut self, accessory_delta: AccessoryDelta<S>) {
+        self.accessory_writes = accessory_delta.writes;
     }
 
     pub(super) fn freeze(self) -> (StateAccesses, AccessoryDelta<S>, S::Witness, S) {
@@ -62,6 +94,8 @@ impl<S: Storage> Delta<S> {
             kernel_cache,
             accessory_writes,
             witness,
+            #[cfg(feature = "native")]
+            uncomitted_changes,
         } = self;
 
         (
@@ -72,6 +106,8 @@ impl<S: Storage> Delta<S> {
             AccessoryDelta {
                 writes: accessory_writes,
                 storage: inner.clone(),
+                #[cfg(feature = "native")]
+                uncomitted_changes,
                 metrics: StateMetrics::default(),
             },
             witness,
@@ -79,6 +115,7 @@ impl<S: Storage> Delta<S> {
         )
     }
 
+    #[cfg(feature = "native")]
     pub(super) fn changes(&mut self) -> ChangeSet {
         self.commit_revertable_storage_cache();
         let changes = self
@@ -93,14 +130,30 @@ impl<S: Storage> Delta<S> {
             .chain(
                 self.accessory_writes
                     .iter()
-                    .map(|(k, v)| ((k.clone(), Namespace::Accessory), v.clone())),
+                    .map(|(k, w)| ((k.clone(), Namespace::Accessory), w.value.clone())),
             )
             .collect();
         ChangeSet { changes }
     }
 }
 
+/// Holds keys and values that were read for the first time.
+#[derive(Debug, Clone, Default)]
+pub struct FirstTimeReads {
+    /// User space reads.
+    pub user: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
+    /// Kernel space reads.
+    pub kernel: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
+}
+
 impl<S: Storage> Delta<S> {
+    pub fn first_reads(&self) -> FirstTimeReads {
+        FirstTimeReads {
+            user: self.user_cache.revertable_ordered_reads().clone(),
+            kernel: self.kernel_cache.revertable_ordered_reads().clone(),
+        }
+    }
+
     pub fn commit_revertable_storage_cache(&mut self) {
         self.user_cache.commit_revertable_storage_cache();
         self.kernel_cache.commit_revertable_storage_cache();
@@ -118,7 +171,7 @@ impl<S: Storage> Delta<S> {
             Namespace::Accessory => {
                 if let Some(access) = self.accessory_writes.get(key) {
                     IsValueCached::Yes(AccessSize::Write(
-                        access.as_ref().map(|v| v.size()).unwrap_or(0),
+                        access.value.as_ref().map(|v| v.size()).unwrap_or(0),
                     ))
                 } else {
                     IsValueCached::No
@@ -127,6 +180,46 @@ impl<S: Storage> Delta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
+    pub fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        match namespace {
+            Namespace::User => self.user_cache.get_size_or_fetch(
+                &self.uncomitted_changes,
+                key,
+                &self.inner,
+                &self.witness,
+                metric,
+            ),
+            Namespace::Kernel => self.kernel_cache.get_size_or_fetch(
+                &self.uncomitted_changes,
+                key,
+                &self.inner,
+                &self.witness,
+                metric,
+            ),
+            Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
+                Some(write) => write.value.as_ref().map(|v| v.size()),
+                None => {
+                    let val = match self.uncomitted_changes.as_ref() {
+                        Some(uncomitted_changes) => uncomitted_changes
+                            .get(Namespace::Accessory, key)
+                            .or_else(|| self.inner.get_accessory(key)),
+                        None => self.inner.get_accessory(key),
+                    };
+                    let size = val.map(|v| v.size());
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                    size
+                }
+            },
+        }
+    }
+
+    #[cfg(not(feature = "native"))]
     pub fn get_size(
         &mut self,
         namespace: Namespace,
@@ -143,8 +236,7 @@ impl<S: Storage> Delta<S> {
                     .get_size_or_fetch(key, &self.inner, &self.witness, metric)
             }
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
-                Some(Some(value)) => Some(value.size()),
-                Some(None) => None,
+                Some(write) => write.value.as_ref().map(|v| v.size()),
                 None => {
                     let val = self.inner.get_accessory(key);
                     let size = val.map(|v| v.size());
@@ -155,6 +247,47 @@ impl<S: Storage> Delta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
+    pub fn get(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        match namespace {
+            Namespace::User => self.user_cache.get_or_fetch(
+                &self.uncomitted_changes,
+                key,
+                &self.inner,
+                &self.witness,
+                metric,
+            ),
+            Namespace::Kernel => self.kernel_cache.get_or_fetch(
+                &self.uncomitted_changes,
+                key,
+                &self.inner,
+                &self.witness,
+                metric,
+            ),
+            Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
+                Some(write) => write.value,
+                None => {
+                    let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
+                        return uncomitted_changes
+                            .get(namespace, key)
+                            .or_else(|| self.inner.get_accessory(key));
+                    } else {
+                        self.inner.get_accessory(key)
+                    };
+                    let size = val.as_ref().map(|v| v.size());
+                    metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+                    val
+                }
+            },
+        }
+    }
+
+    #[cfg(not(feature = "native"))]
     pub fn get(
         &mut self,
         namespace: Namespace,
@@ -171,8 +304,7 @@ impl<S: Storage> Delta<S> {
                     .get_or_fetch(key, &self.inner, &self.witness, metric)
             }
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
-                Some(Some(value)) => Some(value),
-                Some(None) => None,
+                Some(write) => write.value,
                 None => {
                     let val = self.inner.get_accessory(key);
                     let size = val.as_ref().map(|v| v.size());
@@ -188,7 +320,8 @@ impl<S: Storage> Delta<S> {
             Namespace::User => self.user_cache.set(key, value),
             Namespace::Kernel => self.kernel_cache.set(key, value),
             Namespace::Accessory => {
-                self.accessory_writes.insert(key.clone(), Some(value));
+                self.accessory_writes
+                    .insert(key.clone(), AccessoryWrite::new(Some(value)));
             }
         }
     }
@@ -202,6 +335,12 @@ impl<S: Storage> Delta<S> {
             }
         }
     }
+
+    pub fn add_read_if_not_present(&mut self, reads: FirstTimeReads) {
+        self.user_cache.add_read_if_not_present_in_cache(reads.user);
+        self.kernel_cache
+            .add_read_if_not_present_in_cache(reads.kernel);
+    }
 }
 
 impl<S: Storage> fmt::Debug for Delta<S> {
@@ -212,7 +351,9 @@ impl<S: Storage> fmt::Debug for Delta<S> {
 
 /// A delta containing *only* the accessory state.
 pub struct AccessoryDelta<S: Storage> {
-    writes: HashMap<SlotKey, Option<SlotValue>>,
+    writes: HashMap<SlotKey, AccessoryWrite>,
+    #[cfg(feature = "native")]
+    uncomitted_changes: Option<Box<dyn StateGetter>>,
     storage: S,
     metrics: StateMetrics,
 }
@@ -226,19 +367,20 @@ impl<S: Storage> StateMetricsProvider for AccessoryDelta<S> {
 impl<S: Storage> AccessoryDelta<S> {
     /// Freeze the accessory delta, preventing further accesses.
     pub fn freeze(self) -> Vec<(SlotKey, Option<SlotValue>)> {
-        self.writes.into_iter().collect()
+        self.writes.into_iter().map(|(k, v)| (k, v.value)).collect()
     }
 }
 
 impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
+    #[cfg(not(feature = "native"))]
     fn get_size(
         &mut self,
         _namespace: Namespace,
         key: &SlotKey,
         metric: &mut StateAccessMetric,
     ) -> Option<u32> {
-        if let Some(value) = self.writes.get(key) {
-            return value.clone().map(|v| v.size());
+        if let Some(write) = self.writes.get(key) {
+            return write.value.as_ref().map(|v| v.size());
         }
 
         let val = self.storage.get_accessory(key);
@@ -246,14 +388,15 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
         val.map(|v| v.size())
     }
 
+    #[cfg(not(feature = "native"))]
     fn get_value(
         &mut self,
         _namespace: Namespace,
         key: &SlotKey,
         metric: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        if let Some(value) = self.writes.get(key) {
-            return value.clone();
+        if let Some(write) = self.writes.get(key) {
+            return write.value.clone();
         }
 
         let val = self.storage.get_accessory(key);
@@ -261,18 +404,64 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
         val
     }
 
+    #[cfg(feature = "native")]
+    fn get_size(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<u32> {
+        if let Some(write) = self.writes.get(key) {
+            return write.value.as_ref().map(|v| v.size());
+        }
+
+        let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
+            uncomitted_changes
+                .get(namespace, key)
+                .or_else(|| self.storage.get_accessory(key))
+        } else {
+            self.storage.get_accessory(key)
+        };
+
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+        val.map(|v| v.size())
+    }
+
+    #[cfg(feature = "native")]
+    fn get_value(
+        &mut self,
+        namespace: Namespace,
+        key: &SlotKey,
+        metric: &mut StateAccessMetric,
+    ) -> Option<SlotValue> {
+        if let Some(write) = self.writes.get(key) {
+            return write.value.clone();
+        }
+
+        let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
+            uncomitted_changes
+                .get(namespace, key)
+                .or_else(|| self.storage.get_accessory(key))
+        } else {
+            self.storage.get_accessory(key)
+        };
+        metric.storage_read_size = Some(val.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+        val
+    }
+
     fn set_value(&mut self, _namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        self.writes.insert(key.clone(), Some(value));
+        self.writes
+            .insert(key.clone(), AccessoryWrite::new(Some(value)));
     }
 
     fn delete_value(&mut self, _namespace: Namespace, key: &SlotKey) {
-        self.writes.insert(key.clone(), None);
+        self.writes.insert(key.clone(), AccessoryWrite::new(None));
     }
 }
 
 pub(super) struct RevertableWriter<T> {
     pub(super) inner: T,
-    writes: HashMap<(SlotKey, Namespace), Option<SlotValue>>,
+    pub(crate) writes: HashMap<(SlotKey, Namespace), Option<SlotValue>>,
     pub(crate) cache_writes: TempCache,
 }
 
@@ -288,19 +477,9 @@ impl<T> RevertableWriter<T> {
     pub(super) fn new(inner: T) -> Self {
         Self {
             inner,
-            writes: HashMap::default(),
+            writes: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
             cache_writes: TempCache::new(),
         }
-    }
-
-    /// Get an iterator over the current writes
-    pub fn changes(&self) -> ChangeSet {
-        ChangeSet::new(
-            self.writes
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        )
     }
 
     /// Commit all items from [`RevertableWriter`] returning the inner storage.
@@ -329,6 +508,27 @@ impl<T> RevertableWriter<T> {
             Some(value) => inner.set_value(namespace, key, value),
             None => inner.delete_value(namespace, key),
         };
+    }
+}
+
+impl<S: Spec> RevertableWriter<StateCheckpoint<S>> {
+    /// Change set resulting from transaction execution.
+    pub fn changes(&self, execution_context: ExecutionContext) -> TxChangeSet {
+        // Only the WarmUp executors warm up the reads.
+        let reads = if matches!(execution_context, ExecutionContext::SequencerWarmUp) {
+            Some(self.inner.first_reads().clone())
+        } else {
+            None
+        };
+
+        TxChangeSet {
+            writes: self
+                .writes
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            reads,
+        }
     }
 }
 
@@ -375,14 +575,18 @@ impl<C> RevertableWriter<C>
 where
     C: PerBlockCache,
 {
-    pub(crate) fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        if let CacheLookup::Hit(value) = self.cache_writes.get::<T>() {
+    pub(crate) fn get_cached<T: 'static + Send + Sync>(
+        &self,
+        slot_key: Option<SlotKey>,
+    ) -> Option<&T> {
+        if let CacheLookup::Hit(value) = self.cache_writes.get::<T>(slot_key.clone()) {
             value
         } else {
-            self.inner.get_cached::<T>()
+            self.inner.get_cached::<T>(slot_key)
         }
     }
 }
+
 impl<C: StateMetricsProvider> StateMetricsProvider for RevertableWriter<C> {
     fn metrics(&mut self) -> &mut StateMetrics {
         self.inner.metrics()

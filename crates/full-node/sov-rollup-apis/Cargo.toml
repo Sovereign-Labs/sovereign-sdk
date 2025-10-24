@@ -19,6 +19,8 @@ axum = { workspace = true }
 borsh = { workspace = true }
 derive_more = { workspace = true }
 derivative = { workspace = true }
+thiserror = { workspace = true }
+hex = { workspace = true }
 serde = { workspace = true }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 openapiv3 = { workspace = true }
@@ -41,11 +43,10 @@ tempfile = { workspace = true }
 axum-server = { workspace = true }
 anyhow = { workspace = true }
 strum = { workspace = true }
+reqwest = { workspace = true }
 
 # Sovereign dependencies
 sov-bank = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-state = { workspace = true, features = ["native"] }
-
-

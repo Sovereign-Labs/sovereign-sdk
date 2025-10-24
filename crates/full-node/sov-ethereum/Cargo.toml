@@ -16,27 +16,27 @@ workspace = true
 [dependencies]
 tracing = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-address = { workspace = true, features = ["evm"] }
 
 sov-evm = { workspace = true, features = ["native"] }
+sov-uniqueness = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
-sov-blob-storage = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
 
 borsh = { workspace = true }
 serde = { workspace = true }
 
-alloy-primitives = { workspace = true }
 alloy-consensus = { workspace = true }
+alloy-primitives = { workspace = true }
 alloy-rpc-types = { workspace = true }
 alloy-eips = { workspace = true }
 reth-primitives = { workspace = true }
-reth-rpc-eth-types = { workspace = true }
-
+sov-rpc-eth-types = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }
+derive_more = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
-schnellru = "0.2.3"
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -54,12 +54,8 @@ sov-kernels = { workspace = true }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
 
-ethereum-types = "0.14.1"
-ethers-core = { version = "=2.0.14", default-features = false }
-ethers-contract = { version = "=2.0.14", default-features = false }
-ethers-providers = { version = "=2.0.14", default-features = false }
-ethers-signers = { version = "=2.0.14", default-features = false }
-ethers-middleware = { version = "=2.0.14", default-features = false }
+ethereum-types = { workspace = true }
+ethers = { workspace = true }
 
 [features]
 default = []

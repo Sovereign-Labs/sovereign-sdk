@@ -28,12 +28,7 @@ pub(crate) fn raw_blob_from_data(
     signer: &CelestiaAddress,
 ) -> anyhow::Result<celestia_types::blob::RawBlob> {
     Ok(celestia_types::blob::RawBlob::from(
-        celestia_types::blob::Blob::new_with_signer(
-            namespace,
-            data,
-            signer.0.clone(),
-            APP_VERSION,
-        )?,
+        celestia_types::blob::Blob::new(namespace, data, Some(signer.0.clone()), APP_VERSION)?,
     ))
 }
 
@@ -72,7 +67,6 @@ pub(crate) mod files {
     pub const ROLLUP_PROOF_NAMESPACE_EXAMPLES: Namespace =
         Namespace::const_v0(ROLLUP_PROOF_NAMESPACE_EXAMPLES_RAW);
 
-    // From `examples/const-rollup-config`. Used from blocks that were produced on devnet/testnet
     pub const ROLLUP_PARAMS_EXAMPLES: RollupParams = RollupParams {
         rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE_EXAMPLES,
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE_EXAMPLES,
@@ -579,7 +573,7 @@ pub(crate) mod files {
             let mut data = vec![0u8; MEDIUM_BATCH_BYTES];
             rng.fill_bytes(&mut data);
             let blob = RawBlob::from(
-                celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, APP_VERSION).unwrap(),
+                celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap(),
             );
             blobs.push(blob);
 
@@ -594,7 +588,8 @@ pub(crate) mod files {
                 let mut data = vec![0u8; size];
                 rng.fill_bytes(&mut data);
                 let blob = RawBlob::from(
-                    celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, APP_VERSION).unwrap(),
+                    celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION)
+                        .unwrap(),
                 );
                 blobs.push(blob);
             }

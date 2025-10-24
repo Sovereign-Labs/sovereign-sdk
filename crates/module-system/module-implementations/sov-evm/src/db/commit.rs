@@ -1,8 +1,8 @@
 use alloy_primitives::{Address, U256};
 use itertools::Itertools;
-use reth_revm::db::DBErrorMarker;
 use revm::primitives::HashMap;
 use revm::state::{Account, EvmStorageSlot};
+use revm_database_interface::DBErrorMarker;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{Spec, StateAccessor};
 
@@ -25,18 +25,21 @@ where
     type Error = Error<Ws>;
 
     fn commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error> {
-        changes
+        for (address, account) in changes
             .into_iter()
-            .sorted_by_key(|(address, _)| *address) // Sort addresses to avoid non-determinism in ZK
-            .for_each(|(address, account)| {
-                self.commit_account(address, account).unwrap();
-            });
+            // Sort addresses to avoid non-determinism in ZK
+            .sorted_by_key(|(address, _)| *address)
+        {
+            self.commit_account(address, account)?;
+        }
+
         Ok(())
     }
 }
 
 impl<'a, Ws: StateAccessor, S: Spec> EvmDb<'a, Ws, S>
 where
+    EvmDb<'a, Ws, S>: FallibleDatabaseCommit<Error = Error<Ws>>,
     S::Address: FromVmAddress<EthereumAddress>,
 {
     fn commit_account(
@@ -47,7 +50,7 @@ where
         // TODO figure out what to do when account is destroyed.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
         if account.is_selfdestructed() {
-            todo!("Account destruction not supported")
+            return Err(Error::SelfDestructUnsupported);
         }
 
         self.commit_storage(address, account.storage)?;
@@ -60,7 +63,7 @@ where
                 &to_rollup_address::<S>(address),
                 self.state,
             )
-            .map_err(Error)?;
+            .map_err(Error::State)?;
         // Set the EVM account balance to 0 - as balances are stored in the bank module.
         account.balance = U256::ZERO;
 
@@ -68,14 +71,14 @@ where
             if !code.is_empty() {
                 // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                 self.code
-                    .set(&account.code_hash, code.bytecode(), self.state)
-                    .map_err(Error)?;
+                    .set(&account.code_hash, code, self.state)
+                    .map_err(Error::State)?;
             }
         }
 
         self.accounts
             .set(&address, &DbAccount(account), self.state)
-            .map_err(Error)?;
+            .map_err(Error::State)?;
 
         Ok(())
     }
@@ -92,7 +95,7 @@ where
                 let value = value.present_value();
                 self.account_storage
                     .set(&(&address, &key), &value, self.state)
-                    .map_err(Error)
+                    .map_err(Error::State)
             })
     }
 }

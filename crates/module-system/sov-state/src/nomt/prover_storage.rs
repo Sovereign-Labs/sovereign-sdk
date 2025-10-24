@@ -121,6 +121,26 @@ where
             && version_to_use == self.latest_version()
     }
 
+    fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
+        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
+        let key = key.as_ref().to_vec();
+        match N::NAMESPACE {
+            Namespace::User => self
+                .historical_state
+                .get_user_value_option_by_key_unbound(key.as_ref())
+                .expect("Unable to read from UserDb"),
+            Namespace::Kernel => self
+                .historical_state
+                .get_kernel_value_option_by_key_unbound(key.as_ref())
+                .expect("Unable to read from KernelDb"),
+            Namespace::Accessory => self
+                .accessory
+                .get_value_option(key.as_ref(), SlotNumber::MAX)
+                .expect("Unable to read from AccessoryDb"),
+        }
+        .map(Into::into)
+    }
+
     fn read_value<N: CompileTimeNamespace>(
         &self,
         key: &SlotKey,
@@ -134,18 +154,20 @@ where
             return Ok(None);
         };
         let _span = tracing::debug_span!("version", ?resolved_version, passed = ?version).entered();
+        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
+        let key_vec = key.as_ref().to_vec();
         let val = match N::NAMESPACE {
             Namespace::User => {
                 let historical_value = if let Some(version) = resolved_version {
                     self.historical_state
-                        .get_user_value_option_by_key_historical(key.as_ref(), version)?
+                        .get_user_value_option_by_key_historical(key_vec.as_ref(), version)?
                 } else {
                     self.historical_state
-                        .get_user_value_option_by_key(key.as_ref())?
+                        .get_user_value_option_by_key(key_vec.as_ref())?
                 };
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
-                    let key_path = S::Hasher::digest(key.as_ref()).into();
+                    let key_path = S::Hasher::digest(&key_vec).into();
                     tracing::trace!(
                         %key,
                         key_path = hex::encode(key_path),
@@ -168,14 +190,14 @@ where
             Namespace::Kernel => {
                 let historical_value = if let Some(version) = version {
                     self.historical_state
-                        .get_kernel_value_option_by_key_historical(key.as_ref(), version)?
+                        .get_kernel_value_option_by_key_historical(key_vec.as_ref(), version)?
                 } else {
                     self.historical_state
-                        .get_kernel_value_option_by_key(key.as_ref())?
+                        .get_kernel_value_option_by_key(key_vec.as_ref())?
                 };
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
-                    let key_path = S::Hasher::digest(key.as_ref()).into();
+                    let key_path = S::Hasher::digest(&key_vec).into();
                     tracing::trace!(
                         %key,
                         key_path = hex::encode(key_path),
@@ -198,7 +220,7 @@ where
             Namespace::Accessory => self
                 .accessory
                 .get_value_option(
-                    key.as_ref(),
+                    &key_vec, // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
                     resolved_version.unwrap_or(self.latest_version()),
                 )
                 .expect("Unable to read from AccessoryDb"),
@@ -527,11 +549,12 @@ where
         } = state_update;
         let user_to_materialize = user_versioned.ordered_writes.into_iter().map(|(k, v)| {
             // TODO: Clone now, figure out how to optimize later
-            (k.as_ref().clone(), v.map(|x| x.value().to_vec()))
+            // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
+            (k.as_ref().to_vec(), v.map(|x| x.value().to_vec()))
         });
         let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter().map(|(k, v)| {
             // TODO: Clone now, figure out how to optimize later
-            (k.as_ref().clone(), v.map(|x| x.value().to_vec()))
+            (k.as_ref().to_vec(), v.map(|x| x.value().to_vec()))
         });
         let historical_schema_batch = HistoricalStateReader::materialize_values(
             user_to_materialize,
@@ -544,7 +567,13 @@ where
             accessory_writes
                 .ordered_writes
                 .iter()
-                .map(|(k, v_opt)| (k.key().to_vec(), v_opt.as_ref().map(|v| v.value().to_vec()))),
+                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
+                .map(|(k, v_opt)| {
+                    (
+                        k.as_ref().to_vec(),
+                        v_opt.as_ref().map(|v| v.value().to_vec()),
+                    )
+                }),
             next_version,
         )
         .expect("accessory db materialization must succeed");
@@ -657,5 +686,9 @@ where
             borsh::from_slice(&raw_root).expect("Failed to deserialize root hash");
         tracing::trace!(%version, root_hash = %storage_root_historical, "Got unbound root hash");
         Ok(storage_root_historical)
+    }
+
+    fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
+        self.read_value_unbound::<N>(&key)
     }
 }

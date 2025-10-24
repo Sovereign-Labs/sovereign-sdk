@@ -108,9 +108,9 @@ pub use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 pub use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
 pub use sov_rollup_interface::reexports::digest;
 pub use sov_rollup_interface::stf::{
-    ApplySlotOutput, BatchReceipt, ExecutionContext, IgnoredTransactionReceipt, InvalidProofError,
-    ProofOutcome, ProofReceipt, ProofReceiptContents, ProofSender, StateTransitionFunction,
-    StoredEvent,
+    ApplySlotOutput, BatchReceipt, ExecutionContext, GenesisParams as GenesisParamsTrait,
+    IgnoredTransactionReceipt, InvalidProofError, ProofOutcome, ProofReceipt, ProofReceiptContents,
+    ProofSender, StateTransitionFunction, StoredEvent,
 };
 pub use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
@@ -123,7 +123,7 @@ pub use sov_rollup_interface::zk::{
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::StateUpdateInfo;
 pub use sov_rollup_interface::{execution_mode, BasicAddress, TxHash};
-pub use sov_state::{CompileTimeNamespace, Storage};
+pub use sov_state::{CompileTimeNamespace, Prefix, Storage};
 pub use state::*;
 pub use transaction::AuthenticatedTransactionData;
 pub use tx_receipt::*;

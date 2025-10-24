@@ -5,11 +5,10 @@ use digest::consts::U32;
 use digest::Digest;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::crypto::{CredentialId, SigVerificationError, Signature};
-use sov_rollup_interface::zk::CryptoSpec;
 use thiserror::Error;
 
-use crate::gas::traits::{Gas, GasMeter, GasMeteringError};
-use crate::{as_u32_or_panic, GasSpec, PublicKey, Spec};
+use crate::gas::traits::{Gas, GasMeter};
+use crate::{as_u32_or_panic, CryptoSpecExt, GasMeteringError, GasSpec, PublicKey, Spec};
 
 /// A metered hasher that charges gas for each operation.
 /// This data structure should be used in the module system to charge gas when hashing data.
@@ -52,9 +51,9 @@ impl<'a, Meter: GasMeter, Hasher: Digest<OutputSize = U32>> MeteredHasher<'a, Me
     /// # Errors
     /// Returns an error if charging gas for the update operation fails.
     pub fn update(&mut self, data: &[u8]) -> Result<(), MeteringError<Meter>> {
-        self.meter.charge_gas(&self.gas_to_charge_for_hash_update)?;
+        self.meter.charge_gas(self.gas_to_charge_for_hash_update)?;
         self.meter.charge_linear_gas(
-            &self.gas_to_charge_per_byte_for_hash_update,
+            self.gas_to_charge_per_byte_for_hash_update,
             data.len()
                 .try_into()
                 .map_err(|e: TryFromIntError| MeteringError::<Meter>::Overflow(e.to_string()))?,
@@ -138,6 +137,41 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         }
     }
 
+    /// Charges gas for the signature verification.
+    pub fn charge_gas<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
+        &self,
+        meter: &mut Meter,
+        msg: &[u8],
+    ) -> Result<(), MeteredSigVerificationError<GU>> {
+        meter
+            .charge_gas(self.fixed_gas_to_charge_per_verification)
+            .map_err(MeteredSigVerificationError::GasError)?;
+
+        meter
+            .charge_linear_gas(
+                self.gas_to_charge_per_byte_for_verification,
+                as_u32_or_panic(msg.len()),
+            )
+            .map_err(MeteredSigVerificationError::GasError)?;
+
+        meter
+            .charge_gas(<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
+            .map_err(MeteredSigVerificationError::GasError)?;
+
+        meter
+            .charge_linear_gas(
+                <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                msg.len().try_into().map_err(|e: TryFromIntError| {
+                    MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
+                        e.to_string(),
+                    ))
+                })?,
+            )
+            .map_err(MeteredSigVerificationError::GasError)?;
+
+        Ok(())
+    }
+
     /// Verifies a signature with the provided gas meter. This method is a wrapper around [`Signature::verify`].
     ///
     /// # Errors
@@ -148,31 +182,7 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         msg: &[u8],
         meter: &mut Meter,
     ) -> Result<(), MeteredSigVerificationError<GU>> {
-        meter
-            .charge_gas(&self.fixed_gas_to_charge_per_verification)
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        meter
-            .charge_linear_gas(
-                &self.gas_to_charge_per_byte_for_verification,
-                as_u32_or_panic(msg.len()),
-            )
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        meter
-            .charge_gas(&<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        meter
-            .charge_linear_gas(
-                &<Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
-                msg.len().try_into().map_err(|e: TryFromIntError| {
-                    MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
-                        e.to_string(),
-                    ))
-                })?,
-            )
-            .map_err(MeteredSigVerificationError::GasError)?;
+        self.charge_gas(meter, msg)?;
 
         self.inner
             .verify(pub_key, msg)
@@ -208,28 +218,28 @@ pub trait MeteredBorshDeserialize<S: Spec>: Sized {
         buf: &[u8],
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        // This is safe to cast here. We won't have data bigger thane 4GB.
+        // This is safe to cast here. We won't have data bigger than 4GB.
         let buf_len: u32 = as_u32_or_panic(buf.len());
 
         // Custom gas costs to deserialize this data structure.
         meter
-            .charge_gas(&Self::bias_borsh_deserialization())
+            .charge_gas(Self::bias_borsh_deserialization())
             .map_err(MeteredBorshDeserializeError::GasError)?;
 
         meter
             .charge_linear_gas(
-                &Self::gas_to_charge_per_byte_borsh_deserialization(),
+                Self::gas_to_charge_per_byte_borsh_deserialization(),
                 buf_len,
             )
             .map_err(MeteredBorshDeserializeError::GasError)?;
 
         // Common gas costs to deserialize this data structure.
         meter
-            .charge_gas(&S::bias_borsh_deserialization())
+            .charge_gas(S::bias_borsh_deserialization())
             .map_err(MeteredBorshDeserializeError::GasError)?;
 
         meter
-            .charge_linear_gas(&S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
+            .charge_linear_gas(S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
             .map_err(MeteredBorshDeserializeError::GasError)
     }
 
@@ -256,16 +266,13 @@ pub fn charge_gas_to_deserialize_json<S: Spec>(
     buf: &[u8],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), GasMeteringError<<S as GasSpec>::Gas>> {
-    // This is safe to cast here. We won't have data bigger thane 4GB.
+    // This is safe to cast here. We won't have data bigger than 4GB.
     let buf_len: u32 = as_u32_or_panic(buf.len());
 
     // Custom gas costs to deserialize this data structure.
-    meter.charge_gas(&S::tx_bias_json_deserialization())?;
+    meter.charge_gas(S::tx_bias_json_deserialization())?;
 
-    meter.charge_linear_gas(
-        &S::tx_gas_to_charge_per_byte_json_deserialization(),
-        buf_len,
-    )?;
+    meter.charge_linear_gas(S::tx_gas_to_charge_per_byte_json_deserialization(), buf_len)?;
 
     // Since JSON is not used often, no common cost to JSON deserialization is defined to
     // simplify the set of constants.
@@ -274,11 +281,11 @@ pub fn charge_gas_to_deserialize_json<S: Spec>(
 }
 
 /// Calculates `CredentialId`
-pub fn metered_credential<S: Spec>(
-    pub_key: &<S::CryptoSpec as CryptoSpec>::PublicKey,
+pub fn metered_credential<S: Spec, C: CryptoSpecExt>(
+    pub_key: &C::PublicKey,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<CredentialId, GasMeteringError<S::Gas>> {
     let cost = S::gas_to_charge_for_credential();
-    meter.charge_gas(&cost)?;
+    meter.charge_gas(cost)?;
     Ok(pub_key.credential_id())
 }

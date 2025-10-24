@@ -112,12 +112,12 @@ impl<S: Spec> ProverIncentives<S> {
             .expect("The code commitment should be set at genesis");
 
         state
-            .charge_gas(&<S as GasSpec>::fixed_gas_to_charge_per_proof())
+            .charge_gas(<S as GasSpec>::fixed_gas_to_charge_per_proof())
             .map_err(Into::<anyhow::Error>::into)?;
 
         state
             .charge_linear_gas(
-                &<S as GasSpec>::gas_to_charge_per_proof_byte(),
+                <S as GasSpec>::gas_to_charge_per_proof_byte(),
                 proof
                     .raw_aggregated_proof
                     .len()

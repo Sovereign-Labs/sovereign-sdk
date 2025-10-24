@@ -28,7 +28,7 @@ pub(crate) fn process_proof<S, RT>(
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     sequencer_rollup_address: &S::Address,
     sequencer_bond: Amount,
-    gas_price: &<S::Gas as Gas>::Price,
+    gas_price: <S::Gas as Gas>::Price,
     raw_proof: Vec<u8>,
     state: StateCheckpoint<S>,
 ) -> (ProcessProofOutput<S>, StateCheckpoint<S>)
@@ -173,7 +173,7 @@ where
                 &mut checkpoint,
             );
 
-            let gas_used = transaction_consumption.base_fee().clone();
+            let gas_used = *transaction_consumption.base_fee();
             (
                 ProcessProofOutput {
                     proof_receipt: ProofReceipt {
@@ -278,7 +278,7 @@ where
         &self,
         slot_gas: &S::Gas,
         sequencer_bond: Amount,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         tx_scratchpad: TxScratchpad<S, I>,
     ) -> PreExecWorkingSetResult<S, I> {
         // CHECKS:
@@ -321,7 +321,7 @@ where
         }
 
         // 3. Check that the slot gas is higher than the gas needed to validate the transaction.
-        if slot_gas.dim_is_less_or_eq(&max_tx_check_costs) {
+        if slot_gas.dim_is_less_or_eq(max_tx_check_costs) {
             return WorkflowResult::EarlyReturn(
                 ProcessProofOutput {
                     proof_receipt: invalid_proof_receipt::<S>(
@@ -334,8 +334,7 @@ where
             );
         }
 
-        let pre_exec_gas_meter =
-            BasicGasMeter::<S>::new_with_gas(max_tx_check_costs, gas_price.clone());
+        let pre_exec_gas_meter = BasicGasMeter::<S>::new_with_gas(max_tx_check_costs, gas_price);
 
         let mut pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(pre_exec_gas_meter);
 
@@ -344,7 +343,7 @@ where
         // - reward_sequencer
         // etc
         pre_exec_working_set
-            .charge_gas(&<S as GasSpec>::process_tx_pre_exec_checks_gas())
+            .charge_gas(<S as GasSpec>::process_tx_pre_exec_checks_gas())
             // SAFETY: It is ok to expect here because `pre_exec_gas_meter` was initialized with `max_tx_check_costs` which is bigger than process_tx_pre_exec_checks_gas.
             .expect("The gas meter should be able to charge the pre-execution checks");
 
@@ -355,7 +354,7 @@ where
         &mut self,
         slot_gas: &S::Gas,
         sequencer_rollup_address: &S::Address,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         auth_tx: AuthenticatedTransactionData<S>,
         mut pre_exec_working_set: PreExecWorkingSet<S, I>,
     ) -> WorkflowResult<WorkingSet<S, I>, S, I> {
@@ -381,12 +380,12 @@ where
         // The transaction will execute until one of the following conditions is met:
         // 1. It consumes more funds than `tx.max_fee`.
         // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-        let working_set_gas_meter = auth_tx.gas_meter(gas_price, slot_gas);
+        let working_set_gas_meter = auth_tx.gas_meter(gas_price, *slot_gas);
 
         let mut working_set =
             WorkingSet::create_working_set(scratchpad, &auth_tx, working_set_gas_meter);
 
-        if let Err(err) = working_set.charge_gas(&gas_info.gas_used) {
+        if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
             let (scratchpad, _transaction_consumption) = working_set.revert();
 
             return Self::make_early_return(

@@ -54,6 +54,16 @@ pub trait KernelWithSlotMapping<S: Spec>: Sync + Send + 'static {
         height: super::RollupHeight,
         state: &mut crate::state::ApiStateAccessor<S>,
     ) -> Option<<<S as Spec>::Gas as crate::Gas>::Price>;
+
+    /// Returns the `HeightStorageKeys` for this kernel.
+    fn get_latest_rollup_height(&self, state: &S::Storage) -> RollupHeight;
+
+    /// Returns the slot number associated with the given rollup height.
+    fn get_true_slot_number_for_height_unbound(
+        &self,
+        height: RollupHeight,
+        state: &S::Storage,
+    ) -> Option<SlotNumber>;
 }
 
 /// The kernel is responsible for managing the inputs to the `apply_blob` method.

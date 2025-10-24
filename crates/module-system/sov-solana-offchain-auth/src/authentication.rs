@@ -83,7 +83,7 @@ pub struct SolanaOffchainSimpleMessage<S: Spec> {
 pub const PREAMBLE_LEN: usize = 85;
 
 /// The preamble/header required for signing solana offchain messages, supporting a single signer.
-/// See https://docs.anza.xyz/proposals/off-chain-message-signing#message-preamble
+/// See <https://docs.anza.xyz/proposals/off-chain-message-signing#message-preamble>
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct RawSolanaOffchainMessagePreamble {
     pub signing_domain: [u8; 16],
@@ -317,8 +317,11 @@ where
         state,
     )?;
 
-    let authorization_data =
-        extract_authorization_data::<S, D>(&reconstructed_tx_v0, raw_tx_hash, state)?;
+    let authorization_data = extract_authorization_data::<S, D, S::CryptoSpec>(
+        &reconstructed_tx_v0,
+        raw_tx_hash,
+        state,
+    )?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,

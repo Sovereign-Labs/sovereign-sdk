@@ -16,11 +16,18 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
 
     let state_item_exprs = state_fields
         .iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(i, f)| {
             let ident = &f.ident;
             let ty = &f.ty;
             let state_name = format!("{ident}");
             let description = description_code(&f.rest_api_field.doc, &f.rest_api_field.attrs)?;
+            let item_discriminant: u8 = i.try_into().map_err(|_| {
+                syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    "Modules may not have more than 255 fields",
+                )
+            })?;
 
             Ok(quote! {
                 StateItemInfo {
@@ -28,7 +35,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                     name: #state_name.to_string(),
                     description: #description,
                     namespace: <#ty as GetStateItemInfo>::NAMESPACE.into(),
-                    prefix: Prefix(self.#ident.prefix().clone()),
+                    item_discriminant: #item_discriminant,
                 }
             })
         })
@@ -60,6 +67,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                     let state_impl = StateItemRestApiImpl::<Self, #ty> {
                         api_state: api_state.clone(),
                         state_item_info: #state_item_expr,
+                        module_discriminant: Self::default().discriminant(),
                         phantom: PhantomData::<#ty>::default(),
                     };
 
@@ -87,7 +95,18 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                         phantom: PhantomData::<#ty>::default(),
                     };
 
-                    let mut item_spec = (&state_impl).state_item_open_api(#module_name);
+
+                    // First, try to generate a custom spec for this type (will succeed only if the type implements utoipa::ToSchema). 
+                    // Then, try to generate a defaults pec with AnyJsonValue
+                    // If both fail, return Default::default()
+                    let mut custom_info = (&state_impl).generate_custom_path(#module_name, &state_impl.state_item_info.name);
+                    let mut item_spec = if let Some((item_paths, response_name, response)) = custom_info {
+                        let mut spec = spec_from_json_paths(item_paths);
+                        add_simple_custom_response(&mut spec, &response_name, response);
+                        spec
+                    } else {
+                        (&state_impl).state_item_paths(#module_name, &state_impl.state_item_info.name).map(|paths| spec_from_json_paths(paths)).unwrap_or_default()
+                    };
 
                     let old_paths = std::mem::take(&mut item_spec.paths);
 
@@ -136,7 +155,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
             fn rest_api(&self, api_state: ApiState<<Self as ModuleInfo>::Spec>) -> axum::Router<()> {
                 let mut state_item_routers: Vec<axum::Router<()>> = vec![];
                 let base_impl = ModuleRestApiBaseImpl::<Self> {
-                    module: Arc::new(Self::default()),
+                    module: Arc::new(self.clone()),
                     description: #description,
                     state_items: #map_of_state_item_exprs,
                 };

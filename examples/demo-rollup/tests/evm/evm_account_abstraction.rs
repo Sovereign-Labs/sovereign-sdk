@@ -1,30 +1,34 @@
 use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use ethers_core::abi::Address;
-use sov_eth_client::TestClient;
+use ethereum_types::Address;
+use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
-
 type TestSpec = DemoRollupSpec;
-use crate::evm::evm_test_helper::setup;
+
+use crate::evm::evm_test_helper::{setup_with_simple_storage, EVM_EXTENSION};
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Account abstraction for the EVM is disabled"]
 async fn test_evm_account_abstraction() {
-    let (test_rollup, test_client, from_addr, chain_id) = setup(0).await;
+    let (test_rollup, test_client, chain_id) = setup_with_simple_storage(0, EVM_EXTENSION).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
-    send_insert_credentials(&test_client, from_addr, chain_id).await;
+    send_insert_credentials(&test_client, test_client.address(), chain_id).await;
     // Execute the evm tests.
     execute_evm_tests(&test_client).await.unwrap();
 
     test_rollup.rollup_task.abort();
 }
 
-async fn send_insert_credentials(test_client: &TestClient, from_addr: Address, chain_id: u64) {
+async fn send_insert_credentials(
+    test_client: &SimpleStorageClient,
+    from_addr: Address,
+    chain_id: u64,
+) {
     let tx = vec![create_insert_credentials(from_addr, chain_id)];
     test_client
         .send_transactions_and_wait_slot(&tx)
@@ -64,18 +68,18 @@ fn create_insert_credentials(
     )
 }
 
-async fn execute_evm_tests(client: &TestClient) -> Result<(), Box<dyn std::error::Error>> {
-    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+async fn execute_evm_tests(client: &SimpleStorageClient) -> Result<(), Box<dyn std::error::Error>> {
+    let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(0, nonce);
 
     // Balance should be > 0 in genesis
-    let balance = client.eth_get_balance(client.from_addr).await;
+    let balance = client.eth_get_balance(client.address()).await;
     assert!(balance > ethereum_types::U256::zero());
 
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 
     // Nonce should be 1 after the deploy
-    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(1, nonce);
 
     let set_arg = 923;

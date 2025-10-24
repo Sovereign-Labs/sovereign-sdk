@@ -4,6 +4,10 @@ PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 DOCKER_COMPOSE_DIR := $(PROJECT_ROOT)/docker
 DOCKER_COMPOSE_CFG := $(DOCKER_COMPOSE_DIR)/docker-compose.yml
 
+# Hyperlane CLI Docker image constants
+HYPERLANE_CLI_REPO := ghcr.io/sovereign-labs/hyperlane-cli
+HYPERLANE_CLI_TAG := sov-integration-3
+
 docker_compose := docker compose -f $(DOCKER_COMPOSE_CFG)
 
 up:
@@ -51,3 +55,11 @@ restart-toxiproxy:
 	docker compose restart toxiproxy
 	sleep 5
 	TOXIPROXY_HOST="localhost" ./toxiproxy/configure.sh
+
+# Needs docker logged in
+# echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+# make sure that GITHUB_TOKEN has write:packages permission for the sovereign-labs organization.
+build-hyperlane-cli:
+	docker build -f hyperlane/hyperlane-cli.Dockerfile --build-arg CLI_VERSION=$(HYPERLANE_CLI_TAG) -t $(HYPERLANE_CLI_REPO):$(HYPERLANE_CLI_TAG) .
+	docker push $(HYPERLANE_CLI_REPO):$(HYPERLANE_CLI_TAG)
+	docker run $(HYPERLANE_CLI_REPO):$(HYPERLANE_CLI_TAG) --version

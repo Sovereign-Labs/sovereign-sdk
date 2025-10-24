@@ -158,6 +158,22 @@ impl HistoricalStateReader {
         Ok(self.user.get_latest_borrowed(key)?.flatten())
     }
 
+    /// Get the very latest version of the given key from the database.
+    pub fn get_user_value_option_by_key_unbound(
+        &self,
+        key: &SchemaKey,
+    ) -> anyhow::Result<Option<SchemaValue>> {
+        Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
+    }
+
+    /// Get the very latest version of the given key from the database.
+    pub fn get_kernel_value_option_by_key_unbound(
+        &self,
+        key: &SchemaKey,
+    ) -> anyhow::Result<Option<SchemaValue>> {
+        Ok(self.kernel.get_latest_borrowed_unbound(key)?.flatten())
+    }
+
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_user_value_option_by_key_historical(
         &self,
@@ -268,7 +284,7 @@ mod tests {
     #[test]
     fn verify_last_version_bumped_properly() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf()).unwrap();
+        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let key1 = b"AAA";
         let key2 = b"BBB";
@@ -302,7 +318,7 @@ mod tests {
     fn test_no_bound_on_passed_version() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
-        let rocksdb = FlatStateDb::new(db_path.to_path_buf()).unwrap();
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         // Create two independent readers on the same database.
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
@@ -373,7 +389,7 @@ mod tests {
     #[test]
     fn test_unbound_last_version() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf()).unwrap();
+        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
         let reader2 = HistoricalStateReader::new_empty(&rocksdb);

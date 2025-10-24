@@ -14,13 +14,15 @@ use thiserror::Error;
 use crate::capabilities::AuthorizationData;
 use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
-    TxDetails, VersionedTx,
+    TxDetails,
 };
+use crate::CryptoSpecExt;
 use crate::{
     capabilities, metered_credential, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
-    GasMeteringError, MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher,
-    ProvableStateReader, RawTx, Runtime, Spec,
+    GasMeteringError, GasSpec, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    MeteredHasher, ProvableStateReader, RawTx, Runtime, Spec,
 };
+use crate::{GetGasPrice, Multisig};
 
 /// The chain ID of the rollup.
 pub fn config_chain_id() -> u64 {
@@ -43,14 +45,14 @@ pub struct BatchFromUnregisteredSequencer {
 /// Typically, the authentication will require checking the signature of the transaction.
 pub trait TransactionAuthenticator<S: Spec> {
     /// The "message" that is extracted from the transaction and passed to the runtime for execution.
-    type Decodable;
+    type Decodable: Send;
 
     /// The input to the authenticator
     type Input: BorshDeserialize + BorshSerialize + Clone + std::fmt::Debug + Send + Sync + 'static;
 
     /// Authenticates a transaction (typically by checking the signature) and deserializes its contents
     /// into an executable message.
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, AuthenticationError>;
@@ -181,6 +183,9 @@ pub enum FatalError {
     /// Signature verification failed.
     #[error("Signature verification failed: {0}")]
     SigVerificationFailed(String),
+    /// Missing chain id
+    #[error("Missing chain id: expected {0}")]
+    MissingChainId(u64),
     /// The chain id was invalid
     #[error("Invalid chain id: expected {expected}, got {got}")]
     InvalidChainId {
@@ -293,13 +298,13 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 }
 
 /// Extracts authorization data from a verified transaction.
-pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
-    tx_v0: &crate::transaction::Version0<D::Decodable, S>,
+pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
+    tx_v0: &crate::transaction::Version0<D::Decodable, S, C>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
     let pub_key = tx_v0.pub_key.clone();
-    let credential_id = metered_credential(&pub_key, meter)
+    let credential_id = metered_credential::<S, C>(&pub_key, meter)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     Ok(AuthorizationData {
@@ -307,6 +312,36 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>>(
         tx_hash: raw_tx_hash,
         credential_id,
         credentials: Credentials::new(pub_key),
+        default_address: credential_id.into(),
+    })
+}
+
+/// Extracts authorization data from a verified transaction.
+pub fn extract_authorization_data_v1<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
+    tx_v1: &crate::transaction::Version1<D::Decodable, S, C>,
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthorizationData<S>, AuthenticationError> {
+    // Charge gas; We charge for credential ID calculation based on the number of keys in the multisig
+    let num_signatures = (tx_v1.signatures.len() + tx_v1.unused_pub_keys.len()) as u32;
+    meter
+        .charge_linear_gas(S::gas_to_charge_for_credential(), num_signatures)
+        .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+    // Calculate credential ID as hash(min_signers || sorted(pub_keys))
+    let pub_keys = tx_v1
+        .signatures
+        .iter()
+        .map(|s| s.pub_key.clone())
+        .chain(tx_v1.unused_pub_keys.iter().cloned())
+        .collect::<Vec<_>>();
+    let multisg = Multisig::new(tx_v1.min_signers, pub_keys);
+    let credential_id = multisg.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
+
+    Ok(AuthorizationData {
+        uniqueness: tx_v1.uniqueness,
+        tx_hash: raw_tx_hash,
+        credential_id,
+        credentials: Credentials::new(multisg),
         default_address: credential_id.into(),
     })
 }
@@ -322,16 +357,31 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     chain_hash: &[u8; 32],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    match &tx.versioned_tx {
-        VersionedTx::V0(tx_v0) => {
+    match &tx {
+        Transaction::V0(tx_v0) => {
             verify_chain_id(&tx_v0.details, raw_tx_hash)?;
             verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
-            let authorization_data = extract_authorization_data::<S, D>(tx_v0, raw_tx_hash, meter)?;
+            let authorization_data =
+                extract_authorization_data::<S, D, S::CryptoSpec>(tx_v0, raw_tx_hash, meter)?;
 
             let runtime_call = tx_v0.runtime_call.clone();
             let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
                 raw_tx_hash,
                 authenticated_tx: tx_v0.details.clone().into(),
+            };
+
+            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+        }
+        Transaction::V1(tx_v1) => {
+            verify_chain_id(&tx_v1.details, raw_tx_hash)?;
+            verify_signature(&tx, chain_hash, raw_tx_hash, meter)?;
+            let authorization_data =
+                extract_authorization_data_v1::<S, D, S::CryptoSpec>(tx_v1, raw_tx_hash, meter)?;
+
+            let runtime_call = tx_v1.runtime_call.clone();
+            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+                raw_tx_hash,
+                authenticated_tx: tx_v1.details.clone().into(),
             };
 
             Ok((tx_and_raw_hash, authorization_data, runtime_call))
@@ -379,10 +429,19 @@ pub fn authenticate<
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
 #[cfg(feature = "native")]
 pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx: &[u8],
+) -> Result<D::Decodable, FatalError> {
+    decode_sov_tx_with_cryptospec::<S, D, <S as Spec>::CryptoSpec>(raw_tx)
+}
+/// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
+/// Allows decoding `Transaction`s with non-default `CryptoSpec` generics.
+#[cfg(feature = "native")]
+pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
-    let tx = <Transaction<D, S> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
-        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+    let tx =
+        <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
+            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(tx.call())
 }

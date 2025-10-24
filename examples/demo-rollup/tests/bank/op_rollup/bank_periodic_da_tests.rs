@@ -1,30 +1,18 @@
-use core::time::Duration;
 use std::sync::Arc;
-use std::thread::sleep;
 
+use crate::bank::helpers::*;
+use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
+use crate::test_helpers::DemoRollupSpec;
 use anyhow::Context;
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
-use sov_mock_da::storable::service::StorableMockDaService;
-use sov_mock_da::BlockProducingConfig;
-use sov_modules_api::execution_mode::Native;
-use sov_modules_api::macros::config_value;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::OperatingMode;
-use sov_test_utils::test_rollup::RollupBuilder;
-
-use crate::bank::helpers::*;
-use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
-use crate::test_helpers::{test_genesis_source, DemoRollupSpec};
-
-const BLOCK_TIME_MS: u64 = 100;
-const ESTIMATED_BLOCK_PROCESSING_TIME: Duration = Duration::from_millis(BLOCK_TIME_MS);
-const BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
-    block_time_ms: BLOCK_TIME_MS,
-};
+use sov_modules_macros::config_value;
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "fix when ZKP work is resumed again"]
 async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
 
@@ -33,23 +21,7 @@ async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
         finalization_blocks: 0,
     };
 
-    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Optimistic),
-        BLOCK_PRODUCING_CONFIG,
-        test_case.finalization_blocks,
-    )
-    .set_config(|c| c.max_concurrent_blobs = 16777216)
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .start()
-    .await?;
-
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(3)
-        .await
-        .unwrap();
-
-    test_rollup.wait_for_sequencer_ready().await?;
+    let test_rollup = start_test_rollup(&test_case, OperatingMode::Optimistic).await?;
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
@@ -63,7 +35,7 @@ async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
 async fn send_test_bank_txs(
     test_case: TestCase,
     client: &NodeClient,
-    da_service: Arc<StorableMockDaService>,
+    _da_service: Arc<StorableMockDaService>,
 ) -> anyhow::Result<()> {
     let mut slots_subscription = client.client.subscribe_slots().await?;
 
@@ -77,18 +49,19 @@ async fn send_test_bank_txs(
     let initial_balance = 1000;
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
-    da_service.produce_n_blocks_now(3).await.unwrap();
-
     let batch_1_rollup_height = send_tx_and_wait_for_status(&[tx], client).await?;
 
     assert!(batch_1_rollup_height >= 1);
 
     // FIXME(@theochap): Remove that once we are confident that we don't have a race condition in the sequencer.
-    sleep(Duration::from_millis(
-        (ESTIMATED_BLOCK_PROCESSING_TIME.as_millis() * config_value!("DEFERRED_SLOTS_COUNT") * 2)
-            .try_into()
-            .unwrap(),
-    ));
+    let slots_to_wait = config_value!("DEFERRED_SLOTS_COUNT") * 2;
+    tracing::warn!(
+        slots_to_wait,
+        "Going to wait deferred slots count double for some reason"
+    );
+    for _ in 0..slots_to_wait {
+        let _slot = slots_subscription.next().await.unwrap()?;
+    }
 
     assert_slot_finality(
         client,
@@ -107,7 +80,7 @@ async fn send_test_bank_txs(
     let mut rollup_height = 1;
     let mut verified_attested_height = 0;
 
-    // How many slots rollup allowed to lag behind in posting attestations
+    // How many slots rollup allowed lagging behind in posting attestations
     let attestation_publish_threshold = 1000;
 
     while verified_attested_height <= batch_1_rollup_height {
@@ -143,7 +116,10 @@ async fn get_max_attested_height(
         .map(|h| format!("?rollup_height={h}"))
         .unwrap_or_default();
     let url = format!("/modules/attester-incentives/state/maximum-attested-height{param}");
-    let response = client.query_rest_endpoint::<ValueResponse>(&url).await?;
+    let response = client
+        .query_rest_endpoint::<ValueResponse>(&url)
+        .await
+        .with_context(|| format!("Failed to query attested height {rollup_height:?}"))?;
 
     let height = response.value;
     Ok(height)

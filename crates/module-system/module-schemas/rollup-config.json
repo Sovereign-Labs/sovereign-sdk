@@ -438,6 +438,13 @@
           "format": "uint128",
           "minimum": 0.0
         },
+        "num_cache_warmup_workers": {
+          "description": "The number of workers that warm up the main executor cache.",
+          "default": 3,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
         "postgres_connection_string": {
           "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
           "default": null,
@@ -699,8 +706,26 @@
           "format": "uint64",
           "minimum": 0.0
         },
+        "pruner_max_batch_size": {
+          "description": "Maximum number of keys to prune in a single batch.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "pruner_versions_to_keep": {
           "description": "These many versions will be available for historical querying.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "state_cache_size": {
+          "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB. A larger cache size can improve execution speed at the cost of more memory usage.",
           "type": [
             "integer",
             "null"
@@ -758,7 +783,6 @@
       "type": "object",
       "required": [
         "da_polling_interval_ms",
-        "genesis_height",
         "http_config"
       ],
       "properties": {
@@ -777,8 +801,9 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "genesis_height": {
-          "description": "DA start height.",
+        "da_total_timeout_secs": {
+          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead to rollup shutdown.",
+          "default": 600,
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
@@ -795,6 +820,20 @@
           "description": "Whether to save transaction bodies to the database.",
           "default": false,
           "type": "boolean"
+        }
+      }
+    },
+    "SeqConfigExtension": {
+      "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
+      "type": "object",
+      "required": [
+        "max_log_limit"
+      ],
+      "properties": {
+        "max_log_limit": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
         }
       }
     },
@@ -862,7 +901,7 @@
           ]
         },
         "blob_processing_timeout_secs": {
-          "description": "Maximum time in seconds to wait for a blob to be processed.",
+          "description": "Maximum time in seconds to wait for a blob to be processed, since it has been published to DA.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
@@ -873,6 +912,17 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "extension": {
+          "description": "Extensions to the sequencer config (for example evm related configuration).",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SeqConfigExtension"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "max_allowed_node_distance_behind": {
           "description": "The sequencer won't process incoming requests unless the node is within this many blocks or ahead of the sequencer.",

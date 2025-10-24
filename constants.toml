@@ -10,8 +10,22 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+
+# The namespace used by the rollup to store its data.
+# Using byte_string to convert "sov-test-b" to ASCII bytes
+# Should be 10 bytes long for Celestia
+BATCH_NAMESPACE = { byte_string = "sov-test-b" }
+# The namespace used by the rollup to store aggregated ZK proofs.
+# This is "sov-test-p" encoded as ASCII bytes.
+# "hex" format is used as an example, that it is possible to define namespace as any sequence of bytes.
+# `python3 -c "import sys; print('0x' + sys.argv[1].encode().hex())" "sov-test-p"`
+# Should be 10 bytes long for Celestia
+PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
+
 # We will keep only this many blocks in the EVM module.
-EVM_BLOCK_PRUNING_THRESHOLD = 1000
+EVM_BLOCK_PRUNING_THRESHOLD = 10000
+# Rollup for production and EVM for benchmarks
+EVM_GAS_METERING_MODE = "Rollup"
 # How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
 # the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
 SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.
@@ -29,7 +43,7 @@ DEFERRED_SLOTS_COUNT = 120
 MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT = 10
 # How many *rollup blocks* we wait before making a state root visible to the rollup.
 # This value should always be set to at least 1
-STATE_ROOT_DELAY_BLOCKS = 1
+STATE_ROOT_DELAY_BLOCKS = 3
 # How many blobs from unregistered sequencers we will accept per slot
 # We can't slash misbehaving senders because they aren't a registered sequencer with a stake so
 # this serves as protection against spam.
@@ -82,6 +96,9 @@ DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION = [1, 1]
 # The fixed cost of verifying a signature
 DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION = [100, 100]
 # --- End Gas parameters to specify how to charge gas for hashing ---
+
+# The cost of EVM execution
+DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS = [1, 0]
 
 # Maximum amount of gas the sequencer can pay for the tx execution ---
 MAX_SEQUENCER_EXEC_GAS_PER_TX = [1_000_000_000, 1_000_000_000]
@@ -137,3 +154,51 @@ ELASTICITY_MULTIPLIER = 2
 # --- Hyperlane constants ---
 HYPERLANE_BRIDGE_DOMAIN = 5555
 # --- End Hyperlane constants ---
+
+
+BANK_DISCRIMINANT = 0
+ACCOUNTS_DISCRIMINANT = 1
+CHAIN_STATE_DISCRIMINANT = 2
+OPERATOR_INCENTIVES_DISCRIMINANT = 3
+BLOB_STORAGE_DISCRIMINANT = 4
+PROVER_INCENTIVES_DISCRIMINANT = 5
+SEQUENCER_REGISTRY_DISCRIMINANT = 6
+UNIQUENESS_DISCRIMINANT = 7
+HYPERLANE_DISCRIMINANT = 8
+ATTESTER_INCENTIVES_DISCRIMINANT = 9
+BLOB_SELECTOR_DISCRIMINANT = 10
+EVM_DISCRIMINANT = 11
+MAILBOX_DISCRIMINANT = 12
+INTERCHAIN_GAS_PAYMASTER_DISCRIMINANT = 13
+MERKLE_TREE_HOOK_DISCRIMINANT = 14
+WARP_DISCRIMINANT = 15
+PAYMASTER_DISCRIMINANT = 16
+REVENUE_SHARE_DISCRIMINANT = 17
+
+
+# Test modules
+STATE_CONSISTENCY_DISCRIMINANT = 231
+MODULE_WITH_VERSIONED_STATE_ACCESS_IN_SLOT_HOOK_DISCRIMINANT = 232
+GAS_TESTER_DISCRIMINANT = 233
+INCORRECT_HOOKS_OVERRIDE_DISCRIMINANT = 234
+CORRECT_HOOKS_OVERRIDE_DISCRIMINANT = 235
+QUERY_MODULE_DISCRIMINANT = 236
+TEST_STRUCT_DISCRIMINANT = 237
+TEST_VISIBLE_HASH_MODULE_DISCRIMINANT = 238
+MODULE_2_DISCRIMINANT = 239
+MODULE_1_DISCRIMINANT = 240
+THIRD_TEST_STRUCT_DISCRIMINANT = 241
+TEST_HELPER_DISCRIMINANT = 242
+SECOND_TEST_STRUCT_DISCRIMINANT = 243
+FIRST_TEST_STRUCT_DISCRIMINANT = 244
+TEST_ACCESSORY_MODULE_DISCRIMINANT = 245
+MY_MODULE_DISCRIMINANT = 246
+TEST_MODULE_DISCRIMINANT = 247
+ROUTING_RECIPIENT_DISCRIMINANT = 248
+EXAMPLE_MODULE_DISCRIMINANT = 249 
+SYNTHETIC_LOAD_DISCRIMINANT = 250
+TEST_RECIPIENT_DISCRIMINANT = 251
+ACCESS_PATTERN_DISCRIMINANT = 252
+HOOKS_COUNT_DISCRIMINANT = 253
+CACHE_AND_REVERT_TESTER_DISCRIMINANT = 254
+VALUE_SETTER_DISCRIMINANT = 255

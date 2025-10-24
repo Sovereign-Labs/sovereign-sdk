@@ -25,7 +25,7 @@ path = "tests/integration/main.rs"
 anyhow = { workspace = true }
 bech32 = { workspace = true }
 blake2 = "0.10"
-convert_case = "0.6.0"
+convert_case = { workspace = true }
 darling = { workspace = true }
 derive_more = { workspace = true, features = ["deref"] }
 hex = { workspace = true }
@@ -42,6 +42,7 @@ sov-metrics = { workspace = true, optional = true }
 [dev-dependencies]
 sov-modules-macros = { path = ".", features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
+sov-chain-state = { workspace = true, features = ["native"] }
 borsh = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "macros", "server"] }
 schemars = { workspace = true }
@@ -71,7 +72,8 @@ native = [
 	"sov-rollup-interface/native",
 	"sov-state/native",
 	"sov-address/native",
-	"sov-metrics?/native"
+	"sov-metrics?/native",
+	"sov-chain-state/native"
 ]
 arbitrary = [
 	"sov-modules-macros/arbitrary",

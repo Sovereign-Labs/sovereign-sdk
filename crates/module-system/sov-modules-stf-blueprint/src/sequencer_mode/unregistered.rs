@@ -19,6 +19,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     validated_output: AuthTxOutput<S, R>,
     raw_tx: FullyBakedTx,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
+    execution_context: ExecutionContext,
 ) -> (
     Result<ApplyTxResult<S>, TxProcessingError>,
     StateCheckpoint<S>,
@@ -49,6 +50,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     if let Err(e) = runtime.transaction_authorizer().check_uniqueness(
         &auth_data,
         &ctx,
+        &execution_context,
         &mut pre_exec_working_set,
     ) {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
@@ -72,12 +74,12 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
         );
     }
 
-    let gas_price = pre_exec_working_set.gas_price().clone();
+    let gas_price = pre_exec_working_set.gas_price();
     // After this check, we are confident that the transaction sender can cover the costs of transaction processing.
     if let Err(err) =
         runtime
             .gas_enforcer()
-            .try_reserve_gas(tx, &gas_price, &mut ctx, &mut pre_exec_working_set)
+            .try_reserve_gas(tx, gas_price, &mut ctx, &mut pre_exec_working_set)
     {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
         return (
@@ -93,12 +95,12 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     // The transaction will execute until one of the following conditions is met:
     // 1. It consumes more funds than `tx.max_fee`.
     // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-    let working_set_gas_meter = tx.gas_meter(&gas_info.gas_price, slot_gas);
+    let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, *slot_gas);
 
     let mut working_set = WorkingSet::create_working_set(scratchpad, tx, working_set_gas_meter);
 
     // Here we charge the gas for the transaction sig & pre-execution checks.
-    if let Err(err) = working_set.charge_gas(&gas_info.gas_used) {
+    if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
         let (mut scratchpad, transaction_consumption) = working_set.revert();
 
         // Refund the remaining gas to the sender.
@@ -166,6 +168,7 @@ pub(crate) fn apply_batch<S, RT>(
     blob_idx: usize,
     sequencer_da_address: &<S::Da as DaSpec>::Address,
     gas_price: &<S::Gas as Gas>::Price,
+    execution_context: ExecutionContext,
 ) -> (BatchReceipt<S>, StateCheckpoint<S>)
 where
     S: Spec,
@@ -197,7 +200,7 @@ where
                 ignored_tx_receipts,
                 inner: BatchSequencerReceipt {
                     da_address: sequencer_da_address.clone(),
-                    gas_price: gas_price.clone(),
+                    gas_price: *gas_price,
                     gas_used,
                     outcome: BatchSequencerOutcome {
                         rewards: Rewards {
@@ -211,15 +214,12 @@ where
 
     // Check: The slot gas is higher than the gas needed to validate the transaction.
     let max_unregistered_tx_check_costs = <S as GasSpec>::max_unregistered_tx_check_costs();
-    if slot_gas.dim_is_less_or_eq(&max_unregistered_tx_check_costs) {
+    if slot_gas.dim_is_less_or_eq(max_unregistered_tx_check_costs) {
         // We don't consume gas for failed authentication of unregistered sequencer.
         let gas_used = S::Gas::zero();
 
         let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
-            ignored: IgnoredTxContents {
-                gas_used: gas_used.clone(),
-                index: 0,
-            },
+            ignored: IgnoredTxContents { gas_used, index: 0 },
         };
 
         return (
@@ -232,7 +232,7 @@ where
     // A malicious actor could exploit this mechanism to attack the rollup, for instance, by sending large transactions that are costly to deserialize from an address with no funds on the rollup.
     // To mitigate this, we initialize the gas meter with just enough gas to process a valid transaction. If the transaction is too big, we quickly run out of gas.
     // Additionally, we rate-limit (during blob selection) the number of forced registrations to further reduce the effectiveness of such attacks.
-    let meter = BasicGasMeter::new_with_gas(max_unregistered_tx_check_costs, gas_price.clone());
+    let meter = BasicGasMeter::new_with_gas(max_unregistered_tx_check_costs, *gas_price);
 
     let mut pre_exec_working_set = scratchpad.to_pre_exec_working_set(meter);
     let authentication_result =
@@ -252,7 +252,7 @@ where
                     warn!(error = ?err_str);
                     let skipped = SkippedTxContents {
                         error: TxProcessingError::AuthenticationFailed(err_str),
-                        gas_used: gas_used.clone(),
+                        gas_used,
                     };
 
                     return (
@@ -272,10 +272,7 @@ where
                 }
             }
             let ignored = IgnoredTransactionReceipt::<TxReceiptContents<S>> {
-                ignored: IgnoredTxContents {
-                    gas_used: gas_used.clone(),
-                    index: 0,
-                },
+                ignored: IgnoredTxContents { gas_used, index: 0 },
             };
 
             return (
@@ -294,6 +291,7 @@ where
         validated_output,
         batch.tx.clone(),
         sequencer_da_address,
+        execution_context,
     );
 
     let mut tx_receipts = Vec::new();
@@ -307,10 +305,7 @@ where
             // There is no one to charge for the pre-execution gas because the sequencer was not registered at the time of the error.
             // However, we deduct the gas from the slot gas meter.
             gas_used = pre_exec_gas_meter.gas_info().gas_used;
-            let skipped = SkippedTxContents {
-                error,
-                gas_used: gas_used.clone(),
-            };
+            let skipped = SkippedTxContents { error, gas_used };
 
             let tx_receipt = create_tx_receipt(skipped, raw_tx_hash, batch.tx.data.clone());
             tx_receipts.push(tx_receipt);
@@ -338,8 +333,8 @@ where
         ignored_tx_receipts: vec![],
         inner: BatchSequencerReceipt {
             da_address: sequencer_da_address.clone(),
-            gas_price: gas_price.clone(),
-            gas_used: gas_used.clone(),
+            gas_price: *gas_price,
+            gas_used,
 
             outcome: BatchSequencerOutcome {
                 rewards: Rewards {

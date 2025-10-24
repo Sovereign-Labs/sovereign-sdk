@@ -30,7 +30,7 @@ async fn init_and_restart_inner() {
     };
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params: vec![1],
+        genesis_params: vec![1].into(),
     };
 
     let tmpdir = tempfile::tempdir().unwrap();

@@ -7,17 +7,19 @@ use serde::{Deserialize, Serialize};
 use sov_db::config::RollupDbConfig;
 use sov_rollup_interface::node::da::DaService;
 
-use crate::sequencer::{SequencerConfig, SequencerKindConfig};
+use crate::sequencer::{SeqConfigExtension, SequencerConfig, SequencerKindConfig};
 
 pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 
 /// Configuration for StateTransitionRunner.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct RunnerConfig {
-    /// DA start height.
-    pub genesis_height: u64,
     /// Polling interval for the DA service to check the sync status (in milliseconds).
     pub da_polling_interval_ms: u64,
+    /// How much total time DA service has to provide block, including re-orgs, retries, etc.
+    /// Exceeding this timeout will lead to rollup shutdown.
+    #[serde(default = "default_da_total_timeout_sec")]
+    pub da_total_timeout_secs: u64,
     /// HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.
     pub http_config: HttpServerConfig,
     /// How many concurrent tasks to get block from DA service
@@ -25,6 +27,10 @@ pub struct RunnerConfig {
     /// Whether to save transaction bodies to the database.
     #[serde(default)]
     pub save_tx_bodies: bool,
+}
+
+fn default_da_total_timeout_sec() -> u64 {
+    600
 }
 
 impl RunnerConfig {
@@ -149,6 +155,15 @@ pub struct RollupConfig<Address, Da: DaService, M> {
     pub monitoring: M,
 }
 
+impl<Address, Da: DaService, M> RollupConfig<Address, Da, M> {
+    pub fn extension_or_panic(&self) -> SeqConfigExtension {
+        *self.sequencer
+            .extension
+            .as_ref()
+            .expect("Sequencer config extension is missing. Verify the [sequencer.extension] section in the rollup configuration.")
+    }
+}
+
 /// Reads toml file as a specific type.
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let contents = std::fs::read_to_string(&path)?;
@@ -204,6 +219,7 @@ mod tests {
             max_batch_size_bytes = 1048576
             max_concurrent_blobs = 16
             max_allowed_node_distance_behind = 5
+            num_cache_warmup_workers = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.standard]
         "#;

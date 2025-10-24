@@ -1,12 +1,17 @@
 use nomt::Options;
 use schemars::JsonSchema;
 
+use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
+
 /// Configuration for Sovereign Rollup node database.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct RollupDbConfig {
     /// Path where all databases are stored
     pub path: std::path::PathBuf,
-    // User state configuration
+    /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB.
+    /// A larger cache size can improve execution speed at the cost of more memory usage.
+    pub state_cache_size: Option<usize>,
+
     /// Number of concurrent commit workers for the user state.
     /// More details at [`Options::commit_concurrency`]
     pub user_commit_concurrency: Option<usize>,
@@ -47,6 +52,8 @@ pub struct RollupDbConfig {
     pub pruner_block_interval: Option<u64>,
     /// These many versions will be available for historical querying.
     pub pruner_versions_to_keep: Option<usize>,
+    /// Maximum number of keys to prune in a single batch.
+    pub pruner_max_batch_size: Option<usize>,
 }
 
 impl RollupDbConfig {
@@ -55,6 +62,7 @@ impl RollupDbConfig {
     pub fn default_in_path(path: std::path::PathBuf) -> Self {
         Self {
             path,
+            state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
             user_commit_concurrency: Some(4),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
                 2_500 // 9.77MB
@@ -79,6 +87,7 @@ impl RollupDbConfig {
             kernel_leaf_cache_size: None,
             pruner_block_interval: Some(100),
             pruner_versions_to_keep: Some(20),
+            pruner_max_batch_size: None,
         }
     }
 
@@ -141,14 +150,18 @@ impl RollupDbConfig {
         opts
     }
 
-    pub(crate) fn get_pruner_interval(&self) -> u64 {
+    pub(crate) fn get_pruner_interval(&self) -> Option<u64> {
         self.pruner_block_interval
-            .expect("`pruner_block_interval` must be set")
     }
 
     pub(crate) fn get_pruner_versions_to_keep(&self) -> usize {
         self.pruner_versions_to_keep
             .expect("`pruner_versions_to_keep` must be set")
+    }
+
+    pub(crate) fn get_pruner_max_batch_size(&self) -> usize {
+        self.pruner_max_batch_size
+            .unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
     }
 }
 

@@ -1,15 +1,16 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_primitives::{Address, B256, U256};
+use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_primitives::{Address, Bloom, B256, B64, U256};
 use alloy_primitives::{BlockNumber, Bytes};
-use anyhow::Result;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{GenesisState, Module, Spec};
 
+use crate::conversions::create_block_env;
 use crate::db::init::InitEvmDb;
 use crate::evm::primitive_types::Block;
-use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig};
+use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig, EXCESS_BLOB_GAS};
 #[cfg(feature = "native")]
 use std::ops::RangeInclusive;
 
@@ -44,17 +45,29 @@ where
         &mut self,
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         for acc in config.accounts.clone() {
             self.init_account(acc, state)?;
         }
 
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
-        let block = init_block(config);
+
+        let block = init_block(config, self.base_fee());
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
+
+        let block_env = create_block_env(
+            self.base_fee(),
+            block.header.gas_limit,
+            block.header.timestamp,
+            block.header.beneficiary,
+            block.header.number,
+            None,
+        );
+        self.block_env.set(&block_env, state)?;
+
         #[cfg(feature = "native")]
         {
             self.block_numbers.set(&RangeInclusive::new(0, 0), state)?;
@@ -64,8 +77,12 @@ where
         Ok(())
     }
 
-    fn init_account(&mut self, acc: AccountData, state: &mut impl GenesisState<S>) -> Result<()> {
-        let mut evm_db = self.get_db(state);
+    fn init_account(
+        &mut self,
+        acc: AccountData,
+        state: &mut impl GenesisState<S>,
+    ) -> anyhow::Result<()> {
+        let mut evm_db = self.db(state);
         evm_db.insert_account_info(
             acc.address,
             AccountInfo {
@@ -74,25 +91,41 @@ where
                 nonce: 0,
                 code: None,
             },
-        );
+        )?;
 
         if !acc.code.is_empty() {
-            evm_db.insert_code(acc.code_hash, acc.code.clone());
+            evm_db.insert_code(acc.code_hash, acc.code.clone())?;
         };
 
         Ok(())
     }
 }
 
-fn init_block(config: &EvmGenesisConfig) -> Block {
+fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
     let header = alloy_consensus::Header {
         beneficiary: config.chain_spec.coinbase,
         // This will be set in finalize_hook or in the next begin_rollup_block_hook
         state_root: KECCAK_EMPTY,
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
-        base_fee_per_gas: Some(config.initial_base_fee),
-        ..Default::default()
+        excess_blob_gas: Some(EXCESS_BLOB_GAS),
+        base_fee_per_gas: Some(base_fee),
+        // Default values
+        parent_hash: B256::ZERO,
+        ommers_hash: EMPTY_OMMER_ROOT_HASH,
+        transactions_root: EMPTY_ROOT_HASH,
+        receipts_root: EMPTY_ROOT_HASH,
+        logs_bloom: Bloom::default(),
+        difficulty: U256::ZERO,
+        number: 0,
+        gas_used: 0,
+        extra_data: Bytes::default(),
+        mix_hash: B256::ZERO,
+        nonce: B64::ZERO,
+        withdrawals_root: None,
+        blob_gas_used: None,
+        parent_beacon_block_root: None,
+        requests_hash: None,
     };
 
     Block {
@@ -101,25 +134,13 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
     }
 }
 
-fn init_spec(config: &EvmGenesisConfig) -> Result<Vec<(BlockNumber, SpecId)>> {
-    let mut spec = config
-        .chain_spec
-        .hardforks
-        .iter()
-        .map(|&(k, v)| {
-            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-            if v == SpecId::CANCUN {
-                panic!("Cancun is not supported");
-            }
-
-            (k, v)
-        })
-        .collect::<Vec<_>>();
+fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
+    let mut spec = config.chain_spec.hardforks.to_vec();
 
     spec.sort_by(|a, b| a.0.cmp(&b.0));
 
     if spec.is_empty() {
-        spec.push((0, SpecId::SHANGHAI));
+        spec.push((0, SpecId::CANCUN));
     } else if spec[0].0 != 0u64 {
         panic!("EVM spec must start from block 0");
     };

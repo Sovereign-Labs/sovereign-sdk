@@ -11,6 +11,7 @@ repository.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",

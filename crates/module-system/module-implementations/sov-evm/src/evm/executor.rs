@@ -1,6 +1,9 @@
-use alloy_primitives::Address;
-use reth_primitives::TransactionSigned;
-use reth_revm::db::DBErrorMarker;
+use crate::{
+    db::commit::FallibleDatabaseCommit,
+    get_spec_id,
+    sov_evm::{SovEvm, StorageAccessInspector},
+    EvmRuntimeConfig,
+};
 use revm::context::TxEnv;
 use revm::InspectEvm;
 use revm::{
@@ -10,14 +13,13 @@ use revm::{
     },
     Database, MainContext,
 };
+#[cfg(feature = "native")]
+use revm::{interpreter::interpreter::EthInterpreter, Inspector};
+use revm_database_interface::DBErrorMarker;
+use sov_modules_api::macros::config_value;
 
-use crate::{
-    db::commit::FallibleDatabaseCommit,
-    evm::conversions::create_tx_env,
-    get_spec_id,
-    sov_evm::{SovEvm, UnmeteredStorageAccessInspector},
-    EvmRuntimeConfig,
-};
+/// The maximum contract code size is 512KiB by default.
+pub const DEFAULT_MAX_CONTRACT_CODE_SIZE: usize = 512 * 1024;
 
 /// builds CfgEnv
 /// Returns correct config depending on spec for given block number
@@ -28,8 +30,15 @@ pub(crate) fn get_cfg_env(
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
-    cfg_env.chain_id = cfg.chain_spec.chain_id;
-    cfg_env.limit_contract_code_size = cfg.chain_spec.limit_contract_code_size;
+    cfg_env.chain_id = config_value!("CHAIN_ID");
+    cfg_env.limit_contract_code_size = Some(
+        cfg.chain_spec
+            .limit_contract_code_size
+            .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
+    );
+    cfg_env.tx_chain_id_check = false;
+    cfg_env.disable_block_gas_limit = true;
+    cfg_env.disable_balance_check = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
@@ -39,43 +48,56 @@ pub fn transact_commit<
     DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
     E: DBErrorMarker,
 >(
-    account_nonce: u64,
-    mut db: DB,
+    mut db: &mut DB,
     block_env: &BlockEnv,
-    tx: &TransactionSigned,
-    signer: Address,
+    tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<E>> {
-    let tx_env = create_tx_env(account_nonce, tx, signer);
-    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx_env, cfg)?;
+    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg)?;
     // We don't use transact_commit as it does not support returning an error
     db.commit(state)?;
     Ok(result)
 }
 
 #[cfg(feature = "native")]
-pub(crate) fn call<DB: Database<Error = E>, E: DBErrorMarker>(
-    mut db: DB,
-    block_env: &BlockEnv,
+#[allow(dead_code)]
+pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
+    db: DB,
+    block_env: &'a BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
-) -> Result<ExecutionResult, EVMError<E>> {
-    Ok(transact(&mut db, block_env, tx, cfg)?.result)
+    inspector: I,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+{
+    let context = context(db, block_env, cfg);
+    let storage_inspector = StorageAccessInspector::new();
+    let mut evm = SovEvm::new(context, (inspector, storage_inspector));
+    evm.inspect_tx(tx)
 }
 
-fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
-    db: &mut DB,
+/// Execute ethereum transaction
+pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: DB,
     block_env: &BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
-    let context = Context::mainnet()
+    let context = context(db, block_env, cfg);
+    let mut evm = SovEvm::new(context, StorageAccessInspector::new());
+    evm.inspect_tx(tx)
+}
+
+fn context<DB: Database<Error = E>, E: DBErrorMarker>(
+    db: DB,
+    block_env: &BlockEnv,
+    cfg: CfgEnv,
+) -> Context<&BlockEnv, TxEnv, CfgEnv, DB> {
+    Context::mainnet()
         .with_db(db)
         .with_block(block_env)
-        .with_cfg(cfg);
-    let inspector = UnmeteredStorageAccessInspector::new();
-    let mut evm = SovEvm::new(context, inspector);
-    evm.inspect_tx(tx)
+        .with_cfg(cfg)
 }
 
 #[cfg(test)]
@@ -98,7 +120,7 @@ mod tests {
                 limit_contract_code_size: Some(100),
                 ..Default::default()
             },
-            hardforks: vec![(0, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::CANCUN)],
         };
 
         let mut template_cfg_env = CfgEnv::default();
@@ -109,9 +131,12 @@ mod tests {
 
         let mut expected_cfg_env = CfgEnv::default();
         expected_cfg_env.chain_id = config_value!("CHAIN_ID");
+        expected_cfg_env.tx_chain_id_check = false;
         expected_cfg_env.disable_base_fee = true;
+        expected_cfg_env.disable_balance_check = true;
+        expected_cfg_env.disable_block_gas_limit = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
-        expected_cfg_env.spec = SpecId::SHANGHAI;
+        expected_cfg_env.spec = SpecId::CANCUN;
 
         assert_eq!(expected_cfg_env, cfg_env);
     }

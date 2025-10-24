@@ -23,10 +23,9 @@ impl FromStr for AccountStorageKey {
 }
 
 impl EncodeLike<(&Address, &U256), AccountStorageKey> for BcsCodec {
-    fn encode_like(&self, borrowed: &(&Address, &U256)) -> Vec<u8> {
-        let mut out = self.encode_like(borrowed.0);
-        out.extend_from_slice(&self.encode_like(borrowed.1));
-        out
+    fn encode_like(&self, borrowed: &(&Address, &U256), writer: &mut impl std::io::Write) {
+        self.encode_like(borrowed.0, writer);
+        self.encode_like(borrowed.1, writer);
     }
 }
 
@@ -34,9 +33,9 @@ impl EncodeLike<(&Address, &U256), AccountStorageKey> for BcsCodec {
 fn test_account_storage_key_encode_like() {
     use sov_state::StateItemEncoder;
     let key = AccountStorageKey(Address::from_slice(&[1; 20]), U256::from(0));
-    let encoded_like = BcsCodec.encode_like(&(&key.0, &key.1));
+    let encoded_like = BcsCodec.encode_to_vec_like(&(&key.0, &key.1));
 
-    assert_eq!(&BcsCodec.encode(&key), &encoded_like);
+    assert_eq!(&BcsCodec.encode_to_vec(&key), &encoded_like);
 }
 
 #[test]

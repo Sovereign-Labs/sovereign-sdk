@@ -5,7 +5,22 @@ use sov_modules_macros::config_value_private;
 
 use super::Spec;
 use crate::gas::GAS_DIMENSIONS;
-use crate::{new_constant, Amount, Gas};
+use crate::{Amount, Gas};
+
+#[macro_export]
+/// Defines a constant gas value.
+macro_rules! new_constant {
+    ($name: literal, $gas: ty) => {{
+        #[cfg(feature = "gas-constant-estimation")]
+        {
+            <$gas>::from(config_value_private!($name)).with_name($name)
+        }
+        #[cfg(not(feature = "gas-constant-estimation"))]
+        {
+            <$gas>::from(config_value_private!($name))
+        }
+    }};
+}
 
 /// The trait that defines the gas specification for the rollup.
 pub trait GasSpec:
@@ -54,6 +69,9 @@ pub trait GasSpec:
     /// The fixed cost of verifying a signature
     fn fixed_gas_to_charge_per_signature_verification() -> Self::Gas;
     // --- End Gas parameters to specify how to charge gas for signature verification ---
+
+    /// Gas to charge for EVM execution
+    fn gas_to_charge_per_evm_gas() -> Self::Gas;
 
     /// The cost of deserializing a message using Borsh
     fn gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
@@ -220,6 +238,10 @@ impl<S: Spec> GasSpec for S {
             "DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION",
             Self::Gas
         )
+    }
+
+    fn gas_to_charge_per_evm_gas() -> Self::Gas {
+        new_constant!("DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS", Self::Gas)
     }
 
     fn initial_base_fee_per_gas() -> <Self::Gas as Gas>::Price {

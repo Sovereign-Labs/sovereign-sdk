@@ -58,11 +58,11 @@ pub fn bad_request_400(message: &str, err: impl ToString) -> Response {
 }
 
 /// Returns a 503 error to be used when the sequencer is overloaded.
-pub fn sequencer_overloaded_503() -> ErrorObject {
+pub fn sequencer_overloaded_503(reason: &str) -> ErrorObject {
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,
         message: "The sequencer is temporarily overloaded. Try again in a few seconds".to_string(),
-        details: json_obj!({}),
+        details: json_obj!({"reason":  reason}),
     }
 }
 
@@ -91,6 +91,11 @@ pub fn database_error_response_500(err: impl ToString) -> Response {
 
 /// Returns a 500 internal server error.
 pub fn internal_server_error_response_500(err: impl ToString) -> Response {
+    internal_server_error_500(err).into_response()
+}
+
+/// Returns a 500 internal server error.
+pub fn internal_server_error_500(err: impl ToString) -> ErrorObject {
     tracing::error!(error = err.to_string(), "500 error while serving request");
 
     ErrorObject {
@@ -100,7 +105,6 @@ pub fn internal_server_error_response_500(err: impl ToString) -> Response {
             "error": err.to_string(),
         }),
     }
-    .into_response()
 }
 
 #[cfg(test)]

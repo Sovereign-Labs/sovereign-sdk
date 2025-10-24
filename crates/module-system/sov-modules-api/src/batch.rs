@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::DaSpec;
-
+use crate::ExecutionContext;
 use crate::{
     Amount, Context, DispatchCall, Gas, Runtime, SlotGasMeter, Spec, StateCheckpoint,
     TransactionReceipt, TxScratchpad,
 };
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::Bytes;
 
 /// `FullyBakedTx` represents a serialized signed rollup transaction that has been encoded with
 /// authentication information and is ready to be placed on the DA layer.
@@ -24,7 +25,7 @@ use crate::{
 pub struct FullyBakedTx {
     /// Serialized transaction.
     #[as_ref(forward)]
-    pub data: Vec<u8>,
+    pub data: Bytes,
 }
 
 impl std::fmt::Debug for FullyBakedTx {
@@ -39,7 +40,9 @@ impl FullyBakedTx {
     /// Construct a `FullyBakedTx` containing the given data
     #[must_use]
     pub fn new(data: Vec<u8>) -> Self {
-        Self { data }
+        Self {
+            data: Bytes::from_owner(data),
+        }
     }
 }
 
@@ -327,6 +330,11 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
 /// lifecycle. This is used by the sequencer to unwind failing transactions and to inspect
 /// the set of state changes made by a transaction before committing.
 pub trait InjectedControlFlow<S: Spec> {
+    /// Attempts to warm up the cache. This method only affects transactions executed on the main
+    /// sequencer executor and only if a warm up worker task finishes executing the given transaction
+    /// before the main executor.
+    fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>);
+
     /// Runs after authentication but before the transaction executes
     fn pre_flight<RT: Runtime<S>>(
         &self,
@@ -342,6 +350,7 @@ pub trait InjectedControlFlow<S: Spec> {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
         gas_used: &<S as Spec>::Gas,
+        exec_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>);
 }
 
@@ -363,6 +372,8 @@ pub trait IncrementalBatch<S: Spec>: Iterator<Item = (FullyBakedTx, Self::Contro
 }
 
 impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
+    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
+
     fn pre_flight<RT: Runtime<S>>(
         &self,
         _runtime: &RT,
@@ -378,6 +389,7 @@ impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
         _gas_used: &<S as Spec>::Gas,
+        _execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match provisional_outcome.execution_status {
             MaybeExecuted::Executed(receipt) => (

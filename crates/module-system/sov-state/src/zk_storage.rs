@@ -4,7 +4,7 @@ use jmt::storage::TreeReader;
 use jmt::JellyfishMerkleTree;
 #[cfg(feature = "bench")]
 use sov_modules_macros::cycle_tracker;
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::cache::{OrderedReadsAndWrites, StateAccesses};
@@ -12,7 +12,7 @@ use crate::jmt::KeyHash;
 use crate::namespaces::CompileTimeNamespace;
 use crate::storage::{SlotKey, SlotValue, Storage, StorageProof};
 use crate::storage_internals::SparseMerkleProof;
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 use crate::ProvableCompileTimeNamespace;
 use crate::{
     open_merkle_proof, MerkleProofSpec, NodeLeafAndMaybeValue, ProvableNamespace, ReadType,
@@ -43,7 +43,7 @@ fn jmt_verify_existence<S: MerkleProofSpec>(
 ) -> anyhow::Result<()> {
     // For each value that's been read from the tree, verify the provided smt proof
     for (key, read_value) in &state_accesses.ordered_reads {
-        let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
         // This TODO is for performance enhancement, not a security concern.
         // TODO: Switch to the batch read API once it becomes available
         let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
@@ -72,7 +72,7 @@ fn jmt_verify_update<S: MerkleProofSpec>(
         .ordered_writes
         .into_iter()
         .map(|(key, value)| {
-            let key_hash = KeyHash::with::<S::Hasher>(key.key().as_ref());
+            let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
             let val_hash_and_size = value
                 .as_ref()
                 .map(SlotValue::combine_val_hash_and_size::<S::Hasher>);
@@ -205,7 +205,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 // `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
 // In some tests, we use both `ProverStorage`` and `ZkStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.
@@ -258,5 +258,9 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
 
     fn get_root_hash_unbound(&self, _version: SlotNumber) -> anyhow::Result<Self::Root> {
         unimplemented!("The ZkStorage should not be used to get root hash! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+    }
+
+    fn get_unbound<N: crate::CompileTimeNamespace>(&self, _key: SlotKey) -> Option<SlotValue> {
+        unimplemented!("The ZkStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
 }

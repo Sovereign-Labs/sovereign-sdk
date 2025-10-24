@@ -27,7 +27,7 @@ fn test_charge_gas_to_set() {
     let gas_set_cost = <S as GasSpec>::gas_to_charge_per_byte_storage_update()
         .checked_scalar_product(value.size().into())
         .unwrap();
-    let remaining_funds = gas_set_cost.value(&gas_price);
+    let remaining_funds = gas_set_cost.value(gas_price);
 
     let mut working_set = create_working_set(remaining_funds, &gas_price);
 
@@ -49,7 +49,7 @@ fn test_charge_gas_to_set() {
 fn test_charge_gas_retrieve() {
     let gas_price = <<S as Spec>::Gas as Gas>::Price::from([Amount::new(1); 2]);
     let gas_access_cost = <S as GasSpec>::bias_to_charge_for_read();
-    let remaining_funds = gas_access_cost.value(&gas_price);
+    let remaining_funds = gas_access_cost.value(gas_price);
 
     let mut working_set = create_working_set(remaining_funds, &gas_price);
 
@@ -82,10 +82,10 @@ fn test_charge_gas_set_then_retrieve() {
         .unwrap();
 
     let remaining_funds = gas_access_cost
-        .value(&gas_price)
-        .checked_add(gas_set_cost.value(&gas_price))
+        .value(gas_price)
+        .checked_add(gas_set_cost.value(gas_price))
         .unwrap()
-        .checked_add(gas_load_cost.value(&gas_price))
+        .checked_add(gas_load_cost.value(gas_price))
         .unwrap();
 
     let mut working_set = create_working_set(remaining_funds, &gas_price);

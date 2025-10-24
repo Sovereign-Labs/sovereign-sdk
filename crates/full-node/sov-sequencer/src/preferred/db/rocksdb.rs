@@ -167,6 +167,7 @@ impl RocksDbBackend {
             Self::DB_NAME,
             Self::TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
+            0, // We don't need a cache for preferred sequencer since the table is not configured for caching anyway
         )?);
 
         // There's an edge case where we might have an in-progress batch but no completed blobs. In that case,
@@ -316,9 +317,7 @@ mod tests {
         let mut txs = vec![];
         let mut tx_hashes = vec![];
         for i in 0..10 {
-            let tx = FullyBakedTx {
-                data: vec![i as u8; 200],
-            };
+            let tx = FullyBakedTx::new(vec![i as u8; 200]);
             let tx_hash = HexString([i as u8; 32]);
             txs.push(tx);
             tx_hashes.push(tx_hash);

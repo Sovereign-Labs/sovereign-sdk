@@ -248,7 +248,9 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             return Ok(None);
         };
         Ok(Some(AcceptedTx {
-            tx: FullyBakedTx::new(tx.body.unwrap_or_default()),
+            tx: FullyBakedTx {
+                data: tx.body.unwrap_or_default(),
+            },
             tx_hash,
             confirmation: Confirmation {
                 events: tx

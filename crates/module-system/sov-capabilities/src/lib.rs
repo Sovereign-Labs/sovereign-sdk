@@ -13,6 +13,7 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
+use sov_modules_api::ExecutionContext;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
@@ -60,7 +61,7 @@ trait HasGasPayer<S: Spec> {
     fn try_reserve_gas_from_payer(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()>;
@@ -71,7 +72,7 @@ impl<S: Spec> HasGasPayer<S> for StandardProvenRollupCapabilities<'_, S> {
     fn try_reserve_gas_from_payer(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -88,7 +89,7 @@ impl<'a, S: Spec> HasGasPayer<S>
     fn try_reserve_gas_from_payer(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -113,7 +114,7 @@ where
     fn try_reserve_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -123,7 +124,7 @@ where
     fn try_reserve_gas_for_proof(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         sender: &S::Address,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -230,12 +231,14 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &self,
         auth_data: &AuthorizationData<S>,
         _context: &Context<S>,
+        execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         self.uniqueness.check_uniqueness(
             &auth_data.credential_id,
             auth_data.uniqueness,
             auth_data.tx_hash,
+            execution_context,
             state,
         )
     }

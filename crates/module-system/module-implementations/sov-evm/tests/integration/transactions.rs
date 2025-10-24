@@ -2,12 +2,14 @@ use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
 use alloy_primitives::FixedBytes;
+use alloy_primitives::Log;
 use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
 use revm::Database;
 use sov_evm::Evm;
+use sov_modules_api::GasArray;
 use sov_test_utils::TransactionType;
-use sov_test_utils::{BatchTestCase, SimpleStorageContract};
+use sov_test_utils::{BatchTestCase, LegacySimpleStorage};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
@@ -21,7 +23,7 @@ fn test_simple_transfer() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |ctx, state| {
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
             // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
@@ -35,9 +37,46 @@ fn test_simple_transfer() {
 }
 
 #[test]
+fn test_evm_gas_usage() {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
+        "[2, 0]",
+    );
+    let gas_used_with_evm_metering = {
+        let (mut runner, from, _) = setup();
+        let contract = LegacySimpleStorage::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
+        let (receipt, _) = runner.execute(transfer);
+        receipt.last_batch_receipt().inner.gas_used
+    };
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
+        "[1, 0]",
+    );
+    let gas_used_without_evm_metering = {
+        let (mut runner, from, _) = setup();
+        let contract = LegacySimpleStorage::default();
+        let contract_addr = from.address().create(0);
+        runner.execute(create_deploy_tx(0, &contract, &from).tx);
+        let transfer = create_set_arg_tx(0, 1, &contract, contract_addr, &from).tx;
+        let (receipt, _) = runner.execute(transfer);
+        receipt.last_batch_receipt().inner.gas_used
+    };
+    assert_eq!(
+        gas_used_with_evm_metering
+            .checked_sub(gas_used_without_evm_metering)
+            .unwrap()
+            .as_ref(),
+        &[5_251, 0]
+    );
+}
+
+#[test]
 fn test_executing_eth_transactions() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
 
     let address = account.address();
@@ -71,7 +110,7 @@ fn test_executing_eth_transactions() {
                     &tx_hash
                 );
 
-                assert_eq!(evm.get_tx_index_by_hash(&tx_hash, state), Some(nonce));
+                assert_eq!(evm.tx_index(&tx_hash, state), Some(nonce));
 
                 assert!(evm.receipt(nonce, state).unwrap().receipt.success);
 
@@ -82,7 +121,7 @@ fn test_executing_eth_transactions() {
 
                 assert_eq!(nonce + 1, nonce_from_module);
 
-                let storage_value = evm.get_storage(&contract_addr, &U256::ZERO, state).unwrap();
+                let storage_value = evm.storage(&contract_addr, &U256::ZERO, state).unwrap();
 
                 if nonce == 0 {
                     // On contract creation the value is absent.
@@ -150,7 +189,7 @@ fn test_executing_eth_transactions_several_blocks() {
 #[test]
 fn test_failed_tx_doesnt_update_evm_module_state() {
     let (mut runner, _, no_balance_account) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = LegacySimpleStorage::default();
     let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account).tx;
 
     runner.execute_batch(BatchTestCase {
@@ -176,7 +215,7 @@ fn test_account_nonce() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 1);
         }),
@@ -188,7 +227,7 @@ fn test_account_nonce() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 2);
         }),
@@ -199,7 +238,7 @@ fn test_account_nonce() {
 #[test]
 fn test_deploy_many_contracts() {
     let (mut runner, account, _) = setup();
-    let contract = SimpleStorageContract::default();
+    let contract = LegacySimpleStorage::default();
     let contract_addr_1 = account.address().create(0);
 
     let create_contract_tx_1 = create_deploy_tx(0, &contract, &account).tx;
@@ -224,7 +263,7 @@ fn test_deploy_many_contracts() {
             // The two contracts have different addresses.
             assert_ne!(contract_addr_1, contract_addr_2);
 
-            let mut db = evm.get_db(state);
+            let mut db = evm.db(state);
             let contract_1_account = db.basic(contract_addr_1).unwrap().unwrap();
             let contract_2_account = db.basic(contract_addr_2).unwrap().unwrap();
 
@@ -232,7 +271,7 @@ fn test_deploy_many_contracts() {
             assert_eq!(contract_1_account.code_hash, contract_2_account.code_hash);
 
             let storage_value_2 = evm
-                .get_storage(&contract_addr_2, &U256::ZERO, state)
+                .storage(&contract_addr_2, &U256::ZERO, state)
                 .unwrap()
                 .unwrap();
 
@@ -240,11 +279,47 @@ fn test_deploy_many_contracts() {
 
             // The storage of the first contract didn't change.
             let storage_value_1 = evm
-                .get_storage(&contract_addr_1, &U256::ZERO, state)
+                .storage(&contract_addr_1, &U256::ZERO, state)
                 .unwrap()
                 .unwrap();
 
             assert_eq!(U256::from(1), storage_value_1);
+        }),
+    });
+}
+
+#[test]
+fn test_evm_logs() {
+    let (mut runner, account, _) = setup();
+    let contract = LegacySimpleStorage::default();
+    let contract_addr = account.address().create(0);
+    let address_bytes: [u8; 32] = account.address().into_word().into();
+
+    let check_logs = move |logs: &[Log], len: usize| {
+        assert_eq!(logs.len(), len);
+
+        for log in logs {
+            assert_eq!(log.topics().len(), 4);
+            assert_eq!(log.address, contract_addr);
+            assert_eq!(log.topics()[1], address_bytes);
+        }
+    };
+
+    let mut txs = vec![create_deploy_tx(0, &contract, &account).tx];
+
+    txs.push(create_emit_logs(1, &contract, contract_addr, &account, 1, 1).tx);
+    txs.push(create_emit_logs(2, &contract, contract_addr, &account, 1, 2).tx);
+
+    let evm = Evm::<S>::default();
+
+    runner.execute_batch(BatchTestCase {
+        input: txs.into(),
+        assert: Box::new(move |_result, state| {
+            let logs_1 = evm.receipt(1, state).unwrap().receipt.logs;
+            check_logs(&logs_1, 1);
+
+            let logs_2 = evm.receipt(2, state).unwrap().receipt.logs;
+            check_logs(&logs_2, 2);
         }),
     });
 }

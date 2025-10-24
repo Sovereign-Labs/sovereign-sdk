@@ -1,10 +1,9 @@
-use crate::evm::primitive_types::Block;
-use crate::{BlockEnv, Evm, PendingTransaction};
-use alloy_consensus::constants::KECCAK_EMPTY;
+use crate::conversions::create_block_env;
+use crate::evm::primitive_types::{Block, TransactionSigned};
+use crate::{Evm, PendingTransaction};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
-use alloy_consensus::TxReceipt;
-use alloy_primitives::Bloom;
-use alloy_primitives::{B256, U256};
+use alloy_consensus::{TxReceipt, EMPTY_OMMER_ROOT_HASH};
+use alloy_primitives::{Bloom, Bytes, B256, B64, U256};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -29,7 +28,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .head
             .get(state)
             .unwrap_infallible()
-            .expect("Head block should always be set");
+            // This is justified. We set the head at genesis and never remove it — only overwrite it.
+            .expect("The impossible happened: Head block is empty");
 
         let pre_state_user_root: [u8; 32] =
             pre_state_user_root.namespace_root(ProvableNamespace::User);
@@ -42,27 +42,28 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let cfg = self.cfg_infallible(state);
 
-        let new_pending_env = BlockEnv {
-            number: U256::from(parent_block.header.number.wrapping_add(1)),
-            beneficiary: cfg.chain_spec.coinbase,
-            timestamp: U256::from(
-                parent_block
-                    .header
-                    .timestamp
-                    .saturating_add(cfg.chain_spec.block_timestamp_delta),
-            ),
-            // WARNING: `prevrandao`` value is predictable up to [`DEFERRED_SLOTS_COUNT`] in advance,
-            // Users should follow the same best practice that they would on Ethereum and use future randomness.
-            // See: https://eips.ethereum.org/EIPS/eip-4399#tips-for-application-developers
-            prevrandao: Some(B256::from(pre_state_user_root)),
-            basefee: parent_block
-                .header
-                .next_block_base_fee(cfg.chain_spec.base_fee_params)
-                .unwrap(),
-            gas_limit: cfg.chain_spec.block_gas_limit,
-            difficulty: Default::default(),
-            blob_excess_gas_and_price: None,
-        };
+        let new_block_number = parent_block
+            .header
+            .number
+            .checked_add(1)
+            // This is justified. We will never have so many blocks.
+            .expect("The impossible happened: Block number overflow");
+
+        let new_timestamp = self
+            .chain_state_module
+            .get_time(state)
+            .unwrap_infallible()
+            .as_millis() as u64;
+
+        let new_pending_env = create_block_env(
+            self.base_fee(),
+            cfg.chain_spec.block_gas_limit,
+            new_timestamp,
+            cfg.chain_spec.coinbase,
+            new_block_number,
+            Some(B256::from(pre_state_user_root)),
+        );
+
         self.block_env
             .set(&new_pending_env, state)
             .unwrap_infallible();
@@ -71,19 +72,19 @@ impl<S: Spec> BlockHooks for Evm<S> {
     /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
     /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_rollup_block_hook of the next slot.
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<S>) {
-        let cfg = self.cfg_infallible(state);
-
         let block_env = self
             .block_env
             .get(state)
             .unwrap_infallible()
-            .expect("Pending block should always be set");
+            // This is justified. We set `pending_head` in `end_rollup_block_hook`.
+            .expect("The impossible happened: Pending block is empty");
 
         let parent_block = self
             .head
             .get(state)
             .unwrap_infallible()
-            .expect("Head block should always be set")
+            // This is justified. We set the head at genesis and never remove it — only overwrite it.
+            .expect("The impossible happened: Head block is empty")
             .seal();
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);
@@ -104,7 +105,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .last()
             .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
 
-        let transactions: Vec<reth_primitives::TransactionSigned> = pending_transactions
+        let transactions: Vec<TransactionSigned> = pending_transactions
             .iter()
             .map(|tx| tx.transaction.signed_transaction.clone())
             .collect();
@@ -118,12 +119,12 @@ impl<S: Spec> BlockHooks for Evm<S> {
         let transactions_root = calculate_transaction_root(transactions.as_slice());
 
         let header = alloy_consensus::Header {
-            parent_hash: parent_block.header.seal(),
             timestamp: block_env.timestamp.to::<u64>(),
+            parent_hash: parent_block.header.seal(),
             number: block_env.number.to::<u64>(),
             beneficiary: parent_block.header.beneficiary,
             // This will be set in finalize_hook or in the next begin_rollup_block_hook
-            state_root: KECCAK_EMPTY,
+            state_root: Default::default(),
             transactions_root,
             receipts_root,
             logs_bloom: receipts
@@ -132,16 +133,29 @@ impl<S: Spec> BlockHooks for Evm<S> {
             gas_limit: block_env.gas_limit,
             gas_used,
             mix_hash: block_env.prevrandao.map_or(B256::ZERO, B256::from),
-            base_fee_per_gas: parent_block
-                .header
-                .next_block_base_fee(cfg.chain_spec.base_fee_params),
-            ..Default::default()
+            excess_blob_gas: block_env
+                .blob_excess_gas_and_price
+                .map(|blob_gas| blob_gas.excess_blob_gas),
+            base_fee_per_gas: Some(block_env.basefee),
+            // Default values
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            difficulty: U256::ZERO,
+            extra_data: Bytes::default(),
+            nonce: B64::ZERO,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            parent_beacon_block_root: None,
+            requests_hash: None,
         };
+
+        let end_tx_index = start_tx_index
+            .checked_add(pending_transactions.len() as u64)
+            // This is justified. We will never have that many txs.
+            .expect("The impossible happened: Tx count overflow");
 
         let block = Block {
             header,
-            transactions: start_tx_index
-                ..start_tx_index.saturating_add(pending_transactions.len() as u64),
+            transactions: start_tx_index..end_tx_index,
         };
 
         self.head.set(&block, state).unwrap_infallible();
@@ -176,9 +190,8 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             .pending_head
             .get(state)
             .unwrap_infallible()
-            .unwrap_or_else(|| {
-                panic!("The impossible happened: the pending block should always be set.")
-            });
+            // Justified, we set `pending_head` in `end_rollup_block_hook`.
+            .expect("The impossible happened: the pending block should always be set.");
 
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);
         block.header.state_root = user_space_root_hash.into();
@@ -233,7 +246,7 @@ impl<S: Spec> Evm<S> {
                 self.block_hashes
                     .remove(&block_hash, state)?
                     // Safe, since we keep one block_hash per block.
-                    .expect("Impossible happened: no block_hasha vailable to prune");
+                    .expect("Impossible happened: no block_hasha available to prune");
 
                 for tx_idx in block.transactions {
                     let transaction = self

@@ -1,6 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{BlockHeader, Header};
-use alloy_eips::eip1559::{BaseFeeParams, ETHEREUM_BLOCK_GAS_LIMIT_30M};
+use alloy_eips::eip1559::ETHEREUM_BLOCK_GAS_LIMIT_30M;
 use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
@@ -20,7 +20,7 @@ fn test_genesis_data() {
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
         let account = &cfg.accounts[0];
-        let account_info = evm.get_db(state).basic(account.address).unwrap().unwrap();
+        let account_info = evm.db(state).basic(account.address).unwrap().unwrap();
 
         assert_eq!(
             &account_info,
@@ -46,22 +46,19 @@ fn test_genesis_cfg() {
             evm.cfg_infallible(state),
             EvmRuntimeConfig {
                 chain_spec: sov_evm::EvmChainSpec {
-                    chain_id: 1000,
                     block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-                    block_timestamp_delta: 2,
                     coinbase: Address::from([3u8; 20]),
                     limit_contract_code_size: Some(5000),
-                    base_fee_params: BaseFeeParams::ethereum(),
-                    hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
+                    hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
                 },
-                hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
+                hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
             }
         );
     });
 }
 
 #[test]
-fn test_empty_spec_defaults_to_shanghai() {
+fn test_empty_spec_defaults_to_cancun() {
     let mut cfg = default_config();
     cfg.chain_spec.hardforks.clear();
     let runner = basic_setup(cfg);
@@ -69,7 +66,7 @@ fn test_empty_spec_defaults_to_shanghai() {
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
         let evm_cfg = evm.cfg_infallible(state);
-        assert_eq!(evm_cfg.hardforks, vec![(0, SpecId::SHANGHAI)]);
+        assert_eq!(evm_cfg.hardforks, vec![(0, SpecId::CANCUN)]);
     });
 }
 
@@ -78,14 +75,6 @@ fn test_empty_spec_defaults_to_shanghai() {
 fn test_cfg_missing_specs() {
     let mut cfg = EvmGenesisConfig::default();
     cfg.chain_spec.hardforks = vec![(5, SpecId::BERLIN)];
-    let _ = basic_setup(cfg);
-}
-
-#[test]
-#[should_panic(expected = "Cancun is not supported")]
-fn test_cancun_is_unsupported() {
-    let mut cfg = EvmGenesisConfig::default();
-    cfg.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
     let _ = basic_setup(cfg);
 }
 
@@ -101,8 +90,9 @@ fn test_genesis_block() {
         let expected_header = Header {
             state_root: actual_block.header().state_root(),
             gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            base_fee_per_gas: Some(7),
             beneficiary,
+            excess_blob_gas: Some(0),
+            base_fee_per_gas: Some(0),
             ..Default::default()
         };
 
@@ -124,13 +114,10 @@ fn default_config() -> EvmGenesisConfig {
         initial_base_fee: 70,
         genesis_timestamp: 50,
         chain_spec: sov_evm::EvmChainSpec {
-            chain_id: 1000,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            block_timestamp_delta: 2,
             coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000),
-            base_fee_params: BaseFeeParams::ethereum(),
-            hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
         },
     }
 }

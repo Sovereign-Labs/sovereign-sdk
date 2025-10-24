@@ -238,7 +238,7 @@ pub mod mocks {
             _height: super::RollupHeight,
             state: &mut crate::state::ApiStateAccessor<S>,
         ) -> Option<<<S as Spec>::Gas as crate::Gas>::Price> {
-            Some(state.gas_price().clone())
+            Some(state.gas_price())
         }
 
         fn true_slot_number_to_rollup_height(
@@ -247,6 +247,18 @@ pub mod mocks {
             _state: &mut crate::state::ApiStateAccessor<S>,
         ) -> Option<RollupHeight> {
             Some(RollupHeight::new(self.visible_slot_number.get()))
+        }
+
+        fn get_latest_rollup_height(&self, _state: &S::Storage) -> RollupHeight {
+            RollupHeight::new(self.visible_slot_number.get())
+        }
+
+        fn get_true_slot_number_for_height_unbound(
+            &self,
+            height: RollupHeight,
+            _state: &S::Storage,
+        ) -> Option<SlotNumber> {
+            Some(SlotNumber::new_dangerous(height.get()))
         }
     }
 

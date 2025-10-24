@@ -15,6 +15,7 @@ use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, 
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::GenesisParamsTrait;
 use sov_modules_api::{
     DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
     SyncStatus, VersionReader, ZkVerifier,
@@ -46,6 +47,8 @@ use tokio::task::JoinHandle;
 use tracing::info;
 pub use wallet::*;
 
+/// Commit hash of this rollup
+pub const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
 use crate::RollupBlueprint;
 
 /// This trait defines how to create all the necessary dependencies required by a rollup.
@@ -282,6 +285,17 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
             tokio::sync::watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
+        let mut background_handles = vec![];
+
+        let receiver_for_metrics = secondary_shutdown_receiver.clone();
+        let monitoring_config = rollup_config.monitoring.clone();
+        if let Some(metrics_handle) =
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+        {
+            background_handles.push(metrics_handle);
+        } else {
+            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+        };
 
         let operating_mode =
             <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
@@ -327,15 +341,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Recovering the state root"
         );
         let native_stf = StfBlueprint::new_with_optional_encryption(rollup_config.stf.encryption.clone()).await?;
+        let genesis_slot_number = genesis_params.genesis_slot_number();
         let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
             // Missing prev_root means need for initialization
             None => {
                 info!(
-                    rollup_genesis_height = rollup_config.runner.genesis_height,
+                    rollup_genesis_height = genesis_params.genesis_slot_number(),
                     "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
                 );
                 let rollup_genesis_block = da_service
-                    .get_block_at(rollup_config.runner.genesis_height)
+                    .get_block_at(genesis_params.genesis_slot_number())
                     .await?;
 
                 let genesis_header = rollup_genesis_block.header().clone();
@@ -377,7 +392,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             tokio::sync::watch::channel(SyncStatus::START);
 
         let da_sync_state = make_da_sync_state(
-            &rollup_config.runner,
+            genesis_slot_number,
             stop_at_rollup_height,
             &ledger_db,
             da_service.as_ref(),
@@ -409,7 +424,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let (state_update_sender, state_update_receiver) =
             tokio::sync::watch::channel(state_update_info);
 
-        let mut background_handles = vec![];
         if let Some(handle) = da_service_handle {
             background_handles.push(handle);
         }
@@ -433,7 +447,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             prev_state_root,
             visible_state_height_tracker,
             main_shutdown_receiver.clone(),
-            rollup_config.monitoring.clone(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
@@ -529,6 +542,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             shutdown_sender: main_shutdown_sender,
             secondary_shutdown_sender,
             background_handles,
+            genesis_slot_number,
         })
     }
 }
@@ -587,6 +601,9 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     /// A way to gracefully shut down background tasks.
     pub shutdown_sender: tokio::sync::watch::Sender<()>,
 
+    /// The genesis slot number.
+    pub genesis_slot_number: u64,
+
     // Trigger after the runner has finished.
     secondary_shutdown_sender: tokio::sync::watch::Sender<()>,
 
@@ -623,7 +640,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         let monitoring_task =
             spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);
 
-        runner.run_in_process().await?;
+        runner.run_in_process(self.genesis_slot_number).await?;
         tracing::info!("STF Runner has completed execution");
 
         if self.shutdown_sender.send(()).is_err() {
@@ -641,7 +658,17 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         // blocks until background handles have shutdown
         monitoring_task.await??;
         for handle in self.endpoints.inner.background_handles {
-            handle.await??;
+            match handle.await {
+                Err(e) => {
+                    tracing::error!(error = %e, "Endpoint background task panicked.");
+                    return Err(e.into());
+                }
+                Ok(Err(e)) => {
+                    tracing::error!(error = %e, "Endpoint background task joined with error");
+                    return Err(e);
+                }
+                _ => {}
+            }
         }
         tracing::debug!("Rollup completed run");
         Ok(())
@@ -651,32 +678,42 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
 fn spawn_task_monitor(
     shutdown_sender: tokio::sync::watch::Sender<()>,
     handles: Vec<tokio::task::JoinHandle<()>>,
-) -> tokio::task::JoinHandle<Result<(), tokio::task::JoinError>> {
+) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
         let shutdown_recv = shutdown_sender.subscribe();
         tracing::trace!("blocking until a background task joins or rollup shutdown");
         let (result, _, handles) = futures::future::select_all(handles).await;
 
-        if let Err(error) = result {
+        let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
+            false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
             // joined early before a shutdown signal was sent. This likely indicates
             // incorrect behaviour and so we send the signal ourselves to begin the shutdown process.
-            if let Ok(false) = shutdown_recv.has_changed() {
-                tracing::error!("background task joined with success status and no shutdown signal was sent, this is a error!");
+            if let Ok(true) = shutdown_recv.has_changed() {
+                true
+            } else {
+                tracing::error!("background task joined with success status but no shutdown signal had been sent at the time. This is a bug! Please report it.");
                 // Start graceful shutdown
                 _ = shutdown_sender.send(());
+                false
             }
-        }
+        };
 
         tracing::trace!("waiting for background tasks to join");
 
         for handle in handles {
-            handle.await?;
+            if let Err(error) = handle.await {
+                tracing::error!(error = %error, "Additional background task joined with error");
+                was_graceful = false;
+            }
         }
 
         tracing::trace!("task monitoring is complete");
+        if !was_graceful {
+            anyhow::bail!("One or more background tasks joined with errors. See logs for details.");
+        }
 
         Ok(())
     })

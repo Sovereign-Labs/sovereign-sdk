@@ -1,21 +1,24 @@
 use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
 use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::crypto::secp256k1::public_key_to_address;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::B256;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
-use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_address::EthereumAddress;
 use sov_address::MultiAddress;
 use sov_eth_dev_signer::Signer;
-use sov_evm::{AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId};
+use sov_evm::{
+    AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId,
+    TransactionSigned,
+};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};
-use sov_test_utils::{SimpleStorageContract, TransactionType, TEST_DEFAULT_USER_BALANCE};
+use sov_test_utils::{LegacySimpleStorage, TransactionType, TEST_DEFAULT_USER_BALANCE};
 pub(crate) struct EvmAccount(SecretKey);
 
 impl EvmAccount {
@@ -30,7 +33,7 @@ impl EvmAccount {
     }
 
     pub fn address(&self) -> Address {
-        reth_primitives::public_key_to_address(self.public_key())
+        public_key_to_address(self.public_key())
     }
 
     pub fn sign(&self, tx: TypedTransaction) -> (RlpEvmTransaction, TransactionSigned) {
@@ -62,9 +65,8 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
         ],
         ..Default::default()
     };
-    // SHANGHAI instead of LATEST
-    // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912
-    evm_config.chain_spec.hardforks = vec![(0, SpecId::SHANGHAI)];
+
+    evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
 
     let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
 
@@ -105,7 +107,7 @@ pub(crate) struct TxWithNonceAndHash {
 
 pub(crate) fn create_deploy_tx(
     nonce: u64,
-    contract: &SimpleStorageContract,
+    contract: &LegacySimpleStorage,
     account: &EvmAccount,
 ) -> TxWithNonceAndHash {
     let tx = TxEip1559 {
@@ -119,13 +121,47 @@ pub(crate) fn create_deploy_tx(
 pub(crate) fn create_set_arg_tx(
     set_arg: u32,
     nonce: u64,
-    contract: &SimpleStorageContract,
+    contract: &LegacySimpleStorage,
     contract_addr: Address,
     account: &EvmAccount,
 ) -> TxWithNonceAndHash {
     let tx = TxEip1559 {
         to: TxKind::Call(contract_addr),
-        input: Bytes::from(hex::decode(hex::encode(contract.set_call_data(set_arg))).unwrap()),
+        input: Bytes::from(hex::decode(hex::encode(contract.set(set_arg))).unwrap()),
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
+}
+
+pub(crate) fn create_inc_tx(
+    nonce: u64,
+    contract: &LegacySimpleStorage,
+    contract_addr: Address,
+    account: &EvmAccount,
+) -> TxWithNonceAndHash {
+    let tx = TxEip1559 {
+        to: TxKind::Call(contract_addr),
+        input: Bytes::from(hex::decode(hex::encode(contract.inc())).unwrap()),
+        nonce,
+        ..Default::default()
+    };
+    create_tx(account, tx)
+}
+
+pub(crate) fn create_emit_logs(
+    nonce: u64,
+    contract: &LegacySimpleStorage,
+    contract_addr: Address,
+    account: &EvmAccount,
+    topic: u32,
+    nb_of_logs: u32,
+) -> TxWithNonceAndHash {
+    let tx = TxEip1559 {
+        to: TxKind::Call(contract_addr),
+        input: Bytes::from(
+            hex::decode(hex::encode(contract.emit_logs(topic, nb_of_logs))).unwrap(),
+        ),
         nonce,
         ..Default::default()
     };

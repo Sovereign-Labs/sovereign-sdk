@@ -52,7 +52,7 @@ fn reward_mechanism_test_setup() -> (TestRoles, Amount, TestRunner<RT, S>) {
 
     (
         test_roles,
-        gas_consumed_last_tx.value(&initial_gas_price),
+        gas_consumed_last_tx.value(initial_gas_price),
         runner,
     )
 }
@@ -235,7 +235,7 @@ fn produce_malformed_tx(
         )
         .to_serialized_authenticated_tx(&mut nonces);
 
-    tx.data.pop();
+    tx.data.truncate(tx.data.len() - 1);
     TransactionType::PreAuthenticated(tx)
 }
 

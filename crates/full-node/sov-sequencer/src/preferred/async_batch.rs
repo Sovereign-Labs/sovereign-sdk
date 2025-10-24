@@ -2,9 +2,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use sov_modules_api::state::TxScratchpad;
 use sov_modules_api::{
-    ChangeSet, Context, DispatchCall, FullyBakedTx, GasArray, IncrementalBatch,
+    ChangeSet, Context, DispatchCall, ExecutionContext, FullyBakedTx, GasArray, IncrementalBatch,
     InjectedControlFlow, IterableBatchWithId, MaybeExecuted, NoOpControlFlow,
     ProvisionalSequencerOutcome, Runtime, SlotGasMeter, TransactionReceipt, TxChangeSet,
     TxControlFlow,
@@ -22,7 +23,7 @@ use crate::common::sender_is_allowed;
 pub enum MaybeAsyncBatch<S: Spec> {
     /// The batch is streamed from a channel.
     Async {
-        txs_receiver: Receiver<FullyBakedTx>,
+        txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
         responder: AsyncBatchResponder<S>,
         setup_sender: Option<oneshot::Sender<ChangeSet>>,
         address: S::Address,
@@ -36,7 +37,7 @@ pub enum MaybeAsyncBatch<S: Spec> {
 impl<S: Spec> MaybeAsyncBatch<S> {
     /// Create a new batch with a receiver for transactions.
     pub fn new_async(
-        txs_receiver: Receiver<FullyBakedTx>,
+        txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
         setup_sender: oneshot::Sender<ChangeSet>,
         result_channel: Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
         tx_profit_threshold: u128,
@@ -66,24 +67,52 @@ impl<S: Spec> MaybeAsyncBatch<S> {
 /// The control flow injector for an async batch.
 #[derive(Debug)]
 pub enum MaybeAsyncBatchControlFlow<S: Spec> {
-    Async(AsyncBatchResponder<S>),
+    Async {
+        responder: AsyncBatchResponder<S>,
+        // If this is the main sequencer executor, it may benefit from using a precomputed
+        // transaction change set from the worker warm-up executor.
+        maybe_tx_change_set: Option<oneshot::Receiver<TxChangeSet>>,
+    },
     Sync,
 }
 
 impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
+    fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {
+        match self {
+            MaybeAsyncBatchControlFlow::Async {
+                responder: _,
+                maybe_tx_change_set,
+            } => {
+                if let Some(mut rec) = maybe_tx_change_set.take() {
+                    // If the worker executor provides cache values in time, we apply them to the main executor.
+                    // Otherwise, we proceed without waiting and let the main executor continue.
+                    if let Ok(change_set) = rec.try_recv() {
+                        scratchpad.apply_change_set(change_set);
+                    }
+                }
+            }
+            MaybeAsyncBatchControlFlow::Sync => {}
+        }
+    }
+
     fn post_tx(
         &self,
         provisional_outcome: ProvisionalSequencerOutcome<S>,
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
         gas_used: &<S as Spec>::Gas,
+        execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match self {
-            Self::Async(responder) => responder.post_tx(
+            Self::Async {
+                responder,
+                maybe_tx_change_set: _,
+            } => responder.post_tx(
                 provisional_outcome,
                 dirty_scratchpad,
                 slot_gas_meter_before_tx,
                 gas_used,
+                execution_context,
             ),
             Self::Sync => <NoOpControlFlow as sov_modules_api::InjectedControlFlow<S>>::post_tx(
                 &NoOpControlFlow,
@@ -91,6 +120,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
                 dirty_scratchpad,
                 slot_gas_meter_before_tx,
                 gas_used,
+                execution_context,
             ),
         }
     }
@@ -102,7 +132,10 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         call: &<RT as DispatchCall>::Decodable,
     ) -> TxControlFlow<()> {
         match self {
-            Self::Async(responder) => responder.pre_flight(runtime, context, call),
+            Self::Async {
+                responder,
+                maybe_tx_change_set: _,
+            } => responder.pre_flight(runtime, context, call),
             Self::Sync => <NoOpControlFlow as InjectedControlFlow<S>>::pre_flight(
                 &NoOpControlFlow,
                 runtime,
@@ -184,6 +217,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
         gas_used: &<S as Spec>::Gas,
+        execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let end_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
         let execution_time = end_time - self.unix_timestamp_micros.load(Ordering::SeqCst);
@@ -200,10 +234,8 @@ impl<S: Spec> AsyncBatchResponder<S> {
         if !receipt.receipt.is_successful() {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
-                tx_changes: dirty_scratchpad.tx_changes(),
-                remaining_slot_gas: slot_gas_meter_before_tx
-                    .remaining_preferred_slot_gas()
-                    .clone(), // Since we ignore this tx, the remaining gas limit is unchanged
+                tx_changes: dirty_scratchpad.tx_changes(execution_context),
+                remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
                 execution_time_micros: execution_time,
             };
 
@@ -219,16 +251,14 @@ impl<S: Spec> AsyncBatchResponder<S> {
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 
-        let remaining_slot_gas = slot_gas_meter_before_tx
-            .remaining_preferred_slot_gas()
-            .clone()
-            .checked_sub(gas_used)
+        let remaining_slot_gas = (*slot_gas_meter_before_tx.remaining_preferred_slot_gas())
+            .checked_sub(*gas_used)
             // SAFETY: We always enforce that the gas used is less than the remaining slot gas limit
             .expect("Impossible happened: SlotGasMeter underflow when charging gas.");
 
         let response = ExecutedTxResponse {
             receipt: receipt.clone(),
-            tx_changes: dirty_scratchpad.tx_changes(),
+            tx_changes: dirty_scratchpad.tx_changes(execution_context),
             remaining_slot_gas,
             execution_time_micros: execution_time,
         };
@@ -289,12 +319,17 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 txs_receiver,
                 responder,
                 ..
-            } => Handle::current().block_on(txs_receiver.recv()).map(|item| {
-                (
-                    item,
-                    MaybeAsyncBatchControlFlow::Async(responder.clone_for_tx()),
-                )
-            }),
+            } => Handle::current()
+                .block_on(txs_receiver.recv())
+                .map(|mut item| {
+                    (
+                        item.tx,
+                        MaybeAsyncBatchControlFlow::Async {
+                            responder: responder.clone_for_tx(),
+                            maybe_tx_change_set: item.receiver.take(),
+                        },
+                    )
+                }),
             MaybeAsyncBatch::Sync { batch } => batch
                 .next()
                 .map(|(item, _)| (item, MaybeAsyncBatchControlFlow::Sync)),

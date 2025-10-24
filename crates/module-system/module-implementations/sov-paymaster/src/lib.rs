@@ -80,10 +80,9 @@ impl<Addr: Display> PolicyKey<Addr> {
 impl<'a, Addr: Display + BorshSerialize + BorshDeserialize>
     EncodeLike<(Payer<&'a Addr>, &Addr), PolicyKey<Addr>> for BorshCodec
 {
-    fn encode_like(&self, borrowed: &(Payer<&'a Addr>, &Addr)) -> Vec<u8> {
-        let mut out = self.encode_like(borrowed.0 .0);
-        out.extend_from_slice(&self.encode_like(borrowed.1));
-        out
+    fn encode_like(&self, borrowed: &(Payer<&'a Addr>, &Addr), writer: &mut impl std::io::Write) {
+        self.encode_like(borrowed.0 .0, writer);
+        self.encode_like(borrowed.1, writer);
     }
 }
 
@@ -213,7 +212,7 @@ impl<S: Spec> Paymaster<S> {
     pub fn try_reserve_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &mut Context<S>,
         state: &mut impl StateAccessor,
     ) -> Result<(), ReserveGasError> {
@@ -236,7 +235,7 @@ impl<S: Spec> Paymaster<S> {
     fn gas_from_paymaster(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         context: &Context<S>,
         state: &mut impl StateAccessor,
     ) -> Result<Option<S::Address>, ReserveGasError> {
@@ -285,7 +284,7 @@ impl<S: Spec> Paymaster<S> {
     fn try_purchase_paymaster_gas(
         &mut self,
         tx: &AuthenticatedTransactionData<S>,
-        gas_price: &<S::Gas as Gas>::Price,
+        gas_price: <S::Gas as Gas>::Price,
         payer: &S::Address,
         policy: &PayeePolicy<S>,
         state: &mut impl StateAccessor,
@@ -299,7 +298,7 @@ impl<S: Spec> Paymaster<S> {
 #[test]
 fn test_policy_key_encode_like() {
     let key = PolicyKey::with(Payer(1), 2);
-    let encoded_like = BorshCodec.encode_like(&(Payer(&key.payer), &key.payee));
+    let encoded_like = BorshCodec.encode_to_vec_like(&(Payer(&key.payer), &key.payee));
 
     assert_eq!(&borsh::to_vec(&key).unwrap(), &encoded_like);
 }

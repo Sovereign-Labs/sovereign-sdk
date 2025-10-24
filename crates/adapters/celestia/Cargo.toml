@@ -19,8 +19,9 @@ borsh = { workspace = true, features = ["derive", "bytes"] }
 bech32 = { workspace = true }
 prost = "0.13"
 
-celestia-rpc = { version = "0.11.3", default-features = false, optional = true }
-celestia-types = { version = "0.13.0", default-features = false }
+# Upgrade with care. The new version might be incompatible and require run of soak tests
+celestia-rpc = { version = "0.14.0", default-features = false, optional = true }
+celestia-types = { version = "0.16.0", default-features = false }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
@@ -59,7 +60,7 @@ reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 wiremock = "0.6"
-test-strategy = "0.4.0"
+test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
     "macros",
@@ -82,7 +83,8 @@ native = [
     "dep:tokio",
     "sov-celestia-adapter/native",
     "sov-rollup-interface/native",
-    "sov-metrics?/native",
+    "dep:sov-metrics",
+    "sov-metrics/native",
     "dep:tower",
     "sov-modules-macros?/native",
     "dep:rand",

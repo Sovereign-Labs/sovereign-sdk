@@ -2,6 +2,7 @@ use sov_metrics::{init_metrics_tracker, MonitoringConfig, TelegrafSocketConfig};
 use sov_modules_api::{Gas, GasMeter};
 use sov_modules_macros::track_gas_constants_usage;
 use tokio::net::UdpSocket;
+use tokio::sync::watch;
 use tokio::time::timeout;
 
 type S = sov_test_utils::TestSpec;
@@ -18,9 +19,9 @@ fn test_metrics(input: &mut u64) {
 
     *input *= 10;
 
-    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test".to_string());
+    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test");
 
-    meter.charge_gas(&constant).unwrap();
+    meter.charge_gas(constant).unwrap();
 
     assert_eq!(
         sov_metrics::GAS_CONSTANTS
@@ -37,11 +38,17 @@ async fn test_metrics_macro() {
         .await
         .expect("Impossible to bind to port");
 
-    init_metrics_tracker(&MonitoringConfig {
-        telegraf_address: TelegrafSocketConfig::udp(channel.local_addr().unwrap()),
-        max_datagram_size: Some(1),
-        max_pending_metrics: None,
-    });
+    let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
+    shutdown_receiver.mark_unchanged();
+
+    init_metrics_tracker(
+        &MonitoringConfig {
+            telegraf_address: TelegrafSocketConfig::udp(channel.local_addr().unwrap()),
+            max_datagram_size: Some(1),
+            max_pending_metrics: None,
+        },
+        shutdown_receiver,
+    );
 
     let input = &mut 10;
 
@@ -74,9 +81,9 @@ fn test_metrics_without_input() {
         S::initial_base_fee_per_gas(),
     );
 
-    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test".to_string());
+    let constant = <S as Spec>::Gas::from([1, 1]).with_name("test");
 
-    meter.charge_gas(&constant).unwrap();
+    meter.charge_gas(constant).unwrap();
 
     assert_eq!(
         sov_metrics::GAS_CONSTANTS
@@ -93,11 +100,17 @@ async fn test_metrics_macro_without_input() {
         .await
         .expect("Impossible to bind to port");
 
-    init_metrics_tracker(&MonitoringConfig {
-        telegraf_address: TelegrafSocketConfig::udp(channel.local_addr().unwrap()),
-        max_datagram_size: Some(1),
-        max_pending_metrics: None,
-    });
+    let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
+    shutdown_receiver.mark_unchanged();
+
+    init_metrics_tracker(
+        &MonitoringConfig {
+            telegraf_address: TelegrafSocketConfig::udp(channel.local_addr().unwrap()),
+            max_datagram_size: Some(1),
+            max_pending_metrics: None,
+        },
+        shutdown_receiver,
+    );
 
     test_metrics_without_input();
 

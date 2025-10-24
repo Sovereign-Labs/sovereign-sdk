@@ -70,8 +70,11 @@ where
         // shouldn't be necessary, but it's best not to rely on implementation
         // details of `StateValue` and `StateMap` as they both have the right to
         // reserve the whole key space for themselves.
-        let len_value = NamespacedStateValue::with_codec(prefix.extended(b"l"), codec.clone());
-        let elems = NamespacedStateMap::with_codec(prefix.extended(b"e"), codec);
+        let len_value = NamespacedStateValue::with_codec(prefix, codec.clone());
+        // Note that this adds a tacit assumption that no module has more than 128 items. If this assumption is violated, we will need to change this.
+        // We can trivially fix this by adding an extra byte, but it seems unlikely that we'll ever need to. For now, we simply throw an error in the macro
+        // if this assumption is violated.
+        let elems = NamespacedStateMap::with_codec(prefix.offset_by(128), codec);
         Self {
             _phantom: PhantomData,
             prefix,
@@ -153,9 +156,9 @@ where
         let len = self.len(state)?;
 
         Ok(if index < len {
-            self.elems().get(&index, state)?.ok_or_else(|| {
-                StateVecError::MissingValue(self.prefix().clone(), index, PhantomData)
-            })
+            self.elems()
+                .get(&index, state)?
+                .ok_or_else(|| StateVecError::MissingValue(*self.prefix(), index, PhantomData))
         } else {
             Err(StateVecError::IndexOutOfBounds(index))
         })
@@ -343,7 +346,7 @@ where
         Codec::ValueCodec: EncodeLike<Vq, V>,
     {
         let len_key = self.len_value.slot_key();
-        let mut metric = StateAccessMetric::new_read(len_key.key(), len_key.display_fn());
+        let mut metric = StateAccessMetric::new_read();
         let index =
             if let Some(len_bytes) = state.get_value(Accessory::NAMESPACE, &len_key, &mut metric) {
                 self.len_value
@@ -467,7 +470,7 @@ mod test {
         let mut state: StateCheckpoint<TestSpec> =
             StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
-        let prefix = Prefix::new("test".as_bytes().to_vec());
+        let prefix = Prefix::new(0, 0);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
 
         state_vec.push(&0, &mut state).unwrap();
@@ -489,7 +492,7 @@ mod test {
         let mut state: StateCheckpoint<TestSpec> =
             StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
-        let prefix = Prefix::new("test".as_bytes().to_vec());
+        let prefix = Prefix::new(1, 1);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
 
         state_vec.push(&0, &mut state).unwrap();
@@ -512,7 +515,7 @@ mod test {
         let mut state: StateCheckpoint<TestSpec> =
             StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
-        let prefix = Prefix::new("test".as_bytes().to_vec());
+        let prefix = Prefix::new(2, 2);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
 
         for test_case_action in test_cases() {

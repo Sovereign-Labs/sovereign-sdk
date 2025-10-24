@@ -35,7 +35,8 @@ fn put_data(state_db: &StateDb, raw_data: Vec<Vec<u8>>, version: Version) -> Sch
         batch.push((key_hash, Some(value)));
     }
 
-    let preimages_batch = StateDb::materialize_preimages([], key_preimages).unwrap();
+    let preimages_batch =
+        StateDb::materialize_preimages(Vec::<(_, Vec<u8>)>::new(), key_preimages).unwrap();
 
     // Writing empty data into kernel namespace to keep versions in sync
     let kernel_materialize = build_data_to_materialize::<_, sha2::Sha256>(

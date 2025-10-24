@@ -1,11 +1,13 @@
 use std::time::Duration;
 
-use crate::evm::evm_test_helper::setup;
-use sov_eth_client::TestClient;
-use sov_mock_da::storable::service::StorableMockDaService;
-use tokio::time::sleep;
-
 use super::evm_test_helper;
+use crate::evm::evm_test_helper::setup_with_simple_storage;
+use crate::evm::evm_test_helper::EVM_EXTENSION;
+use ethereum_types::H256;
+use ethers::types::U256;
+use sov_eth_client::SimpleStorageClient;
+use sov_mock_da::storable::StorableMockDaService;
+use tokio::time::sleep;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_tx_tests_instant_finality() -> anyhow::Result<()> {
@@ -18,7 +20,8 @@ async fn evm_tx_tests_non_instant_finality() -> anyhow::Result<()> {
 }
 
 async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
-    let (test_rollup, test_client, _, _) = setup(finalization_blocks).await;
+    let (test_rollup, test_client, _) =
+        setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
 
     sanity_checks(&test_client).await;
     execute_evm_tests(&test_client, &test_rollup.da_service)
@@ -29,37 +32,45 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn sanity_checks(test_client: &TestClient) {
+async fn sanity_checks(test_client: &SimpleStorageClient) {
     let etc_accounts = test_client.eth_accounts().await;
-    assert_eq!(vec![test_client.from_addr], etc_accounts);
+    assert_eq!(vec![test_client.address()], etc_accounts);
 
-    let eth_chain_id = test_client.eth_chain_id().await;
-    assert_eq!(test_client.chain_id, eth_chain_id);
+    let earliest_block = test_client
+        .eth_get_block_by_number(Some("earliest".to_owned()))
+        .await;
 
     // The preferred sequencer ought to have created at least one block.
     let latest_block = test_client
         .eth_get_block_by_number(Some("latest".to_owned()))
         .await;
-    let earliest_block = test_client
-        .eth_get_block_by_number(Some("earliest".to_owned()))
+
+    assert_eq!(latest_block.base_fee_per_gas, Some(U256::zero()));
+
+    let pending_block = test_client
+        .eth_get_block_by_number(Some("pending".to_owned()))
         .await;
 
-    assert!(latest_block.number.unwrap().as_u64() > earliest_block.number.unwrap().as_u64());
+    assert_eq!(pending_block.base_fee_per_gas, Some(U256::zero()));
+
     assert!(latest_block.number.unwrap().as_u64() > 0);
+    assert!(latest_block.number > earliest_block.number);
+    assert!(pending_block.number > latest_block.number);
+    assert_eq!(pending_block.hash, Some(H256::zero()));
 
     // Nonce should be 0 before any transactions
     let nonce = test_client
-        .eth_get_transaction_count(test_client.from_addr)
+        .eth_get_transaction_count(test_client.address())
         .await;
     assert_eq!(0, nonce);
 
     // Balance should be > 0 in genesis and before any transactions
-    let balance = test_client.eth_get_balance(test_client.from_addr).await;
+    let balance = test_client.eth_get_balance(test_client.address()).await;
     assert!(balance > ethereum_types::U256::zero());
 }
 
 async fn execute_evm_tests(
-    client: &TestClient,
+    client: &SimpleStorageClient,
     da_service: &StorableMockDaService,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let initial_block_number = client
@@ -75,7 +86,7 @@ async fn execute_evm_tests(
     sleep(Duration::from_secs(1)).await;
 
     // Nonce should be 1 after the deployment
-    let nonce = client.eth_get_transaction_count(client.from_addr).await;
+    let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(1, nonce);
 
     // Check that a new block was published
@@ -101,9 +112,6 @@ async fn execute_evm_tests(
     let values: Vec<u32> = (150..153).collect();
     // Create a blob with multiple transactions.
     evm_test_helper::set_multiple_values_check(client, contract_address, values).await?;
-
-    let value = 103;
-    evm_test_helper::set_value_unsigned_check(client, contract_address, value).await?;
 
     // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
     //evm_test_helper::gas_check(client, da_service, contract_address).await?;

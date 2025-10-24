@@ -1,5 +1,7 @@
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+#[cfg(feature = "native")]
+use sov_state::StateGetter;
 use sov_state::{IsValueCached, Namespace, SlotKey, SlotValue, StateAccesses, Storage};
 use tracing::trace;
 
@@ -7,8 +9,13 @@ use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
+use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::traits::PerBlockCache;
+#[cfg(feature = "native")]
+use crate::TxChangeSet;
 use crate::{GasMeter, Spec, VersionReader};
+#[cfg(feature = "native")]
+use sov_state::sequencer_state::RawStateChanges;
 
 /// This structure is responsible for storing the `read-write` set.
 ///
@@ -24,6 +31,20 @@ pub struct StateCheckpoint<S: Spec> {
     pub(super) rollup_height: RollupHeight,
     pub(super) cache: TempCache,
     pub(super) metrics: StateMetrics,
+}
+
+#[cfg(feature = "native")]
+impl<S: Spec> StateCheckpoint<S> {
+    /// Convert the state checkpoint to a [`RawStateChanges`] instance.
+    pub fn to_raw_state_changes(mut self) -> RawStateChanges {
+        self.delta.commit_revertable_storage_cache();
+        RawStateChanges {
+            user: self.delta.user_cache.into(),
+            kernel: self.delta.kernel_cache.into(),
+            accessory: self.delta.accessory_writes,
+            rollup_height: self.rollup_height.get(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +66,11 @@ impl<S: Spec> StateCheckpoint<S> {
     /// Check if key is in the cache.
     pub fn is_value_cached(&self, namespace: Namespace, key: &SlotKey) -> IsValueCached {
         self.delta.is_value_cached(namespace, key)
+    }
+
+    /// Keys and values that were read for the first time.
+    pub fn first_reads(&self) -> FirstTimeReads {
+        self.delta.first_reads()
     }
 
     /// Commits the revertable part of the `StateCheckpoint` cache.
@@ -76,10 +102,43 @@ impl<S: Spec> StateCheckpoint<S> {
         }
     }
 
+    /// Creates a new [`StateCheckpoint`] instance with the given intermediate state that will be checked before storage when a value isn't already present in the checkpoint.
+    #[cfg(feature = "native")]
+    pub fn new_with_uncomitted_changes<K: Kernel<S>>(
+        inner: S::Storage,
+        kernel: &K,
+        uncomitted_changes: Box<dyn StateGetter>,
+    ) -> Self {
+        Self::with_witness_and_uncomitted_changes(
+            inner,
+            Default::default(),
+            kernel,
+            Some(uncomitted_changes),
+        )
+    }
+
+    /// Replace the storage and intermediate state underlying the checkpoint in place. It is up to the caller
+    /// to ensure that the intermediate state is compatible with the new storage.
+    #[cfg(feature = "native")]
+    pub fn replace_storage(&mut self, inner: S::Storage, uncomitted_changes: Box<dyn StateGetter>) {
+        self.delta.inner = inner;
+        self.delta.uncomitted_changes = Some(uncomitted_changes);
+    }
+
     /// Returns a reference to the storage underlying the state checkpoint.
     #[cfg(feature = "native")]
     pub fn storage(&self) -> &S::Storage {
         self.delta.inner()
+    }
+
+    /// Returns the rollup height of the latest data saved in the underlying storage.
+    #[cfg(feature = "native")]
+    pub fn get_rollup_height_of_underlying_storage<K: Kernel<S>>(
+        &self,
+        kernel: &K,
+    ) -> RollupHeight {
+        let new_checkpoint = Self::new(self.delta.inner().clone(), kernel);
+        new_checkpoint.rollup_height
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
@@ -95,7 +154,28 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
     ) -> Self {
+        Self::with_witness_and_uncomitted_changes(
+            inner,
+            witness,
+            kernel,
+            #[cfg(feature = "native")]
+            None,
+        )
+    }
+
+    /// Creates a new [`StateCheckpoint`] instance without any changes, backed
+    /// by the given [`Storage`] and witness.
+    fn with_witness_and_uncomitted_changes<K: Kernel<S>>(
+        inner: S::Storage,
+        witness: <S::Storage as Storage>::Witness,
+        kernel: &K,
+        #[cfg(feature = "native")] uncomitted_changes: Option<Box<dyn StateGetter>>,
+    ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
+        #[cfg(feature = "native")]
+        {
+            delta.uncomitted_changes = uncomitted_changes;
+        }
         let mut metrics = StateMetrics::default();
         let mut bootstrap_state = BootstrapWorkingSet {
             inner: &mut delta,
@@ -128,6 +208,18 @@ impl<S: Spec> StateCheckpoint<S> {
         (state_accesses, accesory_delta, witness)
     }
 
+    #[cfg(feature = "native")]
+    /// Extracts the accessory delta from this [`StateCheckpoint`].
+    pub fn take_accessory_delta(&mut self) -> AccessoryDelta<S::Storage> {
+        self.delta.take_accessory_delta()
+    }
+
+    #[cfg(feature = "native")]
+    /// Extracts the accessory delta from this [`StateCheckpoint`].
+    pub fn set_accessory_delta(&mut self, accessory_delta: AccessoryDelta<S::Storage>) {
+        self.delta.set_accessory_delta(accessory_delta);
+    }
+
     /// Extracts ordered reads, writes, and witness from this [`StateCheckpoint`] and uses
     /// them to compute the `StateUpdate` created by this `StateCheckpoint`.
     #[allow(clippy::type_complexity)]
@@ -142,7 +234,6 @@ impl<S: Spec> StateCheckpoint<S> {
         S::Storage,
     ) {
         let (cache_log, accessory_delta, witness, storage) = self.delta.freeze();
-
         let _span = tracing::debug_span!("compute_state_root", scope = "node").entered();
         let (root, update) = storage
             .compute_state_update(cache_log, &witness, prev_state_root)
@@ -159,9 +250,15 @@ impl<S: Spec> StateCheckpoint<S> {
         self.visible_slot_num = VisibleSlotNumber::new_dangerous(visible_slot_number);
     }
 
+    #[cfg(feature = "native")]
     /// Returns the list of all changes contained in the state checkpoint.
     pub fn changes(&mut self) -> ChangeSet {
         self.delta.changes()
+    }
+
+    /// Warms up the cache with reads whose keys are not already present.
+    pub fn add_read_if_not_present(&mut self, reads: FirstTimeReads) {
+        self.delta.add_read_if_not_present(reads);
     }
 
     /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
@@ -173,6 +270,23 @@ impl<S: Spec> StateCheckpoint<S> {
     #[cfg(feature = "native")]
     pub fn apply_changes(&mut self, changeset: ChangeSet) {
         for ((key, namespace), value) in changeset.changes {
+            if let Some(value) = value {
+                self.delta.set(namespace, &key, value);
+            } else {
+                self.delta.delete(namespace, &key);
+            }
+        }
+    }
+
+    /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used
+    /// during normal execution, since changes should happen through `StateValue` types which
+    /// use the UniversalStateAccessor API. It is primarily intended for use in the sequencer, which has to manage
+    /// its own state.
+    // This TODO is not a security risk, it is used only in sequencer as intended.
+    // TODO: Remove this method if we stop using `StateCheckpoint` in the sequencer
+    #[cfg(feature = "native")]
+    pub fn apply_tx_changes(&mut self, changeset: TxChangeSet) {
+        for ((key, namespace), value) in changeset.writes {
             if let Some(value) = value {
                 self.set_value(namespace, &key, value);
             } else {
@@ -289,20 +403,24 @@ impl<S: Spec> GasMeter for StateCheckpoint<S> {
 }
 
 impl<S: Spec> PerBlockCache for StateCheckpoint<S> {
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        if let CacheLookup::Hit(value) = self.cache.get::<T>() {
+    fn get_cached<T: 'static + Send + Sync>(&self, slot_key: Option<SlotKey>) -> Option<&T> {
+        if let CacheLookup::Hit(value) = self.cache.get::<T>(slot_key) {
             value
         } else {
             None
         }
     }
 
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T) {
-        self.cache.set(value);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        slot_key: Option<SlotKey>,
+        value: T,
+    ) {
+        self.cache.set(slot_key, value);
     }
 
-    fn delete_cached<T: 'static + Send + Sync>(&mut self) {
-        self.cache.delete::<T>();
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
+        self.cache.delete::<T>(slot_key);
     }
 
     fn update_cache_with(&mut self, other: TempCache) {

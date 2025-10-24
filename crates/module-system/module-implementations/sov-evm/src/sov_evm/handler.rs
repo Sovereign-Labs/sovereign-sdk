@@ -9,10 +9,15 @@ use revm::{
         PrecompileProvider,
     },
     inspector::{Inspector, InspectorEvmTr, InspectorHandler},
-    interpreter::{interpreter::EthInterpreter, interpreter_action::FrameInit, InterpreterResult},
+    interpreter::{
+        interpreter::EthInterpreter, interpreter_action::FrameInit, InitialAndFloorGas,
+        InterpreterResult,
+    },
     state::EvmState,
     Database,
 };
+
+use crate::{gas_metering_mode, GasMeteringMode};
 
 #[derive(Debug)]
 pub struct SovHandler<EVM>(core::marker::PhantomData<EVM>);
@@ -38,6 +43,15 @@ where
     type Evm = EVM;
     type Error = EVMError<<<EVM::Context as ContextTr>::Db as Database>::Error, InvalidTransaction>;
     type HaltReason = HaltReason;
+
+    #[inline]
+    fn validate(&self, evm: &mut Self::Evm) -> Result<InitialAndFloorGas, Self::Error> {
+        self.validate_env(evm)?;
+        match gas_metering_mode() {
+            GasMeteringMode::Rollup => Ok(InitialAndFloorGas::new(0, 0)), // We disable charging initial gas
+            GasMeteringMode::Evm => self.validate_initial_tx_gas(evm),
+        }
+    }
 
     fn validate_against_state_and_deduct_caller(
         &self,

@@ -53,7 +53,7 @@ fn check_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBips) {
         total_gas,
     } = do_check_txs(blobs, txs_len, priority_fee_bips, &mut runner);
 
-    let gas_price = &batch_receipt.inner.gas_price;
+    let gas_price = batch_receipt.inner.gas_price;
     let seq_burn = seq_burn_gas.checked_value(gas_price).unwrap();
     let end = runner.query_state(|state| actors.balances(state));
 
@@ -311,7 +311,7 @@ fn test_batch_gas_used() {
         for receipt in receipts {
             match &receipt.receipt {
                 sov_modules_api::TxEffect::Successful(tx_contents) => {
-                    gas_in_batch = gas_in_batch.checked_combine(&tx_contents.gas_used).unwrap();
+                    gas_in_batch = gas_in_batch.checked_combine(tx_contents.gas_used).unwrap();
                 }
                 _ => panic!("Transactions should succeed"),
             }

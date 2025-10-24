@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 pub use full_node_configs::sequencer::StdSequencerConfig;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
-use sov_metrics::AuthAndProcessMetrics;
+use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
@@ -221,7 +221,7 @@ where
         let tx_scratchpad = ctx.state_checkpoint.to_tx_scratchpad();
 
         let (tx_scratchpad, output_res) =
-            tx_auth::<S, Rt, _>(tx_scratchpad, ctx.gas_price.clone(), &mempool_tx.tx);
+            tx_auth::<S, Rt, _>(tx_scratchpad, ctx.gas_price, &mempool_tx.tx);
 
         let (auth_output, gas_meter) = match output_res {
             Ok(ok) => ok,
@@ -251,18 +251,22 @@ where
             );
         }
 
+        let execution_context = ExecutionContext::Sequencer;
         let pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(gas_meter);
-        let metrics = AuthAndProcessMetrics::new(mempool_tx.hash, Default::default());
+        let metrics = AuthAndProcessMetrics::new(
+            mempool_tx.hash,
+            AuthAndProcessTimings::new_with_defaults(execution_context),
+        );
         let (res, tx_scratchpad, _gas_meter) = process_tx_and_reward_prover(
             &mut runtime,
             pre_exec_working_set,
             // Currently the sequencer doesn't take into account the slot gas limit.
-            &<S::Gas>::MAX,
+            <S::Gas>::MAX,
             auth_output,
             mempool_tx.tx.clone(),
             &self.da_address,
             self.config.rollup_address.clone(),
-            ExecutionContext::Sequencer,
+            execution_context,
             &NoOpControlFlow,
             operating_mode,
             metrics,
@@ -624,12 +628,12 @@ where
             let gas_info = gas_meter.gas_info();
             let tx = auth_output.0.authenticated_tx;
 
-            let working_set_gas_meter = tx.gas_meter(&gas_info.gas_price.clone(), &<S::Gas>::MAX);
+            let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, <S::Gas>::MAX);
 
             let mut working_set =
                 WorkingSet::create_working_set(tx_scratchpad, &tx, working_set_gas_meter);
 
-            if let Err(err) = working_set.charge_gas(&gas_info.gas_used) {
+            if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
                 let (scratchpad, _) = working_set.revert();
 
                 return (
@@ -712,6 +716,8 @@ where
             .blob_sender
             .publish_proof_blob(blob_bytes, blob_id)
             .await?;
+
+        debug!(blob_id, "Proof blob has been dispatched for publishing");
 
         Ok(())
     }

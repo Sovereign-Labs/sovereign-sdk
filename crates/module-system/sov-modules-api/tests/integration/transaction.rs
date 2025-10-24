@@ -1,11 +1,115 @@
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
-use sov_test_utils::runtime::TestOptimisticRuntime;
+use sov_mock_zkvm::MockZkvmCryptoSpec;
+use sov_modules_api::capabilities::UniquenessData;
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, Version0};
+use sov_modules_api::CryptoSpec;
+use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
 use sov_test_utils::TestSpec;
 use sov_universal_wallet::schema::Schema;
 
 type Runtime = TestOptimisticRuntime<TestSpec>;
 
 const ASSERT_MSG: &str = "JSON representation changed, this is a breaking change for web3 SDK, please ensure it is also updated";
+
+// ensure custom serde serialized fields are serialized as expected
+// i.e Transaction pub_key and signature fields as hex strings
+#[test]
+fn test_serde_serialize_tx() {
+    let sig_bytes = hex::decode("c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02").unwrap();
+    let native_sig = <MockZkvmCryptoSpec as CryptoSpec>::Signature::try_from(sig_bytes).unwrap();
+    let key_bytes =
+        hex::decode("1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6").unwrap();
+    let native_pub_key =
+        <MockZkvmCryptoSpec as CryptoSpec>::PublicKey::try_from(key_bytes).unwrap();
+    let native_call = sov_value_setter::CallMessage::SetValue::<TestSpec> {
+        value: 4,
+        gas: None,
+    };
+    let uniq = UniquenessData::Generation(2);
+    let details = TxDetails::<TestSpec> {
+        max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
+        max_fee: sov_bank::Amount(10000),
+        gas_limit: Some(vec![500, 500].try_into().unwrap()),
+        chain_id: 1337,
+    };
+    let native_tx = Version0 {
+        signature: native_sig,
+        pub_key: native_pub_key,
+        runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
+        uniqueness: uniq,
+        details,
+    };
+    let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
+    let native_json = serde_json::to_value(&native).unwrap();
+    let sig = &native_json["V0"]["signature"];
+    let pub_key = &native_json["V0"]["pub_key"];
+
+    assert_eq!(sig, "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02");
+    assert_eq!(
+        pub_key,
+        "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6"
+    );
+}
+
+// Ensure a Schema json_to_borsh serialized json transaction type produces the same bytes as borsh
+// serializing the native type directly.
+#[test]
+fn test_schema_and_native_serialization_consistency() {
+    let json = r#"
+        { "V0": 
+            {
+                "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
+                "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
+                "runtime_call": {
+                    "value_setter": {
+                        "set_value": {
+                            "value": 4,
+                            "gas": null
+                        }
+                    }
+                },
+                "uniqueness": {
+                    "generation": 2
+                },
+                "details": {
+                    "max_priority_fee_bips": 1,
+                    "max_fee": 10000,
+                    "gas_limit": [500, 500],
+                    "chain_id": 1337
+                }
+            }
+        }"#;
+    let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
+    let schema_bytes = schema.json_to_borsh(0, json).unwrap();
+
+    let sig_bytes = hex::decode("c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02").unwrap();
+    let native_sig = <MockZkvmCryptoSpec as CryptoSpec>::Signature::try_from(sig_bytes).unwrap();
+    let key_bytes =
+        hex::decode("1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6").unwrap();
+    let native_pub_key =
+        <MockZkvmCryptoSpec as CryptoSpec>::PublicKey::try_from(key_bytes).unwrap();
+    let native_call = sov_value_setter::CallMessage::SetValue::<TestSpec> {
+        value: 4,
+        gas: None,
+    };
+    let uniq = UniquenessData::Generation(2);
+    let details = TxDetails::<TestSpec> {
+        max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
+        max_fee: sov_bank::Amount(10000),
+        gas_limit: Some(vec![500, 500].try_into().unwrap()),
+        chain_id: 1337,
+    };
+    let native_tx = Version0 {
+        signature: native_sig,
+        pub_key: native_pub_key,
+        runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
+        uniqueness: uniq,
+        details,
+    };
+    let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
+    let native_bytes = borsh::to_vec(&native).unwrap();
+
+    assert_eq!(schema_bytes, native_bytes);
+}
 
 /// The tests in this module are designed to detect changes that will be breaking for web3 SDK
 /// applications. Making these changes without making the neccessary updates in the web3 SDK will
@@ -89,23 +193,10 @@ mod web3_compatibility {
     #[test]
     fn test_tx_wallet_serialization_some_gas_limit() {
         let json = r#"
-        {"versioned_tx": { "V0": 
+        {"V0": 
             {
-                "signature": {
-                    "msg_sig": [
-                        197, 161, 16, 121, 196, 253, 39, 80, 96, 211, 6, 131, 61, 32, 48, 100,
-                        246, 215, 233, 132, 0, 34, 250, 182, 110, 83, 213, 18, 215, 40, 1, 105,
-                        181, 112, 122, 171, 36, 14, 3, 10, 230, 227, 82, 244, 56, 125, 136, 119,
-                        117, 39, 34, 216, 127, 24, 21, 220, 112, 100, 195, 138, 80, 59, 62, 2
-                    ]
-                },
-                "pub_key": {
-                    "pub_key": [
-                        30, 167, 123, 184, 248, 25, 21, 129, 108, 78, 152, 92, 104, 15, 169,
-                        144, 55, 125, 201, 72, 241, 29, 131, 75, 110, 177, 135, 251, 42, 83,
-                        204, 230
-                    ]
-                },
+                "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
+                "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
                 "runtime_call": {
                     "value_setter": {
                         "set_value": {
@@ -123,7 +214,7 @@ mod web3_compatibility {
                     "gas_limit": [500, 500],
                     "chain_id": 1337
                 }
-            }}
+            }
         }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
 
@@ -133,23 +224,10 @@ mod web3_compatibility {
     #[test]
     fn test_tx_wallet_serialization_none_gas_limit() {
         let json = r#"
-        {"versioned_tx": {"V0":
+        {"V0":
             {
-                "signature": {
-                    "msg_sig": [
-                        197, 161, 16, 121, 196, 253, 39, 80, 96, 211, 6, 131, 61, 32, 48, 100,
-                        246, 215, 233, 132, 0, 34, 250, 182, 110, 83, 213, 18, 215, 40, 1, 105,
-                        181, 112, 122, 171, 36, 14, 3, 10, 230, 227, 82, 244, 56, 125, 136, 119,
-                        117, 39, 34, 216, 127, 24, 21, 220, 112, 100, 195, 138, 80, 59, 62, 2
-                    ]
-                },
-                "pub_key": {
-                    "pub_key": [
-                        30, 167, 123, 184, 248, 25, 21, 129, 108, 78, 152, 92, 104, 15, 169,
-                        144, 55, 125, 201, 72, 241, 29, 131, 75, 110, 177, 135, 251, 42, 83,
-                        204, 230
-                    ]
-                },
+                "signature": "c5a11079c4fd275060d306833d203064f6d7e9840022fab66e53d512d7280169b5707aab240e030ae6e352f4387d8877752722d87f1815dc7064c38a503b3e02",
+                "pub_key": "1ea77bb8f81915816c4e985c680fa990377dc948f11d834b6eb187fb2a53cce6",
                 "runtime_call": {
                     "value_setter": {
                         "set_value": {
@@ -167,7 +245,7 @@ mod web3_compatibility {
                     "gas_limit": null,
                     "chain_id": 1337
                 }
-    }}
+            }
         }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
 

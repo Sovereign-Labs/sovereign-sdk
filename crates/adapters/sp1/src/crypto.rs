@@ -4,7 +4,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ed25519_consensus::{Signature, VerificationKey};
+use ed25519_consensus::{Error, Signature, VerificationKey};
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
 use sov_rollup_interface::reexports::schemars::{self, JsonSchema};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
@@ -34,6 +34,21 @@ pub mod private_key {
         }
     }
 
+    impl AsRef<[u8]> for SP1PrivateKey {
+        fn as_ref(&self) -> &[u8] {
+            self.key_pair.as_bytes()
+        }
+    }
+
+    impl TryFrom<Vec<u8>> for SP1PrivateKey {
+        type Error = ed25519_consensus::Error;
+
+        fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+            let key_pair = SigningKey::try_from(value.as_slice())?;
+            Ok(Self { key_pair })
+        }
+    }
+
     impl sov_rollup_interface::crypto::PrivateKey for SP1PrivateKey {
         type PublicKey = SP1PublicKey;
 
@@ -54,9 +69,8 @@ pub mod private_key {
         }
 
         fn sign(&self, msg: &[u8]) -> Self::Signature {
-            SP1Signature {
-                msg_sig: self.key_pair.sign(msg),
-            }
+            let s = self.key_pair.sign(msg);
+            SP1Signature::new(s)
         }
     }
 
@@ -147,7 +161,7 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
 pub struct SP1PublicKey {
     #[schemars(
         flatten,
@@ -162,6 +176,21 @@ impl SP1PublicKey {
     /// Returns the bytes of the underlying public key.
     pub fn bytes(&self) -> &[u8; 32] {
         self.pub_key.as_bytes()
+    }
+}
+
+impl TryFrom<Vec<u8>> for SP1PublicKey {
+    type Error = Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let pub_key = VerificationKey::try_from(value.as_slice())?;
+        Ok(Self { pub_key })
+    }
+}
+
+impl AsRef<[u8]> for SP1PublicKey {
+    fn as_ref(&self) -> &[u8] {
+        self.pub_key.as_ref()
     }
 }
 
@@ -203,16 +232,26 @@ pub struct SP1Signature {
     )]
     #[sov_wallet(as_ty = "[u8; 64]")] // the LENGTH property doesn't seem to exist
     pub msg_sig: Signature,
+    bytes: Vec<u8>,
+}
+
+impl SP1Signature {
+    /// Create a new instance
+    pub fn new(s: Signature) -> Self {
+        Self {
+            msg_sig: s,
+            bytes: s.to_bytes().to_vec(),
+        }
+    }
 }
 
 impl BorshDeserialize for SP1Signature {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0u8; 64];
         reader.read_exact(&mut buffer)?;
+        let s = Signature::try_from(buffer.as_slice()).map_err(map_error)?;
 
-        Ok(Self {
-            msg_sig: Signature::try_from(buffer.as_slice()).map_err(map_error)?,
-        })
+        Ok(Self::new(s))
     }
 }
 
@@ -226,9 +265,23 @@ impl TryFrom<&[u8]> for SP1Signature {
     type Error = anyhow::Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self {
-            msg_sig: Signature::try_from(value).map_err(anyhow::Error::msg)?,
-        })
+        let s = Signature::try_from(value).map_err(anyhow::Error::msg)?;
+        Ok(Self::new(s))
+    }
+}
+
+impl TryFrom<Vec<u8>> for SP1Signature {
+    type Error = ed25519_consensus::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let msg_sig = Signature::try_from(value.as_slice())?;
+        Ok(Self::new(msg_sig))
+    }
+}
+
+impl AsRef<[u8]> for SP1Signature {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes.as_slice()
     }
 }
 
@@ -275,9 +328,7 @@ impl FromStr for SP1Signature {
             .try_into()
             .map_err(|_| anyhow::anyhow!("Invalid signature size"))?;
 
-        Ok(SP1Signature {
-            msg_sig: Signature::from(byte_slice),
-        })
+        Ok(SP1Signature::new(byte_slice.into()))
     }
 }
 

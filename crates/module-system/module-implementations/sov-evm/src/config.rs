@@ -1,5 +1,4 @@
 use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
-use alloy_eips::merge::SLOT_DURATION;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
@@ -9,18 +8,12 @@ use crate::AccountData;
 /// Core EVM chain parameters shared between genesis and runtime
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct EvmChainSpec {
-    /// Unique chain identifier
-    pub chain_id: u64,
-    /// Maximum contract code size (None = unlimited)
+    /// Maximum contract code size (None = default. Currently 512KiB)
     pub limit_contract_code_size: Option<usize>,
     /// Address where transaction fees are collected
     pub coinbase: Address,
     /// Maximum gas allowed per block
     pub block_gas_limit: u64,
-    /// Seconds to add to parent block timestamp
-    pub block_timestamp_delta: u64,
-    /// EIP-1559 base fee calculation parameters
-    pub base_fee_params: alloy_eips::eip1559::BaseFeeParams,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
 }
@@ -41,13 +34,10 @@ pub struct EvmGenesisConfig {
 impl Default for EvmChainSpec {
     fn default() -> Self {
         Self {
-            chain_id: config_value!("CHAIN_ID"),
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
-            block_timestamp_delta: SLOT_DURATION.as_secs(),
-            base_fee_params: alloy_eips::eip1559::BaseFeeParams::new(1, 1),
-            hardforks: vec![(0, SpecId::SHANGHAI)],
+            hardforks: vec![(0, SpecId::CANCUN)],
         }
     }
 }
@@ -86,6 +76,32 @@ impl Default for EvmRuntimeConfig {
     }
 }
 
+#[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+pub(crate) enum GasMeteringMode {
+    /// EVM doesn't charge for storage access and initial cost.
+    /// Sequencer charges the initial cost and state access.
+    /// Later adds to the receipt amount.
+    #[default]
+    Rollup,
+    /// EVM gas costs are resembling those on the mainnet.
+    /// Useful to compute metrics like MGas/s.
+    Evm,
+}
+
+impl From<&str> for GasMeteringMode {
+    fn from(s: &str) -> Self {
+        match s {
+            "Rollup" => GasMeteringMode::Rollup,
+            "EVM" => GasMeteringMode::Evm,
+            _ => panic!("Invalid EVM_GAS_METERING_MODE"),
+        }
+    }
+}
+
+pub(crate) fn gas_metering_mode() -> GasMeteringMode {
+    config_value!("EVM_GAS_METERING_MODE").into()
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -106,10 +122,8 @@ mod tests {
                 code: Bytes::default(),
             }],
             chain_spec: crate::EvmChainSpec {
-                chain_id: 4321, // Use a hard-coded value instead of config_value!("CHAIN_ID") since the string below is hard-coded
                 limit_contract_code_size: None,
-                block_timestamp_delta: 1u64,
-                hardforks: vec![(0, SpecId::SHANGHAI)],
+                hardforks: vec![(0, SpecId::CANCUN)],
                 ..Default::default()
             },
             ..Default::default()
@@ -127,16 +141,10 @@ mod tests {
                 "initial_base_fee":7,
                 "genesis_timestamp":0,
                 "chain_spec":{
-                    "chain_id":4321,
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":30000000,
-                    "block_timestamp_delta":1,
-                    "base_fee_params":{
-                        "max_change_denominator":1,
-                        "elasticity_multiplier":1
-                    },
-                    "hardforks":[[0,"SHANGHAI"]]
+                    "hardforks":[[0,"CANCUN"]]
                 }
         }"#;
 

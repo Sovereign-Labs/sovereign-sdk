@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use nomt_core::hasher::BinaryHasher;
 use nomt_core::proof::MultiProof;
 use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
@@ -165,7 +165,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(all(feature = "test-utils", feature = "native"))]
 // `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
 // In some tests, we use both `ProverStorage`` and `ZkStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.
@@ -218,5 +218,9 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
 
     fn get_root_hash_unbound(&self, _version: SlotNumber) -> anyhow::Result<Self::Root> {
         unimplemented!("The NomtVerifierStorage should not be used to get root hash! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
+    fn get_unbound<N: crate::CompileTimeNamespace>(&self, _key: SlotKey) -> Option<SlotValue> {
+        unimplemented!("The NomtVerifierStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 }

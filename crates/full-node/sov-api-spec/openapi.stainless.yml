@@ -81,37 +81,26 @@ resources:
           retrieve: get /sequencer/unstable/events/{eventOffset}
           list: get /sequencer/unstable/events
   rollup:
-    models:
-      simulateExecutionResponse: SimulateExecutionResponse
     methods:
       simulate: post /rollup/simulate
+      base_fee_per_gas: get /rollup/base-fee-per-gas/latest
+      sync_status: get /rollup/sync-status
+      schema: get /rollup/schema
+      constants: get /rollup/constants
     subresources:
-      base_fee_per_gas:
-        methods:
-          retrieve: get /rollup/base-fee-per-gas/latest
-        models:
-          baseFeePerGas: BaseFeePerGas
       addresses:
         methods:
           dedup: get /rollup/addresses/{credential_id}/dedup
-      sync_status:
-        methods:
-          retrieve: get /rollup/sync-status
-      schema:
-        methods:
-          retrieve: get /rollup/schema
-      constants:
-        methods:
-          retrieve: get /rollup/constants
 targets:
-  node:
+  typescript:
     production_repo: Sovereign-Labs/sovereign-sdk-client-js
     package_name: "@sovereign-sdk/client"
     publish:
       npm: true
     options:
-      browser:
-        state: allow
+      node_migration:
+        previous_version: "0.1.0-alpha.38"
+        migrated_version: "0.2.0"
 settings:
   license:
     name: Sovereign Labs Community Software License

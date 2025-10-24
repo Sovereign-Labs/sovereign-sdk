@@ -19,7 +19,7 @@ use sov_test_utils::runtime::{config_gas_token_id, Payable, TestRunner};
 
 type S = sov_test_utils::TestSpec;
 
-use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, VersionedTx};
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{PrivateKey, RawTx};
 use sov_test_utils::{EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::ValueSetter;
@@ -156,7 +156,7 @@ where
     let result = runner.execute::<RelevantBlobs<MockBlob>>(blobs);
     let batch_receipt = result.0.batch_receipts[0].clone();
 
-    let gas_price = &batch_receipt.inner.gas_price;
+    let gas_price = batch_receipt.inner.gas_price;
     let tx_receipts = &batch_receipt.tx_receipts;
     let ignored_tx_receipts = &batch_receipt.ignored_tx_receipts;
 
@@ -171,7 +171,7 @@ where
     for tx_receipt in tx_receipts {
         match &tx_receipt.receipt {
             TxEffect::Successful(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 gas_value_charged_to_user =
                     gas_value_charged_to_user.checked_add(gas_value).unwrap();
@@ -180,13 +180,13 @@ where
                     .unwrap();
             }
             TxEffect::Skipped(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 // Sequencer doesn't get the fee and is penalized
                 seq_penalty = seq_penalty.checked_add(gas_value).unwrap();
             }
             TxEffect::Reverted(tx_contents) => {
-                total_gas = total_gas.checked_combine(&tx_contents.gas_used).unwrap();
+                total_gas = total_gas.checked_combine(tx_contents.gas_used).unwrap();
                 // From gas usage point of view the `Successful & Reverted` cases are the same.
                 let gas_value = tx_contents.gas_used.value(gas_price);
                 gas_value_charged_to_user =
@@ -200,7 +200,7 @@ where
 
     for ignored_tx_receipt in ignored_tx_receipts {
         let ignored = &ignored_tx_receipt.ignored;
-        let gas_used = &ignored.gas_used;
+        let gas_used = ignored.gas_used;
         total_gas = total_gas.checked_combine(gas_used).unwrap();
         let gas_value = gas_used.value(gas_price);
         seq_penalty = seq_penalty.checked_add(gas_value).unwrap();
@@ -245,13 +245,13 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         None,
     );
 
-    let signed_tx = Transaction::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
+    let signed_tx = Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
 
     // Create a signature for a different message so it won't verify in the stf.
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
 
-    match signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => Transaction::new_with_details_v0(
+    match signed_tx {
+        Transaction::V0(inner) => Transaction::new_with_details_v0(
             inner.pub_key,
             inner.runtime_call,
             bad_signature,
@@ -263,6 +263,9 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
                 chain_id,
             },
         ),
+        Transaction::V1(_inner) => {
+            todo!("Bad signature generation for multisig transactions is not yet supported");
+        }
     }
 }
 

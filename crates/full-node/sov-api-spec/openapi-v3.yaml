@@ -291,6 +291,18 @@ paths:
           "$ref": "#/components/responses/ApiErrorResponse"
         "503":
           "$ref": "#/components/responses/ApiErrorResponse"
+  /sequencer/ready:
+    get:
+      summary: Check whether the sequencer is ready to receive transactions
+      description: Returns an empty response when ready, or a 503 error with details when not ready
+      operationId: is_ready
+      tags:
+        - Sequencer
+      responses:
+        "200":
+          description: Sequencer is ready
+        "503":
+          "$ref": "#/components/responses/ApiErrorResponse"
   /sequencer/txs/{txHash}/status:
     get:
       summary: Get a transaction status by hash
@@ -433,6 +445,10 @@ paths:
   /rollup/simulate:
     post:
       summary: Simulate transaction execution
+      description: |-
+        Simulates transaction execution against the current blockchain state without committing changes.
+        This endpoint provides detailed gas estimation, event emission, and error handling.
+        Useful for estimating gas costs, testing transaction behavior, and debugging.
       operationId: simulate
       tags:
         - Rollup
@@ -440,19 +456,18 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                body:
-                  $ref: "#/components/schemas/PartialTransaction"
-              required:
-                - body
+              $ref: "#/components/schemas/SimulateParameters"
       responses:
         "200":
-          description: Success
+          description: Simulation completed successfully
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SimulateExecutionResponse"
+                $ref: "#/components/schemas/SimulateOutcome"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/ApiErrorResponse"
   /rollup/sync-status:
     get:
       summary: Get the current sync status of the rollup
@@ -844,10 +859,15 @@ components:
           type: integer
         hyperlane_domain:
           type: integer
+        address_prefix:
+          type: string
+          description: The HRP used for addresses in this rollup (e.g., "sov"). Doesn't apply to solana/eth addressed apps.
+          example: "sov"
       required:
         - chain_name
         - chain_id
         - hyperlane_domain
+        - address_prefix
     Hash:
       type: string
       title: Hash
@@ -1130,3 +1150,142 @@ components:
                 - target_da_height
           required:
             - syncing
+    SimulateParameters:
+      type: object
+      description: Parameters for transaction simulation requests
+      properties:
+        sender:
+          type: string
+          description: The credential ID of the transaction sender
+          example: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+        call:
+          type: object
+          description: The runtime call to simulate, provided as JSON
+          additionalProperties: true
+          example:
+            Bank:
+              Transfer:
+                to:
+                  user: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+                coins:
+                  amount: "1000"
+                  token_id: "token_1234567890abcdef"
+        tx_details:
+          $ref: "#/components/schemas/TxDetailsParameter"
+        sequencer:
+          $ref: "#/components/schemas/SequencerParameter"
+        uniqueness:
+          type: object
+          description: Optional uniqueness data for the transaction
+          additionalProperties: true
+      required:
+        - sender
+        - call
+    TxDetailsParameter:
+      type: object
+      description: Optional transaction details for simulation requests
+      properties:
+        max_priority_fee_bips:
+          type: integer
+          description: Maximum priority fee in basis points
+          format: uint16
+          example: 100
+        max_fee:
+          type: string
+          description: Maximum fee the sender is willing to pay
+          example: "1000000"
+        gas_limit:
+          type: array
+          items:
+            type: integer
+            format: uint64
+          description: Gas limit for the transaction as an array of u64 values
+          example: [1000000, 0, 0, 0]
+    SequencerParameter:
+      type: object
+      description: Optional sequencer configuration for simulation requests
+      properties:
+        rollup_address:
+          type: string
+          description: Custom rollup address for the sequencer
+          example: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+        da_address:
+          type: string
+          description: Custom data availability address for the sequencer
+          example: "celestia1234567890abcdef"
+    SimulateOutcome:
+      type: object
+      description: The outcome of a transaction simulation
+      discriminator:
+        propertyName: outcome
+      oneOf:
+        - $ref: "#/components/schemas/SuccessOutcome"
+        - $ref: "#/components/schemas/FailOutcome"
+    SuccessOutcome:
+      type: object
+      description: Successful simulation outcome
+      properties:
+        outcome:
+          type: string
+          enum: [success]
+        gas_used:
+          type: string
+          description: The amount of gas consumed by the transaction
+          example: "104000"
+        priority_fee:
+          type: string
+          description: The amount paid for priority fee
+          example: "104000"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SimulatedEvent"
+          description: Events emitted during transaction execution
+      required:
+        - outcome
+        - gas_used
+        - events
+        - priority_fee
+    FailOutcome:
+      type: object
+      description: Failed simulation outcome
+      properties:
+        outcome:
+          type: string
+          enum: [reverted, skipped]
+        reason:
+          type: string
+          description: The reason why the transaction failed
+          example: "Insufficient balance"
+      required:
+        - outcome
+        - reason
+    SimulatedEvent:
+      type: object
+      description: An event emitted during transaction simulation
+      properties:
+        value:
+          type: object
+          description: The event data
+          additionalProperties: true
+          example:
+            token_transferred:
+              coins:
+                amount: "1000"
+                token_id: "token_1234567890abcdef"
+              from:
+                user: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4"
+              to:
+                user: "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq2k2jj4"
+        key:
+          type: string
+          description: The event key
+          example: "Bank/TokenTransferred"
+        module:
+          type: string
+          description: The module that emitted the event
+          example: "Bank"
+      required:
+        - value
+        - key
+        - module

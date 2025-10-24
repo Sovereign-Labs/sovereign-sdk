@@ -33,7 +33,7 @@ pub enum Proof<F, T> {
 /// The `CryptoSpec` trait configures the cryptographic primitives used by a particular instance of a rollup.
 /// this trait implementation is meant to be provided by the `Zkvm`. module
 pub trait CryptoSpec: PartialEq + Debug + Clone + Send + Sync + 'static {
-    /// The public key used for digital signatures
+    /// The private key used for digital signatures
     #[cfg(feature = "native")]
     type PrivateKey: crate::crypto::PrivateKey<
         PublicKey = Self::PublicKey,

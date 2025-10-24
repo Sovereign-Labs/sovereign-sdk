@@ -7,6 +7,7 @@ use rockbound::{
     default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB, SchemaBatch,
 };
 
+use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
     historical_state::StateChanges,
     namespaces::{KernelNamespace, UserNamespace},
@@ -26,12 +27,12 @@ impl FlatStateDb {
     const DB_PATH_SUFFIX: &'static str = "state-db";
 
     /// Create a new [`FlatStateDb`] from a path.
-    pub fn new(path: std::path::PathBuf) -> anyhow::Result<Self> {
+    pub fn new(path: std::path::PathBuf, cache_size: usize) -> anyhow::Result<Self> {
         let mut columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
         VersionedDB::<NomtStateValues<UserNamespace>>::add_column_families(&mut columns)?;
         VersionedDB::<NomtStateValues<KernelNamespace>>::add_column_families(&mut columns)?;
-        let other =
-            Self::get_rockbound_options(columns).setup_db_in_path_with_column_descriptors(path)?;
+        let other = Self::get_rockbound_options(columns)
+            .setup_db_in_path_with_column_descriptors(path, cache_size)?;
         let other = Arc::new(other);
         let user = VersionedDB::<NomtStateValues<UserNamespace>>::from_db(other.clone())?;
         let kernel = VersionedDB::<NomtStateValues<KernelNamespace>>::from_db(other.clone())?;
@@ -100,9 +101,13 @@ impl FlatStateDb {
     }
 
     /// Coalesce all the changes into a single schema batch and write it atomically.
-    pub fn commit(&self, state: StateChanges) -> anyhow::Result<()> {
+    pub fn commit(&self, state: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
+        let start_prepare = std::time::Instant::now();
         let commit = self.prepare_commit(state)?;
+        let prepare = start_prepare.elapsed();
+        let start_write = std::time::Instant::now();
         self.other.write_schemas(commit)?;
-        Ok(())
+        let write = start_write.elapsed();
+        Ok(FlatStateCommitMetric { prepare, write })
     }
 }

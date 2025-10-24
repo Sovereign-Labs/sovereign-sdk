@@ -147,6 +147,32 @@ impl Metric for PreferredSequencerFetchBatchesToReplayMetrics {
 }
 
 #[derive(Debug)]
+pub struct PreferredSequencerSlotNumberMetrics {
+    pub true_slot_number: u64,
+    pub latest_finalized_slot_number: u64,
+    pub node_visible_slot_number: u64,
+    pub seq_visible_slot_number: u64,
+}
+
+impl Metric for PreferredSequencerSlotNumberMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_preferred_sequencer_slot_numbers"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} true_slot={},last_finalized_slot={},node_visible_slot={},seq_visible_slot={}",
+            self.measurement_name(),
+            self.true_slot_number,
+            self.latest_finalized_slot_number,
+            self.node_visible_slot_number,
+            self.seq_visible_slot_number,
+        )
+    }
+}
+
+#[derive(Debug)]
 pub struct PreferredSequencerPruneMetrics {
     pub duration_ms: u64,
 }

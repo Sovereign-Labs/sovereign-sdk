@@ -7,7 +7,7 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParam
 use sov_celestia_adapter::CelestiaService;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NativeStorageManager;
-use sov_ethereum::{EthRpcConfig, GasPriceOracleConfig};
+use sov_ethereum::EthRpcConfig;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
@@ -118,7 +118,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
     async fn sequencer_additional_apis<Seq>(
         &self,
         sequencer: Arc<Seq>,
-        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -126,7 +126,8 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         let eth_signer = eth_dev_signer();
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
-            gas_price_oracle_config: GasPriceOracleConfig::default(),
+            extension: rollup_config.extension_or_panic(),
+            buffer_raw_txs: true,
         };
 
         Ok(NodeEndpoints {

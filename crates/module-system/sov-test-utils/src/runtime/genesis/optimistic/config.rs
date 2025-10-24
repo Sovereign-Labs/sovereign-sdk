@@ -234,8 +234,8 @@ impl<S: Spec> MinimalOptimisticGenesisConfig<S> {
                 ),
 
                 attester_incentives: AttesterIncentivesConfig {
-                    minimum_attester_bond: default_user_stake.clone(),
-                    minimum_challenger_bond: default_user_stake.clone(),
+                    minimum_attester_bond: default_user_stake,
+                    minimum_challenger_bond: default_user_stake,
                     initial_attesters: vec![(
                         initial_attester.as_user().address().clone(),
                         initial_attester.bond,
@@ -246,12 +246,8 @@ impl<S: Spec> MinimalOptimisticGenesisConfig<S> {
                 },
                 // unused in optimistic mode
                 prover_incentives: ProverIncentivesConfig {
-                    minimum_bond: default_user_stake.clone(),
-                    proving_penalty: {
-                        let mut user_stake = default_user_stake;
-                        user_stake.scalar_division(2);
-                        user_stake
-                    },
+                    minimum_bond: default_user_stake,
+                    proving_penalty: { default_user_stake.scalar_division(2) },
                     initial_provers: vec![(placeholder.address().clone(), placeholder.balance())],
                 },
 

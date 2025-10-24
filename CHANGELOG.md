@@ -1,5 +1,111 @@
+# 2025-10-22
+- #1937 Reject log subscriptions with block filters.
+- #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
+The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
+
+# 2025-10-21
+- #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+- #1936 Fixes warnings about metrics during rollup startup
+- #1933 Cleans up demo-rollup tests
+
+# 2025-10-20
+- #1917 Add support for logs from pending blocks in `eth_getLogs` and introduce `LogsWithCursorProvider` trait in `sov-eth-client` for paginated log retrieval with `eth_getLogsWithCursor`.
+- #1912 Add multi-worker support to EVM logs soak tests with log retrieval via `eth_getLogs`. Workers are automatically funded from root account and use WebSocket connections for better real-time performance.
+- #1924 **Breaking change** rollup's batch and proof namespace needs to be specified in `constants.toml` as `BATCH_NAMESPACE` and `PROOF_NAMESPACE`.
+- #1925 Simplifies batch and proof namespace declaration: `BATCH_NAMESPACE = { byte_string = "sov-test-b" }` or `PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }`
+- #1925 removes the `genesis_height` param from the rollup_config.toml file. Genesis height is now *only* read from the genesis config file (usually `genesis.json`).
+
+# 2025-10-16
+- #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
+- #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
+        This was done because there's no guarantees that any field will remain common across all transaction versions (which was the original motiviation for this design).
+
+# 2025-10-16
+- #1878 Add EVM logs soak test
+
+# 2025-10-15
+- #1877 Updates the `pub_key` and `signature` fields on `Transaction::V0` to serde (de)serialize as hex strings instead of the underlying crypto type.
+        This does not affect the borsh serialization and thus network serialization of transactions, only if you're using `Schema` to serialize transactions,
+        i.e with the `web3` SDK
+- #1884 Moves the EIP712 authenticator from `sov_evm` to its own crate, `sov-eip712-auth`. This significantly reduces the dependency tree when using only the authenticator on a rollup that does not integrate the entire EVM.
+
+# 2025-10-14
+- #1872 Adds a new `V1` transaction type with native support for multisigs.
+- #1874 Refactor `scratchpad.rs` into focused submodules for better maintainability.
+
+# 2025-10-13
+- #1876 Use workspace dependencies consistently across all crates. This ensures version consistency and simplifies dependency management.
+- #1851 Implement `debug_traceBlockByNumber` in EVM module.
+
+# 2025-10-10
+- #1840 DOn't panic on selfdestruct/blockhash. Return an error.
+
+# 2025-10-08
+- #1827 Implement eth_getBlockReceipts in EVM module.
+- #1833 Adds a config option `pruner_max_batch_size` in the `storage` section of the rollup config. If the pruner appears to cause performance degradation, you can reduce the batch size here
+to decrease the number of writes it will attempt at each slot.
+
+# 2025-10-07
+- #1825 **Breaking change** modifies the way that state keys are computed. This improves performance but *requires a complete wipe of your database and resync*. 
+
+# 2025-10-06
+- #1818 feature gates much of the state access observability behind the `expensive-observability` feature flag on `sov-modules-api`. Without this flag, deserialization timing is no longer available and `trace` level logs on state access are removed.
+- #1809 Upgrade RETH 1.7.0 -> 1.8.2.
+
+# 2025-10-03
+- #1806 Fix EVM gas estimation by accounting for sequencer gas in `ApiStateAccessor`. This ensures gas estimates properly include the sequencer gas overhead.
+- #1803 Skip prover build scripts execution when `SKIP_GUEST_BUILD=1`. This helps cargo mark the subtree as clean and avoid recompilation. Reduces incremental compilation time of demo-rollup. It used to re-run whenever OUT_DIR has changed and it changes each compilation.
+
+# 2025-10-01
+- #1796 Adds `EVM_GAS_METERING_MODE` configuration to switch between "Rollup" and "EVM" gas metering modes. Rollup mode (default) keeps existing behavior where EVM doesn't charge for storage access and initial cost. EVM mode enables mainnet-like gas costs useful for computing metrics like MGas/s.
+- #1791 Re-enable EVM gas estimation while bumping the margins.
+- #1790 Updates the `sov-soak-testing-lib` interface to introduce a `SoakTestRunner`, allowing for more flexible usage as more modules are integrated into the soak generator; the old functions `run_generator_task_for_xx()` have been removed. The soak test crate in the demo rollup has been updated accordingly. This is a *breaking change* for any custom soak testing setups.
+
+# 2025-09-29
+- #1770 **Breaking change** introduces a required `buffer_raw_txs` field to `EthRpcConfig`. This change is only breaking for EVM rollups.
+- #1783 Adds `da.tx_priority` optional field for celestia adapter. Possible values are `Low`, `Medium` or `High`. It can be used to improve blob inclusion.
+- #1749 Reduces number of empty blobs posted if there are enough in-flight blobs.
+
+# 2025-09-25
+- #1758 A new config value in rollup.toml: `runner.da_total_timeout_secs`. It should be larger than the total time da service attempts to fetch data. Default value is 10 minutes.
+- #1771 Added new logging warning about metrics, which triggers demo-rollup test.
+- #1772 Added custom Uniswap soak testing infrastructure for EVM load testing.
+
+# 2025-09-21
+- #1729 Adds optional `num_cache_warmup_workers` to `xxx_rollup_config.toml`. This field specifies the number of workers responsible for warming up the executor cache in the preferred sequencer.
+- #1752 Changes in benchmark for sov-demo-rollup
+
+# 2025-09-19
+- #1723 **Breaking change** Introduced an optional `[sequencer.extension]` section in the rollup config, this section is required for `EVM` rollups.
+- #1718 Implement support for historical state queries in ethereum RPC methods.
+
+# 2025-09-16
+- #1664 *Advisory* The EIP-712 compatible authenticator implementation has now been merged. This requires the UniversalSchema to be available to the runtime; the `sov-build` utilities have been updated to include the borsh serialization of the schema, thus `autogenerated.rs` will be modified on the next compilation of the rollup. The chain hash has not changed and no action is required.
+- #1705 Lint fixes in tests.
+
+# 2025-09-15
+- #1660 **Breaking change** The UniversalWallet schema has been restructured to use internal mutability, removing the need for mutable references in its user-facing APIs. In the process, the convenient method `Schema::cached_chain_hash()` has been removed; use `Schema::chain_hash()` for this purpose now. This may require adjusting build-scripts that generate the schema for a rollup. A new web3 sdk version will be provided shortly to be compatible with the upgrade. The chain hash has not changed and rollup consensus is not affected.
+
+# 2025-09-12
+- #1672 Fixes some minor bugs related to pruning in the sequencer DB which could cause duplicate blob submission on restart.
+- #1682 Removes `body_to_save` from TransactionReceipt. Please use original transaction bytes which have been sent.
+
+# 2025-09-11
+- #1669 Account for sequencer gas in EVM transaction receipts. EVM transaction receipts now properly reflect the sequencer gas consumed during execution.
+
+# 2025-09-09
+- #1646 Implements `eth_estimateGas` RPC method for the EVM module. This allows clients to estimate the gas required for transaction execution before submitting them to the network.
+- #1650 Adds an optional `state_cache_size` param to the `storage` section of the rollup config.toml file. 
+- #1645 **BREAKING CHANGE** The `PerBlockCache` trait has been updated. The `put_cached and get_cached` methods now accept an optional `SlotKey`. For backward compatibility, None should be passed when a SlotKey is not provided.
+
+# 2025-09-08
+- #1635 **BREAKING CHANGE** Removes ETH gas price mechanism from the EVM module. The gas oracle, gas price cache, and related configuration have been eliminated. This simplifies EVM transaction handling by removing Ethereum gas pricing in favor of rollup gas metering.
+
+# 2025-09-04
+- #1621 Introduces rollup gas metering for EVM execution. EVM transactions now use available rollup gas as their gas limit and charge rollup gas proportionally to EVM gas consumed.
+
 # 2025-08-29
-- #1570 adds additional metrics on tx processing and state accesses. 
+- #1570 Adds additional metrics on tx processing and state accesses. 
 
 # 2025-08-27
 - #1580 **BREAKING CHANGE** `EVM` account balances are now initialized in the `Bank` genesis rather than the EVM genesis. Any `EVM` rollup must update both `evm.json` and `bank.json` accordingly.

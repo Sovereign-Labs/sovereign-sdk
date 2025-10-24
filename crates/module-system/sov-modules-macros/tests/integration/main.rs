@@ -27,12 +27,17 @@ fn trybuild() {
     // with `SOV_TEST_MODE_CONST_MANIFEST` set to `1`, so as to use
     // `constants.testing.toml`.
     std::env::set_var("SOV_TEST_MODE_CONST_MANIFEST", "1");
+    std::env::remove_var("CARGO_BUILD_JOBS");
     t.pass("tests/integration/trybuild/constants/valid_constants.rs");
 
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_invalid_checksum.rs");
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_not_a_string.rs");
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_prefix_too_short.rs");
     t.compile_fail("tests/integration/trybuild/constants/bech32_constant_prefix_too_long.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_invalid_string.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_odd_length.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_too_long.rs");
+    t.compile_fail("tests/integration/trybuild/constants/hex_too_short.rs");
 
     t.compile_fail("tests/integration/trybuild/module_info/derive_on_enum_not_supported.rs");
     t.compile_fail("tests/integration/trybuild/module_info/field_missing_attribute.rs");

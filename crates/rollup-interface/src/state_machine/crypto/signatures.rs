@@ -23,6 +23,8 @@ pub struct SigVerificationError {
 /// A digital signature.
 pub trait Signature:
     for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
     + Eq
     + Clone
     + Debug
@@ -48,7 +50,11 @@ pub trait PublicKey:
     + Send
     + Sync
     + Serialize
+    + PartialOrd
+    + Ord
     + for<'a> Deserialize<'a>
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
     + UniversalWalletSchema
 {
     /// Returns hashed public key.
@@ -58,7 +64,14 @@ pub trait PublicKey:
 /// A private key for generating digital signatures.
 #[cfg(feature = "native")]
 pub trait PrivateKey:
-    Debug + Send + Sync + Serialize + Clone + serde::de::DeserializeOwned
+    Debug
+    + Send
+    + Sync
+    + Serialize
+    + Clone
+    + serde::de::DeserializeOwned
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
 {
     /// The public key type associated with this signature scheme.
     type PublicKey: PublicKey;

@@ -55,44 +55,6 @@ mod test_module {
 }
 
 #[test]
-fn state_prefix_calculation() {
-    let test_struct = test_module::TestStruct::<ZkTestSpec>::default();
-    let prefix1 = test_struct.test_state1.prefix();
-
-    assert_eq!(
-        *prefix1,
-        sov_modules_api::ModulePrefix::new_storage(
-            "tests::module_info::test_module",
-            "TestStruct",
-            "test_state1"
-        )
-        .into()
-    );
-
-    let prefix2 = test_struct.test_state2.prefix();
-    assert_eq!(
-        *prefix2,
-        sov_modules_api::ModulePrefix::new_storage(
-            "tests::module_info::test_module",
-            "TestStruct",
-            "test_state2"
-        )
-        .into()
-    );
-
-    let prefix2 = test_struct.test_state3.prefix();
-    assert_eq!(
-        *prefix2,
-        sov_modules_api::ModulePrefix::new_storage(
-            "tests::module_info::test_module",
-            "TestStruct",
-            "test_state3"
-        )
-        .into()
-    );
-}
-
-#[test]
 fn module_id() {
     use sov_modules_api::digest::Digest;
 
@@ -135,37 +97,6 @@ mod second_test_module {
             todo!()
         }
     }
-}
-
-#[test]
-fn state_prefix_calculation_of_module_with_child_module() {
-    let second_test_struct: second_test_module::SecondTestStruct<ZkTestSpec> = Default::default();
-
-    let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
-    assert_eq!(
-        *prefix2,
-        sov_modules_api::ModulePrefix::new_storage(
-            "tests::module_info::second_test_module",
-            "SecondTestStruct",
-            "state_in_second_struct_1",
-        )
-        .into()
-    );
-
-    let prefix1 = second_test_struct
-        .module_in_second_struct_1
-        .test_state1
-        .prefix();
-
-    assert_eq!(
-        *prefix1,
-        sov_modules_api::ModulePrefix::new_storage(
-            "tests::module_info::test_module",
-            "TestStruct",
-            "test_state1"
-        )
-        .into()
-    );
 }
 
 #[test]

@@ -8,7 +8,7 @@ use base64::Engine;
 use futures::StreamExt;
 use sov_api_spec::types::AcceptTxBody;
 use sov_blob_storage::config_deferred_slots_count;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockBlock};
 use sov_modules_api::{Amount, RawTx, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -17,6 +17,7 @@ use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
+use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
 use sov_test_utils::{
     default_test_signed_transaction, generate_optimistic_runtime, RtAgnosticBlueprint, TestSpec,
@@ -56,7 +57,7 @@ async fn test_thin_direct_same_transactions() {
         1,
     )
     .set_config(|c| {
-        c.storage = dir1;
+        c.storage = StoragePath::Tmp(dir1);
         c.rollup_prover_config = None;
     })
     .set_da_config(|c| {

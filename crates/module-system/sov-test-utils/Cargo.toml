@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 async-trait = { workspace = true }
 axum-server = { workspace = true }
 borsh = { workspace = true }
@@ -25,13 +26,19 @@ tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true }
 schemars = { workspace = true }
 serde_json = { workspace = true }
-testcontainers = "0.23"
+testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
+num_cpus = { workspace = true }
+
 
 ethereum-types = { workspace = true }
-ethers-core = { workspace = true }
-ethers-contract = { workspace = true }
+ethers = { workspace = true }
+alloy-contract = { workspace = true }
+alloy-sol-types = { workspace = true , features = ["json"] }
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = "1.0.30"
+alloy = { workspace = true }
 
 sha2 = { workspace = true }
 sov-address = { workspace = true }
@@ -66,24 +73,28 @@ sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 strum = { workspace = true }
 tempfile = { workspace = true }
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rockbound = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 
 [features]
 arbitrary = [
-    "ethereum-types/arbitrary",
-    "sov-db/arbitrary",
-    "sov-mock-zkvm/arbitrary",
-    "sov-modules-api/arbitrary",
-    "sov-rollup-interface/arbitrary",
-    "sov-sequencer-registry/arbitrary",
-    "sov-state/arbitrary",
-    "rockbound/arbitrary",
-    "sov-address/arbitrary",
-    "sov-accounts/arbitrary",
-    "sov-uniqueness/arbitrary",
-    "sov-mock-da/arbitrary",
-    "sov-bank/arbitrary",
-    "sov-paymaster/arbitrary",
+	"ethereum-types/arbitrary",
+	"sov-db/arbitrary",
+	"sov-mock-zkvm/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-sequencer-registry/arbitrary",
+	"sov-state/arbitrary",
+	"rockbound/arbitrary",
+	"sov-address/arbitrary",
+	"sov-accounts/arbitrary",
+	"sov-uniqueness/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-paymaster/arbitrary",
+	"alloy-primitives/arbitrary",
+	"alloy-rpc-types-eth/arbitrary",
+	"alloy-sol-types/arbitrary",
+	"alloy/arbitrary"
 ]

@@ -217,7 +217,7 @@ fn test_unregistered_sequencer_registration_is_limited_to_one_per_batch() {
     // We don't have an API for this because the `Batch` struct isn't allowed to contain direct registration transactions.
     let txs = txs
         .into_iter()
-        .map(|tx| FullyBakedTx::new(tx.data))
+        .map(|tx| FullyBakedTx { data: tx.data })
         .collect();
     let blob = new_test_blob_from_batch(txs, direct_sequencer_da_address.as_ref());
 

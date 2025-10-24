@@ -1,28 +1,30 @@
-mod gas_price;
 mod handlers;
 
+use std::convert::Infallible;
 use std::sync::Arc;
 
-use alloy_primitives::B256;
+use alloy_primitives::{B256, U256};
 use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
 use jsonrpsee::RpcModule;
-pub use reth_rpc_eth_types::GasPriceOracleConfig;
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
 pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::{convert_to_transaction_signed, Evm, RlpEvmTransaction};
+use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
-use sov_sequencer::Sequencer;
+use sov_sequencer::{SeqConfigExtension, Sequencer};
+use std::future::ready;
 
-use crate::gas_price::gas_oracle::GasPriceOracle;
+pub use handlers::Cursor;
 
 #[derive(Clone)]
 pub struct EthRpcConfig {
-    pub gas_price_oracle_config: GasPriceOracleConfig,
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
+    pub extension: SeqConfigExtension,
+    /// Whether to buffer raw transactions with a future nonce. If true, we'll retry the transaction a few times to see if the missing intermediate nonce was consumed.
+    pub buffer_raw_txs: bool,
 }
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Arc<Seq>) -> RpcModule<()>
@@ -36,14 +38,16 @@ where
     let EthRpcConfig {
         #[cfg(feature = "local")]
         eth_signer,
-        gas_price_oracle_config,
+        extension,
+        buffer_raw_txs,
     } = eth_rpc_config;
 
     let mut rpc = RpcModule::new(Ethereum {
         sequencer,
-        gas_price_oracle: GasPriceOracle::new(Evm::<S>::default(), gas_price_oracle_config),
         #[cfg(feature = "local")]
         eth_signer,
+        extension,
+        buffer_raw_txs,
     });
 
     register_rpc_methods::<S, Seq>(&mut rpc).expect("Failed to register sequencer RPC methods");
@@ -60,8 +64,29 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    rpc.register_async_method("eth_gasPrice", handlers::eth_gas_price)?;
+    rpc.register_async_method("eth_gasPrice", |_, _, _| {
+        // We don't use EVM gas price mechanism and rely on sov gas/gas price.
+        // Therefore - we can safely return zero here as it's used by wallets to set gas price when sending transactions.
+        // When we receive transactions - we override the gas price with 0 and disable charging the sender account for gas in handler.
+        ready(Ok::<_, Infallible>(U256::ZERO))
+    })?;
     rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
+    rpc.register_async_method(
+        "realtime_sendRawTransaction",
+        handlers::realtime_send_raw_transaction,
+    )?;
+
+    rpc.register_async_method("eth_getLogs", handlers::LogHandlers::<S, Seq>::eth_get_logs)?;
+    rpc.register_async_method(
+        "eth_getLogsWithCursor",
+        handlers::LogHandlers::<S, Seq>::eth_get_logs_with_cursor,
+    )?;
+    rpc.register_subscription(
+        "eth_subscribe",
+        "eth_subscription",
+        "eth_unsubscribe",
+        handlers::eth_subscribe,
+    )?;
 
     #[cfg(feature = "local")]
     {
@@ -77,9 +102,10 @@ where
 
 struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     sequencer: Arc<Seq>,
-    gas_price_oracle: GasPriceOracle<S>,
     #[cfg(feature = "local")]
     eth_signer: Signers,
+    extension: SeqConfigExtension,
+    buffer_raw_txs: bool,
 }
 
 impl<S, Seq> Ethereum<S, Seq>
@@ -89,19 +115,22 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    fn api_state_accessor(&self) -> ApiStateAccessor<S> {
-        self.sequencer.api_state().default_api_state_accessor()
-    }
-
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
-        let signed_transaction = convert_to_transaction_signed(raw_tx.clone())
+        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
+        let signed_transaction = convert_to_tx_signed(raw_tx)
             // TODO: Fix this later
             .map_err(|_err| ErrorCode::ServerError(500))?;
 
         let tx_hash = signed_transaction.hash();
-        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
 
         Ok((*tx_hash, message))
+    }
+
+    fn api_state_accessor(&self) -> ApiStateAccessor<S> {
+        self.sequencer
+            .api_state()
+            .build_api_state_accessor(None)
+            .expect("Failed to build api state accessor")
     }
 }
 

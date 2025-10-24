@@ -64,14 +64,11 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
             //BlockProducingConfig::Manual,
             None,
             TEST_BLOB_PROCESSING_TIMEOUT,
-            1,
             MAX_BATCH_EXECUTION_TIME_MILLIS,
             None,
             0,
         )
-        .await
-        .map(|v| v.into_iter().next().unwrap())
-        .unwrap(),
+        .await,
         admin,
     )
 }
@@ -111,6 +108,7 @@ async fn test_discard_oversized_blobs() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_blobs_are_send_after_rollup_resync() {
+    sov_test_utils::initialize_logging();
     let (test_rollup, _) = create_test_rollup().await;
     let da = test_rollup.da_service.clone();
     let mut header_subscrition = da.subscribe_finalized_header().await.unwrap();

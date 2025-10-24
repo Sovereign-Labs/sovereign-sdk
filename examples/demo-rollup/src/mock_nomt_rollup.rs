@@ -5,8 +5,8 @@ use demo_stf::runtime::Runtime;
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NomtStorageManager;
-use sov_ethereum::{EthRpcConfig, GasPriceOracleConfig};
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_ethereum::EthRpcConfig;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
@@ -114,7 +114,7 @@ impl FullNodeBlueprint<Native> for MockNomtDemoRollup<Native> {
     async fn sequencer_additional_apis<Seq>(
         &self,
         sequencer: Arc<Seq>,
-        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -122,7 +122,8 @@ impl FullNodeBlueprint<Native> for MockNomtDemoRollup<Native> {
         let eth_signer = eth_dev_signer();
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
-            gas_price_oracle_config: GasPriceOracleConfig::default(),
+            extension: rollup_config.extension_or_panic(),
+            buffer_raw_txs: true,
         };
 
         Ok(NodeEndpoints {

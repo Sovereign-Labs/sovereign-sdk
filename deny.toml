@@ -6,7 +6,7 @@ allow = [
   "MIT-0",
   "NCSA",
   "Unlicense",
-  "Unicode-DFS-2016",
+  "CDLA-Permissive-2.0",
   "Unicode-3.0",
   "MPL-2.0",
   "ISC",
@@ -35,6 +35,16 @@ expression = "LicenseRef-Proprietary"
 license-files = [{ path = "COPYING", hash = 0x106164e0 }]
 
 # Sovereign SDK packages use a custom community license
+[[licenses.clarify]]
+name = "sov-evm-soak-testing"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-rpc-eth-types"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
 [[licenses.clarify]]
 name = "sov-blob-sender"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
@@ -171,12 +181,22 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-test-state-consistency"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-chain-state"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
 name = "sov-evm"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-eip712-auth"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
@@ -347,6 +367,11 @@ license-files = []
 
 [[licenses.clarify]]
 name = "sov-soak-testing"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-soak-testing-lib"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

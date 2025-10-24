@@ -3,7 +3,7 @@ use std::str::FromStr;
 use base64::prelude::*;
 use borsh::BorshDeserialize;
 use sov_api_spec::types;
-use sov_mock_da::storable::service::StorableMockDaService;
+use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Address, BlobReaderTrait, DispatchCall, FullyBakedTx};
 use sov_rollup_interface::node::da::DaService;

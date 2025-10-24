@@ -103,7 +103,7 @@ pub trait Module: Clone {
     fn charge_gas(
         &self,
         state: &mut impl TxState<Self::Spec>,
-        gas: &<Self::Spec as Spec>::Gas,
+        gas: <Self::Spec as Spec>::Gas,
     ) -> anyhow::Result<()> {
         Ok(state.charge_gas(gas)?)
     }
@@ -144,6 +144,9 @@ pub trait ModuleInfo {
 
     /// Returns the prefix of the module.
     fn prefix(&self) -> ModulePrefix;
+
+    /// Returns the discriminant of the module.
+    fn discriminant(&self) -> u8;
 
     /// Returns addresses of all the other modules this module is dependent on
     fn dependencies(&self) -> Vec<&ModuleId>;

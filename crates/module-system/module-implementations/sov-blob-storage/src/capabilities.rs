@@ -132,8 +132,8 @@ impl<S: Spec> BlobStorage<S> {
     }
 
     // Selects blobs from the DA layer in the order they appear, subject to the given size limit. Note that this method
-    // mutatates the `blobs_with_total_size_limit` argument rather than returning a new value - this makes it easy to share
-    // beween the preferred and non-preferred paths.
+    // mutates the `blobs_with_total_size_limit` argument rather than returning a new value - this makes it easy to share
+    // between the preferred and non-preferred paths.
     fn select_blobs_da_ordering_helper<'a>(
         &mut self,
         blob_iter: impl Iterator<Item = BlobOrigin<'a, <S::Da as DaSpec>::BlobTransaction>>,
@@ -719,7 +719,8 @@ impl<S: Spec> BlobStorage<S> {
                     continue;
                 }
             }
-            // If we reach this point, neither the list of new blobs nor the list of stored blobs has the next sequence number. We're stuck. break and returne the old sequence number
+            // If we reach this point, neither the list of new blobs nor the list of stored blobs has the next sequence number.
+            // We're stuck. break and return the old sequence number
             break sequence_tracker.next_sequence_number;
         };
 
@@ -744,7 +745,7 @@ impl<S: Spec> BlobStorage<S> {
                 let balance_store = &batch.balance_store;
                 match balance_store {
                     Escrow::DerivedHolder(reserved_balance) => {
-                        if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(&batch, reserved_balance, gas_price_for_new_block, state) {
+                        if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(&batch, reserved_balance, *gas_price_for_new_block, state) {
                             let _ = std::mem::replace(&mut batch.balance_store, Escrow::Direct(retrieved_token_amount));
                         } else {
                             Self::discard(
@@ -779,7 +780,7 @@ impl<S: Spec> BlobStorage<S> {
         &mut self,
         batch: &ValidatedBlob<S, BatchWithId<S>>,
         escrow: &DerivedHolder,
-        gas_price_for_new_block: &<S::Gas as Gas>::Price,
+        gas_price_for_new_block: <S::Gas as Gas>::Price,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Result<Amount, anyhow::Error> {
         let refund_recipient = match &batch.blob {
@@ -907,7 +908,7 @@ impl<S: Spec> BlobStorage<S> {
 
         let proof = self.deserialize_or_try_slash_sender::<Vec<u8>>(
             blob,
-            Some((&sequencer, &gas_price_for_new_block)),
+            Some((&sequencer, gas_price_for_new_block)),
             true,
             state,
         )?;
@@ -922,7 +923,7 @@ impl<S: Spec> BlobStorage<S> {
             BlobData::Proof((proof, sequencer.address)).with_id(blob.hash().into()),
             blob.sender(),
             available_balance,
-            &gas_price_for_new_block,
+            gas_price_for_new_block,
             account_for_deferral,
             state,
         )
@@ -941,7 +942,7 @@ impl<S: Spec> BlobStorage<S> {
         // Defense in depth.
         let batch = self.deserialize_or_try_slash_sender::<Vec<FullyBakedTx>>(
             blob,
-            Some((&sequencer, gas_price_for_new_block)),
+            Some((&sequencer, *gas_price_for_new_block)),
             true,
             state,
         )?;
@@ -956,14 +957,14 @@ impl<S: Spec> BlobStorage<S> {
             BlobData::Batch((Arc::new(batch), sequencer.address)).with_id(blob.hash().into()),
             blob.sender(),
             available_balance,
-            gas_price_for_new_block,
+            *gas_price_for_new_block,
             account_for_deferral,
             state,
         )
     }
 
-    /// Takes the next run of blobs and extracts the list  of blobs that should be processed this slot, if any. Saves
-    /// any new preferred blobs that aren't going to be used immediately into storage.
+    /// Takes the next run of blobs and extracts the list of blobs that should be processed this slot, if any.
+    /// Saves any new preferred blobs that aren't going to be used immediately into storage.
     fn get_blobs_to_process_from_run(
         &mut self,
         next_run_of_blobs: Vec<BlobArrival>,
@@ -1038,7 +1039,7 @@ impl<S: Spec> BlobStorage<S> {
     fn deserialize_or_try_slash_sender<B: BorshDeserialize>(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
-        charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
+        charge_for_deserialization: Option<(&AllowedSequencer<S>, <S::Gas as Gas>::Price)>,
         slash_on_failure: bool,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Option<B> {
@@ -1147,7 +1148,7 @@ impl<S: Spec> BlobStorage<S> {
 impl<S: Spec> BlobStorage<S> {
     #[allow(clippy::type_complexity)]
     /// This implementation returns three categories of blobs:
-    /// 1. Any blobs sent by the preferred sequencer ("prority blobs")
+    /// 1. Any blobs sent by the preferred sequencer ("priority blobs")
     /// 2. Any non-priority blobs which were sent `DEFERRED_SLOTS_COUNT` slots ago ("expiring deferred blobs")
     /// 3. Some additional deferred blobs needed to fill the total requested by the sequencer, if applicable. ("bonus blobs")
     pub fn get_blobs_for_this_slot<CF: InjectedControlFlow<S> + Clone>(
@@ -1201,7 +1202,7 @@ impl<S: Spec> BlobStorage<S> {
         }
 
         // Otherwise, we're configured for a preferred sequencer but one doesn't exist. This usually means that the preferred sequencer was slashed.
-        // Entery recovery mode.
+        // Enter recovery mode.
         let selection =
             self.select_blobs_in_recovery_mode(current_blobs, &mut discarded_blobs, state);
 

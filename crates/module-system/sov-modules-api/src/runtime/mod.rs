@@ -7,11 +7,15 @@ use std::io;
 use borsh::{BorshDeserialize, BorshSerialize};
 use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native")]
+use sov_rollup_interface::stf::GenesisParams;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
 use crate::transaction::TransactionCallable;
+#[cfg(feature = "native")]
+use crate::FullyBakedTx;
 use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
 
 /// Flag indicating what mode the rollup is operating in.
@@ -50,7 +54,7 @@ pub trait Runtime<S: Spec>:
     const CHAIN_HASH: [u8; 32];
 
     /// GenesisConfig type.
-    type GenesisConfig: Clone + Send + Sync;
+    type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
     /// GenesisInput type.
     type GenesisInput: std::fmt::Debug + Clone + Send + Sync;
@@ -93,6 +97,15 @@ pub trait Runtime<S: Spec>:
     /// based on the transaction content. The delay will be applied before
     /// transaction processing begins.
     fn get_transaction_delay_ms(&self, _call: &Self::Decodable) -> u64 {
+        0
+    }
+
+    /// Gets the priority level of a transaction. Higher priority transactions are processed first in the sequencer when possible.
+    /// Messages with equal priority are processed in the order they are received. If messages have a delay configured in [`Runtime::get_transaction_delay_ms`],
+    /// they are considered to be "received" after the delay period has elapsed.
+    // Returns a u32 so that the sequencer can represent priority as a u64 and have some reserved values that are greater than the maximum priority level of any transaction.
+    #[cfg(feature = "native")]
+    fn get_transaction_priority(&self, _call: &FullyBakedTx) -> u32 {
         0
     }
 }

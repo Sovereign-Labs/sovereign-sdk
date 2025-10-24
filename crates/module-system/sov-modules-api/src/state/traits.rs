@@ -12,6 +12,7 @@ use sov_state::{
     User,
 };
 use thiserror::Error;
+#[cfg(feature = "expensive-observability")]
 use tracing::{enabled, instrument, Level, Span};
 
 use super::accessors::seal::UniversalStateAccessor;
@@ -130,12 +131,16 @@ pub trait PerBlockCache {
     /// Gets a value from the cache. This API returns &T because mutating the type would invalidate the revert
     /// guarantees provided by the SDK. Be extremely careful when using interior mutability for objects stored in the cache -
     /// any changes made to the object may not revert on transaction failure, causing possible cache corruption.
-    fn get_cached<T: 'static + Send + Sync>(&self) -> Option<&T>;
+    fn get_cached<T: 'static + Send + Sync>(&self, key: Option<SlotKey>) -> Option<&T>;
     /// Puts a value in the cache. Note that values are required to provide an esimate of their size via the
     /// [`BorshSerializedSize`] trait.
-    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(&mut self, value: T);
+    fn put_cached<T: 'static + Send + Sync + BorshSerializedSize>(
+        &mut self,
+        key: Option<SlotKey>,
+        value: T,
+    );
     /// Deletes a value from the cache.
-    fn delete_cached<T: 'static + Send + Sync>(&mut self);
+    fn delete_cached<T: 'static + Send + Sync>(&mut self, key: Option<SlotKey>);
     /// Adds all writes from another cache to this one.
     fn update_cache_with(&mut self, other: TempCache);
 }
@@ -301,6 +306,20 @@ pub trait ProvableStateReader<N: ProvableCompileTimeNamespace>:
 {
 }
 
+#[cfg(feature = "expensive-observability")]
+macro_rules! maybe_trace_span {
+    ($span_name: expr, $item:expr) => {{
+        tracing::trace_span!($span_name,).in_scope(|| $item)
+    }};
+}
+
+#[cfg(not(feature = "expensive-observability"))]
+macro_rules! maybe_trace_span {
+    ($span_name: expr, $item:expr) => {{
+        $item
+    }};
+}
+
 macro_rules! blanket_impl_metered_state_reader {
     ($namespace:ty) => {
         type Error = StateAccessorError<<T::Spec as GasSpec>::Gas>;
@@ -336,29 +355,27 @@ macro_rules! blanket_impl_metered_state_reader {
             storage_value
                 .map(|storage_value| {
                     // We need to charge for the cost to deserialize the value
-                    tracing::trace_span!("all_accesses::charge_per_byte_borsh_deserialization",)
-                        .in_scope(|| {
-                            self.charge_linear_gas(
-                                &<T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(
-                                ),
-                                storage_value.size(),
-                            )
-                        })
+                    maybe_trace_span!("all_accesses::charge_per_byte_borsh_deserialization", {
+                        self.charge_linear_gas(
+                            <T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(),
+                            storage_value.size(),
+                        )
                         .map_err(|e| StateAccessorError::Decode {
                             key: storage_key.clone(),
                             inner: e,
                             namespace: <$namespace as sov_state::CompileTimeNamespace>::NAMESPACE,
-                        })?;
+                        })
+                    })?;
 
-                    #[cfg(feature = "native")]
+                    #[cfg(feature = "expensive-observability")]
                     let deserialization_start = std::time::Instant::now();
                     let value = codec.value_codec().decode_unwrap(storage_value.value());
-                    #[cfg(feature = "native")]
+                    #[cfg(feature = "expensive-observability")]
                     {
                         let deserialization_duration = deserialization_start.elapsed();
                         self.metrics().add_deserialize_metric(
-                            storage_key.key(),
-                            storage_key.display_fn(),
+                            Default::default(),
+                            None,
                             storage_value.size(),
                             deserialization_duration,
                         );
@@ -384,8 +401,7 @@ impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for 
 
     /// Get a value from the storage.
     fn get(&mut self, key: &SlotKey) -> Result<Option<SlotValue>, Self::Error> {
-        use sov_metrics::StateAccessMetric;
-        let mut metric = StateAccessMetric::new_read(key.key(), key.display_fn());
+        let mut metric = StateAccessMetric::new_read();
         let val = self.get_value(Accessory::NAMESPACE, key, &mut metric);
         self.metrics().push(metric);
         Ok(val)
@@ -403,15 +419,15 @@ impl<T: AccessoryStateReader + StateMetricsProvider> StateReader<Accessory> for 
     {
         let storage_value = <Self as StateReader<Accessory>>::get(self, storage_key)?;
         let value = storage_value.map(|storage_value| {
-            #[cfg(feature = "native")]
+            #[cfg(feature = "expensive-observability")]
             let deserialization_start = std::time::Instant::now();
             let value = codec.value_codec().decode_unwrap(storage_value.value());
-            #[cfg(feature = "native")]
+            #[cfg(feature = "expensive-observability")]
             {
                 let deserialization_duration = deserialization_start.elapsed();
                 self.metrics().add_deserialize_metric(
-                    storage_key.key(),
-                    storage_key.display_fn(),
+                    Default::default(),
+                    None,
                     storage_value.size(),
                     deserialization_duration,
                 );
@@ -535,6 +551,27 @@ pub trait VersionReader {
     fn rollup_height_to_access(&self) -> RollupHeight;
 }
 
+/// Helper macro to delegate VersionReader implementation to an inner field.
+macro_rules! delegate_version_reader {
+    ($ty:ty $(where [$($bounds:tt)*])? => $($field:tt).+) => {
+        impl$(<$($bounds)*>)? $crate::state::VersionReader for $ty {
+            fn rollup_height_to_access(&self) -> $crate::capabilities::RollupHeight {
+                self.$($field).+.rollup_height_to_access()
+            }
+
+            fn current_visible_slot_number(&self) -> sov_rollup_interface::common::VisibleSlotNumber {
+                self.$($field).+.current_visible_slot_number()
+            }
+
+            fn max_allowed_slot_number_to_access(&self) -> sov_rollup_interface::common::SlotNumber {
+                self.$($field).+.max_allowed_slot_number_to_access()
+            }
+        }
+    };
+}
+
+pub(crate) use delegate_version_reader;
+
 /// A trait for state accessors that can know the true [`SlotNumber`] and use it to read/write the kernel.
 /// Note that this trait should be implemented with extreme care, since misuse can cause accidental breakage of
 /// soft confirmations. In particular, this trait should never be added to [`TxState`].
@@ -544,7 +581,7 @@ pub trait PrivilegedKernelAccessor: StateWriter<namespaces::Kernel> {
 }
 
 /// Amount to pay for access to a storage value.
-fn charge_storage_access<Accessor: UniversalStateAccessor + GasMeter>(
+fn charge_storage_access<Accessor: GasMeter>(
     accessor: &mut Accessor,
     key: &SlotKey,
 ) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
@@ -552,23 +589,23 @@ fn charge_storage_access<Accessor: UniversalStateAccessor + GasMeter>(
     // - cold access bias to load something from the storage (aka Merkle proof cost)
     // - fixed hashing cost
     // - hashing cost of the key length
-    tracing::trace_span!("access::charge_bias_for_access",).in_scope(|| {
-        accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_access())
+    maybe_trace_span!("access::charge_bias_for_access", {
+        accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_for_access())
     })?;
 
-    tracing::trace_span!("access::charge_hash_update",).in_scope(|| {
-        accessor.charge_gas(&<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())
+    maybe_trace_span!("access::charge_hash_update", {
+        accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())
     })?;
 
     let key_size: u32 = key
-        .size()
+        .len()
         .try_into()
         .map_err(|e: TryFromIntError| GasMeteringError::Overflow(e.to_string()))?;
 
     if key_size > 0 {
-        tracing::trace_span!("access::charge_per_byte_hash_update").in_scope(|| {
+        maybe_trace_span!("access::charge_per_byte_hash_update", {
             accessor.charge_linear_gas(
-                &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
                 key_size,
             )
         })?;
@@ -584,34 +621,30 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
 ) -> Result<StateAccessMetric, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     charge_storage_access(accessor, key)?;
 
-    tracing::trace_span!("access::charge_bias_for_read",).in_scope(|| {
-        accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
+    maybe_trace_span!("access::charge_bias_for_read", {
+        accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
     })?;
 
-    let mut metric = StateAccessMetric::new_size(key.key(), key.display_fn());
+    let mut metric = StateAccessMetric::new_size();
     let value_size = accessor.get_size(namespace, key, &mut metric);
 
     match value_size {
         Some(0) | None => {}
         Some(value_size) => {
-            tracing::trace_span!("access::charge_per_byte_read").in_scope(|| {
+            maybe_trace_span!("access::charge_per_byte_read", {
                 accessor.charge_linear_gas(
-                    &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
                     value_size,
                 )
             })?;
 
-            tracing::trace_span!("access::charge_hash_update", value_size = value_size).in_scope(
-                || accessor.charge_gas(&<Accessor::Spec as GasSpec>::gas_to_charge_hash_update()),
-            )?;
+            maybe_trace_span!("access::charge_hash_update", {
+                accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())
+            })?;
 
-            tracing::trace_span!(
-                "access::charge_per_byte_hash_update",
-                value_size = value_size
-            )
-            .in_scope(|| {
+            maybe_trace_span!("access::charge_per_byte_hash_update", {
                 accessor.charge_linear_gas(
-                    &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
                     value_size,
                 )
             })?;
@@ -621,7 +654,8 @@ fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
     Ok(metric)
 }
 
-fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
+/// Charge gas for state write
+pub fn charge_write<Accessor: GasMeter>(
     accessor: &mut Accessor,
     _namespace: Namespace,
     key: &SlotKey,
@@ -629,16 +663,16 @@ fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
 ) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     charge_storage_access(accessor, key)?;
 
-    accessor.charge_gas(&<Accessor::Spec as GasSpec>::bias_to_charge_storage_update())?;
+    accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_storage_update())?;
     accessor.charge_linear_gas(
-        &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_storage_update(),
+        <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_storage_update(),
         value_size,
     )?;
 
-    accessor.charge_gas(&<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())?;
+    accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())?;
 
     accessor.charge_linear_gas(
-        &<Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+        <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
         value_size,
     )?;
 
@@ -648,17 +682,18 @@ fn charge_write<Accessor: UniversalStateAccessor + GasMeter>(
 type ValueWithMetrics = (Option<SlotValue>, StateAccessMetric, StateAccessMetric);
 
 /// Returns metrics for the get_size and get_value operations, in that order.
-#[instrument(name = "state::get", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes))]
+#[cfg_attr(feature = "expensive-observability", instrument(name = "state::get", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes)))]
 pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     accessor: &mut Accessor,
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
     let size_metric = charge_read(accessor, namespace, key)?;
-    let mut read_metric = StateAccessMetric::new_read(key.key(), key.display_fn());
+    let mut read_metric = StateAccessMetric::new_read();
 
     let value = accessor.get_value(namespace, key, &mut read_metric);
 
+    #[cfg(feature = "expensive-observability")]
     if enabled!(Level::TRACE) {
         let size = value.as_ref().map(SlotValue::size).unwrap_or(0);
         Span::current().record("value_size_bytes", size);
@@ -667,7 +702,7 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     Ok((value, size_metric, read_metric))
 }
 
-#[instrument(name = "state::set", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes = value.size()))]
+#[cfg_attr(feature = "expensive-observability", instrument(name = "state::set", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes = value.size())))]
 pub(crate) fn set_inner<Accessor: UniversalStateAccessor + GasMeter>(
     accessor: &mut Accessor,
     namespace: Namespace,
@@ -683,7 +718,7 @@ pub(crate) fn set_inner<Accessor: UniversalStateAccessor + GasMeter>(
 
 /// Returns a metric for the read done if `trace` level tracking is enabled. Otherwise, no state read is performed
 /// so no metric is returned.
-#[instrument(name = "state::delete", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes))]
+#[cfg_attr(feature = "expensive-observability", instrument(name = "state::delete", skip_all, level = Level::TRACE, fields(key = %key, value_size_bytes)))]
 pub(crate) fn delete_inner<Accessor: UniversalStateAccessor + GasMeter>(
     accessor: &mut Accessor,
     namespace: Namespace,
@@ -693,13 +728,21 @@ pub(crate) fn delete_inner<Accessor: UniversalStateAccessor + GasMeter>(
     charge_write(accessor, namespace, key, 0)?;
 
     // avoid an extra size calculation
-    let metric = if enabled!(Level::TRACE) {
-        let mut metric = StateAccessMetric::new_size(key.key(), key.display_fn());
-        let size = accessor.get_size(namespace, key, &mut metric).unwrap_or(0);
-        Span::current().record("value_size_bytes", size);
-        Some(metric)
-    } else {
-        None
+    let metric = {
+        #[cfg(feature = "expensive-observability")]
+        if enabled!(Level::TRACE) {
+            let mut metric = StateAccessMetric::new_size();
+            let size = accessor.get_size(namespace, key, &mut metric).unwrap_or(0);
+            Span::current().record("value_size_bytes", size);
+            Some(metric)
+        } else {
+            None
+        }
+
+        #[cfg(not(feature = "expensive-observability"))]
+        {
+            None
+        }
     };
 
     accessor.delete_value(namespace, key);

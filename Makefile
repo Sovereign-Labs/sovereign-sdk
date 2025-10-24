@@ -48,7 +48,6 @@ total-clean:
     	echo "Running cargo clean in $$dir"; \
     	(cargo clean --manifest-path "$$dir/Cargo.toml"); \
     done;
-	rm -rf "examples/demo-rollup/tests/evm/uniswap/node_modules";
 	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
 
 test:  ## Runs test suite using next test
@@ -162,7 +161,7 @@ find-flaky-tests:  ## Runs tests over and over to find if there's flaky tests
 	flaky-finder -j16 -r320 --continue "cargo test -- --nocapture"
 
 coverage: ## Coverage in lcov format
-	SP1_PROVER=mock cargo llvm-cov nextest --locked --all-features --lcov --output-path lcov.info
+	SP1_PROVER=mock cargo  llvm-cov nextest --cargo-profile coverage --locked --all-features --lcov --output-path lcov.info
 
 coverage-html: ## Coverage in HTML format
 	SP1_PROVER=mock cargo llvm-cov nextest --locked --all-features --html

@@ -6,6 +6,7 @@ pub mod basic;
 
 pub mod factory;
 pub mod macros;
+pub mod state_consistency;
 /// Implements `Transaction` generation.
 pub mod transaction;
 pub mod value_setter;

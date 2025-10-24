@@ -31,6 +31,9 @@ use tokio::sync::{mpsc, watch};
 use crate::common::WithCachedTxHashes;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 
+// Don’t prune the data from the database immediately — give the replica some time to read it before it is pruned.
+const PRUNING_LAG: u64 = 10;
+
 #[async_trait]
 pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
     async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> anyhow::Result<()>;
@@ -531,6 +534,7 @@ impl PreferredSequencerDb {
         prune_up_to_including: SequenceNumber,
     ) -> anyhow::Result<()> {
         if let Some(backend) = &mut self.backend {
+            let prune_up_to_including = prune_up_to_including.saturating_sub(PRUNING_LAG);
             backend.prune(prune_up_to_including).await?;
         }
         Ok(())
@@ -576,8 +580,8 @@ where
 {
     let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
+    state.read_from_storage_at_slot_number(latest_state_info.latest_finalized_slot_number);
 
-    state.update_true_slot_number(latest_state_info.latest_finalized_slot_number);
     runtime
         .kernel()
         .next_sequence_number(&mut state)

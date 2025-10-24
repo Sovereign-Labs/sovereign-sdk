@@ -4,7 +4,11 @@
 
 mod entity;
 pub mod layer;
+pub mod local_service;
+pub mod rpc;
 pub mod service;
+
+pub use local_service::StorableMockDaService;
 
 #[cfg(test)]
 mod tests {
@@ -21,7 +25,7 @@ mod tests {
     use tokio::sync::RwLock;
 
     use crate::storable::layer::StorableMockDaLayer;
-    use crate::storable::service::StorableMockDaService;
+    use crate::storable::StorableMockDaService;
     use crate::{BlockProducingConfig, MockAddress, MockDaConfig};
 
     #[tokio::test(flavor = "multi_thread")]

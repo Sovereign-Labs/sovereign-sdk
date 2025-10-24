@@ -1,11 +1,11 @@
 use std::marker::PhantomData;
+#[cfg(feature = "native")]
+use std::sync::LazyLock;
 
-use alloy_consensus::Transaction;
+use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
-use reth_primitives::TransactionSigned;
-use reth_primitives_traits::SignerRecoverable;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::{
     self, fatal_deserialization_error, AuthenticationOutput, AuthorizationData,
@@ -18,42 +18,97 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
 use sov_modules_api::{
-    Amount, DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec,
+    DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 
-mod eip712;
-pub use eip712::Eip712Authenticator;
-
 use crate::conversions::RlpConversionError;
+use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};
+
+/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry - which is about 17.5 MB). This should be long enough that signatures almost always
+/// last until the node has processed the block.
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: LazyLock<
+    quick_cache::sync::Cache<TxHash, Result<Address, AuthenticationError>>,
+> = LazyLock::new(|| quick_cache::sync::Cache::new(250_000));
 
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(
     tx: &TransactionSigned,
     tx_hash: TxHash,
 ) -> Result<Address, AuthenticationError> {
-    tx.recover_signer().map_err(|_| {
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&tx_hash) {
+        return known_result;
+    }
+
+    let result = tx.recover_signer().map_err(|_| {
         AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(format!(
                 "Invalid ethereum signature: tx hash {tx_hash}"
             )),
             tx_hash,
         )
+    });
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(tx_hash, result.clone());
+
+    result
+}
+
+/// Creates the transaction details and tx hash for an EVM transaction.
+fn create_auth_tx_and_hash<S: Spec>(
+    tx: &TransactionSigned,
+    gas_price: <<S as Spec>::Gas as Gas>::Price,
+) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
+    let tx_hash = TxHash::new(**tx.hash());
+    let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
+    let gas_limit = tx.gas_limit();
+    let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
+    let max_fee = gas_limit
+        .checked_value(gas_price)
+        .ok_or(AuthenticationError::FatalError(
+            FatalError::Other("Amount overflow".into()),
+            tx_hash,
+        ))?;
+
+    let tx_details = TxDetails {
+        chain_id: tx_chain_id,
+        max_priority_fee_bips: PriorityFeeBips::ZERO,
+        max_fee,
+        gas_limit: Some(gas_limit),
+    };
+
+    Ok(AuthenticatedTransactionAndRawHash {
+        raw_tx_hash: tx_hash,
+        authenticated_tx: tx_details.into(),
     })
 }
 
-/// Creates the transaction details for an EVM transaction.
-fn create_evm_tx_details<S: Spec>() -> TxDetails<S> {
-    TxDetails {
-        chain_id: config_value!("CHAIN_ID"),
-        max_priority_fee_bips: PriorityFeeBips::ZERO,
-        max_fee: Amount::new(10_000_000),
-        gas_limit: None,
-    }
-}
+fn validate_chain_id(
+    tx_chain_id: Option<u64>,
+    tx_hash: TxHash,
+) -> Result<u64, AuthenticationError> {
+    let rollup_chain_id = config_value!("CHAIN_ID");
+    let tx_chain_id = tx_chain_id.ok_or(AuthenticationError::FatalError(
+        FatalError::MissingChainId(rollup_chain_id),
+        tx_hash,
+    ))?;
 
+    if tx_chain_id != rollup_chain_id {
+        return Err(AuthenticationError::FatalError(
+            FatalError::InvalidChainId {
+                expected: rollup_chain_id,
+                got: tx_chain_id,
+            },
+            tx_hash,
+        ));
+    }
+
+    Ok(tx_chain_id)
+}
 /// Extracts EVM authorization data from a verified transaction.
 fn extract_evm_authorization_data<S: Spec>(
     signer: Address,
@@ -81,7 +136,10 @@ where
 ///
 /// If the caller does plan to derive rollup addresses from evm addresses, they should be sure that their scheme for doing so is deterministic and
 /// collision resistant. You don't want someone to be able to pick a rollup address that someone else is already using!
-pub fn authenticate<Accessor: ProvableStateReader<User, Spec = S>, S: Spec>(
+pub fn authenticate<
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,
+    S: Spec,
+>(
     raw_tx: &[u8],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, CallMessage>, AuthenticationError>
@@ -92,17 +150,14 @@ where
 
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
-    let hash = TxHash::new(**tx.hash());
 
-    let signer = recover_evm_signer(&tx, hash)?;
+    let gas_price = state.gas_price();
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
 
-    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-        raw_tx_hash: hash,
-        authenticated_tx: create_evm_tx_details().into(),
-    };
+    let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
     let nonce = tx.nonce();
-    let auth_data = extract_evm_authorization_data::<S>(signer, hash, nonce);
+    let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
     let call = CallMessage { rlp };
 
@@ -183,7 +238,7 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<

@@ -180,6 +180,7 @@ async fn rest_api_routes() {
     // 5-6. Vec: info and item
     // 7-8. Map: info and item
     let expected_paths_count = 8;
+    println!("spec.paths.paths: {:#?}", spec.paths.paths);
     assert_eq!(expected_paths_count, spec.paths.paths.len());
     for (path, item) in spec.paths.paths {
         let get_operation = match item.operations.get(&PathItemType::Get) {

@@ -8,7 +8,7 @@ use full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerCon
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_metrics::{MonitoringConfig, RunnerMetrics};
+use sov_metrics::RunnerMetrics;
 
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
@@ -49,8 +49,8 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
+    da_total_timeout: Duration,
     da_service: Arc<Da>,
-    da_height_at_genesis: u64,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
     listen_address_http: SocketAddr,
@@ -154,12 +154,17 @@ where
         prev_state_root: Stf::StateRoot,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         shutdown_receiver: watch::Receiver<()>,
-        monitoring_config: MonitoringConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
+        let mut background_handles = Vec::new();
+
+        // This sender is not used immediately,
+        // But when REST and RPC handlers start, sender is used to get another subscription.
+        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
+        secondary_shutdown_receiver.mark_unchanged();
 
         let axum_config = &runner_config.http_config;
 
@@ -173,7 +178,6 @@ where
             .expect("The impossible happened  first_unprocessed_height_at_startup overflowed");
 
         debug!(
-            %runner_config.genesis_height,
             %first_unprocessed_height_at_startup,
             proof_manager_config = ?pm_config,
             "Initializing StfRunner");
@@ -192,6 +196,7 @@ where
         };
 
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
+        let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
         let state_manager = StateManager::new(
             storage_manager,
@@ -202,6 +207,7 @@ where
             state_height_tracker,
             sync_state.clone(),
             da_polling_interval,
+            da_total_timeout,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
@@ -211,21 +217,13 @@ where
             shutdown_receiver.clone(),
         )
         .await?;
-
-        // This sender is not used immediately,
-        // But when REST and RPC handlers start, sender is used to get another subscription.
-        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
-        secondary_shutdown_receiver.mark_unchanged();
-
-        tokio::spawn(async move {
-            sov_metrics::init_metrics_tracker(&monitoring_config);
-        });
+        background_handles.push(fetcher_background_handle);
 
         Ok(Self {
             first_unprocessed_height_at_startup,
             da_polling_interval,
+            da_total_timeout,
             da_service: da_service.clone(),
-            da_height_at_genesis: runner_config.genesis_height,
             stf,
             state_manager,
             listen_address_http,
@@ -234,7 +232,7 @@ where
             sync_fetcher,
             shutdown_receiver,
             secondary_shutdown_sender,
-            background_handles: vec![fetcher_background_handle],
+            background_handles,
             start_at_rollup_height,
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
@@ -358,7 +356,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run_in_process(&mut self) -> anyhow::Result<()> {
+    pub async fn run_in_process(&mut self, genesis_da_height: u64) -> anyhow::Result<()> {
         self.state_manager.startup().await?;
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
@@ -388,6 +386,7 @@ where
                     next_da_height,
                     &start_at_rollup_height,
                     &stop_at_rollup_height,
+                    genesis_da_height,
                 ),
                 &shutdown_receiver,
             )
@@ -406,7 +405,7 @@ where
         info!("Runner main loop is completed, keep shutting down...");
         if let Err(e) = self.secondary_shutdown_sender.send(()) {
             tracing::warn!(
-                ?e,
+                error = ?e,
                 "Failed to send secondary shutdown signal. Happens if no HTTP handlers are running"
             );
         }
@@ -452,22 +451,30 @@ where
         Ok(false)
     }
 
-    #[tracing::instrument(skip(self))]
     async fn process_next_slot(
         &mut self,
         mut next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
+        genesis_da_height: u64,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
         let prev_state_root = self.get_state_root().clone();
+        let span = tracing::info_span!("process_next_slot", next_da_height = next_da_height);
+
+        if let Some(h) = start_at_rollup_height {
+            span.record("start_at_rollup_height", tracing::field::display(h));
+        }
+        if let Some(h) = stop_at_rollup_height {
+            span.record("stop_at_rollup_height", tracing::field::display(h));
+        }
         debug!("Requesting DA block");
 
         let mut transaction_count = 0;
         let mut batch_count = 0;
         let get_block_start = std::time::Instant::now();
         let filtered_block = if next_da_height <= self.sync_fetcher.last_finalized_height {
-            // no reorg will happen for this height, it is safe to just pull it from the fetcher,
+            // no reorg will happen for this height; it is safe to just pull it from the fetcher,
             // which could have this block fetcher already
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
@@ -477,10 +484,12 @@ where
                 self.sync_state.as_ref(),
                 next_da_height,
                 self.da_polling_interval,
+                self.da_total_timeout,
             )
             .await?
         };
         let get_block_time = get_block_start.elapsed();
+        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
 
         let (stf_pre_state, filtered_block) = self
             .state_manager
@@ -604,7 +613,7 @@ where
         self.state_manager
             .process_stf_changes(
                 &self.da_service,
-                self.da_height_at_genesis,
+                genesis_da_height,
                 slot_result.change_set,
                 transition_data,
                 data_to_commit,
@@ -652,7 +661,7 @@ where
         // halt further slot processing.
         if let Some(stop_at_rollup_height) = stop_at_rollup_height {
             if &slot_result.rollup_height == stop_at_rollup_height {
-                info!("Stopping at rollup height: {}", stop_at_rollup_height);
+                info!(rollup_height = %stop_at_rollup_height, "Stopping at rollup the height");
                 return Ok(None);
             }
             assert!(
@@ -745,9 +754,9 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
         }
 }
 
-/// Creats a new `DaSyncState`
+/// Creates a new `DaSyncState`
 pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
-    runner_config: &RunnerConfig,
+    genesis_da_height: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     ledger_db: &LedgerDb,
     da_service: &Da,
@@ -757,8 +766,7 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
 
     debug!(%last_slot_processed_before_shutdown);
-    let da_height_processed =
-        runner_config.genesis_height + last_slot_processed_before_shutdown.get();
+    let da_height_processed = genesis_da_height + last_slot_processed_before_shutdown.get();
 
     let target_da_height = get_target_block(da_service, &stop_at_rollup_height)
         .await?

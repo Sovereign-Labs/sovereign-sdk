@@ -3,6 +3,7 @@
 mod async_batch;
 mod batch_size_tracker;
 mod block_executor;
+mod cache_warm_up_executor;
 mod db;
 mod executor_events;
 mod inner;
@@ -12,16 +13,10 @@ mod side_effects;
 mod state_root_compute;
 mod transaction_subscriptions;
 mod update_state;
-use std::boxed::Box;
-use std::marker::PhantomData;
-use std::num::NonZero;
-use std::path::Path;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
+use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
+use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -45,11 +40,20 @@ use sov_modules_api::{
     ApiTxEffect, FullyBakedTx, RejectReason, Runtime, RuntimeEventProcessor, RuntimeEventResponse,
     Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber, *,
 };
+use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
+use std::boxed::Box;
+use std::marker::PhantomData;
+use std::num::NonZero;
+use std::path::Path;
+use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::mpsc::{self};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
@@ -74,7 +78,7 @@ use crate::{
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
 
-// Big infodump for the user that wouldmake the code hard to read if it were inline.
+// Big info dump for the user that would make the code hard to read if it were inline.
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
 
 /// A [`Sequencer`] with instant transaction confirmation.
@@ -84,7 +88,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    synchronized_state_updator: SequencerStateUpdator<S, Rt>,
+    synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
     api_state: ApiState<S>,
@@ -128,6 +132,7 @@ where
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
         let da_address = da.get_signer().await;
+
         debug!(
             ?latest_state_update,
             %da_address,
@@ -189,7 +194,7 @@ where
         }
 
         let (state_root_compute_handle, state_root_compute_task) =
-            StateRootBackgroundTaskState::create(
+            StateRootBackgroundTaskState::create::<Rt>(
                 block_executors_shutdown_rx,
                 !config
                     .sequencer_kind_config
@@ -222,6 +227,17 @@ where
             shutdown_sender: shutdown_sender.clone(),
         };
 
+        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
+            latest_state_update.clone(),
+            rollup_exec_config.clone(),
+            config.clone(),
+        )
+        .await;
+
+        for worker in workers {
+            handles.push(worker);
+        }
+
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
             api_ledger_db.clone(),
@@ -237,6 +253,7 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
+            cache_warm_up_executor.clone(),
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -253,8 +270,9 @@ where
         .spawn();
         handles.push(side_effects_task);
 
+        let synchronized_state_updator = Arc::new(synchronized_state_updator);
         let seq = Arc::new(PreferredSequencer {
-            synchronized_state_updator,
+            synchronized_state_updator: synchronized_state_updator.clone(),
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
             blobs_sender_channel,
@@ -262,21 +280,27 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender,
+            shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
         });
 
-        // Launch replica sync task only for replicas
-        // This will block until the currently stored batches in the DB are replayed onto the
-        // state, then yield when it switches to processing postgres events live.
-        // This is necessary to prevent conflicts with the update_state task.
+        // Launch replica sync task only for replicas.
         if config.sequencer_kind_config.is_replica {
-            //handles.push(
-            //    spawn_replica_sync_task(seq.clone(), shutdown_receiver.clone(), latest_db_event_id)
-            //        .await,
-            //);
+            if let Some(postgres_connection_string) =
+                &config.sequencer_kind_config.postgres_connection_string
+            {
+                let mut replica_task = ReplicaSyncTask::new(
+                    postgres_connection_string.clone(),
+                    shutdown_sender.clone(),
+                )
+                .await?;
+
+                let replica_task_handle = replica_task.start(synchronized_state_updator).await;
+                handles.push(replica_task_handle.data_fetcher_handle);
+                handles.push(replica_task_handle.sync_task_handle);
+            }
         }
         handles.push(tokio::spawn({
             update_state_task(
@@ -376,14 +400,16 @@ where
                     .trigger_batch_production_if_convenient_msg(
                         "recover_and_catch_up:dump_catchup_batches",
                     )
-                    .await;
+                    .await
+                    .map_err(|e| e.into_state_update_error())?;
             }
 
             // 2. Wait for node to catch up to our sequence number
             let target_sequence_number = self
                 .synchronized_state_updator
                 .next_sequence_number_msg("recover_and_catch_up:get_next_sequence_number")
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
 
             tracing::info!(target_sequence_number, "Recovery: catchup batches sent; sequencer will now wait for the node to process them. We will then re-evaluate if we need to catch up again (if there are so many batches that by the time the node catches up we need to bump the visible_slot_number some more).");
 
@@ -412,7 +438,8 @@ where
                         info.clone(),
                         "recover_and_catch_up:overwrite_executor",
                     )
-                    .await;
+                    .await
+                    .map_err(|e| e.into_state_update_error())?;
             }
         }
 
@@ -455,7 +482,8 @@ where
 
             self.synchronized_state_updator
                 .wait_for_node_resync_msg(info, "wait_for_node_resync")
-                .await;
+                .await
+                .map_err(|e| e.into_state_update_error())?;
 
             // Exit after processing if we're synced
             if is_synced {
@@ -584,7 +612,10 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     // This is by far the most common scenario, i.e. a nominal
     // `update_state` call during sequencer execution with no unusual
     // conditions.
-    ReplaySoftConfirmationsOnTopOfNodeState(Box<RollupBlockExecutor<S, Rt>>, Duration),
+    ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
+        Option<Box<RollupBlockExecutor<S, Rt>>>,
+        Duration,
+    ),
 }
 
 #[tracing::instrument(skip_all, level = "debug")]
@@ -623,7 +654,8 @@ where
             next_sequence_number_according_to_node,
             "update_state::fetch_initial_batches_to_replay",
         )
-        .await;
+        .await
+        .map_err(|e| e.into_state_update_error())?;
 
     match operation {
         PreferredSeqOperation::Unreachable => {
@@ -648,17 +680,21 @@ where
                 .await?;
         }
 
-        PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeState(
+        PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
             executor,
             time_spent_fetching_batches,
         ) => {
-            seq.replay_soft_confirmations_on_top_of_node_state(
-                info,
-                timer_start,
-                time_spent_fetching_batches,
-                executor,
-            )
-            .await?;
+            if let Some(executor) = executor {
+                seq.replay_soft_confirmations_on_top_of_node_state(
+                    info,
+                    timer_start,
+                    time_spent_fetching_batches,
+                    executor,
+                )
+                .await?;
+            } else {
+                seq.do_simple_state_update(info).await?;
+            }
         }
     }
 
@@ -713,6 +749,7 @@ where
                 "check_readiness",
             )
             .await
+            .map_err(|_| SequencerNotReadyDetails::Shutdown)?
             .map(|_| ())
     }
 
@@ -721,10 +758,12 @@ where
     }
 
     #[cfg(feature = "test-utils")]
-    async fn force_close_current_batch(&self) {
+    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
         self.synchronized_state_updator
             .force_close_current_batch_msg("force_close_current_batch")
-            .await;
+            .await
+            .map_err(|e| e.into_state_update_error())?;
+        Ok(())
     }
 
     #[cfg(feature = "test-utils")]
@@ -801,6 +840,7 @@ where
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down_error());
         }
+
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
@@ -829,16 +869,27 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let res = self
+        let res = match self
             .synchronized_state_updator
             .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-            .await;
+            .await
+        {
+            Ok(inner_res) => inner_res,
+            Err(SequencerStateUpdatorError::Shutdown) => {
+                return Err(shut_down_error());
+            }
+            Err(SequencerStateUpdatorError::Unexpected) => {
+                return Err(internal_server_error_500(
+                    "Unexpected Error. The sequencer is unable to accept transactions.",
+                ));
+            }
+        };
 
         match res {
             Ok(rx) => rx.await.map_err(database_error_500),
             Err(e) => match e {
                 AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503());
+                    return Err(sequencer_overloaded_503("Other"));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))
@@ -848,7 +899,7 @@ where
                     nb_of_concurrent_blob_submissions,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
-                        return Err(sequencer_overloaded_503());
+                        return Err(sequencer_overloaded_503("No finalized slots available"));
                     }
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
@@ -873,23 +924,24 @@ where
                         ));
                     }
                 },
-                AcceptTxError::TxTooBig {
-                    current_batch_size,
-                    max_batch_size,
-                } => {
-                    return Err(err_cant_fit_tx(
+                AcceptTxError::NewTxError(err) => match err {
+                    DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
-                        baked_tx.data.len(),
-                    ))
-                }
-                AcceptTxError::ExecutorError(err) => {
-                    return Err(RollupBlockExecutorError::into_http_error(err));
-                }
-
-                AcceptTxError::Shutdown => {
-                    return Err(shut_down_error());
-                }
+                    } => {
+                        return Err(err_cant_fit_tx(
+                            current_batch_size,
+                            max_batch_size,
+                            baked_tx.data.len(),
+                        ))
+                    }
+                    DoNewTxError::ExecutorError(err) => {
+                        return Err(RollupBlockExecutorError::into_http_error(err));
+                    }
+                    DoNewTxError::Shutdown => {
+                        return Err(shut_down_error());
+                    }
+                },
             },
         }
     }
@@ -940,7 +992,8 @@ where
                 proof_data.clone(),
                 "produce_and_publish_proof_blob",
             )
-            .await;
+            .await
+            .map_err(|e| e.into_state_update_error())?;
 
         Ok(())
     }
@@ -1065,15 +1118,28 @@ fn err_cant_fit_tx(current_batch_size: usize, max_batch_size: usize, tx_len: usi
     }
 }
 
-pub(crate) async fn exit_rollup(shutdown_sender: &watch::Sender<()>) {
+#[track_caller]
+pub(crate) fn exit_rollup(
+    shutdown_sender: &watch::Sender<()>,
+) -> impl std::future::Future<Output = ()> {
+    let location = std::panic::Location::caller();
+    exit_rollup_inner(shutdown_sender.clone(), location)
+}
+
+async fn exit_rollup_inner(
+    shutdown_sender: watch::Sender<()>,
+    location: &'static std::panic::Location<'static>,
+) {
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
     if shutdown_sender.send(()).is_err() {
-        tracing::error!("Failed to send shutdown signal");
+        tracing::error!("Failed to send shutdown signal: {location}");
     }
     sleep(Duration::from_secs(5)).await;
-    tracing::info!("Calling std::process::exit(1).");
+    let msg = format!("Calling std::process::exit(1): {location}");
+    tracing::error!(msg);
+    println!("{msg}");
     std::process::exit(1);
 }
 
@@ -1087,9 +1153,9 @@ pub enum BatchCreationError {
     #[error("Internal database error; batch could not be created. Error: {0}")]
     DatabaseError(anyhow::Error),
     /// The sequencer was not able to start a batch because it has consumed its whole buffer of finalized slots.
-    #[error("The sequencer is temporarily overloaded. Try again in a few seconds")]
+    #[error("The sequencer is temporarily overloaded (No finalized slots available). Try again in a few seconds")]
     NoFinalizedSlotAvailable,
-    /// The prefered sequencer has reached the stop height and is no longer creating new batches.
+    /// The preferred sequencer has reached the stop height and is no longer creating new batches.
     #[error(
         "The sequencer is halted for a chain upgrade. Please wait for the upgrade to complete. height_to_stop_at: {height_to_stop_at}, current_height: {current_height}"
     )]

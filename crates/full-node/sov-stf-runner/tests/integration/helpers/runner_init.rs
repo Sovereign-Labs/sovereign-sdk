@@ -69,9 +69,7 @@ pub struct TestNode {
 impl TestNode {
     /// Creates a DA block containing a transaction blob, optionally including an aggregated proof.
     pub async fn send_transaction(&self) -> anyhow::Result<MockHash> {
-        let batch = vec![FullyBakedTx {
-            data: vec![1, 2, 3],
-        }];
+        let batch = vec![FullyBakedTx::new(vec![1, 2, 3])];
 
         let serialized_batch = borsh::to_vec(&batch)?;
         self.da
@@ -83,7 +81,7 @@ impl TestNode {
 
     /// Creates a DA block containing an empty transaction blob, optionally including an aggregated proof.
     pub async fn try_send_aggregated_proof(&self) -> anyhow::Result<MockHash> {
-        let batch = vec![FullyBakedTx { data: vec![] }];
+        let batch = vec![FullyBakedTx::new(vec![])];
         let serialized_batch = borsh::to_vec(&batch)?;
         self.da
             .send_transaction(&serialized_batch)
@@ -175,6 +173,22 @@ pub async fn initialize_runner(
 
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
 
+    let mut tasks = JoinSet::new();
+    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
+    shutdown_receiver.mark_unchanged();
+    let receiver_for_metrics = shutdown_receiver.clone();
+
+    let monitoring_config = rollup_config.monitoring.clone();
+    tasks.spawn(async move {
+        if let Some(handle) =
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+        {
+            handle.await.expect("Metrics task errored");
+        } else {
+            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+        };
+    });
+
     let mut storage_manager: StorageManager = NativeStorageManager::new(path).unwrap();
 
     let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
@@ -184,30 +198,19 @@ pub async fn initialize_runner(
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
     let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
 
-    let da_sync_state = make_da_sync_state(
-        &rollup_config.runner,
-        None,
-        &ledger_db,
-        da_service.as_ref(),
-        sync_sender,
-    )
-    .await
-    .unwrap();
+    let da_sync_state = make_da_sync_state(0, None, &ledger_db, da_service.as_ref(), sync_sender)
+        .await
+        .unwrap();
     let (state_update_sender, state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await
             .unwrap(),
     );
 
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
-
     let (prev_state_root, genesis_state_root) = init_variant
         .initialize(&stf, &mut storage_manager)
         .await
         .unwrap();
-
-    let mut tasks = JoinSet::new();
 
     tasks.spawn({
         let ledger_updates = ledger_db.clone();
@@ -241,7 +244,6 @@ pub async fn initialize_runner(
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
-        rollup_config.monitoring.clone(),
         None,
         None,
         da_sync_state,
@@ -384,6 +386,12 @@ fn get_da_polling_interval_ms(da_config: &MockDaConfig) -> u64 {
     }
 }
 
+fn get_da_total_timeout_secs(da_config: &MockDaConfig) -> u64 {
+    match da_config.block_producing {
+        BlockProducingConfig::Periodic { block_time_ms } => block_time_ms.saturating_mul(10_000),
+        _ => 3_600,
+    }
+}
 pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     path: &std::path::Path,
     da_config: MockDaConfig,
@@ -392,8 +400,8 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     RollupConfig {
         storage: RollupDbConfig::default_in_path(path.to_path_buf()),
         runner: RunnerConfig {
-            genesis_height: 0,
             da_polling_interval_ms: get_da_polling_interval_ms(&da_config),
+            da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),
             concurrent_sync_tasks: Some(1),
             save_tx_bodies: false,
@@ -419,6 +427,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
+            extension: None,
         },
         monitoring: MonitoringConfig::standard(),
     }

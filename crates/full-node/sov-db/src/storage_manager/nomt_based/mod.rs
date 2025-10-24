@@ -21,6 +21,8 @@ use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::metrics::nomt::StorageManagerFinalizationMetric;
 use crate::state_db_nomt::{NomtSessionBuilder, StateOverlay};
 use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob, SnapshotGroup};
+pub use groups::PrunerJobOutput;
+pub(crate) use groups::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
 #[allow(missing_docs)]
 pub struct StateFinishedSession {
@@ -105,9 +107,10 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
 
     // If pruner is running.
     pruner: Option<PrunerJob>,
-    last_pruner_run_at_height: Option<u64>,
-    pruner_block_interval: u64,
+    last_pruner_finish_at_height: Option<u64>,
+    pruner_block_interval: Option<u64>,
     pruner_versions_to_keep: usize,
+    pruner_max_batch_size: usize,
 
     _phantom_s: PhantomData<S>,
 }
@@ -122,6 +125,7 @@ where
     pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let pruner_block_interval = config.get_pruner_interval();
         let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
+        let pruner_max_batch_size = config.get_pruner_max_batch_size();
         assert!(
             pruner_versions_to_keep >= 1,
             "Pruner versions to keep should be at least 1, got {pruner_versions_to_keep}",
@@ -138,9 +142,10 @@ where
             nomt_snapshots: Arc::new(Default::default()),
             db_group,
             pruner: None,
-            last_pruner_run_at_height: None,
+            last_pruner_finish_at_height: None,
             pruner_block_interval,
             pruner_versions_to_keep,
+            pruner_max_batch_size,
             _phantom_s: Default::default(),
         })
     }
@@ -451,27 +456,37 @@ where
             .map(|p| p.is_finished())
             .unwrap_or(false);
         let mut pruning_commit_time = None;
+
         if is_pruner_ready {
             // UNWRAP: Checked above.
             let pruner = std::mem::take(&mut self.pruner).unwrap();
             let prune_group = pruner.join()?;
             let start = std::time::Instant::now();
+            let hit_size_limit = prune_group.hit_size_limit();
             self.db_group.commit_pruning(prune_group)?;
             pruning_commit_time = Some(start.elapsed());
-            self.last_pruner_run_at_height = Some(block_header.height());
+            // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at the current height.
+            // Otherwise, we don't mark the run as finished, so the pruner will spawn another iteration.
+            if !hit_size_limit {
+                self.last_pruner_finish_at_height = Some(block_header.height());
+            }
         }
 
-        let should_run_pruner = self.pruner.is_none()
-            && self
-                .last_pruner_run_at_height
-                .map(|last_run_at_height| {
-                    block_header.height().saturating_sub(last_run_at_height)
-                        > self.pruner_block_interval
-                })
-                .unwrap_or(true);
-        if should_run_pruner {
-            let pruner = self.db_group.start_pruner(self.pruner_versions_to_keep);
-            self.pruner = Some(pruner);
+        if let Some(pruner_block_interval) = self.pruner_block_interval {
+            let should_run_pruner = self.pruner.is_none()
+                && self
+                    .last_pruner_finish_at_height
+                    .map(|last_run_at_height| {
+                        block_header.height().saturating_sub(last_run_at_height)
+                            > pruner_block_interval
+                    })
+                    .unwrap_or(true);
+            if should_run_pruner {
+                let pruner = self
+                    .db_group
+                    .start_pruner(self.pruner_versions_to_keep, self.pruner_max_batch_size);
+                self.pruner = Some(pruner);
+            }
         }
 
         sov_metrics::track_metrics(|tracker| {

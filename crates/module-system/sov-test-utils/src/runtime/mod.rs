@@ -311,7 +311,7 @@ where
             .unwrap_infallible()
     }
 
-    /// A simple helper function to get the the staked balance of a sequencer.
+    /// A simple helper function to get the staked balance of a sequencer.
     pub fn get_sequencer_staking_balance(
         sequencer: &<S::Da as DaSpec>::Address,
         state: &mut ApiStateAccessor<S>,
@@ -754,12 +754,12 @@ where
         let blob_info = blob_metadata.batch_blobs[0].clone();
         let tx_receipt = batch_receipt.tx_receipts[0].clone();
         let gas_used = get_gas_used(&tx_receipt);
-        let gas_price = batch_receipt.inner.gas_price.clone();
+        let gas_price = batch_receipt.inner.gas_price;
 
         let ctx = TransactionAssertContext::from_receipt::<MockDaSpec>(
             tx_receipt,
             blob_info,
-            gas_used.value(&gas_price),
+            gas_used.value(gas_price),
         );
         (transaction_test.assert)(ctx, &mut self.visible_state());
         self
@@ -840,7 +840,7 @@ where
                         )
                 );
 
-            gas_used.value(&gas_price)
+            gas_used.value(gas_price)
         } else {
             Amount::ZERO
         };
@@ -1006,6 +1006,8 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
 struct SeqControlFlow;
 
 impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
+    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
+
     fn pre_flight<RT: Runtime<S>>(
         &self,
         _runtime: &RT,
@@ -1021,6 +1023,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
         _gas_used: &<S as Spec>::Gas,
+        execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let ProvisionalSequencerOutcome {
             execution_status, ..
@@ -1030,7 +1033,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         };
 
         if !receipt.receipt.is_successful() {
-            let _ = dirty_scratchpad.tx_changes();
+            let _ = dirty_scratchpad.tx_changes(execution_context);
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 

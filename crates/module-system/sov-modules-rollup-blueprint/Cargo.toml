@@ -27,6 +27,7 @@ sov-sequencer = { workspace = true, optional = true }
 sov-ledger-apis = { workspace = true, optional = true }
 sov-rollup-apis = { workspace = true, optional = true }
 sov-api-spec = { workspace = true, optional = true }
+sov-metrics = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 futures = { workspace = true, optional = true }
@@ -50,32 +51,34 @@ tracing-opentelemetry = { version = "0.28.0", default-features = false, features
 [features]
 default = ["native"]
 native = [
-    "async-trait",
-    "futures",
-    "console-subscriber",
-    "derivative",
-    "serde_json",
-    "sov-cli",
-    "sov-db",
-    "sov-ledger-apis",
-    "sov-rollup-apis",
-    "sov-api-spec",
-    "sov-modules-api/native",
-    "sov-modules-stf-blueprint/native",
-    "sov-rollup-apis",
-    "sov-rollup-interface/native",
-    "sov-sequencer",
-    "sov-state/native",
-    "sov-stf-runner",
-    "tokio",
-    "tracing",
-    "tracing-panic",
-    "tracing-subscriber",
-    "hex",
-    "opentelemetry",
-    "opentelemetry_sdk",
-    "opentelemetry-otlp",
-    "opentelemetry-appender-tracing",
-    "opentelemetry-semantic-conventions",
-    "tracing-opentelemetry",
+	"async-trait",
+	"futures",
+	"console-subscriber",
+	"derivative",
+	"serde_json",
+	"sov-cli",
+	"sov-db",
+	"sov-ledger-apis",
+	"sov-rollup-apis",
+	"sov-api-spec",
+	"sov-modules-api/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-rollup-apis",
+	"sov-rollup-interface/native",
+	"sov-sequencer",
+	"sov-state/native",
+	"sov-stf-runner",
+	"sov-metrics",
+	"tokio",
+	"tracing",
+	"tracing-panic",
+	"tracing-subscriber",
+	"hex",
+	"opentelemetry",
+	"opentelemetry_sdk",
+	"opentelemetry-otlp",
+	"opentelemetry-appender-tracing",
+	"opentelemetry-semantic-conventions",
+	"tracing-opentelemetry",
+	"sov-metrics?/native"
 ]
