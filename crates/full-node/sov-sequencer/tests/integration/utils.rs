@@ -267,8 +267,12 @@ pub async fn new_test_rollup_with_backend<RT: Runtime<TestSpec> + HasRestApi<Tes
         TestSequencerDbBackend::Postgres { allow_skip } => {
             const DEV_SERVER_CPUS: usize = 96;
 
-            if std::env::var("SOV_TEST_SKIP_DOCKER").is_ok_and(|value| value == "1") {
-                tracing::warn!("Skipping Postgres-backed rollup: SOV_TEST_SKIP_DOCKER=1 was set");
+            if std::env::var("SOV_TEST_SKIP_DOCKER")
+                .map_or(false, |value| value == "1")
+            {
+                tracing::warn!(
+                    "Skipping Postgres-backed rollup: SOV_TEST_SKIP_DOCKER=1 was set"
+                );
                 return None;
             }
 

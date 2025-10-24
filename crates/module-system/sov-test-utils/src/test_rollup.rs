@@ -123,6 +123,26 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
 }
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
+    /// Uses the preferred sequencer with Postgres as a database.
+    async fn with_postgres_sequencer(mut self) -> anyhow::Result<Self> {
+        let postgres =
+            create_postgres_container(&self.config.storage.path().join("postgres_data")).await
+            .with_context(|| "Failed to start Postgres container. This is most likely because (1) the Docker daemon is not running or (2) Docker Desktop doesn't have file sharing permissions to the repository directory")?;
+
+        let postgres_connection_string =
+            connection_string_from_postgres_container(&postgres).await?;
+
+        match &mut self.config.sequencer_config {
+            SequencerKindConfig::Preferred(ref mut config) => {
+                config.postgres_connection_string = Some(postgres_connection_string);
+                self.postgres_container_opt = Some(Arc::new(postgres));
+            }
+            _ => panic!("Can't use Postgres with a non-preferred sequencer"),
+        }
+
+        Ok(self)
+    }
+
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
     pub fn with_preferred_seq_min_profit_per_tx(mut self, minimum_profit_per_tx: u128) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
@@ -459,26 +479,6 @@ where
             config: Self::default_config(finalization_blocks, storage_path, false),
             with_secondary_sequencer: None,
         }
-    }
-
-    /// Uses the preferred sequencer with Postgres as a database.
-    pub async fn with_postgres_sequencer(mut self) -> anyhow::Result<Self> {
-        let postgres =
-            create_postgres_container(&self.config.storage.path().join("postgres_data")).await
-            .with_context(|| "Failed to start Postgres container. This is most likely because (1) the Docker daemon is not running or (2) Docker Desktop doesn't have file sharing permissions to the repository directory")?;
-
-        let postgres_connection_string =
-            connection_string_from_postgres_container(&postgres).await?;
-
-        match &mut self.config.sequencer_config {
-            SequencerKindConfig::Preferred(ref mut config) => {
-                config.postgres_connection_string = Some(postgres_connection_string);
-                self.postgres_container_opt = Some(Arc::new(postgres));
-            }
-            _ => panic!("Can't use Postgres with a non-preferred sequencer"),
-        }
-
-        Ok(self)
     }
 
     /// Creates a new [`TestRollup`] and starts running it in a background Tokio
