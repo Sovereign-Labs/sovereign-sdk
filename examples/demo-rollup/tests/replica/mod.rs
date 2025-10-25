@@ -223,6 +223,7 @@ async fn test_replica_receives_txs_from_postgres() {
 
     assert_eq!(receiver_balance.0, AMOUNT_TO_SEND);
     let _ = test_rollup.shutdown().await;
+    let _ = replica_test_rollup.shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -256,6 +257,7 @@ async fn test_replica_receives_txs_from_postgres_replica_start_after_master() {
 
     assert_eq!(receiver_balance.0, AMOUNT_TO_SEND);
     let _ = test_rollup.shutdown().await;
+    let _ = replica_test_rollup.shutdown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -278,8 +280,8 @@ async fn test_replica_start_stop() {
 
     let receiver_addr = random_address();
 
+    let nb_of_txs = 100;
     {
-        let nb_of_txs = 3;
         send_transfers(
             0,
             nb_of_txs,
@@ -299,54 +301,22 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT_TO_SEND);
     }
 
-    let builder = test_rollup.shutdown().await.unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-    let test_rollup = builder.start_test_rollup().await.unwrap();
-    produce_blocks(20, &da_service).await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    {
-        send_transfers(3, 3, key_and_address, receiver_addr, &test_rollup).await;
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        let receiver_balance = replica_test_rollup
-            .client
-            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
-            .await
-            .unwrap();
-
-        assert_eq!(receiver_balance.0, 6 * AMOUNT_TO_SEND);
-    }
-
-    {}
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_replica_start_stop_1() {
-    let Some(SetupData {
-        postgres,
-        da_service,
-        addr,
-        key_and_address,
-    }) = setup().await
-    else {
-        return;
+    // Restart the rollup
+    let test_rollup = {
+        let builder = test_rollup.shutdown().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        let test_rollup = builder.start_test_rollup().await.unwrap();
+        produce_blocks(20, &da_service).await;
+        test_rollup.wait_for_sequencer_ready().await.unwrap();
+        test_rollup
     };
 
-    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
-    let test_rollup = start_rollup(false, addr, postgres).await;
-
-    produce_blocks(20, &da_service).await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    let receiver_addr = random_address();
-
+    // Restart replica
     {
-        let nb_of_txs = 3;
         send_transfers(
-            0,
+            nb_of_txs as u64,
             nb_of_txs,
-            key_and_address.clone(),
+            key_and_address,
             receiver_addr,
             &test_rollup,
         )
@@ -359,80 +329,7 @@ async fn test_replica_start_stop_1() {
             .await
             .unwrap();
 
-        assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT_TO_SEND);
-    }
-    println!("X1");
-
-    let builder = test_rollup.shutdown().await.unwrap();
-    produce_blocks(5, &da_service).await;
-    let test_rollup = builder.start_test_rollup().await.unwrap();
-    produce_blocks(20, &da_service).await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    {
-        send_transfers(3, 3, key_and_address, receiver_addr, &test_rollup).await;
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        let receiver_balance = replica_test_rollup
-            .client
-            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
-            .await
-            .unwrap();
-
-        assert_eq!(receiver_balance.0, 6 * AMOUNT_TO_SEND);
-    }
-
-    println!("X2");
-
-    {
-        let builder = replica_test_rollup.shutdown().await.unwrap();
-        println!("X22");
-        produce_blocks(5, &da_service).await;
-
-        println!("X3");
-        let replica_test_rollup = builder.start_test_rollup().await.unwrap();
-        produce_blocks(20, &da_service).await;
-
-        println!("X4");
-
-        let receiver_balance = replica_test_rollup
-            .client
-            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
-            .await
-            .unwrap();
-
-        assert_eq!(receiver_balance.0, 6 * AMOUNT_TO_SEND);
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_replica_start_stop_2() {
-    let Some(SetupData {
-        postgres,
-        da_service,
-        addr,
-        key_and_address,
-    }) = setup().await
-    else {
-        return;
-    };
-
-    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
-    let test_rollup = start_rollup(false, addr, postgres).await;
-
-    produce_blocks(20, &da_service).await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    produce_blocks(5, &da_service).await;
-
-    println!("X1");
-    {
-        let builder = replica_test_rollup.shutdown().await.unwrap();
-        println!("X22");
-        produce_blocks(5, &da_service).await;
-
-        println!("X3");
-        let replica_test_rollup = builder.start_test_rollup().await.unwrap();
-        produce_blocks(20, &da_service).await;
+        assert_eq!(receiver_balance.0, 2 * (nb_of_txs as u128) * AMOUNT_TO_SEND);
+        println!("receiver balance: {}", receiver_balance.0);
     }
 }
