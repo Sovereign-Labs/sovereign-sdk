@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::test_helpers::build_transfer_token_tx;
 use crate::test_helpers::test_genesis_source;
 use sov_bank::config_gas_token_id;
@@ -77,6 +78,7 @@ async fn start_rollup(
 const AMOUNT_TO_SEND: u128 = 100;
 
 async fn send_transfers(
+    start_nonce: u64,
     count: u64,
     key_and_address: PrivateKeyAndAddress<S>,
     receiver: <S as Spec>::Address,
@@ -88,7 +90,7 @@ async fn send_transfers(
             config_gas_token_id(),
             receiver,
             AMOUNT_TO_SEND,
-            n,
+            start_nonce + n,
         );
         test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -134,6 +136,31 @@ async fn setup() -> Option<SetupData> {
     })
 }
 
+async fn setup_periodic() -> Option<(SetupData, watch::Sender<()>)> {
+    let postgres = PostgresData::create_postgres().await;
+
+    let postgres = match postgres {
+        Ok(pg) => Some(pg),
+        Err(CreatePostgresError::DockerNotSupported) => return None,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
+    let (da_service, da_shutdown_sender, addr) = create_da_service_periodic().await;
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+
+    Some((
+        SetupData {
+            postgres,
+            da_service,
+            addr,
+            key_and_address,
+        },
+        da_shutdown_sender,
+    ))
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_receives_txs_from_da() {
     let (_, shutdown_sender, addr) = create_da_service_periodic().await;
@@ -148,7 +175,7 @@ async fn test_replica_receives_txs_from_da() {
     let receiver_addr = random_address();
 
     let height_before_tx = test_rollup.height().await;
-    send_transfers(1, key_and_address, receiver_addr, &test_rollup).await;
+    send_transfers(0, 1, key_and_address, receiver_addr, &test_rollup).await;
 
     test_rollup
         .wait_for_height(height_before_tx.get() + 5)
@@ -185,7 +212,7 @@ async fn test_replica_receives_txs_from_postgres() {
 
     let receiver_addr = random_address();
 
-    send_transfers(1, key_and_address, receiver_addr, &test_rollup).await;
+    send_transfers(0, 1, key_and_address, receiver_addr, &test_rollup).await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     let receiver_balance = replica_test_rollup
@@ -218,7 +245,7 @@ async fn test_replica_receives_txs_from_postgres_replica_start_after_master() {
 
     let receiver_addr = random_address();
 
-    send_transfers(1, key_and_address, receiver_addr, &test_rollup).await;
+    send_transfers(0, 1, key_and_address, receiver_addr, &test_rollup).await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     let receiver_balance = replica_test_rollup
@@ -229,4 +256,183 @@ async fn test_replica_receives_txs_from_postgres_replica_start_after_master() {
 
     assert_eq!(receiver_balance.0, AMOUNT_TO_SEND);
     let _ = test_rollup.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_start_stop() {
+    let Some(SetupData {
+        postgres,
+        da_service,
+        addr,
+        key_and_address,
+    }) = setup().await
+    else {
+        return;
+    };
+
+    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
+    let test_rollup = start_rollup(false, addr, postgres).await;
+
+    produce_blocks(20, &da_service).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let receiver_addr = random_address();
+
+    {
+        let nb_of_txs = 3;
+        send_transfers(
+            0,
+            nb_of_txs,
+            key_and_address.clone(),
+            receiver_addr,
+            &test_rollup,
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT_TO_SEND);
+    }
+
+    let builder = test_rollup.shutdown().await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    let test_rollup = builder.start_test_rollup().await.unwrap();
+    produce_blocks(20, &da_service).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    {
+        send_transfers(3, 3, key_and_address, receiver_addr, &test_rollup).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(receiver_balance.0, 6 * AMOUNT_TO_SEND);
+    }
+
+    {}
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_start_stop_1() {
+    let Some(SetupData {
+        postgres,
+        da_service,
+        addr,
+        key_and_address,
+    }) = setup().await
+    else {
+        return;
+    };
+
+    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
+    let test_rollup = start_rollup(false, addr, postgres).await;
+
+    produce_blocks(20, &da_service).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let receiver_addr = random_address();
+
+    {
+        let nb_of_txs = 3;
+        send_transfers(
+            0,
+            nb_of_txs,
+            key_and_address.clone(),
+            receiver_addr,
+            &test_rollup,
+        )
+        .await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT_TO_SEND);
+    }
+    println!("X1");
+
+    let builder = test_rollup.shutdown().await.unwrap();
+    produce_blocks(5, &da_service).await;
+    let test_rollup = builder.start_test_rollup().await.unwrap();
+    produce_blocks(20, &da_service).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    {
+        send_transfers(3, 3, key_and_address, receiver_addr, &test_rollup).await;
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(receiver_balance.0, 6 * AMOUNT_TO_SEND);
+    }
+
+    println!("X2");
+
+    {
+        let builder = replica_test_rollup.shutdown().await.unwrap();
+        println!("X22");
+        produce_blocks(5, &da_service).await;
+
+        println!("X3");
+        let replica_test_rollup = builder.start_test_rollup().await.unwrap();
+        produce_blocks(20, &da_service).await;
+
+        println!("X4");
+
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
+
+        assert_eq!(receiver_balance.0, 6 * AMOUNT_TO_SEND);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_start_stop_2() {
+    let Some(SetupData {
+        postgres,
+        da_service,
+        addr,
+        key_and_address,
+    }) = setup().await
+    else {
+        return;
+    };
+
+    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
+    let test_rollup = start_rollup(false, addr, postgres).await;
+
+    produce_blocks(20, &da_service).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    produce_blocks(5, &da_service).await;
+
+    println!("X1");
+    {
+        let builder = replica_test_rollup.shutdown().await.unwrap();
+        println!("X22");
+        produce_blocks(5, &da_service).await;
+
+        println!("X3");
+        let replica_test_rollup = builder.start_test_rollup().await.unwrap();
+        produce_blocks(20, &da_service).await;
+    }
 }

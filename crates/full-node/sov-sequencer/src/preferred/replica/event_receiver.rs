@@ -83,18 +83,21 @@ impl EventReceiver {
 
     pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
-        let shutdown_receiver = self.shutdown_sender.subscribe();
+        let mut shutdown_receiver = self.shutdown_sender.subscribe();
 
         tokio::spawn(async move {
             let mut start_event_id = None;
             let mut prev_event_type = None;
 
             loop {
-                if shutdown_receiver.has_changed().unwrap_or(true) {
-                    break;
-                }
+                let res = tokio::select! {
+                     _ = shutdown_receiver.changed() => {
+                        break
+                    },
+                    res = self.fetch_data(start_event_id, prev_event_type) => res
+                };
 
-                match self.fetch_data(start_event_id, prev_event_type).await {
+                match res {
                     Ok((event_id, event_type)) => {
                         nb_of_consecutive_db_errors = 0;
                         start_event_id = Some(event_id + 1);
