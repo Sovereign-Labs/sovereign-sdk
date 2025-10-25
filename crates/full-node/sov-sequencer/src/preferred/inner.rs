@@ -189,6 +189,7 @@ where
         sequence_number: SequenceNumber,
     ) {
         info!(%sequence_number, "Overwriting next sequence number");
+        println!("OVERWRITE {:?}", sequence_number);
         self.sequence_number_of_next_blob = sequence_number;
         track_sequence_number(self.sequence_number_of_next_blob);
     }
@@ -588,6 +589,10 @@ where
         visible_increase: NonZero<u8>,
     ) -> Result<(), BatchCreationError> {
         if self.executor.has_in_progress_batch() {
+            if self.is_replica() {
+                panic!("RET BATCH IN PROGRESS");
+            }
+
             return Ok(());
         }
 
@@ -613,6 +618,10 @@ where
 
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.get_and_inc_next_sequence_number();
+
+        if self.is_replica() {
+            println!("BATCH START {:?}", sequence_number);
+        }
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
 
         let start_block_data = StartBlockData {
@@ -1740,6 +1749,11 @@ where
         ) {
             (true, _, _, true, _) => {
                 if inner.is_replica() {
+                    println!(
+                        "K0 WaitForNodeResyncToTip {:?} {:?}",
+                        next_sequence_number_according_to_node, info
+                    );
+
                     inner.executor_events_sender.clean_all_batches_from_cache();
                     PreferredSeqOperation::WaitForNodeResyncToTip
                 } else {
@@ -1753,7 +1767,9 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
-                println!("K1 WaitForNodeResyncToTip");
+                if inner.is_replica() {
+                    println!("K1 WaitForNodeResyncToTip");
+                }
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
             (_, _, true, _, _) => {
@@ -1762,7 +1778,9 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
-                println!("K2 WaitForNodeResyncWithAllowedSlack");
+                if inner.is_replica() {
+                    println!("K2 WaitForNodeResyncWithAllowedSlack");
+                }
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
             (false, true, false, _, _) => {
@@ -1773,7 +1791,9 @@ where
                     "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
                 inner.trigger_recovery(info).await;
 
-                println!("K3 RecoverAndCatchUp");
+                if inner.is_replica() {
+                    println!("K3 RecoverAndCatchUp");
+                }
                 PreferredSeqOperation::RecoverAndCatchUp
             }
             // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
@@ -1785,7 +1805,9 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
-                println!("K4 WaitForNodeResyncToTip");
+                if inner.is_replica() {
+                    println!("K4 WaitForNodeResyncToTip");
+                }
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
             (false, false, false, _, _) => {
@@ -1805,14 +1827,18 @@ where
                         .flush_transactions_cache(info.next_tx_number)
                         .await;
 
-                    println!("K5 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary");
+                    if inner.is_replica() {
+                        println!("K5 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary");
+                    }
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     Some(Box::new(
                         // Since we're replaying from the node state, don't reuse any uncommitted changes
                         inner.new_executor_with_empty_uncommitted_changes(info),
                     ))
                 } else {
-                    println!("K6 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary");
+                    if inner.is_replica() {
+                        println!("K6 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary {next_sequence_number_according_to_node}");
+                    }
                     let rollup_height =
                         StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
                             .rollup_height_to_access();
@@ -1995,9 +2021,15 @@ where
             synced_da_height: info.sync_status.synced_da_height(),
         });
 
-        println!("XXXXX {:?} {distance}", info.sync_status);
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);
         let our_sequence_number = inner.sequence_number_of_next_blob;
+
+        if inner.is_replica() {
+            println!(
+                "XXXXX {:?} dist {distance} our {our_sequence_number} node {node_sequence_number}",
+                info.sync_status
+            );
+        }
 
         if node_sequence_number > our_sequence_number {
             inner
@@ -2121,12 +2153,15 @@ where
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
+        println!("BATCH S");
         validate_db_data_from_replica(
             &inner.is_ready,
             DbData::BatchStart(batch_from_master),
             seq_nr_of_next_blob_for_this_executor,
             seq_nr_from_master,
         )?;
+
+        println!("BATCH E");
 
         inner
             .do_batch_start(
@@ -2148,12 +2183,15 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
 
+        println!("TX  seq_nr_from_master {seq_nr_from_master}, seq_nr_of_current_blob_for_this_executor {seq_nr_of_current_blob_for_this_executor}");
+
         validate_db_data_from_replica(
             &inner.is_ready,
             DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash),
             seq_nr_of_current_blob_for_this_executor,
             seq_nr_from_master,
         )?;
+        println!("TX  VALIDATED");
 
         let _ = inner
             .do_new_tx(tx_hash, baked_tx)
@@ -2171,15 +2209,18 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number() + 1;
+        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
         let seq_nr_from_master = batch_from_master.sequence_number;
 
+        println!("");
+        println!("BATCH END seq_nr_from_master {seq_nr_from_master} seq_nr_of_current_blob_for_this_executor {seq_nr_of_current_blob_for_this_executor}");
         validate_db_data_from_replica(
             &inner.is_ready,
             DbData::BatchEnd(batch_from_master),
             seq_nr_of_current_blob_for_this_executor,
             seq_nr_from_master,
         )?;
+        println!("VALIDATED BATCH");
         inner.close_current_batch().await;
 
         Ok(())

@@ -40,6 +40,18 @@ impl<S: Spec> From<SequencerStateUpdatorError> for ReplicaError<S> {
     }
 }
 
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+static GLOBAL_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+fn next_id() -> u64 {
+    GLOBAL_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+fn get_counter() -> u64 {
+    GLOBAL_COUNTER.load(Ordering::Relaxed)
+}
+
 #[async_trait]
 impl<S, Rt> ReplicaEventHandler for Arc<SequencerStateUpdator<S, Rt>>
 where
@@ -50,14 +62,18 @@ where
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         let res: Result<(), ReplicaError<S>> = match data {
             DbData::BatchStart(batch_to_store) => {
+                println!("BatchStart {:?}", batch_to_store);
                 self.do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
                     .await
             }
             DbData::Transaction(seq, tx, tx_hash) => {
+                let id = next_id();
+                println!("Transaction {:?} {:?}", id, seq);
                 self.do_new_tx_msg_replica(seq, tx_hash, tx, "replica_new_tx")
                     .await
             }
             DbData::BatchEnd(batch_to_store) => {
+                println!("BatchEnd {:?}", batch_to_store);
                 self.close_current_batch_msg_replica(batch_to_store, "replica_close_batch")
                     .await
             }

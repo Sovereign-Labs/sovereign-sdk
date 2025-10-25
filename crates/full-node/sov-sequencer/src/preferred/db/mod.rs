@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Database for sequencer-related data.
 //!
 //! TODO(@neysofu): Remove *all* blocking code inside async functions.

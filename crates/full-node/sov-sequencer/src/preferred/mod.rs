@@ -479,7 +479,6 @@ where
         loop {
             let is_synced = info.sync_status.distance() <= distance_to_tip;
 
-            println!("Is synced: {is_synced} {:?}", info.sync_status);
             self.synchronized_state_updator
                 .wait_for_node_resync_msg(info, distance_to_tip, "wait_for_node_resync")
                 .await
@@ -490,7 +489,6 @@ where
                 break;
             }
 
-            println!("pool start");
             // Else, poll a state update for the next iteration
             info = poll_state_update::<S>(
                 state_update_receiver,
@@ -498,11 +496,8 @@ where
                 "update_state_task",
             )
             .await?;
-
-            println!("pool end");
         }
 
-        println!("Exit syncong");
         Ok(())
     }
 
