@@ -1753,6 +1753,7 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
+                println!("K1 WaitForNodeResyncToTip");
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
             (_, _, true, _, _) => {
@@ -1761,6 +1762,7 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
+                println!("K2 WaitForNodeResyncWithAllowedSlack");
                 PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
             }
             (false, true, false, _, _) => {
@@ -1771,6 +1773,7 @@ where
                     "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
                 inner.trigger_recovery(info).await;
 
+                println!("K3 RecoverAndCatchUp");
                 PreferredSeqOperation::RecoverAndCatchUp
             }
             // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
@@ -1782,6 +1785,7 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
+                println!("K4 WaitForNodeResyncToTip");
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
             (false, false, false, _, _) => {
@@ -1801,12 +1805,14 @@ where
                         .flush_transactions_cache(info.next_tx_number)
                         .await;
 
+                    println!("K5 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary");
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     Some(Box::new(
                         // Since we're replaying from the node state, don't reuse any uncommitted changes
                         inner.new_executor_with_empty_uncommitted_changes(info),
                     ))
                 } else {
+                    println!("K6 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary");
                     let rollup_height =
                         StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
                             .rollup_height_to_access();
@@ -1989,6 +1995,7 @@ where
             synced_da_height: info.sync_status.synced_da_height(),
         });
 
+        println!("XXXXX {:?} {distance}", info.sync_status);
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);
         let our_sequence_number = inner.sequence_number_of_next_blob;
 
