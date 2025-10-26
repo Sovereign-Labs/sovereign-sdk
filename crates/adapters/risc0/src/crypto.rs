@@ -1,5 +1,4 @@
 //! Cryptography optimized for the Rrisc0 Zkvm.
-use std::hash::Hash;
 #[cfg(feature = "native")]
 use std::str::FromStr;
 
@@ -525,4 +524,5 @@ mod hex_tests {
 
         assert_eq!(pub_key_lower, pub_key_upper);
     }
+
 }
