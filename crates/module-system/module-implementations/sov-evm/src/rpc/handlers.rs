@@ -1,4 +1,3 @@
-use crate::db::commit::FallibleDatabaseCommit;
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_primitives::{Address, U64};
@@ -12,6 +11,7 @@ use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::Database;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -272,7 +272,7 @@ where
             state: changes,
         } = self.call(request, block_number, state)?;
         self.db(state)
-            .commit(changes)
+            .try_commit(changes)
             .expect("Gas meter is initialized with INF");
         let gas_used = result.gas_used();
 
