@@ -235,6 +235,13 @@ where
         let next_sequence_number_according_to_node =
             get_next_sequence_number_according_to_node(latest_state_info, &mut runtime);
 
+        if self.is_replica() {
+            println!(
+                "XXXXX prune_sequencer_db next_sequence_number {:?} next_sequence_number_according_to_node {}",
+                self.sequence_number_of_next_blob, next_sequence_number_according_to_node
+            );
+        }
+
         sov_metrics::track_metrics(|tracker| {
             tracker.submit_inline(
                 "sov_rollup_sequence_number_delta",
@@ -1749,11 +1756,24 @@ where
         ) {
             (true, _, _, true, _) => {
                 if inner.is_replica() {
+                    // TODO X1
+                    inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                        target_da_height: sync_status.target_da_height(),
+                        synced_da_height: sync_status.synced_da_height(),
+                    });
+
+                    // TODO X2
+                    inner
+                        .executor_events_sender
+                        .flush_transactions_cache(info.next_tx_number)
+                        .await;
+
                     println!(
                         "K0 WaitForNodeResyncToTip {:?} {:?}",
                         next_sequence_number_according_to_node, info
                     );
 
+                    // TODO X3
                     inner.executor_events_sender.clean_all_batches_from_cache();
                     PreferredSeqOperation::WaitForNodeResyncToTip
                 } else {
@@ -1767,7 +1787,14 @@ where
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
                 });
+
+                // TODO X4
                 if inner.is_replica() {
+                    inner
+                        .executor_events_sender
+                        .flush_transactions_cache(info.next_tx_number)
+                        .await;
+
                     println!("K1 WaitForNodeResyncToTip");
                 }
                 PreferredSeqOperation::WaitForNodeResyncToTip
@@ -1789,6 +1816,7 @@ where
                     %current_visible_slot_number,
                     deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
                     "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
+
                 inner.trigger_recovery(info).await;
 
                 if inner.is_replica() {
@@ -1813,6 +1841,12 @@ where
             (false, false, false, _, _) => {
                 let should_flush_tx_cache = is_startup || is_resync || is_recover;
 
+                /*
+                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
+                });*/
+
                 // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
                 // In all other cases, we can just accept the new storage and move on.
                 let executor = if should_flush_tx_cache {
@@ -1822,14 +1856,19 @@ where
                         is_recover,
                         "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
                     );
+
+                    if inner.is_replica() {
+                        println!(
+                            "K5 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary {} {:?}",
+                            next_sequence_number_according_to_node, info
+                        );
+                    }
+
                     inner
                         .executor_events_sender
                         .flush_transactions_cache(info.next_tx_number)
                         .await;
 
-                    if inner.is_replica() {
-                        println!("K5 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary");
-                    }
                     // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
                     Some(Box::new(
                         // Since we're replaying from the node state, don't reuse any uncommitted changes
@@ -1837,7 +1876,7 @@ where
                     ))
                 } else {
                     if inner.is_replica() {
-                        println!("K6 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary {next_sequence_number_according_to_node}");
+                        println!("K6 ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary  {:?} {next_sequence_number_according_to_node}", info);
                     }
                     let rollup_height =
                         StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
@@ -2054,6 +2093,8 @@ where
         inner.update_api_ledger(&info).await;
 
         if inner.is_replica() && info.sync_status.distance() <= distance {
+            // TODO X7
+            inner.has_finished_startup = true;
             inner.is_ready = Ok(());
         }
     }
@@ -2155,6 +2196,7 @@ where
 
         println!("BATCH S");
         validate_db_data_from_replica(
+            inner.has_finished_startup,
             &inner.is_ready,
             DbData::BatchStart(batch_from_master),
             seq_nr_of_next_blob_for_this_executor,
@@ -2185,7 +2227,9 @@ where
 
         println!("TX  seq_nr_from_master {seq_nr_from_master}, seq_nr_of_current_blob_for_this_executor {seq_nr_of_current_blob_for_this_executor}");
 
+        //tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         validate_db_data_from_replica(
+            inner.has_finished_startup,
             &inner.is_ready,
             DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash),
             seq_nr_of_current_blob_for_this_executor,
@@ -2214,7 +2258,9 @@ where
 
         println!("");
         println!("BATCH END seq_nr_from_master {seq_nr_from_master} seq_nr_of_current_blob_for_this_executor {seq_nr_of_current_blob_for_this_executor}");
+
         validate_db_data_from_replica(
+            inner.has_finished_startup,
             &inner.is_ready,
             DbData::BatchEnd(batch_from_master),
             seq_nr_of_current_blob_for_this_executor,
@@ -2228,11 +2274,19 @@ where
 }
 
 fn validate_db_data_from_replica<S: Spec>(
+    has_finished_startup: bool,
     is_ready: &Result<(), SequencerNotReadyDetails>,
     ret: DbData,
     seq_nr_for_this_executor: u64,
     seq_nr_from_master: u64,
 ) -> Result<(), ReplicaError<S>> {
+    if !has_finished_startup {
+        return Err(ReplicaError::NotReady(
+            SequencerNotReadyDetails::Startup,
+            ret,
+        ));
+    }
+
     if let Err(err) = is_ready {
         return Err(ReplicaError::NotReady(err.clone(), ret));
     }

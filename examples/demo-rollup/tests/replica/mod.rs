@@ -412,7 +412,7 @@ async fn test_replica_start_stop() {
             &test_rollup,
         )
         .await;
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         let receiver_balance = replica_test_rollup
             .client
@@ -443,7 +443,7 @@ async fn test_replica_start_stop() {
             &test_rollup,
         )
         .await;
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         let receiver_balance = replica_test_rollup
             .client
@@ -473,7 +473,7 @@ async fn test_replica_start_stop() {
             &test_rollup,
         )
         .await;
-        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         let receiver_balance = replica_test_rollup
             .client
