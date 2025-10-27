@@ -30,7 +30,7 @@ pub mod first_test_module {
             Ok(self
                 .state_in_first_struct
                 .get(state)
-                .map_err(|e| Error::ModuleError(e.into()))?
+                .map_err(|e| anyhow::anyhow!(e))?
                 .unwrap())
         }
     }
@@ -108,7 +108,7 @@ pub mod second_test_module {
             Ok(self
                 .state_in_second_struct
                 .get(state)
-                .map_err(|e| Error::ModuleError(e.into()))?
+                .map_err(|e| anyhow::anyhow!(e))?
                 .unwrap())
         }
     }
@@ -199,9 +199,10 @@ pub mod third_test_module {
             &self,
             state: &mut WorkingSet<S>,
         ) -> Result<Option<OtherGeneric>, Error> {
-            self.state_in_third_struct
+            Ok(self
+                .state_in_third_struct
                 .get(state)
-                .map_err(|e| Error::ModuleError(e.into()))
+                .map_err(|e| anyhow::anyhow!(e))?)
         }
     }
 
