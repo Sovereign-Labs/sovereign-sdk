@@ -15,6 +15,8 @@ services:
       start_period: 10s
     # uncomment to provide amount of sequencers to provision (default: 1)
     # command: [ "/opt/entrypoint.sh", "2" ]
+    ports:
+      - "127.0.0.1:9090:9090"
     volumes:
       - type: bind
         source: ./credentials

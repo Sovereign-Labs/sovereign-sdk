@@ -1,5 +1,5 @@
+use celestia_client::tx::TxInfo;
 use celestia_types::row_namespace_data::NamespaceData;
-use celestia_types::state::RawTxResponse;
 use sov_metrics::Metric;
 use std::fmt::Formatter;
 use std::io::Write;
@@ -77,9 +77,7 @@ impl Metric for GetBlockMeasurement {
 
 #[derive(Debug)]
 pub struct SuccessfulSubmitMeasurement {
-    pub da_height: i64,
-    pub gas_used: i64,
-    pub response_code: u32,
+    pub da_height: u64,
 }
 
 #[derive(Debug)]
@@ -95,7 +93,7 @@ pub(crate) struct BlobSubmitMeasurement {
 impl BlobSubmitMeasurement {
     pub fn new(
         namespace: RollupNamespace,
-        result: &Result<RawTxResponse, jsonrpsee::core::ClientError>,
+        result: &celestia_client::Result<TxInfo>,
         bytes: usize,
         lock_acquisition_time: std::time::Duration,
         submit_time: std::time::Duration,
@@ -103,9 +101,7 @@ impl BlobSubmitMeasurement {
     ) -> Self {
         let success_metrics = match result {
             Ok(r) => Some(SuccessfulSubmitMeasurement {
-                da_height: r.height,
-                gas_used: r.gas_used,
-                response_code: r.code,
+                da_height: r.height.value(),
             }),
             Err(_err) => None,
         };
@@ -140,11 +136,7 @@ impl Metric for BlobSubmitMeasurement {
             self.total_time.as_micros(),
         )?;
         if let Some(success_metrics) = &self.success_metrics {
-            write!(
-                buffer,
-                ",status_code={},height={},gas_used={}",
-                success_metrics.response_code, success_metrics.da_height, success_metrics.gas_used,
-            )?;
+            write!(buffer, ",height={}", success_metrics.da_height,)?;
         }
 
         Ok(())

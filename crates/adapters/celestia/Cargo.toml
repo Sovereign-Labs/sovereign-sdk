@@ -20,8 +20,10 @@ bech32 = { workspace = true }
 prost = "0.13"
 
 # Upgrade with care. The new version might be incompatible and require run of soak tests
+# TODO: Remove celestia-rpc when migration to client completed.
 celestia-rpc = { version = "0.14.0", default-features = false, optional = true }
 celestia-types = { version = "0.16.0", default-features = false }
+celestia-client = { version = "0.2.0", optional = true }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
@@ -56,6 +58,12 @@ sov-rollup-interface = { workspace = true }
 
 [dev-dependencies]
 postcard = { version = "1", features = ["use-std"] }
+bip39 = { version = "2.2.0", features = ["default", "zeroize"] }
+bip32 = { version = "0.5.3" }
+bcrypt = { version = "0.15" }
+xsalsa20poly1305 = { version = "0.9" }
+base64 = { version = "0.22" }
+sha2 = { version = "0.10" }
 reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
@@ -78,6 +86,7 @@ native = [
     "backon",
     "tendermint/default",
     "dep:celestia-rpc",
+    "dep:celestia-client",
     "dep:futures",
     "dep:jsonrpsee",
     "dep:tokio",

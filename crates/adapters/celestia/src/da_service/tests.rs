@@ -7,7 +7,7 @@ use celestia_types::nmt::Namespace;
 use serde_json::{json, Value};
 use sov_rollup_interface::da::{DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
-use wiremock::matchers::{bearer_token, body_partial_json, method, path};
+use wiremock::matchers::{body_partial_json, method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 use crate::config::default_request_timeout_seconds;
@@ -73,8 +73,7 @@ async fn setup_service(
         .map(|t| NonZero::new(t).unwrap())
         .unwrap_or_else(default_request_timeout_seconds);
     let mut config = CelestiaConfig::dev_config(&mock_server.uri());
-    config.signer_address = Some(address);
-    config.celestia_rpc_timeout_seconds = timeout_sec;
+    config.request_timeout_secs = timeout_sec;
 
     let da_service = CelestiaService::new(config.clone(), params).await;
 
@@ -92,21 +91,18 @@ struct BasicJsonRpcRequest {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
-    let (mock_server, config, da_service) = setup_test_service(None, rollup_params).await;
+    let (mock_server, _config, da_service) = setup_test_service(None, rollup_params).await;
+
+    let signer = da_service.get_signer().await;
 
     let blob = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
-    let raw_blob = raw_blob_from_data(
-        rollup_params.rollup_batch_namespace,
-        blob.clone(),
-        config.signer_address.as_ref().unwrap(),
-    );
-    let tx_config = celestia_rpc::TxConfig::default();
+    let raw_blob = raw_blob_from_data(rollup_params.rollup_batch_namespace, blob.clone(), &signer);
+    let tx_config = celestia_client::tx::TxConfig::default();
 
     let expected_tx_hash = "05D9016060072AA71B007A6CFB1B895623192D6616D513017964C3BFCD047282";
     Mock::given(method("POST"))
         .and(path("/"))
-        .and(bearer_token(config.celestia_rpc_auth_token))
         .and(body_partial_json(json!({
                 "method": "state.SubmitPayForBlob",
                 "params": [
@@ -563,20 +559,20 @@ async fn verification_fails_for_incorrect_namespace() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_proof() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
-    let (mock_server, config, da_service) = setup_test_service(None, rollup_params).await;
+    let (mock_server, _config, da_service) = setup_test_service(None, rollup_params).await;
 
     let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+    let signer = da_service.get_signer().await;
 
     let raw_blob = raw_blob_from_data(
         rollup_params.rollup_proof_namespace,
         zk_proof.clone(),
-        config.signer_address.as_ref().unwrap(),
+        &signer,
     );
-    let tx_config = celestia_rpc::TxConfig::default();
+    let tx_config = celestia_client::tx::TxConfig::default();
 
     Mock::given(method("POST"))
         .and(path("/"))
-        .and(bearer_token(config.celestia_rpc_auth_token))
         .and(body_partial_json(json!({
                 "method": "state.SubmitPayForBlob",
                 "params": [

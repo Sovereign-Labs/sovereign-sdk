@@ -3,29 +3,42 @@ use std::num::NonZero;
 
 use schemars::JsonSchema;
 
-use crate::verifier::address::CelestiaAddress;
-
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct CelestiaConfig {
-    /// The JWT used to authenticate with the Celestia RPC server
-    pub celestia_rpc_auth_token: String,
     /// The address of the Celestia RPC server
-    #[serde(default = "default_rpc_addr")]
-    pub celestia_rpc_address: String,
+    /// ws://localhost:26658
+    #[serde(default = "default_rpc_addr", alias = "celestia_rpc_address")]
+    pub rpc_url: String,
+    /// TODO: Docs
+    #[serde(alias = "celestia_rpc_auth_token")]
+    pub rpc_auth_token: Option<String>,
+
+    /// http://localhost:9090
+    pub grpc_url: Option<String>,
+
+    /// TODO
+    pub grpc_auth_token: Option<String>,
+
+    /// Now hex, later seed phrase and file.
+    pub signer_private_key: Option<String>,
     /// The maximum size of a Celestia RPC response, in bytes
-    #[serde(default = "default_max_response_size")]
-    pub max_celestia_response_body_size: NonZero<u32>,
-    /// The timeout for a Celestia RPC request, in seconds
-    #[serde(default = "default_request_timeout_seconds")]
-    pub celestia_rpc_timeout_seconds: NonZero<u64>,
+    /// TODO: Currently unused, because celestia client does not expose such params
+    #[serde(
+        default = "default_max_response_size",
+        alias = "max_celestia_response_body_size"
+    )]
+    pub max_response_body_size: NonZero<u32>,
+    /// The timeout for a Celestia RPC request, in seconds.
+    /// TODO: Currently unused, because celestia client does not expose such params
+    #[serde(
+        default = "default_request_timeout_seconds",
+        alias = "celestia_rpc_timeout_seconds"
+    )]
+    pub request_timeout_secs: NonZero<u64>,
     /// See [`sov_rollup_interface::node::da::DaService::safe_lead_time`].
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
-    /// The sequencer address that will be used as the signer for the blobs.
-    /// CelestiaService fetches the signer address from the Celestia RPC server.
-    /// Set it only to ensure that the target node runs with correct credentials.
-    pub signer_address: Option<CelestiaAddress>,
 
     /// Default is medium.
     pub tx_priority: Option<TxPriority>,
@@ -55,12 +68,12 @@ pub enum TxPriority {
     High,
 }
 
-impl From<TxPriority> for celestia_rpc::TxPriority {
+impl From<TxPriority> for celestia_client::tx::TxPriority {
     fn from(value: TxPriority) -> Self {
         match value {
-            TxPriority::Low => celestia_rpc::TxPriority::Low,
-            TxPriority::Medium => celestia_rpc::TxPriority::Medium,
-            TxPriority::High => celestia_rpc::TxPriority::High,
+            TxPriority::Low => celestia_client::tx::TxPriority::Low,
+            TxPriority::Medium => celestia_client::tx::TxPriority::Medium,
+            TxPriority::High => celestia_client::tx::TxPriority::High,
         }
     }
 }
@@ -80,18 +93,57 @@ impl CelestiaConfig {
     #[cfg(test)]
     pub(crate) fn dev_config(url: &str) -> Self {
         Self {
-            celestia_rpc_auth_token: "TEST".to_string(),
-            celestia_rpc_address: url.to_string(),
+            rpc_auth_token: None,
+            grpc_auth_token: None,
+            rpc_url: url.to_string(),
+            grpc_url: None,
+            signer_private_key: None,
             max_celestia_response_body_size: NonZero::new(1024 * 1024 * 100).unwrap(),
-            celestia_rpc_timeout_seconds: NonZero::new(120).unwrap(),
+            request_timeout_secs: NonZero::new(120).unwrap(),
             safe_lead_time_ms: 500,
-            signer_address: None,
             tx_priority: None,
             backoff_min_delay_ms: 50,
             backoff_max_delay_ms: 100,
             backoff_max_times: 3,
             backoff_factor: default_factor(),
         }
+    }
+
+    /// Gets auth token from parsed config or from `SOV_CELESTIA_GRPC_AUTH_TOKEN` environment variable.
+    /// Returns None if both are unset.
+    /// Config value has priority over environment variable.
+    fn grpc_auth_token(&self) -> Option<String> {
+        self.grpc_auth_token
+            .clone()
+            .or_else(|| std::env::var("SOV_CELESTIA_GRPC_AUTH_TOKEN").ok())
+    }
+
+    /// Gets auth token from parsed config or from `SOV_CELESTIA_RPC_AUTH_TOKEN` environment variable
+    /// Returns None if both are unset.
+    /// Config value has priority over environment variable.
+    fn rpc_auth_token(&self) -> Option<String> {
+        self.rpc_auth_token
+            .clone()
+            .or_else(|| std::env::var("SOV_CELESTIA_RPC_AUTH_TOKEN").ok())
+    }
+
+    pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
+        let mut builder = celestia_client::Client::builder().rpc_url(&self.rpc_url);
+        if let Some(rpc_auth_token) = self.rpc_auth_token() {
+            builder = builder.rpc_auth_token(&rpc_auth_token);
+        }
+        // Submission section.
+        if let Some(grpc_url) = &self.grpc_url {
+            builder = builder.grpc_url(grpc_url);
+        }
+        if let Some(grpc_auth_token) = self.grpc_auth_token() {
+            builder = builder.grpc_metadata("x-token", &grpc_auth_token);
+        }
+        if let Some(signer_key_hex) = &self.signer_private_key {
+            builder = builder.private_key_hex(signer_key_hex);
+        }
+
+        builder.build().await.map_err(Into::into)
     }
 }
 
