@@ -19,12 +19,6 @@ use thiserror::Error;
 
 use crate::handlers::ETH_RPC_ERROR;
 
-#[derive(Debug, Clone, serde::Deserialize)]
-struct EthSubscribe {
-    kind: SubscriptionKind,
-    params: Params,
-}
-
 pub async fn eth_subscribe<S, Seq>(
     parameters: JRpcParams<'static>,
     pending: PendingSubscriptionSink,
@@ -37,8 +31,10 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let eth_subscribe = parameters.parse::<EthSubscribe>()?;
-    let log_filter = match validate_params_for_log_subscription(eth_subscribe) {
+    let (kind, params): (SubscriptionKind, Option<Params>) = parameters.parse()?;
+    let params = params.unwrap_or(Params::None);
+
+    let log_filter = match validate_params_for_log_subscription(kind, params) {
         Ok(log_filter) => log_filter,
         Err(e) => {
             let rpc_err = to_jsonrpsee_error_object(e, ETH_RPC_ERROR);
@@ -159,12 +155,13 @@ enum ParamsValidationError {
 }
 
 fn validate_params_for_log_subscription(
-    eth_subscribe: EthSubscribe,
+    kind: SubscriptionKind,
+    params: Params,
 ) -> Result<Box<Filter>, ParamsValidationError> {
-    if eth_subscribe.kind != SubscriptionKind::Logs {
+    if kind != SubscriptionKind::Logs {
         return Err(ParamsValidationError::OnlyLogSubscription);
     }
-    match eth_subscribe.params {
+    match params {
         Params::Logs(filter) => {
             if filter.block_option == FilterBlockOption::default() {
                 Ok(filter)
