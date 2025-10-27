@@ -52,12 +52,7 @@ async fn ws_subscribe_new_heads() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_ws_client(rollup.http_addr).await;
 
-    let err = client.subscribe_blocks().await.unwrap_err();
-    let RpcError::ErrorResp(payload) = err else {
-        panic!("Expected subscription error")
-    };
-    let data = payload.data.unwrap();
-    assert_eq!(data.get(), "\"Only LOG subscriptions are supported\"");
+    let _ = timeout(Duration::from_secs(1), client.subscribe_blocks()).await??;
 
     Ok(())
 }
