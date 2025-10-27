@@ -92,8 +92,10 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let start = std::time::Instant::now();
         let StateOverlay { user, kernel } = overlay;
         // Status should be completed before committing.
+        // In release builds we must enforce this invariant at runtime to avoid committing from an unsafe state.
         let flag_prepare_start = std::time::Instant::now();
-        debug_assert_eq!(self.commit_flag.read_status()?, CommitStatus::Completed);
+        let status = self.commit_flag.read_status()?;
+        anyhow::ensure!(status == CommitStatus::Completed, "Commit flag must be Completed before committing");
 
         let in_progress_commit_status = CommitStatus::InProgress(kernel.root().into_inner());
         let flag_prepare = flag_prepare_start.elapsed();
