@@ -22,13 +22,6 @@ pub struct CelestiaConfig {
 
     /// Now hex, later seed phrase and file.
     pub signer_private_key: Option<String>,
-    /// The maximum size of a Celestia RPC response, in bytes
-    /// TODO: Currently unused, because celestia client does not expose such params
-    #[serde(
-        default = "default_max_response_size",
-        alias = "max_celestia_response_body_size"
-    )]
-    pub max_response_body_size: NonZero<u32>,
     /// The timeout for a Celestia RPC request, in seconds.
     /// TODO: Currently unused, because celestia client does not expose such params
     #[serde(
@@ -98,7 +91,6 @@ impl CelestiaConfig {
             rpc_url: url.to_string(),
             grpc_url: None,
             signer_private_key: None,
-            max_celestia_response_body_size: NonZero::new(1024 * 1024 * 100).unwrap(),
             request_timeout_secs: NonZero::new(120).unwrap(),
             safe_lead_time_ms: 500,
             tx_priority: None,
@@ -153,11 +145,6 @@ fn default_safe_lead_time_ms() -> u64 {
 
 fn default_rpc_addr() -> String {
     "http://localhost:11111/".into()
-}
-
-fn default_max_response_size() -> NonZero<u32> {
-    // 100 MiB
-    NonZero::new(1024 * 1024 * 100).unwrap()
 }
 
 // Exponential backoff defaults:
