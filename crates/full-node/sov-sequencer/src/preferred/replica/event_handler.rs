@@ -49,9 +49,18 @@ where
     #[allow(clippy::match_same_arms)]
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         let res: Result<(), ReplicaError<S>> = match data {
-            DbData::BatchStart(_) => Ok(()),
-            DbData::Transaction(_, _, _) => Ok(()),
-            DbData::BatchEnd(_) => Ok(()),
+            DbData::BatchStart(batch_to_store) => {
+                self.do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
+                    .await
+            }
+            DbData::Transaction(seq, tx, tx_hash) => {
+                self.do_new_tx_msg_replica(seq, tx_hash, tx, "replica_new_tx")
+                    .await
+            }
+            DbData::BatchEnd(batch_to_store) => {
+                self.close_current_batch_msg_replica(batch_to_store, "replica_close_batch")
+                    .await
+            }
             DbData::NewProof => Ok(()),
         };
 

@@ -33,8 +33,8 @@ mod authenticate;
 #[cfg(feature = "native")]
 mod helpers;
 
-use alloy_primitives::U256;
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{Address, BlockHash, B256};
+use alloy_primitives::{BlockNumber, U256};
 pub use authenticate::{
     authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
 };
@@ -82,6 +82,10 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
 
+    /// Mapping from block number to block hash. Used by EVM blockhash opcode. Contains only last 256 values.
+    #[state]
+    pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
+
     /// Chain configuration. This field is set in genesis.
     #[state]
     pub(crate) cfg: StateValue<EvmRuntimeConfig, BcsCodec>,
@@ -127,7 +131,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]
-    pub block_hashes: AccessoryStateMap<B256, u64, BcsCodec>,
+    pub block_hash_to_number: AccessoryStateMap<B256, u64, BcsCodec>,
 
     /// Used only by the RPC: transaction_hash => transaction_index mapping.
     #[state]

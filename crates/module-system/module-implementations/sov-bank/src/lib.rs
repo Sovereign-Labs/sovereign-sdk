@@ -120,6 +120,9 @@ impl<S: Spec> Module for Bank<S> {
             call::CallMessage::Transfer { to, coins } => {
                 Ok(self.transfer(&to, coins, context, state)?)
             }
+            call::CallMessage::TransferWithMemo { to, coins, memo } => {
+                Ok(self.transfer_with_memo(&to, coins, Some(memo.into()), context, state)?)
+            }
             call::CallMessage::Burn { coins } => Ok(self.burn_from_eoa(coins, context, state)?),
             call::CallMessage::Mint {
                 coins,

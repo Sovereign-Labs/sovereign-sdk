@@ -50,7 +50,76 @@ fn transfer_token_happy_path() {
                     coins: Coins {
                         amount: TRANSFER_AMOUNT,
                         token_id
-                    }
+                    },
+                    memo: None,
+                })
+            );
+
+            assert_eq!(
+                Bank::<S>::default()
+                    .get_balance_of(&user_no_token_balance_address, token_id, state)
+                    .unwrap_infallible(),
+                Some(TRANSFER_AMOUNT)
+            );
+
+            assert_eq!(
+                Bank::<S>::default()
+                    .get_balance_of(&user_high_token_balance_address, token_id, state)
+                    .unwrap_infallible(),
+                Some(
+                    user_high_token_initial_balance
+                        .checked_sub(TRANSFER_AMOUNT)
+                        .unwrap()
+                )
+            );
+        }),
+    });
+}
+
+/// Tests the happy path of a transfer call with a memo. Transfer a given amount of tokens from a user with a high balance to another user.
+#[test]
+fn transfer_token_with_memo_happy_path() {
+    let (
+        TestData {
+            token_id,
+            token_name,
+            user_high_token_balance,
+            user_no_token_balance,
+            ..
+        },
+        mut runner,
+    ) = setup();
+
+    let user_high_token_balance_address = user_high_token_balance.address();
+    let user_high_token_initial_balance =
+        user_high_token_balance.token_balance(&token_name).unwrap();
+
+    let user_no_token_balance_address = user_no_token_balance.address();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user_high_token_balance.create_plain_message::<RT, Bank<S>>(
+            CallMessage::TransferWithMemo {
+                to: user_no_token_balance_address,
+                coins: Coins {
+                    amount: TRANSFER_AMOUNT,
+                    token_id,
+                },
+                memo: "test memo".try_into().unwrap(),
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            assert_eq!(result.events.len(), 1);
+            assert_eq!(
+                result.events[0],
+                TestBankRuntimeEvent::Bank(sov_bank::event::Event::TokenTransferred {
+                    from: TokenHolder::User(user_high_token_balance_address),
+                    to: TokenHolder::User(user_no_token_balance_address),
+                    coins: Coins {
+                        amount: TRANSFER_AMOUNT,
+                        token_id
+                    },
+                    memo: Some("test memo".to_string()),
                 })
             );
 
@@ -277,7 +346,8 @@ fn transfer_receiver_does_not_have_balance() {
                     coins: Coins {
                         amount: TRANSFER_AMOUNT,
                         token_id
-                    }
+                    },
+                    memo: None,
                 })
             );
 
@@ -347,7 +417,8 @@ fn transfer_sender_equals_receiver_zero_balance() {
                     coins: Coins {
                         amount: zero,
                         token_id
-                    }
+                    },
+                    memo: None,
                 })
             );
         }),
@@ -406,7 +477,8 @@ fn transfer_sender_equals_receiver() {
                     TestBankRuntimeEvent::Bank(sov_bank::event::Event::TokenTransferred {
                         from: TokenHolder::User(sender_address),
                         to: TokenHolder::User(sender_address),
-                        coins: Coins { amount, token_id }
+                        coins: Coins { amount, token_id },
+                        memo: None,
                     })
                 );
             }),
@@ -449,7 +521,8 @@ fn transfer_send_zero_amount() {
                     coins: Coins {
                         amount: Amount::ZERO,
                         token_id
-                    }
+                    },
+                    memo: None,
                 })
             );
         }),
@@ -493,7 +566,8 @@ fn test_transfer_gas_token() {
                     coins: Coins {
                         amount: TRANSFER_AMOUNT,
                         token_id: config_gas_token_id()
-                    }
+                    },
+                    memo: None,
                 })
             );
 

@@ -9,6 +9,7 @@ use alloy_rpc_types_trace::geth::{
 };
 use revm::context::result::ExecResultAndState;
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
+use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{ApiStateAccessor, Spec};
@@ -16,7 +17,6 @@ use sov_rpc_eth_types::EthApiError;
 
 use super::maybe_archival_state::MaybeArchivalState;
 use crate::conversions::replay_tx_env;
-use crate::db::commit::FallibleDatabaseCommit;
 use crate::db::EvmDb;
 use crate::evm::primitive_types::{MaybeSealedBlock, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
@@ -179,7 +179,7 @@ where
                     let gas_limit = tx_env.gas_limit;
                     let ExecResultAndState { result, state } =
                         inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
-                    db.commit(state)?;
+                    db.try_commit(state)?;
 
                     inspector.set_transaction_gas_limit(gas_limit);
                     let frame = inspector

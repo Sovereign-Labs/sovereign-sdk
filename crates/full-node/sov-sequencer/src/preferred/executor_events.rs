@@ -281,6 +281,10 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .chain(maybe_in_progress_batch)
             .collect::<Vec<_>>()
     }
+
+    pub fn clean_all_batches_from_cache(&mut self) {
+        self.cache.clean_all_batches();
+    }
 }
 
 #[derive(strum::IntoStaticStr)]

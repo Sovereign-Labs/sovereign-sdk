@@ -289,6 +289,11 @@ impl PreferredSequencerCache {
         blob_id
     }
 
+    pub fn clean_all_batches(&mut self) {
+        self.completed_blobs.clear();
+        self.in_progress_batch = None;
+    }
+
     pub async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
