@@ -1106,7 +1106,7 @@ impl<S: Spec> BlobStorage<S> {
         if let Some(encryption_layer) = encryption_layer {
             // Encryption layer exists - try encrypted deserialization path
             if let Some(encrypted_batch) = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
-                blob, charge_for_deserialization, true, state,
+                blob, charge_for_deserialization.map(|(seq, price)| (seq, *price)), true, state,
             ) {
                 // Decrypt the transaction data
                 match encryption_layer.decrypt(&encrypted_batch.encrypted_txs_data) {
@@ -1133,7 +1133,7 @@ impl<S: Spec> BlobStorage<S> {
         } else {
             // No encryption layer - try unencrypted deserialization path
             if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
-                blob, charge_for_deserialization, false, state,
+                blob, charge_for_deserialization.map(|(seq, price)| (seq, *price)), false, state,
             ) {
                 return Some(batch);
             }
