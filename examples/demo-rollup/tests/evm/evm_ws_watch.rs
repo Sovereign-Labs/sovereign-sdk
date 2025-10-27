@@ -28,3 +28,14 @@ async fn ws_watch_returns_receipt() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_subscribe_new_heads() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    let client = alloy_ws_client(rollup.http_addr).await;
+
+    let _ = timeout(Duration::from_secs(1), client.subscribe_blocks()).await??;
+
+    Ok(())
+}
