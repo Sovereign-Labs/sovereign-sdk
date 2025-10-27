@@ -1,21 +1,21 @@
+use crate::handlers::subscribe::service::ParamsValidationError;
+use crate::handlers::subscribe::service::Streamer;
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 use alloy_rpc_types::pubsub::Params;
 use alloy_rpc_types::pubsub::SubscriptionKind;
-use alloy_rpc_types::Filter;
 use alloy_rpc_types::FilterBlockOption;
 use jsonrpsee::types::Params as JRpcParams;
+use jsonrpsee::Extensions;
 use jsonrpsee::PendingSubscriptionSink;
-use jsonrpsee::SubscriptionMessage;
-use jsonrpsee::{Extensions, SubscriptionSink};
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::Evm;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
-use thiserror::Error;
+
+mod service;
 
 use crate::handlers::ETH_RPC_ERROR;
 
@@ -35,142 +35,63 @@ where
     let kind: SubscriptionKind = parameters.next()?;
     let params: Params = parameters.optional_next()?.unwrap_or_default();
 
-    let log_filter = match validate_params_for_log_subscription(kind, params) {
-        Ok(log_filter) => log_filter,
-        Err(e) => {
-            let rpc_err = to_jsonrpsee_error_object(e, ETH_RPC_ERROR);
+    match kind {
+        SubscriptionKind::NewHeads => {
+            // NewHeads doesn't accept parameters
+            if params != Params::None {
+                let rpc_err = to_jsonrpsee_error_object(
+                    ParamsValidationError::NewHeadsDoesNotAcceptParams,
+                    ETH_RPC_ERROR,
+                );
+                pending.reject(rpc_err).await;
+                return Ok(());
+            }
+
+            let accepted_sink = pending.accept().await?;
+            tokio::spawn(async move {
+                Streamer::new(accepted_sink, ethereum.clone())
+                    .blocks()
+                    .await;
+            });
+        }
+        SubscriptionKind::Logs => {
+            let filter = match params {
+                Params::Logs(filter) => {
+                    if filter.block_option == FilterBlockOption::default() {
+                        Ok(filter)
+                    } else {
+                        Err(ParamsValidationError::BlockOptionParam)
+                    }
+                }
+                Params::Bool(_) => Err(ParamsValidationError::BoolParam),
+                Params::None => Ok(Default::default()),
+            };
+            let log_filter = match filter {
+                Ok(log_filter) => log_filter,
+                Err(e) => {
+                    let rpc_err = to_jsonrpsee_error_object(e, ETH_RPC_ERROR);
+                    pending.reject(rpc_err).await;
+                    return Ok(());
+                }
+            };
+
+            let accepted_sink = pending.accept().await?;
+            tokio::spawn(async move {
+                Streamer::new(accepted_sink, ethereum.clone())
+                    .logs(log_filter)
+                    .await;
+            });
+        }
+        _ => {
+            // NewPendingTransactions not supported
+            let rpc_err = to_jsonrpsee_error_object(
+                ParamsValidationError::OnlyLogAndNewHeadsSubscription,
+                ETH_RPC_ERROR,
+            );
             pending.reject(rpc_err).await;
             return Ok(());
         }
-    };
-
-    let accepted_sink = pending.accept().await?;
-
-    let _task = tokio::spawn(async move {
-        stream_logs(accepted_sink, log_filter, ethereum.clone()).await;
-    });
+    }
 
     Ok(())
-}
-
-async fn stream_logs<S, Seq>(
-    accepted_sink: SubscriptionSink,
-    filter: Box<Filter>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-) where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    let evm = Evm::<S>::default();
-    let state = &mut ethereum.api_state_accessor();
-
-    let pending_block = evm.pending_block(state);
-    let mut prev_last_tx_index = pending_block.transactions.end;
-
-    // Fetch the initial block. If it’s stale, it will be replaced below.
-    let start_block = pending_block.header.number - 1;
-    let Some(mut block) = evm.get_maybe_sealed_block(start_block, state) else {
-        tracing::error!(start_block, "Block does not exist");
-        return;
-    };
-
-    let state_updates = &mut ethereum.sequencer.api_state().checkpoint_receiver();
-
-    while state_updates.changed().await.is_ok() {
-        let state = &mut ethereum.api_state_accessor();
-
-        let pending_block = evm.pending_block(state);
-        let curr_last_tx_index = pending_block.transactions.end;
-
-        if curr_last_tx_index <= prev_last_tx_index {
-            continue;
-        }
-
-        for index in prev_last_tx_index..curr_last_tx_index {
-            let Some(receipt) = evm.receipt(index, state) else {
-                // This can happen if the state was pruned.
-                tracing::error!(index, "Receipt does not exist");
-                return;
-            };
-
-            if block.number() != receipt.block_number {
-                match evm.get_maybe_sealed_block(receipt.block_number, state) {
-                    Some(b) => block = b,
-                    None => {
-                        tracing::error!(
-                            block_number = receipt.block_number,
-                            "Block does not exist"
-                        );
-                        return;
-                    }
-                }
-            }
-
-            let transaction_index = index - block.transactions_start();
-
-            for (log_index_in_tx, log) in receipt.receipt.logs.into_iter().enumerate() {
-                if filter.matches(&log) {
-                    let rpc_log = alloy_rpc_types::Log {
-                        inner: log,
-                        block_hash: block.hash(),
-                        block_number: Some(block.number()),
-                        block_timestamp: Some(block.timestamp()),
-                        transaction_hash: Some(receipt.transaction_hash),
-                        transaction_index: Some(receipt.transaction_index),
-                        log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
-                        removed: false,
-                    };
-
-                    assert_eq!(receipt.transaction_index, transaction_index);
-
-                    let msg = SubscriptionMessage::new(
-                        accepted_sink.method_name(),
-                        accepted_sink.subscription_id(),
-                        &rpc_log,
-                    )
-                    .unwrap_or_else(|err| {
-                        panic!("Impossible: can't serialize log. Log: {rpc_log:?}, Err: {err:?}",)
-                    });
-
-                    if let Err(err) = accepted_sink.send(msg).await {
-                        tracing::info!(%err, "The subscription client disconnected from the server.");
-                        return;
-                    }
-                }
-            }
-        }
-        prev_last_tx_index = curr_last_tx_index;
-    }
-}
-
-#[derive(Error, Debug)]
-enum ParamsValidationError {
-    #[error("Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor")]
-    BlockOptionParam,
-    #[error("Boolean parameters are not supported in LOG subscriptions")]
-    BoolParam,
-    #[error("Only LOG subscriptions are supported")]
-    OnlyLogSubscription,
-}
-
-fn validate_params_for_log_subscription(
-    kind: SubscriptionKind,
-    params: Params,
-) -> Result<Box<Filter>, ParamsValidationError> {
-    if kind != SubscriptionKind::Logs {
-        return Err(ParamsValidationError::OnlyLogSubscription);
-    }
-    match params {
-        Params::Logs(filter) => {
-            if filter.block_option == FilterBlockOption::default() {
-                Ok(filter)
-            } else {
-                Err(ParamsValidationError::BlockOptionParam)
-            }
-        }
-        Params::Bool(_) => Err(ParamsValidationError::BoolParam),
-        Params::None => Ok(Default::default()),
-    }
 }
