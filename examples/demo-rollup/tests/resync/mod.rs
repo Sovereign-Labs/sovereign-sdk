@@ -11,7 +11,7 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
 use demo_stf_json_client::types::RuntimeAnyJsonValue;
-use full_node_configs::sequencer::SequencerKindConfig;
+use sov_full_node_configs::sequencer::SequencerKindConfig;
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};

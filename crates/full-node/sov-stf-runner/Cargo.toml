@@ -25,7 +25,7 @@ borsh = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-full-node-configs = { workspace = true }
+sov-full-node-configs = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 tokio = { workspace = true, features = ["net", "sync", "rt-multi-thread", "time"] }
 hex = { workspace = true }

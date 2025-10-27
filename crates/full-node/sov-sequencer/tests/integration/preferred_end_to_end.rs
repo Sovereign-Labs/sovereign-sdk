@@ -10,7 +10,7 @@ use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
-use full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
+use sov_full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use futures::future;
 use serde_json::Number;
 use sov_api_spec::types::{

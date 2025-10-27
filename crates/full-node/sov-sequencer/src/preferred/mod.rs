@@ -23,7 +23,7 @@ use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
 use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
-pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
+pub use sov_full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use futures::Stream;
 use inner::*;
 use preferred_blob_sender::PreferredBlobSender;

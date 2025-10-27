@@ -411,7 +411,7 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
-name = "full-node-configs"
+name = "sov-full-node-configs"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

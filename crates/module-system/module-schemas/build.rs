@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use full_node_configs::runner::RollupConfig;
+use sov_full_node_configs::runner::RollupConfig;
 use schemars::schema_for;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::verifier::MockDaSpec;
