@@ -66,7 +66,10 @@ impl<S: Spec> BankMessageGenerator<S> {
         validity: MessageValidity,
     ) -> InternalMessageGenResult<GeneratedMessage<S, CallMessage<S>, BankChangeLogEntry<S>>> {
         match (message_type, validity) {
-            (CallMessageDiscriminants::Transfer, MessageValidity::Valid) => {
+            (
+                CallMessageDiscriminants::Transfer | CallMessageDiscriminants::TransferWithMemo,
+                MessageValidity::Valid,
+            ) => {
                 match self
                     .generate_valid_transfer(u, generator_state)
                     .try_to_arbitrary()
@@ -87,9 +90,10 @@ impl<S: Spec> BankMessageGenerator<S> {
                     }
                 }
             }
-            (CallMessageDiscriminants::Transfer, MessageValidity::Invalid) => {
-                Ok(self.generate_invalid_transfer(u, generator_state)?)
-            }
+            (
+                CallMessageDiscriminants::Transfer | CallMessageDiscriminants::TransferWithMemo,
+                MessageValidity::Invalid,
+            ) => Ok(self.generate_invalid_transfer(u, generator_state)?),
             (CallMessageDiscriminants::CreateToken, MessageValidity::Valid) => {
                 Ok(self.generate_valid_create_token(u, generator_state)?)
             }

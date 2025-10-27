@@ -3,6 +3,7 @@
 - #1966 **Resync breaking change**: Updates the schema generated for the `signature` and `public_key` fields on `Transaction` variants (both V0 and V1) to be byte arrays of the correct length. This is a follow-up on #1877, affecting only the web3 SDK functionality. However, this is a breaking change to the `CHAIN_HASH`, and therefore will invalidate existing transactions.
 
 # 2025-10-22
+- #1951 *Minor breaking change* Adds a new memo field to `Bank::TokenTransfer` events and a new callmessage which can set that field. This change requires resyncing any existing nodes due to the change in event serialization.
 - #1937 Reject log subscriptions with block filters.
 - #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
 The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
