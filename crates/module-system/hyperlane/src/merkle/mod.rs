@@ -38,6 +38,7 @@ impl<S: Spec> Module for MerkleTreeHook<S> {
     type Config = ();
     type CallMessage = ();
     type Event = Event;
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,

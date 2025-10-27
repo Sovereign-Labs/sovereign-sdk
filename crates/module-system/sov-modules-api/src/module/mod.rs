@@ -44,6 +44,9 @@ pub trait Module: Clone {
         + core::marker::Send
         + PartialEq;
 
+    /// Error type returned by module operations.
+    type Error;
+
     /// Genesis is called once when a rollup is deployed.
     ///
     /// You should use this function to initialize all of your module's `StateValue`s and run any other
@@ -86,7 +89,7 @@ pub trait Module: Clone {
         _message: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<Self::Spec>,
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), Self::Error>;
 
     /// Attempts to charge the provided amount of gas from the working set reverting the transaction if unsuccessful.
     ///

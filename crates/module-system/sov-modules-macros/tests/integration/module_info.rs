@@ -42,6 +42,7 @@ mod test_module {
         type Config = ();
         type CallMessage = ();
         type Event = ();
+        type Error = anyhow::Error;
 
         fn call(
             &mut self,
@@ -85,6 +86,7 @@ mod second_test_module {
     impl<S: Spec> Module for SecondTestStruct<S> {
         type Spec = S;
         type Config = ();
+        type Error = anyhow::Error;
         type CallMessage = ();
         type Event = ();
 

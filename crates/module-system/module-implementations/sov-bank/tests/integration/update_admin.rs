@@ -113,12 +113,11 @@ fn test_update_admin() {
             assert: Box::new(move |result, state| {
                 assert!(result.tx_receipt.is_reverted());
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
                     let msg = format!(
                         "`{}` is already a member of the admin list",
                         admins.current_admin.address()
                     );
-                    assert!(err.to_string().contains(&msg));
+                    assert!(contents.reason.to_string().contains(&msg));
                 }
 
                 assert_eq!(get_admins(&token_id, state), admins.original_admins());
@@ -137,12 +136,11 @@ fn test_update_admin() {
             assert: Box::new(move |result, state| {
                 assert!(result.tx_receipt.is_reverted());
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
                     let msg = format!(
                         "Cannot update admin: `{}` is not in the admin list for the specified token Token1",
                         minter.address()
                     );
-                    assert!(err.to_string().contains(&msg));
+                    assert!(contents.reason.to_string().contains(&msg));
                 }
                 assert_eq!(get_admins(&token_id, state), admins.original_admins());
             }),
@@ -179,12 +177,11 @@ fn test_update_admin() {
             assert: Box::new(move |result, state| {
                 assert!(result.tx_receipt.is_reverted());
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
                     let msg = format!(
                         "Cannot update admin: `{}` is not in the admin list for the specified token Token1",
                         admins.current_admin.address()
                     );
-                    assert!(err.to_string().contains(&msg));
+                    assert!(contents.reason.to_string().contains(&msg));
                 }
                 assert_eq!(get_admins(&token_id, state), admins.updated_admins());
             }),

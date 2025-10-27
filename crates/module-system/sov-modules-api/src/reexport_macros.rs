@@ -298,7 +298,7 @@ pub use sov_modules_macros::ModuleInfo;
 /// #        _msg: Self::CallMessage,
 /// #        _context: &Context<Self::Spec>,
 /// #        _state: &mut impl sov_modules_api::state::TxState<S>,
-/// #    ) -> anyhow::Result<()> {
+/// #    ) -> Result<(), Self::Error> {
 /// #        unimplemented!()
 /// #    }
 /// # }
@@ -337,7 +337,7 @@ pub use sov_modules_macros::ModuleInfo;
 /// #        _msg: Self::CallMessage,
 /// #        _context: &Context<Self::Spec>,
 /// #        _state: &mut impl sov_modules_api::state::TxState<S>,
-/// #    ) -> anyhow::Result<()> {
+/// #    ) -> Result<(), Self::Error> {
 /// #        unimplemented!()
 /// #    }
 /// # }
@@ -380,7 +380,7 @@ pub use sov_modules_macros::ModuleInfo;
 /// #        _msg: Self::CallMessage,
 /// #        _context: &Context<Self::Spec>,
 /// #        _state: &mut impl sov_modules_api::state::TxState<S>,
-/// #    ) -> anyhow::Result<()> {
+/// #    ) -> Result<(), Self::Error> {
 /// #        unimplemented!()
 /// #    }
 /// # }

@@ -144,8 +144,10 @@ fn test_update_account_fails() {
         )),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                assert_eq!(err.to_string(), "New CredentialId already exists");
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "New CredentialId already exists"
+                );
             }
         }),
     });
@@ -555,8 +557,10 @@ fn test_disable_custom_account_mappings() {
         )),
         assert: Box::new(move |result, _state| match result.tx_receipt {
             TxEffect::Reverted(contents) => {
-                let Error::ModuleError(err) = contents.reason;
-                assert_eq!(err.to_string(), "Custom account mappings are disabled");
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "Custom account mappings are disabled"
+                );
             }
             _ => panic!("Expected reverted transaction"),
         }),

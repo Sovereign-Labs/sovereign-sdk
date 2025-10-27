@@ -262,13 +262,14 @@ where
     type Config = ();
     type CallMessage = CallMessage<S>;
     type Event = Event<S>;
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::Register {
                 admin,

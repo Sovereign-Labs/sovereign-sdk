@@ -61,6 +61,7 @@ pub mod first_test_module {
         type Config = Config;
         type CallMessage = u8;
         type Event = Event;
+        type Error = anyhow::Error;
 
         fn genesis(
             &mut self,
@@ -131,6 +132,7 @@ pub mod second_test_module {
         type Config = ();
         type CallMessage = u8;
         type Event = Event;
+        type Error = anyhow::Error;
 
         fn genesis(
             &mut self,
@@ -222,6 +224,7 @@ pub mod third_test_module {
         type Config = ();
         type CallMessage = OtherGeneric;
         type Event = Event;
+        type Error = anyhow::Error;
 
         fn genesis(
             &mut self,

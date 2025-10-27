@@ -23,6 +23,7 @@ impl<S: Spec> Module for TestModule<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,

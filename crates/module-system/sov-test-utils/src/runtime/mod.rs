@@ -27,7 +27,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::{ApiState, HasRestApi};
 use sov_modules_api::{
     Amount, ApiStateAccessor, ApplySlotOutput, BlobReaderTrait, CryptoSpec, DaSpec, EncodeCall,
-    Error, Gas, Genesis, InfallibleStateAccessor, Module, PrivateKey, Spec, StateCheckpoint,
+    Gas, Genesis, InfallibleStateAccessor, Module, PrivateKey, Spec, StateCheckpoint,
     TransactionReceipt, TxEffect, VersionReader, VisibleSlotNumber, *,
 };
 use sov_modules_stf_blueprint::{get_gas_used, StfBlueprint};
@@ -989,7 +989,7 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
     if let TxEffect::Reverted(contents) = result {
         assert_eq!(
             &contents.reason,
-            &Error::ModuleError(reason),
+            &reason.into(),
             "The transaction should have reverted because instead the outcome was {contents:?}"
         );
     } else {
