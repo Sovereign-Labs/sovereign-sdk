@@ -31,9 +31,8 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let mut parameters = parameters.sequence();
-    let kind: SubscriptionKind = parameters.next()?;
-    let params: Params = parameters.optional_next()?.unwrap_or_default();
+    let (kind, params): (SubscriptionKind, Option<Params>) = parameters.parse()?;
+    let params = params.unwrap_or(Params::None);
 
     let log_filter = match validate_params_for_log_subscription(kind, params) {
         Ok(log_filter) => log_filter,
