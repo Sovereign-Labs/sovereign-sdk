@@ -1,84 +1,22 @@
-use std::num::NonZero;
 use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Context;
 use celestia_types::nmt::Namespace;
-use serde_json::{json, Value};
+use serde_json::json;
 use sov_rollup_interface::da::{DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
 use wiremock::matchers::{body_partial_json, method, path};
-use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
+use wiremock::{Mock, Request, ResponseTemplate};
 
-use crate::config::default_request_timeout_seconds;
-use crate::da_service::{
-    extract_relevant_blobs, get_extraction_proof, CelestiaConfig, CelestiaService,
-};
+use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
+use crate::test_helper::mock_server::setup_test_service;
+use crate::test_helper::mock_server::RpcIdEchoResponder;
 use crate::test_helper::{raw_blob_from_data, ADDR_1, ADDR_2, ROLLUP_PARAMS_DEV};
 use crate::types::{BlobWithSender, FilteredCelestiaBlock};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
-
-struct RpcIdEchoResponder {
-    response_result: Value,
-}
-
-impl Respond for RpcIdEchoResponder {
-    fn respond(&self, request: &Request) -> ResponseTemplate {
-        let request_body_json: Result<Value, _> = serde_json::from_slice(&request.body);
-
-        let response_id = match request_body_json {
-            Ok(json_value) => json_value.get("id").cloned().unwrap_or(Value::Null),
-            Err(_) => Value::Null,
-        };
-
-        ResponseTemplate::new(200).set_body_json(json!({
-            "id": response_id,
-            "jsonrpc": "2.0",
-            "result": self.response_result
-        }))
-    }
-}
-
-async fn setup_test_service(
-    timeout_sec: Option<u64>,
-    rollup_params: RollupParams,
-) -> (MockServer, CelestiaConfig, CelestiaService) {
-    setup_service(timeout_sec, rollup_params).await
-}
-
-// Last return value is namespace
-async fn setup_service(
-    timeout_sec: Option<u64>,
-    params: RollupParams,
-) -> (MockServer, CelestiaConfig, CelestiaService) {
-    // Start a background HTTP server on a random local port
-    let mock_server = MockServer::start().await;
-
-    let address = CelestiaAddress::from_str(ADDR_1).unwrap();
-
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .and(body_partial_json(json!({
-            "method": "state.AccountAddress"
-        })))
-        .respond_with(RpcIdEchoResponder {
-            response_result: json!(address.to_string()),
-        })
-        .mount(&mock_server)
-        .await;
-
-    let timeout_sec = timeout_sec
-        .map(|t| NonZero::new(t).unwrap())
-        .unwrap_or_else(default_request_timeout_seconds);
-    let mut config = CelestiaConfig::dev_config(&mock_server.uri());
-    config.request_timeout_secs = timeout_sec;
-
-    let da_service = CelestiaService::new(config.clone(), params).await;
-
-    (mock_server, config, da_service)
-}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct BasicJsonRpcRequest {
@@ -475,7 +413,7 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
 async fn test_blobs_from_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_service(None, rollup_params).await;
+    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
     let relevant_blobs = da_service.extract_relevant_blobs(&block);
     assert_eq!(relevant_blobs.batch_blobs.len(), 1);
     assert_eq!(relevant_blobs.proof_blobs.len(), 0);
@@ -485,7 +423,7 @@ async fn test_blobs_from_padded_namespace() {
 async fn verification_for_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_service(None, rollup_params).await;
+    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
     let relevant_blobs = da_service.extract_relevant_blobs(&block);
     let relevant_proofs = da_service

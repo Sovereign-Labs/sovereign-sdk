@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod client;
 #[cfg(test)]
-mod keys;
+pub(crate) mod keys;
 #[cfg(test)]
 mod tests;
 

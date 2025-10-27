@@ -1,4 +1,5 @@
 use super::keys::{read_tendermint_key_file, seed_phrase_to_private_key_cosmos};
+use crate::test_helper::ADDR_1;
 
 const QUICK_NODE_RPC_URL: &str = "wss://a-b-c.celestia-mocha.quiknode.pro/grpc_auth_token";
 const QUICK_NODE_GRPC_URL: &str = "https://a-b-c.celestia-mochaa.quiknode.pro:9090";
@@ -59,7 +60,6 @@ async fn initial_test_quick_node() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn initial_test_local_docker() -> anyhow::Result<()> {
-    let expected_signer_local = "celestia1a68m2l85zn5xh0l07clk4rfvnezhywc53g8x7s";
     let content = include_str!("../../../../../docker/credentials/bridge-0.key");
 
     // Try with "password" first, then "password\n" if that fails
@@ -73,7 +73,7 @@ async fn initial_test_local_docker() -> anyhow::Result<()> {
         .build()
         .await?;
 
-    assert_eq!(expected_signer_local, client.address()?.to_string());
+    assert_eq!(ADDR_1, client.address()?.to_string());
 
     let header = client.header().head().await?;
     println!("HEADER: {header:?}");
