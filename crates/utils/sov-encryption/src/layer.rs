@@ -114,7 +114,7 @@ impl EncryptionLayer {
         // Handle different key client configurations
         let key_listener_handle = match &config.key_client {
             #[cfg(feature = "unix-client")]
-            crate::config::KeyClientConfig::UnixSocket { .. } => {
+            crate::config::KeyClientConfig::UnixSocket { socket_path, .. } => {
                 // Create temporary instance to start listener
                 let temp_layer = Self {
                     key_cache: key_cache.clone(),
@@ -122,8 +122,8 @@ impl EncryptionLayer {
                 };
                 
                 // Start unix socket listener for key pushes
-                let handle = temp_layer.start_key_listener("/var/run/sequencer/keys.sock").await?;
-                info!("Started key listener for unix socket key client");
+                let handle = temp_layer.start_key_listener(socket_path).await?;
+                info!("Started key listener for unix socket key client at {:?}", socket_path);
                 
                 Some(handle)
             }
