@@ -2,6 +2,7 @@ use crate::Ethereum;
 use alloy_consensus::Sealed;
 use alloy_rpc_types::Filter;
 use alloy_rpc_types::Header;
+use jsonrpsee::DisconnectError;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use serde::Serialize;
@@ -35,7 +36,7 @@ where
         Self { sink, ethereum }
     }
 
-    pub async fn logs(&self, filter: Box<Filter>) {
+    pub async fn logs(&self, filter: Box<Filter>) -> Result<(), Error> {
         let evm = Evm::<S>::default();
         let mut state = self.ethereum.api_state_accessor();
 
@@ -46,7 +47,7 @@ where
         let start_block = pending_block.header.number - 1;
         let Some(mut block) = evm.get_maybe_sealed_block(start_block, &mut state) else {
             tracing::error!(start_block, "Block does not exist");
-            return;
+            return Err(Error::BlockDoesNotExist);
         };
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
@@ -65,7 +66,7 @@ where
                 let Some(receipt) = evm.receipt(index, &mut state) else {
                     // This can happen if the state was pruned.
                     tracing::error!(index, "Receipt does not exist");
-                    return;
+                    return Err(Error::ReceiptDoesNotExist);
                 };
 
                 if block.number() != receipt.block_number {
@@ -76,7 +77,7 @@ where
                                 block_number = receipt.block_number,
                                 "Block does not exist"
                             );
-                            return;
+                            return Err(Error::BlockDoesNotExist);
                         }
                     }
                 }
@@ -98,17 +99,16 @@ where
 
                         assert_eq!(receipt.transaction_index, transaction_index);
 
-                        if !self.send_subscription_message(&rpc_log, "log").await {
-                            return;
-                        }
+                        self.send_subscription_message(&rpc_log, "log").await?;
                     }
                 }
             }
             prev_last_tx_index = curr_last_tx_index;
         }
+        Ok(())
     }
 
-    pub async fn blocks(&self) {
+    pub async fn blocks(&self) -> Result<(), Error> {
         let evm = Evm::<S>::default();
         let mut state = self.ethereum.api_state_accessor();
 
@@ -132,20 +132,20 @@ where
             for block_number in (prev_block_number + 1)..=current_block_number {
                 let Some(block) = evm.get_maybe_sealed_block(block_number, &mut state) else {
                     tracing::error!(block_number, "Block does not exist");
-                    return;
+                    return Err(Error::BlockDoesNotExist);
                 };
 
                 let hash = block.hash().unwrap_or_default();
                 let header = Sealed::new_unchecked(block.header().clone(), hash);
                 let rpc_header = Header::from_consensus(header, None, None);
 
-                if !self.send_subscription_message(&rpc_header, "header").await {
-                    return;
-                }
+                self.send_subscription_message(&rpc_header, "header")
+                    .await?;
             }
 
             prev_block_number = current_block_number;
         }
+        Ok(())
     }
 
     /// Helper function to send a message through the subscription sink
@@ -153,18 +153,16 @@ where
         &self,
         data: &T,
         data_type: &str,
-    ) -> bool {
+    ) -> Result<(), DisconnectError> {
         let msg =
             SubscriptionMessage::new(self.sink.method_name(), self.sink.subscription_id(), data)
                 .unwrap_or_else(|err| {
                     panic!("Impossible: can't serialize {data_type}. Data: {data:?}, Err: {err:?}")
                 });
 
-        if let Err(err) = self.sink.send(msg).await {
+        self.sink.send(msg).await.inspect_err(|err| {
             tracing::info!(%err, "The subscription client disconnected from the server.");
-            return false;
-        }
-        true
+        })
     }
 }
 
@@ -178,4 +176,14 @@ pub enum ParamsValidationError {
     OnlyLogAndNewHeadsSubscription,
     #[error("newHeads subscription does not accept parameters")]
     NewHeadsDoesNotAcceptParams,
+}
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Block does not eist")]
+    BlockDoesNotExist,
+    #[error("Receipt does not eist")]
+    ReceiptDoesNotExist,
+    #[error(transparent)]
+    Disconnect(#[from] DisconnectError),
 }

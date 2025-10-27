@@ -51,7 +51,7 @@ where
             tokio::spawn(async move {
                 Streamer::new(accepted_sink, ethereum.clone())
                     .blocks()
-                    .await;
+                    .await
             });
         }
         SubscriptionKind::Logs => {
@@ -79,7 +79,7 @@ where
             tokio::spawn(async move {
                 Streamer::new(accepted_sink, ethereum.clone())
                     .logs(log_filter)
-                    .await;
+                    .await
             });
         }
         _ => {
