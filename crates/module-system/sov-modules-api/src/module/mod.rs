@@ -44,8 +44,8 @@ pub trait Module: Clone {
         + core::marker::Send
         + PartialEq;
 
-    /// Error type returned by module operations.
-    type Error;
+    /// Error type returned by [`Module::call`].
+    type Error: Debug + std::fmt::Display + Send + Sync + 'static;
 
     /// Genesis is called once when a rollup is deployed.
     ///

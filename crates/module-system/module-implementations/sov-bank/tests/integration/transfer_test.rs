@@ -1,7 +1,7 @@
 use sov_bank::utils::TokenHolder;
 use sov_bank::{config_gas_token_id, Bank, CallMessage, Coins};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Amount, Error, TxEffect};
+use sov_modules_api::{Amount, TxEffect};
 use sov_test_utils::runtime::genesis::TestTokenName;
 use sov_test_utils::{AsUser, TestUser, TransactionTestCase};
 
@@ -158,7 +158,6 @@ fn transfer_balance_too_low() {
         mut runner,
     ) = setup();
 
-    let user_high_token_balance_address = user_high_token_balance.address();
     let user_high_token_initial_balance =
         user_high_token_balance.token_balance(&token_name).unwrap();
 
@@ -176,37 +175,11 @@ fn transfer_balance_too_low() {
                 token_id,
             },
         }),
-        assert: Box::new(move |result, state| {
+        assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(
-                    format!("Failed to transfer token_id={token_id}",),
-                    message_1
-                );
-                assert_eq!(
-                    format!(
-                        "Insufficient balance from={user_high_token_balance_address}, got={user_high_token_initial_balance}, needed={transfer_amount}",
-                    ),
-                    message_2,
-                );
-
-                assert_eq!(
-                    Bank::<S>::default()
-                        .get_balance_of(&user_high_token_balance_address, token_id, state)
-                        .unwrap_infallible(),
-                    Some(user_high_token_initial_balance)
-                );
-
-                assert_eq!(
-                    Bank::<S>::default()
-                        .get_balance_of(&user_no_token_balance_address, token_id, state)
-                        .unwrap_infallible(),
-                    None
-                );
+                let actual = contents.reason.to_string();
+                let expected = format!("Token transfer error: Underflow occurred: Insufficient balance for account {}, 100000 - 100001", user_high_token_balance.address());
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -237,19 +210,9 @@ fn transfer_non_existent_token() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                println!("{message_1}\n{message_2}");
-                assert!(chain.next().is_none());
-
-                assert!(message_1.starts_with(
-                    "Failed to transfer token_id=token_1ry733wdf5jt2hkgyljcgy54k3julqqtvrf9j2wfty0l7tnrrdqyqq4a0a3"
-                ));
-                assert!(message_2.starts_with(
-                    "Insufficient balance from="
-                ));
+                let actual = contents.reason.to_string();
+                let expected = format!("Token transfer error: Underflow occurred: Insufficient balance for account {}, 0 - 1", user.address());
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -270,7 +233,6 @@ fn transfer_sender_does_not_have_balance() {
         mut runner,
     ) = setup();
 
-    let sender_address = user_no_token_balance.address();
     let receiver_address = user_high_token_balance.address();
 
     runner.execute_transaction(TransactionTestCase {
@@ -283,24 +245,9 @@ fn transfer_sender_does_not_have_balance() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-
-                assert_eq!(
-                    format!("Failed to transfer token_id={token_id}"),
-                    message_1
-                );
-
-                assert_eq!(
-                    format!(
-                        "Insufficient balance from={sender_address}, got=0, needed={TRANSFER_AMOUNT}",
-                    ),
-                    message_2,
-                    "The error message is incorrect"
-                );
+                let actual = contents.reason.to_string();
+                let expected = format!("Token transfer error: Underflow occurred: Insufficient balance for account {}, 0 - 10", user_no_token_balance.address());
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }

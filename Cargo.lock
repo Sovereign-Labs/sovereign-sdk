@@ -11215,6 +11215,7 @@ dependencies = [
  "proptest",
  "schemars 0.8.22",
  "serde",
+ "serde_json",
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",

@@ -1,7 +1,7 @@
 use sov_accounts::{Accounts, CallMessage, Response};
 use sov_modules_api::transaction::{UnsignedTransaction, Version1};
 use sov_modules_api::{
-    CryptoSpec, Error, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+    CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;

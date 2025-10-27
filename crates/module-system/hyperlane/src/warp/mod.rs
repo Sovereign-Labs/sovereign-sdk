@@ -619,7 +619,7 @@ where
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<TokenId> {
         let holder: DerivedHolder = warp_route.0.into();
-        self.bank.create_token(
+        Ok(self.bank.create_token(
             format!("Synthetic token for {warp_route}"),
             Some(decimals),
             Amount::ZERO,              // No initial balance
@@ -628,7 +628,7 @@ where
             None,                // No supply cap
             holder.to_payable(), // The mint authority is the warp route
             state,
-        )
+        )?)
     }
 
     /// "Enroll" a remote router on another chain. Whenever this route needs to send/receive funds on that chain,

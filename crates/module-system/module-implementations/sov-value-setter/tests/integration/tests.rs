@@ -64,21 +64,21 @@ fn test_setting_value_not_admin() {
             value: 5,
             gas: None,
         }),
-        assert: Box::new(move |_result, _state| {
-            // match &result.tx_receipt {
-            //     sov_modules_api::TxEffect::Reverted(reason) => {
-            //         assert_eq!(
-            //             &reason.reason,
-            //             &SetValueError::<S>::WrongSender {
-            //                 sender: non_admin.address(),
-            //                 admin: admin.address()
-            //             }
-            //             .into(),
-            //             "Transaction reverted, but with unexpected reason"
-            //         );
-            //     }
-            //     unexpected => panic!("Expected transaction to revert, but got: {unexpected:?}"),
-            // };
+        assert: Box::new(move |result, _state| {
+            match &result.tx_receipt {
+                sov_modules_api::TxEffect::Reverted(reason) => {
+                    assert_eq!(
+                        &reason.reason.to_string(),
+                        &SetValueError::<S>::WrongSender {
+                            sender: non_admin.address(),
+                            admin: admin.address()
+                        }
+                        .to_string(),
+                        "Transaction reverted, but with unexpected reason"
+                    );
+                }
+                unexpected => panic!("Expected transaction to revert, but got: {unexpected:?}"),
+            };
         }),
     });
 }

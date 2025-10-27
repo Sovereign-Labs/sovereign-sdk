@@ -2,7 +2,6 @@ use sov_attester_incentives::{CustomError, UnbondingInfo};
 use sov_mock_da::MockAddress;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::RegistrationError;
-use sov_modules_api::Error;
 use sov_modules_api::{Amount, Spec, StateAccessorError};
 use sov_rollup_interface::common::SlotNumber;
 use sov_test_utils::runtime::TestRunner;

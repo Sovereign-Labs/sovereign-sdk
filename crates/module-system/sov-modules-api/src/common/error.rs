@@ -3,7 +3,7 @@
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{ser::Error as _, Deserialize, Serialize};
 
 /// A bech32 address parse error.
 #[derive(Debug, thiserror::Error)]
@@ -19,34 +19,99 @@ pub enum Bech32ParseError {
     WrongLength(usize, usize),
 }
 
-// TODO: Error associated type needs to derive Debug + Display + Serialize + DeserializeOwned + 'static
+/// todo
+#[derive(Debug, thiserror::Error)]
+pub enum CoreModuleError {
+    /// todo
+    #[error(transparent)]
+    Generic(#[from] anyhow::Error),
+    ///todo
+    #[error(transparent)]
+    StateRead(Box<dyn std::error::Error + Send + Sync>),
+    /// TODO
+    #[error(transparent)]
+    StateWrite(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl CoreModuleError {
+    /// todo
+    pub fn state_read<E: std::error::Error + Send + Sync + 'static>(err: E) -> Self {
+        Self::StateRead(Box::new(err))
+    }
+
+    /// TODO
+    pub fn state_write<E: std::error::Error + Send + Sync + 'static>(err: E) -> Self {
+        Self::StateWrite(Box::new(err))
+    }
+}
+
+impl serde::Serialize for CoreModuleError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("CoreModuleError", 2)?;
+
+        match self {
+            CoreModuleError::Generic(e) => {
+                state.serialize_field("error_code", "generic")?;
+                state.serialize_field("message", &e.to_string())?;
+            }
+            CoreModuleError::StateRead(e) => {
+                state.serialize_field("error_code", "state_read")?;
+                state.serialize_field("message", &e.to_string())?;
+            }
+            CoreModuleError::StateWrite(e) => {
+                state.serialize_field("error_code", "state_write")?;
+                state.serialize_field("message", &e.to_string())?;
+            }
+        }
+
+        state.end()
+    }
+}
+
+impl ErrorDetail for CoreModuleError {
+    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(serde_json::to_value(self).expect("Serialization of CoreModuleError should not fail"))
+    }
+}
 
 /// TODO
 pub trait ErrorDetail: Debug + Display {
     /// TODO
-    fn error_detail(&self) -> Result<serde_json::Value, ()>;
+    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 impl ErrorDetail for anyhow::Error {
-    fn error_detail(&self) -> Result<serde_json::Value, ()> {
+    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         Ok(serde_json::json!({ "message": format!("{self}") }))
     }
 }
 
+#[derive(Clone, Debug, derive_more::Display)]
+struct DeserializedError {
+    data: serde_json::Value,
+}
+
+impl ErrorDetail for DeserializedError {
+    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(self.data.clone())
+    }
+}
+
 /// TODO
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_more::Display)]
 pub struct ModuleError(Arc<dyn ErrorDetail + Send + Sync>);
 
 impl ModuleError {
     /// TODO
-    pub fn error_detail(&self) -> Result<serde_json::Value, ()> {
+    pub fn error_detail(
+        &self,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
         self.0.error_detail()
-    }
-}
-
-impl Display for ModuleError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
@@ -65,130 +130,23 @@ impl<T: ErrorDetail + Send + Sync + 'static> From<T> for ModuleError {
 }
 
 impl Serialize for ModuleError {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        todo!()
+        self.0
+            .error_detail()
+            .map_err(S::Error::custom)?
+            .serialize(serializer)
     }
 }
 
 impl<'de> Deserialize<'de> for ModuleError {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        todo!()
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Ok(Self(Arc::new(DeserializedError { data: value })))
     }
 }
-
-// General error type in the Module System.
-// #[derive(Debug, thiserror::Error)]
-// pub enum ModuleError {
-//     /// Custom error thrown by a module.
-//     #[error(transparent)]
-//     ModuleError(#[from] anyhow::Error),
-// }
-//
-// impl serde::Serialize for ModuleError {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         let error = match self {
-//             ModuleError::ModuleError(e) => format!("{e:}"),
-//         };
-//         error.serialize(serializer)
-//     }
-// }
-//
-// impl<'de> serde::Deserialize<'de> for ModuleError {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         let error = String::deserialize(deserializer)?;
-//         Ok(Self::ModuleError(anyhow::Error::msg(error)))
-//     }
-// }
-//
-// /// We are manually implementing clone because the inner [`anyhow::Error`] doesn't implement clone.
-// /// We need to manually loop through the error chain to not loose any of the error context. The intermediate
-// /// error types are not clonable so we need to manually convert them to strings.
-// impl Clone for ModuleError {
-//     fn clone(&self) -> Self {
-//         match self {
-//             Self::ModuleError(anyhow_err) => {
-//                 let mut chain = anyhow_err.chain();
-//
-//                 Self::ModuleError(if let Some(err) = chain.next() {
-//                     let mut output = anyhow::Error::msg(err.to_string());
-//
-//                     for outer_err in chain {
-//                         output = output.context(anyhow::Error::msg(outer_err.to_string()));
-//                     }
-//
-//                     output
-//                 } else {
-//                     anyhow::anyhow!("Empty error message")
-//                 })
-//             }
-//         }
-//     }
-// }
-//
-// impl PartialEq for ModuleError {
-//     fn eq(&self, other: &Self) -> bool {
-//         match (self, other) {
-//             (Self::ModuleError(e1), Self::ModuleError(e2)) => e1.to_string() == e2.to_string(),
-//         }
-//     }
-// }
-//
-// impl Eq for ModuleError {}
-
-// #[cfg(test)]
-// mod test {
-//     use anyhow::anyhow;
-//
-//     use crate::ModuleError;
-//
-//     #[test]
-//     fn test_module_error_roundtrip() {
-//         let error = ModuleError::ModuleError(anyhow::Error::msg("test"));
-//         let serialized = serde_json::to_string(&error).unwrap();
-//         let deserialized: ModuleError = serde_json::from_str(&serialized).unwrap();
-//         // We can only asserts start, because RUST_BACKTRACE can alter full output
-//         assert!(deserialized.to_string().starts_with("test"));
-//     }
-//
-//     /// Tests that the inner error context gets correctly propagated when copying an error.
-//     #[test]
-//     fn test_module_error_copy() {
-//         let error = anyhow!("Inner message").context("Outer context".to_string());
-//
-//         let cloned_err = ModuleError::ModuleError(error).clone();
-//
-//         match cloned_err {
-//             ModuleError::ModuleError(cloned_err) => {
-//                 let mut chained_clone = cloned_err.chain();
-//
-//                 assert_eq!(
-//                     chained_clone.len(),
-//                     2,
-//                     "The cloned error doesn't have the correct length"
-//                 );
-//                 assert_eq!(
-//                     chained_clone.next().unwrap().to_string(),
-//                     "Inner message",
-//                     "The inner message has not been correctly cloned"
-//                 );
-//                 assert_eq!(
-//                     chained_clone.next().unwrap().to_string(),
-//                     "Outer context",
-//                     "The outer context has not been correctly cloned"
-//                 );
-//             }
-//         }
-//     }
-// }
