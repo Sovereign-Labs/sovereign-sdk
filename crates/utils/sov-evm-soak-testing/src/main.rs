@@ -1,6 +1,6 @@
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
-use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::types::{Filter, TransactionRequest};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
@@ -85,17 +85,12 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
     Ok(hex::encode(key_bytes))
 }
 
-/// Creates an Alloy WebSocket client connected to the specified RPC server.
-pub(crate) async fn alloy_client(
-    rpc_addr: SocketAddr,
-    signer: PrivateKeySigner,
-) -> Result<DynProvider> {
-    let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
-    let ws = WsConnect::new(url);
+/// Creates an Alloy HTTP client connected to the specified RPC server.
+pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Result<DynProvider> {
+    let url = Url::parse(&format!("http://{rpc_addr}/rpc"))?;
     let client = ProviderBuilder::new()
         .wallet(signer)
-        .connect_ws(ws)
-        .await?
+        .connect_http(url)
         .erased();
     Ok(client)
 }
@@ -122,7 +117,7 @@ async fn run_uniswap_test(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone()).await?;
+        let client = alloy_client(rpc_addr, signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match UniSoakTest::new(client, signer.address()).await {
@@ -163,7 +158,6 @@ async fn fund_worker_accounts(
 
         root_client.send_transaction(tx).await?.watch().await?;
     }
-
     Ok(())
 }
 
@@ -176,13 +170,10 @@ async fn run_logs_test(
     num_workers: usize,
 ) -> Result<()> {
     validate_worker_count(num_workers)?;
-
     // Set up root account and fund workers
     let root_signer: PrivateKeySigner = private_key.parse()?;
-    let root_client = alloy_client(rpc_addr, root_signer.clone()).await?;
-
+    let root_client = alloy_client(rpc_addr, root_signer.clone())?;
     fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
-
     let from_block = root_client.get_block_number().await?;
 
     // Spawn workers
@@ -190,7 +181,7 @@ async fn run_logs_test(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone()).await?;
+        let client = alloy_client(rpc_addr, signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match LogsSoakTest::new(client, worker_idx).await {
@@ -231,7 +222,7 @@ async fn run_logs_test(
 /// Runs the SimpleStorage soak test.
 async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
     let signer: PrivateKeySigner = private_key.parse()?;
-    let client = alloy_client(rpc_addr, signer).await?;
+    let client = alloy_client(rpc_addr, signer)?;
     simple_storage::run(client).await
 }
 
