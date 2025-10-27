@@ -286,7 +286,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x3028840bcc7715ab8c2386629312a40fc2f38bb61d2f03f80b33f5d6b3361d36",
+  "chain_hash": "0xc6e6b319930b8b8c0550f548c7a3454e15a2193ae5c309283fddb46c43eeabda",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
