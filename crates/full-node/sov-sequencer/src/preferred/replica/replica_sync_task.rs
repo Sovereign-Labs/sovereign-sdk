@@ -77,12 +77,16 @@ impl ReplicaSyncTask {
         shutdown_receiver: watch::Receiver<()>,
     ) {
         'outer: loop {
-            if shutdown_receiver.has_changed().unwrap_or(true) {
-                break 'outer;
-            }
-
-            let Some(mut data) = db_data_receiver.recv().await else {
-                break 'outer;
+            let mut data = tokio::select! {
+                 _ = shutdown_receiver.changed() => {
+                    break 'outer
+                },
+                maybe_data = db_data_receiver.recv() => {
+                    match maybe_data {
+                        Some(data) => data,
+                        None => break 'outer,
+                    }
+                }
             };
 
             'inner: loop {
