@@ -1,3 +1,6 @@
+# 2025-10-28
+- #1987 Added `newHeads` subscription to `eth_subscribe`.
+
 # 2025-10-27
 - #1976 Fixed `eth_subscribe` parameter parsing to accept standard Ethereum JSON-RPC positional parameters.
 
