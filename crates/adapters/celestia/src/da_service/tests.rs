@@ -27,6 +27,7 @@ struct BasicJsonRpcRequest {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "until testcontainers"]
 async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
     let (mock_server, _config, da_service) = setup_test_service(None, rollup_params).await;
@@ -77,6 +78,7 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "till testcontainers"]
 async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
     let (mock_server, _config, da_service) = setup_test_service(None, ROLLUP_PARAMS_DEV).await;
 
@@ -116,6 +118,7 @@ async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "till testcontainers"]
 async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
     let (mock_server, _config, da_service) = setup_test_service(None, ROLLUP_PARAMS_DEV).await;
 
@@ -147,6 +150,7 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "till testcontainers"]
 async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
     let timeout = 1;
     let (mock_server, _config, da_service) =
@@ -332,12 +336,8 @@ async fn verification_error(
     expected_err_pattern: &str,
     rollup_params: RollupParams,
 ) -> anyhow::Result<()> {
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
-
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -355,12 +355,9 @@ async fn verification_error(
 async fn verification_fails_if_tx_missing() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -385,13 +382,10 @@ async fn verification_fails_if_tx_missing() {
 async fn verification_fails_if_not_all_blobs_are_proven() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
+    let relevant_blobs = extract_relevant_blobs(&block);
 
-    let mut relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
     // drop the proof for last batch
     relevant_proofs.batch.inclusion_proof.pop();
 
@@ -412,9 +406,7 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_blobs_from_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
-    let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
+    let relevant_blobs = extract_relevant_blobs(&block);
     assert_eq!(relevant_blobs.batch_blobs.len(), 1);
     assert_eq!(relevant_blobs.proof_blobs.len(), 0);
 }
@@ -423,12 +415,9 @@ async fn test_blobs_from_padded_namespace() {
 async fn verification_for_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -441,12 +430,9 @@ async fn verification_for_padded_namespace() {
 async fn verification_fails_if_there_is_less_blobs_than_proofs() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let mut relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     // push one extra blob proof
     relevant_proofs
@@ -469,13 +455,9 @@ async fn verification_fails_if_there_is_less_blobs_than_proofs() {
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_fails_for_incorrect_namespace() {
     let block = with_rollup_proof_data::filtered_block();
-    let rollup_params = with_rollup_proof_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     // create a verifier with a different namespace than the da_service
     let verifier = CelestiaVerifier::new(RollupParams {
@@ -495,6 +477,7 @@ async fn verification_fails_for_incorrect_namespace() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "till testcontainers"]
 async fn test_submit_proof() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
     let (mock_server, _config, da_service) = setup_test_service(None, rollup_params).await;
@@ -584,10 +567,8 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
         }
     };
 
-    for ((block, rollup_params, _signers), payload) in cases {
-        let (_, _, da_service) = setup_test_service(None, rollup_params).await;
-
-        let mut relevant_blobs = da_service.extract_relevant_blobs(&block);
+    for ((block, _rollup_params, _signers), payload) in cases {
+        let mut relevant_blobs = extract_relevant_blobs(&block);
 
         let expected_batches = payload.batches();
         assert_payload(&mut relevant_blobs.batch_blobs, expected_batches);

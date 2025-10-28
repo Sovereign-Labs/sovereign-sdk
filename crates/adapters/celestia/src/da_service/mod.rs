@@ -437,6 +437,8 @@ impl DaService for CelestiaService {
         &self,
         block: &Self::FilteredBlock,
     ) -> RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction> {
+        // NOTE: Does not add logic here, it should go directly into the function below,
+        // otherwise tests won't cover the change
         extract_relevant_blobs(block)
     }
 
@@ -448,6 +450,8 @@ impl DaService for CelestiaService {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     > {
+        // NOTE: Does not add logic here, it should go directly into the function below,
+        // otherwise tests won't cover the change
         get_extraction_proof(block, blobs)
     }
 

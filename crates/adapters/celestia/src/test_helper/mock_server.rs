@@ -15,6 +15,9 @@ pub struct MockCelestiaNode {
     // pub grpc_server: thread/task
 }
 
+#[allow(dead_code)]
+struct MockCelestiaNodeTonic;
+
 use super::keys::credentials_1;
 
 // Mock gRPC server - prints requests and always responds with "pong"
@@ -38,7 +41,10 @@ pub mod grpc {
                             }
 
                             println!("------");
-                            println!("Mock gRPC received {n} bytes: {}", String::from_utf8_lossy(&buf));
+                            println!(
+                                "Mock gRPC received {n} bytes: {}",
+                                String::from_utf8_lossy(&buf)
+                            );
                             println!("------");
                             // Simple HTTP/2 gRPC response: pong
                             let response = b"pong";

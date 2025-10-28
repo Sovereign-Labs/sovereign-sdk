@@ -65,6 +65,8 @@ reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 wiremock = "0.6"
+tonic = { version = "0.13", default-features = false }
+celestia-proto = { version = "0.10.0", default-features = false }
 test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
@@ -99,10 +101,10 @@ bench = [
     "sov-celestia-adapter/bench",
 ]
 arbitrary = [
-	"dep:arbitrary",
-	"dep:proptest",
-	"sov-celestia-adapter/arbitrary",
-	"sov-rollup-interface/arbitrary",
-	"sov-test-utils/arbitrary",
-	"sov-modules-macros?/arbitrary"
+    "dep:arbitrary",
+    "dep:proptest",
+    "sov-celestia-adapter/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-test-utils/arbitrary",
+    "sov-modules-macros?/arbitrary"
 ]
