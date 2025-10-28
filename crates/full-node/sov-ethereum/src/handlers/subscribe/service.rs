@@ -59,7 +59,8 @@ where
     pub async fn logs(&self, filter: Box<Filter>) -> Result<(), Error> {
         let mut state = self.ethereum.api_state_accessor();
         let pending_block = self.evm.pending_block(&mut state);
-        let mut tx_watermark = Watermark::new(pending_block.transactions.end);
+        // Tx range in block is exclusive therefore the last processed one is `pending_block.transactions.end - 1`
+        let mut tx_watermark = Watermark::new(pending_block.transactions.end - 1);
 
         // Fetch the initial block. If it's stale, it will be replaced below.
         let mut block = self.get_block(pending_block.header.number - 1, &mut state)?;
@@ -69,7 +70,7 @@ where
             let mut state = self.ethereum.api_state_accessor();
             let pending_block = self.evm.pending_block(&mut state);
 
-            for tx_idx in tx_watermark.advance(pending_block.transactions.end) {
+            for tx_idx in tx_watermark.advance(pending_block.transactions.end - 1) {
                 let receipt = self.get_receipt(tx_idx, &mut state)?;
 
                 if block.number() != receipt.block_number {
