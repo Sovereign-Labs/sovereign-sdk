@@ -17,15 +17,37 @@ pub struct MockCelestiaNode {
 
 use super::keys::credentials_1;
 
-// Mock gRPC server - just for tests that don't actually submit blobs
+// Mock gRPC server - prints requests and always responds with "pong"
 pub mod grpc {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    #[allow(dead_code)]
     pub async fn start_mock_grpc_server() -> anyhow::Result<SocketAddr> {
-        // For now, just return a dummy address
-        // The actual gRPC calls will fail, but that's okay for tests that don't use them
-        Ok("127.0.0.1:0".parse().unwrap())
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let local_addr = listener.local_addr()?;
+
+        tokio::spawn(async move {
+            loop {
+                if let Ok((mut socket, _)) = listener.accept().await {
+                    tokio::spawn(async move {
+                        let mut buf = vec![0u8; 1024];
+
+                        while let Ok(n) = socket.read(&mut buf).await {
+                            if n == 0 { break; }
+
+                            println!("Mock gRPC received {} bytes", n);
+
+                            // Simple HTTP/2 gRPC response: pong
+                            let response = b"pong";
+                            let _ = socket.write_all(response).await;
+                        }
+                    });
+                }
+            }
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        Ok(local_addr)
     }
 }
 
