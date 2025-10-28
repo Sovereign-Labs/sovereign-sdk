@@ -268,6 +268,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
+    /// Convenience function to return the transaction bytes in the correct format ready for submission.
+    pub fn tx_bytes(&self) -> Vec<u8> {
+        borsh::to_vec(self).expect("Serialization should be never fail")
+    }
+
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
         let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
         tracing::trace!(transaction = ?this, "Deserialized transaction");
@@ -501,6 +506,18 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
     }
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
+
+#[cfg(feature = "native")]
+impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
+    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
+    pub fn sign(
+        self,
+        private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+        chain_hash: &[u8; 32],
+    ) -> Transaction<R, S> {
+        Transaction::new_signed_tx(private_key, chain_hash, self)
+    }
+}
 
 impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     /// Creates a new [`UnsignedTransaction`] with the given arguments.
