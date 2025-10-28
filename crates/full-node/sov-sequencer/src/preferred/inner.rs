@@ -1756,6 +1756,8 @@ where
         ) {
             (true, _, _, true, _) => {
                 if inner.is_replica() {
+                    println!("batches_to_replay {:?}", batches_to_replay);
+
                     // TODO X1
                     inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                         target_da_height: sync_status.target_da_height(),
@@ -1768,14 +1770,20 @@ where
                         .flush_transactions_cache(info.next_tx_number)
                         .await;
 
+                    inner.executor_events_sender.clean_all_batches_from_cache();
+
+                    let mut rt = Rt::default();
+                    let node_sequence_number =
+                        get_next_sequence_number_according_to_node(&info, &mut rt);
+                    // inner.sequence_number_of_next_blob = node_sequence_number;
+
                     println!(
                         "K0 WaitForNodeResyncToTip {:?} {:?}",
                         next_sequence_number_according_to_node, info
                     );
 
-                    // TODO X3
-                    inner.executor_events_sender.clean_all_batches_from_cache();
-                    PreferredSeqOperation::WaitForNodeResyncToTip
+                    //PreferredSeqOperation::WaitForNodeResyncToTip
+                    PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
                 } else {
                     PreferredSeqOperation::Unreachable
                 }
@@ -1790,12 +1798,31 @@ where
 
                 // TODO X4
                 if inner.is_replica() {
+                    println!("next_sequence_number {}", next_sequence_number);
                     inner
                         .executor_events_sender
                         .flush_transactions_cache(info.next_tx_number)
                         .await;
 
-                    println!("K1 WaitForNodeResyncToTip");
+                    inner.executor_events_sender.clean_all_batches_from_cache();
+
+                    let mut rt = Rt::default();
+                    let node_sequence_number =
+                        get_next_sequence_number_according_to_node(&info, &mut rt);
+                    inner.sequence_number_of_next_blob = node_sequence_number;
+
+                    let ex = Some(Box::new(
+                        inner.new_executor_with_empty_uncommitted_changes(info),
+                    ));
+
+                    println!(
+                        "Z ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary {:?} {:?}",
+                        inner.sequence_number_of_next_blob, info
+                    );
+                    return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
+                        ex,
+                        Duration::from_secs(0),
+                    );
                 }
                 PreferredSeqOperation::WaitForNodeResyncToTip
             }
@@ -2084,6 +2111,7 @@ where
             .update_state_for_recovery(checkpoint)
             .await;
 
+        /*
         let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
 
         inner
@@ -2096,7 +2124,7 @@ where
             // TODO X7
             inner.has_finished_startup = true;
             inner.is_ready = Ok(());
-        }
+        }*/
     }
 
     /// Closes the current batch

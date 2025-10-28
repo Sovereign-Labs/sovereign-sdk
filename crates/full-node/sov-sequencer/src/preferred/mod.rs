@@ -479,6 +479,12 @@ where
         loop {
             let is_synced = info.sync_status.distance() <= distance_to_tip;
 
+            println!(
+                "wait_for_node_resync {:?} {:?} {:?}",
+                info.sync_status, distance_to_tip, is_synced
+            );
+            // Exit
+
             self.synchronized_state_updator
                 .wait_for_node_resync_msg(info, distance_to_tip, "wait_for_node_resync")
                 .await

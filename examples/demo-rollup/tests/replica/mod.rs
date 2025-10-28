@@ -193,7 +193,7 @@ async fn test_replica_receives_txs_from_da() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_replica_receives_txs_from_postgres() {
+async fn test_replica_receives_txs_from_postgres_x() {
     let Some(SetupData {
         postgres,
         da_service,
@@ -205,13 +205,17 @@ async fn test_replica_receives_txs_from_postgres() {
     };
 
     let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
+    println!("LOL0");
     let test_rollup = start_rollup(false, addr, postgres).await;
 
+    println!("LOL1");
     produce_blocks(20, &da_service).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
+    println!("LOL2");
     let receiver_addr = random_address();
 
+    println!("LOL3");
     send_transfers(0, 1, key_and_address, receiver_addr, &test_rollup).await;
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
@@ -401,7 +405,7 @@ async fn test_replica_start_stop() {
 
     let receiver_addr = random_address();
 
-    let nb_of_txs = 1000;
+    let nb_of_txs = 1500;
     println!("X1");
     {
         send_transfers(
