@@ -16,7 +16,7 @@ use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
@@ -253,6 +253,12 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<MaybeSealedBlock> {
+        if let Some(block_number) = &block_number {
+            if block_number == "latest" {
+                tracing::warn!("Overwriting latest block with pending block");
+                return Some(MaybeSealedBlock::Pending(self.pending_block(state)));
+            }
+        }
         let pending_or_block_nr = self.str_to_block_nr(block_number, state);
 
         match pending_or_block_nr {
@@ -340,6 +346,9 @@ where
                 match pending_or_block_nr {
                     PendingOrBlock::Pending => MaybeArchivalState::Current(state),
                     PendingOrBlock::Number(number) => {
+                        if number == state.rollup_height_to_access().get() || (number == state.rollup_height_to_access().get() + 1) {
+                            return Ok(MaybeArchivalState::Current(state));
+                        }
                         let archival_state = state
                             .get_archival_state(RollupHeight::new(number))
                             .map_err(into_rpc_error)?;
