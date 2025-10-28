@@ -5,6 +5,7 @@ use alloy_rpc_types::pubsub::Params;
 use alloy_rpc_types::pubsub::SubscriptionKind;
 use alloy_rpc_types::FilterBlockOption;
 use jsonrpsee::types::ErrorObjectOwned;
+use jsonrpsee::types::Params as JRpcParams;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -23,6 +24,15 @@ impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> Self {
         to_jsonrpsee_error_object(err, ETH_RPC_ERROR)
     }
+}
+
+pub fn parse(
+    parameters: JRpcParams<'static>,
+) -> Result<(SubscriptionKind, Params), ErrorObjectOwned> {
+    let mut parameters = parameters.sequence();
+    let kind = parameters.next()?;
+    let params = parameters.optional_next()?.unwrap_or_default();
+    Ok((kind, params))
 }
 
 pub fn validate(kind: SubscriptionKind, params: Params) -> Result<SubscriptionRequest, Error> {
