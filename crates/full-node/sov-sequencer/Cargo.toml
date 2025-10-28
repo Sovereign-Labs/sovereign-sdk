@@ -21,6 +21,7 @@ axum = { workspace = true, features = ["http1", "http2", "ws", "json", "query"] 
 base64 = { workspace = true }
 bincode = { workspace = true }
 borsh = { workspace = true }
+dashmap = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
