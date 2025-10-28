@@ -264,9 +264,9 @@ bech32 = { version = "0.11" }
 derive_more = { version = "1.0", default-features = false, features = ["std"] }
 clap = { version = "4.5.16", features = ["derive"] }
 toml = { version = "0.8.19", features = ["parse"] }
-jsonrpsee = { version = "0.26.0" }
-jsonrpsee-types = { version = "0.26.0" }
-jsonrpsee-core = { version = "0.26.0" }
+jsonrpsee = { version = "0.26.0", default-features = false }
+jsonrpsee-types = { version = "0.26.0", default-features = false }
+jsonrpsee-core = { version = "0.26.0", default-features = false }
 schemars = { version = "0.8.21", features = ["derive"] }
 tempfile = "3.20.0"
 testcontainers = "0.25.0"

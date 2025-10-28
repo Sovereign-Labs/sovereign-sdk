@@ -14,10 +14,7 @@ readme = "README.md"
 workspace = true
 
 [dependencies]
-jsonrpsee = { workspace = true, features = [
-    "macros",
-    "server",
-], optional = true }
+jsonrpsee = { workspace = true, features = ["server-core"], optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }

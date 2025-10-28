@@ -25,7 +25,7 @@ derivative = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["client", "server"] }
+jsonrpsee = { workspace = true, default-features = false, features = ["client", "server"] }
 mini-moka = "0.10"
 full-node-configs = { workspace = true }
 rockbound = { workspace = true }
