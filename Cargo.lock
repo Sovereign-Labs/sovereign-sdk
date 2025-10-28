@@ -8812,7 +8812,6 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
 dependencies = [
- "arbitrary",
  "prost",
 ]
 
@@ -11622,19 +11621,15 @@ dependencies = [
  "bip32",
  "bip39",
  "borsh",
- "bytes",
  "celestia-client",
  "celestia-types",
  "derive_more 1.0.0",
  "futures",
  "hex",
- "http 1.3.1",
- "http-body-util",
  "nmt-rs",
  "postcard",
  "proptest",
  "prost",
- "prost-types",
  "rand 0.8.5",
  "reltester",
  "risc0-zkvm",
@@ -11653,8 +11648,6 @@ dependencies = [
  "test-strategy",
  "thiserror 1.0.69",
  "tokio",
- "tokio-stream",
- "tonic 0.12.3",
  "tower 0.5.2",
  "tracing",
  "wiremock",

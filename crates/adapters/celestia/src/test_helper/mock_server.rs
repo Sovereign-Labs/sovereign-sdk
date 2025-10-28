@@ -12,7 +12,7 @@ use crate::verifier::RollupParams;
 #[allow(dead_code)]
 pub struct MockCelestiaNode {
     pub rpc_server: MockServer,
-    pub grpc_server: tonic::transport::Server,
+    // pub grpc_server: thread/task
 }
 
 use super::keys::credentials_1;
@@ -37,8 +37,9 @@ pub mod grpc {
                                 break;
                             }
 
-                            println!("Mock gRPC received {n} bytes");
-
+                            println!("------");
+                            println!("Mock gRPC received {n} bytes: {}", String::from_utf8_lossy(&buf));
+                            println!("------");
                             // Simple HTTP/2 gRPC response: pong
                             let response = b"pong";
                             let _ = socket.write_all(response).await;

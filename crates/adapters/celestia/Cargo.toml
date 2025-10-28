@@ -65,12 +65,6 @@ reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 wiremock = "0.6"
-tonic = "0.12"
-tokio-stream = { version = "0.1", features = ["net"] }
-prost-types = "0.13"
-http = "1.0"
-http-body-util = "0.1"
-bytes = "1.0"
 test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
@@ -110,6 +104,5 @@ arbitrary = [
 	"sov-celestia-adapter/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-test-utils/arbitrary",
-	"prost-types/arbitrary",
 	"sov-modules-macros?/arbitrary"
 ]
