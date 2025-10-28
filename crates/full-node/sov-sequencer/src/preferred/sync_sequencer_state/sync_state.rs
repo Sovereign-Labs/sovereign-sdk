@@ -4,7 +4,9 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
-use crate::preferred::sync_sequencer_state::master_true_table::operation_for_master;
+use crate::preferred::sync_sequencer_state::true_table::{
+    operation_for_master, operation_for_replica,
+};
 use crate::preferred::sync_sequencer_state::TrueTable;
 use crate::preferred::sync_sequencer_state::{InitialConditions, Message};
 use crate::preferred::update_state::do_next_event;
@@ -490,15 +492,27 @@ where
             is_recover,
         };
 
-        operation_for_master(
-            table,
-            info,
-            &mut inner,
-            initial_conditions,
-            time_spent_fetching_batches,
-            current_visible_slot_number,
-        )
-        .await
+        if inner.is_replica() {
+            operation_for_replica(
+                table,
+                info,
+                &mut inner,
+                initial_conditions,
+                time_spent_fetching_batches,
+                current_visible_slot_number,
+            )
+            .await
+        } else {
+            operation_for_master(
+                table,
+                info,
+                &mut inner,
+                initial_conditions,
+                time_spent_fetching_batches,
+                current_visible_slot_number,
+            )
+            .await
+        }
     }
 
     async fn process_check_readiness(

@@ -26,7 +26,7 @@ use std::sync::Arc;
 pub(crate) use sync_state::*;
 use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) use updator::*;
-mod master_true_table;
+mod true_table;
 
 mod inner;
 mod sync_state;
