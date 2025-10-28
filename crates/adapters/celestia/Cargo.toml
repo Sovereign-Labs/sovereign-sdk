@@ -35,8 +35,6 @@ backon = { workspace = true, optional = true }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 futures = { workspace = true, default-features = false, optional = true }
 hex = { workspace = true, features = ["serde"] }
-# THIS:? 
-jsonrpsee = { workspace = true, default-features = false, features = ["http-client"], optional = true }
 proptest = { workspace = true, features = ["alloc", "std"], optional = true }
 schemars = { workspace = true, features = ["derive"] }
 serde = { workspace = true, default-features = false, features = [
@@ -93,7 +91,6 @@ native = [
     "tendermint/default",
     "dep:celestia-client",
     "dep:futures",
-    "dep:jsonrpsee",
     "dep:tokio",
     "sov-celestia-adapter/native",
     "sov-rollup-interface/native",
