@@ -49,6 +49,7 @@ where
     pub async fn new_with_optional_encryption(
         encryption_config: Option<sov_encryption::EncryptionConfig>
     ) -> Result<Self, sov_encryption::EncryptionError> {
+        tracing::info!("STF creating with encryption config: {:?}", encryption_config);
         match encryption_config {
             Some(config) => Self::with_encryption_config(RT::default(), config).await,
             None => Ok(Self::default()),

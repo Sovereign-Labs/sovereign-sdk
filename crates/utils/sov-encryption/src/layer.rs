@@ -109,6 +109,7 @@ pub struct EncryptionLayer {
 
 impl EncryptionLayer {
     pub async fn new(config: EncryptionConfig) -> Result<Self, EncryptionError> {
+        info!("Creating encryption layer with config: {:?}", config);
         let key_cache = KeyCache::new();
         
         // Handle different key client configurations
@@ -121,8 +122,11 @@ impl EncryptionLayer {
                     _key_listener_handle: None,
                 };
                 
+                // Clone the socket path to satisfy lifetime requirements
+                let socket_path_cloned = socket_path.clone();
+                
                 // Start unix socket listener for key pushes
-                let handle = temp_layer.start_key_listener(socket_path).await?;
+                let handle = temp_layer.start_key_listener(socket_path_cloned).await?;
                 info!("Started key listener for unix socket key client at {:?}", socket_path);
                 
                 Some(handle)
