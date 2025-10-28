@@ -5,17 +5,18 @@ use core::fmt::Debug;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::da::DaSpec;
 use sov_state::EventContainer;
-use sov_universal_wallet::schema::UniversalWallet;
 
 use crate::common::ModuleError;
 use crate::{GenesisState, ModuleId, TxState};
 
+mod call;
 mod dispatch;
 mod event;
 mod gas_spec;
 mod prefix;
 mod spec;
 
+pub use call::*;
 pub use dispatch::*;
 pub use event::*;
 pub use gas_spec::*;
@@ -32,14 +33,7 @@ pub trait Module: Clone {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Debug
-        + BorshSerialize
-        + BorshDeserialize
-        + UniversalWallet
-        + schemars::JsonSchema
-        + Clone
-        + PartialEq
-        + Eq;
+    type CallMessage: CallMessage;
 
     /// Module defined event resulting from a call method.
     type Event: Debug

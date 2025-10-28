@@ -1,5 +1,6 @@
 # 2025-10-27
 - #1981 **Breaking change** Adds support for celestia-client allowing direct use of RPC providers. Full message TBD.
+- #1976 Fixed `eth_subscribe` parameter parsing to accept standard Ethereum JSON-RPC positional parameters.
 
 # 2025-10-24
 - #1968 Implement EVM `BLOCKHASH` opcode with support for querying the last 256 block hashes.
