@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_interface::{crypto::CredentialId, TxHash};
+use std::cmp::Ordering;
 use std::collections::{btree_map::OccupiedEntry, BTreeMap};
 use std::sync::Arc;
 use tokio::sync::oneshot;
@@ -48,30 +49,24 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
         self.txs.remove(&nonce)
     }
 
-    fn has_contiguous_sequence_to(&self, target_nonce: u64, expected_first: u64) -> bool {
-        if target_nonce == expected_first {
-            return true;
-        }
-
-        let Some(&first_nonce) = self.txs.keys().next() else {
-            return false;
-        };
-        if first_nonce != expected_first {
-            return false;
-        }
-
-        let mut expected = expected_first;
-        for &nonce in self.txs.keys() {
-            if nonce > target_nonce {
-                break;
+    fn has_contiguous_sequence_to(&self, tx_nonce: u64, next_nonce: u64) -> bool {
+        match tx_nonce.cmp(&next_nonce) {
+            Ordering::Less => false, // tx is in the past
+            Ordering::Equal => true, // tx is ready now - no prerequisites necessary
+            Ordering::Greater => {
+                let mut expected = next_nonce;
+                for &nonce in self.txs.keys() {
+                    if nonce > tx_nonce {
+                        break;
+                    }
+                    if nonce != expected {
+                        return false;
+                    }
+                    expected += 1;
+                }
+                expected > tx_nonce
             }
-            if nonce != expected {
-                return false;
-            }
-            expected += 1;
         }
-
-        expected > target_nonce
     }
 
     fn is_empty(&self) -> bool {
@@ -208,5 +203,198 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
                 return;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sov_test_utils::runtime::TestOptimisticRuntime;
+    use sov_test_utils::TestSpec;
+    use tokio::sync::oneshot;
+
+    type TestRuntime = TestOptimisticRuntime<TestSpec>;
+
+    // Helper to create a mock QueuedTx for testing
+    fn create_mock_queued_tx(nonce: u64) -> QueuedTx<TestSpec, TestRuntime> {
+        let (sender, _receiver) = oneshot::channel();
+        QueuedTx {
+            tx: FullyBakedTx {
+                data: vec![].into(),
+            },
+            tx_hash: TxHash::from([0u8; 32]),
+            nonce,
+            original_tx_queue_id: 0,
+            result_sender: sender,
+        }
+    }
+
+    #[test]
+    fn test_has_contiguous_sequence_empty_queue() {
+        let queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        // Empty queue should return false when target > next_nonce
+        assert!(!queue.has_contiguous_sequence_to(5, 0));
+
+        // But if target == next_nonce, return true even on empty queue (no prerequisites needed)
+        assert!(queue.has_contiguous_sequence_to(0, 0));
+        assert!(queue.has_contiguous_sequence_to(5, 5));
+    }
+
+    #[test]
+    fn test_has_contiguous_sequence_target_equals_expected() {
+        let queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        // When target == expected_first, should return true immediately (edge case for eviction check)
+        assert!(queue.has_contiguous_sequence_to(5, 5));
+        assert!(queue.has_contiguous_sequence_to(0, 0));
+        assert!(queue.has_contiguous_sequence_to(100, 100));
+    }
+
+    #[test]
+    fn test_has_contiguous_sequence_wrong_start() {
+        let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        queue.insert(3, create_mock_queued_tx(3));
+        queue.insert(4, create_mock_queued_tx(4));
+        queue.insert(5, create_mock_queued_tx(5));
+
+        // Queue starts at 3, but we expect 0
+        assert!(!queue.has_contiguous_sequence_to(5, 0));
+        // Queue starts at 3, but we expect 1
+        assert!(!queue.has_contiguous_sequence_to(5, 1));
+        // Queue starts at 3, and we expect 3 - should work
+        assert!(queue.has_contiguous_sequence_to(5, 3));
+    }
+
+    #[test]
+    fn test_has_contiguous_sequence_with_gap() {
+        let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        queue.insert(0, create_mock_queued_tx(0));
+        queue.insert(1, create_mock_queued_tx(1));
+        queue.insert(3, create_mock_queued_tx(3)); // Gap at 2
+        queue.insert(4, create_mock_queued_tx(4));
+
+        // Should succeed up to the gap
+        assert!(queue.has_contiguous_sequence_to(1, 0));
+        assert!(queue.has_contiguous_sequence_to(0, 0));
+
+        // Should fail when target is beyond the gap
+        assert!(!queue.has_contiguous_sequence_to(2, 0));
+        assert!(!queue.has_contiguous_sequence_to(3, 0));
+        assert!(!queue.has_contiguous_sequence_to(4, 0));
+    }
+
+    #[test]
+    fn test_has_contiguous_sequence_complete() {
+        let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        queue.insert(5, create_mock_queued_tx(5));
+        queue.insert(6, create_mock_queued_tx(6));
+        queue.insert(7, create_mock_queued_tx(7));
+        queue.insert(8, create_mock_queued_tx(8));
+
+        // Should succeed for all nonces we have
+        assert!(queue.has_contiguous_sequence_to(7, 5));
+        assert!(queue.has_contiguous_sequence_to(6, 5));
+        assert!(queue.has_contiguous_sequence_to(5, 5));
+        assert!(queue.has_contiguous_sequence_to(8, 5));
+
+        // Should fail when target is beyond what we have
+        assert!(!queue.has_contiguous_sequence_to(9, 5));
+        assert!(!queue.has_contiguous_sequence_to(10, 5));
+    }
+
+    #[test]
+    fn test_has_contiguous_sequence_target_before_expected() {
+        let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        queue.insert(5, create_mock_queued_tx(5));
+        queue.insert(6, create_mock_queued_tx(6));
+
+        // Target is before expected_first - should fail
+        assert!(!queue.has_contiguous_sequence_to(4, 5));
+    }
+
+    #[test]
+    fn test_address_queue_insert_and_remove() {
+        let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        // Insert some transactions
+        assert!(queue.insert(1, create_mock_queued_tx(1)).is_none());
+        assert!(queue.insert(2, create_mock_queued_tx(2)).is_none());
+        assert!(queue.insert(3, create_mock_queued_tx(3)).is_none());
+
+        // Replace existing transaction
+        let old_tx = queue.insert(2, create_mock_queued_tx(2));
+        assert!(old_tx.is_some());
+        assert_eq!(old_tx.unwrap().nonce, 2);
+
+        // Remove transactions
+        assert!(queue.remove(1).is_some());
+        assert!(queue.remove(1).is_none()); // Already removed
+        assert!(queue.remove(2).is_some());
+        assert!(queue.remove(3).is_some());
+
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn test_address_queue_head() {
+        let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
+
+        // Empty queue has no head
+        assert!(queue.head().is_none());
+
+        // Insert out of order
+        queue.insert(5, create_mock_queued_tx(5));
+        queue.insert(3, create_mock_queued_tx(3));
+        queue.insert(7, create_mock_queued_tx(7));
+
+        // Head should be the lowest nonce (BTreeMap ordering)
+        let head = queue.head();
+        assert!(head.is_some());
+        let head = head.unwrap();
+        assert_eq!(*head.key(), 3);
+
+        // Remove head and check next
+        head.remove();
+        let next_head = queue.head();
+        assert_eq!(*next_head.unwrap().key(), 5);
+    }
+
+    #[test]
+    fn test_tx_nonce_queues_basic_operations() {
+        let queues: TxNonceQueues<TestSpec, TestRuntime> = TxNonceQueues::new();
+
+        let credential_id = CredentialId::from([1u8; 32]);
+
+        // Enqueue some transactions
+        let entry = queues.lock_for_address(credential_id.clone());
+        TxNonceQueues::enqueue_with_lock(entry, create_mock_queued_tx(5));
+
+        let entry = queues.lock_for_address(credential_id.clone());
+        TxNonceQueues::enqueue_with_lock(entry, create_mock_queued_tx(6));
+
+        // Check prerequisites
+        assert!(queues.has_prerequisites_to_nonce(&credential_id, 6, 5));
+        assert!(!queues.has_prerequisites_to_nonce(&credential_id, 6, 4)); // Wrong start
+        assert!(!queues.has_prerequisites_to_nonce(&credential_id, 7, 5)); // Beyond what we have
+
+        // Remove a transaction
+        let removed = queues.remove(&credential_id, 5);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().nonce, 5);
+
+        // Check prerequisites again
+        assert!(!queues.has_prerequisites_to_nonce(&credential_id, 6, 5)); // Gap now
+
+        // Remove non-existent
+        assert!(queues.remove(&credential_id, 5).is_none());
+
+        // Remove last transaction - queue should be cleaned up
+        assert!(queues.remove(&credential_id, 6).is_some());
+        assert!(!queues.has_prerequisites_to_nonce(&credential_id, 6, 5));
     }
 }
