@@ -1,32 +1,31 @@
-use std::ops::RangeInclusive;
+use std::ops::Range;
 
 /// An empty range used to represent no new items.
-#[allow(clippy::reversed_empty_ranges)]
-const EMPTY_RANGE: RangeInclusive<u64> = 1..=0;
+const EMPTY_RANGE: Range<u64> = 0..0;
 
 /// Tracks the high-water mark of a monotonically increasing sequence.
 ///
 /// Returns new items above the watermark on each advance.
 /// https://en.wikipedia.org/wiki/Watermark_(data_synchronization)
 pub struct Watermark {
-    mark: u64,
+    last_processed: u64,
 }
 
 impl Watermark {
-    pub fn new(initial: u64) -> Self {
-        Self { mark: initial }
+    pub fn new(last_processed: u64) -> Self {
+        Self { last_processed }
     }
 
-    /// Returns the range of new items from the last mark to the new value.
+    /// Returns the range of new items from the last processed element to the new value.
     ///
-    /// If the new value hasn't advanced past the current mark, returns an empty range.
-    /// Otherwise, updates the mark and returns the range of new items.
-    pub fn advance(&mut self, new_value: u64) -> RangeInclusive<u64> {
-        if new_value <= self.mark {
+    /// If the new value hasn't advanced past the last processed element, returns an empty range.
+    /// Otherwise, updates the last processed element and returns the range of new items.
+    pub fn advance(&mut self, latest: u64) -> Range<u64> {
+        if latest <= self.last_processed {
             return EMPTY_RANGE;
         }
-        let range = self.mark + 1..=new_value;
-        self.mark = new_value;
+        let range = self.last_processed + 1..latest + 1;
+        self.last_processed = latest;
         range
     }
 }
@@ -40,8 +39,8 @@ mod tests {
         let mut watermark = Watermark::new(0);
 
         let range = watermark.advance(2);
-        assert_eq!(range, 1..=2);
-        assert_eq!(watermark.mark, 2);
+        assert_eq!(range, 1..3);
+        assert_eq!(watermark.last_processed, 2);
     }
 
     #[test]
@@ -50,7 +49,7 @@ mod tests {
 
         let range = watermark.advance(0);
         assert_eq!(range, EMPTY_RANGE);
-        assert_eq!(watermark.mark, 0);
+        assert_eq!(watermark.last_processed, 0);
     }
 
     #[test]
@@ -59,25 +58,25 @@ mod tests {
 
         let range = watermark.advance(0);
         assert_eq!(range, EMPTY_RANGE);
-        assert_eq!(watermark.mark, 1); // Mark doesn't move backward
+        assert_eq!(watermark.last_processed, 1); // Last processed doesn't move backward
     }
 
     #[test]
     fn multiple_advances() {
         let mut watermark = Watermark::new(0);
 
-        assert_eq!(watermark.advance(3), 1..=3);
+        assert_eq!(watermark.advance(3), 1..4);
         assert_eq!(watermark.advance(3), EMPTY_RANGE);
-        assert_eq!(watermark.advance(5), 4..=5);
+        assert_eq!(watermark.advance(5), 4..6);
         assert_eq!(watermark.advance(5), EMPTY_RANGE);
-        assert_eq!(watermark.advance(7), 6..=7);
+        assert_eq!(watermark.advance(7), 6..8);
     }
 
     #[test]
     fn single_item_increment() {
         let mut watermark = Watermark::new(0);
 
-        assert_eq!(watermark.advance(1), 1..=1);
-        assert_eq!(watermark.advance(2), 2..=2);
+        assert_eq!(watermark.advance(1), 1..2);
+        assert_eq!(watermark.advance(2), 2..3);
     }
 }
