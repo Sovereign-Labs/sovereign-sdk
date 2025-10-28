@@ -25,7 +25,7 @@ pub fn create_key_client(config: KeyClientConfig) -> Box<dyn KeyClient> {
             Box::new(StaticKeyClient::new(encryption_key, decryption_key))
         }
         #[cfg(feature = "unix-client")]
-        KeyClientConfig::UnixSocket { socket_path, timeout, max_retries, retry_delay_ms } => {
+        KeyClientConfig::UnixSocket { socket_path, timeout, max_retries, retry_delay_ms, .. } => {
             Box::new(UnixSocketKeyClient::new(socket_path, timeout, max_retries, retry_delay_ms))
         }
     }
