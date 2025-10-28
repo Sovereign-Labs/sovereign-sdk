@@ -12073,7 +12073,6 @@ dependencies = [
  "full-node-configs",
  "futures",
  "hex",
- "jsonrpsee",
  "prettytable-rs",
  "prometheus_exporter",
  "proptest",

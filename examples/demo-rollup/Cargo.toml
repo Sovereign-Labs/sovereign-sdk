@@ -46,11 +46,6 @@ borsh = { workspace = true, features = ["bytes", "derive"] }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 axum = { workspace = true }
-jsonrpsee = { workspace = true, features = [
-  "http-client",
-  "server",
-  "ws-client",
-] }
 schemars = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
   "alloc",
@@ -120,7 +115,7 @@ alloy-rpc-types-eth = "1.0.30"
 alloy-rpc-types-trace = { workspace = true }
 alloy-pubsub = "1.0"
 alloy-provider = { workspace = true, features = ["debug-api"] }
-sov-rpc-eth-types = { workspace = true}
+sov-rpc-eth-types = { workspace = true }
 
 
 reqwest = { workspace = true }
