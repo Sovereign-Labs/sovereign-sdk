@@ -33,9 +33,11 @@ pub mod grpc {
                         let mut buf = vec![0u8; 1024];
 
                         while let Ok(n) = socket.read(&mut buf).await {
-                            if n == 0 { break; }
+                            if n == 0 {
+                                break;
+                            }
 
-                            println!("Mock gRPC received {} bytes", n);
+                            println!("Mock gRPC received {n} bytes");
 
                             // Simple HTTP/2 gRPC response: pong
                             let response = b"pong";

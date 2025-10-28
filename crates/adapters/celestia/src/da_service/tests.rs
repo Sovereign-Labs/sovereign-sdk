@@ -607,8 +607,11 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn regenerate_test_data() -> anyhow::Result<()> {
-    let client =
-        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
 
     let signer = CelestiaAddress::from_str(ADDR_1)?;
 
@@ -632,8 +635,11 @@ async fn regenerate_test_data() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
-    let client =
-        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
 
     let signer = CelestiaAddress::from_str(ADDR_1)?;
     with_several_small_rollup_batches::update_test_data(&client, &signer).await;
@@ -648,8 +654,11 @@ async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn generate_mocha_testnet_blocks() -> anyhow::Result<()> {
-    let client =
-        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
 
     from_testnet_no_shares::update_test_data(&client).await;
     from_testnet_with_tail_padding::update_test_data(&client).await;

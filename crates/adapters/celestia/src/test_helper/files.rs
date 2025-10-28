@@ -2,8 +2,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use celestia_rpc::{HeaderClient, ShareClient, StateClient};
-use celestia_types::blob::RawBlob;
 use celestia_types::nmt::Namespace;
 use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::ExtendedHeader;
@@ -189,10 +187,7 @@ pub mod with_several_small_rollup_batches {
     pub const DATA_PATH: &str = "test_data/block_with_several_small_rollup_batches";
     pub const ROLLUP_PARAMS: RollupParams = ROLLUP_PARAMS_DEV;
 
-    pub async fn update_test_data(
-        client: &jsonrpsee::http_client::HttpClient,
-        signer: &CelestiaAddress,
-    ) {
+    pub async fn update_test_data(client: &celestia_client::Client, signer: &CelestiaAddress) {
         let payload = get_payload();
         let path = make_test_path(DATA_PATH);
         update_block_data_from_payload(&path, client, signer, false, payload)
@@ -225,10 +220,7 @@ pub mod with_several_medium_rollup_batches {
     pub const DATA_PATH: &str = "test_data/block_with_several_medium_rollup_batches";
     pub const ROLLUP_PARAMS: RollupParams = ROLLUP_PARAMS_DEV;
 
-    pub async fn update_test_data(
-        client: &jsonrpsee::http_client::HttpClient,
-        signer: &CelestiaAddress,
-    ) {
+    pub async fn update_test_data(client: &celestia_client::Client, signer: &CelestiaAddress) {
         let payload = get_payload();
         let path = make_test_path(DATA_PATH);
         update_block_data_from_payload(&path, client, signer, false, payload)
@@ -261,10 +253,7 @@ pub mod with_several_large_rollup_batches {
     pub const DATA_PATH: &str = "test_data/block_with_several_large_rollup_batches";
     pub const ROLLUP_PARAMS: RollupParams = ROLLUP_PARAMS_DEV;
 
-    pub async fn update_test_data(
-        client: &jsonrpsee::http_client::HttpClient,
-        signer: &CelestiaAddress,
-    ) {
+    pub async fn update_test_data(client: &celestia_client::Client, signer: &CelestiaAddress) {
         let payload = get_payload();
         let path = make_test_path(DATA_PATH);
         update_block_data_from_payload(&path, client, signer, false, payload)
@@ -311,11 +300,11 @@ pub mod with_preceding_blobs_from_different_namespaces {
     }
 
     pub async fn update_test_data(
-        client: &jsonrpsee::http_client::HttpClient,
+        client: &celestia_client::Client,
         signer: &CelestiaAddress,
     ) -> anyhow::Result<()> {
         let mut rng = rand::rngs::SmallRng::from_seed([1; 32]);
-        let mut blobs: Vec<RawBlob> = Vec::new();
+        let mut blobs = Vec::new();
         let path = make_test_path(DATA_PATH);
 
         for namespace in &[
@@ -330,14 +319,14 @@ pub mod with_preceding_blobs_from_different_namespaces {
         ] {
             let mut data = vec![0u8; SMALL_BATCH_BYTES];
             rng.fill_bytes(&mut data);
-            let blob = raw_blob_from_data(*namespace, data, signer)?;
+            let blob = blob_from_data(*namespace, data, signer)?;
             blobs.push(blob);
         }
 
         for size in [SMALL_BATCH_BYTES, MEDIUM_BATCH_BYTES] {
             let mut data = vec![0u8; size];
             rng.fill_bytes(&mut data);
-            let blob = raw_blob_from_data(ROLLUP_BATCH_NAMESPACE, data, signer)?;
+            let blob = blob_from_data(ROLLUP_BATCH_NAMESPACE, data, signer)?;
             blobs.push(blob);
         }
 
@@ -365,10 +354,7 @@ pub mod with_batch_and_proof_same_block {
     pub const DATA_PATH: &str = "test_data/block_with_batch_and_proof";
     pub const ROLLUP_PARAMS: RollupParams = ROLLUP_PARAMS_DEV;
 
-    pub async fn update_test_data(
-        client: &jsonrpsee::http_client::HttpClient,
-        signer: &CelestiaAddress,
-    ) {
+    pub async fn update_test_data(client: &celestia_client::Client, signer: &CelestiaAddress) {
         let mut payload = generate_payload_with_batches(2, MEDIUM_BATCH_BYTES);
         let proof_payload = generate_payload_with_batches(3, MEDIUM_BATCH_BYTES);
         payload.proofs = proof_payload.batches;
@@ -435,13 +421,13 @@ pub mod from_testnet_no_shares {
         (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
     }
 
-    pub async fn update_test_data(client: &jsonrpsee::http_client::HttpClient) {
+    pub async fn update_test_data(client: &celestia_client::Client) {
         let path = make_test_path(DATA_PATH);
         let signers = serde_json::json!({"signers": Vec::<String>::new()});
         write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
 
         let height = 3001032;
-        let block_header = client.header_get_by_height(height).await.unwrap();
+        let block_header = client.header().get_by_height(height).await.unwrap();
         save_blobs(
             client,
             &path,
@@ -486,14 +472,14 @@ pub mod from_testnet_with_tail_padding {
         (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
     }
 
-    pub async fn update_test_data(client: &jsonrpsee::http_client::HttpClient) {
+    pub async fn update_test_data(client: &celestia_client::Client) {
         let path = make_test_path(DATA_PATH);
 
         let signers = serde_json::json!({"signers": vec![ADDR_4]});
         write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
 
         let height = 5812964;
-        let block_header = client.header_get_by_height(height).await.unwrap();
+        let block_header = client.header().get_by_height(height).await.unwrap();
         save_blobs(
             client,
             &path,
@@ -524,35 +510,31 @@ pub mod with_mixed_v0_and_v1_blobs {
         (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
     }
 
-    pub async fn update_test_data(
-        client: &jsonrpsee::http_client::HttpClient,
-        signer: &CelestiaAddress,
-    ) {
+    pub async fn update_test_data(client: &celestia_client::Client, signer: &CelestiaAddress) {
         let path = make_test_path(DATA_PATH);
         let mut rng = rand::rngs::SmallRng::from_seed([1; 32]);
-        let mut blobs: Vec<RawBlob> = Vec::new();
+        let mut blobs = Vec::new();
 
         // First blob: V0
         let mut data = vec![0u8; MEDIUM_BATCH_BYTES];
         rng.fill_bytes(&mut data);
-        let blob = RawBlob::from(
-            celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap(),
-        );
+        let blob =
+            celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap();
+
         blobs.push(blob);
 
         // Second blob: V1, normal
         let mut data = vec![0u8; SMALL_BATCH_BYTES];
         rng.fill_bytes(&mut data);
-        let blob = raw_blob_from_data(ROLLUP_BATCH_NAMESPACE, data, signer).unwrap();
+        let blob = blob_from_data(ROLLUP_BATCH_NAMESPACE, data, signer).unwrap();
         blobs.push(blob);
 
         // Third, fourth blobs: V0
         for size in [SMALL_BATCH_BYTES, MEDIUM_BATCH_BYTES] {
             let mut data = vec![0u8; size];
             rng.fill_bytes(&mut data);
-            let blob = RawBlob::from(
-                celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap(),
-            );
+            let blob =
+                celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap();
             blobs.push(blob);
         }
 
@@ -627,7 +609,7 @@ pub(crate) fn get_payload_for_test(path: impl AsRef<Path>) -> anyhow::Result<Pay
 
 pub(crate) async fn update_block_data(
     path: &Path,
-    client: &jsonrpsee::http_client::HttpClient,
+    client: &celestia_client::Client,
     signer: &CelestiaAddress,
     with_prev_header: bool,
 ) -> anyhow::Result<()> {
@@ -637,39 +619,40 @@ pub(crate) async fn update_block_data(
 
 pub(crate) async fn update_block_data_from_payload(
     path: &Path,
-    client: &jsonrpsee::http_client::HttpClient,
+    client: &celestia_client::Client,
     signer: &CelestiaAddress,
     with_prev_header: bool,
     payload: PayloadData,
 ) -> anyhow::Result<()> {
-    let mut blobs: Vec<RawBlob> = Vec::with_capacity(payload.batches.len());
+    let mut blobs = Vec::with_capacity(payload.batches.len());
 
     if !payload.batches.is_empty() || !payload.proofs.is_empty() {
         for batch in &payload.batches {
             let data = hex::decode(batch)?;
-            let blob = raw_blob_from_data(ROLLUP_BATCH_NAMESPACE, data, signer)?;
+            let blob = blob_from_data(ROLLUP_BATCH_NAMESPACE, data, signer)?;
             blobs.push(blob);
         }
         for proof in &payload.proofs {
             let data = hex::decode(proof)?;
-            let blob = raw_blob_from_data(ROLLUP_PROOF_NAMESPACE, data, signer)?;
+            let blob = blob_from_data(ROLLUP_PROOF_NAMESPACE, data, signer)?;
             blobs.push(blob);
         }
     } else {
         let data = vec![0, 1, 2, 3, 4, 5];
-        let blob = raw_blob_from_data(ROLLUP_OTHER_NAMESPACE_PRECEDING, data, signer)?;
+        let blob = blob_from_data(ROLLUP_OTHER_NAMESPACE_PRECEDING, data, signer)?;
         blobs.push(blob);
     }
 
     // All blobs are sent from single signer.
-    // But other test blocks might have different case.
+    // But other test blocks might have different cases.
     let signers = serde_json::json!({"signers": vec![signer.to_string(); blobs.len()]});
     write_to_file(&path.join(SIGNERS_JSON), &signers)?;
 
     let block_header = submit_blobs(client, blobs).await?;
     if with_prev_header {
         let prev_block_header = client
-            .header_get_by_height(block_header.height().value().checked_sub(1).unwrap())
+            .header()
+            .get_by_height(block_header.height().value().checked_sub(1).unwrap())
             .await?;
         write_to_file(&path.join(PREV_HEADER_JSON), &prev_block_header)?;
     }
@@ -686,7 +669,7 @@ pub(crate) async fn update_block_data_from_payload(
 }
 
 async fn save_blobs(
-    client: &jsonrpsee::http_client::HttpClient,
+    client: &celestia_client::Client,
     path: &Path,
     block_header: &ExtendedHeader,
     batch_namespace: Namespace,
@@ -697,13 +680,15 @@ async fn save_blobs(
     let signers = serde_json::json!({"signers": Vec::<String>::new()});
     write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
     let rollup_batch_rows = client
-        .share_get_namespace_data(block_header, batch_namespace)
+        .share()
+        .get_namespace_data(block_header.height().value(), batch_namespace)
         .await
         .unwrap();
     write_to_file(&path.join(ROLLUP_BATCH_ROWS_JSON), &rollup_batch_rows).unwrap();
 
     let rollup_proof_rows = client
-        .share_get_namespace_data(block_header, proof_namespace)
+        .share()
+        .get_namespace_data(block_header.height().value(), proof_namespace)
         .await
         .unwrap();
     write_to_file(&path.join(ROLLUP_PROOF_ROWS_JSON), &rollup_proof_rows).unwrap();
@@ -711,16 +696,19 @@ async fn save_blobs(
 
 #[allow(clippy::float_arithmetic)]
 pub(crate) async fn submit_blobs(
-    client: &jsonrpsee::http_client::HttpClient,
-    blobs: Vec<RawBlob>,
+    client: &celestia_client::Client,
+    blobs: Vec<celestia_types::Blob>,
 ) -> anyhow::Result<ExtendedHeader> {
     // TODO: THIS:
-    let tx_config = celestia_rpc::TxConfig::default();
+    let tx_config = celestia_client::tx::TxConfig::default();
 
-    let tx_response = client.state_submit_pay_for_blob(&blobs, tx_config).await?;
-    let height = tx_response.height as u64;
+    let tx_response = client
+        .state()
+        .submit_pay_for_blob(&blobs, tx_config)
+        .await?;
+    let height = tx_response.height.value();
 
-    let block_header = client.header_get_by_height(height).await?;
+    let block_header = client.header().get_by_height(height).await?;
     Ok(block_header)
 }
 

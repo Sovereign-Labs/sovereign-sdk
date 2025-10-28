@@ -21,7 +21,6 @@ prost = "0.13"
 
 # Upgrade with care. The new version might be incompatible and require run of soak tests
 # TODO: Remove celestia-rpc when migration to client completed.
-celestia-rpc = { version = "0.14.0", default-features = false, optional = true }
 celestia-types = { version = "0.16.0", default-features = false }
 celestia-client = { version = "0.2.0", optional = true }
 tendermint = { version = "0.40.4", default-features = false }
@@ -36,7 +35,8 @@ backon = { workspace = true, optional = true }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 futures = { workspace = true, default-features = false, optional = true }
 hex = { workspace = true, features = ["serde"] }
-jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
+# THIS:? 
+jsonrpsee = { workspace = true, default-features = false, features = ["http-client"], optional = true }
 proptest = { workspace = true, features = ["alloc", "std"], optional = true }
 schemars = { workspace = true, features = ["derive"] }
 serde = { workspace = true, default-features = false, features = [
@@ -91,7 +91,6 @@ default = []
 native = [
     "backon",
     "tendermint/default",
-    "dep:celestia-rpc",
     "dep:celestia-client",
     "dep:futures",
     "dep:jsonrpsee",
@@ -115,6 +114,6 @@ arbitrary = [
 	"sov-celestia-adapter/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-test-utils/arbitrary",
-	"sov-modules-macros?/arbitrary",
-	"prost-types/arbitrary"
+	"prost-types/arbitrary",
+	"sov-modules-macros?/arbitrary"
 ]
