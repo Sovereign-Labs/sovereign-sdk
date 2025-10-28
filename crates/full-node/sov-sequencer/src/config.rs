@@ -1,1 +1,1 @@
-pub use full_node_configs::sequencer::*;
+pub use sov_full_node_configs::sequencer::*;

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
+use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};

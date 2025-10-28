@@ -9,7 +9,7 @@ repository = { workspace = true }
 
 version = { workspace = true }
 readme = "README.md"
-publish = false
+publish = true 
 
 [lints]
 workspace = true

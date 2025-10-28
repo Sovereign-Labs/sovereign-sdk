@@ -1,7 +1,7 @@
 use crate::test_helpers::build_transfer_token_tx;
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
+use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::TokenId;

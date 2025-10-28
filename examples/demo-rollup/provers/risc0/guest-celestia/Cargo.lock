@@ -4886,7 +4886,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "alloy-primitives",
  "arrayvec",
@@ -4906,7 +4906,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bech32",
  "borsh",
@@ -4922,7 +4922,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "sov-universal-wallet-macro-helpers",

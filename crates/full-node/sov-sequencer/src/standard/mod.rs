@@ -4,7 +4,7 @@ mod mempool;
 
 use async_trait::async_trait;
 use axum::http::StatusCode;
-pub use full_node_configs::sequencer::StdSequencerConfig;
+pub use sov_full_node_configs::sequencer::StdSequencerConfig;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};

@@ -3,7 +3,7 @@ use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::*;
 use anyhow::Context;
-use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
+use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
