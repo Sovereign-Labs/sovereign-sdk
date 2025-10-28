@@ -4,6 +4,8 @@ use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
+use sov_rollup_interface::node::future_or_shutdown;
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use tokio::sync::watch;
@@ -83,18 +85,20 @@ impl EventReceiver {
 
     pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
-        let mut shutdown_receiver = self.shutdown_sender.subscribe();
+        let shutdown_receiver = self.shutdown_sender.subscribe();
 
         tokio::spawn(async move {
             let mut start_event_id = None;
             let mut prev_event_type = None;
 
             loop {
-                let res = tokio::select! {
-                     _ = shutdown_receiver.changed() => {
-                        break
-                    },
-                    res = self.fetch_data(start_event_id, prev_event_type) => res
+                let fut = future_or_shutdown(
+                    self.fetch_data(start_event_id, prev_event_type),
+                    &shutdown_receiver,
+                );
+
+                let FutureOrShutdownOutput::Output(res) = fut.await else {
+                    break;
                 };
 
                 match res {

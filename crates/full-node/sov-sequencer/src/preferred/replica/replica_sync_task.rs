@@ -1,6 +1,8 @@
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use async_trait::async_trait;
+use sov_rollup_interface::node::future_or_shutdown;
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -74,19 +76,12 @@ impl ReplicaSyncTask {
     async fn run_handler<R: ReplicaEventHandler>(
         handler: R,
         mut db_data_receiver: tokio::sync::mpsc::Receiver<DbData>,
-        mut shutdown_receiver: watch::Receiver<()>,
+        shutdown_receiver: watch::Receiver<()>,
     ) {
         'outer: loop {
-            let mut data = tokio::select! {
-                 _ = shutdown_receiver.changed() => {
-                    break 'outer
-                },
-                maybe_data = db_data_receiver.recv() => {
-                    match maybe_data {
-                        Some(data) => data,
-                        None => break 'outer,
-                    }
-                }
+            let fut = future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+            let FutureOrShutdownOutput::Output(Some(mut data)) = fut.await else {
+                break 'outer;
             };
 
             'inner: loop {
