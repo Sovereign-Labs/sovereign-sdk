@@ -119,8 +119,6 @@ sov-rpc-eth-types = { workspace = true }
 
 
 reqwest = { workspace = true }
-prettytable-rs = "0.10"
-criterion = "0.5.1"
 
 [build-dependencies]
 anyhow = { workspace = true }

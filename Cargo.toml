@@ -231,9 +231,7 @@ quote = "1.0"
 rand = "0.8"
 rand_chacha = "0.3.1"
 rayon = "1.10.0"
-reqwest = { version = "0.12", features = [
-    "rustls-tls",
-], default-features = false }
+reqwest = { version = "0.12", default-features = false }
 serde = { version = "1.0.208", default-features = false, features = [
     "alloc",
     "derive",
@@ -284,11 +282,11 @@ risc0-build = "2.1"
 flume = { version = "0.11.1", features = ["async"] }
 
 # EVM dependencies
-ethereum-types = "0.14.1"
-ethers = { version = "=2.0.14" }
+ethereum-types = { version = "0.14.1", default-features = false }
+ethers = { version = "=2.0.14", default-features = false }
 
-alloy = { version = "1.0.37" }
-alloy-serde = { version = "1.0.37" }
+alloy = { version = "1.0.37", default-features = false, features = ["std", "essentials"] }
+alloy-serde = { version = "1.0.37", default-features = false }
 alloy-chains = { version = "0.2.14", default-features = false }
 alloy-primitives = { version = "1.4.0", default-features = false }
 alloy-sol-types = { version = "1.4.0", default-features = false }
@@ -301,8 +299,8 @@ alloy-rpc-types = { version = "1.0.37", features = [
     "eth",
 ], default-features = false }
 
-alloy-provider = { version = "1.0.37", features = ["ws"] }
-alloy-rpc-types-trace = { version = "1.0.37" }
+alloy-provider = { version = "1.0.37", default-features = false, features = ["ws"] }
+alloy-rpc-types-trace = { version = "1.0.37", default-features = false }
 reth-errors = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
 reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
