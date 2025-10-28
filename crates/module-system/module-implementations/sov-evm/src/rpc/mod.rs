@@ -346,7 +346,9 @@ where
                 match pending_or_block_nr {
                     PendingOrBlock::Pending => MaybeArchivalState::Current(state),
                     PendingOrBlock::Number(number) => {
-                        if number == state.rollup_height_to_access().get() || (number == state.rollup_height_to_access().get() + 1) {
+                        if number == state.rollup_height_to_access().get()
+                            || (number == state.rollup_height_to_access().get() + 1)
+                        {
                             return Ok(MaybeArchivalState::Current(state));
                         }
                         let archival_state = state
