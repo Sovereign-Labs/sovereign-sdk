@@ -86,14 +86,14 @@ where
     pub async fn blocks(&self) -> Result<(), Error> {
         let mut state = self.ethereum.api_state_accessor();
         let pending_block = self.evm.pending_block(&mut state);
-        let mut block_watermark = Watermark::new(..pending_block.header.number);
+        let mut block_watermark = Watermark::new(..pending_block.header.number + 1);
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
         while state_updates.changed().await.is_ok() {
             let mut state = self.ethereum.api_state_accessor();
             let pending_block = self.evm.pending_block(&mut state);
 
-            for block_number in block_watermark.advance(..pending_block.header.number) {
+            for block_number in block_watermark.advance(..pending_block.header.number + 1) {
                 let block = self.get_block(block_number, &mut state)?;
                 self.send_block_header(&block).await?;
             }

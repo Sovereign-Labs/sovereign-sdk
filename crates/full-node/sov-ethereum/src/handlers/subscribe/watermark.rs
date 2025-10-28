@@ -24,7 +24,7 @@ impl Watermark {
         if visible.end <= self.processed.end {
             return EMPTY_RANGE;
         }
-        let range = self.processed.end + 1..visible.end;
+        let range = self.processed.end..visible.end;
         self.processed = visible;
         range
     }
@@ -39,7 +39,7 @@ mod tests {
         let mut watermark = Watermark::new(..0);
 
         let range = watermark.advance(..2);
-        assert_eq!(range, 1..2);
+        assert_eq!(range, 0..2);
         assert_eq!(watermark.processed, ..2);
     }
 
@@ -65,18 +65,18 @@ mod tests {
     fn multiple_advances() {
         let mut watermark = Watermark::new(..0);
 
-        assert_eq!(watermark.advance(..3), 1..3);
+        assert_eq!(watermark.advance(..3), 0..3);
         assert_eq!(watermark.advance(..3), EMPTY_RANGE);
-        assert_eq!(watermark.advance(..5), 4..5);
+        assert_eq!(watermark.advance(..5), 3..5);
         assert_eq!(watermark.advance(..5), EMPTY_RANGE);
-        assert_eq!(watermark.advance(..7), 6..7);
+        assert_eq!(watermark.advance(..7), 5..7);
     }
 
     #[test]
     fn single_item_increment() {
         let mut watermark = Watermark::new(..0);
 
-        assert_eq!(watermark.advance(..1), 1..1);
-        assert_eq!(watermark.advance(..2), 2..2);
+        assert_eq!(watermark.advance(..1), 0..1);
+        assert_eq!(watermark.advance(..2), 1..2);
     }
 }
