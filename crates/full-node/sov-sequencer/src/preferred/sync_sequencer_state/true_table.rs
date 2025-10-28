@@ -72,40 +72,8 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (false, false, false, _, _) => {
-            // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
-            // In all other cases, we can just accept the new storage and move on.
-            let executor = if initial_conditions.should_flush_tx_cache() {
-                debug!(
-                    ?initial_conditions,
-                    "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
-                );
-                inner
-                    .executor_events_sender
-                    .flush_transactions_cache(info.next_tx_number)
-                    .await;
-
-                // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
-                Some(Box::new(
-                    // Since we're replaying from the node state, don't reuse any uncommitted changes
-                    inner.new_executor_with_empty_uncommitted_changes(info),
-                ))
-            } else {
-                let rollup_height =
-                    StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
-                        .rollup_height_to_access();
-                debug!(
-                    ? initial_conditions,
-                    % rollup_height,
-                    ?info,
-                    "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
-                );
-                None
-            };
-
-            PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
-                executor,
-                time_spent_fetching_batches,
-            )
+            reply_soft_confirmations(info, inner, initial_conditions, time_spent_fetching_batches)
+                .await
         }
     };
 
@@ -171,42 +139,51 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (false, false, false, _, _) => {
-            // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
-            // In all other cases, we can just accept the new storage and move on.
-            let executor = if initial_conditions.should_flush_tx_cache() {
-                debug!(
-                    ?initial_conditions,
-                    "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
-                );
-                inner
-                    .executor_events_sender
-                    .flush_transactions_cache(info.next_tx_number)
-                    .await;
-
-                // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
-                Some(Box::new(
-                    // Since we're replaying from the node state, don't reuse any uncommitted changes
-                    inner.new_executor_with_empty_uncommitted_changes(info),
-                ))
-            } else {
-                let rollup_height =
-                    StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
-                        .rollup_height_to_access();
-                debug!(
-                    ? initial_conditions,
-                    % rollup_height,
-                    ?info,
-                    "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
-                );
-                None
-            };
-
-            PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
-                executor,
-                time_spent_fetching_batches,
-            )
+            reply_soft_confirmations(info, inner, initial_conditions, time_spent_fetching_batches)
+                .await
         }
     };
 
     operation
+}
+
+async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
+    info: &StateUpdateInfo<S::Storage>,
+    inner: &mut InnerGuard<'_, S, Rt>,
+    initial_conditions: InitialConditions,
+    time_spent_fetching_batches: Duration,
+) -> PreferredSeqOperation<S, Rt> {
+    // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
+    // In all other cases, we can just accept the new storage and move on.
+    let executor = if initial_conditions.should_flush_tx_cache() {
+        debug!(
+            ?initial_conditions,
+            "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
+        );
+        inner
+            .executor_events_sender
+            .flush_transactions_cache(info.next_tx_number)
+            .await;
+
+        // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
+        Some(Box::new(
+            // Since we're replaying from the node state, don't reuse any uncommitted changes
+            inner.new_executor_with_empty_uncommitted_changes(info),
+        ))
+    } else {
+        let rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+            .rollup_height_to_access();
+        debug!(
+            ? initial_conditions,
+            % rollup_height,
+            ?info,
+            "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
+        );
+        None
+    };
+
+    PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
+        executor,
+        time_spent_fetching_batches,
+    )
 }
