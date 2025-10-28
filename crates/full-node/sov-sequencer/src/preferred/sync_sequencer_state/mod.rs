@@ -26,6 +26,7 @@ use std::sync::Arc;
 pub(crate) use sync_state::*;
 use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) use updator::*;
+mod master_true_table;
 
 mod inner;
 mod sync_state;
@@ -227,4 +228,25 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) batches_count: u64,
     pub(crate) transactions_count: usize,
     pub(crate) batch_is_in_progress: bool,
+}
+
+struct TrueTable {
+    condition_nodes_sequence_number_is_fresher: bool,
+    condition_too_close_to_deferred_slots_count_for_comfort: bool,
+    condition_node_is_lagging: bool,
+    condition_are_there_batches_to_replay: bool,
+    condition_node_is_unsynced_and_doesnt_know_it: bool,
+}
+
+#[derive(Debug)]
+struct InitialConditions {
+    is_startup: bool,
+    is_resync: bool,
+    is_recover: bool,
+}
+
+impl InitialConditions {
+    fn should_flush_tx_cache(&self) -> bool {
+        self.is_startup || self.is_resync || self.is_recover
+    }
 }

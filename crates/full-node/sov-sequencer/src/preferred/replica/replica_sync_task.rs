@@ -74,7 +74,7 @@ impl ReplicaSyncTask {
     async fn run_handler<R: ReplicaEventHandler>(
         handler: R,
         mut db_data_receiver: tokio::sync::mpsc::Receiver<DbData>,
-        shutdown_receiver: watch::Receiver<()>,
+        mut shutdown_receiver: watch::Receiver<()>,
     ) {
         'outer: loop {
             let mut data = tokio::select! {
