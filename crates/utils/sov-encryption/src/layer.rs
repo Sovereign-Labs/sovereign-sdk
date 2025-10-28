@@ -244,18 +244,28 @@ impl EncryptionLayer {
         let cache = self.key_cache.clone();
         
         let handle = tokio::spawn(async move {
-            info!("Key listener started on {:?}", socket_path.as_ref());
+            info!("🚀 Key listener started on {:?}", socket_path.as_ref());
             
-            while let Ok((stream, _)) = listener.accept().await {
-                let cache = cache.clone();
-                
-                // Handle each connection in a separate task
-                tokio::spawn(async move {
-                    if let Err(e) = Self::handle_key_connection(stream, cache).await {
-                        error!("Error handling key connection: {}", e);
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _)) => {
+                        info!("🔌 New connection accepted on unix socket");
+                        let cache = cache.clone();
+                        
+                        // Handle each connection in a separate task
+                        tokio::spawn(async move {
+                            if let Err(e) = Self::handle_key_connection(stream, cache).await {
+                                error!("❌ Error handling key connection: {}", e);
+                            }
+                        });
                     }
-                });
+                    Err(e) => {
+                        error!("❌ Failed to accept connection on unix socket: {}", e);
+                        break;
+                    }
+                }
             }
+            warn!("🛑 Key listener exiting");
         });
         
         Ok(handle)
@@ -267,31 +277,51 @@ impl EncryptionLayer {
     ) -> Result<(), EncryptionError> {
         use tokio::io::AsyncReadExt;
         
+        info!("New unix socket connection established for key updates");
         let mut buffer = vec![0u8; 4096];
         
         while let Ok(n) = stream.read(&mut buffer).await {
-            if n == 0 { break; } // Connection closed
+            if n == 0 { 
+                info!("Unix socket connection closed by client");
+                break; 
+            }
+            
+            info!("Received {} bytes on unix socket", n);
+            debug!("Raw data: {:?}", &buffer[..n]);
             
             // Deserialize key update message
-            let key_update: KeyUpdate = bincode::deserialize(&buffer[..n])
-                .map_err(|e| EncryptionError::EncryptionFailed(format!("Key update deserialization failed: {e}")))?;
-            
-            match key_update {
-                KeyUpdate::NewKey(key) => {
-                    info!("Received new encryption key: {}", key.id);
-                    cache.update_current_key(key);
+            match bincode::deserialize::<KeyUpdate>(&buffer[..n]) {
+                Ok(key_update) => {
+                    info!("Successfully deserialized KeyUpdate message");
+                    match key_update {
+                        KeyUpdate::NewKey(key) => {
+                            info!("🔑 Received NEW encryption key: {} ({}bytes)", key.id, key.material.len());
+                            debug!("Key material: {}", hex::encode(&key.material));
+                            cache.update_current_key(key);
+                            info!("✅ Updated current encryption key in cache");
+                        }
+                        KeyUpdate::RotateKey { old_id, new_key } => {
+                            info!("🔄 Key rotation: {} -> {} ({}bytes)", old_id, new_key.id, new_key.material.len());
+                            debug!("New key material: {}", hex::encode(&new_key.material));
+                            cache.rotate_key(old_id, new_key);
+                            info!("✅ Rotated encryption key in cache");
+                        }
+                        KeyUpdate::RevokeKey(key_id) => {
+                            warn!("🚫 Key revoked: {}", key_id);
+                            cache.revoke_key(key_id);
+                            warn!("❌ Revoked encryption key from cache");
+                        }
+                    }
                 }
-                KeyUpdate::RotateKey { old_id, new_key } => {
-                    info!("Key rotation: {} -> {}", old_id, new_key.id);
-                    cache.rotate_key(old_id, new_key);
-                }
-                KeyUpdate::RevokeKey(key_id) => {
-                    warn!("Key revoked: {}", key_id);
-                    cache.revoke_key(key_id);
+                Err(e) => {
+                    error!("❌ Failed to deserialize KeyUpdate message from {} bytes: {}", n, e);
+                    error!("Raw data hex: {}", hex::encode(&buffer[..n]));
+                    return Err(EncryptionError::EncryptionFailed(format!("Key update deserialization failed: {e}")));
                 }
             }
         }
         
+        info!("Unix socket key connection handler exiting");
         Ok(())
     }
 }
