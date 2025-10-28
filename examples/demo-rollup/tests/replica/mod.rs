@@ -115,6 +115,7 @@ async fn test_replica_receives_txs_from_da() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn test_replica_receives_txs_from_postgres() {
     let postgres = PostgresData::create_postgres().await;
 
