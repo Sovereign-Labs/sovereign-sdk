@@ -4,6 +4,8 @@ use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
+use sov_rollup_interface::node::future_or_shutdown;
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use tokio::sync::watch;
@@ -90,11 +92,16 @@ impl EventReceiver {
             let mut prev_event_type = None;
 
             loop {
-                if shutdown_receiver.has_changed().unwrap_or(true) {
-                    break;
-                }
+                let fut = future_or_shutdown(
+                    self.fetch_data(start_event_id, prev_event_type),
+                    &shutdown_receiver,
+                );
 
-                match self.fetch_data(start_event_id, prev_event_type).await {
+                let FutureOrShutdownOutput::Output(res) = fut.await else {
+                    break;
+                };
+
+                match res {
                     Ok((event_id, event_type)) => {
                         nb_of_consecutive_db_errors = 0;
                         start_event_id = Some(event_id + 1);

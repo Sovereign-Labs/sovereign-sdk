@@ -4,7 +4,11 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
-use crate::preferred::sync_sequencer_state::Message;
+use crate::preferred::sync_sequencer_state::conditions_table::{
+    operation_for_master, operation_for_replica,
+};
+use crate::preferred::sync_sequencer_state::ConditionsTable;
+use crate::preferred::sync_sequencer_state::{InitialStatus, Message};
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::AcceptTxError;
 use crate::preferred::DoNewTxError;
@@ -22,7 +26,6 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
@@ -35,8 +38,6 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
-use tracing::error;
-use tracing::warn;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
@@ -477,103 +478,41 @@ where
         // Note that we're holding a lock on the sequencer, so this is guaranteed to be up to date.
         let condition_are_there_batches_to_replay = !batches_to_replay.is_empty();
 
-        let operation = match (
+        let table = ConditionsTable {
             condition_nodes_sequence_number_is_fresher,
             condition_too_close_to_deferred_slots_count_for_comfort,
             condition_node_is_lagging,
             condition_are_there_batches_to_replay,
             condition_node_is_unsynced_and_doesnt_know_it,
-        ) {
-            (true, _, _, true, _) => {
-                if inner.is_replica() {
-                    inner.executor_events_sender.clean_all_batches_from_cache();
-                    PreferredSeqOperation::WaitForNodeResyncToTip
-                } else {
-                    PreferredSeqOperation::Unreachable
-                }
-            }
-
-            (true, _, false, false, _) => {
-                warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
-                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                    target_da_height: sync_status.target_da_height(),
-                    synced_da_height: sync_status.synced_da_height(),
-                });
-                PreferredSeqOperation::WaitForNodeResyncToTip
-            }
-            (_, _, true, _, _) => {
-                warn!(?distance, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.");
-                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                    target_da_height: sync_status.target_da_height(),
-                    synced_da_height: sync_status.synced_da_height(),
-                });
-                PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
-            }
-            (false, true, false, _, _) => {
-                error!(
-                    slot_number_according_to_node=%info.slot_number,
-                    %current_visible_slot_number,
-                    deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
-                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
-                inner.trigger_recovery(info).await;
-
-                PreferredSeqOperation::RecoverAndCatchUp
-            }
-            // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
-            (_, _, _, _, true) => {
-                // Check for this condition after all of the normal "out-of-sync" conditions have been checked, because it may be possible for other unsynced conditions to trip this check
-                // and we'd rather report the real root cause if there's a different one.
-                warn!("The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.");
-                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                    target_da_height: sync_status.target_da_height(),
-                    synced_da_height: sync_status.synced_da_height(),
-                });
-                PreferredSeqOperation::WaitForNodeResyncToTip
-            }
-            (false, false, false, _, _) => {
-                let should_flush_tx_cache = is_startup || is_resync || is_recover;
-
-                // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
-                // In all other cases, we can just accept the new storage and move on.
-                let executor = if should_flush_tx_cache {
-                    debug!(
-                        is_startup,
-                        is_resync,
-                        is_recover,
-                        "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
-                    );
-                    inner
-                        .executor_events_sender
-                        .flush_transactions_cache(info.next_tx_number)
-                        .await;
-
-                    // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
-                    Some(Box::new(
-                        // Since we're replaying from the node state, don't reuse any uncommitted changes
-                        inner.new_executor_with_empty_uncommitted_changes(info),
-                    ))
-                } else {
-                    let rollup_height =
-                        StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
-                            .rollup_height_to_access();
-                    debug!(
-                        is_startup,
-                        is_resync,
-                        is_recover,
-                        %rollup_height,
-                        ?info,
-                        "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
-                    );
-                    None
-                };
-
-                PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
-                    executor,
-                    time_spent_fetching_batches,
-                )
-            }
         };
-        operation
+
+        let initial_status = InitialStatus {
+            is_startup,
+            is_resync,
+            is_recover,
+        };
+
+        if inner.is_replica() {
+            operation_for_replica(
+                table,
+                info,
+                &mut inner,
+                initial_status,
+                time_spent_fetching_batches,
+                current_visible_slot_number,
+            )
+            .await
+        } else {
+            operation_for_master(
+                table,
+                info,
+                &mut inner,
+                initial_status,
+                time_spent_fetching_batches,
+                current_visible_slot_number,
+            )
+            .await
+        }
     }
 
     async fn process_check_readiness(
