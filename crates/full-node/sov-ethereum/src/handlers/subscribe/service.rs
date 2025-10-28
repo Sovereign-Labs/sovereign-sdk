@@ -20,6 +20,16 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Block does not eist")]
+    BlockDoesNotExist,
+    #[error("Receipt does not eist")]
+    ReceiptDoesNotExist,
+    #[error(transparent)]
+    Disconnect(#[from] DisconnectError),
+}
+
 pub struct Streamer<S, Seq>
 where
     S: Spec,
@@ -147,26 +157,4 @@ where
             tracing::info!(%err, "The subscription client disconnected from the server.");
         })
     }
-}
-
-#[derive(Error, Debug)]
-pub enum ParamsValidationError {
-    #[error("Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor")]
-    BlockOptionParam,
-    #[error("Boolean parameters are not supported in LOG subscriptions")]
-    BoolParam,
-    #[error("Only LOG and newHeads subscriptions are supported")]
-    OnlyLogAndNewHeadsSubscription,
-    #[error("newHeads subscription does not accept parameters")]
-    NewHeadsDoesNotAcceptParams,
-}
-
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Block does not eist")]
-    BlockDoesNotExist,
-    #[error("Receipt does not eist")]
-    ReceiptDoesNotExist,
-    #[error(transparent)]
-    Disconnect(#[from] DisconnectError),
 }
