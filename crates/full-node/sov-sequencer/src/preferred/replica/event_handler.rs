@@ -1,7 +1,7 @@
-use crate::preferred::inner::SequencerStateUpdator;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
 use crate::preferred::replica::replica_sync_task::ReplicaEventHandler;
+use crate::preferred::sync_sequencer_state::SequencerStateUpdator;
 use crate::preferred::BatchCreationError;
 use crate::preferred::DoNewTxError;
 use crate::preferred::SequencerStateUpdatorError;
