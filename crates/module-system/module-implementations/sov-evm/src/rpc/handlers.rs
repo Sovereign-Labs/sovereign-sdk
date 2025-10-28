@@ -154,6 +154,11 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
+        let block_number = if block_number.as_ref().is_some_and(|n| n == "pending") {
+            Some("pending".to_string())
+        } else {
+            block_number
+        };
         let mut state = self.resolve_state(block_number, state)?;
 
         let ethereum_address: EthereumAddress = address.into();

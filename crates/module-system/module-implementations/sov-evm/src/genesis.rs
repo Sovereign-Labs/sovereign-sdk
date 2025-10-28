@@ -64,7 +64,7 @@ where
             block.header.timestamp,
             block.header.beneficiary,
             block.header.number,
-            None,
+            Some(KECCAK_EMPTY),
         );
         self.block_env.set(&block_env, state)?;
 
