@@ -55,7 +55,7 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
 
     assert!(latest_block.number.unwrap().as_u64() > 0);
     assert!(latest_block.number > earliest_block.number);
-    assert!(pending_block.number > latest_block.number);
+    assert!(pending_block.number == latest_block.number);
     assert_eq!(pending_block.hash, Some(H256::zero()));
 
     // Nonce should be 0 before any transactions

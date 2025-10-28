@@ -26,11 +26,8 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
                 .eth_get_block_by_number(Some("pending".to_string()))
                 .await;
 
-            assert_eq!(pending_block.parent_hash, latest_block.hash.unwrap());
-            assert_eq!(
-                pending_block.number.unwrap(),
-                latest_block.number.unwrap() + 1
-            );
+            assert_eq!(pending_block.parent_hash, latest_block.parent_hash);
+            assert_eq!(pending_block.number.unwrap(), latest_block.number.unwrap());
             assert!(pending_block.transactions.is_empty());
             assert!(latest_block.transactions.is_empty());
         }

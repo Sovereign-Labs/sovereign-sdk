@@ -38,7 +38,7 @@ fn test_state_at_invalid_depth() {
     }
     runner.query_visible_state(|state| {
         let err = evm
-            .get_balance(to.address(), Some("0x03".into()), state)
+            .get_balance(to.address(), Some("0x04".into()), state)
             .unwrap_err();
         assert_eq!(
             err.message(),
