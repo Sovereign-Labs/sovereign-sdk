@@ -3,7 +3,6 @@ use std::time::Duration;
 use alloy::network::TransactionBuilder;
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionRequest;
-use alloy::transports::RpcError;
 use alloy_primitives::{Address, B256};
 use futures::StreamExt;
 use tokio::time::timeout;
