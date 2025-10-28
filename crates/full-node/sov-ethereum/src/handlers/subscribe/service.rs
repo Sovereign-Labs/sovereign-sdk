@@ -1,3 +1,4 @@
+use super::watermark::Watermark;
 use crate::Ethereum;
 use alloy_consensus::Sealed;
 use alloy_rpc_types::Filter;
@@ -9,7 +10,10 @@ use serde::Serialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
+use sov_evm::MaybeSealedBlock;
+use sov_evm::Receipt;
 use sov_modules_api::capabilities::HasKernel;
+use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
 use std::fmt::Debug;
@@ -23,6 +27,7 @@ where
 {
     sink: SubscriptionSink,
     ethereum: Arc<Ethereum<S, Seq>>,
+    evm: Evm<S>,
 }
 
 impl<S, Seq> Streamer<S, Seq>
@@ -33,56 +38,54 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     pub fn new(sink: SubscriptionSink, ethereum: Arc<Ethereum<S, Seq>>) -> Self {
-        Self { sink, ethereum }
+        Self {
+            sink,
+            ethereum,
+            evm: Default::default(),
+        }
+    }
+
+    fn get_block(
+        &self,
+        number: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<MaybeSealedBlock, Error> {
+        self.evm
+            .get_maybe_sealed_block(number, state)
+            .ok_or(Error::BlockDoesNotExist)
+            .inspect_err(|_| tracing::error!(number, "Block does not exist"))
+    }
+
+    fn get_receipt(&self, idx: u64, state: &mut ApiStateAccessor<S>) -> Result<Receipt, Error> {
+        self.evm
+            .receipt(idx, state)
+            .ok_or(Error::ReceiptDoesNotExist)
+            .inspect_err(|_| tracing::error!(idx, "Receipt does not exist"))
     }
 
     pub async fn logs(&self, filter: Box<Filter>) -> Result<(), Error> {
-        let evm = Evm::<S>::default();
         let mut state = self.ethereum.api_state_accessor();
 
-        let pending_block = evm.pending_block(&mut state);
-        let mut prev_last_tx_index = pending_block.transactions.end;
+        let pending_block = self.evm.pending_block(&mut state);
+        let mut tx_watermark = Watermark::new(pending_block.transactions.end);
 
         // Fetch the initial block. If it's stale, it will be replaced below.
-        let start_block = pending_block.header.number - 1;
-        let Some(mut block) = evm.get_maybe_sealed_block(start_block, &mut state) else {
-            tracing::error!(start_block, "Block does not exist");
-            return Err(Error::BlockDoesNotExist);
-        };
+        let mut block = self.get_block(pending_block.header.number - 1, &mut state)?;
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
 
         while state_updates.changed().await.is_ok() {
             let mut state = self.ethereum.api_state_accessor();
 
-            let pending_block = evm.pending_block(&mut state);
-            let curr_last_tx_index = pending_block.transactions.end;
+            let pending_block = self.evm.pending_block(&mut state);
 
-            if curr_last_tx_index <= prev_last_tx_index {
-                continue;
-            }
-
-            for index in prev_last_tx_index..curr_last_tx_index {
-                let Some(receipt) = evm.receipt(index, &mut state) else {
-                    // This can happen if the state was pruned.
-                    tracing::error!(index, "Receipt does not exist");
-                    return Err(Error::ReceiptDoesNotExist);
-                };
+            for index in tx_watermark.advance(pending_block.transactions.end) {
+                let receipt = self.get_receipt(index, &mut state)?;
 
                 if block.number() != receipt.block_number {
-                    match evm.get_maybe_sealed_block(receipt.block_number, &mut state) {
-                        Some(b) => block = b,
-                        None => {
-                            tracing::error!(
-                                block_number = receipt.block_number,
-                                "Block does not exist"
-                            );
-                            return Err(Error::BlockDoesNotExist);
-                        }
-                    }
+                    let new_block = self.get_block(receipt.block_number, &mut state)?;
+                    block = new_block;
                 }
-
-                let transaction_index = index - block.transactions_start();
 
                 for (log_index_in_tx, log) in receipt.receipt.logs.into_iter().enumerate() {
                     if filter.matches(&log) {
@@ -97,59 +100,39 @@ where
                             removed: false,
                         };
 
-                        assert_eq!(receipt.transaction_index, transaction_index);
-
-                        self.send_subscription_message(&rpc_log, "log").await?;
+                        self.send(&rpc_log, "log").await?;
                     }
                 }
             }
-            prev_last_tx_index = curr_last_tx_index;
         }
         Ok(())
     }
 
     pub async fn blocks(&self) -> Result<(), Error> {
-        let evm = Evm::<S>::default();
         let mut state = self.ethereum.api_state_accessor();
 
-        let pending_block = evm.pending_block(&mut state);
-        let mut prev_block_number = pending_block.header.number - 1;
+        let pending_block = self.evm.pending_block(&mut state);
+        let mut block_watermark = Watermark::new(pending_block.header.number - 1);
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-
         while state_updates.changed().await.is_ok() {
             let mut state = self.ethereum.api_state_accessor();
 
-            let pending_block = evm.pending_block(&mut state);
-            let current_block_number = pending_block.header.number - 1;
+            let pending_block = self.evm.pending_block(&mut state);
 
-            // Check if there's a new sealed block
-            if current_block_number <= prev_block_number {
-                continue;
-            }
-
-            // Send all new blocks from prev_block_number+1 to current_block_number
-            for block_number in (prev_block_number + 1)..=current_block_number {
-                let Some(block) = evm.get_maybe_sealed_block(block_number, &mut state) else {
-                    tracing::error!(block_number, "Block does not exist");
-                    return Err(Error::BlockDoesNotExist);
-                };
-
+            for block_number in block_watermark.advance(pending_block.header.number - 1) {
+                let block = self.get_block(block_number, &mut state)?;
                 let hash = block.hash().unwrap_or_default();
                 let header = Sealed::new_unchecked(block.header().clone(), hash);
                 let rpc_header = Header::from_consensus(header, None, None);
 
-                self.send_subscription_message(&rpc_header, "header")
-                    .await?;
+                self.send(&rpc_header, "header").await?;
             }
-
-            prev_block_number = current_block_number;
         }
         Ok(())
     }
 
-    /// Helper function to send a message through the subscription sink
-    async fn send_subscription_message<T: Serialize + Debug>(
+    async fn send<T: Serialize + Debug>(
         &self,
         data: &T,
         data_type: &str,

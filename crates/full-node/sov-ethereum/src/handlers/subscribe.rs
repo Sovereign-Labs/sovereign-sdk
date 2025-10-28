@@ -16,6 +16,7 @@ use sov_sequencer::Sequencer;
 use std::sync::Arc;
 
 mod service;
+pub(crate) mod watermark;
 
 use crate::handlers::ETH_RPC_ERROR;
 
