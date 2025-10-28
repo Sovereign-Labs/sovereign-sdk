@@ -19,8 +19,7 @@ borsh = { workspace = true, features = ["derive", "bytes"] }
 bech32 = { workspace = true }
 prost = "0.13"
 
-# Upgrade with care. The new version might be incompatible and require run of soak tests
-# TODO: Remove celestia-rpc when migration to client completed.
+# Upgrade with care. The new version might be incompatible and require a run of soak tests
 celestia-types = { version = "0.16.0", default-features = false }
 celestia-client = { version = "0.2.0", default-features = false, optional = true }
 tendermint = { version = "0.40.4", default-features = false }
