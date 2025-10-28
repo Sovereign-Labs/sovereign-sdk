@@ -243,6 +243,17 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         )
     }
 
+    /// Fetches the latest nonce for an account
+    fn get_nonce(
+        &self,
+        auth_data: &AuthorizationData<S>,
+        state: &mut impl StateAccessor,
+    ) -> anyhow::Result<Option<u64>> {
+        self.uniqueness
+            .next_nonce(&auth_data.credential_id, state)
+            .map(Some)
+    }
+
     /// Marks a transaction as having been executed, preventing it from executing again.
     fn mark_tx_attempted(
         &mut self,
