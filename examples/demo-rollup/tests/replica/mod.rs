@@ -115,7 +115,7 @@ async fn test_replica_receives_txs_from_da() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
+#[ignore = "Flaky test under investigation"]
 async fn test_replica_receives_txs_from_postgres() {
     let postgres = PostgresData::create_postgres().await;
 
