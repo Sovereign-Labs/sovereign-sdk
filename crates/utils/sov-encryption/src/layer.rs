@@ -115,7 +115,24 @@ impl EncryptionLayer {
         // Handle different key client configurations
         let key_listener_handle = match &config.key_client {
             #[cfg(feature = "unix-client")]
-            crate::config::KeyClientConfig::UnixSocket { socket_path, .. } => {
+            crate::config::KeyClientConfig::UnixSocket { socket_path, initial_key, .. } => {
+                // If an initial key is provided, populate the cache with it
+                if let Some(key_hex) = initial_key {
+                    let key_bytes = hex::decode(key_hex)
+                        .map_err(|e| EncryptionError::InvalidKeyFormat(format!("Invalid hex initial key: {e}")))?;
+                    if key_bytes.len() != 32 {
+                        return Err(EncryptionError::InvalidKeyFormat(
+                            format!("Initial key must be 32 bytes, got {}", key_bytes.len())
+                        ));
+                    }
+                    let initial_encryption_key = EncryptionKey {
+                        id: "genesis-key".to_string(),
+                        material: key_bytes,
+                    };
+                    key_cache.update_current_key(initial_encryption_key);
+                    info!("Initialized unix socket encryption layer with genesis key");
+                }
+                
                 // Create temporary instance to start listener
                 let temp_layer = Self {
                     key_cache: key_cache.clone(),

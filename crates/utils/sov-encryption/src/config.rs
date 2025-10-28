@@ -44,6 +44,8 @@ pub enum KeyClientConfig {
         /// Retry backoff base delay (in milliseconds)
         #[serde(default = "default_retry_delay_ms")]
         retry_delay_ms: u64,
+        /// Optional initial key to start with (hex-encoded)
+        initial_key: Option<String>,
     },
     
 }
