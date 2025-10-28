@@ -4,11 +4,11 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
-use crate::preferred::sync_sequencer_state::true_table::{
+use crate::preferred::sync_sequencer_state::conditions_table::{
     operation_for_master, operation_for_replica,
 };
 use crate::preferred::sync_sequencer_state::ConditionsTable;
-use crate::preferred::sync_sequencer_state::{InitialConditions, Message};
+use crate::preferred::sync_sequencer_state::{InitialStatus, Message};
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::AcceptTxError;
 use crate::preferred::DoNewTxError;
@@ -486,7 +486,7 @@ where
             condition_node_is_unsynced_and_doesnt_know_it,
         };
 
-        let initial_conditions = InitialConditions {
+        let initial_status = InitialStatus {
             is_startup,
             is_resync,
             is_recover,
@@ -497,7 +497,7 @@ where
                 table,
                 info,
                 &mut inner,
-                initial_conditions,
+                initial_status,
                 time_spent_fetching_batches,
                 current_visible_slot_number,
             )
@@ -507,7 +507,7 @@ where
                 table,
                 info,
                 &mut inner,
-                initial_conditions,
+                initial_status,
                 time_spent_fetching_batches,
                 current_visible_slot_number,
             )

@@ -26,7 +26,7 @@ use std::sync::Arc;
 pub(crate) use sync_state::*;
 use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) use updator::*;
-mod true_table;
+mod conditions_table;
 
 mod inner;
 mod sync_state;
@@ -239,13 +239,13 @@ struct ConditionsTable {
 }
 
 #[derive(Debug)]
-struct InitialConditions {
+struct InitialStatus {
     is_startup: bool,
     is_resync: bool,
     is_recover: bool,
 }
 
-impl InitialConditions {
+impl InitialStatus {
     fn should_flush_tx_cache(&self) -> bool {
         self.is_startup || self.is_resync || self.is_recover
     }

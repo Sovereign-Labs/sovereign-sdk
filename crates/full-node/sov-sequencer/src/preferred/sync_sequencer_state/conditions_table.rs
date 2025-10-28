@@ -1,5 +1,5 @@
 use crate::preferred::sync_sequencer_state::ConditionsTable;
-use crate::preferred::sync_sequencer_state::InitialConditions;
+use crate::preferred::sync_sequencer_state::InitialStatus;
 use crate::preferred::InnerGuard;
 use crate::preferred::PreferredSeqOperation;
 use crate::SequencerNotReadyDetails;
@@ -19,7 +19,7 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
     table: ConditionsTable,
     info: &StateUpdateInfo<S::Storage>,
     inner: &mut InnerGuard<'_, S, Rt>,
-    initial_conditions: InitialConditions,
+    initial_status: InitialStatus,
     time_spent_fetching_batches: Duration,
     current_visible_slot_number: SlotNumber,
 ) -> PreferredSeqOperation<S, Rt> {
@@ -72,8 +72,7 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (false, false, false, _, _) => {
-            reply_soft_confirmations(info, inner, initial_conditions, time_spent_fetching_batches)
-                .await
+            reply_soft_confirmations(info, inner, initial_status, time_spent_fetching_batches).await
         }
     };
 
@@ -84,7 +83,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
     table: ConditionsTable,
     info: &StateUpdateInfo<S::Storage>,
     inner: &mut InnerGuard<'_, S, Rt>,
-    initial_conditions: InitialConditions,
+    initial_status: InitialStatus,
     time_spent_fetching_batches: Duration,
     current_visible_slot_number: SlotNumber,
 ) -> PreferredSeqOperation<S, Rt> {
@@ -139,8 +138,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (false, false, false, _, _) => {
-            reply_soft_confirmations(info, inner, initial_conditions, time_spent_fetching_batches)
-                .await
+            reply_soft_confirmations(info, inner, initial_status, time_spent_fetching_batches).await
         }
     };
 
@@ -150,14 +148,14 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
 async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
     inner: &mut InnerGuard<'_, S, Rt>,
-    initial_conditions: InitialConditions,
+    initial_status: InitialStatus,
     time_spent_fetching_batches: Duration,
 ) -> PreferredSeqOperation<S, Rt> {
     // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
     // In all other cases, we can just accept the new storage and move on.
-    let executor = if initial_conditions.should_flush_tx_cache() {
+    let executor = if initial_status.should_flush_tx_cache() {
         debug!(
-            ?initial_conditions,
+            ?initial_status,
             "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
         );
         inner
@@ -174,7 +172,7 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
         let rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
             .rollup_height_to_access();
         debug!(
-            ? initial_conditions,
+            ? initial_status,
             % rollup_height,
             ?info,
             "Skipping `replay_soft_confirmations_on_top_of_node_state`. Fast tracking info"
