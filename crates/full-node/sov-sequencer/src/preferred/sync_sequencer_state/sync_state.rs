@@ -7,7 +7,7 @@ use crate::preferred::replica::replica_sync_task::DBDataRejected;
 use crate::preferred::sync_sequencer_state::true_table::{
     operation_for_master, operation_for_replica,
 };
-use crate::preferred::sync_sequencer_state::TrueTable;
+use crate::preferred::sync_sequencer_state::ConditionsTable;
 use crate::preferred::sync_sequencer_state::{InitialConditions, Message};
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::AcceptTxError;
@@ -478,7 +478,7 @@ where
         // Note that we're holding a lock on the sequencer, so this is guaranteed to be up to date.
         let condition_are_there_batches_to_replay = !batches_to_replay.is_empty();
 
-        let table = TrueTable {
+        let table = ConditionsTable {
             condition_nodes_sequence_number_is_fresher,
             condition_too_close_to_deferred_slots_count_for_comfort,
             condition_node_is_lagging,

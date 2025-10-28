@@ -230,7 +230,7 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) batch_is_in_progress: bool,
 }
 
-struct TrueTable {
+struct ConditionsTable {
     condition_nodes_sequence_number_is_fresher: bool,
     condition_too_close_to_deferred_slots_count_for_comfort: bool,
     condition_node_is_lagging: bool,

@@ -1,5 +1,5 @@
+use crate::preferred::sync_sequencer_state::ConditionsTable;
 use crate::preferred::sync_sequencer_state::InitialConditions;
-use crate::preferred::sync_sequencer_state::TrueTable;
 use crate::preferred::InnerGuard;
 use crate::preferred::PreferredSeqOperation;
 use crate::SequencerNotReadyDetails;
@@ -16,7 +16,7 @@ use tracing::error;
 use tracing::warn;
 
 pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
-    table: TrueTable,
+    table: ConditionsTable,
     info: &StateUpdateInfo<S::Storage>,
     inner: &mut InnerGuard<'_, S, Rt>,
     initial_conditions: InitialConditions,
@@ -81,7 +81,7 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
 }
 
 pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
-    table: TrueTable,
+    table: ConditionsTable,
     info: &StateUpdateInfo<S::Storage>,
     inner: &mut InnerGuard<'_, S, Rt>,
     initial_conditions: InitialConditions,
