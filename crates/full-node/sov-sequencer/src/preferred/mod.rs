@@ -12,6 +12,7 @@ mod side_effects;
 mod state_root_compute;
 mod sync_sequencer_state;
 mod transaction_subscriptions;
+mod tx_nonce_queue;
 mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
