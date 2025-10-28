@@ -6,7 +6,6 @@ mod block_executor;
 mod cache_warm_up_executor;
 mod db;
 mod executor_events;
-//mod inner;
 mod preferred_blob_sender;
 mod replica;
 mod side_effects;
