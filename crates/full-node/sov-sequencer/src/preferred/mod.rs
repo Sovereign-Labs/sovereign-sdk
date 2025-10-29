@@ -514,6 +514,29 @@ where
             }
         }
 
+        // Add the critical background tasks that were missing
+        handles.push(tokio::spawn({
+            update_state_task(
+                seq.clone(),
+                state_update_receiver.clone(),
+                shutdown_receiver.clone(),
+            )
+        }));
+        handles.push(tokio::spawn({
+            let ledger_db = ledger_db.clone();
+            let seq = seq.clone();
+            let shutdown_rx = shutdown_receiver.clone();
+            async move {
+                loop_send_tx_notifications::<S, Rt>(
+                    state_update_receiver,
+                    shutdown_rx,
+                    &ledger_db,
+                    seq.tx_status_manager(),
+                )
+                .await;
+            }
+        }));
+
         Ok((seq, handles))
     }
 
