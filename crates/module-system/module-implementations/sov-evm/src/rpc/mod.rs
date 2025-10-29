@@ -1,7 +1,7 @@
 use std::ops::DerefMut;
 
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_consensus::{Sealed, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
@@ -348,7 +348,7 @@ where
     ) -> Result<BlockEnv, EthApiError> {
         let maybe_blcok = self
             .get_sealed_block_by_number(block_number, state)?
-            .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
+            .ok_or(EthApiError::UnknownBlock)?;
 
         Ok(match maybe_blcok {
             MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),

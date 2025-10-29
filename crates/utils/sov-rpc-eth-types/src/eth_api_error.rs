@@ -38,9 +38,12 @@ pub enum EthApiError {
     /// See also <https://eips.ethereum.org/EIPS/eip-4444>
     #[error("pruned history unavailable")]
     PrunedHistoryUnavailable,
-    /// Thrown when an unknown block or transaction index is encountered
-    #[error("unknown block or tx index")]
-    UnknownBlockOrTxIndex,
+    /// Thrown when an unknown block
+    #[error("unknown block")]
+    UnknownBlock,
+    /// Thrown when an unknown tx index
+    #[error("unknown tx index {0}")]
+    UnknownTxIndex(u64),
     /// Thrown when unable to parse numeric block number
     #[error("invalid block number {0} {1}")]
     InvalidBlockNumber(String, ParseIntError),
@@ -98,7 +101,7 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             EthApiError::InvalidHeader(_) | EthApiError::EvmCustom(_) => {
                 internal_rpc_err(error.to_string())
             }
-            EthApiError::UnknownBlockOrTxIndex => {
+            EthApiError::UnknownBlock | EthApiError::UnknownTxIndex(_) => {
                 rpc_error_with_code(EthRpcErrorCode::ResourceNotFound.code(), error.to_string())
             }
             // TODO(onbjerg): We rewrite the error message here because op-node does string matching
