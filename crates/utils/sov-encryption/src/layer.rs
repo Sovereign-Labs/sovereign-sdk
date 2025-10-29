@@ -197,14 +197,23 @@ impl fmt::Debug for dyn EncryptionLayerTrait {
 
 // Convenience type alias and struct for easier usage
 pub struct EncryptionLayer {
-    key_cache: KeyCache,
+    key_cache: Arc<KeyCache>,
     _key_listener_handle: Option<JoinHandle<()>>,
+}
+
+impl Clone for EncryptionLayer {
+    fn clone(&self) -> Self {
+        Self {
+            key_cache: self.key_cache.clone(),
+            _key_listener_handle: None, // Don't clone the handle - only one listener should exist
+        }
+    }
 }
 
 impl EncryptionLayer {
     pub async fn new(config: EncryptionConfig) -> Result<Self, EncryptionError> {
         info!("Creating encryption layer with config: {:?}", config);
-        let key_cache = KeyCache::new();
+        let key_cache = Arc::new(KeyCache::new());
         
         // Handle different key client configurations
         let key_listener_handle = match &config.key_client {
@@ -334,7 +343,14 @@ impl EncryptionLayer {
         let _ = std::fs::remove_file(&socket_path);
         
         let listener = UnixListener::bind(&socket_path)
-            .map_err(|e| EncryptionError::EncryptionFailed(format!("Socket bind failed: {e}")))?;
+            .map_err(|e| {
+                error!("❌ SOCKET BIND FAILED: Cannot bind to {:?}: {}", socket_path.as_ref(), e);
+                if e.kind() == std::io::ErrorKind::AddrInUse {
+                    error!("❌ ADDRESS IN USE: Another process is already using this socket path!");
+                    error!("❌ SOLUTION: Use different socket paths for sequencer and STF, or share the encryption layer");
+                }
+                EncryptionError::EncryptionFailed(format!("Socket bind failed: {e}"))
+            })?;
         let cache = self.key_cache.clone();
         
         let handle = tokio::spawn(async move {
@@ -381,7 +397,7 @@ impl EncryptionLayer {
 
     async fn handle_key_connection(
         mut stream: UnixStream, 
-        cache: KeyCache
+        cache: Arc<KeyCache>
     ) -> Result<(), EncryptionError> {
         use tokio::io::AsyncReadExt;
         
@@ -499,40 +515,37 @@ impl EncryptionLayer {
         key
     }
 
-    /// Set the current slot number and proactively activate keys for the next slot
-    /// This ensures keys are ready before encryption/decryption operations
+    /// Set the current slot number and activate keys for THIS slot
+    /// Keys are activated just-in-time for the current slot being processed
     pub fn set_current_slot(&self, slot_number: u64) {
         let previous_slot = self.key_cache.get_current_slot();
         
         debug!("⏰ SLOT UPDATE: Setting current slot to {} (was {})", slot_number, previous_slot);
         *self.key_cache.current_slot.write().unwrap() = slot_number;
         
-        // Proactively check if we need to activate keys for the next slot (slot_number + 1)
-        // This ensures keys are ready before encryption happens
+        // Activate keys for the CURRENT slot being processed
         if slot_number > previous_slot {
-            let next_slot = slot_number + 1;
-            debug!("🔍 PROACTIVE CHECK: Looking for keys to activate for upcoming slot {}", next_slot);
-            let activated_keys = self.key_cache.check_for_activation(next_slot);
+            debug!("🔍 ACTIVATION CHECK: Looking for keys to activate for current slot {}", slot_number);
+            let activated_keys = self.key_cache.check_for_activation(slot_number);
             if !activated_keys.is_empty() {
-                info!("🔑 PROACTIVE ACTIVATION: {} key(s) pre-activated for slot {} (current slot: {})", 
-                      activated_keys.len(), next_slot, slot_number);
+                info!("🔑 SLOT ACTIVATION: {} key(s) activated for slot {}", 
+                      activated_keys.len(), slot_number);
                 for key in &activated_keys {
-                    info!("🔑 PROACTIVE ACTIVATION: Key '{}' is now ready for slot {}", key.id, next_slot);
+                    info!("🔑 SLOT ACTIVATION: Key '{}' is now active for slot {}", key.id, slot_number);
                 }
             } else {
-                debug!("🔍 PROACTIVE CHECK: No keys needed activation for slot {}", next_slot);
+                debug!("🔍 ACTIVATION CHECK: No keys needed activation for slot {}", slot_number);
             }
         }
     }
     
-    /// Check if any scheduled keys should be activated (legacy method for compatibility)
+    /// Check if any scheduled keys should be activated (fallback method)
     fn check_and_activate_keys(&self) {
-        // This should now be a no-op since keys are proactively activated
-        // But we keep it for safety in case of edge cases
+        // Double-check activation for the current slot as a safety measure
         let current_slot = self.key_cache.get_current_slot();
-        let activated_keys = self.key_cache.update_slot(current_slot);
+        let activated_keys = self.key_cache.check_for_activation(current_slot);
         if !activated_keys.is_empty() {
-            info!("🔑 Fallback activation: {} key(s) activated at slot {} during encrypt/decrypt", 
+            info!("🔑 FALLBACK ACTIVATION: {} key(s) activated at slot {} during encrypt/decrypt", 
                   activated_keys.len(), current_slot);
         }
     }

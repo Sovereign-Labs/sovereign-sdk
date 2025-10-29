@@ -327,6 +327,196 @@ where
         Ok((seq, handles))
     }
 
+    /// Create a PreferredSequencer with a shared encryption layer
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_with_shared_encryption(
+        da: Da,
+        state_update_receiver: StateUpdateReceiver<S::Storage>,
+        storage_path: &Path,
+        config: &SequencerConfig<S::Address, PreferredSequencerConfig>,
+        ledger_db: LedgerDb,
+        api_ledger_db: LedgerDb,
+        shutdown_sender: watch::Sender<()>,
+        stop_at_rollup_height: Option<RollupHeight>,
+        shared_encryption_layer: Option<sov_encryption::EncryptionLayer>,
+    ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
+        let shutdown_receiver = shutdown_sender.subscribe();
+        let latest_state_update = state_update_receiver.borrow().clone();
+        let da_address = da.get_signer().await;
+
+        debug!(
+            ?latest_state_update,
+            %da_address,
+            "Instantiating the preferred sequencer with shared encryption layer"
+        );
+
+        let mut runtime: Rt = Default::default();
+        let tx_status_manager = TxStatusManager::default();
+
+        assert!(
+            accepts_preferred_batches(runtime.blob_selector()),
+            "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
+        );
+
+        let (checkpoint_sender, checkpoint_receiver) = watch::channel(StateCheckpoint::new(
+            latest_state_update.storage.clone(),
+            &runtime.kernel(),
+        ));
+        let api_state = ApiState::build(
+            Arc::new(()),
+            checkpoint_receiver,
+            runtime.kernel_with_slot_mapping(),
+            None,
+        );
+
+        let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
+
+        let (blobs_sender_channel, _) =
+            broadcast::channel(config.sequencer_kind_config.events_channel_size);
+
+        let db = PreferredSequencerDb::new(
+            shutdown_sender.clone(),
+            config.sequencer_kind_config.is_replica,
+            storage_path,
+            &config.sequencer_kind_config.postgres_connection_string,
+        )
+        .await?;
+
+        let (next_sequence_number, db_cache) = db.initial_data().await?;
+
+        let mut handles = vec![];
+
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new_with_shared_encryption(
+            da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            config.sequencer_kind_config.is_replica,
+            shared_encryption_layer,
+        )
+        .await?;
+
+        if let Some(blob_sender_handle) = blob_sender_handle {
+            handles.push(blob_sender_handle);
+        }
+
+        let (state_root_compute_handle, state_root_compute_task) =
+            StateRootBackgroundTaskState::create::<Rt>(
+                block_executors_shutdown_rx,
+                !config
+                    .sequencer_kind_config
+                    .disable_state_root_consistency_checks,
+            );
+        handles.push(state_root_compute_handle);
+
+        // TODO: Rename events_channel_size to transaction_channel_size
+        let cached_txs = TransactionCache::new(
+            api_ledger_db.clone(),
+            latest_state_update.next_tx_number,
+            config.sequencer_kind_config.events_channel_size,
+        );
+
+        let (executor_events_sender, executor_events_receiver) =
+            ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
+        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
+
+        // Here we need to mutliply by 1000 to convert from millis to micros.
+        let batch_execution_time_limit_micros = config
+            .sequencer_kind_config
+            .batch_execution_time_limit_millis
+            * 1000;
+
+        let rollup_exec_config = RollupBlockExecutorConfig {
+            da_address: da_address.clone(),
+            shutdown_notifier: block_executors_shutdown_notifier.clone(),
+            state_root_request_sender: state_root_compute_task.request_sender.clone(),
+            shutdown_receiver: shutdown_receiver.clone(),
+            shutdown_sender: shutdown_sender.clone(),
+        };
+
+        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
+            latest_state_update.clone(),
+            rollup_exec_config.clone(),
+            config.clone(),
+        )
+        .await;
+
+        for worker in workers {
+            handles.push(worker);
+        }
+
+        let tx_queue_id = Arc::new(AtomicU64::new(0));
+        let (synchronized_state, synchronized_state_updator) = create(
+            api_ledger_db.clone(),
+            latest_state_update.clone(),
+            tx_queue_id.clone(),
+            batch_execution_time_limit_micros,
+            config.clone(),
+            shutdown_receiver.clone(),
+            shutdown_sender.clone(),
+            executor_events_sender,
+            next_sequence_number,
+            in_flight_blobs,
+            stop_at_rollup_height,
+            rollup_exec_config.clone(),
+            cached_txs.write_handle(),
+            cache_warm_up_executor.clone(),
+        );
+
+        let synchronized_state_task = synchronized_state.start().await;
+        handles.push(synchronized_state_task);
+
+        let side_effects_task = SideEffectsTask {
+            checkpoint_sender,
+            blob_sender,
+            executor_events_receiver,
+            db,
+            shutdown_sender: shutdown_sender.clone(),
+            transaction_cache: cached_txs.write_handle(),
+        }
+        .spawn();
+        handles.push(side_effects_task);
+
+        let synchronized_state_updator = Arc::new(synchronized_state_updator);
+        let seq = Arc::new(PreferredSequencer {
+            synchronized_state_updator: synchronized_state_updator.clone(),
+            tx_status_manager: tx_status_manager.clone(),
+            transaction_cache: cached_txs,
+            blobs_sender_channel,
+            api_state,
+            _runtime: PhantomData,
+            config: config.clone(),
+            shutdown_receiver: shutdown_receiver.clone(),
+            shutdown_sender: shutdown_sender.clone(),
+            tx_queue_id,
+            stop_at_rollup_height,
+            test_only_state_update_notification_sender: broadcast::channel(100).0,
+        });
+
+        // Launch replica sync task only for replicas.
+        if config.sequencer_kind_config.is_replica {
+            if let Some(postgres_connection_string) =
+                &config.sequencer_kind_config.postgres_connection_string
+            {
+                let mut replica_task = ReplicaSyncTask::new(
+                    postgres_connection_string.clone(),
+                    shutdown_sender.clone(),
+                )
+                .await?;
+
+                let replica_task_handle = replica_task.start(synchronized_state_updator.clone()).await;
+                handles.push(replica_task_handle.data_fetcher_handle);
+                handles.push(replica_task_handle.sync_task_handle);
+            }
+        }
+
+        Ok((seq, handles))
+    }
+
     /// Returns a range to allow hysteresis during catchup. The first (lower) value will be the
     /// minimum to be considered successfully recovered, the second (upper) value will be the
     /// target.

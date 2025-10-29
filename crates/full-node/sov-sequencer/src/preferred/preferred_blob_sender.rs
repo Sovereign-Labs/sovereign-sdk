@@ -160,6 +160,57 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 
         inner.hooks().add_txs(blob_id, tx_hashes).await;
     }
+
+    /// Constructor that accepts a shared encryption layer instead of creating its own
+    pub(crate) async fn new_with_shared_encryption(
+        da: Da,
+        ledger_db: LedgerDb,
+        all_completed_blobs: Vec<PreferredSequencerReadBlob>,
+        storage_path: Box<Path>,
+        tx_status_manager: TxStatusManager<Da::Spec>,
+        shutdown_sender: watch::Sender<()>,
+        blob_processing_timeout: Duration,
+        blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
+        is_replica: bool,
+        shared_encryption_layer: Option<EncryptionLayer>,
+    ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
+        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        
+        if is_replica {
+            Ok((
+                Self {
+                    inner: None,
+                    nb_of_concurrent_blob_submissions,
+                    encryption_layer: shared_encryption_layer,
+                },
+                None,
+            ))
+        } else {
+            // Restore missing blob data to make sure they land on the DA
+            let blobs_to_send = create_blobs_to_send(all_completed_blobs, shared_encryption_layer.as_ref())?;
+            let (inner, blob_sender_handle) = BlobSender::new(
+                da.clone(),
+                ledger_db,
+                storage_path.as_ref(),
+                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
+                shutdown_sender,
+                blob_processing_timeout,
+                Some(blobs_sender_channel),
+                blobs_to_send,
+                nb_of_concurrent_blob_submissions.clone(),
+            )
+            .await?;
+
+            Ok((
+                Self {
+                    inner: Some(inner),
+                    nb_of_concurrent_blob_submissions,
+                    encryption_layer: shared_encryption_layer,
+                },
+                Some(blob_sender_handle),
+            ))
+        }
+    }
 }
 
 pub fn create_blobs_to_send(

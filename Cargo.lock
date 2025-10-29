@@ -12925,6 +12925,7 @@ dependencies = [
  "sov-api-spec",
  "sov-cli",
  "sov-db",
+ "sov-encryption",
  "sov-ledger-apis",
  "sov-metrics",
  "sov-modules-api",

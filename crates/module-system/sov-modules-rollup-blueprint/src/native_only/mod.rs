@@ -201,6 +201,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         shutdown_receiver: watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        shared_encryption_layer: Option<sov_encryption::EncryptionLayer>,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
         match &rollup_config.sequencer.sequencer_kind_config {
             SequencerKindConfig::Standard(seq_config) => {
@@ -234,7 +235,21 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
-                let (sequencer, background_handles) =
+                let (sequencer, background_handles) = if shared_encryption_layer.is_some() {
+                    tracing::info!("🔗 Creating PreferredSequencer with shared encryption layer");
+                    PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create_with_shared_encryption(
+                        da_service.clone(),
+                        state_update_receiver.clone(),
+                        &rollup_config.storage.path,
+                        &rollup_config.sequencer.with_seq_config(seq_config.clone()),
+                        ledger_db.clone(),
+                        api_ledger_db.clone(),
+                        shutdown_sender.clone(),
+                        stop_at_rollup_height,
+                        shared_encryption_layer.clone(),
+                    )
+                    .await?
+                } else {
                     PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
                         da_service.clone(),
                         state_update_receiver.clone(),
@@ -245,7 +260,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         shutdown_sender.clone(),
                         stop_at_rollup_height,
                     )
-                    .await?;
+                    .await?
+                };
 
                 let mut endpoints = self
                     .sequencer_additional_apis(sequencer.clone(), rollup_config)
@@ -340,7 +356,28 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             is_genesis = prev_root.is_none(),
             "Recovering the state root"
         );
-        let native_stf = StfBlueprint::new_with_optional_encryption(rollup_config.stf.encryption.clone()).await?;
+        
+        // Create shared encryption layer if any component needs it
+        let shared_encryption_layer: Option<sov_encryption::EncryptionLayer> = if rollup_config.stf.encryption.is_some() || rollup_config.sequencer.batch_encryption.is_some() {
+            // Prefer STF encryption config, fall back to sequencer config
+            let encryption_config = rollup_config.stf.encryption.clone()
+                .or_else(|| rollup_config.sequencer.batch_encryption.clone());
+            if let Some(config) = encryption_config {
+                tracing::info!("🔐 Creating shared encryption layer for STF and sequencer synchronization");
+                Some(sov_encryption::EncryptionLayer::new(config).await?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        
+        // Create STF with shared encryption layer
+        let native_stf = if let Some(ref encryption_layer) = shared_encryption_layer {
+            StfBlueprint::with_encryption_layer(Self::Runtime::default(), encryption_layer.clone())
+        } else {
+            StfBlueprint::new()
+        };
         let genesis_slot_number = genesis_params.genesis_slot_number();
         let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
             // Missing prev_root means need for initialization
@@ -464,6 +501,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 main_shutdown_receiver.clone(),
                 main_shutdown_sender.clone(),
                 stop_at_rollup_height,
+                shared_encryption_layer.clone(),
             )
             .await?;
 
