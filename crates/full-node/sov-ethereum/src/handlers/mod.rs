@@ -1,5 +1,7 @@
 mod get_logs;
 mod subscribe;
+#[cfg(feature = "local")]
+use alloy_primitives::TxKind;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::TransactionReceipt;
 pub use get_logs::{Cursor, LogHandlers};
@@ -47,6 +49,7 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
 {
+    dbg!();
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
@@ -207,6 +210,13 @@ pub(crate) mod signer {
                 &mut state,
             )?;
             transaction_request.gas = Some(estimated_gas.to::<u64>());
+
+            // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
+            // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,
+            // but alloy's `build_typed_tx()` requires `Some(TxKind::Create)`
+            if transaction_request.to.is_none() {
+                transaction_request.to = Some(TxKind::Create);
+            }
 
             let transaction = transaction_request
                 .build_typed_tx()

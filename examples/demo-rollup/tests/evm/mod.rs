@@ -3,6 +3,7 @@ mod evm_balances;
 mod evm_block_hash;
 mod evm_gas_estimation;
 mod evm_logs;
+mod evm_no_gas_limit;
 mod evm_rpc;
 mod evm_soft_conf;
 mod evm_subscribe;
