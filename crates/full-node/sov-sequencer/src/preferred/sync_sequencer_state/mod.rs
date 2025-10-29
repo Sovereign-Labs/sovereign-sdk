@@ -159,11 +159,7 @@ where
 {
     let (message_sender, message_receiver) = mpsc::channel(CHANNEL_SIZE);
 
-    let is_ready = if seq_config.sequencer_kind_config.is_replica {
-        Err(SequencerNotReadyDetails::ReplicaMode)
-    } else {
-        Err(SequencerNotReadyDetails::Startup)
-    };
+    let is_ready = Err(SequencerNotReadyDetails::Startup);
 
     let inner = Inner {
         api_ledger_db,
@@ -221,6 +217,7 @@ pub(crate) enum AcceptTxError<S: Spec> {
         nb_of_concurrent_blob_submissions: usize,
     },
     NewTxError(DoNewTxError<S>),
+    ReplicaMode,
 }
 
 #[derive(Debug)]
@@ -230,6 +227,7 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) batch_is_in_progress: bool,
 }
 
+#[derive(Debug)]
 struct ConditionsTable {
     condition_nodes_sequence_number_is_fresher: bool,
     condition_too_close_to_deferred_slots_count_for_comfort: bool,

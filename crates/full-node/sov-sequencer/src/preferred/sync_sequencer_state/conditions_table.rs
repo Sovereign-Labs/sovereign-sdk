@@ -1,3 +1,4 @@
+use crate::preferred::get_next_sequence_number_according_to_node;
 use crate::preferred::sync_sequencer_state::ConditionsTable;
 use crate::preferred::sync_sequencer_state::InitialStatus;
 use crate::preferred::InnerGuard;
@@ -90,6 +91,18 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
     let sync_status = &info.sync_status;
     let distance = sync_status.distance();
 
+    let node_next_sequence_number =
+        get_next_sequence_number_according_to_node(info, &mut Rt::default());
+    let next_internal_sequence_number = inner.sequence_number_of_next_blob;
+
+    debug!(
+        ?table,
+        ?node_next_sequence_number,
+        ?next_internal_sequence_number,
+        ?sync_status,
+        "operation_for_replica"
+    );
+
     let operation = match (
         table.condition_nodes_sequence_number_is_fresher,
         table.condition_too_close_to_deferred_slots_count_for_comfort,
@@ -98,33 +111,86 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
         table.condition_node_is_unsynced_and_doesnt_know_it,
     ) {
         (true, _, _, true, _) => {
+            // The node is ahead of the replica sequencer, which still has batches to replay.
+            // This can happen in the following scenario. The replica is applying soft-conf from the master via PG
+            // but for some reasons the Batch landed on DA faster than was closed with PG notification.
+            // In this case we will log an error as we want the PG notification to be much faster than the DA
+            // and heal the sequencer by deleting the in flight batches from the cache.
+
+            error!("The node has a higher sequence number than the sequencer, but it’s very close to the chain tip. 
+            This indicates that replicas are receiving data through DA faster than through Postgres notifications. 
+            node_next_sequence_number: {node_next_sequence_number}, next_internal_sequence_number: {next_internal_sequence_number}");
+
+            inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                target_da_height: sync_status.target_da_height(),
+                synced_da_height: sync_status.synced_da_height(),
+            });
+
+            inner
+                .executor_events_sender
+                .flush_transactions_cache(info.next_tx_number)
+                .await;
             inner.executor_events_sender.clean_all_batches_from_cache();
+
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (true, _, false, false, _) => {
-            warn!("The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.");
+            // The replica is near the chain tip and observes new batches on the DA.
+            // This indicates that the master continues producing batches while the replica is still syncing.
+            // We wait until the replica is no more than one block behind the tip and override the replica’s sequencer with the node’s state.
+            // At this stage, the replica can start accepting PG notifications from the master.
+            if sync_status.distance() <= 1 {
+                inner
+                    .executor_events_sender
+                    .flush_transactions_cache(info.next_tx_number)
+                    .await;
+
+                inner.executor_events_sender.clean_all_batches_from_cache();
+
+                let mut rt = Rt::default();
+                let node_sequence_number =
+                    get_next_sequence_number_according_to_node(info, &mut rt);
+                inner.sequence_number_of_next_blob = node_sequence_number;
+
+                let executor = Some(Box::new(
+                    inner.new_executor_with_empty_uncommitted_changes(info),
+                ));
+
+                inner.is_ready = Ok(());
+                inner.has_finished_startup = true;
+
+                return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
+                    executor,
+                    Duration::from_secs(0),
+                );
+            } else {
+                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
+                });
+
+                PreferredSeqOperation::WaitForNodeResyncToTip
+            }
+        }
+        (_, _, true, _, _) => {
+            // The replica node is syncing.
+            warn!(
+                ?distance,
+                "The sequencer must pause because the node has lagged behind the DA blockchain."
+            );
             inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                 target_da_height: sync_status.target_da_height(),
                 synced_da_height: sync_status.synced_da_height(),
             });
             PreferredSeqOperation::WaitForNodeResyncToTip
-        }
-        (_, _, true, _, _) => {
-            warn!(?distance, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.");
-            inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                target_da_height: sync_status.target_da_height(),
-                synced_da_height: sync_status.synced_da_height(),
-            });
-            PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
         }
         (false, true, false, _, _) => {
             error!(
                     slot_number_according_to_node=%info.slot_number,
                     %current_visible_slot_number,
                     deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
-                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
-            inner.trigger_recovery(info).await;
-            PreferredSeqOperation::RecoverAndCatchUp
+                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold.");
+            panic!("Replica does not support automatic recovery.");
         }
         // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
         (_, _, _, _, true) => {

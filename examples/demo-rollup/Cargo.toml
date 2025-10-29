@@ -67,6 +67,7 @@ tokio = { workspace = true, features = [
   "macros",
   "tracing",
 ] }
+tokio-stream = { workspace = true }
 tracing = { workspace = true }
 prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }

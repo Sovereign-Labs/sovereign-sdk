@@ -496,13 +496,6 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
                 details: Default::default(),
             };
         }
-        SequencerNotReadyDetails::ReplicaMode => {
-            return ErrorObject {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                message: "Sequencer is replica and cannot accept transactions".to_string(),
-                details: Default::default(),
-            };
-        }
         SequencerNotReadyDetails::Shutdown => {
             return ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
