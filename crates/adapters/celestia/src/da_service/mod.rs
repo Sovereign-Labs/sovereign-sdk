@@ -1,8 +1,4 @@
 #[cfg(test)]
-mod client;
-#[cfg(test)]
-pub(crate) mod keys;
-#[cfg(test)]
 mod tests;
 
 use std::sync::Arc;
@@ -96,7 +92,7 @@ impl CelestiaService {
         debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
         let Some(signer) = &self.signer_address else {
-            // TODO: Better error when switched to thiserror.
+            // TODO: Follow up: Better error when switched to thiserror.
             return Err(celestia_client::Error::NoAssociatedAddress);
         };
         let blob = JsonBlob::new(
@@ -236,7 +232,7 @@ impl CelestiaService {
 
         // Fetch the header and relevant shares via RPC
         let start_get_block = Instant::now();
-        // TODO: Move to try_join and don't wait for its completion.
+        // TODO: Follup up: Move to try_join and don't wait for its completion.
         let header = client
             .header()
             .get_by_height(height)
@@ -354,7 +350,6 @@ impl CelestiaService {
             })
     }
 
-    // TODO: Enable later
     /// Subscribe to finalized headers as they are finalized.
     /// Expect only to receive headers which were finalized after subscription
     /// Optimized version of `get_last_finalized_block_header`.
@@ -370,7 +365,7 @@ impl CelestiaService {
 }
 
 fn into_transient_with_context(error: celestia_client::Error) -> MaybeRetryable<anyhow::Error> {
-    // TODO: Can be improved on when to retry or not
+    // TODO: Follow up: Can be improved on when to retry or not
     let error = anyhow::anyhow!("Celestia RPC node returned an error: {:?}", error);
     MaybeRetryable::Transient(error)
 }
@@ -500,7 +495,7 @@ impl DaService for CelestiaService {
         .await
     }
 
-    // TODO: Should this become and Result or Option?
+    // TODO: Follow up: Should this become and Result or Option?
     async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
         match self.signer_address.clone() {
             None => {

@@ -138,7 +138,7 @@ impl CelestiaDevNode {
             .context("failed to start bridge container")?;
 
         let rpc_port = bridge.get_host_port_ipv4(BRIDGE_RPC_PORT).await?;
-        tracing::info!(time = ?start.elapsed(), grpc_port = validator_grpc_port, rpc_port, "CelestiaTestServer has started");
+        tracing::info!(time = ?start.elapsed(), grpc_port = validator_grpc_port, rpc_port, "CelestiaDevNode has started");
         Ok(Self { validator, bridge })
     }
 

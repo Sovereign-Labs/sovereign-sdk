@@ -54,16 +54,10 @@ sov-modules-macros = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
 
 [dev-dependencies]
-postcard = { version = "1", features = ["use-std"] }
-bip39 = { version = "2.2.0", features = ["default", "zeroize"] }
-bip32 = { version = "0.5.3" }
-bcrypt = { version = "0.15" }
-xsalsa20poly1305 = { version = "0.9" }
-base64 = { version = "0.22" }
-sha2 = { version = "0.10" }
-reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
+postcard = { version = "1", features = ["use-std"] }
+reltester = { workspace = true }
 test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
