@@ -63,30 +63,31 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockTransactions<Transaction>, EthApiError> {
         let tx_range = block.tx_range();
-        let txs = tx_range
-            .map(|idx| self.tx(idx, state))
-            .collect::<Result<Vec<_>, _>>()?;
         let txs = match kind {
             BlockTransactionsKind::Full => {
-                let txs = txs
+                let txs = tx_range
                     .into_iter()
                     .enumerate()
-                    .map(|(idx, tx)| {
-                        from_recovered_with_block_context(
+                    .map(|(pos, idx)| {
+                        let tx = self.tx(idx, state)?;
+                        Ok::<_, EthApiError>(from_recovered_with_block_context(
                             tx.into(),
                             block.hash(),
                             block.number(),
-                            idx as u64,
-                        )
+                            pos as u64,
+                        ))
                     })
-                    .collect::<Vec<_>>();
+                    .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Full(txs)
             }
             BlockTransactionsKind::Hashes => {
-                let hashes = txs
+                let hashes = tx_range
                     .into_iter()
-                    .map(|tx| *tx.signed_transaction.hash())
-                    .collect::<Vec<_>>();
+                    .map(|idx| {
+                        let tx = self.tx(idx, state)?;
+                        Ok::<_, EthApiError>(*tx.signed_transaction.hash())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Hashes(hashes)
             }
         };
