@@ -102,20 +102,24 @@ where
         block_number: Option<String>,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<Block> {
-        let block = self.get_sealed_block_by_number(block_number, state)?;
+    ) -> Result<Option<Block>, EthApiError> {
+        let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
+            return Ok(None);
+        };
         let hash = block.hash().unwrap_or_default();
 
-        let transactions = self.get_block_transactions(&block, kind, state)?;
+        let Some(transactions) = self.get_block_transactions(&block, kind, state) else {
+            return Ok(None);
+        };
         let header = Sealed::new_unchecked(block.header().clone(), hash);
         let header = Header::from_consensus(header, None, None);
 
-        Some(Block {
+        Ok(Some(Block {
             header,
             transactions,
             uncles: vec![],
             withdrawals: None,
-        })
+        }))
     }
 
     fn get_contract_code(
@@ -167,13 +171,18 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<Vec<TransactionReceipt>> {
-        let block = self.get_sealed_block_by_number(block_number, state)?;
-        let receipts = block
+    ) -> Result<Option<Vec<TransactionReceipt>>, EthApiError> {
+        let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
+            return Ok(None);
+        };
+        let Some(receipts) = block
             .tx_range()
             .map(|index| self.get_receipt_by_index(index, state))
-            .collect::<Option<Vec<_>>>()?;
-        Some(receipts)
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Ok(None);
+        };
+        Ok(Some(receipts))
     }
 
     fn call(
@@ -252,18 +261,18 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<MaybeSealedBlock> {
+    ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
         let pending_or_block_nr = self.str_to_block_nr(block_number, state);
 
         match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
+            PendingOrBlock::Number(nr) => Ok(self.get_maybe_sealed_block(nr, state)),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
-                Some(MaybeSealedBlock::Pending(pending_block))
+                Ok(Some(MaybeSealedBlock::Pending(pending_block)))
             }
             PendingOrBlock::Invalid(invalid) => {
                 tracing::error!(invalid, "Invalid block number");
-                None
+                Ok(None)
             }
         }
     }
@@ -354,7 +363,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockEnv, EthApiError> {
         let maybe_blcok = self
-            .get_sealed_block_by_number(block_number, state)
+            .get_sealed_block_by_number(block_number, state)?
             .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
 
         Ok(match maybe_blcok {

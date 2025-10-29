@@ -79,7 +79,7 @@ where
             .map(|number| hex::encode(number.to_be_bytes()));
         let kind = details.unwrap_or_default().into();
         Ok(match block_number_hex {
-            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state),
+            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state)?,
             None => None,
         })
     }
@@ -97,7 +97,7 @@ where
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
         let kind = details.unwrap_or_default().into();
-        Ok(self.get_block(block_number, kind, state))
+        Ok(self.get_block(block_number, kind, state)?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -216,7 +216,7 @@ where
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockReceipts`"
         );
-        Ok(self.get_receipts(block_number, state))
+        Ok(self.get_receipts(block_number, state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`

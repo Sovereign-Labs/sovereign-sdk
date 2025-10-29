@@ -4,6 +4,7 @@ use alloy_rpc_types::request::TransactionInputError;
 use revm::context::result::InvalidTransaction;
 use revm::context_interface::result::{EVMError, InvalidHeader};
 use std::convert::Infallible;
+use std::num::ParseIntError;
 
 use crate::utils::{
     block_id_to_str, internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code,
@@ -39,6 +40,9 @@ pub enum EthApiError {
     /// Thrown when an unknown block or transaction index is encountered
     #[error("unknown block or tx index")]
     UnknownBlockOrTxIndex,
+    /// Thrown when unable to parse numeric block number
+    #[error("invalid block number {0} {1}")]
+    InvalidBlockNumber(String, ParseIntError),
     #[error(transparent)]
     InvalidHeader(#[from] InvalidHeader),
     /// Thrown when a call or transaction request (`eth_call`, `eth_estimateGas`,
@@ -83,6 +87,7 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             | EthApiError::EmptyRawTransactionData
             | EthApiError::ConflictingFeeFieldsInRequest
             | EthApiError::InvalidTracerConfig
+            | EthApiError::InvalidBlockNumber(_, _)
             | EthApiError::TransactionConversionError => invalid_params_rpc_err(error.to_string()),
             EthApiError::InvalidTransaction(err) => err.into(),
             EthApiError::InvalidHeader(_) | EthApiError::EvmCustom(_) => {
