@@ -133,7 +133,7 @@ pub(crate) fn default_safe_lead_time_ms() -> u64 {
 }
 
 fn default_rpc_addr() -> String {
-    "ws://localhost:26658/".into()
+    "ws://localhost:26658".into()
 }
 
 // Exponential backoff defaults:

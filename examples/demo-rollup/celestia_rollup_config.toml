@@ -14,9 +14,7 @@ grpc_url = "http://127.0.0.1:9090"
 # Taken from ../../docker/credentials/bridge-0.key
 signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
 
-# The largest response the rollup will accept from the Celestia node. Defaults to 100 MB
-max_celestia_response_body_size = 104_857_600
-# The maximum time to wait for a response to an RPC query against Celestia node. 
+# The maximum time to wait for a response to an RPC query against Celestia node.
 # Default: 60 seconds
 # We set it to allow skipping 3 blocks on mocha testnet
 request_timeout_secs = 18
