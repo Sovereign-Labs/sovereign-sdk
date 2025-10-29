@@ -18,6 +18,7 @@ mod update_state;
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
+use crate::preferred::tx_nonce_queue::TxNonceQueues;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -32,13 +33,18 @@ use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::capabilities::{BlobSelector, RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{
+    BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
+};
 use sov_modules_api::macros::config_value;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::{SkippedTxContents, TxProcessingError};
 use sov_modules_api::{
-    ApiTxEffect, FullyBakedTx, RejectReason, Runtime, RuntimeEventProcessor, RuntimeEventResponse,
-    Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber, *,
+    ApiTxEffect, FullyBakedTx, Gas, RejectReason, Runtime, RuntimeEventProcessor,
+    RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, TransactionReceipt, VersionReader,
+    VisibleSlotNumber, *,
 };
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
@@ -95,7 +101,8 @@ where
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-
+    /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
+    tx_nonce_queues: TxNonceQueues<S, Rt>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     shutdown_sender: watch::Sender<()>,
@@ -283,6 +290,7 @@ where
             api_state,
             _runtime: PhantomData,
             config: config.clone(),
+            tx_nonce_queues: TxNonceQueues::default(),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,
@@ -862,8 +870,8 @@ where
 
         // Check if this transaction has a configured delay
         let runtime = Rt::default();
-        let call = match Rt::Auth::decode_serialized_tx(&baked_tx) {
-            Ok((call, _)) => call,
+        let (call, auth_data) = match Rt::Auth::decode_serialized_tx(&baked_tx) {
+            Ok(t) => t,
             Err(_) => {
                 return Err(ErrorObject {
                     status: StatusCode::BAD_REQUEST,
@@ -876,6 +884,10 @@ where
         };
         let call = Rt::wrap_call(call);
         let delay_ms = runtime.get_transaction_delay_ms(&call);
+        // We need to destructure auth_data because it's not `Send`.
+        let uniqueness = auth_data.uniqueness;
+        let credential_id = auth_data.credential_id;
+        drop(auth_data);
 
         if delay_ms > 0 {
             tracing::debug!(%tx_hash, delay_ms, "Delaying transaction processing");
@@ -883,11 +895,101 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let res = match self
-            .synchronized_state_updator
-            .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-            .await
-        {
+        let tx_len = baked_tx.data.len();
+
+
+        let outer_res = match uniqueness {
+            UniquenessData::Generation(_) => {
+                self.synchronized_state_updator
+                    .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
+                    .await
+            }
+            UniquenessData::Nonce(tx_nonce) => {
+                let user_queue = self
+                    .tx_nonce_queues
+                    .lock_for_address(credential_id);
+                let user_current_nonce = {
+                    let state = self
+                        .api_state
+                        .default_api_state_accessor()
+                        .to_provable_reader();
+                    let mut state = state.api_state_accessor;
+                    sov_uniqueness::Uniqueness::<S>::default()
+                        .nonce(&credential_id, &mut state)
+                        .unwrap_infallible()
+                        .unwrap_or_default()
+                };
+                let max_accepted_nonce = user_current_nonce + 100;
+                match tx_nonce {
+                    nonce if nonce == user_current_nonce => {
+                        // Transaction has a valid nonce, execute.
+                        drop(user_queue); // Release the queue lock as we won't be using it
+                        self.synchronized_state_updator
+                            .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
+                            .await
+                    }
+                    nonce if nonce > user_current_nonce && nonce < max_accepted_nonce => {
+                        // Transaction's nonce is within the future threshold to be queued.
+                        let mut queue_receiver =
+                            TxNonceQueues::enqueue_from_lock(user_queue, baked_tx, tx_hash, tx_nonce, original_tx_queue_id);
+                        loop {
+                            tokio::select! {
+                                rx = &mut queue_receiver => {
+                                    break rx.unwrap_or_else(|_| {
+                                        // The oneshot sender was dropped. This should normally only happen
+                                        // on shutdown, but if a stale transaction somehow ends up in the
+                                        // queue it can be evicted (dropping it and the sender).
+                                        // Since the transaction was queued and therefore had an incorrect
+                                        // nonce to begin with, we reject with a nonce error.
+                                        err_invalid_nonce::<S, Rt>(
+                                            tx_hash,
+                                            tx_nonce,
+                                            user_current_nonce,
+                                            credential_id,
+                                        )
+                                    });
+                                },
+                                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                                    // Timeout waiting for prerequisite transactions
+                                    let current_nonce = {
+                                        let state = self
+                                            .api_state
+                                            .default_api_state_accessor()
+                                            .to_provable_reader();
+                                        let mut state = state.api_state_accessor;
+                                        sov_uniqueness::Uniqueness::<S>::default()
+                                            .nonce(&credential_id, &mut state)
+                                            .unwrap_infallible()
+                                            .unwrap_or_default()
+                                    };
+                                    if self.tx_nonce_queues.has_prerequisites_to_nonce(&credential_id, tx_nonce, current_nonce) {
+                                        continue;
+                                    } else {
+                                        break err_invalid_nonce::<S, Rt>(
+                                            tx_hash,
+                                            tx_nonce,
+                                            current_nonce,
+                                            credential_id,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // Invalid nonce, either in the past or in the far future
+                        err_invalid_nonce::<S, Rt>(
+                            tx_hash,
+                            tx_nonce,
+                            user_current_nonce,
+                            credential_id,
+                        )
+                    }
+                }
+            }
+        };
+
+        let res = match outer_res {
             Ok(inner_res) => inner_res,
             Err(SequencerStateUpdatorError::Shutdown) => {
                 return Err(shut_down_error());
@@ -946,7 +1048,7 @@ where
                         return Err(err_cant_fit_tx(
                             current_batch_size,
                             max_batch_size,
-                            baked_tx.data.len(),
+                            tx_len,
                         ))
                     }
                     DoNewTxError::ExecutorError(err) => {
@@ -1141,6 +1243,35 @@ fn err_cant_fit_tx(current_batch_size: usize, max_batch_size: usize, tx_len: usi
         }),
     }
 }
+
+/// Helper function to create an invalid nonce error
+fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
+    tx_hash: TxHash,
+    tx_nonce: u64,
+    expected_nonce: u64,
+    credential_id: CredentialId,
+) -> Result<tx_nonce_queue::TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
+    // Match the error format from sov-uniqueness check_nonce_uniqueness
+    let error_msg = format!(
+        "Tx bad nonce for credential id: {}, expected: {}, but found: {}",
+        credential_id, expected_nonce, tx_nonce
+    );
+    let receipt = TransactionReceipt {
+        tx_hash,
+        body_to_save: None,
+        events: Vec::new(),
+        receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
+            gas_used: <S::Gas as Gas>::zero(),
+            error: TxProcessingError::CheckUniquenessFailed(error_msg),
+        }),
+    };
+    Ok(Err(AcceptTxError::NewTxError(
+        DoNewTxError::ExecutorError(RollupBlockExecutorError::UnsuccessfulTransaction {
+            receipt,
+        }),
+    )))
+}
+
 
 #[track_caller]
 pub(crate) fn exit_rollup(

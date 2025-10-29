@@ -12538,6 +12538,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-transaction-generator",
+ "sov-uniqueness",
  "sov-value-setter",
  "sqlx",
  "strum 0.26.3",

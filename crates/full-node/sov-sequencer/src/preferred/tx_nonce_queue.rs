@@ -13,13 +13,12 @@ use super::sync_sequencer_state::{
 };
 use super::Confirmation;
 
-type TransactionReceiverResult<S, Rt> =
+pub(crate) type TransactionReceiverResult<S, Rt> =
     Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>;
 
 pub struct QueuedTx<S: Spec, Rt: Runtime<S>> {
     pub tx: FullyBakedTx,
     pub tx_hash: TxHash,
-    pub nonce: u64,
     pub original_tx_queue_id: u64,
     pub result_sender:
         oneshot::Sender<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>>,
@@ -73,6 +72,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     }
 }
 
+#[derive(Default)]
 pub struct TxNonceQueues<S: Spec, Rt: Runtime<S>> {
     queues: DashMap<CredentialId, AddressQueue<S, Rt>>,
 }
@@ -94,21 +94,31 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
     }
 
     /// Enqueue a transaction (caller should hold lock from lock_for_address)
-    pub fn enqueue_with_lock(
+    pub fn enqueue_from_lock(
         queue_entry: dashmap::mapref::entry::Entry<CredentialId, AddressQueue<S, Rt>>,
-        tx: QueuedTx<S, Rt>,
-    ) {
-        let nonce = tx.nonce;
-        let new_hash = tx.tx_hash;
+        tx: FullyBakedTx,
+        tx_hash: TxHash,
+        nonce: u64,
+        original_tx_queue_id: u64,
+    ) -> oneshot::Receiver<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        let queued_tx = QueuedTx {
+            tx,
+            tx_hash,
+            original_tx_queue_id,
+            result_sender
+        };
         let mut queue = queue_entry.or_insert_with(AddressQueue::new);
-        if let Some(old_tx) = queue.insert(nonce, tx) {
+        if let Some(old_tx) = queue.insert(nonce, queued_tx) {
             tracing::debug!(
                 nonce,
                 old_hash = ?old_tx.tx_hash,
-                new_hash = ?new_hash,
+                new_hash = ?tx_hash,
                 "Replaced queued transaction with same nonce"
             );
         }
+
+        result_receiver
     }
 
     /// Remove a transaction by nonce
