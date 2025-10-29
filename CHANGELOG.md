@@ -1,5 +1,6 @@
 # 2025-10-29
 - #1838 Add binary WebSocket frame support to RPC server and client.
+- #1997 Fix `eth_sendTransaction` contract deployments without gas limit by converting `to: null` to `TxKind::Create`.
 
 # 2025-10-28
 - #1987 Added `newHeads` subscription to `eth_subscribe`.
