@@ -43,8 +43,6 @@ pub enum PendingOrBlock {
     Pending,
     /// Block number.
     Number(u64),
-    /// Invalid block number.
-    Invalid(String),
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
@@ -224,18 +222,19 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> PendingOrBlock {
+    ) -> Result<PendingOrBlock, EthApiError> {
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
-        match block_number_str.as_str() {
+        Ok(match block_number_str.as_str() {
             "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
             "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
             "pending" => PendingOrBlock::Pending,
-            number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
-                Ok(nr) => PendingOrBlock::Number(nr),
-                Err(_) => PendingOrBlock::Invalid(block_number_str),
-            },
-        }
+            number => {
+                let number = u64::from_str_radix(number.trim_start_matches("0x"), 16)
+                    .map_err(|e| EthApiError::InvalidBlockNumber(block_number_str, e))?;
+                PendingOrBlock::Number(number)
+            }
+        })
     }
 
     /// Converts BlockNumberOrTag into number.
@@ -262,17 +261,13 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
-        let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+        let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
 
         match pending_or_block_nr {
             PendingOrBlock::Number(nr) => Ok(self.get_maybe_sealed_block(nr, state)),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
                 Ok(Some(MaybeSealedBlock::Pending(pending_block)))
-            }
-            PendingOrBlock::Invalid(invalid) => {
-                tracing::error!(invalid, "Invalid block number");
-                Ok(None)
             }
         }
     }
@@ -339,7 +334,7 @@ where
             None => MaybeArchivalState::Current(state),
             Some(number) if number == "latest" => MaybeArchivalState::Current(state),
             _ => {
-                let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+                let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
                 match pending_or_block_nr {
                     PendingOrBlock::Pending => MaybeArchivalState::Current(state),
                     PendingOrBlock::Number(number) => {
@@ -347,9 +342,6 @@ where
                             .get_archival_state(RollupHeight::new(number))
                             .map_err(into_rpc_error)?;
                         MaybeArchivalState::Archival(archival_state.into())
-                    }
-                    PendingOrBlock::Invalid(_) => {
-                        return Err(EthApiError::UnknownBlockOrTxIndex.into());
                     }
                 }
             }
