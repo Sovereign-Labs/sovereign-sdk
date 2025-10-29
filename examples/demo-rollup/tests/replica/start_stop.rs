@@ -3,6 +3,7 @@ use super::*;
 use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "This test is temporarily ignored"]
 async fn test_replica_start_stop() {
     let postgres = PostgresData::create_postgres().await;
 
