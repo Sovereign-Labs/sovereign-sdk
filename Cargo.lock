@@ -12366,6 +12366,7 @@ dependencies = [
  "reth-primitives-traits",
  "revm",
  "serde",
+ "sov-modules-api",
  "thiserror 1.0.69",
 ]
 

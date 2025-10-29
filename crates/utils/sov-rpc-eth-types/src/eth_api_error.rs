@@ -3,6 +3,7 @@ use alloy_rpc_types::error::EthRpcErrorCode;
 use alloy_rpc_types::request::TransactionInputError;
 use revm::context::result::InvalidTransaction;
 use revm::context_interface::result::{EVMError, InvalidHeader};
+use sov_modules_api::ApiStateAccessorError;
 use std::convert::Infallible;
 use std::num::ParseIntError;
 
@@ -43,6 +44,9 @@ pub enum EthApiError {
     /// Thrown when unable to parse numeric block number
     #[error("invalid block number {0} {1}")]
     InvalidBlockNumber(String, ParseIntError),
+    /// Thrown when unable to access specific rollup height
+    #[error(transparent)]
+    ApiStateAccess(#[from] ApiStateAccessorError),
     #[error(transparent)]
     InvalidHeader(#[from] InvalidHeader),
     /// Thrown when a call or transaction request (`eth_call`, `eth_estimateGas`,
@@ -87,6 +91,7 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             | EthApiError::EmptyRawTransactionData
             | EthApiError::ConflictingFeeFieldsInRequest
             | EthApiError::InvalidTracerConfig
+            | EthApiError::ApiStateAccess(_)
             | EthApiError::InvalidBlockNumber(_, _)
             | EthApiError::TransactionConversionError => invalid_params_rpc_err(error.to_string()),
             EthApiError::InvalidTransaction(err) => err.into(),

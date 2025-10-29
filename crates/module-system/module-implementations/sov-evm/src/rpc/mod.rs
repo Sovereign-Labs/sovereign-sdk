@@ -10,7 +10,6 @@ use alloy_rpc_types::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
-use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -21,7 +20,6 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
 use crate::db::EvmDb;
-use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::get_cfg_env;
@@ -263,13 +261,13 @@ where
     ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
         let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
 
-        match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => Ok(self.get_maybe_sealed_block(nr, state)),
+        Ok(match pending_or_block_nr {
+            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
-                Ok(Some(MaybeSealedBlock::Pending(pending_block)))
+                Some(MaybeSealedBlock::Pending(pending_block))
             }
-        }
+        })
     }
 
     /// Retrieves the pending block.
@@ -329,7 +327,7 @@ where
         &self,
         block_number: Option<String>,
         state: &'a mut ApiStateAccessor<S>,
-    ) -> RpcResult<MaybeArchivalState<'a, S>> {
+    ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
         let state = match block_number {
             None => MaybeArchivalState::Current(state),
             Some(number) if number == "latest" => MaybeArchivalState::Current(state),
@@ -338,9 +336,7 @@ where
                 match pending_or_block_nr {
                     PendingOrBlock::Pending => MaybeArchivalState::Current(state),
                     PendingOrBlock::Number(number) => {
-                        let archival_state = state
-                            .get_archival_state(RollupHeight::new(number))
-                            .map_err(into_rpc_error)?;
+                        let archival_state = state.get_archival_state(RollupHeight::new(number))?;
                         MaybeArchivalState::Archival(archival_state.into())
                     }
                 }
