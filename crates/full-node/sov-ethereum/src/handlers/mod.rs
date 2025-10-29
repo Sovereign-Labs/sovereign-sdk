@@ -49,7 +49,6 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
 {
-    dbg!();
     let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
     let (tx_hash, raw_message) = ethereum
         .make_raw_tx(raw_evm_tx)
