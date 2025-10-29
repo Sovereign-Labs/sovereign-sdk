@@ -102,16 +102,12 @@ where
         let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
             return Ok(None);
         };
-        let hash = block.hash().unwrap_or_default();
-
         let Some(transactions) = self.get_block_transactions(&block, kind, state) else {
             return Ok(None);
         };
-        let header = Sealed::new_unchecked(block.header().clone(), hash);
-        let header = Header::from_consensus(header, None, None);
 
         Ok(Some(Block {
-            header,
+            header: Header::from_sealed(block.into()),
             transactions,
             uncles: vec![],
             withdrawals: None,
