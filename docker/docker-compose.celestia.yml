@@ -1,11 +1,7 @@
-# TODO: Switch to pre-built images.
 services:
   validator:
-    image: validator
+    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v5.0.2-mocha
     hostname: validator
-    build:
-      context: ./celestia
-      dockerfile: Dockerfile.validator
     environment:
       NO_COLOR: 1
     # uncomment to provide amount of sequencers to provision (default: 10)
@@ -19,11 +15,8 @@ services:
       - genesis:/genesis
 
   sequencer-0:
-    image: bridge
+    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.27.4-mocha
     hostname: sequencer-0
-    build:
-      context: ./celestia
-      dockerfile: Dockerfile.bridge
     depends_on:
       - validator
     # uncomment to provide the id of the sequencer (default: 0)
