@@ -79,7 +79,7 @@ impl CelestiaService {
         &self,
         blob: &[u8],
         namespace: Namespace,
-    ) -> celestia_client::Result<SubmitBlobReceipt<TmHash>> {
+    ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
         let start = std::time::Instant::now();
         let bytes = blob.len();
         let ns = if namespace == self.rollup_batch_namespace {
@@ -92,8 +92,10 @@ impl CelestiaService {
         debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
         let Some(signer) = &self.signer_address else {
-            // TODO: Follow up: Better error when switched to thiserror.
-            return Err(celestia_client::Error::NoAssociatedAddress);
+            // TODO: Follow up: Better error when switched to `thiserror`.
+            return Err(MaybeRetryable::Permanent(anyhow::anyhow!(
+                "Signer must be set for submitting blobs"
+            )));
         };
         let blob = JsonBlob::new(
             namespace,
@@ -119,10 +121,20 @@ impl CelestiaService {
         let submit_client = self.submit_client.lock().await;
         let lock_acquisition = start_lock.elapsed();
         let start_submit = std::time::Instant::now();
-        let tx_result = submit_client
-            .state()
-            .submit_pay_for_blob(&[blob], tx_config)
-            .await;
+        let tx_result = match tokio::time::timeout(
+            self.request_timeout,
+            submit_client
+                .state()
+                .submit_pay_for_blob(&[blob], tx_config),
+        )
+        .await
+        {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(e)) => Err(e.into()),
+            Err(_) => Err(anyhow::anyhow!(
+                "Timeout waiting for state.SubmitPayForBlob"
+            )),
+        };
         drop(submit_client);
 
         let submit_time = start_submit.elapsed();
@@ -139,7 +151,7 @@ impl CelestiaService {
             tracker.submit(measurement);
         });
 
-        let tx_response = tx_result?;
+        let tx_response = tx_result.map_err(MaybeRetryable::Transient)?;
         let tx_hash = TmHash(tx_response.hash);
         info!(
             da_height = tx_response.height.value(),
@@ -232,18 +244,22 @@ impl CelestiaService {
 
         // Fetch the header and relevant shares via RPC
         let start_get_block = Instant::now();
-        // TODO: Follup up: Move to try_join and don't wait for its completion.
-        let header = client
-            .header()
-            .get_by_height(height)
-            .await
-            .map_err(into_transient_with_context)?;
+        // TODO: Follow up: Move to try_join and don't wait for its completion.
+        let header =
+            match tokio::time::timeout(self.request_timeout, client.header().get_by_height(height))
+                .await
+            {
+                Ok(Ok(h)) => Ok(h),
+                Ok(Err(err)) => Err(into_transient_with_context(err)),
+                Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("RequestTimeout"))),
+            }?;
         let fetch_header_time = start_get_block.elapsed();
         let square_width = header.dah.square_width();
         trace!(%header, height, time_ms = fetch_header_time.as_millis(), "Got the block header");
 
         let data_futures_all = Instant::now();
 
+        // TODO: Follow up: timeouts here
         let rollup_batch_rows_future = client
             .share()
             .get_namespace_data(height, self.rollup_batch_namespace);
@@ -322,7 +338,6 @@ impl CelestiaService {
         debug!("Submitting batch of transactions to Celestia");
         self.submit_blob_to_namespace(blob, self.rollup_batch_namespace)
             .await
-            .map_err(into_transient_with_context)
     }
 
     #[instrument(skip(self, aggregated_proof), err)]
@@ -332,7 +347,6 @@ impl CelestiaService {
     ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
         self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
             .await
-            .map_err(into_transient_with_context)
     }
 
     async fn get_proofs_at_inner(

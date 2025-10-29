@@ -7,23 +7,31 @@ use schemars::JsonSchema;
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct CelestiaConfig {
     /// The address of the Celestia RPC server
-    /// ws://localhost:26658
+    /// For example: ws://localhost:26658
     #[serde(default = "default_rpc_addr", alias = "celestia_rpc_address")]
     pub rpc_url: String,
-    /// TODO: Docs
+    /// JWT token for RPC server.
+    /// If not specified in the config will be pulled from `SOV_CELESTIA_RPC_AUTH_TOKEN`
+    /// environment variable.
+    /// Optional.
     #[serde(alias = "celestia_rpc_auth_token")]
     pub rpc_auth_token: Option<String>,
 
-    /// http://localhost:9090
+    /// The address of the Celestia gRPC server, for example, http://localhost:9090
+    /// Optional.
+    /// Set only if DaService needs to submit blobs.
     pub grpc_url: Option<String>,
 
-    /// TODO
+    /// The token for accessing Celestia gRPC server.
+    /// If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_AUTH_TOKEN`.
+    /// Optional, used only if `grpc_url` is set.
     pub grpc_auth_token: Option<String>,
 
-    /// Now hex, later seed phrase and file.
+    /// The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
+    /// Can be done, for example:
+    /// `celestia-appd keys export --unsafe --unarmored-hex key-name --keyring-backend test`
     pub signer_private_key: Option<String>,
     /// The timeout for a Celestia RPC request, in seconds.
-    /// TODO: Currently unused, because celestia client does not expose such params
     #[serde(
         default = "default_request_timeout_seconds",
         alias = "celestia_rpc_timeout_seconds"
@@ -109,14 +117,13 @@ impl CelestiaConfig {
         // Submission section.
         if let Some(grpc_url) = &self.grpc_url {
             builder = builder.grpc_url(grpc_url);
+            if let Some(grpc_auth_token) = self.grpc_auth_token() {
+                builder = builder.grpc_metadata("x-token", &grpc_auth_token);
+            }
+            if let Some(signer_key_hex) = &self.signer_private_key {
+                builder = builder.private_key_hex(signer_key_hex);
+            }
         }
-        if let Some(grpc_auth_token) = self.grpc_auth_token() {
-            builder = builder.grpc_metadata("x-token", &grpc_auth_token);
-        }
-        if let Some(signer_key_hex) = &self.signer_private_key {
-            builder = builder.private_key_hex(signer_key_hex);
-        }
-
         builder.build().await.map_err(Into::into)
     }
 }
@@ -126,7 +133,7 @@ pub(crate) fn default_safe_lead_time_ms() -> u64 {
 }
 
 fn default_rpc_addr() -> String {
-    "http://localhost:11111/".into()
+    "ws://localhost:26658/".into()
 }
 
 // Exponential backoff defaults:

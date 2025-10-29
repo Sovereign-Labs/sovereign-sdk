@@ -1,16 +1,16 @@
 [da]
-# The address of the *trusted* Celestia light client to interact with.
+# The address of the *trusted* Celestia node to interact with.
 # Example for quicknode: wss://a-b-c.celestia-mocha.quiknode.pro/grpc_auth_token;
+# Default value is ws://127.0.0.1:26658
 rpc_url = "ws://127.0.0.1:26658"
 # The JWT used to authenticate with the celestia light client. Instructions for generating this token can be found in the README
 # Optional.
-# rpc_auth_token = "MY.SECRET.TOKEN"
-
+#rpc_auth_token = "MY.SECRET.TOKEN"
+# The address of *trusted* Celestia gRPC to submit blobs
 grpc_url = "http://127.0.0.1:9090"
-
+# The Auth token for interacting with gRPC
 # Optional. X-token for quicknode
 #grpc_auth_token = ""
-
 # Taken from ../../docker/credentials/bridge-0.key
 signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
 
@@ -19,7 +19,6 @@ max_celestia_response_body_size = 104_857_600
 # The maximum time to wait for a response to an RPC query against Celestia node. 
 # Default: 60 seconds
 # We set it to allow skipping 3 blocks on mocha testnet
-# TODO: Currently not used
 request_timeout_secs = 18
 
 # Options are "Low", "Medium" and "High"

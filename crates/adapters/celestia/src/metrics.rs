@@ -93,7 +93,7 @@ pub(crate) struct BlobSubmitMeasurement {
 impl BlobSubmitMeasurement {
     pub fn new(
         namespace: RollupNamespace,
-        result: &celestia_client::Result<TxInfo>,
+        result: &anyhow::Result<TxInfo>,
         bytes: usize,
         lock_acquisition_time: std::time::Duration,
         submit_time: std::time::Duration,

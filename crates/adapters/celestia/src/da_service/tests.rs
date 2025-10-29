@@ -100,7 +100,7 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
 
     assert!(
         collected_batch_blobs.is_empty(),
-        "Batch blobs should not be send when submitting proofs"
+        "Batch blobs should not be sent when submitting proofs"
     );
     assert_single_blob(collected_proof_blobs, signer, response.blob_hash, &zk_proof);
 
