@@ -50,8 +50,8 @@ impl Image for CelestiaBridge {
 
     fn ready_conditions(&self) -> Vec<WaitFor> {
         vec![
+            WaitFor::message_on_either_std("JWT token has been saved"),
             WaitFor::healthcheck(),
-            // WaitFor::message_on_stdout("Started celestia DA node"),
         ]
     }
 

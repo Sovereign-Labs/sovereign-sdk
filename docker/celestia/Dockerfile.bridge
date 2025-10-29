@@ -20,7 +20,8 @@ COPY ./run-bridge.sh /opt/entrypoint.sh
 COPY ./bridge-healthcheck.sh /opt/bridge-healthcheck.sh
 RUN chmod +x /opt/entrypoint.sh && chmod +x /opt/bridge-healthcheck.sh
 
-HEALTHCHECK --interval=5s --timeout=5s --retries=60 --start-period=10s \
+# TODO: Remove it from here, as it depends
+HEALTHCHECK --interval=5s --timeout=5s --retries=60 --start-period=60s \
     CMD ["/opt/bridge-healthcheck.sh", "/credentials/bridge-0.jwt"]
 
 EXPOSE 2121 26658

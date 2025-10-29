@@ -37,6 +37,9 @@ wait_for_provision() {
 
 # Import the test account key shared by the validator
 import_shared_key() {
+  echo "Credentials directory listing before import:"
+  ls -la "$CREDENTIALS_DIR"
+  echo "Importing key: name=$NODE_NAME file=$NODE_KEY_FILE"
   echo "password" | cel-key import "$NODE_NAME" "$NODE_KEY_FILE" \
     --keyring-backend="test" \
     --p2p.network "$P2P_NETWORK" \
