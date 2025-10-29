@@ -139,7 +139,7 @@ impl CelestiaConfig {
     }
 }
 
-fn default_safe_lead_time_ms() -> u64 {
+pub(crate) fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
@@ -165,19 +165,19 @@ fn default_rpc_addr() -> String {
 // - First 9 attempts: 100ms + 200ms + 400ms + 800ms + 1.6s + 3.2s + 6.4s + 12.8s + 25.6s = ~51.1 seconds
 // - Remaining 51 attempts: 51 × 30s = 1,530 seconds (25.5 minutes)
 // - **Total waiting time: ~1,581 seconds (≈ 26.35 minutes)**
-fn default_min_delay_ms() -> u64 {
+pub(crate) fn default_min_delay_ms() -> u64 {
     100
 }
 
-fn default_max_delay_ms() -> u64 {
+pub(crate) fn default_max_delay_ms() -> u64 {
     12_000
 }
 
-fn default_max_times() -> usize {
+pub(crate) fn default_max_times() -> usize {
     60
 }
 
-fn default_factor() -> f32 {
+pub(crate) fn default_factor() -> f32 {
     2.0
 }
 
