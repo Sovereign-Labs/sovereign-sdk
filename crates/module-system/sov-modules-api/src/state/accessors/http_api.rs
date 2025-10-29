@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::GasMeteringError;
-use alloy_eips::eip1559::ETHEREUM_BLOCK_GAS_LIMIT_30M;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::sequencer_state::MaybePresentValue;
@@ -540,11 +539,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Result<Self, ApiStateAccessorError> {
         let delta: &super::internals::Delta<<S as Spec>::Storage> = &state_checkpoint.delta;
-        let gas_meter = BasicGasMeter::new_with_funds_and_gas(
-            Amount::MAX,
-            [ETHEREUM_BLOCK_GAS_LIMIT_30M, ETHEREUM_BLOCK_GAS_LIMIT_30M].into(),
-            gas_price,
-        );
+        let gas_meter = BasicGasMeter::new_api(gas_price);
 
         let mut out = Self {
             storage: delta.inner.clone(),
@@ -596,11 +591,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         state_to_access: StateToAccess,
     ) -> Self {
-        let gas_meter = BasicGasMeter::new_with_funds_and_gas(
-            Amount::MAX,
-            [ETHEREUM_BLOCK_GAS_LIMIT_30M, ETHEREUM_BLOCK_GAS_LIMIT_30M].into(),
-            <S::Gas as Gas>::Price::ZEROED,
-        );
+        let gas_meter = BasicGasMeter::new_api(<S::Gas as Gas>::Price::ZEROED);
         Self {
             events: Vec::new(),
             gas_meter,
