@@ -74,9 +74,9 @@ where
                     .map(|(idx, tx)| {
                         from_recovered_with_block_context(
                             tx.into(),
-                            Some(block.hash().unwrap_or_default()),
+                            block.hash(),
                             block.number(),
-                            U256::from(idx),
+                            idx as u64,
                         )
                     })
                     .collect::<Vec<_>>();
@@ -131,7 +131,7 @@ where
         let tx_number = self.tx_index(&hash, state)?;
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let index = U256::from(tx_number - block.transactions_start());
+        let index = tx_number - block.transactions_start();
         let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
         Some(tx)
     }
