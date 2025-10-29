@@ -29,6 +29,8 @@ const AES_GCM_NONCE_SIZE: usize = 12;
 pub struct EncryptionKey {
     pub id: String,
     pub material: Vec<u8>,
+    #[serde(default)]
+    pub slot_number: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,6 +207,7 @@ impl EncryptionLayer {
                     let initial_encryption_key = EncryptionKey {
                         id: "genesis-key".to_string(),
                         material: key_bytes,
+                        slot_number: None,
                     };
                     key_cache.update_current_key(initial_encryption_key);
                     info!("Initialized unix socket encryption layer with genesis key");
@@ -232,6 +235,7 @@ impl EncryptionLayer {
                 let static_key = EncryptionKey {
                     id: "static-key".to_string(),
                     material: key_bytes,
+                    slot_number: None,
                 };
                 key_cache.update_current_key(static_key);
                 info!("Initialized with static encryption key");
@@ -374,8 +378,43 @@ impl EncryptionLayer {
                         KeyUpdate::NewKey(key) => {
                             info!("📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes)", key.id, key.material.len());
                             debug!("📨 KEY RECEIVED: Key material hash: {}", hex::encode(&key.material[..8.min(key.material.len())]));
-                            cache.update_current_key(key.clone());
-                            info!("✅ KEY UPDATED: Current encryption key set to '{}'", key.id);
+                            
+                            // Check if this key has a slot_number for scheduling
+                            if let Some(target_slot) = key.slot_number {
+                                let current_slot = cache.get_current_slot();
+                                let slots_until_activation = target_slot.saturating_sub(current_slot);
+                                
+                                info!("🔑 SLOT-BASED ACTIVATION: Key '{}' will activate at slot {} ({} slots from now)", 
+                                      key.id, target_slot, slots_until_activation);
+                                
+                                // Convert to scheduled key
+                                let scheduled_key = SlotScheduledKey {
+                                    key: EncryptionKey {
+                                        id: key.id.clone(),
+                                        material: key.material.clone(),
+                                        slot_number: None, // Clear slot_number since it's now in the scheduled wrapper
+                                    },
+                                    activate_at_slot: target_slot,
+                                };
+                                cache.schedule_key(scheduled_key);
+                                info!("✅ KEY SCHEDULED: Key '{}' scheduled for slot {}", key.id, target_slot);
+                            } else {
+                                // No slot number provided - activate immediately
+                                let current_key = cache.get_current_key();
+                                if current_key.is_none() {
+                                    info!("🔑 GENESIS ACTIVATION: No current key exists, activating '{}' immediately", key.id);
+                                } else {
+                                    warn!("⚠️  IMMEDIATE ACTIVATION: NewKey '{}' has no slot_number, activating immediately!", key.id);
+                                }
+                                
+                                let clean_key = EncryptionKey {
+                                    id: key.id.clone(),
+                                    material: key.material.clone(),
+                                    slot_number: None,
+                                };
+                                cache.update_current_key(clean_key);
+                                info!("✅ KEY UPDATED: Current encryption key set to '{}'", key.id);
+                            }
                         }
                         KeyUpdate::ScheduledKey(scheduled_key) => {
                             info!("📨 KEY RECEIVED: SCHEDULED encryption key '{}' ({} bytes) -> activate at slot {}", 
@@ -416,6 +455,22 @@ impl EncryptionLayer {
 }
 
 impl EncryptionLayer {
+    /// Get the appropriate key for a specific slot number
+    /// This ensures sequencer and STF use the same key for the same slot
+    pub fn get_key_for_slot(&self, slot_number: u64) -> Option<EncryptionKey> {
+        // First activate any keys that should be active for this slot
+        self.key_cache.check_for_activation(slot_number);
+        
+        // Then return the current key
+        let key = self.key_cache.get_current_key();
+        if let Some(ref k) = key {
+            info!("🔑 SLOT KEY: Using key '{}' for slot {}", k.id, slot_number);
+        } else {
+            warn!("🔑 SLOT KEY: No key available for slot {}", slot_number);
+        }
+        key
+    }
+
     /// Set the current slot number and proactively activate keys for the next slot
     /// This ensures keys are ready before encryption/decryption operations
     pub fn set_current_slot(&self, slot_number: u64) {
@@ -484,12 +539,18 @@ impl EncryptionLayerTrait for EncryptionLayer {
         let key = self.key_cache.get_current_key()
             .ok_or(EncryptionError::InvalidKeyFormat("No encryption key available".to_string()))?;
         
-        info!("🔐 ENCRYPT: Using key '{}' at slot {} for {} bytes", 
-              key.id, current_slot, plaintext.len());
+        let scheduled_count = self.key_cache.scheduled_keys.read().unwrap().len();
+        info!("🔐 ENCRYPT: Using key '{}' at slot {} for {} bytes ({} keys scheduled)", 
+              key.id, current_slot, plaintext.len(), scheduled_count);
         debug!("🔐 ENCRYPT: Key material hash: {}", 
                hex::encode(&key.material[..8.min(key.material.len())]));
         
-        self.encrypt_with_key(&key.material, plaintext)
+        let result = self.encrypt_with_key(&key.material, plaintext);
+        if result.is_ok() {
+            info!("✅ ENCRYPT SUCCESS: Key '{}' encrypted {} bytes -> {} bytes at slot {}", 
+                  key.id, plaintext.len(), result.as_ref().unwrap().len(), current_slot);
+        }
+        result
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
@@ -501,12 +562,25 @@ impl EncryptionLayerTrait for EncryptionLayer {
         let key = self.key_cache.get_current_key()
             .ok_or(EncryptionError::InvalidKeyFormat("No key available for decryption".to_string()))?;
         
-        info!("🔓 DECRYPT: Using key '{}' at slot {} for {} bytes", 
-              key.id, current_slot, ciphertext.len());
+        let scheduled_count = self.key_cache.scheduled_keys.read().unwrap().len();
+        info!("🔓 DECRYPT: Using key '{}' at slot {} for {} bytes ({} keys scheduled)", 
+              key.id, current_slot, ciphertext.len(), scheduled_count);
         debug!("🔓 DECRYPT: Key material hash: {}", 
                hex::encode(&key.material[..8.min(key.material.len())]));
         
-        self.decrypt_with_key(&key.material, ciphertext)
+        let result = self.decrypt_with_key(&key.material, ciphertext);
+        match &result {
+            Ok(plaintext) => {
+                info!("✅ DECRYPT SUCCESS: Key '{}' decrypted {} bytes -> {} bytes at slot {}", 
+                      key.id, ciphertext.len(), plaintext.len(), current_slot);
+            }
+            Err(e) => {
+                error!("❌ DECRYPT FAILED: Key '{}' failed to decrypt {} bytes at slot {}: {}", 
+                       key.id, ciphertext.len(), current_slot, e);
+                error!("❌ DECRYPT DEBUG: This usually means data was encrypted with a different key");
+            }
+        }
+        result
     }
 
     fn encryption_type(&self) -> &'static str {
