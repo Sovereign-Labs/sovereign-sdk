@@ -235,9 +235,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
-                let (sequencer, background_handles) = if shared_encryption_layer.is_some() {
+                if shared_encryption_layer.is_some() {
                     tracing::info!("🔗 Creating PreferredSequencer with shared encryption layer");
-                    PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create_with_shared_encryption(
+                }
+                let (sequencer, background_handles) = 
+                    PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
                         da_service.clone(),
                         state_update_receiver.clone(),
                         &rollup_config.storage.path,
@@ -248,20 +250,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         stop_at_rollup_height,
                         shared_encryption_layer.clone(),
                     )
-                    .await?
-                } else {
-                    PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
-                        da_service.clone(),
-                        state_update_receiver.clone(),
-                        &rollup_config.storage.path,
-                        &rollup_config.sequencer.with_seq_config(seq_config.clone()),
-                        ledger_db.clone(),
-                        api_ledger_db.clone(),
-                        shutdown_sender.clone(),
-                        stop_at_rollup_height,
-                    )
-                    .await?
-                };
+                    .await?;
 
                 let mut endpoints = self
                     .sequencer_additional_apis(sequencer.clone(), rollup_config)
