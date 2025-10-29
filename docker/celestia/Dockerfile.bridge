@@ -1,6 +1,11 @@
 # A dockerfile for the celestia bridge node in DA layer
 # Based on:
 # https://github.com/celestiaorg/celestia-node/blob/main/Dockerfile
+
+ARG CELESTIA_NODE_TAG=v0.27.4-mocha
+
+FROM ghcr.io/celestiaorg/celestia-node:${CELESTIA_NODE_TAG} AS celestia-node
+
 FROM docker.io/alpine:3.20.1
 
 ENV CELESTIA_HOME=/root
@@ -13,8 +18,8 @@ RUN apk update && \
     rm grpcurl_1.8.7_linux_x86_64.tar.gz
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-node:v0.27.4-mocha /bin/celestia /bin/celestia
-COPY --from=ghcr.io/celestiaorg/celestia-node:v0.27.4-mocha /bin/cel-key /bin/cel-key
+COPY --from=celestia-node /bin/celestia /bin/celestia
+COPY --from=celestia-node /bin/cel-key /bin/cel-key
 
 COPY ./run-bridge.sh /opt/entrypoint.sh
 COPY ./bridge-healthcheck.sh /opt/bridge-healthcheck.sh
@@ -26,4 +31,4 @@ HEALTHCHECK --interval=5s --timeout=5s --retries=60 --start-period=60s \
 
 EXPOSE 2121 26658
 
-CMD /opt/entrypoint.sh
+CMD ["/opt/entrypoint.sh"]

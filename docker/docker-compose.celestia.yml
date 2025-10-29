@@ -1,3 +1,4 @@
+# TODO: Switch to pre-built images.
 services:
   validator:
     image: validator

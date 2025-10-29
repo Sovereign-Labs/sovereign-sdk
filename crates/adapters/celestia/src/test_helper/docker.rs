@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::borrow::Cow;
 use std::str::FromStr;
 use std::time::Duration;
@@ -19,8 +17,10 @@ use testcontainers::{ContainerAsync, Image, ImageExt};
 use tokio::time::sleep;
 use uuid::Uuid;
 
-const VALIDATOR_IMAGE: &str = "validator";
-const BRIDGE_IMAGE: &str = "bridge";
+const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
+const VALIDATOR_TAG: &str = "v5.0.2-mocha";
+const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
+const BRIDGE_TAG: &str = "v0.27.4-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
 const BRIDGE_RPC_PORT: u16 = 26658;
 
@@ -32,7 +32,7 @@ impl Image for CelestiaValidator {
     }
 
     fn tag(&self) -> &str {
-        "latest"
+        VALIDATOR_TAG
     }
 
     fn ready_conditions(&self) -> Vec<WaitFor> {
@@ -54,7 +54,7 @@ impl Image for CelestiaBridge {
     }
 
     fn tag(&self) -> &str {
-        "latest"
+        BRIDGE_TAG
     }
 
     fn ready_conditions(&self) -> Vec<WaitFor> {
