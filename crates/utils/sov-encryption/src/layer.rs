@@ -32,8 +32,15 @@ pub struct EncryptionKey {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotScheduledKey {
+    pub key: EncryptionKey,
+    pub activate_at_slot: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KeyUpdate {
     NewKey(EncryptionKey),
+    ScheduledKey(SlotScheduledKey),
     RotateKey { old_id: String, new_key: EncryptionKey },
     RevokeKey(String),
 }
@@ -48,12 +55,16 @@ pub struct KeyCache {
     // RwLock<> could result in writer starvation if there is constant stream of readers
     // Writer could be blocked indefinitely so we'll never update the key. 
     current_key: Arc<RwLock<Option<EncryptionKey>>>,
+    scheduled_keys: Arc<RwLock<Vec<SlotScheduledKey>>>,
+    current_slot: Arc<RwLock<u64>>,
 }
 
 impl KeyCache {
     pub fn new() -> Self {
         Self {
             current_key: Arc::new(RwLock::new(None)),
+            scheduled_keys: Arc::new(RwLock::new(Vec::new())),
+            current_slot: Arc::new(RwLock::new(0)),
         }
     }
     
@@ -63,6 +74,60 @@ impl KeyCache {
     
     pub fn update_current_key(&self, key: EncryptionKey) {
         *self.current_key.write().unwrap() = Some(key);
+    }
+    
+    pub fn schedule_key(&self, scheduled_key: SlotScheduledKey) {
+        info!("📅 Scheduling key {} for activation at slot {}", scheduled_key.key.id, scheduled_key.activate_at_slot);
+        let mut scheduled = self.scheduled_keys.write().unwrap();
+        
+        // Insert in sorted order by activation slot
+        let pos = scheduled.binary_search_by_key(&scheduled_key.activate_at_slot, |k| k.activate_at_slot)
+            .unwrap_or_else(|e| e);
+        scheduled.insert(pos, scheduled_key);
+        
+        info!("📊 Total scheduled keys: {}", scheduled.len());
+    }
+    
+    pub fn update_slot(&self, slot_number: u64) -> Vec<EncryptionKey> {
+        let mut activated_keys = Vec::new();
+        
+        // Update current slot
+        *self.current_slot.write().unwrap() = slot_number;
+        
+        // Check for keys to activate
+        activated_keys.extend(self.check_for_activation(slot_number));
+        
+        activated_keys
+    }
+    
+    /// Check for keys that should be activated at the given slot number without updating current slot
+    /// This allows proactive activation without blocking
+    pub fn check_for_activation(&self, slot_number: u64) -> Vec<EncryptionKey> {
+        let mut activated_keys = Vec::new();
+        let mut scheduled = self.scheduled_keys.write().unwrap();
+        let mut to_activate = Vec::new();
+        
+        // Find all keys that should be activated at this slot
+        while let Some(scheduled_key) = scheduled.first() {
+            if scheduled_key.activate_at_slot <= slot_number {
+                to_activate.push(scheduled.remove(0));
+            } else {
+                break;
+            }
+        }
+        
+        // Activate keys (most recent one becomes current)
+        for scheduled_key in to_activate {
+            info!("🔑 Activating key {} for slot {}", scheduled_key.key.id, slot_number);
+            activated_keys.push(scheduled_key.key.clone());
+            self.update_current_key(scheduled_key.key);
+        }
+        
+        activated_keys
+    }
+    
+    pub fn get_current_slot(&self) -> u64 {
+        *self.current_slot.read().unwrap()
     }
     
     pub fn rotate_key(&self, _old_id: String, new_key: EncryptionKey) {
@@ -78,6 +143,10 @@ impl KeyCache {
                 warn!("Current key revoked, encryption will fail until new key received");
             }
         }
+        
+        // Also remove from scheduled keys
+        let mut scheduled = self.scheduled_keys.write().unwrap();
+        scheduled.retain(|sk| sk.key.id != key_id);
     }
 }
 
@@ -300,6 +369,13 @@ impl EncryptionLayer {
                             cache.update_current_key(key);
                             info!("✅ Updated current encryption key in cache");
                         }
+                        KeyUpdate::ScheduledKey(scheduled_key) => {
+                            info!("⏰ Received SCHEDULED encryption key: {} ({}bytes) -> activate at slot {}", 
+                                  scheduled_key.key.id, scheduled_key.key.material.len(), scheduled_key.activate_at_slot);
+                            debug!("Scheduled key material: {}", hex::encode(&scheduled_key.key.material));
+                            cache.schedule_key(scheduled_key);
+                            info!("✅ Scheduled encryption key in cache");
+                        }
                         KeyUpdate::RotateKey { old_id, new_key } => {
                             info!("🔄 Key rotation: {} -> {} ({}bytes)", old_id, new_key.id, new_key.material.len());
                             debug!("New key material: {}", hex::encode(&new_key.material));
@@ -326,14 +402,71 @@ impl EncryptionLayer {
     }
 }
 
+impl EncryptionLayer {
+    /// Set the current slot number and proactively activate keys for the next slot
+    /// This ensures keys are ready before encryption/decryption operations
+    pub fn set_current_slot(&self, slot_number: u64) {
+        let previous_slot = self.key_cache.get_current_slot();
+        *self.key_cache.current_slot.write().unwrap() = slot_number;
+        
+        // Proactively check if we need to activate keys for the next slot (slot_number + 1)
+        // This ensures keys are ready before encryption happens
+        if slot_number > previous_slot {
+            let next_slot = slot_number + 1;
+            let activated_keys = self.key_cache.check_for_activation(next_slot);
+            if !activated_keys.is_empty() {
+                info!("🔑 Proactive activation: {} key(s) pre-activated for slot {} (current slot: {})", 
+                      activated_keys.len(), next_slot, slot_number);
+            }
+        }
+    }
+    
+    /// Check if any scheduled keys should be activated (legacy method for compatibility)
+    fn check_and_activate_keys(&self) {
+        // This should now be a no-op since keys are proactively activated
+        // But we keep it for safety in case of edge cases
+        let current_slot = self.key_cache.get_current_slot();
+        let activated_keys = self.key_cache.update_slot(current_slot);
+        if !activated_keys.is_empty() {
+            info!("🔑 Fallback activation: {} key(s) activated at slot {} during encrypt/decrypt", 
+                  activated_keys.len(), current_slot);
+        }
+    }
+    
+    /// Get the current slot number
+    pub fn get_current_slot(&self) -> u64 {
+        self.key_cache.get_current_slot()
+    }
+    
+    /// Get the current active key
+    pub fn get_current_key(&self) -> Option<EncryptionKey> {
+        self.key_cache.get_current_key()
+    }
+    
+    /// Update the current slot and activate any scheduled keys (legacy method for manual activation)
+    pub fn update_slot(&self, slot_number: u64) -> Vec<EncryptionKey> {
+        let activated_keys = self.key_cache.update_slot(slot_number);
+        if !activated_keys.is_empty() {
+            info!("🎯 Slot {} reached - activated {} key(s)", slot_number, activated_keys.len());
+        }
+        activated_keys
+    }
+}
+
 impl EncryptionLayerTrait for EncryptionLayer {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        // Check for key activation before encryption
+        self.check_and_activate_keys();
+        
         let key = self.key_cache.get_current_key()
             .ok_or(EncryptionError::InvalidKeyFormat("No encryption key available".to_string()))?;
         self.encrypt_with_key(&key.material, plaintext)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        // Check for key activation before decryption
+        self.check_and_activate_keys();
+        
         let key = self.key_cache.get_current_key()
             .ok_or(EncryptionError::InvalidKeyFormat("No key available for decryption".to_string()))?;
         self.decrypt_with_key(&key.material, ciphertext)

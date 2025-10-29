@@ -208,11 +208,16 @@ fn batch_bytes(
     encryption_layer: Option<&EncryptionLayer>
 ) -> anyhow::Result<Vec<u8>> {
     if let Some(encryptor) = encryption_layer {
+        // Set current slot for proactive key activation during encryption
+        // Use the visible slot number from the batch for encryption context
+        let slot_number = batch.visible_slot_number_after_increase.as_true().get();
+        encryptor.set_current_slot(slot_number);
+        
         // Serialize the entire transaction vector
         let txs_serialized = borsh::to_vec(&*batch.txs)?;
         
         // Encrypt the serialized transaction data as one ciphertext
-        tracing::info!("🔐 Encrypting batch of {} transactions", batch.txs.len());
+        tracing::info!("🔐 Encrypting batch of {} transactions at slot {}", batch.txs.len(), slot_number);
         let encrypted_txs_data = encryptor.encrypt(&txs_serialized)?;
         
         // Create batch with serialized encrypted blob + metadata including tx hashes
