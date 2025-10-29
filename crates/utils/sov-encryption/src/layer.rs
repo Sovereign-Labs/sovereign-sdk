@@ -25,29 +25,31 @@ const AES_256_KEY_SIZE: usize = 32;
 #[cfg(feature = "aes-encryption")]
 const AES_GCM_NONCE_SIZE: usize = 12;
 
+/// Key format from the key service (matches your service exactly)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptionKey {
     pub id: String,
-    #[serde(alias = "key_data")]
-    pub material: Vec<u8>,
-    #[serde(default)]
-    pub slot_number: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    pub key_data: Vec<u8>,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub slot_number: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Internal key format used by the encryption layer
+#[derive(Debug, Clone)]
+pub struct InternalKey {
+    pub id: String,
+    pub material: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SlotScheduledKey {
-    pub key: EncryptionKey,
+    pub key: InternalKey,
     pub activate_at_slot: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KeyUpdate {
     NewKey(EncryptionKey),
-    ScheduledKey(SlotScheduledKey),
-    RotateKey { old_id: String, new_key: EncryptionKey },
-    RevokeKey(String),
 }
 
 #[derive(Clone)]
@@ -59,7 +61,7 @@ pub struct KeyCache {
 
     // RwLock<> could result in writer starvation if there is constant stream of readers
     // Writer could be blocked indefinitely so we'll never update the key. 
-    current_key: Arc<RwLock<Option<EncryptionKey>>>,
+    current_key: Arc<RwLock<Option<InternalKey>>>,
     scheduled_keys: Arc<RwLock<Vec<SlotScheduledKey>>>,
     current_slot: Arc<RwLock<u64>>,
 }
@@ -73,12 +75,22 @@ impl KeyCache {
         }
     }
     
-    pub fn get_current_key(&self) -> Option<EncryptionKey> {
+    pub fn get_current_key(&self) -> Option<InternalKey> {
         self.current_key.read().unwrap().clone()
     }
     
-    pub fn update_current_key(&self, key: EncryptionKey) {
-        *self.current_key.write().unwrap() = Some(key);
+    pub fn update_current_key(&self, key: InternalKey) {
+        let previous_key = self.current_key.read().unwrap().as_ref().map(|k| k.id.clone());
+        *self.current_key.write().unwrap() = Some(key.clone());
+        
+        match previous_key {
+            Some(prev_id) => {
+                warn!("🔄 KEY REPLACED: '{}' -> '{}' (immediate activation)", prev_id, key.id);
+            }
+            None => {
+                info!("🔑 KEY SET: '{}' is now the current key", key.id);
+            }
+        }
     }
     
     pub fn schedule_key(&self, scheduled_key: SlotScheduledKey) {
@@ -93,7 +105,7 @@ impl KeyCache {
         info!("📊 Total scheduled keys: {}", scheduled.len());
     }
     
-    pub fn update_slot(&self, slot_number: u64) -> Vec<EncryptionKey> {
+    pub fn update_slot(&self, slot_number: u64) -> Vec<InternalKey> {
         let mut activated_keys = Vec::new();
         
         // Update current slot
@@ -107,7 +119,7 @@ impl KeyCache {
     
     /// Check for keys that should be activated at the given slot number without updating current slot
     /// This allows proactive activation without blocking
-    pub fn check_for_activation(&self, slot_number: u64) -> Vec<EncryptionKey> {
+    pub fn check_for_activation(&self, slot_number: u64) -> Vec<InternalKey> {
         let mut activated_keys = Vec::new();
         let mut scheduled = self.scheduled_keys.write().unwrap();
         let mut to_activate = Vec::new();
@@ -143,7 +155,7 @@ impl KeyCache {
         *self.current_slot.read().unwrap()
     }
     
-    pub fn rotate_key(&self, _old_id: String, new_key: EncryptionKey) {
+    pub fn rotate_key(&self, _old_id: String, new_key: InternalKey) {
         // Could keep old key for decryption of old data
         self.update_current_key(new_key);
     }
@@ -207,11 +219,9 @@ impl EncryptionLayer {
                             format!("Initial key must be 32 bytes, got {}", key_bytes.len())
                         ));
                     }
-                    let initial_encryption_key = EncryptionKey {
+                    let initial_encryption_key = InternalKey {
                         id: "genesis-key".to_string(),
                         material: key_bytes,
-                        slot_number: None,
-                        timestamp: None,
                     };
                     key_cache.update_current_key(initial_encryption_key);
                     info!("Initialized unix socket encryption layer with genesis key");
@@ -236,11 +246,9 @@ impl EncryptionLayer {
                 // For static keys, populate the cache immediately
                 let key_bytes = hex::decode(encryption_key)
                     .map_err(|e| EncryptionError::InvalidKeyFormat(format!("Invalid hex key: {e}")))?;
-                let static_key = EncryptionKey {
+                let static_key = InternalKey {
                     id: "static-key".to_string(),
                     material: key_bytes,
-                    slot_number: None,
-                    timestamp: None,
                 };
                 key_cache.update_current_key(static_key);
                 info!("Initialized with static encryption key");
@@ -357,80 +365,16 @@ impl EncryptionLayer {
         Ok(handle)
     }
     
-    /// Deserialize the key service message format with proper compatibility
+    /// Deserialize the key service message format
     fn deserialize_key_service_message(data: &[u8]) -> Result<KeyUpdate, String> {
-        // Define the key service's EncryptionKey format for compatibility
-        #[derive(Debug, Clone, Serialize, Deserialize)]
-        struct KeyServiceEncryptionKey {
-            pub id: String,
-            pub key_data: Vec<u8>,
-            pub timestamp: chrono::DateTime<chrono::Utc>,
-            pub slot_number: u64,
-        }
-        
-        #[derive(Debug, Clone, Serialize, Deserialize)]
-        enum KeyServiceKeyUpdate {
-            NewKey(KeyServiceEncryptionKey),
-            RotateKey {
-                old_id: String,
-                new_key: KeyServiceEncryptionKey,
-            },
-            RevokeKey(String),
-        }
-        
-        // Try to deserialize using the key service format
-        match bincode::deserialize::<KeyServiceKeyUpdate>(data) {
-            Ok(key_service_update) => {
-                info!("📋 PARSED KEY SERVICE: Successfully deserialized key service format");
-                
-                // Convert to our internal format
-                let internal_update = match key_service_update {
-                    KeyServiceKeyUpdate::NewKey(key) => {
-                        info!("📋 CONVERTING: NewKey '{}' with slot {}", key.id, key.slot_number);
-                        KeyUpdate::NewKey(EncryptionKey {
-                            id: key.id,
-                            material: key.key_data,
-                            slot_number: Some(key.slot_number),
-                            timestamp: Some(key.timestamp),
-                        })
-                    }
-                    KeyServiceKeyUpdate::RotateKey { old_id, new_key } => {
-                        info!("📋 CONVERTING: RotateKey {} -> '{}' with slot {}", 
-                              old_id, new_key.id, new_key.slot_number);
-                        KeyUpdate::RotateKey {
-                            old_id,
-                            new_key: EncryptionKey {
-                                id: new_key.id,
-                                material: new_key.key_data,
-                                slot_number: Some(new_key.slot_number),
-                                timestamp: Some(new_key.timestamp),
-                            },
-                        }
-                    }
-                    KeyServiceKeyUpdate::RevokeKey(key_id) => {
-                        info!("📋 CONVERTING: RevokeKey '{}'", key_id);
-                        KeyUpdate::RevokeKey(key_id)
-                    }
-                };
-                
-                Ok(internal_update)
+        // Try to deserialize directly since the formats should match now
+        match bincode::deserialize::<KeyUpdate>(data) {
+            Ok(key_update) => {
+                info!("📋 PARSED KEY SERVICE: Successfully deserialized KeyUpdate");
+                Ok(key_update)
             }
-            Err(key_service_err) => {
-                debug!("Key service format failed: {}", key_service_err);
-                
-                // Fall back to our internal format
-                match bincode::deserialize::<KeyUpdate>(data) {
-                    Ok(internal_update) => {
-                        info!("📋 PARSED INTERNAL: Successfully deserialized internal format");
-                        Ok(internal_update)
-                    }
-                    Err(internal_err) => {
-                        Err(format!(
-                            "Failed both key service format ({}) and internal format ({})", 
-                            key_service_err, internal_err
-                        ))
-                    }
-                }
+            Err(e) => {
+                Err(format!("Failed to deserialize KeyUpdate: {}", e))
             }
         }
     }
@@ -461,70 +405,39 @@ impl EncryptionLayer {
                     info!("Successfully deserialized KeyUpdate message");
                     match key_update {
                         KeyUpdate::NewKey(key) => {
-                            info!("📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes)", key.id, key.material.len());
-                            debug!("📨 KEY RECEIVED: Key material hash: {}", hex::encode(&key.material[..8.min(key.material.len())]));
+                            info!("📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes) for slot {}", 
+                                  key.id, key.key_data.len(), key.slot_number);
+                            debug!("📨 KEY RECEIVED: Key material hash: {}", 
+                                   hex::encode(&key.key_data[..8.min(key.key_data.len())]));
                             
-                            // Check if this key has a slot_number for scheduling
-                            if let Some(target_slot) = key.slot_number {
-                                let current_slot = cache.get_current_slot();
-                                let slots_until_activation = target_slot.saturating_sub(current_slot);
-                                
+                            let current_slot = cache.get_current_slot();
+                            let target_slot = key.slot_number;
+                            let slots_until_activation = target_slot.saturating_sub(current_slot);
+                            
+                            // Convert to internal format and schedule for slot-based activation
+                            let internal_key = InternalKey {
+                                id: key.id.clone(),
+                                material: key.key_data.clone(),
+                            };
+                            
+                            if target_slot <= current_slot {
+                                // Key should activate immediately (for past/current slots)
+                                info!("🔑 IMMEDIATE ACTIVATION: Key '{}' for slot {} (current slot: {})", 
+                                      key.id, target_slot, current_slot);
+                                cache.update_current_key(internal_key);
+                                info!("✅ KEY UPDATED: Current encryption key set to '{}'", key.id);
+                            } else {
+                                // Schedule for future activation
                                 info!("🔑 SLOT-BASED ACTIVATION: Key '{}' will activate at slot {} ({} slots from now)", 
                                       key.id, target_slot, slots_until_activation);
                                 
-                                // Convert to scheduled key
                                 let scheduled_key = SlotScheduledKey {
-                                    key: EncryptionKey {
-                                        id: key.id.clone(),
-                                        material: key.material.clone(),
-                                        slot_number: None, // Clear slot_number since it's now in the scheduled wrapper
-                                        timestamp: key.timestamp,
-                                    },
+                                    key: internal_key,
                                     activate_at_slot: target_slot,
                                 };
                                 cache.schedule_key(scheduled_key);
                                 info!("✅ KEY SCHEDULED: Key '{}' scheduled for slot {}", key.id, target_slot);
-                            } else {
-                                // No slot number provided - activate immediately
-                                let current_key = cache.get_current_key();
-                                if current_key.is_none() {
-                                    info!("🔑 GENESIS ACTIVATION: No current key exists, activating '{}' immediately", key.id);
-                                } else {
-                                    warn!("⚠️  IMMEDIATE ACTIVATION: NewKey '{}' has no slot_number, activating immediately!", key.id);
-                                }
-                                
-                                let clean_key = EncryptionKey {
-                                    id: key.id.clone(),
-                                    material: key.material.clone(),
-                                    slot_number: None,
-                                    timestamp: key.timestamp,
-                                };
-                                cache.update_current_key(clean_key);
-                                info!("✅ KEY UPDATED: Current encryption key set to '{}'", key.id);
                             }
-                        }
-                        KeyUpdate::ScheduledKey(scheduled_key) => {
-                            info!("📨 KEY RECEIVED: SCHEDULED encryption key '{}' ({} bytes) -> activate at slot {}", 
-                                  scheduled_key.key.id, scheduled_key.key.material.len(), scheduled_key.activate_at_slot);
-                            debug!("📨 KEY RECEIVED: Scheduled key material hash: {}", 
-                                   hex::encode(&scheduled_key.key.material[..8.min(scheduled_key.key.material.len())]));
-                            let current_slot = cache.get_current_slot();
-                            let slots_until_activation = scheduled_key.activate_at_slot.saturating_sub(current_slot);
-                            cache.schedule_key(scheduled_key.clone());
-                            info!("✅ KEY SCHEDULED: Key '{}' scheduled for slot {} ({} slots from now)", 
-                                  scheduled_key.key.id, scheduled_key.activate_at_slot, slots_until_activation);
-                        }
-                        KeyUpdate::RotateKey { old_id, new_key } => {
-                            info!("📨 KEY RECEIVED: ROTATION {} -> '{}' ({} bytes)", old_id, new_key.id, new_key.material.len());
-                            debug!("📨 KEY RECEIVED: New key material hash: {}", 
-                                   hex::encode(&new_key.material[..8.min(new_key.material.len())]));
-                            cache.rotate_key(old_id.clone(), new_key.clone());
-                            info!("✅ KEY ROTATED: Replaced key '{}' with '{}'", old_id, new_key.id);
-                        }
-                        KeyUpdate::RevokeKey(key_id) => {
-                            warn!("📨 KEY RECEIVED: REVOKE key '{}'", key_id);
-                            cache.revoke_key(key_id.clone());
-                            warn!("❌ KEY REVOKED: Key '{}' removed from cache", key_id);
                         }
                     }
                 }
@@ -545,9 +458,34 @@ impl EncryptionLayer {
 }
 
 impl EncryptionLayer {
+    /// Debug method to show current key status
+    pub fn debug_key_status(&self) {
+        let current_key = self.key_cache.get_current_key();
+        let current_slot = self.key_cache.get_current_slot();
+        let scheduled_keys = self.key_cache.scheduled_keys.read().unwrap();
+        
+        match current_key {
+            Some(key) => {
+                info!("🔍 KEY STATUS: Current key '{}' at slot {}", key.id, current_slot);
+            }
+            None => {
+                warn!("🔍 KEY STATUS: No current key available at slot {}", current_slot);
+            }
+        }
+        
+        if scheduled_keys.is_empty() {
+            info!("🔍 KEY STATUS: No scheduled keys");
+        } else {
+            info!("🔍 KEY STATUS: {} scheduled keys:", scheduled_keys.len());
+            for sk in scheduled_keys.iter() {
+                info!("🔍   - Key '{}' scheduled for slot {}", sk.key.id, sk.activate_at_slot);
+            }
+        }
+    }
+
     /// Get the appropriate key for a specific slot number
     /// This ensures sequencer and STF use the same key for the same slot
-    pub fn get_key_for_slot(&self, slot_number: u64) -> Option<EncryptionKey> {
+    pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
         // First activate any keys that should be active for this slot
         self.key_cache.check_for_activation(slot_number);
         
@@ -605,12 +543,12 @@ impl EncryptionLayer {
     }
     
     /// Get the current active key
-    pub fn get_current_key(&self) -> Option<EncryptionKey> {
+    pub fn get_current_key(&self) -> Option<InternalKey> {
         self.key_cache.get_current_key()
     }
     
     /// Update the current slot and activate any scheduled keys (legacy method for manual activation)
-    pub fn update_slot(&self, slot_number: u64) -> Vec<EncryptionKey> {
+    pub fn update_slot(&self, slot_number: u64) -> Vec<InternalKey> {
         let activated_keys = self.key_cache.update_slot(slot_number);
         if !activated_keys.is_empty() {
             info!("🎯 Slot {} reached - activated {} key(s)", slot_number, activated_keys.len());
@@ -622,6 +560,9 @@ impl EncryptionLayer {
 impl EncryptionLayerTrait for EncryptionLayer {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         let current_slot = self.key_cache.get_current_slot();
+        
+        // Debug key status before encryption
+        self.debug_key_status();
         
         // Check for key activation before encryption
         self.check_and_activate_keys();
@@ -645,6 +586,9 @@ impl EncryptionLayerTrait for EncryptionLayer {
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         let current_slot = self.key_cache.get_current_slot();
+        
+        // Debug key status before decryption
+        self.debug_key_status();
         
         // Check for key activation before decryption
         self.check_and_activate_keys();

@@ -290,6 +290,54 @@
               ]
             }
           }
+        },
+        {
+          "description": "Unix socket key client",
+          "type": "object",
+          "required": [
+            "socket_path",
+            "type"
+          ],
+          "properties": {
+            "initial_key": {
+              "description": "Optional initial key to start with (hex-encoded)",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "max_retries": {
+              "description": "Maximum number of retry attempts",
+              "default": 3,
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0.0
+            },
+            "retry_delay_ms": {
+              "description": "Retry backoff base delay (in milliseconds)",
+              "default": 1000,
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "socket_path": {
+              "description": "Path to the Unix socket",
+              "type": "string"
+            },
+            "timeout": {
+              "description": "Timeout for key server requests (in seconds)",
+              "default": 30,
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "unix_socket"
+              ]
+            }
+          }
         }
       ]
     },

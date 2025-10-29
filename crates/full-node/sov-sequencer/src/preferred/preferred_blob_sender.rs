@@ -221,6 +221,14 @@ fn batch_bytes(
         // Encrypt the serialized transaction data as one ciphertext
         tracing::info!("🔐 SEQUENCER: Encrypting batch #{} with {} transactions ({} bytes) at slot {}", 
                        batch.sequence_number, batch.txs.len(), txs_serialized.len(), slot_number);
+        
+        // Log which key will be used for encryption
+        if let Some(current_key) = encryptor.get_current_key() {
+            tracing::info!("🔐 SEQUENCER: Will encrypt with key '{}' for slot {}", current_key.id, slot_number);
+        } else {
+            tracing::error!("🔐 SEQUENCER: No encryption key available for slot {}", slot_number);
+        }
+        
         let encrypted_txs_data = encryptor.encrypt(&txs_serialized)?;
         
         // Create batch with serialized encrypted blob + metadata including tx hashes
