@@ -28,9 +28,12 @@ const AES_GCM_NONCE_SIZE: usize = 12;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EncryptionKey {
     pub id: String,
+    #[serde(alias = "key_data")]
     pub material: Vec<u8>,
     #[serde(default)]
     pub slot_number: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,6 +211,7 @@ impl EncryptionLayer {
                         id: "genesis-key".to_string(),
                         material: key_bytes,
                         slot_number: None,
+                        timestamp: None,
                     };
                     key_cache.update_current_key(initial_encryption_key);
                     info!("Initialized unix socket encryption layer with genesis key");
@@ -236,6 +240,7 @@ impl EncryptionLayer {
                     id: "static-key".to_string(),
                     material: key_bytes,
                     slot_number: None,
+                    timestamp: None,
                 };
                 key_cache.update_current_key(static_key);
                 info!("Initialized with static encryption key");
@@ -352,6 +357,84 @@ impl EncryptionLayer {
         Ok(handle)
     }
     
+    /// Deserialize the key service message format with proper compatibility
+    fn deserialize_key_service_message(data: &[u8]) -> Result<KeyUpdate, String> {
+        // Define the key service's EncryptionKey format for compatibility
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        struct KeyServiceEncryptionKey {
+            pub id: String,
+            pub key_data: Vec<u8>,
+            pub timestamp: chrono::DateTime<chrono::Utc>,
+            pub slot_number: u64,
+        }
+        
+        #[derive(Debug, Clone, Serialize, Deserialize)]
+        enum KeyServiceKeyUpdate {
+            NewKey(KeyServiceEncryptionKey),
+            RotateKey {
+                old_id: String,
+                new_key: KeyServiceEncryptionKey,
+            },
+            RevokeKey(String),
+        }
+        
+        // Try to deserialize using the key service format
+        match bincode::deserialize::<KeyServiceKeyUpdate>(data) {
+            Ok(key_service_update) => {
+                info!("📋 PARSED KEY SERVICE: Successfully deserialized key service format");
+                
+                // Convert to our internal format
+                let internal_update = match key_service_update {
+                    KeyServiceKeyUpdate::NewKey(key) => {
+                        info!("📋 CONVERTING: NewKey '{}' with slot {}", key.id, key.slot_number);
+                        KeyUpdate::NewKey(EncryptionKey {
+                            id: key.id,
+                            material: key.key_data,
+                            slot_number: Some(key.slot_number),
+                            timestamp: Some(key.timestamp),
+                        })
+                    }
+                    KeyServiceKeyUpdate::RotateKey { old_id, new_key } => {
+                        info!("📋 CONVERTING: RotateKey {} -> '{}' with slot {}", 
+                              old_id, new_key.id, new_key.slot_number);
+                        KeyUpdate::RotateKey {
+                            old_id,
+                            new_key: EncryptionKey {
+                                id: new_key.id,
+                                material: new_key.key_data,
+                                slot_number: Some(new_key.slot_number),
+                                timestamp: Some(new_key.timestamp),
+                            },
+                        }
+                    }
+                    KeyServiceKeyUpdate::RevokeKey(key_id) => {
+                        info!("📋 CONVERTING: RevokeKey '{}'", key_id);
+                        KeyUpdate::RevokeKey(key_id)
+                    }
+                };
+                
+                Ok(internal_update)
+            }
+            Err(key_service_err) => {
+                debug!("Key service format failed: {}", key_service_err);
+                
+                // Fall back to our internal format
+                match bincode::deserialize::<KeyUpdate>(data) {
+                    Ok(internal_update) => {
+                        info!("📋 PARSED INTERNAL: Successfully deserialized internal format");
+                        Ok(internal_update)
+                    }
+                    Err(internal_err) => {
+                        Err(format!(
+                            "Failed both key service format ({}) and internal format ({})", 
+                            key_service_err, internal_err
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
     async fn handle_key_connection(
         mut stream: UnixStream, 
         cache: KeyCache
@@ -370,8 +453,10 @@ impl EncryptionLayer {
             info!("Received {} bytes on unix socket", n);
             debug!("Raw data: {:?}", &buffer[..n]);
             
-            // Deserialize key update message
-            match bincode::deserialize::<KeyUpdate>(&buffer[..n]) {
+            // Try to deserialize the key service bincode format
+            let key_update_result = Self::deserialize_key_service_message(&buffer[..n]);
+
+            match key_update_result {
                 Ok(key_update) => {
                     info!("Successfully deserialized KeyUpdate message");
                     match key_update {
@@ -393,6 +478,7 @@ impl EncryptionLayer {
                                         id: key.id.clone(),
                                         material: key.material.clone(),
                                         slot_number: None, // Clear slot_number since it's now in the scheduled wrapper
+                                        timestamp: key.timestamp,
                                     },
                                     activate_at_slot: target_slot,
                                 };
@@ -411,6 +497,7 @@ impl EncryptionLayer {
                                     id: key.id.clone(),
                                     material: key.material.clone(),
                                     slot_number: None,
+                                    timestamp: key.timestamp,
                                 };
                                 cache.update_current_key(clean_key);
                                 info!("✅ KEY UPDATED: Current encryption key set to '{}'", key.id);
@@ -444,6 +531,9 @@ impl EncryptionLayer {
                 Err(e) => {
                     error!("❌ Failed to deserialize KeyUpdate message from {} bytes: {}", n, e);
                     error!("Raw data hex: {}", hex::encode(&buffer[..n]));
+                    if let Ok(json_str) = std::str::from_utf8(&buffer[..n]) {
+                        error!("Raw data as string: {}", json_str);
+                    }
                     return Err(EncryptionError::EncryptionFailed(format!("Key update deserialization failed: {e}")));
                 }
             }

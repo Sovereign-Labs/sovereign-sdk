@@ -46,6 +46,9 @@ schemars = { workspace = true, features = ["derive"] }
 # Logging
 tracing = { workspace = true }
 
+# Time handling
+chrono = { workspace = true, features = ["serde"] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio-test = "0.4"
