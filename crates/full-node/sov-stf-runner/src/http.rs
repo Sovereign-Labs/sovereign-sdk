@@ -421,7 +421,7 @@ mod tests {
                 let response_text = std::str::from_utf8(&data)?;
                 assert!(response_text.contains("\"result\":\"hi\""));
             }
-            _ => panic!("Expected binary response, got: {:?}", response),
+            _ => panic!("Expected binary response, got: {response:?}"),
         }
 
         shutdown_sender.send(())?;
