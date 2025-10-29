@@ -83,24 +83,6 @@ impl CelestiaConfig {
         backoff_policy
     }
 
-    #[cfg(test)]
-    pub(crate) fn dev_config(url: &str) -> Self {
-        Self {
-            rpc_auth_token: None,
-            grpc_auth_token: None,
-            rpc_url: url.to_string(),
-            grpc_url: None,
-            signer_private_key: None,
-            request_timeout_secs: NonZero::new(120).unwrap(),
-            safe_lead_time_ms: 500,
-            tx_priority: None,
-            backoff_min_delay_ms: 50,
-            backoff_max_delay_ms: 100,
-            backoff_max_times: 3,
-            backoff_factor: default_factor(),
-        }
-    }
-
     /// Gets auth token from parsed config or from `SOV_CELESTIA_GRPC_AUTH_TOKEN` environment variable.
     /// Returns None if both are unset.
     /// Config value has priority over environment variable.

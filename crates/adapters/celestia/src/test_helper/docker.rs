@@ -1,12 +1,14 @@
 #![allow(dead_code)]
 
 use std::borrow::Cow;
-use std::time::{Duration, Instant};
+use std::str::FromStr;
+use std::time::Duration;
 
 use crate::config::{
     default_factor, default_max_delay_ms, default_max_times, default_min_delay_ms,
     default_request_timeout_seconds, default_safe_lead_time_ms,
 };
+use crate::verifier::address::CelestiaAddress;
 use crate::{CelestiaConfig, CelestiaService};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -69,13 +71,15 @@ impl Image for CelestiaBridge {
     }
 }
 
-pub struct CelestiaTestServer {
+/// A collection of validator and node containers, that can be used for testing.
+pub struct CelestiaDevNode {
     validator: ContainerAsync<CelestiaValidator>,
     bridge: ContainerAsync<CelestiaBridge>,
 }
 
-impl CelestiaTestServer {
+impl CelestiaDevNode {
     pub async fn start() -> anyhow::Result<Self> {
+        let start = std::time::Instant::now();
         let suffix = Uuid::new_v4().to_string();
 
         let network = format!("celestia-test-{suffix}");
@@ -133,97 +137,39 @@ impl CelestiaTestServer {
             .await
             .context("failed to start bridge container")?;
 
-        let server = Self { validator, bridge };
-        server
-            .wait_for_bridge_connectivity()
-            .await
-            .context("bridge node failed to reach validator")?;
-
-        Ok(server)
+        let rpc_port = bridge.get_host_port_ipv4(BRIDGE_RPC_PORT).await?;
+        tracing::info!(time = ?start.elapsed(), grpc_port = validator_grpc_port, rpc_port, "CelestiaTestServer has started");
+        Ok(Self { validator, bridge })
     }
 
-    pub async fn validator_port_ipv4(&self, internal_port: u16) -> anyhow::Result<u16> {
+    pub async fn validator_port_ipv4(&self) -> anyhow::Result<u16> {
         self.validator
-            .get_host_port_ipv4(internal_port)
+            .get_host_port_ipv4(VALIDATOR_GRPC_PORT)
             .await
             .context("failed to resolve validator host port")
     }
 
-    pub async fn bridge_port_ipv4(&self, internal_port: u16) -> anyhow::Result<u16> {
+    pub async fn bridge_port_ipv4(&self) -> anyhow::Result<u16> {
         self.bridge
-            .get_host_port_ipv4(internal_port)
+            .get_host_port_ipv4(BRIDGE_RPC_PORT)
             .await
             .context("failed to resolve bridge host port")
     }
 
-    // TODO: Do we need that??
-    async fn wait_for_bridge_connectivity(&self) -> anyhow::Result<()> {
-        let timeout = Duration::from_secs(60);
-        let poll_interval = Duration::from_millis(500);
-        let deadline = Instant::now() + timeout;
-        let mut last_error: Option<anyhow::Error> = None;
-        let mut attempt = 0u32;
-
-        while Instant::now() < deadline {
-            attempt += 1;
-            match self
-                .bridge
-                .exec(ExecCommand::new([
-                    "grpcurl",
-                    "-plaintext",
-                    "validator:9090",
-                    "list",
-                ]))
-                .await
-            {
-                Ok(_) => {
-                    tracing::info!(
-                        attempts = attempt,
-                        "Bridge confirmed connectivity with validator"
-                    );
-                    return Ok(());
-                }
-                Err(err) => {
-                    let error: anyhow::Error = err.into();
-                    tracing::debug!(
-                        attempts = attempt,
-                        error = %error,
-                        "Bridge not ready yet; retrying"
-                    );
-                    last_error = Some(error);
-                    sleep(poll_interval).await;
-                }
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| anyhow!("grpcurl never succeeded")))
-            .context("bridge connectivity check timed out")
-    }
-
-    pub async fn export_signer_key(&self, key_index: u8) -> anyhow::Result<String> {
-        // Move those to sov-test utils at some point
+    async fn run_validator_command(&self, command: Vec<String>) -> anyhow::Result<String> {
         const EXIT_POLL_ATTEMPTS: usize = 300;
         const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-        let key_name = format!("bridge-{key_index}");
-        let command = [
-            "sh",
-            "-lc",
-            &format!(
-                "yes | celestia-appd keys export --unsafe --unarmored-hex \"{key_name}\" --keyring-backend \"test\""
-            ),
-        ];
-
         let mut exec = self
             .validator
-            .exec(ExecCommand::new(command))
+            .exec(ExecCommand::new(command.clone()))
             .await
-            .context("failed to execute key export command")?;
+            .with_context(|| format!("failed to execute validator command: {command:?}"))?;
 
         let mut exit_code = exec
             .exit_code()
             .await
-            .context("failed to obtain export command exit code")?;
+            .context("failed to obtain validator command exit code")?;
 
         if exit_code.is_none() {
             for _ in 0..EXIT_POLL_ATTEMPTS {
@@ -231,35 +177,54 @@ impl CelestiaTestServer {
                 exit_code = exec
                     .exit_code()
                     .await
-                    .context("failed to obtain export command exit code")?;
+                    .context("failed to obtain validator command exit code")?;
                 if exit_code.is_some() {
                     break;
                 }
             }
         }
 
-        let exit_code = exit_code
-            .ok_or_else(|| anyhow!("validator key export did not finish within timeout"))?;
-
-        if exit_code != 0 {
-            let stderr = String::from_utf8_lossy(
-                &exec
-                    .stderr_to_vec()
-                    .await
-                    .context("failed to capture export stderr")?,
-            )
-            .into_owned();
-            return Err(anyhow!(
-                "validator key export failed with exit code {exit_code}: {stderr}"
-            ));
-        }
+        let exit_code =
+            exit_code.ok_or_else(|| anyhow!("validator command did not finish within timeout"))?;
 
         let stdout_bytes = exec
             .stdout_to_vec()
             .await
-            .context("failed to capture export stdout")?;
-        let stdout = String::from_utf8(stdout_bytes).context("export output is not valid UTF-8")?;
-        let key = stdout.trim().to_string();
+            .context("failed to capture validator command stdout")?;
+        let stdout =
+            String::from_utf8(stdout_bytes).context("command output is not valid UTF-8")?;
+        let stdout_trimmed = stdout.trim().to_owned();
+
+        if exit_code != 0 {
+            let stderr_bytes = exec
+                .stderr_to_vec()
+                .await
+                .context("failed to capture validator command stderr")?;
+            let stderr = String::from_utf8_lossy(&stderr_bytes).into_owned();
+            return Err(anyhow!(
+                "validator command {:?} failed with exit code {exit_code}: {stderr}",
+                command
+            ));
+        }
+
+        Ok(stdout_trimmed)
+    }
+
+    /// By default, celestia validator will pre-fund 10 keys. Index starts from 0.
+    pub async fn export_signer_key(&self, key_index: u8) -> anyhow::Result<String> {
+        let key_name = format!("bridge-{key_index}");
+        let command = vec![
+            "sh".to_owned(),
+            "-lc".to_owned(),
+            format!(
+                "yes | celestia-appd keys export --unsafe --unarmored-hex \"{key_name}\" --keyring-backend \"test\""
+            ),
+        ];
+
+        let key = self
+            .run_validator_command(command)
+            .await
+            .context("failed to export signer key")?;
 
         if key.is_empty() {
             return Err(anyhow!("validator key export returned empty output"));
@@ -268,18 +233,38 @@ impl CelestiaTestServer {
         Ok(key)
     }
 
+    pub async fn get_signer_address(&self, key_index: u8) -> anyhow::Result<CelestiaAddress> {
+        let key_name = format!("bridge-{key_index}");
+        let command = vec![
+            "sh".to_owned(),
+            "-lc".to_owned(),
+            format!(
+                "celestia-appd keys show \"{key_name}\" --keyring-backend \"test\" --output=json | jq -r '.address'"
+            ),
+        ];
+
+        let address = self
+            .run_validator_command(command)
+            .await
+            .context("failed to query signer address")?;
+
+        if address.is_empty() {
+            return Err(anyhow!(
+                "validator key show returned empty address for key {key_name}"
+            ));
+        }
+
+        CelestiaAddress::from_str(&address).context("failed to parse signer address")
+    }
+
+    // Config for sequencer 0.
     pub async fn get_config(&self) -> anyhow::Result<CelestiaConfig> {
-        let rpc_url = format!(
-            "ws://127.0.0.1:{}",
-            self.bridge_port_ipv4(BRIDGE_RPC_PORT).await?
-        );
-        let grpc_url = format!(
-            "http://127.0.0.1:{}",
-            self.validator_port_ipv4(VALIDATOR_GRPC_PORT).await?
-        );
+        let rpc_url = format!("ws://127.0.0.1:{}", self.bridge_port_ipv4().await?);
+        let grpc_url = format!("http://127.0.0.1:{}", self.validator_port_ipv4().await?);
 
         let key_0 = self.export_signer_key(0).await?;
-        tracing::info!(?key_0, "Keys, baby!");
+        let address_0 = self.get_signer_address(0).await?;
+        tracing::info!(?address_0, ?key_0, "Celestia signer credentials ready");
         Ok(CelestiaConfig {
             rpc_url,
             rpc_auth_token: None,
@@ -299,40 +284,21 @@ impl CelestiaTestServer {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_service_starts() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
-    );
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
+    //     "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
+    // );
+    let dev_node = CelestiaDevNode::start().await?;
 
-    let server = CelestiaTestServer::start().await?;
-    let validator_port = server
-        .validator_port_ipv4(VALIDATOR_GRPC_PORT)
-        .await
-        .context("failed to query validator port after startup")?;
-    let bridge_port = server
-        .bridge_port_ipv4(BRIDGE_RPC_PORT)
-        .await
-        .context("failed to query bridge port after startup")?;
-
-    tracing::info!(
-        validator_port,
-        bridge_port,
-        "Celestia test server is up and routing traffic"
-    );
-
-    let config = server.get_config().await?;
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    let config = dev_node.get_config().await?;
     tracing::info!("CONFIG: {:?}", config);
     let da_service = CelestiaService::new(config, crate::test_helper::ROLLUP_PARAMS_DEV).await;
     let signer = da_service.get_signer().await;
-    tracing::info!("DA SERVICE HAS BEEN BUILT WITH SIGNER: {}", signer);
+    assert_eq!(signer, dev_node.get_signer_address(0).await?);
     let header_1 = da_service.get_head_block_header().await?;
-    tracing::info!("HEAD 1: {}", header_1.display());
-    // tokio::time::sleep(std::time::Duration::from_secs(12)).await;
     let blob = vec![0, 1, 2, 3, 4];
-    let result = da_service.send_transaction(&blob).await.await??;
-    tracing::info!("Result: {:?}", result);
+    let _result = da_service.send_transaction(&blob).await.await??;
     let header_2 = da_service.get_head_block_header().await?;
-    tracing::info!("HEAD 2: {}", header_2.display());
+    assert!(header_2.height() > header_1.height());
 
     for h in header_1.height()..=header_2.height() {
         let block = da_service.get_block_at(h).await?;
@@ -341,7 +307,7 @@ async fn test_service_starts() -> anyhow::Result<()> {
         tracing::info!(height=%h, %batch_blobs, "Got block data! ======");
         for blob in blobs.batch_blobs {
             let blob_signer = blob.sender;
-            tracing::info!("BLOB {} SENDER {}", blob.hash, blob_signer)
+            tracing::info!("BLOB {} SENDER {blob_signer}", blob.hash);
         }
     }
 

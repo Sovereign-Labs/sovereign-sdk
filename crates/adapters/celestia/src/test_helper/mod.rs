@@ -1,9 +1,6 @@
+pub(crate) mod docker;
 pub(crate) mod files;
-mod keys;
-#[cfg(test)]
-pub(crate) mod mock_server;
 pub(crate) mod serialization;
-mod docker;
 
 use celestia_types::nmt::Namespace;
 
@@ -37,14 +34,4 @@ pub(crate) fn blob_from_data(
 ) -> anyhow::Result<celestia_types::Blob> {
     celestia_types::blob::Blob::new(namespace, data, Some(signer.0.clone()), APP_VERSION)
         .map_err(Into::into)
-}
-
-pub(crate) fn raw_blob_from_data(
-    namespace: Namespace,
-    data: Vec<u8>,
-    signer: &CelestiaAddress,
-) -> anyhow::Result<celestia_types::blob::RawBlob> {
-    Ok(celestia_types::blob::RawBlob::from(blob_from_data(
-        namespace, data, signer,
-    )?))
 }
