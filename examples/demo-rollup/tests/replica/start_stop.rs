@@ -197,3 +197,40 @@ async fn test_replica_start_stop() {
     let _ = test_rollup.shutdown().await;
     let _ = da_shutdown.send(());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_replica_start_stop_while_master_process_txs() {
+    let postgres = PostgresData::create_postgres().await;
+
+    let postgres = match postgres {
+        Ok(pg) => Some(pg),
+        Err(CreatePostgresError::DockerNotSupported) => return,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
+    let (_da_service, da_shutdown, addr) = create_da_service_periodic().await;
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+
+    let test_rollup = start_rollup(false, addr, postgres.clone()).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let receiver_addr = random_address();
+    let nb_of_txs = 300;
+
+    let mut replica_test_rollup = start_rollup(true, addr, postgres).await;
+    for i in 0..10 {
+        replica_test_rollup
+            .wait_for_sequencer_ready()
+            .await
+            .unwrap();
+
+        let builder = replica_test_rollup.shutdown().await.unwrap();
+        replica_test_rollup = builder.start_test_rollup().await.unwrap();
+    }
+
+    let _ = replica_test_rollup.shutdown().await;
+    let _ = test_rollup.shutdown().await;
+    let _ = da_shutdown.send(());
+}

@@ -685,6 +685,8 @@ where
             .executor_events_sender
             .update_state_for_recovery(checkpoint)
             .await;
+
+        inner.update_api_ledger(&info).await;
     }
 
     /// Closes the current batch
