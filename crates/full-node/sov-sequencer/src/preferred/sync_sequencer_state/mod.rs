@@ -34,7 +34,7 @@ mod updator;
 
 const CHANNEL_SIZE: usize = 128;
 
-enum Message<S: Spec, Rt: Runtime<S>> {
+pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     NextSequenceNumber {
         resp: oneshot::Sender<SequenceNumber>,
         reason: &'static str,
