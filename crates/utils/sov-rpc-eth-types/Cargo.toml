@@ -13,7 +13,7 @@ alloy-primitives = { workspace = true }
 alloy-rpc-types = { workspace = true }
 jsonrpsee-types = { workspace = true }
 jsonrpsee-core = { workspace = true }
-sov-modules-api = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
 thiserror = { workspace = true }
 revm = { workspace = true }
 alloy-eips = { workspace = true }
