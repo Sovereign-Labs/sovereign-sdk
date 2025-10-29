@@ -659,7 +659,7 @@ where
     async fn process_wait_for_node_resync(
         &mut self,
         info: StateUpdateInfo<S::Storage>,
-        distance: u64,
+        _distance: u64,
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -686,17 +686,7 @@ where
             .update_state_for_recovery(checkpoint)
             .await;
 
-        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
-
-        inner
-            .force_overwrite_state(info.clone(), recovery_executor)
-            .await;
-
         inner.update_api_ledger(&info).await;
-
-        if inner.is_replica() && info.sync_status.distance() <= distance {
-            inner.is_ready = Ok(());
-        }
     }
 
     /// Closes the current batch
@@ -738,6 +728,11 @@ where
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
+
+        if inner.is_replica() {
+            // The sequencer is running in replica mode and cannot accept transactions.
+            return Err(AcceptTxError::ReplicaMode);
+        }
 
         // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
         // we've effectively jumped the line
@@ -791,6 +786,7 @@ where
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         validate_db_data_from_replica(
+            inner.has_finished_startup,
             &inner.is_ready,
             DbData::BatchStart(batch_from_master),
             seq_nr_of_next_blob_for_this_executor,
@@ -818,6 +814,7 @@ where
         let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
 
         validate_db_data_from_replica(
+            inner.has_finished_startup,
             &inner.is_ready,
             DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash),
             seq_nr_of_current_blob_for_this_executor,
@@ -840,15 +837,17 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number() + 1;
+        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         validate_db_data_from_replica(
+            inner.has_finished_startup,
             &inner.is_ready,
             DbData::BatchEnd(batch_from_master),
             seq_nr_of_current_blob_for_this_executor,
             seq_nr_from_master,
         )?;
+
         inner.close_current_batch().await;
 
         Ok(())
@@ -856,11 +855,19 @@ where
 }
 
 fn validate_db_data_from_replica<S: Spec>(
+    has_finished_startup: bool,
     is_ready: &Result<(), SequencerNotReadyDetails>,
     ret: DbData,
     seq_nr_for_this_executor: u64,
     seq_nr_from_master: u64,
 ) -> Result<(), ReplicaError<S>> {
+    if !has_finished_startup {
+        return Err(ReplicaError::NotReady(
+            SequencerNotReadyDetails::Startup,
+            ret,
+        ));
+    }
+
     if let Err(err) = is_ready {
         return Err(ReplicaError::NotReady(err.clone(), ret));
     }

@@ -941,6 +941,7 @@ where
                         return Err(shut_down_error());
                     }
                 },
+                AcceptTxError::ReplicaMode => return Err(replica_mode_error()),
             },
         }
     }
@@ -955,6 +956,15 @@ where
         // way that facilitates random access to tx status information. That
         // means the sequencer only relies on the cache. FIXME(@neysofu).
         Ok(TxStatus::Unknown)
+    }
+}
+
+fn replica_mode_error() -> ErrorObject {
+    ErrorObject {
+        status: StatusCode::SERVICE_UNAVAILABLE,
+        message: "The sequencer is running in replica mode and cannot accept transactions"
+            .to_string(),
+        details: Default::default(),
     }
 }
 

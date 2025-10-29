@@ -11553,6 +11553,7 @@ dependencies = [
  "sp1",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tracing",
  "tracing-panic",
  "tracing-subscriber 0.3.20",
