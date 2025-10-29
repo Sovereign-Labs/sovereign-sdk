@@ -19,6 +19,10 @@ COPY ./run-validator.sh /opt/entrypoint.sh
 COPY ./validator-healthcheck.sh /opt/validator-healthcheck.sh
 RUN chmod +x /opt/entrypoint.sh /opt/validator-healthcheck.sh
 
+# https://docs.docker.com/reference/dockerfile/#healthcheck
+HEALTHCHECK --interval=10s --timeout=5s --retries=30 --start-period=10s \
+    CMD ["/opt/validator-healthcheck.sh"]
+
 # p2p, rpc and prometheus port
 EXPOSE 26656 26657 1317 9090
 

@@ -4,8 +4,8 @@
 set -euxo pipefail
 
 # Amount of bridge nodes to setup, taken from the first argument
-# or 1 if not provided
-BRIDGE_COUNT="${1:-1}"
+# or 10 if not provided
+BRIDGE_COUNT="${1:-10}"
 # a private local network
 P2P_NETWORK="private"
 # a validator node configuration directory

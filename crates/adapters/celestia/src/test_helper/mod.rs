@@ -3,6 +3,7 @@ mod keys;
 #[cfg(test)]
 pub(crate) mod mock_server;
 pub(crate) mod serialization;
+mod docker;
 
 use celestia_types::nmt::Namespace;
 
