@@ -1,4 +1,5 @@
 # 2025-10-29
+- #1996 Set gas limit to 1B on ETH API access.
 - #1838 Add binary WebSocket frame support to RPC server and client.
 
 # 2025-10-28
