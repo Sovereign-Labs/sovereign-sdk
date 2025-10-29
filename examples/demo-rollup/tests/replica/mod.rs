@@ -101,6 +101,9 @@ async fn send_transfers(
         );
         test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
         tokio::time::sleep(Duration::from_millis(10)).await;
+        if n % 100 == 0 {
+            println!("Sent tx {n}");
+        }
     }
 }
 
