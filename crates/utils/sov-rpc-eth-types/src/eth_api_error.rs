@@ -39,12 +39,8 @@ pub enum EthApiError {
     /// Thrown when an unknown block or transaction index is encountered
     #[error("unknown block or tx index")]
     UnknownBlockOrTxIndex,
-    /// An internal error where prevrandao is not set in the evm's environment
-    #[error("prevrandao not in the EVM's environment after merge")]
-    PrevrandaoNotSet,
-    /// `excess_blob_gas` is not set for Cancun and above
-    #[error("excess blob gas missing in the EVM's environment after Cancun")]
-    ExcessBlobGasNotSet,
+    #[error(transparent)]
+    InvalidHeader(#[from] InvalidHeader),
     /// Thrown when a call or transaction request (`eth_call`, `eth_estimateGas`,
     /// `eth_sendTransaction`) contains conflicting fields (legacy, EIP-1559)
     #[error("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")]
@@ -89,9 +85,9 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             | EthApiError::InvalidTracerConfig
             | EthApiError::TransactionConversionError => invalid_params_rpc_err(error.to_string()),
             EthApiError::InvalidTransaction(err) => err.into(),
-            EthApiError::PrevrandaoNotSet
-            | EthApiError::ExcessBlobGasNotSet
-            | EthApiError::EvmCustom(_) => internal_rpc_err(error.to_string()),
+            EthApiError::InvalidHeader(_) | EthApiError::EvmCustom(_) => {
+                internal_rpc_err(error.to_string())
+            }
             EthApiError::UnknownBlockOrTxIndex => {
                 rpc_error_with_code(EthRpcErrorCode::ResourceNotFound.code(), error.to_string())
             }
@@ -107,15 +103,6 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             err @ EthApiError::TransactionInputError(_) => invalid_params_rpc_err(err.to_string()),
             EthApiError::PrunedHistoryUnavailable => rpc_error_with_code(4444, error.to_string()),
             EthApiError::Other(err) => err.to_rpc_error(),
-        }
-    }
-}
-
-impl From<InvalidHeader> for EthApiError {
-    fn from(value: InvalidHeader) -> Self {
-        match value {
-            InvalidHeader::ExcessBlobGasNotSet => Self::ExcessBlobGasNotSet,
-            InvalidHeader::PrevrandaoNotSet => Self::PrevrandaoNotSet,
         }
     }
 }
