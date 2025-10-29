@@ -17,9 +17,7 @@ use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
 use crate::gas::GasArray;
 use crate::state::accessors::internals::AccessoryWrite;
 use crate::state::traits::PerBlockCache;
-use crate::{
-    Amount, BasicGasMeter, Gas, GasMeter, GetGasPrice, ProvableStateReader, Spec, VersionReader,
-};
+use crate::{BasicGasMeter, Gas, GasMeter, GetGasPrice, ProvableStateReader, Spec, VersionReader};
 
 fn get_slot_number(visible_slot_number: Option<VisibleSlotNumber>) -> Option<SlotNumber> {
     // This TODO is not a security risk.
