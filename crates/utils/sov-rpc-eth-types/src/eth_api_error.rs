@@ -25,9 +25,6 @@ pub enum EthApiError {
     /// When the transaction signature is invalid
     #[error("invalid transaction signature")]
     InvalidTransactionSignature,
-    // /// Errors related to the transaction pool
-    // #[error(transparent)]
-    // PoolError(RpcPoolError),
     /// Header not found for block hash/number/tag
     #[error("header not found")]
     HeaderNotFound(BlockId),
@@ -55,12 +52,6 @@ pub enum EthApiError {
     /// Errors related to invalid transactions
     #[error(transparent)]
     InvalidTransaction(#[from] RpcInvalidTransactionError),
-    // /// Thrown when constructing an RPC block from primitive block data fails
-    // #[error(transparent)]
-    // InvalidBlockData(#[from] BlockError),
-    // /// Error related to signing
-    // #[error(transparent)]
-    // Signing(#[from] SignError),
     /// Some feature is unsupported
     #[error("unsupported")]
     Unsupported(&'static str),
@@ -73,22 +64,9 @@ pub enum EthApiError {
     /// Evm generic purpose error.
     #[error("Revm error: {0}")]
     EvmCustom(String),
-    /// Bytecode override is invalid.
-    ///
-    /// This can happen if bytecode provided in an
-    /// [`AccountOverride`](alloy_rpc_types_eth::state::AccountOverride) is malformed, e.g. invalid
-    /// 7702 bytecode.
-    // #[error("Invalid bytecode: {0}")]
-    // InvalidBytecode(String),
     /// Error encountered when converting a transaction type
     #[error("Transaction conversion error")]
     TransactionConversionError,
-    // /// Error thrown when tracing with a muxTracer fails
-    // #[error(transparent)]
-    // MuxTracerError(#[from] MuxError),
-    // /// Error thrown when batch tx response channel fails
-    // #[error(transparent)]
-    // BatchTxRecvError(#[from] RecvError),
     /// Any other error
     #[error("{0}")]
     Other(Box<dyn ToRpcError>),
