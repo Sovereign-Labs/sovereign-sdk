@@ -435,9 +435,10 @@ where
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
             .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
 
-        // Set current slot number in encryption layer for lazy key activation
+        // Set current slot number in encryption layer for proactive key activation
         if let Some(encryption_layer) = encryption_layer {
             let slot_number = slot_header.height();
+            tracing::info!("📦 STF: Setting slot {} for batch processing and decryption", slot_number);
             encryption_layer.set_current_slot(slot_number);
         }
 

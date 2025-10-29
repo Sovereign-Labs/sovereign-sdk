@@ -211,13 +211,16 @@ fn batch_bytes(
         // Set current slot for proactive key activation during encryption
         // Use the visible slot number from the batch for encryption context
         let slot_number = batch.visible_slot_number_after_increase.as_true().get();
+        tracing::info!("📦 SEQUENCER: Setting slot {} for batch encryption (seq #{}, {} txs)", 
+                       slot_number, batch.sequence_number, batch.txs.len());
         encryptor.set_current_slot(slot_number);
         
         // Serialize the entire transaction vector
         let txs_serialized = borsh::to_vec(&*batch.txs)?;
         
         // Encrypt the serialized transaction data as one ciphertext
-        tracing::info!("🔐 Encrypting batch of {} transactions at slot {}", batch.txs.len(), slot_number);
+        tracing::info!("🔐 SEQUENCER: Encrypting batch #{} with {} transactions ({} bytes) at slot {}", 
+                       batch.sequence_number, batch.txs.len(), txs_serialized.len(), slot_number);
         let encrypted_txs_data = encryptor.encrypt(&txs_serialized)?;
         
         // Create batch with serialized encrypted blob + metadata including tx hashes

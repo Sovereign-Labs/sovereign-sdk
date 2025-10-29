@@ -118,9 +118,17 @@ impl KeyCache {
         
         // Activate keys (most recent one becomes current)
         for scheduled_key in to_activate {
-            info!("🔑 Activating key {} for slot {}", scheduled_key.key.id, slot_number);
+            info!("🔑 KEY ACTIVATION: Activating key '{}' for slot {} (was scheduled for slot {})", 
+                  scheduled_key.key.id, slot_number, scheduled_key.activate_at_slot);
+            debug!("🔑 KEY ACTIVATION: Key material hash: {}", 
+                   hex::encode(&scheduled_key.key.material[..8.min(scheduled_key.key.material.len())]));
             activated_keys.push(scheduled_key.key.clone());
             self.update_current_key(scheduled_key.key);
+        }
+        
+        if !activated_keys.is_empty() {
+            info!("📊 KEY STATUS: {} keys activated, {} keys remaining scheduled", 
+                  activated_keys.len(), scheduled.len());
         }
         
         activated_keys
@@ -364,28 +372,33 @@ impl EncryptionLayer {
                     info!("Successfully deserialized KeyUpdate message");
                     match key_update {
                         KeyUpdate::NewKey(key) => {
-                            info!("🔑 Received NEW encryption key: {} ({}bytes)", key.id, key.material.len());
-                            debug!("Key material: {}", hex::encode(&key.material));
-                            cache.update_current_key(key);
-                            info!("✅ Updated current encryption key in cache");
+                            info!("📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes)", key.id, key.material.len());
+                            debug!("📨 KEY RECEIVED: Key material hash: {}", hex::encode(&key.material[..8.min(key.material.len())]));
+                            cache.update_current_key(key.clone());
+                            info!("✅ KEY UPDATED: Current encryption key set to '{}'", key.id);
                         }
                         KeyUpdate::ScheduledKey(scheduled_key) => {
-                            info!("⏰ Received SCHEDULED encryption key: {} ({}bytes) -> activate at slot {}", 
+                            info!("📨 KEY RECEIVED: SCHEDULED encryption key '{}' ({} bytes) -> activate at slot {}", 
                                   scheduled_key.key.id, scheduled_key.key.material.len(), scheduled_key.activate_at_slot);
-                            debug!("Scheduled key material: {}", hex::encode(&scheduled_key.key.material));
-                            cache.schedule_key(scheduled_key);
-                            info!("✅ Scheduled encryption key in cache");
+                            debug!("📨 KEY RECEIVED: Scheduled key material hash: {}", 
+                                   hex::encode(&scheduled_key.key.material[..8.min(scheduled_key.key.material.len())]));
+                            let current_slot = cache.get_current_slot();
+                            let slots_until_activation = scheduled_key.activate_at_slot.saturating_sub(current_slot);
+                            cache.schedule_key(scheduled_key.clone());
+                            info!("✅ KEY SCHEDULED: Key '{}' scheduled for slot {} ({} slots from now)", 
+                                  scheduled_key.key.id, scheduled_key.activate_at_slot, slots_until_activation);
                         }
                         KeyUpdate::RotateKey { old_id, new_key } => {
-                            info!("🔄 Key rotation: {} -> {} ({}bytes)", old_id, new_key.id, new_key.material.len());
-                            debug!("New key material: {}", hex::encode(&new_key.material));
-                            cache.rotate_key(old_id, new_key);
-                            info!("✅ Rotated encryption key in cache");
+                            info!("📨 KEY RECEIVED: ROTATION {} -> '{}' ({} bytes)", old_id, new_key.id, new_key.material.len());
+                            debug!("📨 KEY RECEIVED: New key material hash: {}", 
+                                   hex::encode(&new_key.material[..8.min(new_key.material.len())]));
+                            cache.rotate_key(old_id.clone(), new_key.clone());
+                            info!("✅ KEY ROTATED: Replaced key '{}' with '{}'", old_id, new_key.id);
                         }
                         KeyUpdate::RevokeKey(key_id) => {
-                            warn!("🚫 Key revoked: {}", key_id);
-                            cache.revoke_key(key_id);
-                            warn!("❌ Revoked encryption key from cache");
+                            warn!("📨 KEY RECEIVED: REVOKE key '{}'", key_id);
+                            cache.revoke_key(key_id.clone());
+                            warn!("❌ KEY REVOKED: Key '{}' removed from cache", key_id);
                         }
                     }
                 }
@@ -407,16 +420,24 @@ impl EncryptionLayer {
     /// This ensures keys are ready before encryption/decryption operations
     pub fn set_current_slot(&self, slot_number: u64) {
         let previous_slot = self.key_cache.get_current_slot();
+        
+        debug!("⏰ SLOT UPDATE: Setting current slot to {} (was {})", slot_number, previous_slot);
         *self.key_cache.current_slot.write().unwrap() = slot_number;
         
         // Proactively check if we need to activate keys for the next slot (slot_number + 1)
         // This ensures keys are ready before encryption happens
         if slot_number > previous_slot {
             let next_slot = slot_number + 1;
+            debug!("🔍 PROACTIVE CHECK: Looking for keys to activate for upcoming slot {}", next_slot);
             let activated_keys = self.key_cache.check_for_activation(next_slot);
             if !activated_keys.is_empty() {
-                info!("🔑 Proactive activation: {} key(s) pre-activated for slot {} (current slot: {})", 
+                info!("🔑 PROACTIVE ACTIVATION: {} key(s) pre-activated for slot {} (current slot: {})", 
                       activated_keys.len(), next_slot, slot_number);
+                for key in &activated_keys {
+                    info!("🔑 PROACTIVE ACTIVATION: Key '{}' is now ready for slot {}", key.id, next_slot);
+                }
+            } else {
+                debug!("🔍 PROACTIVE CHECK: No keys needed activation for slot {}", next_slot);
             }
         }
     }
@@ -455,20 +476,36 @@ impl EncryptionLayer {
 
 impl EncryptionLayerTrait for EncryptionLayer {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        let current_slot = self.key_cache.get_current_slot();
+        
         // Check for key activation before encryption
         self.check_and_activate_keys();
         
         let key = self.key_cache.get_current_key()
             .ok_or(EncryptionError::InvalidKeyFormat("No encryption key available".to_string()))?;
+        
+        info!("🔐 ENCRYPT: Using key '{}' at slot {} for {} bytes", 
+              key.id, current_slot, plaintext.len());
+        debug!("🔐 ENCRYPT: Key material hash: {}", 
+               hex::encode(&key.material[..8.min(key.material.len())]));
+        
         self.encrypt_with_key(&key.material, plaintext)
     }
 
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        let current_slot = self.key_cache.get_current_slot();
+        
         // Check for key activation before decryption
         self.check_and_activate_keys();
         
         let key = self.key_cache.get_current_key()
             .ok_or(EncryptionError::InvalidKeyFormat("No key available for decryption".to_string()))?;
+        
+        info!("🔓 DECRYPT: Using key '{}' at slot {} for {} bytes", 
+              key.id, current_slot, ciphertext.len());
+        debug!("🔓 DECRYPT: Key material hash: {}", 
+               hex::encode(&key.material[..8.min(key.material.len())]));
+        
         self.decrypt_with_key(&key.material, ciphertext)
     }
 
