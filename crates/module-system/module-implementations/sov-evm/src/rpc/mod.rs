@@ -61,36 +61,36 @@ where
         block: &MaybeSealedBlock,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<BlockTransactions<Transaction>> {
+    ) -> Result<BlockTransactions<Transaction>, EthApiError> {
         let tx_range = block.tx_range();
+        let txs = tx_range
+            .map(|idx| self.tx(idx, state))
+            .collect::<Result<Vec<_>, _>>()?;
         let txs = match kind {
             BlockTransactionsKind::Full => {
-                let txs = tx_range
-                    .clone()
-                    .map(|idx| {
-                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
-                        Some(from_recovered_with_block_context(
+                let txs = txs
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, tx)| {
+                        from_recovered_with_block_context(
                             tx.into(),
                             Some(block.hash().unwrap_or_default()),
                             block.number(),
-                            U256::from(idx - tx_range.start),
-                        ))
+                            U256::from(idx),
+                        )
                     })
-                    .collect::<Option<Vec<_>>>()?;
+                    .collect::<Vec<_>>();
                 BlockTransactions::Full(txs)
             }
             BlockTransactionsKind::Hashes => {
-                let hashes = tx_range
+                let hashes = txs
                     .into_iter()
-                    .map(|idx| {
-                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
-                        Some(*tx.signed_transaction.hash())
-                    })
-                    .collect::<Option<Vec<_>>>()?;
+                    .map(|tx| *tx.signed_transaction.hash())
+                    .collect::<Vec<_>>();
                 BlockTransactions::Hashes(hashes)
             }
         };
-        Some(txs)
+        Ok(txs)
     }
 
     fn get_block(
@@ -102,10 +102,7 @@ where
         let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
             return Ok(None);
         };
-        let Some(transactions) = self.get_block_transactions(&block, kind, state) else {
-            return Ok(None);
-        };
-
+        let transactions = self.get_block_transactions(&block, kind, state)?;
         Ok(Some(Block {
             header: Header::from_sealed(block.into()),
             transactions,
