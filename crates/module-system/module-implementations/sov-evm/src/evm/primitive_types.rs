@@ -242,6 +242,7 @@ impl MaybeSealedBlock {
     }
 }
 
+#[cfg(feature = "native")]
 impl From<MaybeSealedBlock> for Sealed<Header> {
     fn from(block: MaybeSealedBlock) -> Sealed<Header> {
         let hash = block.hash().unwrap_or_default();

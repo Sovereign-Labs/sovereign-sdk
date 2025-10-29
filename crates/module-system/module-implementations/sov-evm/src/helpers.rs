@@ -69,7 +69,7 @@ pub(crate) fn from_recovered_with_block_context(
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::Address;
+    use alloy_primitives::{Address, U256};
     use revm::context::TransactTo;
 
     use super::*;
