@@ -125,6 +125,7 @@ impl<M: ModuleInfo> HasRestApi<M::Spec> for &M {
 /// # impl<S: Spec> sov_modules_api::Module for MyModule<S> {
 /// #    type Spec = S;
 /// #    type Config = ();
+/// #    type Error = anyhow::Error;
 /// #    type CallMessage = ();
 /// #    type Event = ();
 /// #
