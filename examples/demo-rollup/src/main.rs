@@ -88,7 +88,7 @@ async fn run() -> anyhow::Result<()> {
     prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
         .context("Prometheus exporter start failed")?;
 
-    let _ = rustls::crypto::ring::default_provider()
+    rustls::crypto::ring::default_provider()
         .install_default()
         .map_err(|e| anyhow::anyhow!("Failed to setup ring crypto provider: {e:?}"))?;
 
