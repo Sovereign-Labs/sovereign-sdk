@@ -11901,6 +11901,7 @@ dependencies = [
  "borsh",
  "bytes",
  "chrono",
+ "clap",
  "criterion",
  "derive_more 1.0.0",
  "futures",
@@ -11925,6 +11926,7 @@ dependencies = [
  "tokio",
  "toml 0.8.23",
  "tracing",
+ "tracing-subscriber 0.3.20",
  "url",
 ]
 
