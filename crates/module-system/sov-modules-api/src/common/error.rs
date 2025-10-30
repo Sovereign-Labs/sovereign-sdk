@@ -3,8 +3,26 @@
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
-use crate::rest::utils::json_obj;
 use serde::{ser::Error as _, Deserialize, Serialize};
+
+/// Exactly like [`serde_json::Value`], but returns a JSON object instead of a
+/// JSON value.
+#[macro_export]
+macro_rules! json_obj {
+    ($($json:tt)+) => {
+        $crate::to_json_object(::serde_json::json!($($json)+))
+    };
+}
+
+/// Calls [`serde_json::to_value`] on the given value but panics if the
+/// resulting value is not a JSON object.
+pub fn to_json_object<T: Serialize>(value: T) -> serde_json::Map<String, serde_json::Value> {
+    let value = serde_json::to_value(value).unwrap();
+    match value {
+        serde_json::Value::Object(obj) => obj,
+        _ => panic!("Expected serialization to produce a JSON object; got {value:?}"),
+    }
+}
 
 /// A bech32 address parse error.
 #[derive(Debug, thiserror::Error)]
