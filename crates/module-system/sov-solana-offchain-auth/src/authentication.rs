@@ -35,6 +35,8 @@ pub struct SolanaOffchainUnsignedTransaction<R: TransactionCallable, S: Spec> {
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
+    /// The address override, if any.
+    pub address_override: Option<S::Address>,
 }
 
 impl<R, S> SolanaOffchainUnsignedTransaction<R, S>
@@ -48,6 +50,7 @@ where
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
+            address_override: self.address_override,
         }
     }
 
@@ -285,6 +288,7 @@ where
         details: unsigned_tx.details,
         signature: unpacked_message.signature,
         pub_key: unpacked_message.pub_key,
+        address_override: unsigned_tx.address_override,
     };
 
     if unpacked_message.chain_hash != *runtime_chain_hash {

@@ -14,9 +14,12 @@ pub use query::*;
 mod tests;
 pub use call::CallMessage;
 use sov_modules_api::{
-    Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateMap, StateValue, TxState,
+    Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi,
+    SafeVec, Spec, StateMap, StateValue, TxState,
 };
+
+/// The maximum number of allowed credentials per account.
+pub const ALLOWED_CREDENTIALS_PER_ACCOUNT: usize = 32;
 
 /// An account on the rollup.
 #[derive(
@@ -26,12 +29,12 @@ use sov_modules_api::{
     serde::Deserialize,
     Debug,
     PartialEq,
-    Copy,
     Clone,
+    Default,
 )]
-pub struct Account<S: Spec> {
-    /// The address of the account.
-    pub addr: S::Address,
+pub struct Account {
+    /// The crednetials allowed to access the account.
+    pub allowed_credentials: SafeVec<CredentialId, ALLOWED_CREDENTIALS_PER_ACCOUNT>,
 }
 
 /// A module responsible for managing accounts on the rollup.
@@ -44,7 +47,7 @@ pub struct Accounts<S: Spec> {
 
     /// Mapping from a credential to its corresponding account.
     #[state]
-    pub(crate) accounts: StateMap<CredentialId, Account<S>>,
+    pub(crate) accounts: StateMap<S::Address, Account>,
 
     /// If this field is false, `CallMessage::InsertCredentialId` messages will be rejected.
     #[state]
@@ -80,5 +83,12 @@ impl<S: Spec> Module for Accounts<S> {
                 Ok(self.insert_credential_id(new_credential_id, context, state)?)
             }
         }
+    }
+}
+
+impl<S: Spec> Accounts<S> {
+    /// Returns a reference to the accounts map.
+    pub fn accounts(&self) -> &StateMap<S::Address, Account> {
+        &self.accounts
     }
 }

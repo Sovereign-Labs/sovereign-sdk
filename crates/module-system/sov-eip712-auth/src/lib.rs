@@ -256,6 +256,7 @@ fn verify_and_decode_tx<
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
+                requested_address: tx_v1.address_override.clone(),
             };
             let runtime_call = tx_v1.runtime_call.clone();
             let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {

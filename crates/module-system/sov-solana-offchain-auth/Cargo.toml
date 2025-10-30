@@ -40,7 +40,7 @@ sov-test-utils = { workspace = true }
 sov-kernels = { workspace = true, features = ["native", "test-utils"] }
 sov-value-setter = { workspace = true }
 sov-bank = { workspace = true }
-bs58 = { workspace = true }
+ed25519-dalek = { version = "2.1.1" }
 sov-paymaster = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
@@ -58,16 +58,16 @@ reqwest = { workspace = true }
 [features]
 default = []
 native = [
-	"sov-modules-api/native",
-	"sov-solana-offchain-auth/native",
-	"sov-bank/native",
-	"sov-kernels/native",
-	"sov-mock-da/native",
-	"sov-mock-zkvm/native",
-	"sov-modules-rollup-blueprint/native",
-	"sov-modules-stf-blueprint/native",
-	"sov-paymaster/native",
-	"sov-rollup-interface/native",
-	"sov-state/native",
-	"sov-value-setter/native"
+    "sov-modules-api/native",
+    "sov-solana-offchain-auth/native",
+    "sov-bank/native",
+    "sov-kernels/native",
+    "sov-mock-da/native",
+    "sov-mock-zkvm/native",
+    "sov-modules-rollup-blueprint/native",
+    "sov-modules-stf-blueprint/native",
+    "sov-paymaster/native",
+    "sov-rollup-interface/native",
+    "sov-state/native",
+    "sov-value-setter/native"
 ]

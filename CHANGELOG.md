@@ -20,6 +20,7 @@
 The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
 
 # 2025-10-21
+- #1931 **Breaking change** Adds an optional `address_override` field in the transaction. If (and only if) this field is set, the rollup will use the provided address to execute the transaction (assuming the signer is authorized). If the field is not set, the "default" address generated from the signing key will be used. After this change, the same credential may be used to control multiple logical accounts on the chain - so the chain cannot infer which account you intend to use unless you provide the address. ***This is a breaking change to tx serialization; chains from before the upgrade cannot be synced!***
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
 - #1936 Fixes warnings about metrics during rollup startup
 - #1933 Cleans up demo-rollup tests

@@ -311,6 +311,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             credential_id,
             default_address: credential_id.into(),
             credentials: Credentials::new(credential_id),
+            requested_address: None,
         }
     }
 
@@ -425,7 +426,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
         let mut scratchpad = accessor.to_tx_scratchpad();
         let context = runtime
             .transaction_authorizer()
-            .resolve_context(
+            .resolve_context_and_authorize(
                 &auth_data,
                 &sequencer.da_address,
                 sequencer.rollup_address,

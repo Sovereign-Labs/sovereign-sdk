@@ -1,7 +1,8 @@
-use sov_accounts::{Accounts, CallMessage, Response};
+use sov_accounts::{Accounts, CallMessage};
 use sov_modules_api::transaction::{UnsignedTransaction, Version1};
 use sov_modules_api::{
-    CryptoSpec, Error, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+    CredentialId, CryptoSpec, Error, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents,
+    Spec, StateAccessor, TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -64,26 +65,18 @@ fn setup_with_disable_custom_account_mappings() -> (TestUser<S>, TestRunner<RT, 
     )
 }
 
-#[test]
-fn test_config_account() {
-    let (
-        TestData {
-            account_1: user, ..
-        },
-        runner,
-    ) = setup();
-
-    // The account is registered at genesis.
-    runner.query_visible_state(|state| {
-        let accounts = Accounts::<S>::default();
-        let response = accounts.get_account(user.credential_id(), state);
-        assert_eq!(
-            response,
-            Response::AccountExists {
-                addr: user.address()
-            }
-        );
-    });
+fn assert_account_contains_credential<S: Spec>(
+    accounts: &Accounts<S>,
+    address: &S::Address,
+    credential_id: &CredentialId,
+    state: &mut impl StateAccessor,
+) {
+    let account = accounts
+        .accounts()
+        .get(address, state)
+        .expect("Out of gas!")
+        .expect("Account should exist");
+    assert!(account.allowed_credentials.contains(credential_id));
 }
 
 #[test]
@@ -108,21 +101,7 @@ fn test_update_account() {
             let accounts = Accounts::<S>::default();
 
             // New account with the new public key and an old address is created.
-            assert_eq!(
-                accounts.get_account(new_credential, state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
-            );
-            // Account corresponding to the old credential still exists.
-            assert_eq!(
-                accounts.get_account(user.credential_id(), state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
-            );
-
-            assert_ne!(new_credential, user.credential_id());
+            assert_account_contains_credential(&accounts, &user.address(), &new_credential, state);
         }),
     });
 }
@@ -162,6 +141,7 @@ fn test_setup_multisig_and_act() {
         },
         mut runner,
     ) = setup();
+    let address = user.address();
 
     // First, create and register a multisig
     let multisig_keys = vec![
@@ -182,18 +162,11 @@ fn test_setup_multisig_and_act() {
             let accounts = Accounts::<S>::default();
 
             // New account with the new public key and an old address is created.
-            assert_eq!(
-                accounts.get_account(multisig_credential_id, state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
-            );
-            // Account corresponding to the old credential still exists.
-            assert_eq!(
-                accounts.get_account(user.credential_id(), state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
+            assert_account_contains_credential(
+                &accounts,
+                &user.address(),
+                &multisig_credential_id,
+                state,
             );
 
             assert_ne!(multisig_credential_id, user.credential_id());
@@ -207,12 +180,13 @@ fn test_setup_multisig_and_act() {
     // - Submitting the transaction and asserting it is skipped
     let generate_multisig_tx = || {
         let key = TestPrivateKey::generate();
-        UnsignedTransaction::<RT, S>::new_with_details(
+        UnsignedTransaction::<RT, S>::new_with_details_and_address_override(
             TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(
                 key.pub_key().credential_id(),
             )),
             sov_modules_api::capabilities::UniquenessData::Generation(0),
             default_test_tx_details::<S>(),
+            Some(address),
         )
         .to_multisig_tx(multisig.clone())
     };
@@ -232,7 +206,11 @@ fn test_setup_multisig_and_act() {
         runner.execute_transaction(TransactionTestCase {
             input: multisig_tx,
             assert: Box::new(move |result, _state| {
-                assert!(result.tx_receipt.is_successful());
+                assert!(
+                    result.tx_receipt.is_successful(),
+                    "Transaction failed. Expected success but got: {:?}",
+                    result.tx_receipt
+                );
             }),
         });
     };
@@ -316,8 +294,8 @@ fn test_setup_multisig_and_act() {
     assert_tx_skip(
         tx_with_non_member_signature,
         &mut runner,
-        "Impossible to reserve gas",
-    ); // Fails to reserve gas because the credential ID has changed
+        "is not allowed to access address",
+    );
 
     // A transaction with only one signature should be skipped because it does not meet the required threshold.
     let tx_with_too_few_signatures = {
@@ -388,11 +366,15 @@ fn test_register_new_account() {
 
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
-        let response = accounts.get_account(non_registered_account.credential_id(), state);
-        assert_eq!(response, Response::AccountEmpty);
+        let response = accounts
+            .accounts()
+            .get(&non_registered_account.address(), state)
+            .expect("Out of gas!");
+        assert_eq!(response, None);
     });
 
     let new_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let non_registered_account_clone = non_registered_account.clone();
 
     runner.execute_transaction(TransactionTestCase {
         input: non_registered_account.create_plain_message::<RT, Accounts<S>>(
@@ -404,22 +386,42 @@ fn test_register_new_account() {
             let accounts = Accounts::<S>::default();
 
             // New account with the new public key and an old address is created.
-            assert_eq!(
-                accounts.get_account(new_credential, state),
-                Response::AccountExists {
-                    addr: non_registered_account.address()
-                }
-            );
-
-            // The default credential of the account exists
-            assert_eq!(
-                accounts.get_account(non_registered_account.credential_id(), state),
-                Response::AccountExists {
-                    addr: non_registered_account.address()
-                }
+            assert_account_contains_credential(
+                &accounts,
+                &non_registered_account.address(),
+                &new_credential,
+                state,
             );
 
             assert_ne!(new_credential, non_registered_account.credential_id());
+        }),
+    });
+
+    let another_new_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: non_registered_account_clone.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::InsertCredentialId(another_new_credential),
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+
+            let accounts = Accounts::<S>::default();
+
+            // Assert that the original credential remains
+            assert_account_contains_credential(
+                &accounts,
+                &non_registered_account_clone.address(),
+                &new_credential,
+                state,
+            );
+            // Assert that the new credential is added
+            assert_account_contains_credential(
+                &accounts,
+                &non_registered_account_clone.address(),
+                &another_new_credential,
+                state,
+            );
         }),
     });
 }
@@ -438,8 +440,9 @@ fn test_resolve_sender_address_with_default_address_non_registered() {
         let mut accounts = Accounts::<S>::default();
         assert_eq!(
             accounts
-                .resolve_sender_address(
+                .resolve_sender_address_and_authorize(
                     &non_registered_account.address(),
+                    &None,
                     &non_registered_account.credential_id(),
                     state
                 )
@@ -466,7 +469,12 @@ fn test_resolve_sender_address_registered() {
         // Ensure correct (registered) address is used even if another fallback is provided
         assert_eq!(
             accounts
-                .resolve_sender_address(&account_2.address(), &account_1.credential_id(), state)
+                .resolve_sender_address_and_authorize(
+                    &account_2.address(),
+                    &Some(account_1.address()),
+                    &account_1.credential_id(),
+                    state
+                )
                 .unwrap(),
             account_1.address()
         );
@@ -507,14 +515,24 @@ fn test_resolve_address_if_more_than_one_credential() {
 
         assert_eq!(
             accounts
-                .resolve_sender_address(&default_address_1, &credential_1, state)
+                .resolve_sender_address_and_authorize(
+                    &default_address_1,
+                    &Some(non_registered_account.address()),
+                    &credential_1,
+                    state
+                )
                 .unwrap(),
             non_registered_account.address()
         );
 
         assert_eq!(
             accounts
-                .resolve_sender_address(&default_address_2, &credential_2, state)
+                .resolve_sender_address_and_authorize(
+                    &default_address_2,
+                    &Some(non_registered_account.address()),
+                    &credential_2,
+                    state
+                )
                 .unwrap(),
             non_registered_account.address()
         );
@@ -536,7 +554,12 @@ fn test_resolve_with_different_default_address() {
 
         assert_eq!(
             accounts
-                .resolve_sender_address(&account_1.address(), &random_credential, state)
+                .resolve_sender_address_and_authorize(
+                    &account_1.address(),
+                    &Some(account_1.address()),
+                    &random_credential,
+                    state
+                )
                 .unwrap(),
             account_1.address()
         );

@@ -245,7 +245,8 @@ fn test_multisig_signature_verification() {
     });
 
     // Create a multisig transaction
-    let utx = create_utx::<S, RT>(encode_message::<_, RT>());
+    let mut utx = create_utx::<S, RT>(encode_message::<_, RT>());
+    utx.address_override = Some(admin.address());
     let mut signatures = Vec::new();
     for key in multisig_keys.iter() {
         signatures.push(sign_utx_in_place(&utx, key));
@@ -322,12 +323,10 @@ fn test_multisig_signature_verification() {
             .unwrap();
         Transaction::<RT, S>::from(tx)
     };
-    // Since the random signature is not part of the multisig, this changes the computed credential ID yielding a gas error. If we were to add a paymaster,
-    // The tx would succeed on a different account. In that case, this test case would need refinement to distinguish between the two cases.
     assert_tx_skipped(
         tx_with_random_sig,
         &mut runner,
-        "Insufficient balance to pay for the transaction gas",
+        "is not allowed to access address",
     );
 
     // A transaction with a duplicate signature should be skipped

@@ -84,6 +84,10 @@ impl<L: LinkingScheme> Ty<L> {
     pub fn is_skip(&self) -> bool {
         matches!(self, Ty::Skip { .. })
     }
+    /// Returns true if the type is an option type
+    pub fn is_option(&self) -> bool {
+        matches!(self, Ty::Option { .. })
+    }
 }
 
 impl Ty<IndexLinking> {

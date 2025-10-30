@@ -309,6 +309,7 @@ pub fn extract_authorization_data<S: Spec, D: DispatchCall<Spec = S>, C: CryptoS
         credential_id,
         credentials: Credentials::new(pub_key),
         default_address: credential_id.into(),
+        requested_address: tx_v0.address_override.clone(),
     })
 }
 
@@ -339,6 +340,7 @@ pub fn extract_authorization_data_v1<S: Spec, D: DispatchCall<Spec = S>, C: Cryp
         credential_id,
         credentials: Credentials::new(multisg),
         default_address: credential_id.into(),
+        requested_address: tx_v1.address_override.clone(),
     })
 }
 
