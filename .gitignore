@@ -13,6 +13,7 @@ target/
 demo_data/
 demo_data_1/
 demo_data_2/
+demo_data_replica/
 
 docker/observability
 
