@@ -32,7 +32,7 @@ use super::state_root_compute::StateRootComputeRequest;
 use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
-use crate::common::{generic_accept_tx_error, AcceptedTx};
+use crate::common::AcceptedTx;
 use crate::preferred::async_batch::{ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -85,7 +85,17 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                 reject_reason_to_error(reason, call)
             }
             RollupBlockExecutorError::UnsuccessfulTransaction { receipt } => {
-                generic_accept_tx_error(receipt)
+                let details = match receipt.receipt {
+                    sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
+                        reverted.reason.error_detail().unwrap_or(json_obj!({}))
+                    }
+                    _ => json_obj!({}),
+                };
+                ErrorObject {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Transaction execution unsuccessful".to_string(),
+                    details,
+                }
             }
             RollupBlockExecutorError::UnexpectedFailure => ErrorObject {
                 status: StatusCode::INTERNAL_SERVER_ERROR,

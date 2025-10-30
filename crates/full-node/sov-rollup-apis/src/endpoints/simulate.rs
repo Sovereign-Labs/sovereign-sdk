@@ -20,9 +20,9 @@ use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
-    get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, EventModuleName,
-    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, Spec, StateCheckpoint,
-    StateProvider as _, WorkingSet,
+    get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, ErrorContext,
+    EventModuleName, FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, Spec,
+    StateCheckpoint, StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
@@ -201,7 +201,7 @@ pub struct FailOutcome {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevertOutcome {
     /// Details about the revert reason.
-    pub detail: serde_json::Value,
+    pub detail: ErrorContext,
 }
 
 /// The outcome of a transaction simulation.
@@ -347,7 +347,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
                 reason: e.error.to_string(),
             }),
             TxEffect::Reverted(e) => SimulateOutcome::Reverted(RevertOutcome {
-                detail: e.reason.error_detail().unwrap_or_default(),
+                detail: e.reason.error_detail().unwrap_or(json_obj!({})),
             }),
             TxEffect::Successful(_) => SimulateOutcome::Success(SuccessOutcome {
                 priority_fee: result.transaction_consumption.priority_fee().0,

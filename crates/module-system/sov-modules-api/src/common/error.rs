@@ -4,6 +4,7 @@ use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use serde::{ser::Error as _, Deserialize, Serialize};
+use sov_rest_utils::json_obj;
 
 /// A bech32 address parse error.
 #[derive(Debug, thiserror::Error)]
@@ -101,10 +102,46 @@ impl serde::Serialize for CoreModuleError {
 }
 
 impl ErrorDetail for CoreModuleError {
-    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(serde_json::to_value(self).expect("Serialization of CoreModuleError should not fail"))
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(json_obj!(self))
     }
 }
+
+/// Type alias for structured error detail objects.
+///
+/// This represents the standardized format for error details returned by the `ErrorDetail` trait.
+/// It's a JSON object (map) containing structured information about error conditions, including
+/// error codes, parameters, and contextual data that client-side applications can parse and
+/// handle appropriately.
+///
+/// # Examples
+/// ```json
+/// {
+///   "error_code": "insufficient_balance",
+///   "amount": "100",
+///   "balance": "50",
+///   "from": "addr1",
+///   "to": "addr2"
+/// }
+/// ```
+/// Type alias for structured error detail objects.
+///
+/// This represents the standardized format for error details returned by the `ErrorDetail` trait.
+/// It's a JSON object (map) containing structured information about error conditions, including
+/// error codes, parameters, and contextual data that client-side applications can parse and
+/// handle appropriately.
+///
+/// # Examples
+/// ```json
+/// {
+///   "error_code": "insufficient_balance",
+///   "amount": "100",
+///   "balance": "50",
+///   "from": "addr1",
+///   "to": "addr2"
+/// }
+/// ```
+pub type ErrorContext = serde_json::Map<String, serde_json::Value>;
 
 /// Trait for providing structured error details as JSON for client-side applications.
 ///
@@ -117,18 +154,27 @@ impl ErrorDetail for CoreModuleError {
 /// to provide useful structured data to client-side applications, enabling proper error
 /// handling, user feedback, and debugging capabilities.
 ///
+/// ## Error Response Structure
+///
+/// When a module call fails, the structured error details returned by this trait are
+/// automatically inserted into the `detail` field of the error response sent to clients.
+/// This provides rich, machine-readable context about the failure beyond just the error message.
+///
 /// The trait requires `Debug + Display` to ensure all error types can be both printed for
 /// debugging and formatted for user-facing messages, while the `error_detail` method provides
 /// machine-readable structured data for client consumption.
 pub trait ErrorDetail: Debug + Display {
-    /// Returns detailed error information as a structured JSON value.
+    /// Returns detailed error information as a structured JSON object.
     ///
-    /// This method should serialize the error into a `serde_json::Value` containing all relevant
-    /// information about the failure. The JSON structure can include error codes, context,
-    /// and any parameters that caused the failure to enable proper error handling and debugging.
+    /// This method should serialize the error into an `ErrorContext` (JSON object) containing
+    /// all relevant information about the failure. The JSON structure should include error codes,
+    /// context, and any parameters that caused the failure to enable proper error handling and debugging.
+    ///
+    /// **The returned JSON object will be automatically inserted into the `detail` field**
+    /// of error responses when module calls fail, providing clients with structured error information.
     ///
     /// # Returns
-    /// - `Ok(serde_json::Value)` - Structured error details in JSON format
+    /// - `Ok(ErrorContext)` - Structured error details as a JSON object
     /// - `Err(Box<dyn Error>)` - If serialization fails (though implementations should avoid this)
     ///
     /// # Examples
@@ -142,12 +188,12 @@ pub trait ErrorDetail: Debug + Display {
     ///   "to": "addr2"
     /// }
     /// ```
-    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>>;
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>>;
 }
 
 impl ErrorDetail for anyhow::Error {
-    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(serde_json::json!({ "message": format!("{self}") }))
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(json_obj!({ "message": format!("{self}") }))
     }
 }
 
@@ -160,14 +206,24 @@ impl ErrorDetail for anyhow::Error {
 ///
 /// When `ModuleError` is deserialized, the JSON data is captured in this struct, which
 /// then implements `ErrorDetail` by simply returning the stored JSON data unchanged.
-#[derive(Clone, Debug, derive_more::Display)]
+#[derive(Clone, Debug)]
 struct DeserializedError {
-    data: serde_json::Value,
+    data: ErrorContext,
 }
 
 impl ErrorDetail for DeserializedError {
-    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
         Ok(self.data.clone())
+    }
+}
+
+impl std::fmt::Display for DeserializedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Deserialized error: {}",
+            serde_json::to_string(&self.data).unwrap()
+        )
     }
 }
 
@@ -191,11 +247,9 @@ impl ModuleError {
     /// JSON can be used for API responses, logging, and debugging.
     ///
     /// # Returns
-    /// - `Ok(serde_json::Value)` - Structured error details from the wrapped error
+    /// - `Ok(ErrorContext)` - Structured error details from the wrapped error
     /// - `Err(Box<dyn Error>)` - If the underlying error detail extraction fails
-    pub fn error_detail(
-        &self,
-    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
         self.0.error_detail()
     }
 }
@@ -231,7 +285,7 @@ impl<'de> Deserialize<'de> for ModuleError {
     where
         D: serde::Deserializer<'de>,
     {
-        let value = serde_json::Value::deserialize(deserializer)?;
+        let value = serde_json::Map::deserialize(deserializer)?;
         Ok(Self(Arc::new(DeserializedError { data: value })))
     }
 }

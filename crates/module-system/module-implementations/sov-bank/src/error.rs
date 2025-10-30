@@ -1,5 +1,5 @@
 use crate::token::TokenId;
-use sov_modules_api::{Amount, CoreModuleError, ErrorDetail};
+use sov_modules_api::{rest::utils::json_obj, Amount, CoreModuleError, ErrorContext, ErrorDetail};
 
 /// Errors that occur during arithmetic operations on token amounts.
 ///
@@ -233,8 +233,8 @@ pub enum Error {
 }
 
 impl ErrorDetail for Error {
-    fn error_detail(&self) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(serde_json::to_value(self).expect("Bank error serialization should not fail"))
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(json_obj!(self))
     }
 }
 
@@ -275,7 +275,7 @@ mod tests {
             },
         )));
         let detail = err.error_detail().unwrap();
-        let expected = serde_json::json!({
+        let expected = json_obj!({
             "call": "create_token",
             "error_code": "overflow",
             "base": "100",
@@ -292,7 +292,7 @@ mod tests {
             max_allowed: 18,
         });
         let detail = err.error_detail().unwrap();
-        let expected = serde_json::json!({
+        let expected = json_obj!({
             "call": "create_token",
             "error_code": "too_many_decimals",
             "provided": 20,
@@ -311,7 +311,7 @@ mod tests {
             token_id: "token123".to_string(),
         });
         let detail = err.error_detail().unwrap();
-        let expected = serde_json::json!({
+        let expected = json_obj!({
             "call": "transfer_token",
             "error_code": "insufficient_balance",
             "amount": "100",
@@ -331,7 +331,7 @@ mod tests {
             token_name: "TestToken".to_string(),
         });
         let detail = err.error_detail().unwrap();
-        let expected = serde_json::json!({
+        let expected = json_obj!({
             "call": "mint_token",
             "error_code": "supply_cap_exceeded",
             "supply_cap": "1000",
@@ -348,7 +348,7 @@ mod tests {
             token_name: "TestToken".to_string(),
         });
         let detail = err.error_detail().unwrap();
-        let expected = serde_json::json!({
+        let expected = json_obj!({
             "call": "update_admin",
             "error_code": "admin_does_not_exist",
             "admin_to_replace": "old_admin",
@@ -364,7 +364,7 @@ mod tests {
             token_name: "TestToken".to_string(),
         }));
         let detail = err.error_detail().unwrap();
-        let expected = serde_json::json!({
+        let expected = json_obj!({
             "call": "create_token",
             "error_code": "not_admin",
             "caller": "unauthorized_user",
