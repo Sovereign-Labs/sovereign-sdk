@@ -287,7 +287,7 @@ impl EncryptionLayer {
 
     
     #[cfg(feature = "aes-encryption")]
-    fn encrypt_with_key(&self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+    pub fn encrypt_with_key(&self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         if key.len() != AES_256_KEY_SIZE {
             return Err(EncryptionError::InvalidKeyFormat(
                 format!("Expected {} byte key, got {}", AES_256_KEY_SIZE, key.len())
@@ -555,20 +555,9 @@ impl EncryptionLayer {
         debug!("⏰ SLOT UPDATE: Setting current slot to {} (was {})", slot_number, previous_slot);
         *self.key_cache.current_slot.write().unwrap() = slot_number;
         
-        // Activate keys for the CURRENT slot being processed
-        if slot_number > previous_slot {
-            debug!("🔍 ACTIVATION CHECK: Looking for keys to activate for current slot {}", slot_number);
-            let activated_keys = self.key_cache.check_for_activation(slot_number);
-            if !activated_keys.is_empty() {
-                info!("🔑 SLOT ACTIVATION: {} key(s) activated for slot {}", 
-                      activated_keys.len(), slot_number);
-                for key in &activated_keys {
-                    info!("🔑 SLOT ACTIVATION: Key '{}' is now active for slot {}", key.id, slot_number);
-                }
-            } else {
-                debug!("🔍 ACTIVATION CHECK: No keys needed activation for slot {}", slot_number);
-            }
-        }
+        // DON'T activate keys here - let get_key_for_slot handle activation
+        // This prevents race conditions where sequencer uses keys activated by STF
+        debug!("🔍 SLOT UPDATE: Slot updated, key activation deferred to get_key_for_slot()");
     }
     
     /// Check if any scheduled keys should be activated (fallback method)

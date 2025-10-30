@@ -259,28 +259,26 @@ fn batch_bytes(
     encryption_layer: Option<&EncryptionLayer>
 ) -> anyhow::Result<Vec<u8>> {
     if let Some(encryptor) = encryption_layer {
-        // Set current slot for proactive key activation during encryption
         // Use the visible slot number from the batch for encryption context
         let slot_number = batch.visible_slot_number_after_increase.as_true().get();
-        tracing::info!("📦 SEQUENCER: Setting slot {} for batch encryption (seq #{}, {} txs)", 
-                       slot_number, batch.sequence_number, batch.txs.len());
-        encryptor.set_current_slot(slot_number);
+        tracing::info!("📦 SEQUENCER: Encrypting batch #{} with {} transactions at slot {}", 
+                       batch.sequence_number, batch.txs.len(), slot_number);
+        
+        // Get the key specifically for this slot instead of using shared current key
+        // This prevents race conditions where STF activates keys in shared cache
+        let slot_key = encryptor.get_key_for_slot(slot_number)
+            .ok_or_else(|| anyhow::anyhow!("No encryption key available for slot {}", slot_number))?;
+        
+        tracing::info!("🔐 SEQUENCER: Using key '{}' for slot {} encryption", slot_key.id, slot_number);
         
         // Serialize the entire transaction vector
         let txs_serialized = borsh::to_vec(&*batch.txs)?;
         
-        // Encrypt the serialized transaction data as one ciphertext
-        tracing::info!("🔐 SEQUENCER: Encrypting batch #{} with {} transactions ({} bytes) at slot {}", 
-                       batch.sequence_number, batch.txs.len(), txs_serialized.len(), slot_number);
+        // Encrypt using the slot-specific key directly
+        tracing::info!("🔐 SEQUENCER: Encrypting {} bytes at slot {} with key '{}'", 
+                       txs_serialized.len(), slot_number, slot_key.id);
         
-        // Log which key will be used for encryption
-        if let Some(current_key) = encryptor.get_current_key() {
-            tracing::info!("🔐 SEQUENCER: Will encrypt with key '{}' for slot {}", current_key.id, slot_number);
-        } else {
-            tracing::error!("🔐 SEQUENCER: No encryption key available for slot {}", slot_number);
-        }
-        
-        let encrypted_txs_data = encryptor.encrypt(&txs_serialized)?;
+        let encrypted_txs_data = encryptor.encrypt_with_key(&slot_key.material, &txs_serialized)?;
         
         // Create batch with serialized encrypted blob + metadata including tx hashes
         tracing::info!("📦 SEQUENCER: Creating encrypted batch #{} with encryption_slot={}", 
