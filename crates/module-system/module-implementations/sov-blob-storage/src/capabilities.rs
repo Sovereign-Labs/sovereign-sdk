@@ -16,7 +16,6 @@ use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_rollup_interface::stf::DiscardedBlob;
 use sov_sequencer_registry::AllowedSequencerError;
-use sov_encryption::EncryptionLayerTrait;
 use tracing::{debug, info, trace, warn};
 
 use crate::max_size_checker::{BlobsAccumulatorWithSizeLimit, PushOrIgnore};
@@ -1108,26 +1107,42 @@ impl<S: Spec> BlobStorage<S> {
             if let Some(encrypted_batch) = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
                 blob, charge_for_deserialization.map(|(seq, price)| (seq, *price)), true, state,
             ) {
-                // Decrypt the transaction data
-                match encryption_layer.decrypt(&encrypted_batch.encrypted_txs_data) {
-                    Ok(decrypted_txs_bytes) => {
-                        match borsh::from_slice::<std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>>(&decrypted_txs_bytes) {
-                            Ok(txs) => {
-                                tracing::debug!("Successfully decrypted encrypted batch with {} transactions", txs.len());
-                                return Some(PreferredBatchData {
-                                    sequence_number: encrypted_batch.sequence_number,
-                                    data: txs,
-                                    visible_slots_to_advance: encrypted_batch.visible_slots_to_advance,
-                                });
-                            }
-                            Err(e) => {
-                                tracing::error!("Failed to deserialize decrypted transactions: {}", e);
+                // Use the slot number from the encrypted batch for decryption to ensure
+                // we use the same key that was used for encryption
+                let encryption_slot = encrypted_batch.encryption_slot;
+                tracing::info!("🔓 STF: Setting encryption slot to {} for decryption (batch sequence #{})", 
+                               encryption_slot, encrypted_batch.sequence_number);
+                
+                // Get the key that was used for encryption at this specific slot
+                if let Some(key_for_slot) = encryption_layer.get_key_for_slot(encryption_slot) {
+                    tracing::info!("🔓 STF: Using key '{}' for slot {} decryption", key_for_slot.id, encryption_slot);
+                    
+                    // Use the specific key to decrypt
+                    match encryption_layer.decrypt_with_key(&key_for_slot.material, &encrypted_batch.encrypted_txs_data) {
+                        Ok(decrypted_txs_bytes) => {
+                            match borsh::from_slice::<std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>>(&decrypted_txs_bytes) {
+                                Ok(txs) => {
+                                    tracing::info!("✅ STF: Successfully decrypted batch #{} with {} transactions using key '{}' for slot {}", 
+                                                   encrypted_batch.sequence_number, txs.len(), key_for_slot.id, encryption_slot);
+                                    return Some(PreferredBatchData {
+                                        sequence_number: encrypted_batch.sequence_number,
+                                        data: txs,
+                                        visible_slots_to_advance: encrypted_batch.visible_slots_to_advance,
+                                    });
+                                }
+                                Err(e) => {
+                                    tracing::error!("❌ STF: Failed to deserialize decrypted transactions for slot {}: {}", encryption_slot, e);
+                                }
                             }
                         }
+                        Err(e) => {
+                            tracing::error!("❌ STF: Failed to decrypt batch #{} with key '{}' for slot {}: {}", 
+                                           encrypted_batch.sequence_number, key_for_slot.id, encryption_slot, e);
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!("Failed to decrypt batch: {}", e);
-                    }
+                } else {
+                    tracing::error!("❌ STF: No key available for encryption slot {} (batch sequence #{})", 
+                                   encryption_slot, encrypted_batch.sequence_number);
                 }
             }
         } else {

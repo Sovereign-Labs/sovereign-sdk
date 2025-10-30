@@ -306,7 +306,7 @@ impl EncryptionLayer {
     }
 
     #[cfg(feature = "aes-encryption")]
-    fn decrypt_with_key(&self, key: &[u8], ciphertext_with_nonce: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+    pub fn decrypt_with_key(&self, key: &[u8], ciphertext_with_nonce: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         if key.len() != AES_256_KEY_SIZE {
             return Err(EncryptionError::InvalidKeyFormat(
                 format!("Expected {} byte key, got {}", AES_256_KEY_SIZE, key.len())

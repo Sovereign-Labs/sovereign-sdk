@@ -283,12 +283,14 @@ fn batch_bytes(
         let encrypted_txs_data = encryptor.encrypt(&txs_serialized)?;
         
         // Create batch with serialized encrypted blob + metadata including tx hashes
-        tracing::debug!("📦 Creating encrypted batch with tx hashes");
+        tracing::info!("📦 SEQUENCER: Creating encrypted batch #{} with encryption_slot={}", 
+                       batch.sequence_number, slot_number);
         borsh::to_vec(&EncryptedPreferredBatchData {
             sequence_number: batch.sequence_number,
             visible_slots_to_advance: batch.visible_slots_to_advance,
             encrypted_txs_data,
             tx_hashes: batch.tx_hashes,
+            encryption_slot: slot_number,
         }).map_err(Into::into)
     } else {
         // Original unencrypted path if encryption is not enabled
