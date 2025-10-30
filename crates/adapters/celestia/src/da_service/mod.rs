@@ -28,7 +28,7 @@ use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot};
 use tokio::time::Instant;
 use tracing::{debug, info, instrument, trace};
 
@@ -37,7 +37,7 @@ type BoxError = anyhow::Error;
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
     // Client is used for a submission request, where we want to have consistent ordering.
-    submit_client: Arc<Mutex<celestia_client::Client>>,
+    submit_client: Arc<tokio::sync::Mutex<celestia_client::Client>>,
     // Client used for queries, where it is not important to have ordering
     read_client: Arc<celestia_client::Client>,
     rollup_batch_namespace: Namespace,
@@ -62,7 +62,7 @@ impl CelestiaService {
         tx_priority: Option<celestia_client::tx::TxPriority>,
     ) -> Self {
         Self {
-            submit_client: Arc::new(Mutex::new(submit_client)),
+            submit_client: Arc::new(tokio::sync::Mutex::new(submit_client)),
             read_client: Arc::new(read_client),
             rollup_batch_namespace,
             rollup_proof_namespace,
@@ -74,12 +74,20 @@ impl CelestiaService {
         }
     }
 
+    fn get_tx_config(&self) -> celestia_client::tx::TxConfig {
+        let mut tx_config = celestia_client::tx::TxConfig::default();
+        if let Some(priority) = self.tx_priority.as_ref() {
+            tx_config = tx_config.with_priority(*priority);
+        }
+        tx_config
+    }
+
     #[instrument(skip(self, blob, namespace))]
     async fn submit_blob_to_namespace(
         &self,
         blob: &[u8],
         namespace: Namespace,
-    ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
+    ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
         let bytes = blob.len();
         let ns = if namespace == self.rollup_batch_namespace {
@@ -93,9 +101,7 @@ impl CelestiaService {
 
         let Some(signer) = &self.signer_address else {
             // TODO: Follow up: Better error when switched to `thiserror`.
-            return Err(MaybeRetryable::Permanent(anyhow::anyhow!(
-                "Signer must be set for submitting blobs"
-            )));
+            anyhow::bail!("Signer must be set for submitting blobs");
         };
         let blob = JsonBlob::new(
             namespace,
@@ -113,28 +119,33 @@ impl CelestiaService {
             "Submitting a blob"
         );
 
-        let mut tx_config = celestia_client::tx::TxConfig::default();
-        if let Some(priority) = self.tx_priority.as_ref() {
-            tx_config = tx_config.with_priority(*priority);
-        }
         let start_lock = std::time::Instant::now();
         let submit_client = self.submit_client.lock().await;
         let lock_acquisition = start_lock.elapsed();
+
         let start_submit = std::time::Instant::now();
-        let tx_result = match tokio::time::timeout(
-            self.request_timeout,
-            submit_client
-                .state()
-                .submit_pay_for_blob(&[blob], tx_config),
+        let blobs = &[blob];
+        let tx_result = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || async {
+                let tx_config = self.get_tx_config();
+                // TODO: follow up: track individual submission results
+                match tokio::time::timeout(
+                    self.request_timeout,
+                    submit_client.state().submit_pay_for_blob(blobs, tx_config),
+                )
+                .await
+                {
+                    Ok(Ok(response)) => Ok(response),
+                    Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
+                    Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!(
+                        "Timeout waiting for state.SubmitPayForBlob"
+                    ))),
+                }
+            },
+            "send_transaction",
         )
-        .await
-        {
-            Ok(Ok(response)) => Ok(response),
-            Ok(Err(e)) => Err(e.into()),
-            Err(_) => Err(anyhow::anyhow!(
-                "Timeout waiting for state.SubmitPayForBlob"
-            )),
-        };
+        .await;
         drop(submit_client);
 
         let submit_time = start_submit.elapsed();
@@ -331,25 +342,6 @@ impl CelestiaService {
         Ok(CelestiaHeader::from(header))
     }
 
-    #[instrument(skip(self, blob), err)]
-    async fn send_transaction_inner(
-        &self,
-        blob: &[u8],
-    ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        debug!("Submitting batch of transactions to Celestia");
-        self.submit_blob_to_namespace(blob, self.rollup_batch_namespace)
-            .await
-    }
-
-    #[instrument(skip(self, aggregated_proof), err)]
-    async fn send_proof_inner(
-        &self,
-        aggregated_proof: &[u8],
-    ) -> Result<SubmitBlobReceipt<TmHash>, MaybeRetryable<anyhow::Error>> {
-        self.submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
-            .await
-    }
-
     async fn get_proofs_at_inner(
         &self,
         height: u64,
@@ -472,12 +464,10 @@ impl DaService for CelestiaService {
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
         let (tx, rx) = oneshot::channel();
-        let res = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.send_transaction_inner(blob),
-            "send_transaction",
-        )
-        .await;
+        let res = self
+            .submit_blob_to_namespace(blob, self.rollup_batch_namespace)
+            .await;
+        // UNWRAP: Not possible because the receiver is in the scope still
         tx.send(res).unwrap();
         rx
     }
@@ -489,12 +479,9 @@ impl DaService for CelestiaService {
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
         let (tx, rx) = oneshot::channel();
-        let res = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.send_proof_inner(aggregated_proof),
-            "send_proof",
-        )
-        .await;
+        let res = self
+            .submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
+            .await;
         // UNWRAP: Not possible because the receiver is in the scope still
         tx.send(res).unwrap();
         rx
