@@ -144,7 +144,7 @@ mod tests {
                 "chain_spec":{
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
-                    "block_gas_limit":30000000,
+                    "block_gas_limit":1000000000,
                     "hardforks":[[0,"CANCUN"]]
                 }
         }"#;
