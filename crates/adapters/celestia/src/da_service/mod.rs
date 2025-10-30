@@ -28,7 +28,7 @@ use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
-use tokio::sync::{oneshot};
+use tokio::sync::oneshot;
 use tokio::time::Instant;
 use tracing::{debug, info, instrument, trace};
 
