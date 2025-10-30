@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use serde::{ser::Error as _, Deserialize, Serialize};
-use sov_rest_utils::json_obj;
+use crate::rest::utils::json_obj;
 
 /// A bech32 address parse error.
 #[derive(Debug, thiserror::Error)]
