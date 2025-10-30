@@ -8,9 +8,9 @@ DOCKER_COMPOSE_CFG := $(DOCKER_COMPOSE_DIR)/docker-compose.yml
 HYPERLANE_CLI_REPO := ghcr.io/sovereign-labs/hyperlane-cli
 HYPERLANE_CLI_TAG := sov-integration-3
 
+# Celestia Docker image constants
 CELESTIA_DEVNET_VALIDATOR_IMAGE := ghcr.io/sovereign-labs/celestia-validator-devnet
 CELESTIA_DEVNET_VALIDATOR_TAG := v5.0.2-mocha
-
 CELESTIA_DEVNET_BRIDGE_IMAGE := ghcr.io/sovereign-labs/celestia-bridge-devnet
 CELESTIA_DEVNET_BRIDGE_TAG := v0.27.4-mocha
 

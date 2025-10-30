@@ -121,10 +121,57 @@ Each time a Celestia block is created,
 the DA service makes a series of RPC requests to obtain all of the relevant share data. 
 Then, it packages that data into the format expected by the DA verifier and returns.
 
+## Operations and Development
+
+
+### Configuration
+
+#### RPC Provider: QuickNode
+
+https://www.quicknode.com/guides/infrastructure/node-setup/run-a-celestia-light-node
+
+#### Local light node and community RPC
+
+
+#### Fully Sovereign: Local bridge and consensus node
+
+### Upgrading Celestia version
+
+When upgrading to a new version of Celestia, you'll need to update the docker images used for testing and development. 
+
+Follow these steps (all paths are from root of the repo):
+
+1. **Update version tags in [`docker/Makefile`](../../../docker/Makefile)**:
+   ```makefile
+   CELESTIA_DEVNET_VALIDATOR_TAG := v5.0.2-mocha  # Update this version
+   CELESTIA_DEVNET_BRIDGE_TAG := v0.27.4-mocha    # Update this version
+   ```
+
+2. **Update matching tags in `crates/adapters/celestia/src/test_helper/docker.rs`**:
+   ```rust
+   const VALIDATOR_TAG: &str = "v5.0.2-mocha";
+   const BRIDGE_TAG: &str = "v0.27.4-mocha";
+   ```
+
+3. **Build the new docker images**:
+   ```bash
+   cd docker
+   make build-celestia-devnet-images
+   ```
+
+4. **Push the images to the registry** ([requires authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)):
+   ```bash
+   # Authenticate with GitHub Container Registry. You need a GitHub Personal Access Token with write:packages permission
+   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+   make push-celestia-devnet-images
+   ```
+
+5. **Run tests** to verify the new version works correctly:
+   ```bash
+   cd ../crates/adapters/celestia
+   cargo test
+   ```
+
 ## License
 
-Licensed under the [Apache License, Version 2.0](../../../LICENSE).
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
-licensed as above, without any additional terms or conditions.
+See the [LICENSE](../../../LICENSE) file for license rights and limitations.

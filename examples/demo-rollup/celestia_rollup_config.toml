@@ -1,17 +1,33 @@
 [da]
-# The address of the *trusted* Celestia node to interact with.
-# Example for quicknode: wss://a-b-c.celestia-mocha.quiknode.pro/grpc_auth_token;
-# Default value is ws://127.0.0.1:26658
+# The address of the Celestia RPC server to interact with.
+# Example for local: ws://127.0.0.1:26658
+# Example for QuickNode: wss://a-b-c.celestia-mocha.quiknode.pro/YOUR_ENDPOINT_ID
+# Default value: ws://127.0.0.1:26658
 rpc_url = "ws://127.0.0.1:26658"
-# The JWT used to authenticate with the celestia light client. Instructions for generating this token can be found in the README
+
+# JWT token for RPC server.
+# If not specified in the config, will be pulled from `SOV_CELESTIA_RPC_AUTH_TOKEN` environment variable.
 # Optional.
 #rpc_auth_token = "MY.SECRET.TOKEN"
-# The address of *trusted* Celestia gRPC to submit blobs
+
+# The address of the Celestia gRPC server for submitting blobs.
+# Example: http://127.0.0.1:9090
+# Optional. Set only if DaService needs to submit blobs.
 grpc_url = "http://127.0.0.1:9090"
-# The Auth token for interacting with gRPC
-# Optional. X-token for quicknode
+
+# The token for accessing Celestia gRPC server.
+# If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_AUTH_TOKEN` environment variable.
+# Optional, used only if `grpc_url` is set.
+# For QuickNode, use X-token header.
 #grpc_auth_token = ""
-# Taken from ../../docker/credentials/bridge-0.key
+
+# The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
+# If not specified in the config, will be pulled from `SOV_CELESTIA_SIGNER_KEY` environment variable.
+# Can be exported from celestia-appd:
+#   celestia-appd keys export --unsafe --unarmored-hex key-name --keyring-backend test
+# Or from cel-key (light/bridge node):
+#   cel-key export key-name --unarmored-hex --unsafe --node.type light --p2p.network=mocha
+# This one is from ../../docker/credentials/bridge-0.key
 signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
 
 # The maximum time to wait for a response to an RPC query against Celestia node.

@@ -31,8 +31,10 @@ pub struct CelestiaConfig {
 
     /// The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
     /// If not specified in the config, will be pulled from `SOV_CELESTIA_SIGNER_KEY`.
-    /// Can be done, for example:
+    /// Can be exported from `celestia-appd`:
     /// `celestia-appd keys export --unsafe --unarmored-hex key-name --keyring-backend test`
+    /// Or from `cel-key` (light/bridge node):
+    /// `cel-key export key-name --unarmored-hex --unsafe --node.type light --p2p.network=mocha`
     #[serde(default = "default_signer_private_key")]
     pub signer_private_key: Option<String>,
     /// The timeout for a Celestia RPC request, in seconds.
