@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 use std::fmt;
 use std::path::Path;
+use std::collections::HashMap;
 
 use tokio::task::JoinHandle;
 use tokio::net::{UnixListener, UnixStream};
@@ -64,6 +65,8 @@ pub struct KeyCache {
     current_key: Arc<RwLock<Option<InternalKey>>>,
     scheduled_keys: Arc<RwLock<Vec<SlotScheduledKey>>>,
     current_slot: Arc<RwLock<u64>>,
+    // Historical record of which key was active at each slot for decryption
+    slot_key_history: Arc<RwLock<HashMap<u64, InternalKey>>>,
 }
 
 impl KeyCache {
@@ -72,6 +75,7 @@ impl KeyCache {
             current_key: Arc::new(RwLock::new(None)),
             scheduled_keys: Arc::new(RwLock::new(Vec::new())),
             current_slot: Arc::new(RwLock::new(0)),
+            slot_key_history: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     
@@ -80,15 +84,19 @@ impl KeyCache {
     }
     
     pub fn update_current_key(&self, key: InternalKey) {
+        let current_slot = *self.current_slot.read().unwrap();
         let previous_key = self.current_key.read().unwrap().as_ref().map(|k| k.id.clone());
+        
+        // Record this key as being active from the current slot onwards
+        self.slot_key_history.write().unwrap().insert(current_slot, key.clone());
         *self.current_key.write().unwrap() = Some(key.clone());
         
         match previous_key {
             Some(prev_id) => {
-                warn!("🔄 KEY REPLACED: '{}' -> '{}' (immediate activation)", prev_id, key.id);
+                warn!("🔄 KEY REPLACED: '{}' -> '{}' (immediate activation) at slot {}", prev_id, key.id, current_slot);
             }
             None => {
-                info!("🔑 KEY SET: '{}' is now the current key", key.id);
+                info!("🔑 KEY SET: '{}' is now the current key at slot {}", key.id, current_slot);
             }
         }
     }
@@ -139,6 +147,10 @@ impl KeyCache {
                   scheduled_key.key.id, slot_number, scheduled_key.activate_at_slot);
             debug!("🔑 KEY ACTIVATION: Key material hash: {}", 
                    hex::encode(&scheduled_key.key.material[..8.min(scheduled_key.key.material.len())]));
+            
+            // Record this key as active for its scheduled slot
+            self.slot_key_history.write().unwrap().insert(scheduled_key.activate_at_slot, scheduled_key.key.clone());
+            
             activated_keys.push(scheduled_key.key.clone());
             self.update_current_key(scheduled_key.key);
         }
@@ -505,14 +517,34 @@ impl EncryptionLayer {
         // First activate any keys that should be active for this slot
         self.key_cache.check_for_activation(slot_number);
         
-        // Then return the current key
-        let key = self.key_cache.get_current_key();
-        if let Some(ref k) = key {
-            info!("🔑 SLOT KEY: Using key '{}' for slot {}", k.id, slot_number);
-        } else {
-            warn!("🔑 SLOT KEY: No key available for slot {}", slot_number);
+        // Look for the key that was active at this specific slot in history
+        let history = self.key_cache.slot_key_history.read().unwrap();
+        
+        // Find the most recent key that was active at or before this slot
+        let mut best_key = None;
+        let mut best_slot = 0;
+        
+        for (&hist_slot, key) in history.iter() {
+            if hist_slot <= slot_number && hist_slot >= best_slot {
+                best_key = Some(key.clone());
+                best_slot = hist_slot;
+            }
         }
-        key
+        
+        if let Some(ref k) = best_key {
+            info!("🔑 SLOT KEY: Using key '{}' (activated at slot {}) for slot {}", k.id, best_slot, slot_number);
+        } else {
+            // Fallback to current key if no history available
+            let current_key = self.key_cache.get_current_key();
+            if let Some(ref k) = current_key {
+                warn!("🔑 SLOT KEY: No history for slot {}, using current key '{}'", slot_number, k.id);
+                return current_key;
+            } else {
+                warn!("🔑 SLOT KEY: No key available for slot {}", slot_number);
+            }
+        }
+        
+        best_key
     }
 
     /// Set the current slot number and activate keys for THIS slot
