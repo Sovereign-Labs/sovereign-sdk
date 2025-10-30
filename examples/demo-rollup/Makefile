@@ -25,14 +25,14 @@ clean:
 	rm -rf "mock_da.sqlite"
 	rm -f demo_rollup_config.toml
 	rm -rf "~/.sov-cli-wallet"
-	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' ../configs/celestia_rollup_config.toml | tr -d '[:space:]"\n'))
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' celestia_rollup_config.toml | tr -d '[:space:]"\n'))
 	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
 		echo "Path is empty or too short, not safe to remove"; \
 		exit 1; \
 	fi
 	@echo "Removing Celestia rollup database ${path}"
 	rm -rf "${path}"
-	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' ../configs/mock_rollup_config.toml | tr -d '[:space:]"\n'))
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' mock_rollup_config.toml | tr -d '[:space:]"\n'))
 	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
 		echo "Path is empty or too short, not safe to remove"; \
 		exit 1; \
