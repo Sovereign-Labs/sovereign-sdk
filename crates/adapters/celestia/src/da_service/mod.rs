@@ -174,6 +174,7 @@ impl CelestiaService {
 
 impl CelestiaService {
     pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
+        tracing::info!(?config, "Initializing Celestia Adapter");
         let request_timeout = Duration::from_secs(config.request_timeout_secs.get());
 
         let backoff_policy = config.get_backoff_policy();

@@ -6732,6 +6732,7 @@ dependencies = [
  "pin-project",
  "send_wrapper 0.6.0",
  "tokio",
+ "tonic 0.13.1",
  "web-time",
 ]
 
@@ -11661,14 +11662,12 @@ dependencies = [
  "sov-rpc-eth-types",
  "sov-sequencer",
  "sov-sequencer-registry",
- "sov-sp1-adapter",
  "sov-state",
  "sov-stf-runner",
  "sov-synthetic-load",
  "sov-test-utils",
  "sov-universal-wallet",
  "sov-zkvm-utils",
- "sp1",
  "tempfile",
  "tokio",
  "tracing",
@@ -13069,16 +13068,6 @@ dependencies = [
  "sov-modules-api",
  "sov-universal-wallet",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "sp1"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "lazy_static",
- "sov-zkvm-utils",
- "sp1-build",
 ]
 
 [[package]]
@@ -14610,8 +14599,10 @@ dependencies = [
  "percent-encoding",
  "pin-project",
  "prost",
+ "rustls-native-certs 0.8.1",
  "socket2 0.5.10",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tokio-stream",
  "tower 0.5.2",
  "tower-layer",
