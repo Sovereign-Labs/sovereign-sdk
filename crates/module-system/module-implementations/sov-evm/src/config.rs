@@ -1,7 +1,8 @@
-use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
+use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
+use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
 
 use crate::AccountData;
 
@@ -36,7 +37,7 @@ impl Default for EvmChainSpec {
         Self {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
             hardforks: vec![(0, SpecId::CANCUN)],
         }
     }
