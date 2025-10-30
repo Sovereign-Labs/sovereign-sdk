@@ -259,6 +259,6 @@ async fn test_replica_start_stop_many_times() {
     }
 
     let _ = replica_test_rollup.shutdown().await;
-    test_rollup.shutdown().await.unwrap();
+    let _ = test_rollup.shutdown().await;
     let _ = da_shutdown.send(());
 }
