@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
     Context, EventEmitter, ModuleInfo, RuntimeDiscriminant, SafeString, SafeVec, Spec,
-    StateAccessor, StateReader, TxState,
+    StateAccessor, StateReader, TxState, CoreModuleError
 };
 use sov_rollup_interface::common::SizedSafeString;
 use sov_state::{EventContainer, User};
@@ -512,12 +512,11 @@ impl<S: Spec> Bank<S> {
         coins: Coins,
         memo: Option<String>,
         state: &mut (impl StateAccessor + EventContainer),
-    ) -> Result<()> {
+    ) -> Result<(), TransferTokenError> {
         let from = from.as_token_holder();
         let to = to.as_token_holder();
 
-        self.do_transfer(from, to, &coins.token_id, coins.amount, state)
-            .with_context(|| format!("Failed to transfer token_id={}", &coins.token_id))?;
+        self.do_transfer(from, to, &coins.token_id, coins.amount, state)?;
 
         self.emit_event(
             state,
