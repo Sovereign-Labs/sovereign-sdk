@@ -199,7 +199,9 @@ fn not_enough_gas_wont_panic() {
 
             if let TxEffect::Reverted(contents) = result.tx_receipt {
                 let actual = contents.reason.to_string();
-                let expected = "The amount to charge is greater than the funds available in the meter.".to_owned();
+                let expected =
+                    "The amount to charge is greater than the funds available in the meter."
+                        .to_owned();
                 assert!(actual.contains(&expected));
             } else {
                 panic!("The transaction outcome is incorrect")
