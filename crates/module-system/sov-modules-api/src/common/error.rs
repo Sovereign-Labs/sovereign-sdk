@@ -3,8 +3,8 @@
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
-use serde::{ser::Error as _, Deserialize, Serialize};
 use crate::rest::utils::json_obj;
+use serde::{ser::Error as _, Deserialize, Serialize};
 
 /// A bech32 address parse error.
 #[derive(Debug, thiserror::Error)]
