@@ -29,7 +29,6 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")),
@@ -38,17 +37,14 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
 
-    let sender_address = MockAddress::new([0u8; 32]);
-
-    // Determine block producing configuration
     let block_producing = sov_mock_da::BlockProducingConfig::Periodic {
-        block_time_ms: 3000,
+        block_time_ms: cli.block_time_ms,
     };
 
     // Create DA configuration
     let config = MockDaConfig {
         connection_string: cli.db.clone(),
-        sender_address,
+        sender_address: MockAddress::new([0u8; 32]),
         finalization_blocks: 0,
         block_producing,
         da_layer: None,
@@ -61,12 +57,8 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("  Database: {}", cli.db);
     tracing::info!("  Block producing: {:?}", config.block_producing);
 
-    // Create shutdown channel
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-
-    // Initialize DA service
     let da_service = StorableMockDaService::from_config(config, shutdown_receiver).await;
-
     // Start the HTTP server
     let addr = start_server(da_service, &cli.host, cli.port).await?;
 
