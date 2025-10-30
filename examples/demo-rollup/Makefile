@@ -25,14 +25,14 @@ clean:
 	rm -rf "mock_da.sqlite"
 	rm -f demo_rollup_config.toml
 	rm -rf "~/.sov-cli-wallet"
-	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' celestia_rollup_config.toml | tr -d '[:space:]"\n'))
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' ../configs/celestia_rollup_config.toml | tr -d '[:space:]"\n'))
 	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
 		echo "Path is empty or too short, not safe to remove"; \
 		exit 1; \
 	fi
 	@echo "Removing Celestia rollup database ${path}"
 	rm -rf "${path}"
-	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' mock_rollup_config.toml | tr -d '[:space:]"\n'))
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' ../configs/mock_rollup_config.toml | tr -d '[:space:]"\n'))
 	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
 		echo "Path is empty or too short, not safe to remove"; \
 		exit 1; \
@@ -85,7 +85,7 @@ start:
 	timestamp=$$(date $(DATE_FORMAT)); \
 	echo "$$timestamp: token received: $$TOKEN";
 	@TOKEN=$$($(get_token) 2>/dev/null); \
-   	cat celestia_rollup_config.toml | \
+   	cat ../configs/celestia_rollup_config.toml | \
    	sed 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"'$$TOKEN'"/' > demo_rollup_config.toml;
 	@start_time=$$(cat $(CELESTIA_START_TIME_FILE)); \
     end_time=$$(date +%s); \
@@ -106,7 +106,7 @@ create-second-celestia-config:
     	echo "$$timestamp: token received: $$TOKEN";
 	@TOKEN=$$($(get_token_1) 2>/dev/null); \
 	ADDRESS=$$(cat ../../docker/credentials/bridge-1.addr); \
-   	cat celestia_rollup_config.toml | \
+   	cat ../configs/celestia_rollup_config.toml | \
    	sed 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"'$$TOKEN'"/' | \
    	sed 's/^\(own_celestia_address = \)"[^"]*"/\1"'$$ADDRESS'"/' | \
    	sed 's/^\(path = \)"[^"]*"/\1"demo_data_1"/' | \
