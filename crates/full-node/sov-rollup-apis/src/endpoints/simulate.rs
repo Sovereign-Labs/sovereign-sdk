@@ -197,6 +197,13 @@ pub struct FailOutcome {
     pub reason: String,
 }
 
+/// Reverted simulation outcome with details.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevertOutcome {
+    /// Details about the revert reason.
+    pub detail: serde_json::Value,
+}
+
 /// The outcome of a transaction simulation.
 ///
 /// This enum represents the three possible outcomes when simulating a transaction:
@@ -207,7 +214,7 @@ pub enum SimulateOutcome<E> {
     /// The transaction executed successfully.
     Success(SuccessOutcome<E>),
     /// The transaction was reverted during execution.
-    Reverted(FailOutcome),
+    Reverted(RevertOutcome),
     /// The transaction was skipped due to pre-execution errors.
     Skipped(FailOutcome),
 }
@@ -339,8 +346,8 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             TxEffect::Skipped(e) => SimulateOutcome::Skipped(FailOutcome {
                 reason: e.error.to_string(),
             }),
-            TxEffect::Reverted(e) => SimulateOutcome::Reverted(FailOutcome {
-                reason: e.reason.to_string(),
+            TxEffect::Reverted(e) => SimulateOutcome::Reverted(RevertOutcome {
+                detail: e.reason.error_detail().unwrap_or_default(),
             }),
             TxEffect::Successful(_) => SimulateOutcome::Success(SuccessOutcome {
                 priority_fee: result.transaction_consumption.priority_fee().0,
