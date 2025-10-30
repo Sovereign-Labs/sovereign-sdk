@@ -64,7 +64,7 @@ use transaction_subscriptions::TransactionCache;
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
     AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError, StateUpdateNotification,
-    WithCachedTxHashes,
+    SubscriptionStreamError, WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
@@ -806,8 +806,18 @@ where
         &self,
         starting_from: Option<u64>,
     ) -> Option<
-        anyhow::Result<
-            Pin<Box<dyn Stream<Item = anyhow::Result<ApiAcceptedTx<Self::Confirmation>>> + Send>>,
+        Result<
+            Pin<
+                Box<
+                    dyn Stream<
+                            Item = Result<
+                                ApiAcceptedTx<Self::Confirmation>,
+                                SubscriptionStreamError,
+                            >,
+                        > + Send,
+                >,
+            >,
+            SubscriptionStreamError,
         >,
     > {
         Some(
