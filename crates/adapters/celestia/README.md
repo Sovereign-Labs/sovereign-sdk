@@ -128,12 +128,28 @@ Then, it packages that data into the format expected by the DA verifier and retu
 
 #### RPC Provider: QuickNode
 
-https://www.quicknode.com/guides/infrastructure/node-setup/run-a-celestia-light-node
+Please make sure to get through these guides:
 
-#### Local light node and community RPC
+* https://www.quicknode.com/docs/celestia/celestia-grpc/overview
+* https://www.quicknode.com/guides/infrastructure/node-setup/run-a-celestia-light-node
 
+After that identify: 
 
-#### Fully Sovereign: Local bridge and consensus node
+* **Endpoint host name**, for example: `your-quicknode-endpoint.celestia-mocha.quiknode.pro`
+* **Token**: The alphanumeric string that follows the endpoint name in the URL
+
+Also prepare celestia private key in hex format.
+
+```toml
+# This can be taken from "API access URL". websocket is recommended
+# This follows format: "ws://QUICK_NODE_ENDPONINT/API_TOKEN"
+rpc_url = "wss://your-quicknode-endpoint.celestia-mocha.quiknode.pro/your-api-token/"
+# This follows format: "https://QUICK_NODE_ENDPONINT:9090"
+grpc_url = "https://foo-bar-baz.celestia-mocha.quiknode.pro:9090"
+# API Token as is
+grpc_auth_token = "your-api-token"
+signer_private_key = "798f316d2feecd1c1af5cf7c40abeae2d719c12afef8ba10ea0d785eb2595322"
+```
 
 ### Upgrading Celestia version
 
