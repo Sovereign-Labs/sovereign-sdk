@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
-    Context, EventEmitter, ModuleInfo, RuntimeDiscriminant, SafeString, SafeVec, Spec,
-    StateAccessor, StateReader, TxState, CoreModuleError
+    Context, CoreModuleError, EventEmitter, ModuleInfo, RuntimeDiscriminant, SafeString, SafeVec,
+    Spec, StateAccessor, StateReader, TxState,
 };
 use sov_rollup_interface::common::SizedSafeString;
 use sov_state::{EventContainer, User};
