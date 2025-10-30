@@ -1,4 +1,5 @@
 # 2025-10-29
+- #1996 Set gas limit to 1B on ETH API access.
 - #1838 Add binary WebSocket frame support to RPC server and client.
 - #1997 Fix `eth_sendTransaction` contract deployments without gas limit by converting `to: null` to `TxKind::Create`.
 
