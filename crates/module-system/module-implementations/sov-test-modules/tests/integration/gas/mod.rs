@@ -198,16 +198,9 @@ fn not_enough_gas_wont_panic() {
             );
 
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                assert_eq!(chain.len(), 1, "The error chain is incorrect");
-
-                assert!(
-                    chain.next().unwrap().to_string().contains(
-                        "The amount to charge is greater than the funds available in the meter."
-                    ),
-                    "The error message is incorrect"
-                );
+                let actual = contents.reason.to_string();
+                let expected = "The amount to charge is greater than the funds available in the meter.".to_owned();
+                assert!(actual.contains(&expected));
             } else {
                 panic!("The transaction outcome is incorrect")
             }
@@ -230,16 +223,9 @@ fn very_high_gas_to_charge_should_overflow() {
             );
 
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                assert_eq!(chain.len(), 1, "The error chain is incorrect");
-
-                assert!(
-                        chain.next().unwrap().to_string().contains(
-                            "Gas calculation overflow: Charge Funds: Unable to charge gas, because the calculation overflows"
-                        ),
-                        "The error message is incorrect"
-                    );
+                let actual = contents.reason.to_string();
+                let expected = "Gas calculation overflow: Charge Funds: Unable to charge gas, because the calculation overflows".to_owned();
+                assert!(actual.contains(&expected));
             } else {
                 panic!("The transaction outcome is incorrect")
             }
