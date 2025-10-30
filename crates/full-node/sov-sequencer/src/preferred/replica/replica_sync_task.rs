@@ -97,14 +97,25 @@ impl ReplicaSyncTask {
 
                     Err(DBDataRejected::ExecutorAhead(executor_seq_nr)) => {
                         // The executor is ahead of the db drain the queue and wait until we catch up.
-                        while let Ok(new_data) = db_data_receiver.try_recv() {
-                            if new_data.sequence_number() > executor_seq_nr {
+                        loop {
+                            let fut =
+                                future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+
+                            let FutureOrShutdownOutput::Output(Some(new_data)) = fut.await else {
+                                break 'outer;
+                            };
+
+                            assert!(
+                                new_data.sequence_number() <= executor_seq_nr,
+                                "The sequence number must be consecutive"
+                            );
+
+                            if new_data.sequence_number() == executor_seq_nr {
                                 assert!(matches!(new_data, DbData::BatchStart(_)));
                                 data = new_data;
                                 continue 'inner;
                             }
                         }
-                        break 'inner;
                     }
 
                     Err(DBDataRejected::ExecutorBehind(db_data)) => {
@@ -376,8 +387,8 @@ mod tests {
 
         let seq_nr = 3;
         let test_cases = to_db_data(&test_cases);
-        // We skip batch 1,2 and 3 so 15 db messages in total.
-        let expected = test_cases.iter().skip(15).cloned().collect();
+        // We skip batch 1, 2 so 10 db messages in total.
+        let expected = test_cases.iter().skip(10).cloned().collect();
         check_sync_task(test_cases.clone(), expected, seq_nr).await;
     }
 

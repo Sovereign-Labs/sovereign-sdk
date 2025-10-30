@@ -150,6 +150,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                 let mut rt = Rt::default();
                 let node_sequence_number =
                     get_next_sequence_number_according_to_node(info, &mut rt);
+
                 inner.sequence_number_of_next_blob = node_sequence_number;
 
                 let executor = Some(Box::new(
