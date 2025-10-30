@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::GasMeteringError;
-use alloy_eips::eip1559::ETHEREUM_BLOCK_GAS_LIMIT_30M;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::sequencer_state::MaybePresentValue;
@@ -18,9 +17,7 @@ use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
 use crate::gas::GasArray;
 use crate::state::accessors::internals::AccessoryWrite;
 use crate::state::traits::PerBlockCache;
-use crate::{
-    Amount, BasicGasMeter, Gas, GasMeter, GetGasPrice, ProvableStateReader, Spec, VersionReader,
-};
+use crate::{BasicGasMeter, Gas, GasMeter, GetGasPrice, ProvableStateReader, Spec, VersionReader};
 
 fn get_slot_number(visible_slot_number: Option<VisibleSlotNumber>) -> Option<SlotNumber> {
     // This TODO is not a security risk.
@@ -540,16 +537,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Result<Self, ApiStateAccessorError> {
         let delta: &super::internals::Delta<<S as Spec>::Storage> = &state_checkpoint.delta;
-        // Allow about 1gigagas for API access
-        let gas_meter = BasicGasMeter::new_with_funds_and_gas(
-            Amount::MAX,
-            [
-                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
-                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
-            ]
-            .into(),
-            gas_price,
-        );
+        let gas_meter = BasicGasMeter::new_api(gas_price);
 
         let mut out = Self {
             storage: delta.inner.clone(),
@@ -601,16 +589,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         state_to_access: StateToAccess,
     ) -> Self {
-        // Allow about 1gigagas for API access
-        let gas_meter = BasicGasMeter::new_with_funds_and_gas(
-            Amount::MAX,
-            [
-                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
-                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
-            ]
-            .into(),
-            <S::Gas as Gas>::Price::ZEROED,
-        );
+        let gas_meter = BasicGasMeter::new_api(<S::Gas as Gas>::Price::ZEROED);
         Self {
             events: Vec::new(),
             gas_meter,
