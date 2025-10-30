@@ -40,12 +40,12 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
-use sov_modules_api::{SkippedTxContents, TxProcessingError};
 use sov_modules_api::{
     ApiTxEffect, FullyBakedTx, Gas, RejectReason, Runtime, RuntimeEventProcessor,
-    RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, TransactionReceipt, VersionReader,
-    VisibleSlotNumber, *,
+    RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, TransactionReceipt,
+    VersionReader, VisibleSlotNumber, *,
 };
+use sov_modules_api::{SkippedTxContents, TxProcessingError};
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
@@ -897,7 +897,6 @@ where
 
         let tx_len = baked_tx.data.len();
 
-
         let outer_res = match uniqueness {
             UniquenessData::Generation(_) => {
                 self.synchronized_state_updator
@@ -905,9 +904,7 @@ where
                     .await
             }
             UniquenessData::Nonce(tx_nonce) => {
-                let user_queue = self
-                    .tx_nonce_queues
-                    .lock_for_address(credential_id);
+                let user_queue = self.tx_nonce_queues.lock_for_address(credential_id);
                 let user_current_nonce = {
                     let state = self
                         .api_state
@@ -919,7 +916,8 @@ where
                         .unwrap_infallible()
                         .unwrap_or_default()
                 };
-                let max_accepted_nonce = user_current_nonce + 100;
+                let max_accepted_nonce = user_current_nonce
+                    + self.config.sequencer_kind_config.maximum_future_nonce_delta;
                 match tx_nonce {
                     nonce if nonce == user_current_nonce => {
                         // Transaction has a valid nonce, execute.
@@ -930,8 +928,13 @@ where
                     }
                     nonce if nonce > user_current_nonce && nonce < max_accepted_nonce => {
                         // Transaction's nonce is within the future threshold to be queued.
-                        let mut queue_receiver =
-                            TxNonceQueues::enqueue_from_lock(user_queue, baked_tx, tx_hash, tx_nonce, original_tx_queue_id);
+                        let mut queue_receiver = TxNonceQueues::enqueue_from_lock(
+                            user_queue,
+                            baked_tx,
+                            tx_hash,
+                            tx_nonce,
+                            original_tx_queue_id,
+                        );
                         loop {
                             tokio::select! {
                                 rx = &mut queue_receiver => {
@@ -949,7 +952,9 @@ where
                                         )
                                     });
                                 },
-                                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                                _ = tokio::time::sleep(std::time::Duration::from_millis(
+                                        self.config.sequencer_kind_config.future_nonce_transaction_timeout_millis
+                                )) => {
                                     // Timeout waiting for prerequisite transactions
                                     let current_nonce = {
                                         let state = self
@@ -1044,13 +1049,7 @@ where
                     DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
-                    } => {
-                        return Err(err_cant_fit_tx(
-                            current_batch_size,
-                            max_batch_size,
-                            tx_len,
-                        ))
-                    }
+                    } => return Err(err_cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                     DoNewTxError::ExecutorError(err) => {
                         return Err(RollupBlockExecutorError::into_http_error(err));
                     }
@@ -1265,13 +1264,10 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
             error: TxProcessingError::CheckUniquenessFailed(error_msg),
         }),
     };
-    Ok(Err(AcceptTxError::NewTxError(
-        DoNewTxError::ExecutorError(RollupBlockExecutorError::UnsuccessfulTransaction {
-            receipt,
-        }),
-    )))
+    Ok(Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+        RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+    ))))
 }
-
 
 #[track_caller]
 pub(crate) fn exit_rollup(

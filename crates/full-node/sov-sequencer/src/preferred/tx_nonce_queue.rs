@@ -100,13 +100,14 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
         tx_hash: TxHash,
         nonce: u64,
         original_tx_queue_id: u64,
-    ) -> oneshot::Receiver<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>> {
+    ) -> oneshot::Receiver<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>>
+    {
         let (result_sender, result_receiver) = oneshot::channel();
         let queued_tx = QueuedTx {
             tx,
             tx_hash,
             original_tx_queue_id,
-            result_sender
+            result_sender,
         };
         let mut queue = queue_entry.or_insert_with(AddressQueue::new);
         if let Some(old_tx) = queue.insert(nonce, queued_tx) {
