@@ -123,7 +123,7 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
     }
 
     /// Remove a transaction by nonce
-    pub fn remove(&self, credential_id: &CredentialId, nonce: u64) -> Option<QueuedTx<S, Rt>> {
+    pub fn evict(&self, credential_id: &CredentialId, nonce: u64) -> Option<QueuedTx<S, Rt>> {
         let mut entry = self.queues.get_mut(credential_id)?;
         let tx = entry.remove(nonce)?;
 
@@ -247,10 +247,27 @@ mod tests {
                 data: vec![nonce].into(),
             },
             tx_hash: TxHash::from([0u8; 32]),
-            nonce: nonce.into(),
             original_tx_queue_id: 0,
             result_sender: sender,
         }
+    }
+
+    fn enqueue_mock_queued_tx(
+        entry: dashmap::mapref::entry::Entry<CredentialId, AddressQueue<TestSpec, TestRuntime>>,
+        nonce: u8,
+    ) {
+        let to_queue = create_mock_queued_tx(nonce);
+        TxNonceQueues::enqueue_from_lock(
+            entry,
+            to_queue.tx,
+            to_queue.tx_hash,
+            nonce.into(),
+            to_queue.original_tx_queue_id,
+        );
+    }
+
+    fn nonce_from_queued_tx(tx: &QueuedTx<TestSpec, TestRuntime>) -> u8 {
+        *tx.tx.data.first().unwrap()
     }
 
     #[test]
@@ -353,7 +370,7 @@ mod tests {
         // Replace existing transaction
         let old_tx = queue.insert(2, create_mock_queued_tx(2));
         assert!(old_tx.is_some());
-        assert_eq!(old_tx.unwrap().nonce, 2);
+        assert_eq!(nonce_from_queued_tx(&old_tx.unwrap()), 2);
 
         // Remove transactions
         assert!(queue.remove(1).is_some());
@@ -396,10 +413,9 @@ mod tests {
 
         // Enqueue some transactions
         let entry = queues.lock_for_address(credential_id);
-        TxNonceQueues::enqueue_with_lock(entry, create_mock_queued_tx(5));
-
+        enqueue_mock_queued_tx(entry, 5);
         let entry = queues.lock_for_address(credential_id);
-        TxNonceQueues::enqueue_with_lock(entry, create_mock_queued_tx(6));
+        enqueue_mock_queued_tx(entry, 6);
 
         // Check prerequisites
         assert!(queues.has_prerequisites_to_nonce(&credential_id, 6, 5));
@@ -407,18 +423,18 @@ mod tests {
         assert!(!queues.has_prerequisites_to_nonce(&credential_id, 7, 5)); // Beyond what we have
 
         // Remove a transaction
-        let removed = queues.remove(&credential_id, 5);
+        let removed = queues.evict(&credential_id, 5);
         assert!(removed.is_some());
-        assert_eq!(removed.unwrap().nonce, 5);
+        assert_eq!(nonce_from_queued_tx(&removed.unwrap()), 5);
 
         // Check prerequisites again
         assert!(!queues.has_prerequisites_to_nonce(&credential_id, 6, 5)); // Gap now
 
         // Remove non-existent
-        assert!(queues.remove(&credential_id, 5).is_none());
+        assert!(queues.evict(&credential_id, 5).is_none());
 
         // Remove last transaction - queue should be cleaned up
-        assert!(queues.remove(&credential_id, 6).is_some());
+        assert!(queues.evict(&credential_id, 6).is_some());
         assert!(!queues.has_prerequisites_to_nonce(&credential_id, 6, 5));
     }
 
@@ -489,7 +505,7 @@ mod tests {
         // Enqueue transactions with nonces 3, 4, 5
         for nonce in [3, 4, 5] {
             let entry = queues.lock_for_address(credential_id);
-            TxNonceQueues::enqueue_with_lock(entry, create_mock_queued_tx(nonce));
+            enqueue_mock_queued_tx(entry, nonce);
         }
 
         // Spawn mock message handler that tracks which nonces are executed
@@ -524,7 +540,7 @@ mod tests {
         // Enqueue transactions: 0, 1, 3, 4 (gap at 2)
         for nonce in [0, 1, 3, 4] {
             let entry = queues.lock_for_address(credential_id);
-            TxNonceQueues::enqueue_with_lock(entry, create_mock_queued_tx(nonce));
+            enqueue_mock_queued_tx(entry, nonce);
         }
 
         // Spawn mock message handler

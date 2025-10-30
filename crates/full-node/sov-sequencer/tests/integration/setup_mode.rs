@@ -13,6 +13,7 @@ use base64::Engine;
 use sov_api_spec::types::{self as api_types};
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PriorityFeeBips;
 use sov_modules_api::transaction::TxDetails;
@@ -339,7 +340,7 @@ fn encode_zero_gas_tx(
     let tx = test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce,
+        UniquenessData::Generation(nonce),
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
         details,
     );

@@ -104,7 +104,7 @@ where
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
-    tx_nonce_queues: TxNonceQueues<S, Rt>,
+    tx_nonce_queues: Arc<TxNonceQueues<S, Rt>>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     shutdown_sender: watch::Sender<()>,
@@ -295,7 +295,7 @@ where
             api_state,
             _runtime: PhantomData,
             config: config.clone(),
-            tx_nonce_queues: TxNonceQueues::default(),
+            tx_nonce_queues: Arc::new(TxNonceQueues::default()),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,
@@ -921,9 +921,22 @@ where
                     nonce if nonce == user_current_nonce => {
                         // Transaction has a valid nonce, execute.
                         drop(user_queue); // Release the queue lock as we won't be using it
-                        self.synchronized_state_updator
+                        let res = self
+                            .synchronized_state_updator
                             .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-                            .await
+                            .await;
+                        let queues = self.tx_nonce_queues.clone();
+                        let updator = self.synchronized_state_updator.clone();
+                        tokio::spawn(async move {
+                            queues
+                                .drain_any_ready_transactions(
+                                    credential_id,
+                                    user_current_nonce + 1,
+                                    updator,
+                                )
+                                .await
+                        });
+                        res
                     }
                     nonce if nonce > user_current_nonce && nonce < max_accepted_nonce => {
                         // Transaction's nonce is within the future threshold to be queued.
@@ -969,6 +982,7 @@ where
                                     if self.tx_nonce_queues.has_prerequisites_to_nonce(&credential_id, tx_nonce, current_nonce) {
                                         continue;
                                     } else {
+                                        self.tx_nonce_queues.evict(&credential_id, tx_nonce);
                                         break err_invalid_nonce::<S, Rt>(
                                             tx_hash,
                                             tx_nonce,
