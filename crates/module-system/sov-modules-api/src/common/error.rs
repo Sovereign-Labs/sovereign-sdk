@@ -5,10 +5,42 @@ use std::sync::Arc;
 
 use serde::{ser::Error as _, Deserialize, Serialize};
 
-/// Exactly like [`serde_json::Value`], but returns a JSON object instead of a
-/// JSON value.
+/// Macro for creating structured error detail objects for the `ErrorDetail` trait.
+///
+/// This macro provides a convenient way to create `ErrorContext` objects (JSON objects)
+/// that contain structured error information. It accepts the same syntax as `serde_json::json!`
+/// but ensures the result is always a JSON object, which is required by the `ErrorDetail` trait.
+///
+/// The macro is particularly useful in `ErrorDetail` implementations where you need to
+/// provide rich, structured error information to client applications.
+///
+/// # Panics
+/// Panics if the provided JSON does not serialize to a JSON object (e.g., if you pass
+/// a primitive value, array, or null instead of an object with key-value pairs).
+///
+/// # Examples
+/// ```
+/// use sov_modules_api::err_detail;
+///
+/// // Create error details for insufficient balance
+/// let details = err_detail!({
+///     "error_code": "insufficient_balance",
+///     "amount": "100",
+///     "balance": "50",
+///     "token_id": "token123"
+/// });
+///
+/// // Create error details with dynamic values
+/// let amount = 100u64;
+/// let balance = 50u64;
+/// let details = err_detail!({
+///     "error_code": "insufficient_balance",
+///     "amount": amount.to_string(),
+///     "balance": balance.to_string()
+/// });
+/// ```
 #[macro_export]
-macro_rules! json_obj {
+macro_rules! err_detail {
     ($($json:tt)+) => {
         $crate::to_json_object(::serde_json::json!($($json)+))
     };
@@ -121,7 +153,7 @@ impl serde::Serialize for CoreModuleError {
 
 impl ErrorDetail for CoreModuleError {
     fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(json_obj!(self))
+        Ok(err_detail!(self))
     }
 }
 
@@ -211,7 +243,7 @@ pub trait ErrorDetail: Debug + Display {
 
 impl ErrorDetail for anyhow::Error {
     fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(json_obj!({ "message": format!("{self}") }))
+        Ok(err_detail!({ "message": format!("{self}") }))
     }
 }
 
