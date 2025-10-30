@@ -667,8 +667,13 @@ where
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
             let subscription = state.ledger.subscribe_proof_saved().map(|data| {
-                AggregatedProof::try_from(data)
-                    .map_err(|_| WsLedgerError::AggregatedProofConvertFailed)
+                AggregatedProof::try_from(data).map_err(|e| {
+                    tracing::error!(
+                        error = %e,
+                        "Error converting aggregated proof to REST API representation"
+                    );
+                    WsLedgerError::AggregatedProofConvertFailed
+                })
             });
             serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
         })
