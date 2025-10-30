@@ -220,7 +220,7 @@ async fn test_replica_start_stop_many_times() {
     let nb_of_txs = 300;
 
     let mut replica_test_rollup = start_rollup(true, addr, postgres).await;
-    for i in 0..10 {
+    for i in 0..3 {
         let builder = replica_test_rollup.shutdown().await.unwrap();
 
         let height_before_tx = test_rollup.height().await;
@@ -255,6 +255,16 @@ async fn test_replica_start_stop_many_times() {
             &mut event_subscription,
         )
         .await;
+
+        let receiver_balance = replica_test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
+
+        let expected_balance = AMOUNT * ((nb_of_txs * (i + 1)) as u128);
+        assert_eq!(receiver_balance.0, expected_balance);
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 

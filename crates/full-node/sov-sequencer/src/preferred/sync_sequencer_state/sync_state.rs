@@ -785,6 +785,12 @@ where
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
+        debug!(
+            % seq_nr_from_master,
+            % seq_nr_of_next_blob_for_this_executor,
+            "Entering process_do_batch_start_replica"
+        );
+
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -799,6 +805,12 @@ where
                 batch_from_master.visible_slots_to_advance,
             )
             .await?;
+
+        debug!(
+            % seq_nr_from_master,
+            % seq_nr_of_next_blob_for_this_executor,
+            "Exiting process_do_batch_start_replica"
+        );
 
         Ok(())
     }
@@ -840,6 +852,12 @@ where
         let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
         let seq_nr_from_master = batch_from_master.sequence_number;
 
+        debug!(
+            % seq_nr_from_master,
+            % seq_nr_of_current_blob_for_this_executor,
+            "Entering process_close_current_batch_replica"
+        );
+
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -849,6 +867,12 @@ where
         )?;
 
         inner.close_current_batch().await;
+
+        debug!(
+            % seq_nr_from_master,
+            % seq_nr_of_current_blob_for_this_executor,
+            "Exiting process_close_current_batch_replica"
+        );
 
         Ok(())
     }
