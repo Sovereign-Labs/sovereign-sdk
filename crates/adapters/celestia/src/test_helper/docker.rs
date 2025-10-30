@@ -79,6 +79,7 @@ pub struct CelestiaDevNode {
 
 impl CelestiaDevNode {
     pub async fn start() -> anyhow::Result<Self> {
+        let _ = rustls::crypto::ring::default_provider().install_default();
         let start = std::time::Instant::now();
         let suffix = Uuid::new_v4().to_string();
 

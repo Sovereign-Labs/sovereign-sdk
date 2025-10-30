@@ -56,6 +56,7 @@ sov-rollup-interface = { workspace = true }
 [dev-dependencies]
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
+rustls = { workspace = true, features = ["ring"] }
 postcard = { version = "1", features = ["use-std"] }
 reltester = { workspace = true }
 test-strategy = { workspace = true }

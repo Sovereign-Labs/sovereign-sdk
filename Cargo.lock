@@ -11496,6 +11496,7 @@ dependencies = [
  "reltester",
  "risc0-zkvm",
  "risc0-zkvm-platform",
+ "rustls 0.23.31",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -11632,6 +11633,7 @@ dependencies = [
  "reqwest 0.12.23",
  "reth-primitives",
  "risc0",
+ "rustls 0.23.31",
  "schemars 0.8.22",
  "secp256k1 0.30.0",
  "serde",
@@ -11662,12 +11664,14 @@ dependencies = [
  "sov-rpc-eth-types",
  "sov-sequencer",
  "sov-sequencer-registry",
+ "sov-sp1-adapter",
  "sov-state",
  "sov-stf-runner",
  "sov-synthetic-load",
  "sov-test-utils",
  "sov-universal-wallet",
  "sov-zkvm-utils",
+ "sp1",
  "tempfile",
  "tokio",
  "tracing",
@@ -13068,6 +13072,16 @@ dependencies = [
  "sov-modules-api",
  "sov-universal-wallet",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "sp1"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "lazy_static",
+ "sov-zkvm-utils",
+ "sp1-build",
 ]
 
 [[package]]
