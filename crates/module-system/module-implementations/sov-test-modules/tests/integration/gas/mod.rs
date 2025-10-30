@@ -1,6 +1,6 @@
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Amount, Error, Gas, GasSpec, Spec, TxEffect};
+use sov_modules_api::{Amount, Gas, GasSpec, Spec, TxEffect};
 use sov_test_modules::gas::{CallMessage, GasTester};
 use sov_test_utils::{
     AsUser, AtomicAmount, TransactionTestAssert, TransactionTestCase, TEST_DEFAULT_USER_BALANCE,
