@@ -61,7 +61,6 @@ impl NamespaceDataMetrics {
 pub(crate) struct BlobSubmitMeasurement {
     pub namespace: RollupNamespace,
     pub bytes: usize,
-    pub landed_da_height: u64,
     pub lock_acquisition_time: std::time::Duration,
     pub submit_time: std::time::Duration,
     pub total_time: std::time::Duration,
@@ -79,10 +78,9 @@ impl Metric for BlobSubmitMeasurement {
         let lock_acquisition_us = self.lock_acquisition_time.as_micros();
         let submit_time_us = self.submit_time.as_micros();
         let total_time_us = self.total_time.as_micros();
-        let da_height = self.landed_da_height;
         write!(
             buffer,
-            "{name} namespace={namespace},bytes={bytes},lock_acquisition_us={lock_acquisition_us},submit_time_us={submit_time_us},total_time_us={total_time_us},da_height={da_height}"
+            "{name},namespace={namespace} bytes={bytes},lock_acquisition_us={lock_acquisition_us},submit_time_us={submit_time_us},total_time_us={total_time_us}"
         )
     }
 }

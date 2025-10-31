@@ -78,6 +78,7 @@ pub fn default_rust_log_value() -> String {
         "debug", // Default logging level.
         // Info-only:
         "sov_paymaster=info", // We rarely need to debug why exactly transactions aren't covered
+        "sov_celestia=trace",
         "h2=info",
         "tower=info",
         "tower_http=info",

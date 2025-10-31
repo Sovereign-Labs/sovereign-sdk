@@ -149,19 +149,19 @@ setup_private_validator() {
   # Adjusting for faster block times. Default values are in comments above
   # Numbers are derived by trial and error.
   # timeout_commit = "11s"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '500ms' consensus.timeout_commit
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '2000ms' consensus.timeout_commit
   # timeout_propose = "10s"
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '4000ms' consensus.timeout_propose
   # timeout_propose_delta = "500ms"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_propose_delta
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '200ms' consensus.timeout_propose_delta
   # timeout_prevote = "1s"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_prevote
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '400ms' consensus.timeout_prevote
   # timeout_prevote_delta = "500ms"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_prevote_delta
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '400ms' consensus.timeout_prevote_delta
   # timeout_precommit = "1s"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '20ms' consensus.timeout_precommit
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '400ms' consensus.timeout_precommit
   # timeout_precommit_delta = "500ms"
-  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_precommit_delta
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '200ms' consensus.timeout_precommit_delta
 
   echo "Final Private Validator Config:"
   cat "$CONFIG_DIR/config/config.toml"

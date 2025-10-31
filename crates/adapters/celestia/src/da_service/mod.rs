@@ -132,36 +132,26 @@ impl CelestiaService {
 
         let start_submit = std::time::Instant::now();
         let blobs = &[blob];
+        let method_name = format!("submit_{ns}_blob");
         let tx_response = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
             || async {
                 let tx_config = self.get_tx_config();
                 let start = std::time::Instant::now();
-                let result = match tokio::time::timeout(
+                let result = tokio::time::timeout(
                     self.request_timeout,
                     submit_client.state().submit_pay_for_blob(blobs, tx_config),
                 )
-                .await
-                {
-                    Ok(Ok(response)) => Ok(response),
-                    Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
-                    Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!(
-                        "Timeout waiting for state.SubmitPayForBlob"
-                    ))),
-                };
+                .await;
+                let result = flatten_timeout(result);
                 let is_success = result.is_ok();
-                let measurement = SubmitPayForBlob {
-                    namespace: ns,
-                    response_time: start.elapsed(),
-                    is_success,
-                };
+                let measurement = SubmitPayForBlob::new(ns, start.elapsed(), is_success);
                 sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
                 result
             },
-            "send_transaction",
+            &method_name,
         )
-        .await
-        .map_err(MaybeRetryable::Transient)?;
+        .await?;
         drop(submit_client);
 
         let submit_time = start_submit.elapsed();
@@ -169,7 +159,6 @@ impl CelestiaService {
         let measurement = BlobSubmitMeasurement {
             namespace: ns,
             bytes,
-            landed_da_height: tx_response.height.value(),
             lock_acquisition_time: lock_acquisition,
             submit_time,
             total_time,
@@ -249,11 +238,7 @@ impl CelestiaService {
             tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
         let is_success = matches!(result, Ok(Ok(_)));
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetBlockHeaderMeasurement {
-                height,
-                response_time: start.elapsed(),
-                is_success,
-            });
+            tracker.submit(GetBlockHeaderMeasurement::new(start.elapsed(), is_success));
         });
         let extended_header = flatten_timeout(result)?;
         Ok(extended_header.into())
@@ -274,12 +259,7 @@ impl CelestiaService {
         .await;
         let is_success = matches!(result, Ok(Ok(_)));
         let response_time = start.elapsed();
-        let measurement = GetNamespaceDataMeasurement {
-            height,
-            namespace: ns,
-            response_time,
-            is_success,
-        };
+        let measurement = GetNamespaceDataMeasurement::new(ns, response_time, is_success);
         sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
         flatten_timeout(result)
     }
@@ -355,10 +335,7 @@ impl CelestiaService {
         .await;
         let is_success = matches!(result, Ok(Ok(_)));
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetChainHeadMeasurement {
-                response_time: start.elapsed(),
-                is_success,
-            });
+            tracker.submit(GetChainHeadMeasurement::new(start.elapsed(), is_success));
         });
         let header = flatten_timeout(result)?;
 
