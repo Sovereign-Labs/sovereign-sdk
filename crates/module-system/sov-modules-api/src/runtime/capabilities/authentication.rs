@@ -64,7 +64,9 @@ pub trait TransactionAuthenticator<S: Spec> {
     /// Decode a transaction into a message.
     /// This method doesn’t charge gas for deserialization, so it’s meant for off-chain code only (hence to the `native` feature).
     #[cfg(feature = "native")]
-    fn decode_serialized_tx(tx: &FullyBakedTx) -> Result<Self::Decodable, FatalError>;
+    fn decode_serialized_tx(
+        tx: &FullyBakedTx,
+    ) -> Result<(Self::Decodable, AuthorizationData<S>), FatalError>;
 
     /// Authenticates raw transaction that is submitted from unregistered sequencers for the
     /// purpose of forced registration (circumventing censorship by currently registered sequencers).
@@ -120,7 +122,9 @@ where
     type Input = AuthenticatorInput;
 
     #[cfg(feature = "native")]
-    fn decode_serialized_tx(tx: &FullyBakedTx) -> Result<Self::Decodable, FatalError> {
+    fn decode_serialized_tx(
+        tx: &FullyBakedTx,
+    ) -> Result<(Self::Decodable, AuthorizationData<S>), FatalError> {
         let AuthenticatorInput::Standard(tx) = borsh::from_slice(&tx.data)
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
@@ -455,7 +459,7 @@ pub fn authenticate_unregistered<
 #[cfg(feature = "native")]
 pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx: &[u8],
-) -> Result<D::Decodable, FatalError> {
+) -> Result<(D::Decodable, AuthorizationData<S>), FatalError> {
     decode_sov_tx_with_cryptospec::<S, D, <S as Spec>::CryptoSpec>(raw_tx)
 }
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
@@ -463,12 +467,23 @@ pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
 #[cfg(feature = "native")]
 pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
-) -> Result<D::Decodable, FatalError> {
+) -> Result<(D::Decodable, AuthorizationData<S>), FatalError> {
     let tx =
         <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
-    Ok(tx.call())
+    let mut unmeter = crate::UnlimitedGasMeter::<S>::default();
+    let authorization_data = match &tx {
+        Transaction::V0(v0) => {
+            extract_authorization_data::<S, D, C>(v0, calculate_hash::<S>(raw_tx), &mut unmeter)
+        }
+        Transaction::V1(v1) => {
+            extract_authorization_data_v1::<S, D, C>(v1, calculate_hash::<S>(raw_tx), &mut unmeter)
+        }
+    }
+    .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+    Ok((tx.call(), authorization_data))
 }
 
 /// Calculates the hash of `data` and charges gas.

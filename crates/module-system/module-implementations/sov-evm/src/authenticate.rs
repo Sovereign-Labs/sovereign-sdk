@@ -221,19 +221,28 @@ where
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
-    ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
+    ) -> Result<(Self::Decodable, AuthorizationData<S>), sov_modules_api::capabilities::FatalError>
+    {
         let auth_variant: EvmAuthenticatorInput = borsh::from_slice(&tx.data).map_err(|e| {
             sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
         })?;
 
         match auth_variant {
             EvmAuthenticatorInput::Evm(raw_tx) => {
-                let (call, _tx) = decode_evm_tx(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }))
+                let (call, tx) = decode_evm_tx(&raw_tx.data)?;
+                let hash = TxHash::new(**tx.hash());
+                let signer = recover_evm_signer(&tx, hash).map_err(|e| {
+                    sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
+                })?;
+                let auth_data = extract_evm_authorization_data::<S>(signer, hash, tx.nonce());
+                Ok((
+                    EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }),
+                    auth_data,
+                ))
             }
             EvmAuthenticatorInput::Standard(raw_tx) => {
-                let call = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Standard(call))
+                let (call, auth) = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
+                Ok((EvmAuthenticatorInput::Standard(call), auth))
             }
         }
     }

@@ -858,7 +858,7 @@ where
         // Check if this transaction has a configured delay
         let runtime = Rt::default();
         let call = match Rt::Auth::decode_serialized_tx(&baked_tx) {
-            Ok(call) => call,
+            Ok((call, _)) => call,
             Err(_) => {
                 return Err(ErrorObject {
                     status: StatusCode::BAD_REQUEST,

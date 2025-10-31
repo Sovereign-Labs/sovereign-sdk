@@ -50,7 +50,13 @@ where
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
-    ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
+    ) -> Result<
+        (
+            Self::Decodable,
+            sov_modules_api::capabilities::AuthorizationData<S>,
+        ),
+        sov_modules_api::capabilities::FatalError,
+    > {
         use crate::authentication::decode_solana_json_tx;
 
         let auth_variant: SolanaOffchainAuthenticatorInput =
@@ -60,12 +66,10 @@ where
 
         match auth_variant {
             SolanaOffchainAuthenticatorInput::Standard(raw_tx) => {
-                let call = sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)
             }
             SolanaOffchainAuthenticatorInput::SolanaOffchain(raw_tx) => {
-                let call = decode_solana_json_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                decode_solana_json_tx::<S, Rt>(&raw_tx.data)
             }
         }
     }
