@@ -11859,6 +11859,7 @@ dependencies = [
  "schemars 0.8.22",
  "secp256k1 0.30.0",
  "serde",
+ "serde_json",
  "serde_with",
  "sov-address",
  "sov-bank",
