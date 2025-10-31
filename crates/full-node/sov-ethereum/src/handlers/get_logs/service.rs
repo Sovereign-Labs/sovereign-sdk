@@ -26,6 +26,9 @@ use std::ops::Range;
 use std::ops::RangeInclusive;
 use thiserror::Error;
 
+/// Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
+const RESPONSE_SIZE_LIMIT: usize = (1024 * 1024) - (1024 * 30);
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Receipt for index {0} not found. The state may have already been pruned.")]
@@ -72,6 +75,7 @@ pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     max_logs: Immutable<usize>,
     evm: Evm<S>,
     logs: Vec<Log>,
+    logs_serialized_size: usize,
     state: ApiStateAccessor<S>,
     _phantom: PhantomData<(S, Seq)>,
 }
@@ -96,6 +100,7 @@ where
             state,
             evm: Evm::<S>::default(),
             logs: vec![],
+            logs_serialized_size: 0,
             _phantom: PhantomData,
         }
     }
@@ -249,7 +254,9 @@ where
 
         // As logs iter is pre-enumerated - we keep correct indices
         for (idx, log) in logs_iter.skip(skipped_logs as usize) {
-            if self.logs.len() >= *self.max_logs {
+            
+            if self.logs.len() >= *self.max_logs 
+            {
                 return Ok(Some(Cursor {
                     block_height: header.number(),
                     tx_index_absolute,
@@ -269,6 +276,15 @@ where
                 log_index: Some(receipt.log_index_start + idx as u64),
                 removed: false,
             };
+            let log_size = serialized_size(&rpc_log);
+            if self.logs_serialized_size + log_size >= RESPONSE_SIZE_LIMIT {
+                return Ok(Some(Cursor {
+                    block_height: header.number(),
+                    tx_index_absolute,
+                    log_index_in_tx: idx as u32,
+                }));
+            }
+            self.logs_serialized_size += log_size;
             self.logs.push(rpc_log);
         }
         Ok(None)
@@ -307,4 +323,19 @@ where
         let block_number = block_nr_or_tag.unwrap_or_default();
         Ok(self.evm.resolve_block_number(block_number, &mut self.state))
     }
+}
+
+fn serialized_size(log: &Log) -> usize {
+        b"\"{address\":".len() + 44 // 20 byte address, hex-encoded + open/close quotes and 0x
+        + b",\"data\":".len() + 4 + log.inner.data.data.len() * 2 // 32 byte data, hex-encoded + open/close quotes and 0x + quotation marks
+        + b",\"topics\":[]".len() + log.inner.topics().len() * 68 // 32 byte topic, hex-encoded + open/close quotes and 0x
+        + b",\"blockHash\":".len() + 68 // Block hash (0x-prefixed + 32 data bytes) + quotation marks
+        + b",\"transactionHash\":".len() + 68 // Transaction hash (0x-prefixed + 32 data bytes) + quotation mark
+        + b",\"blockNumber\":".len() + 14 // Assume a billion blocks (plus open/close quotes and 0x prefix)
+        + b",\"blockTimestamp\":".len() + 16 // Conservatively assume a long time (current unix timestamp is only 8 hex digits, this assumes 12)
+        + b",\"transactionIndex\":".len() + 12 // Conservatively assume millions of txs per block (plus open/close quotes and 0x prefix)    
+        + b",\"logIndex\":".len() + 14 // Conservatively assume 256 logs per tx
+        + b",\"removed\":false}".len() // false is longer than true
+        // See example serialized log below: 
+        // r#"{"address":"0x0000000000000000000000000000000000000069","topics":["0x0000000000000000000000000000000000000000000000000000000000000069"],"data":"0x69","blockHash":"0x0000000000000000000000000000000000000000000000000000000000000069","blockNumber":"0x69","blockTimestamp":"0x69","transactionHash":"0x0000000000000000000000000000000000000000000000000000000000000069","transactionIndex":"0x69","logIndex":"0x69","removed":false}"#
 }
