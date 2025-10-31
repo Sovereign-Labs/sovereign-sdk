@@ -328,7 +328,6 @@ where
         Ok((seq, handles))
     }
 
-
     /// Returns a range to allow hysteresis during catchup. The first (lower) value will be the
     /// minimum to be considered successfully recovered, the second (upper) value will be the
     /// target.

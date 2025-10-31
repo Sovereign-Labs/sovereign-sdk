@@ -20,9 +20,10 @@ use tracing::{debug, info, trace, warn};
 
 use crate::max_size_checker::{BlobsAccumulatorWithSizeLimit, PushOrIgnore};
 use crate::{
-    config_deferred_slots_count, config_unregistered_blobs_per_slot, BlobStorage, BlobType, Escrow,
-    PreferredBatchData, PreferredBlobData, PreferredBlobDataWithId, PreferredProofData,
-    EncryptedPreferredBatchData, SequenceNumber, SequencerNumberTracker, SequencerType, ValidatedBlob,
+    config_deferred_slots_count, config_unregistered_blobs_per_slot, BlobStorage, BlobType,
+    EncryptedPreferredBatchData, Escrow, PreferredBatchData, PreferredBlobData,
+    PreferredBlobDataWithId, PreferredProofData, SequenceNumber, SequencerNumberTracker,
+    SequencerType, ValidatedBlob,
 };
 /// A loose upper bound on the size of an emergency registration blob, in bytes. Blobs larger than this are statically known to be invalid
 /// so we don't bother trying to deserialize them.
@@ -1042,7 +1043,6 @@ impl<S: Spec> BlobStorage<S> {
         slash_on_failure: bool,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Option<B> {
-        
         if let Some((registered_sender, gas_price_for_new_block)) = charge_for_deserialization {
             let funds_for_deserialization =
                 <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
@@ -1060,7 +1060,7 @@ impl<S: Spec> BlobStorage<S> {
             ).expect("Failed to remove funds for deserialization even though the sender has enough balance. This should never happen.");
         }
         let data_to_deserialize = data_for_deserialization(blob);
-        
+
         match B::try_from_slice(data_to_deserialize) {
             Ok(batch) => Some(batch),
             // if the blob is malformed, slash the sequencer
@@ -1104,30 +1104,49 @@ impl<S: Spec> BlobStorage<S> {
     ) -> Option<PreferredBatchData> {
         if let Some(encryption_layer) = encryption_layer {
             // Encryption layer exists - try encrypted deserialization path
-            if let Some(encrypted_batch) = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
-                blob, charge_for_deserialization.map(|(seq, price)| (seq, *price)), true, state,
-            ) {
+            if let Some(encrypted_batch) = self
+                .deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
+                    blob,
+                    charge_for_deserialization.map(|(seq, price)| (seq, *price)),
+                    true,
+                    state,
+                )
+            {
                 // Use the slot number from the encrypted batch for decryption to ensure
                 // we use the same key that was used for encryption
                 let encryption_slot = encrypted_batch.encryption_slot;
-                tracing::info!("🔓 STF: Setting encryption slot to {} for decryption (batch sequence #{})", 
-                               encryption_slot, encrypted_batch.sequence_number);
-                
+                tracing::info!(
+                    "🔓 STF: Setting encryption slot to {} for decryption (batch sequence #{})",
+                    encryption_slot,
+                    encrypted_batch.sequence_number
+                );
+
                 // Get the key that was used for encryption at this specific slot
                 if let Some(key_for_slot) = encryption_layer.get_key_for_slot(encryption_slot) {
-                    tracing::info!("🔓 STF: Using key '{}' for slot {} decryption", key_for_slot.id, encryption_slot);
-                    
+                    tracing::info!(
+                        "🔓 STF: Using key '{}' for slot {} decryption",
+                        key_for_slot.id,
+                        encryption_slot
+                    );
+
                     // Use the specific key to decrypt
-                    match encryption_layer.decrypt_with_key(&key_for_slot.material, &encrypted_batch.encrypted_txs_data) {
+                    match encryption_layer.decrypt_with_key(
+                        &key_for_slot.material,
+                        &encrypted_batch.encrypted_txs_data,
+                    ) {
                         Ok(decrypted_txs_bytes) => {
-                            match borsh::from_slice::<std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>>(&decrypted_txs_bytes) {
+                            match borsh::from_slice::<
+                                std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>,
+                            >(&decrypted_txs_bytes)
+                            {
                                 Ok(txs) => {
                                     tracing::info!("✅ STF: Successfully decrypted batch #{} with {} transactions using key '{}' for slot {}", 
                                                    encrypted_batch.sequence_number, txs.len(), key_for_slot.id, encryption_slot);
                                     return Some(PreferredBatchData {
                                         sequence_number: encrypted_batch.sequence_number,
                                         data: txs,
-                                        visible_slots_to_advance: encrypted_batch.visible_slots_to_advance,
+                                        visible_slots_to_advance: encrypted_batch
+                                            .visible_slots_to_advance,
                                     });
                                 }
                                 Err(e) => {
@@ -1136,19 +1155,30 @@ impl<S: Spec> BlobStorage<S> {
                             }
                         }
                         Err(e) => {
-                            tracing::error!("❌ STF: Failed to decrypt batch #{} with key '{}' for slot {}: {}", 
-                                           encrypted_batch.sequence_number, key_for_slot.id, encryption_slot, e);
+                            tracing::error!(
+                                "❌ STF: Failed to decrypt batch #{} with key '{}' for slot {}: {}",
+                                encrypted_batch.sequence_number,
+                                key_for_slot.id,
+                                encryption_slot,
+                                e
+                            );
                         }
                     }
                 } else {
-                    tracing::error!("❌ STF: No key available for encryption slot {} (batch sequence #{})", 
-                                   encryption_slot, encrypted_batch.sequence_number);
+                    tracing::error!(
+                        "❌ STF: No key available for encryption slot {} (batch sequence #{})",
+                        encryption_slot,
+                        encrypted_batch.sequence_number
+                    );
                 }
             }
         } else {
             // No encryption layer - try unencrypted deserialization path
             if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
-                blob, charge_for_deserialization.map(|(seq, price)| (seq, *price)), false, state,
+                blob,
+                charge_for_deserialization.map(|(seq, price)| (seq, *price)),
+                false,
+                state,
             ) {
                 return Some(batch);
             }
@@ -1156,7 +1186,6 @@ impl<S: Spec> BlobStorage<S> {
 
         None
     }
-
 }
 
 // The public API of the BlobStorage module.
@@ -1326,7 +1355,6 @@ fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
 fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
     blob.verified_data()
 }
-
 
 #[cfg(test)]
 mod tests {

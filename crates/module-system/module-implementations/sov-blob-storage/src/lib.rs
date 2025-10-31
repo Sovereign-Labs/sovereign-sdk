@@ -7,7 +7,6 @@ use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::sync::Arc;
 
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -23,7 +22,6 @@ use sov_modules_api::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::codec::BcsCodec;
 
-
 /// For how many slots deferred blobs are stored before being executed
 pub fn config_deferred_slots_count() -> u64 {
     config_value!("DEFERRED_SLOTS_COUNT")
@@ -35,7 +33,6 @@ pub fn config_deferred_slots_count() -> u64 {
 pub fn config_unregistered_blobs_per_slot() -> u64 {
     config_value!("UNREGISTERED_BLOBS_PER_SLOT")
 }
-
 
 /// The type of sequencer that published a blob.
 #[derive(
@@ -420,7 +417,10 @@ impl PreferredBlobData {
 
     /// Returns true if the blob is a batch.
     pub fn is_batch(&self) -> bool {
-        matches!(self, PreferredBlobData::Batch(_) | PreferredBlobData::EncryptedBatch(_))
+        matches!(
+            self,
+            PreferredBlobData::Batch(_) | PreferredBlobData::EncryptedBatch(_)
+        )
     }
 
     /// Returns the number of visible slots to advance after processing the blob if it's a batch.

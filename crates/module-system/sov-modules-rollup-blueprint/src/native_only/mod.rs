@@ -238,7 +238,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 if shared_encryption_layer.is_some() {
                     tracing::info!("🔗 Creating PreferredSequencer with shared encryption layer");
                 }
-                let (sequencer, background_handles) = 
+                let (sequencer, background_handles) =
                     PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
                         da_service.clone(),
                         state_update_receiver.clone(),
@@ -345,22 +345,30 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             is_genesis = prev_root.is_none(),
             "Recovering the state root"
         );
-        
+
         // Create shared encryption layer if any component needs it
-        let shared_encryption_layer: Option<sov_encryption::EncryptionLayer> = if rollup_config.stf.encryption.is_some() || rollup_config.sequencer.batch_encryption.is_some() {
-            // Prefer STF encryption config, fall back to sequencer config
-            let encryption_config = rollup_config.stf.encryption.clone()
-                .or_else(|| rollup_config.sequencer.batch_encryption.clone());
-            if let Some(config) = encryption_config {
-                tracing::info!("🔐 Creating shared encryption layer for STF and sequencer synchronization");
-                Some(sov_encryption::EncryptionLayer::new(config).await?)
+        let shared_encryption_layer: Option<sov_encryption::EncryptionLayer> =
+            if rollup_config.stf.encryption.is_some()
+                || rollup_config.sequencer.batch_encryption.is_some()
+            {
+                // Prefer STF encryption config, fall back to sequencer config
+                let encryption_config = rollup_config
+                    .stf
+                    .encryption
+                    .clone()
+                    .or_else(|| rollup_config.sequencer.batch_encryption.clone());
+                if let Some(config) = encryption_config {
+                    tracing::info!(
+                        "🔐 Creating shared encryption layer for STF and sequencer synchronization"
+                    );
+                    Some(sov_encryption::EncryptionLayer::new(config).await?)
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
-        
+            };
+
         // Create STF with shared encryption layer
         let native_stf = if let Some(ref encryption_layer) = shared_encryption_layer {
             StfBlueprint::with_encryption_layer(Self::Runtime::default(), encryption_layer.clone())

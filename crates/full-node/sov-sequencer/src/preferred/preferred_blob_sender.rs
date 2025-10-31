@@ -39,7 +39,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         shared_encryption_layer: Option<EncryptionLayer>,
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        
+
         if is_replica {
             Ok((
                 Self {
@@ -56,7 +56,8 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             //  2. DB corruption.
             //  3. Node crash at an inconvenient time.
             // Let's restore all missing blob data to make sure they land on the DA.
-            let blobs_to_send = create_blobs_to_send(all_completed_blobs, shared_encryption_layer.as_ref())?;
+            let blobs_to_send =
+                create_blobs_to_send(all_completed_blobs, shared_encryption_layer.as_ref())?;
             let (inner, blob_sender_handle) = BlobSender::new(
                 da.clone(),
                 ledger_db,
@@ -152,7 +153,6 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 
         inner.hooks().add_txs(blob_id, tx_hashes).await;
     }
-
 }
 
 pub fn create_blobs_to_send(
@@ -198,40 +198,57 @@ fn proof_bytes(proof_data: &[u8], sequence_number: u64) -> anyhow::Result<Arc<[u
 
 fn batch_bytes(
     batch: PreferredSequencerReadBatch,
-    encryption_layer: Option<&EncryptionLayer>
+    encryption_layer: Option<&EncryptionLayer>,
 ) -> anyhow::Result<Vec<u8>> {
     if let Some(encryptor) = encryption_layer {
         // Use the visible slot number from the batch for encryption context
         let slot_number = batch.visible_slot_number_after_increase.as_true().get();
-        tracing::info!("📦 SEQUENCER: Encrypting batch #{} with {} transactions at slot {}", 
-                       batch.sequence_number, batch.txs.len(), slot_number);
-        
+        tracing::info!(
+            "📦 SEQUENCER: Encrypting batch #{} with {} transactions at slot {}",
+            batch.sequence_number,
+            batch.txs.len(),
+            slot_number
+        );
+
         // Get the key specifically for this slot instead of using shared current key
         // This prevents race conditions where STF activates keys in shared cache
-        let slot_key = encryptor.get_key_for_slot(slot_number)
-            .ok_or_else(|| anyhow::anyhow!("No encryption key available for slot {}", slot_number))?;
-        
-        tracing::info!("🔐 SEQUENCER: Using key '{}' for slot {} encryption", slot_key.id, slot_number);
-        
+        let slot_key = encryptor.get_key_for_slot(slot_number).ok_or_else(|| {
+            anyhow::anyhow!("No encryption key available for slot {}", slot_number)
+        })?;
+
+        tracing::info!(
+            "🔐 SEQUENCER: Using key '{}' for slot {} encryption",
+            slot_key.id,
+            slot_number
+        );
+
         // Serialize the entire transaction vector
         let txs_serialized = borsh::to_vec(&*batch.txs)?;
-        
+
         // Encrypt using the slot-specific key directly
-        tracing::info!("🔐 SEQUENCER: Encrypting {} bytes at slot {} with key '{}'", 
-                       txs_serialized.len(), slot_number, slot_key.id);
-        
+        tracing::info!(
+            "🔐 SEQUENCER: Encrypting {} bytes at slot {} with key '{}'",
+            txs_serialized.len(),
+            slot_number,
+            slot_key.id
+        );
+
         let encrypted_txs_data = encryptor.encrypt_with_key(&slot_key.material, &txs_serialized)?;
-        
+
         // Create batch with serialized encrypted blob + metadata including tx hashes
-        tracing::info!("📦 SEQUENCER: Creating encrypted batch #{} with encryption_slot={}", 
-                       batch.sequence_number, slot_number);
+        tracing::info!(
+            "📦 SEQUENCER: Creating encrypted batch #{} with encryption_slot={}",
+            batch.sequence_number,
+            slot_number
+        );
         borsh::to_vec(&EncryptedPreferredBatchData {
             sequence_number: batch.sequence_number,
             visible_slots_to_advance: batch.visible_slots_to_advance,
             encrypted_txs_data,
             tx_hashes: batch.tx_hashes,
             encryption_slot: slot_number,
-        }).map_err(Into::into)
+        })
+        .map_err(Into::into)
     } else {
         // Original unencrypted path if encryption is not enabled
         tracing::debug!("📦 Creating batch with unencrypted txs");
@@ -239,6 +256,7 @@ fn batch_bytes(
             sequence_number: batch.sequence_number,
             visible_slots_to_advance: batch.visible_slots_to_advance,
             data: batch.txs,
-        }).map_err(Into::into)
+        })
+        .map_err(Into::into)
     }
 }
