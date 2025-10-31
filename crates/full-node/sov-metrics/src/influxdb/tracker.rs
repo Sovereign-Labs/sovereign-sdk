@@ -93,6 +93,7 @@ impl MetricsTracker {
     pub fn track_runner_metrics(&self, point: RunnerMetrics) {
         let timestamp = timestamp();
         let RunnerMetrics {
+            da_height: da_height_processed,
             sync_distance,
             get_block_time,
             batches_processed,
@@ -110,6 +111,7 @@ impl MetricsTracker {
         self.submit_with_time(
             timestamp,
             RunnerDaMetrics {
+                da_height: da_height_processed,
                 sync_distance,
                 get_block_time,
             },
@@ -117,6 +119,7 @@ impl MetricsTracker {
         self.submit_with_time(
             timestamp,
             RunnerCountMetrics {
+                da_height: da_height_processed,
                 batches: batches_processed,
                 batch_bytes: batch_bytes_processed,
                 transactions: transactions_processed,
@@ -127,6 +130,7 @@ impl MetricsTracker {
         self.submit_with_time(
             timestamp,
             RunnerTimeMetrics {
+                da_height: da_height_processed,
                 process_slot_time,
                 apply_slot_time,
                 stf_transition_time,
@@ -148,6 +152,8 @@ pub fn timestamp() -> u128 {
 
 /// Metrics related to the main loop of STF runner.
 pub struct RunnerMetrics {
+    /// DA height processed in this iteration.
+    pub da_height: u64,
     /// Distance between processed DA height and DA head.
     pub sync_distance: i64,
     /// Time it took to fetch given block from DA layer.
@@ -181,12 +187,14 @@ pub struct RunnerMetrics {
 
 #[derive(Debug)]
 pub(crate) struct RunnerDaMetrics {
+    pub da_height: u64,
     pub sync_distance: i64,
     pub get_block_time: std::time::Duration,
 }
 
 #[derive(Debug)]
 pub(crate) struct RunnerCountMetrics {
+    pub da_height: u64,
     pub batches: u64,
     pub batch_bytes: u64,
     pub transactions: u64,
@@ -196,6 +204,7 @@ pub(crate) struct RunnerCountMetrics {
 
 #[derive(Debug)]
 pub(crate) struct RunnerTimeMetrics {
+    pub da_height: u64,
     pub process_slot_time: std::time::Duration,
     pub apply_slot_time: std::time::Duration,
     pub stf_transition_time: std::time::Duration,
@@ -207,6 +216,8 @@ pub(crate) struct RunnerTimeMetrics {
 /// Detailed metrics on how much time it took to process changes after a slot has been applied.
 #[derive(Debug)]
 pub struct RunnerProcessStfChangesMetrics {
+    /// DA height at which changes were processed.
+    pub da_height: u64,
     /// Number of aggregated proofs were to process.
     pub aggregated_proofs_count: usize,
     /// A number of transitions have to be finalized.
@@ -323,8 +334,9 @@ impl Metric for RunnerDaMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} sync_distance={},get_block_time_ms={}",
+            "{} da_height={},sync_distance={},get_block_time_ms={}",
             self.measurement_name(),
+            self.da_height,
             self.sync_distance,
             self.get_block_time.as_millis(),
         )
@@ -339,8 +351,9 @@ impl Metric for RunnerCountMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} batches_c={},transactions_c={},proofs_c={},batch_bytes={},proof_bytes={}",
+            "{} da_height={},batches_c={},transactions_c={},proofs_c={},batch_bytes={},proof_bytes={}",
             self.measurement_name(),
+            self.da_height,
             self.batches,
             self.transactions,
             self.proofs_processed,
@@ -358,8 +371,9 @@ impl Metric for RunnerTimeMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} process_slot={},apply_slot={},stf_transition={},extract_blobs={},blob_extraction_proof={},processing_changes_time={}",
+            "{} da_height={},process_slot={},apply_slot={},stf_transition={},extract_blobs={},blob_extraction_proof={},processing_changes_time={}",
             self.measurement_name(),
+            self.da_height,
             self.process_slot_time.as_micros(),
             self.apply_slot_time.as_micros(),
             self.stf_transition_time.as_micros(),
@@ -378,9 +392,9 @@ impl Metric for RunnerProcessStfChangesMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
+            "{} da_height={},proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
             self.measurement_name(),
-            // Fields
+            self.da_height,
             self.aggregated_proofs_count,
             self.finalized_transitions_count,
             self.total_time.as_micros(),
