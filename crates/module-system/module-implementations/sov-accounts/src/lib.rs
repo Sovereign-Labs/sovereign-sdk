@@ -60,6 +60,8 @@ impl<S: Spec> Module for Accounts<S> {
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
@@ -74,7 +76,7 @@ impl<S: Spec> Module for Accounts<S> {
         msg: Self::CallMessage,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             call::CallMessage::InsertCredentialId(new_credential_id) => {
                 Ok(self.insert_credential_id(new_credential_id, context, state)?)

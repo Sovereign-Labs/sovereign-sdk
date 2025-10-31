@@ -39,6 +39,7 @@ impl<S: Spec> Module for TestVisibleHashModule<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,

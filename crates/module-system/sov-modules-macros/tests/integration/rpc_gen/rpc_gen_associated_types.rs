@@ -58,6 +58,7 @@ pub mod my_module {
         type Config = D;
         type CallMessage = D;
         type Event = ();
+        type Error = anyhow::Error;
 
         fn genesis(
             &mut self,

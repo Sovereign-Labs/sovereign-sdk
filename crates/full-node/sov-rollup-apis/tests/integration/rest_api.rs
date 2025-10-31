@@ -194,12 +194,15 @@ async fn test_simulation_fail() {
         .await
         .unwrap();
     let actual = response.json::<serde_json::Value>().await.unwrap();
-    // Test raw JSON to ensure it's acutally usable
     let expected = serde_json::json!({
         "outcome": "reverted",
-        // we lose the context because of how module errors are currently implemented
-        // the actual reason for the failure is the sender doesnt have enough balance
-        "reason": "Failed to transfer token_id=token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
+        "detail": {
+            "call": "transfer_token",
+            "error_code": "underflow",
+            "base": "0",
+            "subtrahend": "1000",
+            "message": format!("Insufficient balance for account {}", sender.address()),
+        },
     });
 
     assert_eq!(actual, expected);

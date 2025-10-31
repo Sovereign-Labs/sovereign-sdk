@@ -1,6 +1,5 @@
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
-use sov_modules_api::Error::ModuleError;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::{generate_zk_runtime, AsUser, TestSpec, TestUser, TransactionTestCase};
@@ -69,14 +68,12 @@ fn test_setting_value_not_admin() {
             match &result.tx_receipt {
                 sov_modules_api::TxEffect::Reverted(reason) => {
                     assert_eq!(
-                        &reason.reason,
-                        &ModuleError(
-                            SetValueError::<S>::WrongSender {
-                                sender: non_admin.address(),
-                                admin: admin.address()
-                            }
-                            .into()
-                        ),
+                        &reason.reason.to_string(),
+                        &SetValueError::<S>::WrongSender {
+                            sender: non_admin.address(),
+                            admin: admin.address()
+                        }
+                        .to_string(),
                         "Transaction reverted, but with unexpected reason"
                     );
                 }

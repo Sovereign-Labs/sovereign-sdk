@@ -121,13 +121,14 @@ impl<S: Spec> Module for TestRecipient<S> {
     type Config = ();
     type CallMessage = CallMessage;
     type Event = Event<S>;
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::Register { address, ism } => {
                 self.register(address, ism, state)?;

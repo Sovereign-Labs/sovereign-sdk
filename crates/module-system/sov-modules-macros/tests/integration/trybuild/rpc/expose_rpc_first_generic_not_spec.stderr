@@ -1,7 +1,7 @@
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:16
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:113:16
     |
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                ^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
 note: required by a bound in `sov_modules_api::Genesis::Spec`
@@ -11,25 +11,25 @@ note: required by a bound in `sov_modules_api::Genesis::Spec`
     |                ^^^^ required by this bound in `Genesis::Spec`
 help: consider further restricting type parameter `T` with trait `Spec`
     |
-112 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
+113 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
     |                            +++++++++++++++++++++++
 
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:19
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:19
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                   ^^^^^^^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
     = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider further restricting type parameter `T` with trait `Spec`
     |
-112 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
+113 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
     |                            +++++++++++++++++++++++
 
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:110:1
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:1
     |
-110 | #[expose_rpc]
+111 | #[expose_rpc]
     | ^^^^^^^^^^^^^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
 note: required by a bound in `ApiState`
@@ -40,13 +40,13 @@ note: required by a bound in `ApiState`
     = note: this error originates in the attribute macro `expose_rpc` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider further restricting type parameter `T` with trait `Spec`
     |
-112 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
+113 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
     |                            +++++++++++++++++++++++
 
 error[E0277]: `ActualSpec` doesn't implement `std::fmt::Debug`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:120:19
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:121:19
     |
-120 | impl TestSpec for ActualSpec {
+121 | impl TestSpec for ActualSpec {
     |                   ^^^^^^^^^^ `ActualSpec` cannot be formatted using `{:?}`
     |
     = help: the trait `std::fmt::Debug` is not implemented for `ActualSpec`
@@ -60,14 +60,14 @@ note: required by a bound in `TestSpec`
     |                             ^^^^^^^^^^^^^^^ required by this bound in `TestSpec`
 help: consider annotating `ActualSpec` with `#[derive(Debug)]`
     |
-118 + #[derive(Debug)]
-119 | struct ActualSpec;
+119 + #[derive(Debug)]
+120 | struct ActualSpec;
     |
 
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:16
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:113:16
     |
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                ^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
 note: required by a bound in `sov_modules_api::DispatchCall::Spec`
@@ -77,13 +77,13 @@ note: required by a bound in `sov_modules_api::DispatchCall::Spec`
     |                ^^^^ required by this bound in `DispatchCall::Spec`
 help: consider further restricting type parameter `T` with trait `Spec`
     |
-112 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
+113 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
     |                            +++++++++++++++++++++++
 
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
 note: required by a bound in `StateProvider`
@@ -94,15 +94,15 @@ note: required by a bound in `StateProvider`
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider further restricting type parameter `T` with trait `Spec`
     |
-112 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
+113 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
     |                            +++++++++++++++++++++++
 
 error[E0271]: type mismatch resolving `<QueryModule<S, <T as TestSpec>::Data> as ModuleInfo>::Spec == T`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:19
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:19
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                   ^^^^^^^ type mismatch resolving `<QueryModule<S, <T as TestSpec>::Data> as ModuleInfo>::Spec == T`
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                -            - found type parameter
     |                |
     |                expected type parameter
@@ -120,11 +120,11 @@ note: expected this to be `T`
     = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0271]: type mismatch resolving `<ChainState<S> as ModuleInfo>::Spec == T`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:19
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:19
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                   ^^^^^^^ expected type parameter `T`, found type parameter `S`
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                -            - found type parameter
     |                |
     |                expected type parameter
@@ -137,9 +137,9 @@ error[E0271]: type mismatch resolving `<ChainState<S> as ModuleInfo>::Spec == T`
     = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `impl ::sov_modules_api::GenesisState<<Self as ::sov_modules_api::Genesis>::Spec>: GenesisState<S>` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:19
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:19
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                   ^^^^^^^ the trait `GenesisState<S>` is not implemented for `impl ::sov_modules_api::GenesisState<<Self as ::sov_modules_api::Genesis>::Spec>`
     |
 note: required by a bound in `sov_modules_api::Genesis::genesis`
@@ -153,9 +153,9 @@ note: required by a bound in `sov_modules_api::Genesis::genesis`
     = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
     = note: required for `WorkingSet<T, I>` to implement `GasMeter`
@@ -171,15 +171,15 @@ note: required by a bound in `sov_modules_api::Module::call`
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider further restricting type parameter `T` with trait `Spec`
     |
-112 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
+113 | struct Runtime<T: TestSpec + sov_modules_api::Spec, S: Spec> {
     |                            +++++++++++++++++++++++
 
 error[E0271]: type mismatch resolving `<WorkingSet<T, I> as GasMeter>::Spec == S`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^ expected type parameter `S`, found type parameter `T`
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                -            - expected type parameter
     |                |
     |                found type parameter
@@ -200,14 +200,14 @@ note: required by a bound in `sov_modules_api::Module::call`
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0308]: mismatched types
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^
     |                            |
     |                            expected `&Context<S>`, found `&Context<T>`
     |                            arguments to this function are incorrect
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                -            - expected type parameter
     |                |
     |                found type parameter
@@ -224,11 +224,11 @@ note: method defined here
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0271]: type mismatch resolving `<QueryModule<S, <T as TestSpec>::Data> as ModuleInfo>::Spec == T`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^ type mismatch resolving `<QueryModule<S, <T as TestSpec>::Data> as ModuleInfo>::Spec == T`
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                -            - found type parameter
     |                |
     |                expected type parameter
@@ -246,11 +246,11 @@ note: expected this to be `T`
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0271]: type mismatch resolving `<ChainState<S> as ModuleInfo>::Spec == T`
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:28
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
-111 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^ expected type parameter `T`, found type parameter `S`
-112 | struct Runtime<T: TestSpec, S: Spec> {
+113 | struct Runtime<T: TestSpec, S: Spec> {
     |                -            - found type parameter
     |                |
     |                expected type parameter
@@ -263,9 +263,9 @@ error[E0271]: type mismatch resolving `<ChainState<S> as ModuleInfo>::Spec == T`
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0599]: the method `clone` exists for struct `ApiState<T>`, but its trait bounds were not satisfied
-   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:110:1
+   --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:111:1
     |
-110 | #[expose_rpc]
+111 | #[expose_rpc]
     | ^^^^^^^^^^^^^ method cannot be called on `ApiState<T>` due to unsatisfied trait bounds
     |
    ::: $WORKSPACE/crates/module-system/sov-modules-api/src/rest/mod.rs
@@ -279,5 +279,5 @@ error[E0599]: the method `clone` exists for struct `ApiState<T>`, but its trait 
     = note: this error originates in the attribute macro `expose_rpc` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider restricting the type parameter to satisfy the trait bound
     |
-110 | #[expose_rpc] where T: sov_modules_api::Spec
+111 | #[expose_rpc] where T: sov_modules_api::Spec
     |               ++++++++++++++++++++++++++++++

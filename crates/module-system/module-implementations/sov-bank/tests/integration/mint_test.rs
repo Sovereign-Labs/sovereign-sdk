@@ -1,6 +1,6 @@
 use sov_bank::{Bank, CallMessage, Coins, TokenId};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Amount, Error, SafeVec, TxEffect};
+use sov_modules_api::{Amount, SafeVec, TxEffect};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
 use crate::helpers::{setup, TestBankRuntimeEvent, TestData, RT};
@@ -80,20 +80,13 @@ fn mint_token_fails_if_user_unauthorized() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(message_1, format!("Failed to mint token_id={token_id}"));
-                assert_eq!(
-                    message_2,
-                    format!(
-                        "Sender {} is not an admin of token {}",
-                        unauthorized_minter.address(),
-                        token_name
-                    ),
+                let actual = contents.reason.to_string();
+                let expected = format!(
+                    "Token mint error: Caller {} is not an admin for token {}",
+                    unauthorized_minter.address(),
+                    token_name
                 );
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -135,20 +128,12 @@ fn try_create_token_and_mint_should_fail_if_not_authorized() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(message_1, format!("Failed to mint token_id={token_id}"));
-                assert_eq!(
-                    message_2,
-                    format!(
-                        "Sender {} is not an admin of token {}",
-                        user.address(),
-                        token_name
-                    ),
+                let actual = contents.reason.to_string();
+                let expected = format!(
+                    "Token mint error: Caller {} is not an admin for token TestToken(BankToken)",
+                    user.address()
                 );
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -175,16 +160,9 @@ fn mint_token_account_balance_overflow() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(message_1, format!("Failed to mint token_id={token_id}"));
-                assert_eq!(
-                    message_2,
-                    "Total Supply overflow in the mint method of bank module",
-                );
+                let actual = contents.reason.to_string();
+                let expected = "Token mint error: Overflow occurred: Total supply overflow when minting tokens, 300000 + 340282366920938463463374607431768211455";
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -220,16 +198,9 @@ fn mint_token_total_supply_overflow() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(message_1, format!("Failed to mint token_id={token_id}"));
-                assert_eq!(
-                    message_2,
-                    "Total Supply overflow in the mint method of bank module",
-                );
+                let actual = contents.reason.to_string();
+                let expected = "Token mint error: Overflow occurred: Total supply overflow when minting tokens, 300000 + 340282366920938463463374607431768111454";
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -258,13 +229,9 @@ fn test_mint_token_fails_if_token_doesnt_exist() {
         }),
         assert: Box::new(move |result, _state| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                assert_eq!(
-                    message_1,
-                    format!("Failed to get token_id={invalid_token_id}")
-                );
+                let actual = contents.reason.to_string();
+                let expected = format!("Token mint error: Token not found: {invalid_token_id}");
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have failed");
             }
@@ -301,15 +268,9 @@ fn test_mint_token_fails_if_token_is_frozen() {
             }),
             assert: Box::new(move |result, _state| {
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
-                    let mut chain = err.chain();
-                    let message_1 = chain.next().unwrap().to_string();
-                    let message_2 = chain.next().unwrap().to_string();
-                    assert_eq!(message_1, format!("Failed to mint token_id={token_id}"));
-                    assert_eq!(
-                        message_2,
-                        format!("Attempt to mint frozen token {token_name}")
-                    );
+                    let actual = contents.reason.to_string();
+                    let expected = format!("Token mint error: Token is frozen: {token_name}");
+                    assert_eq!(actual, expected);
                 } else {
                     panic!("The transaction should have failed");
                 }
