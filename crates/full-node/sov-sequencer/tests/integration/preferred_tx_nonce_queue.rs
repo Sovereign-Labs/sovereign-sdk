@@ -310,15 +310,20 @@ async fn test_zero_length_queue() {
 /// This triggers race conditions where timeout checks often happen while a previous transaction is
 /// mid-execution, or before the sequencer's API state has updated with the latest nonce.
 /// We stress test the queue to validate that its internal tracking is robust.
+///
+/// The timing here is somewhat tricky: we *must* submit tx 0 before the first timeout hits, but we
+/// also want to make sure that some transactions do it timeouts before executing. Queueing txs
+/// starts to take a non-zero amount of time especially in a full nextest parallelised run when the
+/// machine is loaded. We rely on the fact that executing TXs should always take longer than just
+/// queueing them (since we don't want for the API response) and so we use a generous queue timeout
+/// but a large number of TXs that will fill the queue. In observation, this seems to reliably test
+/// timeouts both locally and in CI, without observable flakiness (at the time of writing).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_repeated_timeouts_with_race_conditions() {
-    const RACE_TIMEOUT: u64 = 150;
-    const NUM_TXS: u64 = 290;
+    const SHORTENED_TIMEOUT: u64 = 1000;
+    const NUM_TXS: u64 = 200;
 
-    const MILIS_TO_SPAWN_ALL_TASKS: u64 = 30; // In testing it takes about 2-3ms on laptop, so 10x that
-                                              // should ensure no flakiness
-
-    let (test_rollup, admin) = create_test_rollup(300, RACE_TIMEOUT).await;
+    let (test_rollup, admin) = create_test_rollup(NUM_TXS + 10, SHORTENED_TIMEOUT).await;
     let client = test_rollup.api_client().clone();
     let key = admin.private_key;
 
@@ -335,11 +340,8 @@ async fn test_repeated_timeouts_with_race_conditions() {
         handles.push(handle);
     }
 
-    // Wait extra to get close to the timeout right from the start
-    tokio::time::sleep(Duration::from_millis(
-        RACE_TIMEOUT - MILIS_TO_SPAWN_ALL_TASKS,
-    ))
-    .await;
+    // Wait a bit so transactions start filling up the queue
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Submit nonce 0, which will trigger the drain of all queued transactions.
     submit_tx_set_value(&client, &key, 0, true).await;
