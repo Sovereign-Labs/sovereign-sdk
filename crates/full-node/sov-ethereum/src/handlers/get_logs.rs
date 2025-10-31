@@ -54,7 +54,7 @@ where
         let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
         let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
         let service =
-            LogsService::<S, Seq>::new(filter.unwrap_or_default(), cursor, ethereum.extension.max_log_limit, state);
+            LogsService::<S, Seq>::new(filter, cursor, ethereum.extension.max_log_limit, state);
         Ok(service.logs_for_filter().await?)
     }
 }
