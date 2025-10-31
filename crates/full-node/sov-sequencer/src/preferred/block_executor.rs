@@ -90,7 +90,7 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
                     }
                     _ => json_obj!({
-                        "message": format!("{:?}", receipt),
+                        "error": format!("{:?}", receipt),
                     }),
                 };
                 ErrorObject {
