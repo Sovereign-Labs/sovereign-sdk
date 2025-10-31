@@ -2,7 +2,7 @@ use sov_blob_sender::BlobExecutionStatus;
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{EncryptedPreferredBatchData, PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
-use sov_encryption::{EncryptionLayer, EncryptionLayerTrait};
+use sov_encryption::EncryptionLayer;
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
 use std::{
@@ -36,24 +36,16 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         is_replica: bool,
-        encryption_config: Option<sov_encryption::EncryptionConfig>,
+        shared_encryption_layer: Option<EncryptionLayer>,
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        
-        // Initialize encryption layer if config is provided
-        // The layer will automatically handle its own key management based on config
-        let encryption_layer = if let Some(config) = encryption_config {
-            Some(EncryptionLayer::new(config).await?)
-        } else {
-            None
-        };
         
         if is_replica {
             Ok((
                 Self {
                     inner: None,
                     nb_of_concurrent_blob_submissions,
-                    encryption_layer,
+                    encryption_layer: shared_encryption_layer,
                 },
                 None,
             ))
@@ -64,7 +56,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             //  2. DB corruption.
             //  3. Node crash at an inconvenient time.
             // Let's restore all missing blob data to make sure they land on the DA.
-            let blobs_to_send = create_blobs_to_send(all_completed_blobs, encryption_layer.as_ref())?;
+            let blobs_to_send = create_blobs_to_send(all_completed_blobs, shared_encryption_layer.as_ref())?;
             let (inner, blob_sender_handle) = BlobSender::new(
                 da.clone(),
                 ledger_db,
@@ -82,7 +74,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                 Self {
                     inner: Some(inner),
                     nb_of_concurrent_blob_submissions,
-                    encryption_layer,
+                    encryption_layer: shared_encryption_layer,
                 },
                 Some(blob_sender_handle),
             ))
@@ -161,56 +153,6 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         inner.hooks().add_txs(blob_id, tx_hashes).await;
     }
 
-    /// Constructor that accepts a shared encryption layer instead of creating its own
-    pub(crate) async fn new_with_shared_encryption(
-        da: Da,
-        ledger_db: LedgerDb,
-        all_completed_blobs: Vec<PreferredSequencerReadBlob>,
-        storage_path: Box<Path>,
-        tx_status_manager: TxStatusManager<Da::Spec>,
-        shutdown_sender: watch::Sender<()>,
-        blob_processing_timeout: Duration,
-        blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
-        is_replica: bool,
-        shared_encryption_layer: Option<EncryptionLayer>,
-    ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        
-        if is_replica {
-            Ok((
-                Self {
-                    inner: None,
-                    nb_of_concurrent_blob_submissions,
-                    encryption_layer: shared_encryption_layer,
-                },
-                None,
-            ))
-        } else {
-            // Restore missing blob data to make sure they land on the DA
-            let blobs_to_send = create_blobs_to_send(all_completed_blobs, shared_encryption_layer.as_ref())?;
-            let (inner, blob_sender_handle) = BlobSender::new(
-                da.clone(),
-                ledger_db,
-                storage_path.as_ref(),
-                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                shutdown_sender,
-                blob_processing_timeout,
-                Some(blobs_sender_channel),
-                blobs_to_send,
-                nb_of_concurrent_blob_submissions.clone(),
-            )
-            .await?;
-
-            Ok((
-                Self {
-                    inner: Some(inner),
-                    nb_of_concurrent_blob_submissions,
-                    encryption_layer: shared_encryption_layer,
-                },
-                Some(blob_sender_handle),
-            ))
-        }
-    }
 }
 
 pub fn create_blobs_to_send(

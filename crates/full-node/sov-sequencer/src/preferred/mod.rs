@@ -176,37 +176,19 @@ where
 
         let mut handles = vec![];
 
-        let (blob_sender, blob_sender_handle) = if let Some(shared_encryption) = shared_encryption_layer {
-            // Use shared encryption layer if provided
-            PreferredBlobSender::new_with_shared_encryption(
-                da,
-                ledger_db.clone(),
-                db_cache.all_completed_blobs().clone(),
-                storage_path.into(),
-                tx_status_manager.clone(),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                blobs_sender_channel.clone(),
-                config.sequencer_kind_config.is_replica,
-                Some(shared_encryption),
-            )
-            .await?
-        } else {
-            // Fall back to original method with config-based encryption
-            PreferredBlobSender::new(
-                da,
-                ledger_db.clone(),
-                db_cache.all_completed_blobs().clone(),
-                storage_path.into(),
-                tx_status_manager.clone(),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                blobs_sender_channel.clone(),
-                config.sequencer_kind_config.is_replica,
-                config.batch_encryption.clone(),
-            )
-            .await?
-        };
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
+            da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            config.sequencer_kind_config.is_replica,
+            shared_encryption_layer,
+        )
+        .await?;
 
         if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
