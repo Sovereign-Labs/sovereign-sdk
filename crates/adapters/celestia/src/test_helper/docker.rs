@@ -18,11 +18,13 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
-const VALIDATOR_TAG: &str = "v5.0.2-mocha";
+const VALIDATOR_TAG: &str = "v6.2.0-mocha";
 const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
-const BRIDGE_TAG: &str = "v0.27.4-mocha";
+const BRIDGE_TAG: &str = "v0.28.2-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
 const BRIDGE_RPC_PORT: u16 = 26658;
+
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
 
 pub struct CelestiaValidator;
 
@@ -36,7 +38,10 @@ impl Image for CelestiaValidator {
     }
 
     fn ready_conditions(&self) -> Vec<WaitFor> {
-        vec![WaitFor::healthcheck()]
+        vec![
+            WaitFor::healthcheck(),
+            WaitFor::message_on_either_std("Provisioning finished."),
+        ]
     }
 
     fn env_vars(
@@ -106,6 +111,7 @@ impl CelestiaDevNode {
                 "/credentials",
             ))
             .with_mount(Mount::volume_mount(genesis_volume.clone(), "/genesis"))
+            .with_startup_timeout(STARTUP_TIMEOUT)
             .start()
             .await
             .context("failed to start validator container")?;

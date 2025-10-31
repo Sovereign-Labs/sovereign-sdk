@@ -4,8 +4,8 @@
 set -euxo pipefail
 
 # Amount of bridge nodes to setup, taken from the first argument
-# or 10 if not provided
-BRIDGE_COUNT="${1:-10}"
+# or 5 if not provided
+BRIDGE_COUNT="${1:-5}"
 # a private local network
 P2P_NETWORK="private"
 # a validator node configuration directory
@@ -187,7 +187,11 @@ setup_private_validator() {
   sed -i'.bak' 's/^timeout_precommit\s*=.*/timeout_precommit = "20ms"/g' "$CONFIG_DIR/config/config.toml"
   # timeout_precommit_delta = "500ms"
   sed -i'.bak' 's/^timeout_precommit_delta\s*=.*/timeout_precomm_delta = "10ms"/g' "$CONFIG_DIR/config/config.toml"
+  echo "================================"
+  echo "Final Private Validator Config:"
   cat "$CONFIG_DIR/config/config.toml"
+  echo "End of Final Private Validator Config:"
+  echo "==================================="
 }
 
 main() {
