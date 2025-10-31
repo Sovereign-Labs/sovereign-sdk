@@ -1,10 +1,12 @@
 use futures::StreamExt;
+use futures::TryStreamExt;
 use sov_node_client::NodeClient;
 
 fn master_client() -> NodeClient {
     let rest_url = format!("http://{}:{}", "127.0.0.1", "12346");
     NodeClient::new_unchecked(&rest_url)
 }
+
 fn replica_client() -> NodeClient {
     let rest_url = format!("http://{}:{}", "127.0.0.1", "12349");
     NodeClient::new_unchecked(&rest_url)
@@ -27,12 +29,14 @@ async fn main() {
         .await
         .unwrap();
 
+    println!("START");
+
     loop {
         let master_event = master_sub.next().await.unwrap();
-        let replica_event = replica_sub.next().await.unwrap();
+        let replica_event = replica_sub.try_next().await.unwrap();
 
         println!("");
-        println!("Master event: {:?}", master_event);
+        println!("MASTER master_event: {:?}", master_event);
         println!("Replica event: {:?}", replica_event);
     }
 }
