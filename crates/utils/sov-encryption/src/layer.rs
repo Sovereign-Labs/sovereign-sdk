@@ -102,7 +102,7 @@ impl KeyCache {
     }
     
     pub fn schedule_key(&self, scheduled_key: SlotScheduledKey) {
-        info!("📅 Scheduling key {} for activation at slot {}", scheduled_key.key.id, scheduled_key.activate_at_slot);
+        debug!("📅 Scheduling key {} for activation at slot {}", scheduled_key.key.id, scheduled_key.activate_at_slot);
         let mut scheduled = self.scheduled_keys.write().unwrap();
         
         // Insert in sorted order by activation slot
@@ -110,7 +110,7 @@ impl KeyCache {
             .unwrap_or_else(|e| e);
         scheduled.insert(pos, scheduled_key);
         
-        info!("📊 Total scheduled keys: {}", scheduled.len());
+        debug!("📊 Total scheduled keys: {}", scheduled.len());
     }
     
     pub fn update_slot(&self, slot_number: u64) -> Vec<InternalKey> {
@@ -145,8 +145,6 @@ impl KeyCache {
         for scheduled_key in to_activate {
             info!("🔑 KEY ACTIVATION: Activating key '{}' for slot {} (was scheduled for slot {})", 
                   scheduled_key.key.id, slot_number, scheduled_key.activate_at_slot);
-            debug!("🔑 KEY ACTIVATION: Key material hash: {}", 
-                   hex::encode(&scheduled_key.key.material[..8.min(scheduled_key.key.material.len())]));
             
             // Record this key as active for its scheduled slot
             self.slot_key_history.write().unwrap().insert(scheduled_key.activate_at_slot, scheduled_key.key.clone());
@@ -156,7 +154,7 @@ impl KeyCache {
         }
         
         if !activated_keys.is_empty() {
-            info!("📊 KEY STATUS: {} keys activated, {} keys remaining scheduled", 
+            debug!("📊 KEY STATUS: {} keys activated, {} keys remaining scheduled", 
                   activated_keys.len(), scheduled.len());
         }
         
@@ -398,7 +396,7 @@ impl EncryptionLayer {
         // Try to deserialize directly since the formats should match now
         match bincode::deserialize::<KeyUpdate>(data) {
             Ok(key_update) => {
-                info!("📋 PARSED KEY SERVICE: Successfully deserialized KeyUpdate");
+                debug!("📋 PARSED KEY SERVICE: Successfully deserialized KeyUpdate");
                 Ok(key_update)
             }
             Err(e) => {
@@ -413,7 +411,7 @@ impl EncryptionLayer {
     ) -> Result<(), EncryptionError> {
         use tokio::io::AsyncReadExt;
         
-        info!("New unix socket connection established for key updates");
+        debug!("New unix socket connection established for key updates");
         let mut buffer = vec![0u8; 4096];
         
         while let Ok(n) = stream.read(&mut buffer).await {
@@ -422,7 +420,7 @@ impl EncryptionLayer {
                 break; 
             }
             
-            info!("Received {} bytes on unix socket", n);
+            debug!("Received {} bytes on unix socket", n);
             debug!("Raw data: {:?}", &buffer[..n]);
             
             // Try to deserialize the key service bincode format
@@ -430,13 +428,11 @@ impl EncryptionLayer {
 
             match key_update_result {
                 Ok(key_update) => {
-                    info!("Successfully deserialized KeyUpdate message");
+                    debug!("Successfully deserialized KeyUpdate message");
                     match key_update {
                         KeyUpdate::NewKey(key) => {
                             info!("📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes) for slot {}", 
                                   key.id, key.key_data.len(), key.slot_number);
-                            debug!("📨 KEY RECEIVED: Key material hash: {}", 
-                                   hex::encode(&key.key_data[..8.min(key.key_data.len())]));
                             
                             let current_slot = cache.get_current_slot();
                             let target_slot = key.slot_number;
@@ -471,16 +467,16 @@ impl EncryptionLayer {
                 }
                 Err(e) => {
                     error!("❌ Failed to deserialize KeyUpdate message from {} bytes: {}", n, e);
-                    error!("Raw data hex: {}", hex::encode(&buffer[..n]));
+                    debug!("Raw data hex: {}", hex::encode(&buffer[..n]));
                     if let Ok(json_str) = std::str::from_utf8(&buffer[..n]) {
-                        error!("Raw data as string: {}", json_str);
+                        debug!("Raw data as string: {}", json_str);
                     }
                     return Err(EncryptionError::EncryptionFailed(format!("Key update deserialization failed: {e}")));
                 }
             }
         }
         
-        info!("Unix socket key connection handler exiting");
+        debug!("Unix socket key connection handler exiting");
         Ok(())
     }
 }
@@ -607,8 +603,6 @@ impl EncryptionLayerTrait for EncryptionLayer {
         let scheduled_count = self.key_cache.scheduled_keys.read().unwrap().len();
         info!("🔐 ENCRYPT: Using key '{}' at slot {} for {} bytes ({} keys scheduled)", 
               key.id, current_slot, plaintext.len(), scheduled_count);
-        debug!("🔐 ENCRYPT: Key material hash: {}", 
-               hex::encode(&key.material[..8.min(key.material.len())]));
         
         let result = self.encrypt_with_key(&key.material, plaintext);
         if result.is_ok() {
@@ -633,8 +627,6 @@ impl EncryptionLayerTrait for EncryptionLayer {
         let scheduled_count = self.key_cache.scheduled_keys.read().unwrap().len();
         info!("🔓 DECRYPT: Using key '{}' at slot {} for {} bytes ({} keys scheduled)", 
               key.id, current_slot, ciphertext.len(), scheduled_count);
-        debug!("🔓 DECRYPT: Key material hash: {}", 
-               hex::encode(&key.material[..8.min(key.material.len())]));
         
         let result = self.decrypt_with_key(&key.material, ciphertext);
         match &result {
