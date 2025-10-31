@@ -785,9 +785,6 @@ where
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
-        println!("");
-        println!("====");
-        println!("Entering process_do_batch_start_replica {seq_nr_from_master} {seq_nr_of_next_blob_for_this_executor}");
         debug!(
             % seq_nr_from_master,
             % seq_nr_of_next_blob_for_this_executor,
