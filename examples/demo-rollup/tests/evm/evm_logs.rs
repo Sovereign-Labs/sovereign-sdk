@@ -167,9 +167,9 @@ fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs_with_cursor_and_filter() {
-    let max_log_limit = 7;
-    let nb_of_txs = 9;
-    let nb_of_logs_per_tx: u32 = 12;
+    let max_log_limit = 9;
+    let nb_of_txs = 20;
+    let nb_of_logs_per_tx: u32 = 7;
 
     let rollup_and_client = RollupAndClient::new(max_log_limit).await;
     let start_tx = rollup_and_client.get_tx_count().await as u32;
@@ -181,10 +181,12 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     let mut nb_of_logs_received = 0;
-    let mut logs_with_cursor = rollup_and_client.get_logs_with_cursor_and_filter(&serde_json::json!({
-            "fromBlock": "0x0",
-            "toBlock": "latest",
-    })).await;
+    let mut logs_with_cursor = rollup_and_client
+        .get_logs_with_cursor_and_filter(&serde_json::json!({
+                "fromBlock": "0x0",
+                "toBlock": "latest",
+        }))
+        .await;
 
     nb_of_logs_received += logs_with_cursor.logs.len();
 
@@ -211,24 +213,24 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
 
         nb_of_logs_until_prev_cursor = nb_of_logs_according_to_cursor;
 
-        logs_with_cursor = rollup_and_client.get_logs_with_cursor_and_filter(&serde_json::json!({
-            "fromBlock": "0x0",
-            "toBlock": "latest",
-            "cursor": packed_cursor,
-        })).await;
+        logs_with_cursor = rollup_and_client
+            .get_logs_with_cursor_and_filter(&serde_json::json!({
+                "fromBlock": "0x0",
+                "toBlock": "latest",
+                "cursor": packed_cursor,
+            }))
+            .await;
         nb_of_logs_received += logs_with_cursor.logs.len();
     }
 
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
 }
 
-
-
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs_with_cursor() {
-    let max_log_limit = 7;
-    let nb_of_txs = 9;
-    let nb_of_logs_per_tx: u32 = 2;
+    let max_log_limit = 9;
+    let nb_of_txs = 20;
+    let nb_of_logs_per_tx: u32 = 7;
 
     let rollup_and_client = RollupAndClient::new(max_log_limit).await;
     let start_tx = rollup_and_client.get_tx_count().await as u32;
@@ -274,7 +276,6 @@ async fn evm_test_get_logs_with_cursor() {
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
 }
 
-
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_get_logs_at_max_response_size() {
     let nb_of_txs = 3;
@@ -294,7 +295,6 @@ async fn evm_test_get_logs_at_max_response_size() {
 
     nb_of_logs_received += logs_with_cursor.logs.len();
 
-    let mut nb_of_logs_until_prev_cursor = start_tx * nb_of_logs_per_tx;
     loop {
         let packed_cursor = match logs_with_cursor.cursor {
             Some(packed) => packed,
@@ -306,8 +306,6 @@ async fn evm_test_get_logs_at_max_response_size() {
         let cursor = Cursor::unpack(&packed_cursor).unwrap();
         let nb_of_logs_according_to_cursor =
             nb_of_logs_according_to_cursor(cursor, nb_of_logs_per_tx);
-
-        nb_of_logs_until_prev_cursor = nb_of_logs_according_to_cursor;
 
         logs_with_cursor = rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
         nb_of_logs_received += logs_with_cursor.logs.len();
@@ -415,7 +413,12 @@ impl RollupAndClient {
         self.client.get_logs_with_cursor(&filter_with_cursor).await
     }
 
-    async fn get_logs_with_cursor_and_filter(&self, cursor_and_filter: &impl serde::Serialize) -> LogsWithMaybeCursor {
-        self.client.get_logs_with_cursor_and_filter(cursor_and_filter).await
+    async fn get_logs_with_cursor_and_filter(
+        &self,
+        cursor_and_filter: &impl serde::Serialize,
+    ) -> LogsWithMaybeCursor {
+        self.client
+            .get_logs_with_cursor_and_filter(cursor_and_filter)
+            .await
     }
 }
