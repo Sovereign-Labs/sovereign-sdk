@@ -149,7 +149,7 @@ async fn submit_tx_set_value(
             body: BASE64_STANDARD.encode(&tx),
         })
         .await;
-    println!("RECEIVED result for nonce {nonce}: {res:?}");
+    // println!("RECEIVED result for nonce {nonce}: {res:?}");
     match expect_success {
         true => {
             res.unwrap();
@@ -305,4 +305,50 @@ async fn test_zero_length_queue() {
     }
     // Sanity check
     query_set_value(&test_rollup, 0).await.unwrap();
+}
+
+/// Test a very large number of out-of-order transactions with a tight timeout timer.
+/// This triggers race conditions where timeout checks often happen while a previous transaction is
+/// mid-execution, or before the sequencer's API state has updated with the latest nonce.
+/// We stress test the queue to validate that its internal tracking is robust.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_repeated_timeouts_with_race_conditions() {
+    const RACE_TIMEOUT: u64 = 150;
+    const NUM_TXS: u64 = 290;
+
+    const MILIS_TO_SPAWN_ALL_TASKS: u64 = 30; // In testing it takes about 2-3ms on laptop, so 10x that
+                                              // should ensure no flakiness
+
+    let (test_rollup, admin) = create_test_rollup(300, RACE_TIMEOUT).await;
+    let client = test_rollup.api_client().clone();
+    let key = admin.private_key;
+
+    // Submit a batch of transactions with future nonces
+    // Spawn all tasks at once (no delays) to get them into the queue quickly
+    // and have their timeouts start at roughly the same time
+    let mut handles = vec![];
+    for nonce in (1..=NUM_TXS).rev() {
+        let client = client.clone();
+        let key = key.clone();
+        let handle = tokio::spawn(async move {
+            submit_tx_set_value(&client, &key, nonce, true).await;
+        });
+        handles.push(handle);
+    }
+
+    // Wait extra to get close to the timeout right from the start
+    tokio::time::sleep(Duration::from_millis(
+        RACE_TIMEOUT - MILIS_TO_SPAWN_ALL_TASKS,
+    ))
+    .await;
+
+    // Submit nonce 0, which will trigger the drain of all queued transactions.
+    submit_tx_set_value(&client, &key, 0, true).await;
+
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    // Verify all transactions executed successfully
+    query_set_value(&test_rollup, NUM_TXS).await.unwrap();
 }
