@@ -282,7 +282,6 @@ async fn evm_test_get_logs_at_max_response_size() {
     let nb_of_logs_per_tx: u32 = 5000;
 
     let rollup_and_client = RollupAndClient::new(20_000).await;
-    let start_tx = rollup_and_client.get_tx_count().await as u32;
 
     rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
@@ -304,9 +303,6 @@ async fn evm_test_get_logs_at_max_response_size() {
         };
 
         let cursor = Cursor::unpack(&packed_cursor).unwrap();
-        let nb_of_logs_according_to_cursor =
-            nb_of_logs_according_to_cursor(cursor, nb_of_logs_per_tx);
-
         logs_with_cursor = rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
         nb_of_logs_received += logs_with_cursor.logs.len();
     }
