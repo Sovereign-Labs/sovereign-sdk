@@ -89,7 +89,7 @@ impl Metric for GasConstantMetric {
         let maybe_pre_state_root = meta.iter().find(|(k, _)| k == "pre_state_root");
         if let Some(pre_state_root) = maybe_pre_state_root {
             let row = format!(
-                "{},{} {},{}\n",
+                "{},{},{},{}\n",
                 self.name, self.constant, self.num_invocations, pre_state_root.1
             );
             writer.write_all(row.as_bytes())?;
