@@ -1,4 +1,4 @@
-.PHONY: up down wait-compose-ready restart logs postgres
+.PHONY: up down wait-compose-ready restart logs postgres build-hyperlane-cli build-celestia-devnet-images push-celestia-devnet-images
 
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 DOCKER_COMPOSE_DIR := $(PROJECT_ROOT)/docker
@@ -7,6 +7,12 @@ DOCKER_COMPOSE_CFG := $(DOCKER_COMPOSE_DIR)/docker-compose.yml
 # Hyperlane CLI Docker image constants
 HYPERLANE_CLI_REPO := ghcr.io/sovereign-labs/hyperlane-cli
 HYPERLANE_CLI_TAG := sov-integration-3
+
+# Celestia Docker image constants
+CELESTIA_DEVNET_VALIDATOR_IMAGE := ghcr.io/sovereign-labs/celestia-validator-devnet
+CELESTIA_DEVNET_VALIDATOR_TAG := v5.0.2-mocha
+CELESTIA_DEVNET_BRIDGE_IMAGE := ghcr.io/sovereign-labs/celestia-bridge-devnet
+CELESTIA_DEVNET_BRIDGE_TAG := v0.27.4-mocha
 
 docker_compose := docker compose -f $(DOCKER_COMPOSE_CFG)
 
@@ -63,3 +69,19 @@ build-hyperlane-cli:
 	docker build -f hyperlane/hyperlane-cli.Dockerfile --build-arg CLI_VERSION=$(HYPERLANE_CLI_TAG) -t $(HYPERLANE_CLI_REPO):$(HYPERLANE_CLI_TAG) .
 	docker push $(HYPERLANE_CLI_REPO):$(HYPERLANE_CLI_TAG)
 	docker run $(HYPERLANE_CLI_REPO):$(HYPERLANE_CLI_TAG) --version
+
+build-celestia-devnet-images:
+	docker build \
+		--file celestia/Dockerfile.validator \
+		--build-arg CELESTIA_APP_TAG=$(CELESTIA_DEVNET_VALIDATOR_TAG) \
+		-t $(CELESTIA_DEVNET_VALIDATOR_IMAGE):$(CELESTIA_DEVNET_VALIDATOR_TAG) \
+		celestia
+	docker build \
+		--file celestia/Dockerfile.bridge \
+		--build-arg CELESTIA_NODE_TAG=$(CELESTIA_DEVNET_BRIDGE_TAG) \
+		-t $(CELESTIA_DEVNET_BRIDGE_IMAGE):$(CELESTIA_DEVNET_BRIDGE_TAG) \
+		celestia
+
+push-celestia-devnet-images:
+	docker push $(CELESTIA_DEVNET_VALIDATOR_IMAGE):$(CELESTIA_DEVNET_VALIDATOR_TAG)
+	docker push $(CELESTIA_DEVNET_BRIDGE_IMAGE):$(CELESTIA_DEVNET_BRIDGE_TAG)

@@ -4,8 +4,8 @@
 set -euxo pipefail
 
 # Amount of bridge nodes to setup, taken from the first argument
-# or 1 if not provided
-BRIDGE_COUNT="${1:-1}"
+# or 10 if not provided
+BRIDGE_COUNT="${1:-10}"
 # a private local network
 P2P_NETWORK="private"
 # a validator node configuration directory
@@ -69,10 +69,18 @@ provision_bridge_nodes() {
       echo "Creating a new keys for the $bridge_name"
       celestia-appd keys add "$bridge_name" --keyring-backend "test"
       # export it
-      echo "password" | celestia-appd keys export "$bridge_name" --keyring-backend "test" 2> "$key_file"
+      echo "password" | celestia-appd keys export "$bridge_name" --keyring-backend "test" > "$key_file"
+      if [ ! -s "$key_file" ]; then
+        echo "Exported key file for $bridge_name is empty: $key_file" >&2
+        exit 1
+      fi
       # export associated address
       node_address "$bridge_name" > "$addr_file"
     else
+      if [ ! -s "$key_file" ]; then
+        echo "Existing key file for $bridge_name is empty: $key_file" >&2
+        exit 1
+      fi
       # otherwise, just import it
       echo "password" | celestia-appd keys import "$bridge_name" "$key_file" \
         --keyring-backend="test"
