@@ -292,9 +292,9 @@ impl CelestiaDevNode {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_service_starts() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
-    );
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
+    //     "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
+    // );
     let dev_node = CelestiaDevNode::start().await?;
 
     let config = dev_node.get_config().await?;
