@@ -41,9 +41,7 @@ impl NamespaceDataMetrics {
 pub(crate) struct GetBlockMeasurement {
     pub height: u64,
     pub square_width: u16,
-    pub fetch_header_time: std::time::Duration,
     // This includes both batch and proof rows, running concurrently.
-    pub fetch_rows_time: std::time::Duration,
     pub build_relevant_data: std::time::Duration,
     pub batch_ns_metrics: NamespaceDataMetrics,
     pub proof_ns_metrics: NamespaceDataMetrics,
@@ -57,14 +55,15 @@ impl Metric for GetBlockMeasurement {
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         // height is tag, the rest is field
+
+        // TODO: variables
+
         write!(
             buffer,
-            "{},height={} square_width={},fetch_header_us={},fetch_rows_us={},build_data_us={},total_time_us={},batch_rows={},batch_shares={},proof_rows={},proof_shares={}",
+            "{},height={} square_width={},build_data_us={},total_time_us={},batch_rows={},batch_shares={},proof_rows={},proof_shares={}",
             self.measurement_name(),
             self.height,
             self.square_width,
-            self.fetch_header_time.as_micros(),
-            self.fetch_rows_time.as_micros(),
             self.build_relevant_data.as_micros(),
             self.total_time.as_micros(),
             self.batch_ns_metrics.rows,
