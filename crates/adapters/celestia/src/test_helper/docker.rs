@@ -40,7 +40,7 @@ impl Image for CelestiaValidator {
     fn ready_conditions(&self) -> Vec<WaitFor> {
         vec![
             WaitFor::healthcheck(),
-            WaitFor::message_on_either_std("Genesis hash has been saved."),
+            WaitFor::message_on_either_std("Genesis hash has been saved"),
         ]
     }
 
