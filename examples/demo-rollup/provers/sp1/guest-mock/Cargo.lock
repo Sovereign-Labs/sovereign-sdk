@@ -5618,6 +5618,7 @@ dependencies = [
  "revm-database-interface",
  "schemars 0.8.21",
  "serde",
+ "serde_json",
  "serde_with",
  "sov-address",
  "sov-bank",
