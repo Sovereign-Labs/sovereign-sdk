@@ -254,9 +254,7 @@ where
 
         // As logs iter is pre-enumerated - we keep correct indices
         for (idx, log) in logs_iter.skip(skipped_logs as usize) {
-            
-            if self.logs.len() >= *self.max_logs 
-            {
+            if self.logs.len() >= *self.max_logs {
                 return Ok(Some(Cursor {
                     block_height: header.number(),
                     tx_index_absolute,
@@ -326,7 +324,7 @@ where
 }
 
 fn serialized_size(log: &Log) -> usize {
-        b"\"{address\":".len() + 44 // 20 byte address, hex-encoded + open/close quotes and 0x
+    b"\"{address\":".len() + 44 // 20 byte address, hex-encoded + open/close quotes and 0x
         + b",\"data\":".len() + 4 + log.inner.data.data.len() * 2 // 32 byte data, hex-encoded + open/close quotes and 0x + quotation marks
         + b",\"topics\":[]".len() + log.inner.topics().len() * 68 // 32 byte topic, hex-encoded + open/close quotes and 0x
         + b",\"blockHash\":".len() + 68 // Block hash (0x-prefixed + 32 data bytes) + quotation marks
@@ -336,6 +334,6 @@ fn serialized_size(log: &Log) -> usize {
         + b",\"transactionIndex\":".len() + 12 // Conservatively assume millions of txs per block (plus open/close quotes and 0x prefix)    
         + b",\"logIndex\":".len() + 14 // Conservatively assume 256 logs per tx
         + b",\"removed\":false}".len() // false is longer than true
-        // See example serialized log below: 
-        // r#"{"address":"0x0000000000000000000000000000000000000069","topics":["0x0000000000000000000000000000000000000000000000000000000000000069"],"data":"0x69","blockHash":"0x0000000000000000000000000000000000000000000000000000000000000069","blockNumber":"0x69","blockTimestamp":"0x69","transactionHash":"0x0000000000000000000000000000000000000000000000000000000000000069","transactionIndex":"0x69","logIndex":"0x69","removed":false}"#
+                                       // See example serialized log below:
+                                       // r#"{"address":"0x0000000000000000000000000000000000000069","topics":["0x0000000000000000000000000000000000000000000000000000000000000069"],"data":"0x69","blockHash":"0x0000000000000000000000000000000000000000000000000000000000000069","blockNumber":"0x69","blockTimestamp":"0x69","transactionHash":"0x0000000000000000000000000000000000000000000000000000000000000069","transactionIndex":"0x69","logIndex":"0x69","removed":false}"#
 }

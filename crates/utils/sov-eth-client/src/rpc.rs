@@ -171,7 +171,10 @@ impl RpcClient {
             .unwrap()
     }
 
-    pub async fn get_logs_with_cursor_and_filter(&self, cursor_and_filter: &impl serde::Serialize) -> LogsWithMaybeCursor {
+    pub async fn get_logs_with_cursor_and_filter(
+        &self,
+        cursor_and_filter: &impl serde::Serialize,
+    ) -> LogsWithMaybeCursor {
         self.ws
             .request("eth_getLogsWithCursor", rpc_params![cursor_and_filter])
             .await
