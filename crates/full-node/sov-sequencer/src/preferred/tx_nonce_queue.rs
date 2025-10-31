@@ -79,12 +79,14 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
 
                 // Handle currently_executing if it's in the range we care about.
                 // Sometimes the API state visible to the sequencer doesn't update fast enough and
-                // current_nonce is in the past. We know that `currently_executing` was actually
-                // popped for execution so we can assume the `currently_executing` value is a valid
-                // nonce and start checking from there.
+                // current_nonce is in the past; we use it as a lower bound for the real current
+                // nonce.
+                // Meanhile `last_executed` is known to have been the last tx popped from the queue
+                // for execution, so it's an upper bound on the user's real nonce. Therefore we
+                // leniently accept all txs within this range, and then check the actual queued
+                // keys past last_executed.
                 if let Some(exec_nonce) = self.last_executed {
-                    if exec_nonce >= current_nonce && exec_nonce <= tx_nonce {
-                        // currently_executing fills in nonces from current_nonce up to exec_nonce
+                    if exec_nonce >= current_nonce {
                         expected = exec_nonce + 1;
                     }
                 }
@@ -185,7 +187,7 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
         self.queues
             .get(credential_id)
             .map(|queue| queue.has_contiguous_sequence_to(tx_nonce, current_nonce))
-            .unwrap_or(false)
+            .unwrap_or(tx_nonce == current_nonce)
     }
 
     /// Drain all ready transactions starting from expected_nonce until a gap or error

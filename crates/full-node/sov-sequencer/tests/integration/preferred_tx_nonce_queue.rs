@@ -320,8 +320,8 @@ async fn test_zero_length_queue() {
 /// timeouts both locally and in CI, without observable flakiness (at the time of writing).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_repeated_timeouts_with_race_conditions() {
-    const SHORTENED_TIMEOUT: u64 = 1000;
-    const NUM_TXS: u64 = 200;
+    const SHORTENED_TIMEOUT: u64 = 500;
+    const NUM_TXS: u64 = 100;
 
     let (test_rollup, admin) = create_test_rollup(NUM_TXS + 10, SHORTENED_TIMEOUT).await;
     let client = test_rollup.api_client().clone();
@@ -340,8 +340,9 @@ async fn test_repeated_timeouts_with_race_conditions() {
         handles.push(handle);
     }
 
-    // Wait a bit so transactions start filling up the queue
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Wait a bit so transactions start filling up the queue. This also reduces API delay a bit as
+    // all the initial transactions are processed and go into the waiting loop.
+    tokio::time::sleep(Duration::from_millis(SHORTENED_TIMEOUT - 200)).await;
 
     // Submit nonce 0, which will trigger the drain of all queued transactions.
     submit_tx_set_value(&client, &key, 0, true).await;
