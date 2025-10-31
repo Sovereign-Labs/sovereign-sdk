@@ -157,7 +157,7 @@ async fn run() -> anyhow::Result<()> {
                 stop_at_rollup_height,
             )
             .await
-            .context("Failed to initialize NOMT based MockDa rollup")?;
+            .context("Failed to initialize NOMT based ExternalMockDa rollup")?;
             rollup.run().await
         }
         (SupportedDaLayer::Celestia, SupportedStorage::Jmt) => {
