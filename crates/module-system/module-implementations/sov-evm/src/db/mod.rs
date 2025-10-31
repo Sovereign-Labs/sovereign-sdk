@@ -1,4 +1,4 @@
-use crate::{to_rollup_address, AccountStorageKey};
+use crate::{to_rollup_address, AccountStorageKey, EvmRuntimeConfig};
 use alloy_primitives::{Address, BlockHash, BlockNumber, B256, U256};
 use derive_more::Debug;
 use derive_more::{Deref, Into};
@@ -24,6 +24,8 @@ pub enum Error<Ws: StateAccessor> {
     SelfDestructUnsupported,
     #[error("No block hash for block {0}")]
     BlockHashNotFound(BlockNumber),
+    #[error("Contract creation is only allowed from allowed addresses. {0} is not on the list")]
+    ContractCreationDenied(Address),
 }
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
@@ -41,6 +43,7 @@ pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
     pub(crate) state: &'a mut Ws,
     pub(crate) bank_module: sov_bank::Bank<S>,
+    pub(crate) cfg: EvmRuntimeConfig,
 }
 
 impl<'a, Ws: TxState<S>, S: Spec> Database for EvmDb<'a, Ws, S>

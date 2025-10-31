@@ -102,6 +102,8 @@ mod tests {
     use revm::primitives::hardfork::SpecId;
     use sov_modules_api::macros::config_value;
 
+    use crate::ContractCreationPolicy;
+
     use super::*;
 
     #[test]
@@ -117,6 +119,7 @@ mod tests {
                 ..Default::default()
             },
             hardforks: vec![(0, SpecId::CANCUN)],
+            contract_creation_policy: ContractCreationPolicy::Everyone,
         };
 
         let mut template_cfg_env = CfgEnv::default();

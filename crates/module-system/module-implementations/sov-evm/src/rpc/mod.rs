@@ -185,7 +185,7 @@ where
         let tx_env = prepare_call_env(&block_env, request.clone())?;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
-        let evm_db: EvmDb<_, S> = self.db(state);
+        let evm_db: EvmDb<_, S> = self.db(state)?;
 
         Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)?)
     }

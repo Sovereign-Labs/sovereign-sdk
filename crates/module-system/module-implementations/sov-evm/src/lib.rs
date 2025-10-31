@@ -85,6 +85,10 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
 
+    /// A set of addresses that are allowed to deploy new contracts
+    #[state]
+    pub(crate) contract_creation_allowlist: StateMap<Address, (), BcsCodec>,
+
     /// Mapping from block number to block hash. Used by EVM blockhash opcode. Contains only last 256 values.
     #[state]
     pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,

@@ -3,7 +3,9 @@ use alloy_consensus::{BlockHeader, Header};
 use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
-use sov_evm::{AccountData, Evm, EvmGenesisConfig, EvmRuntimeConfig, SpecId};
+use sov_evm::{
+    AccountData, ContractCreationPolicy, Evm, EvmGenesisConfig, EvmRuntimeConfig, SpecId,
+};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -20,7 +22,12 @@ fn test_genesis_data() {
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
         let account = &cfg.accounts[0];
-        let account_info = evm.db(state).basic(account.address).unwrap().unwrap();
+        let account_info = evm
+            .db(state)
+            .unwrap()
+            .basic(account.address)
+            .unwrap()
+            .unwrap();
 
         assert_eq!(
             &account_info,
@@ -52,6 +59,7 @@ fn test_genesis_cfg() {
                     hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
                 },
                 hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
+                contract_creation_policy: ContractCreationPolicy::Everyone
             }
         );
     });
@@ -119,6 +127,7 @@ fn default_config() -> EvmGenesisConfig {
             limit_contract_code_size: Some(5000),
             hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
         },
+        contract_creation_policy: ContractCreationPolicy::Everyone,
     }
 }
 

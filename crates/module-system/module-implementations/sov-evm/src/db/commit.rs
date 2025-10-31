@@ -1,14 +1,14 @@
 use alloy_primitives::{Address, U256};
 use itertools::Itertools;
 use revm::primitives::HashMap;
-use revm::state::{Account, EvmStorageSlot};
+use revm::state::{Account, AccountInfo, EvmStorageSlot};
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{Spec, StateAccessor};
 
 use super::EvmDb;
 use crate::db::{DbAccount, Error};
-use crate::{to_rollup_address, to_rollup_balance};
+use crate::{to_rollup_address, to_rollup_balance, ContractCreationPolicy};
 
 impl<'a, Ws: StateAccessor, S: Spec> TryDatabaseCommit for EvmDb<'a, Ws, S>
 where
@@ -59,19 +59,35 @@ where
         // Set the EVM account balance to 0 - as balances are stored in the bank module.
         account.balance = U256::ZERO;
 
+        self.commit_code(address, &account)?;
+        self.accounts
+            .set(&address, &DbAccount(account), self.state)
+            .map_err(Error::State)?;
+
+        Ok(())
+    }
+
+    fn commit_code(
+        &mut self,
+        address: Address,
+        account: &AccountInfo,
+    ) -> Result<(), <Self as TryDatabaseCommit>::Error> {
         if let Some(ref code) = account.code {
             if !code.is_empty() {
+                match self.cfg.contract_creation_policy {
+                    ContractCreationPolicy::Everyone => {}
+                    ContractCreationPolicy::Allowlist(ref allowlist) => {
+                        if !allowlist.contains(&address) {
+                            return Err(Error::ContractCreationDenied(address));
+                        }
+                    }
+                }
                 // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                 self.code
                     .set(&account.code_hash, code, self.state)
                     .map_err(Error::State)?;
             }
         }
-
-        self.accounts
-            .set(&address, &DbAccount(account), self.state)
-            .map_err(Error::State)?;
-
         Ok(())
     }
 
