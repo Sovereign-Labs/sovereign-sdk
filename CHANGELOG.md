@@ -1,3 +1,6 @@
+# 2025-10-31
+- #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
+
 # 2025-10-29
 - #1996 Set gas limit to 1B on ETH API access.
 - #1838 Add binary WebSocket frame support to RPC server and client.
