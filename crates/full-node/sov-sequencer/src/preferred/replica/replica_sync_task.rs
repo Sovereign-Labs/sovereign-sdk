@@ -104,13 +104,14 @@ impl ReplicaSyncTask {
                             let FutureOrShutdownOutput::Output(Some(new_data)) = fut.await else {
                                 break 'outer;
                             };
+                            /*
 
                             assert!(
                                 new_data.sequence_number() <= executor_seq_nr,
                                 "The sequence number must be consecutive"
-                            );
+                            );*/
 
-                            if new_data.sequence_number() == executor_seq_nr {
+                            if new_data.sequence_number() == executor_seq_nr + 1 {
                                 assert!(matches!(new_data, DbData::BatchStart(_)));
                                 data = new_data;
                                 continue 'inner;

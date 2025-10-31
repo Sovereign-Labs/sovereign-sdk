@@ -501,6 +501,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         } = start_block_data;
 
         let old_visible_slot_number = self.checkpoint.current_visible_slot_number();
+
+        println!("spawn_exec_task old_visible_slot_number {old_visible_slot_number} visible_increase {visible_increase}");
+
         let next_visible_slot_number = self
             .checkpoint
             .current_visible_slot_number()

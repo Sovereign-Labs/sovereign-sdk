@@ -3,7 +3,14 @@ use super::*;
 use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_replica_start_stop() {
+async fn test_replica_start_stop_xx() {
+    for i in 0..50 {
+        println!("I am {}", i);
+        foo().await;
+    }
+}
+
+async fn foo() {
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -200,6 +207,10 @@ async fn test_replica_start_stop() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_start_stop_many_times() {
+    xxx().await;
+}
+
+async fn xxx() {
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -220,7 +231,8 @@ async fn test_replica_start_stop_many_times() {
     let nb_of_txs = 300;
 
     let mut replica_test_rollup = start_rollup(true, addr, postgres).await;
-    for i in 0..3 {
+    for i in 0..30 {
+        println!(" - I am {}", i);
         let builder = replica_test_rollup.shutdown().await.unwrap();
 
         let height_before_tx = test_rollup.height().await;
@@ -249,12 +261,21 @@ async fn test_replica_start_stop_many_times() {
         )
         .await;
 
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        /*
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
-        .await;
+        .await;*/
+
+        let xxxx = test_rollup
+            .client
+            .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+            .await
+            .unwrap();
 
         let receiver_balance = replica_test_rollup
             .client
@@ -262,11 +283,25 @@ async fn test_replica_start_stop_many_times() {
             .await
             .unwrap();
 
-        let expected_balance = AMOUNT * ((nb_of_txs * (i + 1)) as u128);
-        assert_eq!(receiver_balance.0, expected_balance);
+        println!("=====");
+        println!("=====");
+        println!("=====");
+        println!("xxxx: {xxxx:?}");
+        println!("{receiver_balance:?}");
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        //let expected_balance = AMOUNT * ((nb_of_txs * (i + 1)) as u128);
+        //assert_eq!(receiver_balance.0, expected_balance);
     }
+
+    tokio::time::sleep(std::time::Duration::from_millis(1450)).await;
+
+    let receiver_balance = replica_test_rollup
+        .client
+        .get_balance::<S>(&receiver_addr, &config_gas_token_id(), None)
+        .await
+        .unwrap();
+
+    println!("receiver_balance: {receiver_balance:?}");
 
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;

@@ -547,8 +547,18 @@ where
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
         // Update the `inner`'s state to reflect the new storage.
         // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
+
+        {
+            let next_node_sequence_number =
+                get_next_sequence_number_according_to_node(&info, &mut Rt::default());
+            if next_node_sequence_number > inner.sequence_number_of_next_blob {
+                inner.sequence_number_of_next_blob = next_node_sequence_number;
+            }
+        }
+
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
+
         inner.latest_info = info;
         let checkpoint = inner
             .executor
@@ -603,6 +613,15 @@ where
         // These steps should match `process_new_storage` except for the need to drop the db_event_subscription.
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
+
+        {
+            let next_node_sequence_number =
+                get_next_sequence_number_according_to_node(&info, &mut Rt::default());
+            if next_node_sequence_number > inner.sequence_number_of_next_blob {
+                inner.sequence_number_of_next_blob = next_node_sequence_number;
+            }
+        }
+
         inner.latest_info = info;
         let checkpoint = inner
             .executor
@@ -791,6 +810,12 @@ where
             "Entering process_do_batch_start_replica"
         );
 
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
+        println!("");
+        println!("BATCH START {seq_nr_from_master} {seq_nr_of_next_blob_for_this_executor}");
+        println!("batch_from_master {batch_from_master:?}");
+
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -812,6 +837,8 @@ where
             "Exiting process_do_batch_start_replica"
         );
 
+        println!("BATCH START EXIT");
+
         Ok(())
     }
 
@@ -825,6 +852,7 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
         let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
 
+        println!("TX");
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -858,6 +886,8 @@ where
             "Entering process_close_current_batch_replica"
         );
 
+        println!("BATCH END {seq_nr_from_master} {seq_nr_of_current_blob_for_this_executor}");
+
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -868,6 +898,7 @@ where
 
         inner.close_current_batch().await;
 
+        println!("BATCH END EXIT ");
         debug!(
             % seq_nr_from_master,
             % seq_nr_of_current_blob_for_this_executor,

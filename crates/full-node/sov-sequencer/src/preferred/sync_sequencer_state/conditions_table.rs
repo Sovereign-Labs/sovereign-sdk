@@ -111,6 +111,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
         table.condition_node_is_unsynced_and_doesnt_know_it,
     ) {
         (true, _, _, true, _) => {
+            println!("X1");
             // The node is ahead of the replica sequencer, which still has batches to replay.
             // This can happen in the following scenario. The replica is applying soft-conf from the master via PG
             // but for some reasons the Batch landed on DA faster than was closed with PG notification.
@@ -140,6 +141,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             // We wait until the replica is no more than one block behind the tip and override the replica’s sequencer with the node’s state.
             // At this stage, the replica can start accepting PG notifications from the master.
             if sync_status.distance() <= 1 {
+                println!("X2");
                 inner
                     .executor_events_sender
                     .flush_transactions_cache(info.next_tx_number)
@@ -148,23 +150,35 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                 inner.executor_events_sender.clean_all_batches_from_cache();
 
                 let mut rt = Rt::default();
-                let node_sequence_number =
-                    get_next_sequence_number_according_to_node(info, &mut rt);
+                //let next_node_sequence_number =
+                //    get_next_sequence_number_according_to_node(info, &mut rt);
 
-                inner.sequence_number_of_next_blob = node_sequence_number;
+                //inner.sequence_number_of_next_blob = next_node_sequence_number;
 
                 let executor = Some(Box::new(
                     inner.new_executor_with_empty_uncommitted_changes(info),
                 ));
 
-                inner.is_ready = Ok(());
-                inner.has_finished_startup = true;
+                //inner.is_ready = Ok(());
+                //inner.has_finished_startup = true;
+
+                inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
+                });
+
+                let mut rt = Rt::default();
+                let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+                let old_visible_slot_number = checkpoint.current_visible_slot_number();
+
+                println!("old_visible_slot_number: {old_visible_slot_number}");
 
                 return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
                     executor,
                     Duration::from_secs(0),
                 );
             } else {
+                println!("X3");
                 inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
                     target_da_height: sync_status.target_da_height(),
                     synced_da_height: sync_status.synced_da_height(),
@@ -174,6 +188,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             }
         }
         (_, _, true, _, _) => {
+            println!("X4");
             // The replica node is syncing.
             warn!(
                 ?distance,
@@ -186,6 +201,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (false, true, false, _, _) => {
+            println!("X5");
             error!(
                     slot_number_according_to_node=%info.slot_number,
                     %current_visible_slot_number,
@@ -195,6 +211,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
         }
         // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
         (_, _, _, _, true) => {
+            println!("X6");
             // Check for this condition after all of the normal "out-of-sync" conditions have been checked, because it may be possible for other unsynced conditions to trip this check
             // and we'd rather report the real root cause if there's a different one.
             warn!("The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.");
@@ -205,6 +222,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (false, false, false, _, _) => {
+            println!("X7");
             reply_soft_confirmations(info, inner, initial_status, time_spent_fetching_batches).await
         }
     };
