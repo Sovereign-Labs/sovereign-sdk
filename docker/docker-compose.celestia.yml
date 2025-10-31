@@ -1,10 +1,10 @@
 services:
   validator:
-    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v5.0.2-mocha
+    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v6.2.0-mocha
     hostname: validator
     environment:
       NO_COLOR: 1
-    # uncomment to provide amount of sequencers to provision (default: 10)
+    # uncomment to provide amount of sequencers to provision (default: 5)
     # command: [ "/opt/entrypoint.sh", "2" ]
     ports:
       - "127.0.0.1:9090:9090"
@@ -15,7 +15,7 @@ services:
       - genesis:/genesis
 
   sequencer-0:
-    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.27.4-mocha
+    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.28.2-mocha
     hostname: sequencer-0
     depends_on:
       - validator

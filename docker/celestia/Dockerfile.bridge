@@ -2,7 +2,7 @@
 # Based on:
 # https://github.com/celestiaorg/celestia-node/blob/main/Dockerfile
 
-ARG CELESTIA_NODE_TAG=v0.27.4-mocha
+ARG CELESTIA_NODE_TAG=v0.28.2-mocha
 
 FROM ghcr.io/celestiaorg/celestia-node:${CELESTIA_NODE_TAG} AS celestia-node
 

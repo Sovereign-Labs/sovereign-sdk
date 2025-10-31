@@ -83,6 +83,8 @@ main() {
     --core.ip validator \
     --keyring.keyname "$NODE_NAME" \
     --p2p.network "$P2P_NETWORK" \
+    --log.level.module share/discovery:error \
+    --log.level.module module/p2p:fatal \
     --rpc.addr "0.0.0.0"
 }
 
