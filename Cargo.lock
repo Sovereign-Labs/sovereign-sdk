@@ -12593,6 +12593,7 @@ dependencies = [
  "clap",
  "demo-stf",
  "derivative",
+ "futures",
  "rand 0.8.5",
  "reqwest 0.12.23",
  "schemars 0.8.22",

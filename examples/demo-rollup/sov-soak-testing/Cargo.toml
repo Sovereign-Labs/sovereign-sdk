@@ -47,6 +47,7 @@ sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
 sov-soak-testing-lib = { workspace = true }
+futures = { workspace = true }
 
 [[bin]]
 name = "main"
@@ -55,3 +56,8 @@ path = "src/bin/main.rs"
 [[bin]]
 name = "generator"
 path = "src/bin/generator.rs"
+
+
+[[bin]]
+name = "subscriber"
+path = "src/bin/subscriber.rs"
