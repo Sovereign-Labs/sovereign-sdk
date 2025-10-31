@@ -143,13 +143,12 @@ async fn submit_tx_set_value(
     nonce: u64,
     expect_success: bool,
 ) {
-    let tx = tx_set_value(&key, nonce, nonce);
+    let tx = tx_set_value(key, nonce, nonce);
     let res = client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
         })
         .await;
-    // println!("RECEIVED result for nonce {nonce}: {res:?}");
     match expect_success {
         true => {
             res.unwrap();
