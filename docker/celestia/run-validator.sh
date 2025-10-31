@@ -46,16 +46,18 @@ wait_for_block() {
   echo "$block_hash"
 }
 
-# Saves the hash of the genesis node and the keys funded with the coins
-# to the directory shared with the bridge node
-provision_bridge_nodes() {
-  local genesis_hash
-  local last_node_idx=$((BRIDGE_COUNT - 1))
+save_genesis_hash() {
+    local genesis_hash
+    # Save the genesis hash for the bridge
+    genesis_hash=$(wait_for_block 1)
+    echo "Saving a genesis hash=$genesis_hash to $GENESIS_HASH_FILE"
+    # TODO: check exit code, and compare what has been written.
+    echo "$genesis_hash" > "$GENESIS_HASH_FILE"
+    echo "Genesis hash has been saved"
+}
 
-  # Save the genesis hash for the bridge
-  genesis_hash=$(wait_for_block 1)
-  echo "Saving a genesis hash to $GENESIS_HASH_FILE"
-  echo "$genesis_hash" > "$GENESIS_HASH_FILE"
+fund_bridge_nodes() {
+  local last_node_idx=$((BRIDGE_COUNT - 1))
 
   # Get or create the keys for bridge nodes
   for node_idx in $(seq 0 "$last_node_idx"); do
@@ -63,6 +65,7 @@ provision_bridge_nodes() {
     local key_file="$CREDENTIALS_DIR/$bridge_name.key"
     local addr_file="$CREDENTIALS_DIR/$bridge_name.addr"
 
+    # Generate key, if necessary, otherwise just add it to keystore
     if [ ! -e "$key_file" ]; then
       # if key don't exist yet, then create and export it
       # create a new key
@@ -85,36 +88,12 @@ provision_bridge_nodes() {
       echo "password" | celestia-appd keys import "$bridge_name" "$key_file" \
         --keyring-backend="test"
     fi
-  done
 
-  # Transfer the coins to bridge nodes addresses
-  # Coins transfer need to be after validator registers EVM address, which happens in block 2.
-  # see `setup_private_validator`
-  local start_block=2
-
-  for node_idx in $(seq 0 "$last_node_idx"); do
-    # TODO: <https://github.com/celestiaorg/celestia-app/issues/2869>
-    # we need to transfer the coins for each node in separate
-    # block, or the signing of all but the first one will fail.
-    # Unfortunately multi-send only works with >= 2 bridge nodes,
-    # so we still rely on this hack.
-    wait_for_block $((start_block + node_idx))
-
-    local bridge_name="bridge-$node_idx"
     local bridge_address
-
     bridge_address=$(node_address "$bridge_name")
-
-    echo "Transferring $BRIDGE_COINS coins to the $bridge_name"
-    echo "y" | celestia-appd tx bank send \
-      "$NODE_NAME" \
-      "$bridge_address" \
-      "$BRIDGE_COINS" \
-      --fees 21000utia
+    celestia-appd genesis add-genesis-account "$bridge_address" "$BRIDGE_COINS"
   done
-
-  # !! This is the last log entry that indicates the setup has finished for all the nodes
-  echo "Provisioning finished."
+  echo "Funded bridge nodes"
 }
 
 # Set up the validator for a private alone network.
@@ -135,6 +114,9 @@ setup_private_validator() {
     --keyring-backend="test" \
     --chain-id "$P2P_NETWORK" \
     --gas-prices "1utia"
+  # Add bridge node keys and fund them in genesis
+  fund_bridge_nodes
+
   # Collect the genesis transactions and form a genesis.json
   celestia-appd genesis collect-gentxs
 
@@ -155,39 +137,32 @@ setup_private_validator() {
   # enable unsafe CORS since we don't do security properly in CI
   dasel put -f "$CONFIG_DIR/config/app.toml" -t bool -v true grpc-web.enable-unsafe-cors
 
-  echo "~~~~~~~~~~~~~~~~"
-  echo "APP CONFIG:"
+  echo "================================"
+  echo "APP CONFIG: app.toml"
   cat "$CONFIG_DIR/config/app.toml"
-
-
-  # TODO: convert this to dasel
-  # Set proper defaults and change ports
-  # If you encounter: `sed: -I or -i may not be used with stdin` on MacOS you can mitigate by installing gnu-sed
-  # https://gist.github.com/andre3k1/e3a1a7133fded5de5a9ee99c87c6fa0d?permalink_comment_id=3082272#gistcomment-3082272
-  sed -i'.bak' 's|"tcp://127.0.0.1:26657"|"tcp://0.0.0.0:26657"|g' "$CONFIG_DIR/config/config.toml"
-  sed -i'.bak' 's|"null"|"kv"|g' "$CONFIG_DIR/config/config.toml"
+  echo "================================"
 
   # Enable prometheus
-  sed -i'.bak' 's/prometheus = false/prometheus = true/g' "$CONFIG_DIR/config/config.toml"
-  sed -i'.bak' 's/prometheus_listen_addr = ":26660"/prometheus_listen_addr = "0.0.0.0:26660"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t bool -v true instrumentation.prometheus
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '0.0.0.0:26660' instrumentation.prometheus_listen_addr
 
-  # Adjusting for faster block times
+  # Adjusting for faster block times. Default values are in comments above
   # Numbers are derived by trial and error.
   # timeout_commit = "11s"
-  sed -i'.bak' 's/^timeout_commit\s*=.*/timeout_commit = "500ms"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '500ms' consensus.timeout_commit
   # timeout_propose = "10s"
-  sed -i'.bak' 's/^timeout_propose\s*=.*/timeout_propose = "50ms"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '4000ms' consensus.timeout_propose
   # timeout_propose_delta = "500ms"
-  sed -i'.bak' 's/^timeout_propose_delta\s*=.*/timeout_propose_delta = "10ms"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_propose_delta
   # timeout_prevote = "1s"
-  sed -i'.bak' 's/^timeout_prevote\s*=.*/timeout_prevote = "10ms"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_prevote
   # timeout_prevote_delta = "500ms"
-  sed -i'.bak' 's/^timeout_prevote_delta\s*=.*/timeout_prevote_delta = "10ms"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_prevote_delta
   # timeout_precommit = "1s"
-  sed -i'.bak' 's/^timeout_precommit\s*=.*/timeout_precommit = "20ms"/g' "$CONFIG_DIR/config/config.toml"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '20ms' consensus.timeout_precommit
   # timeout_precommit_delta = "500ms"
-  sed -i'.bak' 's/^timeout_precommit_delta\s*=.*/timeout_precomm_delta = "10ms"/g' "$CONFIG_DIR/config/config.toml"
-  echo "================================"
+  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '10ms' consensus.timeout_precommit_delta
+
   echo "Final Private Validator Config:"
   cat "$CONFIG_DIR/config/config.toml"
   echo "End of Final Private Validator Config:"
@@ -195,10 +170,10 @@ setup_private_validator() {
 }
 
 main() {
-  # Configure stuff
   setup_private_validator
-  # Spawn a job to provision a bridge node later
-  provision_bridge_nodes &
+
+  # Spawn a job to save genesis_hash
+  save_genesis_hash &
   # Start the celestia-app
   echo "Configuration finished. Running a validator node..."
   celestia-appd start --api.enable --grpc.enable --force-no-bbr
