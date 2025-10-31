@@ -607,7 +607,7 @@ where
                     tokio::spawn(async move {
                         queues
                             .drain_any_ready_transactions(credential_id, starting_nonce, updator)
-                            .await
+                            .await;
                     });
                 }
                 res
@@ -1305,8 +1305,7 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
 ) -> Result<tx_nonce_queue::TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
     // Match the error format from sov-uniqueness check_nonce_uniqueness
     let error_msg = format!(
-        "Tx bad nonce for credential id: {}, expected: {}, but found: {}",
-        credential_id, expected_nonce, tx_nonce
+        "Tx bad nonce for credential id: {credential_id}, expected: {expected_nonce}, but found: {tx_nonce}"
     );
     let receipt = TransactionReceipt {
         tx_hash,
