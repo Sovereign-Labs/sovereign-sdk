@@ -40,7 +40,7 @@ impl Image for CelestiaValidator {
     fn ready_conditions(&self) -> Vec<WaitFor> {
         vec![
             WaitFor::healthcheck(),
-            WaitFor::message_on_either_std("Provisioning finished."),
+            WaitFor::message_on_either_std("Genesis hash has been saved."),
         ]
     }
 
@@ -123,6 +123,7 @@ impl CelestiaDevNode {
         tracing::info!(
             id = validator.id(),
             port = validator_grpc_port,
+            time = ?start.elapsed(),
             "Validator container started successfully"
         );
 
@@ -291,9 +292,9 @@ impl CelestiaDevNode {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_service_starts() -> anyhow::Result<()> {
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
-    //     "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
-    // );
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
+    );
     let dev_node = CelestiaDevNode::start().await?;
 
     let config = dev_node.get_config().await?;
