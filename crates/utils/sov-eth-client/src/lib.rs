@@ -18,7 +18,7 @@ mod rpc;
 pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
-const GAS: u64 = 9000000u64;
+const GAS: u64 = 100_000_000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
 const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
