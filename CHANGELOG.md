@@ -19,6 +19,7 @@
 # 2025-10-31
 - #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
 - #2007 Changes celestia rollup metrics, please switch to new dashboard.
+- #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
 
 # 2025-10-29
 - #1996 Set gas limit to 1B on ETH API access.
