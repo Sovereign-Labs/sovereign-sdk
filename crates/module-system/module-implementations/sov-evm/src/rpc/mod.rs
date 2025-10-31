@@ -10,7 +10,6 @@ use alloy_rpc_types::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
-use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -21,7 +20,6 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
 use crate::db::EvmDb;
-use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::get_cfg_env;
@@ -220,12 +218,14 @@ where
 
         match block_number_str.as_str() {
             "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
-            "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
-            "pending" => PendingOrBlock::Pending,
-            number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
-                Ok(nr) => PendingOrBlock::Number(nr),
-                Err(_) => PendingOrBlock::Invalid(block_number_str),
-            },
+            // We treat latest and pending the same to avoid foundry issues
+            "latest" | "pending" => PendingOrBlock::Pending,
+            number => {
+                let Ok(number) = u64::from_str_radix(number.trim_start_matches("0x"), 16) else {
+                    return PendingOrBlock::Invalid(block_number_str.to_string());
+                };
+                PendingOrBlock::Number(number)
+            }
         }
     }
 
@@ -238,11 +238,10 @@ where
         let block_numbers = self.block_numbers(state);
         let block_number = match block {
             BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                *block_numbers.end()
-            }
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
             BlockNumberOrTag::Number(nr) => nr,
-            BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+            // We treat latest and pending the same to avoid foundry issues
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => *block_numbers.end() + 1,
         };
         block_number
     }
@@ -331,30 +330,22 @@ where
         &self,
         block_number: Option<String>,
         state: &'a mut ApiStateAccessor<S>,
-    ) -> RpcResult<MaybeArchivalState<'a, S>> {
-        let state = match block_number {
-            None => MaybeArchivalState::Current(state),
-            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
-            _ => {
-                let pending_or_block_nr = self.str_to_block_nr(block_number, state);
-                match pending_or_block_nr {
-                    PendingOrBlock::Pending => MaybeArchivalState::Current(state),
-                    PendingOrBlock::Number(number) => {
-                        if number == state.rollup_height_to_access().get() || (number == state.rollup_height_to_access().get() + 1) {
-                            return Ok(MaybeArchivalState::Current(state));
-                        }
-                        let archival_state = state
-                            .get_archival_state(RollupHeight::new(number))
-                            .map_err(into_rpc_error)?;
-                        MaybeArchivalState::Archival(archival_state.into())
-                    }
-                    PendingOrBlock::Invalid(_) => {
-                        return Err(EthApiError::UnknownBlockOrTxIndex.into());
-                    }
+    ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
+        let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+        match pending_or_block_nr {
+            PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
+            PendingOrBlock::Number(number) => {
+                if number == state.rollup_height_to_access().get() || (number == state.rollup_height_to_access().get() + 1) {
+                    return Ok(MaybeArchivalState::Current(state));
                 }
+                let archival_state = state.get_archival_state(RollupHeight::new(number)).map_err(|_| EthApiError::UnknownBlockOrTxIndex)?;
+                Ok(MaybeArchivalState::Archival(archival_state.into()))
             }
-        };
-        Ok(state)
+            PendingOrBlock::Invalid(invalid) => {
+                tracing::error!(invalid, "Invalid block number");
+                Err(EthApiError::UnknownBlockOrTxIndex)
+            }
+        }
     }
 
     fn resolve_block_env(
