@@ -56,10 +56,9 @@ impl Metric for GetBlockMeasurement {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // height is tag, the rest is field
         write!(
             buffer,
-            "{},height={} square_width={},fetch_header_us={},fetch_rows_us={},build_data_us={},total_time_us={},batch_rows={},batch_shares={},proof_rows={},proof_shares={}",
+            "{}, height={},square_width={},fetch_header_us={},fetch_rows_us={},build_data_us={},total_time_us={},batch_rows={},batch_shares={},proof_rows={},proof_shares={}",
             self.measurement_name(),
             self.height,
             self.square_width,
