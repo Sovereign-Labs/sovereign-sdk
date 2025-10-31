@@ -1,3 +1,6 @@
+# 2025-11-01
+- #2006 Add associated Error type to the EVM module.
+
 # 2025-10-31
 - #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
 
