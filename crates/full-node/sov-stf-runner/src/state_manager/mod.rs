@@ -423,7 +423,6 @@ where
         self.state_root = new_state_root;
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(RunnerProcessStfChangesMetrics {
-                da_height: block_header.height(),
                 aggregated_proofs_count,
                 finalized_transitions_count: finalized_transitions.len(),
                 total_time: start.elapsed(),

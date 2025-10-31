@@ -138,7 +138,6 @@ mod tests {
 
         let start = timestamp();
         tracker.track_runner_metrics(RunnerMetrics {
-            da_height: 12333,
             sync_distance: 55768,
             get_block_time: std::time::Duration::from_millis(1000),
             batches_processed: 2084,
