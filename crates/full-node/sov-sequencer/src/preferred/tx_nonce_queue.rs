@@ -36,7 +36,7 @@ impl<S: Spec, Rt: Runtime<S>> Debug for AddressQueue<S, Rt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{ nonces: {:?}, currently_executing: {:?} }}",
+            "{{ nonces: {:?}, last_executed: {:?} }}",
             self.txs.keys().cloned().collect::<Vec<_>>(),
             self.last_executed
         )
@@ -69,7 +69,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     }
 
     /// Check if there's a contiguous sequence of transactions from `current_nonce` to `tx_nonce` (inclusive).
-    /// A nonce is considered "present" if it's either in the queue OR marked as currently_executing.
+    /// A nonce is considered "present" if it's either in the queue OR marked as last_executed.
     fn has_contiguous_sequence_to(&self, tx_nonce: u64, current_nonce: u64) -> bool {
         match tx_nonce.cmp(&current_nonce) {
             Ordering::Less => false, // tx is in the past
@@ -77,7 +77,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
             Ordering::Greater => {
                 let mut expected = current_nonce;
 
-                // Handle currently_executing if it's in the range we care about.
+                // Handle last_executed if it's in the range we care about.
                 // Sometimes the API state visible to the sequencer doesn't update fast enough and
                 // current_nonce is in the past; we use it as a lower bound for the real current
                 // nonce.
@@ -231,12 +231,6 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
                     }
                 };
 
-                // Clean up empty queue
-                if queue.is_empty() {
-                    drop(queue);
-                    self.queues.remove(&credential_id);
-                }
-
                 tx
             };
 
@@ -256,6 +250,14 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
             // Send the raw result back to the original API handler task, so errors can be
             // correctly propagated to the user. If the receiver is no longer listening, ignore.
             let _ = queued_tx.result_sender.send(result);
+
+            // After the waiting task has been notified, clean up the queue if it's empty
+            if let Some(queue) = self.queues.get_mut(&credential_id) {
+                if queue.is_empty() {
+                    drop(queue);
+                    self.queues.remove(&credential_id);
+                }
+            }
 
             if should_continue {
                 expected_nonce += 1;
@@ -403,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_currently_executing_at_start() {
+    fn test_has_contiguous_sequence_with_last_executed_at_start() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
         // Queue has [1, 2, 3]
@@ -420,7 +422,7 @@ mod tests {
         // Now we mark tx 0 as executing, even though the user's nonce isn't updated yet
         queue.mark_executing(0);
 
-        // Should succeed - currently_executing fills the first position
+        // Should succeed - last_executed fills the first position
         assert!(queue.has_contiguous_sequence_to(4, 0));
         assert!(queue.has_contiguous_sequence_to(3, 0));
         assert!(queue.has_contiguous_sequence_to(2, 0));
@@ -432,13 +434,13 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_currently_executing_alone() {
+    fn test_has_contiguous_sequence_with_last_executed_alone() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Empty queue, but currently_executing = 5
+        // Empty queue, but last_executed = 5
         queue.mark_executing(5);
 
-        // Should succeed when target equals currently_executing
+        // Should succeed when target equals last_executed
         assert!(queue.has_contiguous_sequence_to(5, 5));
         // And for the next valid nonce, too, despite the queue being empty
         assert!(queue.has_contiguous_sequence_to(6, 5));
@@ -450,10 +452,10 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_currently_executing_stale() {
+    fn test_has_contiguous_sequence_with_last_executed_stale() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Queue has [2, 3], currently_executing = 0 (stale, before current_nonce)
+        // Queue has [2, 3], last_executed = 0 (stale, before current_nonce)
         queue.insert(2, create_mock_queued_tx(2));
         queue.insert(3, create_mock_queued_tx(3));
         queue.mark_executing(0);
@@ -466,26 +468,36 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_currently_executing_nonce_is_stale() {
+    fn test_has_contiguous_sequence_with_last_executed_nonce_is_stale() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Queue has [3, 4], currently_executing = 2
-        queue.insert(3, create_mock_queued_tx(2));
-        queue.insert(4, create_mock_queued_tx(3));
-        queue.mark_executing(2);
+        // Queue has [5, 6], last_executed = 4
+        queue.insert(5, create_mock_queued_tx(2));
+        queue.insert(6, create_mock_queued_tx(3));
+        queue.mark_executing(4);
 
-        // Nonce is stale at 0 but we know 2 is already executing, so should succeed
-        assert!(queue.has_contiguous_sequence_to(3, 0));
-        assert!(queue.has_contiguous_sequence_to(4, 0));
-        // 1 is in the past compared to what we know is executing
-        assert!(!queue.has_contiguous_sequence_to(1, 0));
+        // Nonce is stale at 1 but we know 4 is already executing, so should succeed
+        assert!(queue.has_contiguous_sequence_to(4, 1));
+        assert!(queue.has_contiguous_sequence_to(5, 1));
+        assert!(queue.has_contiguous_sequence_to(6, 1));
+        assert!(queue.has_contiguous_sequence_to(7, 1));
+        assert!(!queue.has_contiguous_sequence_to(8, 1)); // Lacks nonce 7 as a prerequisite
+
+        // 0 is in the past compared to the user's current nonce
+        assert!(!queue.has_contiguous_sequence_to(0, 1));
+        // 1 matches the user's current nonce
+        assert!(queue.has_contiguous_sequence_to(1, 1));
+        // 2 and 3 are between the current nonce and the last_executed, so we keep them in the
+        // queue for now
+        assert!(queue.has_contiguous_sequence_to(2, 1));
+        assert!(queue.has_contiguous_sequence_to(3, 1));
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_gap_after_currently_executing() {
+    fn test_has_contiguous_sequence_with_gap_after_last_executed() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Queue has [2], currently_executing = 0 (with gap)
+        // Queue has [2], last_executed = 0 (with gap)
         queue.insert(2, create_mock_queued_tx(2));
         queue.mark_executing(0);
 
