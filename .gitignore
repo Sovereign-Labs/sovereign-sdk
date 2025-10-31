@@ -21,6 +21,7 @@ docker/observability
 .vscode/*
 
 /docker/celestia/credentials/*
+/docker/credentials/*
 /docker/**/storage/*
 /docker/influxdb-data
 !/docker/celestia/credentials/bridge-0.addr

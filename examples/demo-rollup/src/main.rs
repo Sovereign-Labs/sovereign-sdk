@@ -91,6 +91,10 @@ async fn run() -> anyhow::Result<()> {
     prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
         .context("Prometheus exporter start failed")?;
 
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|e| anyhow::anyhow!("Failed to setup ring crypto provider: {e:?}"))?;
+
     let rollup_config_path = args.rollup_config_path.as_str();
 
     let prover_config_disc = parse_prover_config().expect("Failed to parse prover config");

@@ -10,6 +10,7 @@
 - #1987 Added `newHeads` subscription to `eth_subscribe`.
 
 # 2025-10-27
+- #1981 **Breaking change** Adds support for celestia-client allowing direct use of RPC providers. Full message TBD.
 - #1976 Fixed `eth_subscribe` parameter parsing to accept standard Ethereum JSON-RPC positional parameters.
 
 # 2025-10-24
