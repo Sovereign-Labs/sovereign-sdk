@@ -88,8 +88,8 @@ async fn main() {
 
 async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
-    prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
-        .context("Prometheus exporter start failed")?;
+    //prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
+    //    .context("Prometheus exporter start failed")?;
 
     rustls::crypto::ring::default_provider()
         .install_default()
