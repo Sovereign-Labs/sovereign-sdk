@@ -629,6 +629,7 @@ where
             inner.trigger_batch_production_if_convenient().await;
         }
         inner.prune_sequencer_db().await;
+        inner.start_replica_task_notifier.notify();
         drop(inner);
 
         let prune_duration = start_prune.elapsed();

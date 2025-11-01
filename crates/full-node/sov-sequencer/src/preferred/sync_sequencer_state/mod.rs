@@ -4,6 +4,7 @@ use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::replica::event_handler::ReplicaError;
+use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchCreationError;
 use crate::preferred::Confirmation;
@@ -149,6 +150,7 @@ pub(crate) fn create<S, Rt>(
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
     cache_warm_up_executor: CacheWarmUpExecutor<S>,
+    start_replica_task_notifier: EventReceiverStartNotifier,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -186,6 +188,7 @@ where
         rollup_exec_config,
         tx_cache_writer,
         cache_warm_up_executor,
+        start_replica_task_notifier,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));

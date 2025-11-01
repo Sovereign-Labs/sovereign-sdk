@@ -1,5 +1,6 @@
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
+use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use async_trait::async_trait;
 use sov_rollup_interface::node::future_or_shutdown;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
@@ -28,35 +29,43 @@ pub(crate) struct ReplicaTaskHandles {
 
 pub(crate) struct ReplicaSyncTask {
     shutdown_sender: watch::Sender<()>,
-    postgres_connection_string: String,
     page_size: usize,
+    start_replica_task_receiver: watch::Receiver<()>,
 }
 
 impl ReplicaSyncTask {
     pub(crate) async fn new(
-        postgres_connection_string: String,
         shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<Self> {
-        Self::new_with_page_size(postgres_connection_string, shutdown_sender, PAGE_SIZE).await
+    ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
+        Self::new_with_page_size(shutdown_sender, PAGE_SIZE).await
     }
 
     pub(crate) async fn new_with_page_size(
-        postgres_connection_string: String,
         shutdown_sender: watch::Sender<()>,
         page_size: usize,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            postgres_connection_string,
-            shutdown_sender,
-            page_size,
-        })
+    ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
+        let (start_replica_task_notifier, start_replica_task_receiver) =
+            EventReceiverStartNotifier::new();
+        Ok((
+            Self {
+                shutdown_sender,
+                page_size,
+                start_replica_task_receiver,
+            },
+            start_replica_task_notifier,
+        ))
     }
 
-    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) -> ReplicaTaskHandles {
+    pub(crate) async fn start<R: ReplicaEventHandler>(
+        &mut self,
+        handler: R,
+        postgres_connection_string: String,
+    ) -> ReplicaTaskHandles {
         let (event_receiver, db_data_receiver) = EventReceiver::new(
-            self.postgres_connection_string.clone(),
+            postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
             self.page_size,
+            self.start_replica_task_receiver.clone(),
         )
         .await;
 

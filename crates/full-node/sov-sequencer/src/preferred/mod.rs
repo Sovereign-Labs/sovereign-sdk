@@ -237,6 +237,9 @@ where
             handles.push(worker);
         }
 
+        let (mut replica_task, start_replica_task_notifier) =
+            ReplicaSyncTask::new(shutdown_sender.clone()).await?;
+
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
             api_ledger_db.clone(),
@@ -252,7 +255,8 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
-            cache_warm_up_executor.clone(),
+            cache_warm_up_executor,
+            start_replica_task_notifier,
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -290,17 +294,17 @@ where
             if let Some(postgres_connection_string) =
                 &config.sequencer_kind_config.postgres_connection_string
             {
-                let mut replica_task = ReplicaSyncTask::new(
-                    postgres_connection_string.clone(),
-                    shutdown_sender.clone(),
-                )
-                .await?;
-
-                let replica_task_handle = replica_task.start(synchronized_state_updator).await;
+                let replica_task_handle = replica_task
+                    .start(
+                        synchronized_state_updator,
+                        postgres_connection_string.clone(),
+                    )
+                    .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);
             }
         }
+
         handles.push(tokio::spawn({
             update_state_task(
                 seq.clone(),
