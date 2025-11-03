@@ -16,6 +16,13 @@ use sov_modules_api::{
     ProvableStateReader, SafeString, Spec, TxHash,
 };
 
+#[cfg(feature = "native")]
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+
 /// The payload for a solana offchain message.
 /// Essentially a wrapper around `sov_modules_api::transaction::UnsignedTransaction` that also
 /// includes the chain_hash, in order to ensure the hash gets signed as part of the message.
@@ -154,7 +161,12 @@ fn verify_solana_signature<S: Spec>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    MeteredSignature::new::<S>(signature.clone())
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
+
+    let res = MeteredSignature::new::<S>(signature.clone())
         .verify(pub_key, signed_bytes, meter)
         .map_err(|e| match e {
             sov_modules_api::MeteredSigVerificationError::BadSignature(err) => {
@@ -168,7 +180,12 @@ fn verify_solana_signature<S: Spec>(
                     "Signature verification ran out of gas: {err}"
                 ))
             }
-        })
+        });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
 }
 
 fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage<S>, FatalError> {

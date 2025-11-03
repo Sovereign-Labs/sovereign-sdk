@@ -1,6 +1,4 @@
 use std::marker::PhantomData;
-#[cfg(feature = "native")]
-use std::sync::LazyLock;
 
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::Decodable2718;
@@ -27,12 +25,13 @@ use crate::conversions::RlpConversionError;
 use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};
 
-/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry - which is about 17.5 MB). This should be long enough that signatures almost always
-/// last until the node has processed the block.
 #[cfg(feature = "native")]
-static SIGNATURE_CACHE: LazyLock<
-    quick_cache::sync::Cache<TxHash, Result<Address, AuthenticationError>>,
-> = LazyLock::new(|| quick_cache::sync::Cache::new(250_000));
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+/// At default size, and ~70 bytes per entry, this costs about 17.5 MB at the default size.
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(

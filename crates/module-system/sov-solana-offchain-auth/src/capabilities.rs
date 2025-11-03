@@ -60,12 +60,10 @@ where
 
         match auth_variant {
             SolanaOffchainAuthenticatorInput::Standard(raw_tx) => {
-                let call = sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)
             }
             SolanaOffchainAuthenticatorInput::SolanaOffchain(raw_tx) => {
-                let call = decode_solana_json_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                decode_solana_json_tx::<S, Rt>(&raw_tx.data)
             }
         }
     }

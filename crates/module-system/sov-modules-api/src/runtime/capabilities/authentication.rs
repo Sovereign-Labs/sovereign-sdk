@@ -2,7 +2,6 @@
 //! transactions within a rollup.
 
 use std::marker::PhantomData;
-use std::sync::LazyLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
@@ -111,11 +110,9 @@ pub trait TransactionAuthenticator<S: Spec> {
 ///
 /// # Usage Example
 /// ```rust,ignore
-/// use std::sync::LazyLock;
-///
 /// #[cfg(feature = "native")]
-/// static SIGNATURE_CACHE: LazyLock<SignatureVerificationCache<()>> =
-///     LazyLock::new(|| quick_cache::sync::Cache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+/// static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+///     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 ///
 /// fn verify_signature(...) -> Result<(), AuthenticationError> {
 ///     #[cfg(feature = "native")]
@@ -137,9 +134,8 @@ pub type SignatureVerificationCache<T> =
 #[cfg(feature = "native")]
 /// The default size for signature verification caches.
 ///
-/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry
-/// - which is about 17.5 MB). This should be long enough that signatures almost always last until
-/// the node has processed the block.
+/// At 5k TPS, this gives us 50 seconds of cache lifetime. This should be long enough that
+/// signatures almost always last until the node has processed the block.
 pub const DEFAULT_SIGNATURE_CACHE_SIZE: usize = 250_000;
 
 /// See [`RollupAuthenticator`].
@@ -154,8 +150,8 @@ pub enum AuthenticatorInput {
 }
 
 #[cfg(feature = "native")]
-static SIGNATURE_CACHE: LazyLock<SignatureVerificationCache<()>> =
-    LazyLock::new(|| quick_cache::sync::Cache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Canonical implementation of [`TransactionAuthenticator`].
 #[derive(Debug, PartialEq, Clone, Default)]
