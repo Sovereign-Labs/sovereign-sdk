@@ -39,7 +39,6 @@ pub struct InternalKey {
     pub material: Vec<u8>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KeyUpdate {
     NewKey(EncryptionKey),
@@ -88,24 +87,21 @@ impl KeyCache {
     }
 
     pub fn set_key_for_slot(&self, slot_number: u64, key: InternalKey) {
-        info!(
-            "🔑 KEY SET: '{}' for slot {}",
-            key.id, slot_number
-        );
-        
+        info!("🔑 KEY SET: '{}' for slot {}", key.id, slot_number);
+
         // Store in the main map
         self.slot_key_map
             .write()
             .unwrap()
             .insert(slot_number, key.clone());
-        
+
         // Update current key cache if this is the newest key
         let mut current_cache = self.current_key_cache.write().unwrap();
         let should_update = match current_cache.as_ref() {
             Some((cached_slot, _)) => slot_number >= *cached_slot,
             None => true,
         };
-        
+
         if should_update {
             *current_cache = Some((slot_number, key));
             debug!(
@@ -115,15 +111,10 @@ impl KeyCache {
         }
     }
 
-
-
-
-
-
     pub fn revoke_key(&self, key_id: String) {
         let mut map = self.slot_key_map.write().unwrap();
         map.retain(|_, key| key.id != key_id);
-        
+
         // Clear current cache if it contains the revoked key
         let mut current_cache = self.current_key_cache.write().unwrap();
         if let Some((_, cached_key)) = current_cache.as_ref() {
@@ -132,7 +123,7 @@ impl KeyCache {
                 warn!("Current key cache cleared due to key revocation");
             }
         }
-        
+
         warn!("Key '{}' revoked from all slots", key_id);
     }
 }
@@ -455,12 +446,12 @@ impl EncryptionLayer {
     pub fn debug_key_status(&self) {
         let map = self.key_cache.slot_key_map.read().unwrap();
         let current_cache = self.key_cache.current_key_cache.read().unwrap();
-        
+
         if map.is_empty() {
             warn!("🔍 KEY STATUS: No keys available");
         } else {
             info!("🔍 KEY STATUS: {} keys stored:", map.len());
-            
+
             // Show current cache status
             match current_cache.as_ref() {
                 Some((slot, key)) => {
@@ -470,7 +461,7 @@ impl EncryptionLayer {
                     info!("💾 CURRENT CACHE: Empty");
                 }
             }
-            
+
             // Show recent keys (last 5)
             let slots: Vec<_> = map.keys().rev().take(5).cloned().collect();
             for slot in slots {
@@ -478,7 +469,7 @@ impl EncryptionLayer {
                     info!("🔍   - Slot {}: Key '{}'", slot, key.id);
                 }
             }
-            
+
             if map.len() > 5 {
                 info!("🔍   ... and {} more historical keys", map.len() - 5);
             }
@@ -489,30 +480,23 @@ impl EncryptionLayer {
     /// This ensures sequencer and STF use the same key for the same slot
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
         let key = self.key_cache.get_key_for_slot(slot_number);
-        
+
         if let Some(ref k) = key {
-            debug!(
-                "🔑 SLOT KEY: Using key '{}' for slot {}",
-                k.id, slot_number
-            );
+            debug!("🔑 SLOT KEY: Using key '{}' for slot {}", k.id, slot_number);
         } else {
             warn!("🔑 SLOT KEY: No key available for slot {}", slot_number);
         }
 
         key
     }
-
-
-
-
-
 }
 
 impl EncryptionLayerTrait for EncryptionLayer {
     fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         // For trait methods, we need a slot number. We'll use slot 0 as default
         // In practice, callers should use get_key_for_slot() + encrypt_with_key() directly
-        let key = self.get_key_for_slot(0)
+        let key = self
+            .get_key_for_slot(0)
             .ok_or(EncryptionError::InvalidKeyFormat(
                 "No encryption key available for slot 0".to_string(),
             ))?;
@@ -529,7 +513,8 @@ impl EncryptionLayerTrait for EncryptionLayer {
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         // For trait methods, we need a slot number. We'll use slot 0 as default
         // In practice, callers should use get_key_for_slot() + decrypt_with_key() directly
-        let key = self.get_key_for_slot(0)
+        let key = self
+            .get_key_for_slot(0)
             .ok_or(EncryptionError::InvalidKeyFormat(
                 "No key available for decryption at slot 0".to_string(),
             ))?;
