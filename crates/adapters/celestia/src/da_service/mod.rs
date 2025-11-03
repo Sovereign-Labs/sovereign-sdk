@@ -1,14 +1,13 @@
 #[cfg(test)]
 mod tests;
 
-use std::sync::Arc;
-use std::time::Duration;
-
 pub use crate::config::CelestiaConfig;
-use crate::metrics::{
-    BlobSubmitMeasurement, GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
-    NamespaceDataMetrics, RollupNamespace,
+use crate::metrics::client::{
+    GetBlockHeaderMeasurement, GetChainHeadMeasurement, GetNamespaceDataMeasurement,
+    SubmitPayForBlob,
 };
+use crate::metrics::full::{BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics};
+use crate::metrics::RollupNamespace;
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
     APP_VERSION,
@@ -17,10 +16,12 @@ use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
 use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use crate::CelestiaHeader;
+use anyhow::Context;
 use async_trait::async_trait;
 use backon::ExponentialBuilder;
 use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::nmt::Namespace;
+use celestia_types::row_namespace_data::NamespaceData;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
@@ -28,9 +29,11 @@ use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::Instant;
-use tracing::{debug, info, instrument, trace};
+use tracing::instrument;
 
 type BoxError = anyhow::Error;
 
@@ -74,6 +77,16 @@ impl CelestiaService {
         }
     }
 
+    fn rollup_namespace(&self, namespace: &Namespace) -> RollupNamespace {
+        if namespace == &self.rollup_batch_namespace {
+            RollupNamespace::Batch
+        } else if namespace == &self.rollup_proof_namespace {
+            RollupNamespace::Proof
+        } else {
+            panic!("Passed unknown namespace: {namespace:?}. Bug and misconfiguration")
+        }
+    }
+
     fn get_tx_config(&self) -> celestia_client::tx::TxConfig {
         let mut tx_config = celestia_client::tx::TxConfig::default();
         if let Some(priority) = self.tx_priority.as_ref() {
@@ -90,14 +103,8 @@ impl CelestiaService {
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
         let bytes = blob.len();
-        let ns = if namespace == self.rollup_batch_namespace {
-            RollupNamespace::Batch
-        } else if namespace == self.rollup_proof_namespace {
-            RollupNamespace::Proof
-        } else {
-            panic!("Attempt to submit to non batch/proof namespace: {namespace:?}")
-        };
-        debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
+        let ns = self.rollup_namespace(&namespace);
+        tracing::debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
         let Some(signer) = &self.signer_address else {
             // TODO: Follow up: Better error when switched to `thiserror`.
@@ -111,7 +118,7 @@ impl CelestiaService {
         )
         .expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
-        debug!(
+        tracing::debug!(
             namespace = ?ns,
             commitment = %blob_hash,
             bytes,
@@ -125,46 +132,43 @@ impl CelestiaService {
 
         let start_submit = std::time::Instant::now();
         let blobs = &[blob];
-        let tx_result = run_maybe_retryable_async_fn_with_retries(
+        let method_name = format!("submit_{ns}_blob");
+        let tx_response = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
             || async {
                 let tx_config = self.get_tx_config();
-                // TODO: follow up: track individual submission results
-                match tokio::time::timeout(
+                let start = std::time::Instant::now();
+                let result = tokio::time::timeout(
                     self.request_timeout,
                     submit_client.state().submit_pay_for_blob(blobs, tx_config),
                 )
-                .await
-                {
-                    Ok(Ok(response)) => Ok(response),
-                    Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
-                    Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!(
-                        "Timeout waiting for state.SubmitPayForBlob"
-                    ))),
-                }
+                .await;
+                let result = flatten_timeout(result);
+                let is_success = result.is_ok();
+                let measurement = SubmitPayForBlob::new(ns, start.elapsed(), is_success);
+                sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
+                result
             },
-            "send_transaction",
+            &method_name,
         )
-        .await;
+        .await?;
         drop(submit_client);
 
         let submit_time = start_submit.elapsed();
         let total_time = start.elapsed();
-        let measurement = BlobSubmitMeasurement::new(
-            ns,
-            &tx_result,
+        let measurement = BlobSubmitMeasurement {
+            namespace: ns,
             bytes,
-            lock_acquisition,
+            lock_acquisition_time: lock_acquisition,
             submit_time,
             total_time,
-        );
+        };
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(measurement);
         });
 
-        let tx_response = tx_result.map_err(MaybeRetryable::Transient)?;
         let tx_hash = TmHash(tx_response.hash);
-        info!(
+        tracing::info!(
             da_height = tx_response.height.value(),
             tx_hash = %tx_hash,
             blob_hash = %blob_hash,
@@ -234,59 +238,63 @@ impl CelestiaService {
             tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
         let is_success = matches!(result, Ok(Ok(_)));
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetBlockHeaderMeasurement {
-                height,
-                fetch_header_time: start.elapsed(),
-                is_success,
-            });
+            tracker.submit(GetBlockHeaderMeasurement::new(start.elapsed(), is_success));
         });
-
-        let extended_header = result
-            .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-            .map_err(into_transient_with_context)?;
-
+        let extended_header = flatten_timeout(result)?;
         Ok(extended_header.into())
     }
 
-    async fn get_block_at_inner(
+    async fn get_namespace_data_at_inner(
         &self,
         height: u64,
-    ) -> Result<FilteredCelestiaBlock, MaybeRetryable<anyhow::Error>> {
+        namespace: Namespace,
+    ) -> Result<NamespaceData, MaybeRetryable<anyhow::Error>> {
+        let start = std::time::Instant::now();
         let client = &self.read_client;
+        let ns = self.rollup_namespace(&namespace);
+        let result = tokio::time::timeout(
+            self.request_timeout,
+            client.share().get_namespace_data(height, namespace),
+        )
+        .await;
+        let is_success = matches!(result, Ok(Ok(_)));
+        let response_time = start.elapsed();
+        let measurement = GetNamespaceDataMeasurement::new(ns, response_time, is_success);
+        sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
+        flatten_timeout(result)
+    }
 
-        // Fetch the header and relevant shares via RPC
+    async fn get_block_at_with_retries(
+        &self,
+        height: u64,
+    ) -> anyhow::Result<FilteredCelestiaBlock> {
         let start_get_block = Instant::now();
-        // TODO: Follow up: Move to try_join and don't wait for its completion.
-        let header =
-            match tokio::time::timeout(self.request_timeout, client.header().get_by_height(height))
-                .await
-            {
-                Ok(Ok(h)) => Ok(h),
-                Ok(Err(err)) => Err(into_transient_with_context(err)),
-                Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("RequestTimeout"))),
-            }?;
-        let fetch_header_time = start_get_block.elapsed();
-        let square_width = header.dah.square_width();
-        trace!(%header, height, time_ms = fetch_header_time.as_millis(), "Got the block header");
 
-        let data_futures_all = Instant::now();
-
-        // TODO: Follow up: timeouts here
-        let rollup_batch_rows_future = client
-            .share()
-            .get_namespace_data(height, self.rollup_batch_namespace);
-        let rollup_proof_rows_future = client
-            .share()
-            .get_namespace_data(height, self.rollup_proof_namespace);
-
-        let (batch_rows, proof_rows) =
-            tokio::try_join!(rollup_batch_rows_future, rollup_proof_rows_future,)
-                .map_err(into_transient_with_context)?;
-        let fetch_rows_time = data_futures_all.elapsed();
-        trace!(
-            time_ms = data_futures_all.elapsed().as_millis(),
-            "All data futures are resolved"
+        let header_future = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.get_block_header_at_inner(height),
+            "get_block_header_at",
         );
+        let rollup_batch_rows_future = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.get_namespace_data_at_inner(height, self.rollup_batch_namespace),
+            "get_rollup_batch_namespace",
+        );
+        let rollup_proof_rows_future = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || self.get_namespace_data_at_inner(height, self.rollup_proof_namespace),
+            "get_rollup_proof_namespace",
+        );
+
+        let (header, batch_rows, proof_rows) = tokio::try_join!(
+            header_future,
+            rollup_batch_rows_future,
+            rollup_proof_rows_future,
+        )?;
+
+        let square_width = header.dah.square_width();
+
+        let futures_time = start_get_block.elapsed();
 
         let build_relevant_data_start = std::time::Instant::now();
         let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
@@ -299,14 +307,13 @@ impl CelestiaService {
         let build_relevant_data = build_relevant_data_start.elapsed();
 
         let total_time = start_get_block.elapsed();
-        trace!(time_ms = total_time.as_millis(), "Get block total");
+        tracing::trace!(time_ms = total_time.as_millis(), "Get block total");
 
         sov_metrics::track_metrics(|tracker| {
             let get_block_measurement = GetBlockMeasurement {
                 height,
                 square_width,
-                fetch_header_time,
-                fetch_rows_time,
+                futures_time,
                 build_relevant_data,
                 batch_ns_metrics,
                 proof_ns_metrics,
@@ -314,9 +321,7 @@ impl CelestiaService {
             };
             tracker.submit(get_block_measurement);
         });
-
         FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
-            .map_err(MaybeRetryable::Permanent)
     }
 
     async fn get_head_block_header_inner(
@@ -330,14 +335,9 @@ impl CelestiaService {
         .await;
         let is_success = matches!(result, Ok(Ok(_)));
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetChainHeadMeasurement {
-                fetch_header_time: start.elapsed(),
-                is_success,
-            });
+            tracker.submit(GetChainHeadMeasurement::new(start.elapsed(), is_success));
         });
-        let header = result
-            .map_err(|_| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout")))?
-            .map_err(into_transient_with_context)?;
+        let header = flatten_timeout(result)?;
 
         Ok(CelestiaHeader::from(header))
     }
@@ -346,6 +346,8 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
+        // TODO: follow up: timeout here
+        // TODO: follow up: metrics here
         self.read_client
             .blob()
             .get_all(height, &[self.rollup_proof_namespace])
@@ -387,13 +389,7 @@ impl DaService for CelestiaService {
 
     #[instrument(skip(self))]
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let f = || async {
-            tokio::time::timeout(self.request_timeout, self.get_block_at_inner(height))
-                .await
-                .map_err(|e| MaybeRetryable::Transient(anyhow::anyhow!("Request timeout: {:?}", e)))
-                .and_then(|result| result)
-        };
-        run_maybe_retryable_async_fn_with_retries(self.backoff_policy, f, "get_block_at").await
+        self.get_block_at_with_retries(height).await
     }
 
     #[instrument(skip(self))]
@@ -466,7 +462,8 @@ impl DaService for CelestiaService {
         let (tx, rx) = oneshot::channel();
         let res = self
             .submit_blob_to_namespace(blob, self.rollup_batch_namespace)
-            .await;
+            .await
+            .context("Batch submit");
         // UNWRAP: Not possible because the receiver is in the scope still
         tx.send(res).unwrap();
         rx
@@ -481,7 +478,8 @@ impl DaService for CelestiaService {
         let (tx, rx) = oneshot::channel();
         let res = self
             .submit_blob_to_namespace(aggregated_proof, self.rollup_proof_namespace)
-            .await;
+            .await
+            .context("Proof submit");
         // UNWRAP: Not possible because the receiver is in the scope still
         tx.send(res).unwrap();
         rx
@@ -555,4 +553,14 @@ pub(crate) fn get_extraction_proof(
     };
 
     RelevantProofs { proof, batch }
+}
+
+fn flatten_timeout<T>(
+    response: Result<Result<T, celestia_client::Error>, tokio::time::error::Elapsed>,
+) -> Result<T, MaybeRetryable<anyhow::Error>> {
+    match response {
+        Ok(Ok(response)) => Ok(response),
+        Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
+        Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
+    }
 }
