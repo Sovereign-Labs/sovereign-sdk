@@ -79,17 +79,17 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
         // the account's nonce cannot be higher than this.
         // We add 1 because `current_nonce` is the next valid nonce, while `last_executed` was the
         // previous valid nonce (so the next transaction should have nonce `last_executed + 1`).
-        let upper_bound = current_nonce.max(self.last_executed.map(|n| n.saturating_add(1)).unwrap_or(0));
-
+        let upper_bound =
+            current_nonce.max(self.last_executed.map(|n| n.saturating_add(1)).unwrap_or(0));
 
         if tx_nonce < lower_bound {
             // The transaction can never be valid.
-            return false;
+            false
         } else if lower_bound <= tx_nonce && tx_nonce <= upper_bound {
             // There is uncertainty about the user account's real nonce. In this range, leniently
             // treat transactions as valid (the uncertainty will eventually resolve itself as API
             // state updates).
-            return true;
+            true
         } else if tx_nonce > upper_bound {
             // The transaction's nonce is known to be greater than our upper bound estimate of the
             // next valid nonce.
@@ -107,7 +107,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
             }
 
             // Return true if we've reached tx_nonce, meaning we have all prerequisites
-            return expected >= tx_nonce;
+            expected >= tx_nonce
         } else {
             unreachable!("The ranges checked are meant to be exhaustive");
         }
