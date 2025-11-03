@@ -273,7 +273,7 @@ where
         } = self.call(request, block_number, state)?;
         self.db(state)?
             .try_commit(changes)
-            .expect("Gas meter is initialized with INF");
+            .map_err(EthApiError::from)?;
         let gas_used = result.gas_used();
 
         // Charge for logs storage in the receipt

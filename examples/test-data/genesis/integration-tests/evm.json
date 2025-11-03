@@ -21,7 +21,11 @@
       "code": "0x"
     }
   ],
-  "contract_creation_policy": "everyone",
+  "contract_creation_policy": {
+    "allowlist": [
+      "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+    ]
+  },
   "initial_base_fee": 7,
   "genesis_timestamp": 0,
   "chain_spec": {
