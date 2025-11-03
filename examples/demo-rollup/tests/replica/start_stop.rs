@@ -244,6 +244,7 @@ async fn test_replica_start_stop_many_times() {
             .await
             .unwrap();
 
+        test_rollup.wait_for_next_blocks(10).await;
         send_transfers(
             i * nb_of_txs,
             nb_of_txs,
@@ -252,8 +253,6 @@ async fn test_replica_start_stop_many_times() {
             &test_rollup,
         )
         .await;
-
-        test_rollup.wait_for_next_blocks(10).await;
 
         wait_for_all_events_with_timeout(
             Duration::from_millis(100),
