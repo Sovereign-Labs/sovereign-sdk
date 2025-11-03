@@ -46,6 +46,7 @@ use sov_modules_api::{
     VersionReader, VisibleSlotNumber, *,
 };
 use sov_modules_api::{SkippedTxContents, TxProcessingError};
+use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
@@ -70,8 +71,8 @@ use transaction_subscriptions::TransactionCache;
 
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
-    AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError, StateUpdateNotification,
-    SubscriptionStreamError, WithCachedTxHashes,
+    pre_exec_err_to_accept_tx_err, AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError,
+    StateUpdateNotification, SubscriptionStreamError, WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
@@ -1006,15 +1007,8 @@ where
             .api_state()
             .default_api_state_accessor()
             .to_provable_reader();
-        let (_, auth_data, call) =
-            <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state).map_err(|_|
-                ErrorObject {
-                    status: StatusCode::BAD_REQUEST,
-                    message: "Unable to decode transaction".to_string(),
-                    details: sov_rest_utils::json_obj!({
-                        "error": "Unable to decode transaction".to_string(),
-                    }),
-        })?;
+        let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
+            .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
         let call = Rt::wrap_call(call);
         let delay_ms = runtime.get_transaction_delay_ms(&call);
         // We need to destructure auth_data because it's not `Send`.
