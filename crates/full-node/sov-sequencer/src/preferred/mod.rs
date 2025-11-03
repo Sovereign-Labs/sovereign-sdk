@@ -1002,18 +1002,19 @@ where
 
         // Check if this transaction has a configured delay
         let runtime = Rt::default();
-        let (call, auth_data) = match Rt::Auth::decode_serialized_tx(&baked_tx) {
-            Ok(t) => t,
-            Err(_) => {
-                return Err(ErrorObject {
+        let mut state = self
+            .api_state()
+            .default_api_state_accessor()
+            .to_provable_reader();
+        let (_, auth_data, call) =
+            <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state).map_err(|_|
+                ErrorObject {
                     status: StatusCode::BAD_REQUEST,
                     message: "Unable to decode transaction".to_string(),
                     details: sov_rest_utils::json_obj!({
                         "error": "Unable to decode transaction".to_string(),
                     }),
-                });
-            }
-        };
+        })?;
         let call = Rt::wrap_call(call);
         let delay_ms = runtime.get_transaction_delay_ms(&call);
         // We need to destructure auth_data because it's not `Send`.

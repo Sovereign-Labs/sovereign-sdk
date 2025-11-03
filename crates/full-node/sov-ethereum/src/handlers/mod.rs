@@ -14,8 +14,6 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_modules_api::capabilities::HasKernel;
-use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
@@ -43,21 +41,7 @@ where
         .make_raw_tx(raw_evm_tx)
         .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-    // Authenticate the transaction.
-    // This was used earlier to get the credential and nonce, for retries. This has now been
-    // implemented in the sequencer and is therefore no longer needed. However, calling
-    // `authenticate()` here pre-calculates and caches the signature check in the async API
-    // handler, which is important for performance.
-    // This will also be moved into the sequencer, but for now is kept here.
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-    let mut state = ethereum
-        .sequencer
-        .api_state()
-        .default_api_state_accessor()
-        .to_provable_reader();
-    let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
-        to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
-    })?;
 
     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
         to_jsonrpsee_error_object(
