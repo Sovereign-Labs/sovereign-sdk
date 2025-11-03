@@ -304,7 +304,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let (call, _) = Rt::Auth::decode_serialized_tx(&baked_tx.tx)?;
+        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx)?;
         let call = Rt::wrap_call(call);
 
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
