@@ -82,23 +82,22 @@ where
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
-    ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
+    ) -> Result<(Self::Decodable, AuthorizationData<S>), sov_modules_api::capabilities::FatalError>
+    {
         let auth_variant: Eip712AuthenticatorInput = borsh::from_slice(&tx.data).map_err(|e| {
             sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
         })?;
 
         match auth_variant {
             Eip712AuthenticatorInput::Standard(raw_tx) => {
-                let call = sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)
             }
             Eip712AuthenticatorInput::Eip712(raw_tx) => {
-                let call = sov_modules_api::capabilities::decode_sov_tx_with_cryptospec::<
+                sov_modules_api::capabilities::decode_sov_tx_with_cryptospec::<
                     S,
                     Rt,
                     <<S as Spec>::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec,
-                >(&raw_tx.data)?;
-                Ok(call)
+                >(&raw_tx.data)
             }
         }
     }

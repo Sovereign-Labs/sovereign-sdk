@@ -11704,17 +11704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-eip-712"
-version = "0.3.0"
-dependencies = [
- "alloy-primitives",
- "alloy-sol-types",
- "anyhow",
- "hex",
- "k256",
-]
-
-[[package]]
 name = "sov-eip712-auth"
 version = "0.3.0"
 dependencies = [
@@ -11859,6 +11848,7 @@ dependencies = [
  "schemars 0.8.22",
  "secp256k1 0.30.0",
  "serde",
+ "serde_json",
  "serde_with",
  "sov-address",
  "sov-bank",

@@ -333,7 +333,7 @@ pub struct AuthAndProcessTimings {
     pub reward_prover_timer: MaybeTimer,
     /// State Accesses performed while rewarding the prover.
     pub reward_prover_access_metrics: StateMetrics,
-    /// The execution context for the trasnaction.
+    /// The execution context for the transaction.
     pub execution_context: ExecutionContext,
 }
 

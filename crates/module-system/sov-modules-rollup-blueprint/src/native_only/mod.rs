@@ -687,6 +687,7 @@ fn spawn_task_monitor(
 
         let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
+            _ = shutdown_sender.send(());
             false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
@@ -707,6 +708,7 @@ fn spawn_task_monitor(
         for handle in handles {
             if let Err(error) = handle.await {
                 tracing::error!(error = %error, "Additional background task joined with error");
+                _ = shutdown_sender.send(());
                 was_graceful = false;
             }
         }
