@@ -365,6 +365,9 @@ mod tests {
             .start(test_handler, postgres_connection_string)
             .await;
 
+        // Wait for sync_task.start to spawn the sync task
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
         execute(db, test_cases).await;
 
         for data in expected {
