@@ -2,6 +2,7 @@
 //! transactions within a rollup.
 
 use std::marker::PhantomData;
+use std::sync::LazyLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
@@ -52,6 +53,9 @@ pub trait TransactionAuthenticator<S: Spec> {
 
     /// Authenticates a transaction (typically by checking the signature) and deserializes its contents
     /// into an executable message.
+    /// For rollups running a preferred sequencer it is expected that implementations cache signature
+    /// checks during native execution, and the preferred sequencer will attempt to pre-populate this
+    /// cache to parallelise signature checks.
     fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
@@ -96,6 +100,48 @@ pub trait TransactionAuthenticator<S: Spec> {
     }
 }
 
+#[cfg(feature = "native")]
+/// A helper type intended for caching the results of signature verification outside of the ZKVM.
+/// In particular, the preferred sequencer expects a cache to be available and attempts to warm it
+/// upon receiving a transaction, prior to executing it inside the STF.
+///
+/// # Type Parameter
+/// - `T`: The success type of the verification result. Can be `()` if only success/failure is
+///   stored.
+///
+/// # Usage Example
+/// ```rust,ignore
+/// use std::sync::LazyLock;
+///
+/// #[cfg(feature = "native")]
+/// static SIGNATURE_CACHE: LazyLock<SignatureVerificationCache<()>> =
+///     LazyLock::new(|| quick_cache::sync::Cache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+///
+/// fn verify_signature(...) -> Result<(), AuthenticationError> {
+///     #[cfg(feature = "native")]
+///     if let Some(cached) = SIGNATURE_CACHE.get(&tx_hash) {
+///         return cached;
+///     }
+///
+///     let result = /* actual verification */;
+///
+///     #[cfg(feature = "native")]
+///     SIGNATURE_CACHE.insert(tx_hash, result.clone());
+///
+///     result
+/// }
+/// ```
+pub type SignatureVerificationCache<T> =
+    quick_cache::sync::Cache<TxHash, Result<T, AuthenticationError>>;
+
+#[cfg(feature = "native")]
+/// The default size for signature verification caches.
+///
+/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry
+/// - which is about 17.5 MB). This should be long enough that signatures almost always last until
+/// the node has processed the block.
+pub const DEFAULT_SIGNATURE_CACHE_SIZE: usize = 250_000;
+
 /// See [`RollupAuthenticator`].
 #[derive(std::fmt::Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub enum AuthenticatorInput {
@@ -106,6 +152,10 @@ pub enum AuthenticatorInput {
     /// backwards-compatible way.
     Standard(RawTx),
 }
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: LazyLock<SignatureVerificationCache<()>> =
+    LazyLock::new(|| quick_cache::sync::Cache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Canonical implementation of [`TransactionAuthenticator`].
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -284,13 +334,23 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    tx.verify(chain_hash, meter).map_err(|e| match e {
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
+
+    let res = tx.verify(chain_hash, meter).map_err(|e| match e {
         TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
         _ => AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(e.to_string()),
             raw_tx_hash,
         ),
-    })
+    });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
 }
 
 /// Extracts authorization data from a verified transaction.

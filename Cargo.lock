@@ -12108,6 +12108,7 @@ dependencies = [
  "openapiv3",
  "proptest",
  "proptest-derive 0.5.1",
+ "quick_cache",
  "reqwest 0.12.23",
  "schemars 0.8.22",
  "serde",
