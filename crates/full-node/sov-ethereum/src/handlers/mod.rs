@@ -33,8 +33,6 @@ const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 const FUTURE_NONCE_THRESHOLD: u64 = 100;
 /// How long to wait between retries.
 const SLEEP_DURATION_MS: u64 = 10;
-/// The maximum number of times to fetch the nonce and retry.
-const MAX_RETRIES: u32 = 10;
 /// The maximum amount of time to buffer a tx with a future nonce. Provides an upper bound in case retry attempts are taking too long.
 const MAX_BUFFER_DURATION_MS: u128 = 200;
 
@@ -55,77 +53,23 @@ where
         .make_raw_tx(raw_evm_tx)
         .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-    // Authenticate the transaction so that we can get the credential ID and nonce.
+    // Authenticate the transaction.
+    // This was used earlier to get the credential and nonce, for retries. This has now been
+    // implemented in the sequencer and is therefore no longer needed. However, calling
+    // `authenticate()` here pre-calculates and caches the signature check in the async API
+    // handler, which is important for performance.
+    // This will also be moved into the sequencer, but for now is kept here.
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
     let mut state = ethereum
         .sequencer
         .api_state()
         .default_api_state_accessor()
         .to_provable_reader();
-    let (_decoded_tx, auth_data, _call) =
+    let _ =
         <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
             to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
         })?;
-    let mut state = state.api_state_accessor;
-    let AuthorizationData {
-        credential_id,
-        uniqueness,
-        ..
-    } = auth_data;
-    drop(auth_data); // Drop the authorization data because it's not `Send`, so we can't hold it across retries.
-    let retries = if ethereum.buffer_raw_txs {
-        MAX_RETRIES
-    } else {
-        0
-    };
-    let start = std::time::Instant::now();
-    for _ in 0..retries {
-        match uniqueness {
-            UniquenessData::Nonce(nonce) => {
-                let expected_nonce = sov_uniqueness::Uniqueness::<S>::default()
-                    .nonce(&credential_id, &mut state)?
-                    .unwrap_or_default();
-                if nonce == expected_nonce {
-                    ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
-                        to_jsonrpsee_error_object(
-                            format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-                            ETH_RPC_ERROR,
-                        )
-                    })?;
 
-                    return on_success(tx_hash, ethereum);
-                } else if nonce < expected_nonce {
-                    return Err(to_jsonrpsee_error_object(
-                        format!("Nonce error: nonce {nonce} has already been used"),
-                        ETH_RPC_ERROR,
-                    ));
-                } else if nonce > (expected_nonce + FUTURE_NONCE_THRESHOLD) {
-                    return Err(to_jsonrpsee_error_object(
-                        format!(
-                            "Nonce error: Provided nonce {nonce} is in the future. Expected nonce is {expected_nonce}",
-                        ),
-                        ETH_RPC_ERROR,
-                    ));
-                }
-            }
-            _ => {
-                return Err(to_jsonrpsee_error_object(
-                    "Invalid uniqueness data",
-                    ETH_RPC_ERROR,
-                ));
-            }
-        }
-        // tokio::time::sleep can have unreliable timing under load, so if the total time we've been retrying is too large we'll break the loop early.
-        if start.elapsed().as_millis() > MAX_BUFFER_DURATION_MS {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(SLEEP_DURATION_MS)).await;
-        state = ethereum.sequencer.api_state().default_api_state_accessor();
-    }
-
-    // Once we've exhausted all retries, make one "regular" attempt to accept the transaction.
-    // This ensures that every tx is attempted at least once even if MAX_RETRIES is set to zero
-    // and provides some protection against spuriously rejecting txs in case our view of the state was stale.
     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
         to_jsonrpsee_error_object(
             format!("{} - '{}' ({:?})", e.status, e.message, e.details),
