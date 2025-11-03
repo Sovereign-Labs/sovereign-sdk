@@ -125,7 +125,12 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
     ) -> Self {
-        let tx = borsh::to_vec(&Transaction::new_signed_tx(key, chain_hash, unsigned_tx)).unwrap();
+        let tx = borsh::to_vec(&Transaction::<RT, S>::new_signed_tx(
+            key,
+            chain_hash,
+            unsigned_tx,
+        ))
+        .unwrap();
         Self::PreSigned(RawTx { data: tx })
     }
 

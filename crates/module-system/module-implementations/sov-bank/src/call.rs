@@ -1,16 +1,24 @@
-use anyhow::{bail, Context as _, Result};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
-    Context, EventEmitter, SafeString, SafeVec, Spec, StateAccessor, StateReader, TxState,
+    Context, CoreModuleError, EventEmitter, ModuleInfo, RuntimeDiscriminant, SafeString, SafeVec,
+    Spec, StateAccessor, StateReader, TxState,
 };
-use sov_state::User;
+use sov_rollup_interface::common::SizedSafeString;
+use sov_state::{EventContainer, User};
 use strum::{EnumDiscriminants, EnumIs, EnumIter, VariantArray};
 
+use crate::error::{
+    ArithmeticError, BurnTokenError, CommonError, CreateTokenError, FreezeTokenError,
+    MintTokenError, TransferTokenError, UpdateAdminError,
+};
 use crate::event::Event;
 use crate::token::unique_holders;
 use crate::utils::{get_token_id_metered, Payable, TokenHolderRef};
 use crate::{Amount, Bank, Coins, Token, TokenId};
+
+/// The maximum length of the memo field for a transfer, in bytes.
+pub const MAX_MEMO_LENGTH: usize = 512;
 
 /// The maximum number of addresses that can be authorized to mint or freeze a token.
 pub const MAX_ADMINS: usize = 20;
@@ -48,7 +56,6 @@ pub enum CallMessage<S: Spec> {
         /// The amount of tokens to transfer.
         coins: Coins,
     },
-
     /// Burns a specified amount of tokens.
     Burn {
         /// The amount of tokens to burn.
@@ -76,6 +83,16 @@ pub enum CallMessage<S: Spec> {
         /// The ID of the token whose admin list is being updated.
         token_id: TokenId,
     },
+    /// Transfers a specified amount of tokens to the specified address.
+    #[sov_wallet(show_as = "Transfer to address {} {} with memo `{}`.")]
+    TransferWithMemo {
+        /// The address to which the tokens will be transferred.
+        to: S::Address,
+        /// The amount of tokens to transfer.
+        coins: Coins,
+        /// The message included with the transfer
+        memo: SizedSafeString<MAX_MEMO_LENGTH>,
+    },
 }
 
 impl<S: Spec> Bank<S> {
@@ -92,24 +109,25 @@ impl<S: Spec> Bank<S> {
         supply_cap: Option<Amount>,
         minter: impl Payable<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<TokenId> {
+    ) -> Result<TokenId, CreateTokenError> {
         tracing::trace!(%minter, "Create token request");
 
         if let Some(decimals) = token_decimals {
-            anyhow::ensure!(
-                decimals <= Amount::MAX_DECIMALS,
-                "Too many decimal places: {}, maximum allowed for a token: {}",
-                decimals,
-                Amount::MAX_DECIMALS
-            );
+            if decimals > Amount::MAX_DECIMALS {
+                return Err(CreateTokenError::TooManyDecimals {
+                    provided: decimals,
+                    max_allowed: Amount::MAX_DECIMALS,
+                });
+            }
         };
 
-        if initial_balance > supply_cap.unwrap_or(Amount::MAX) {
-            bail!(
-                "Requested initial balance {} is greater than the supply cap {}",
+        let supply_cap = supply_cap.unwrap_or(Amount::MAX);
+
+        if initial_balance > supply_cap {
+            return Err(CreateTokenError::InitialBalanceExceedsSupplyCap {
                 initial_balance,
-                supply_cap.unwrap_or(Amount::MAX)
-            );
+                supply_cap,
+            });
         }
 
         let mint_to_address = mint_to_address.as_token_holder();
@@ -124,22 +142,31 @@ impl<S: Spec> Bank<S> {
         let token = Token::<S> {
             name: token_name.to_owned(),
             total_supply: initial_balance,
-            supply_cap: supply_cap.unwrap_or(Amount::MAX),
+            supply_cap,
             admins: admins.clone(),
         };
 
-        if self.tokens.get(&token_id, state)?.is_some() {
-            bail!(
-                "Token with id already exists {}, name={} minter={}",
-                token_id,
-                token_name,
-                minter.as_token_holder()
-            );
-        }
-        self.balances
-            .set(&(mint_to_address, &token_id), &initial_balance, state)?;
+        let token_exists = self
+            .tokens
+            .get(&token_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .is_some();
 
-        self.tokens.set(&token_id, &token, state)?;
+        if token_exists {
+            return Err(CreateTokenError::TokenAlreadyExists {
+                token_id: token_id.to_string(),
+                name: token_name,
+                minter: minter.as_token_holder().to_string(),
+            })?;
+        }
+
+        self.balances
+            .set(&(mint_to_address, &token_id), &initial_balance, state)
+            .map_err(CoreModuleError::state_write)?;
+
+        self.tokens
+            .set(&token_id, &token, state)
+            .map_err(CoreModuleError::state_write)?;
 
         tracing::trace!(
             %token_id,
@@ -161,7 +188,7 @@ impl<S: Spec> Bank<S> {
                 },
                 mint_to_address: mint_to_address.into(),
                 minter: minter.as_token_holder().into(),
-                supply_cap: supply_cap.unwrap_or(Amount::MAX),
+                supply_cap,
                 admins,
             },
         );
@@ -175,7 +202,19 @@ impl<S: Spec> Bank<S> {
         coins: Coins,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> Result<(), TransferTokenError> {
+        self.transfer_with_memo(to, coins, None, context, state)
+    }
+
+    /// Transfers the set of `coins` to the address specified by `to` with an optional memo.
+    pub fn transfer_with_memo(
+        &mut self,
+        to: impl Payable<S>,
+        coins: Coins,
+        memo: Option<String>,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), TransferTokenError> {
         tracing::trace!("Transfer token request");
 
         let to = to.as_token_holder();
@@ -196,6 +235,7 @@ impl<S: Spec> Bank<S> {
                 from: sender.as_token_holder().into(),
                 to: to.into(),
                 coins,
+                memo,
             },
         );
         Ok(())
@@ -218,25 +258,30 @@ impl<S: Spec> Bank<S> {
         coins: Coins,
         owner: impl Payable<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> Result<(), BurnTokenError> {
         tracing::trace!("Handling Burn call");
 
         let mut token = self
             .tokens
-            .get_or_err(&coins.token_id, state)?
-            .with_context(|| format!("Failed to get token_id={}", &coins.token_id))?;
+            .get(&coins.token_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .ok_or_else(|| CommonError::TokenNotFound {
+                token_id: coins.token_id,
+            })?;
 
         token.total_supply = token
             .total_supply
             .checked_sub(coins.amount)
             .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Total supply underflow when burning, supply={} is less than burn amount={}",
-                    token.total_supply,
-                    coins.amount
-                )
+                CommonError::Arithmetic(ArithmeticError::Underflow {
+                    base: token.total_supply,
+                    subtrahend: coins.amount,
+                    message: "Total supply underflow when burning".to_owned(),
+                })
             })?;
-        self.tokens.set(&coins.token_id, &token, state)?;
+        self.tokens
+            .set(&coins.token_id, &token, state)
+            .map_err(CoreModuleError::state_write)?;
 
         let owner: TokenHolderRef<'_, S> = owner.as_token_holder();
         self.decrease_balance_checked(&coins.token_id, owner, coins.amount, state)?;
@@ -266,16 +311,8 @@ impl<S: Spec> Bank<S> {
         coins: Coins,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
-        let token_id = coins.token_id;
-        self.burn(coins, context.sender(), state).with_context(|| {
-            format!(
-                "Failed to burn token_id={} owner={}",
-                token_id,
-                context.sender()
-            )
-        })?;
-        Ok(())
+    ) -> Result<(), BurnTokenError> {
+        self.burn(coins, context.sender(), state)
     }
 
     /// Mints the `coins`to the address `mint_to_identity` using the externally owned account ("EOA") supplied by
@@ -289,7 +326,7 @@ impl<S: Spec> Bank<S> {
         mint_to_identity: impl Payable<S>,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> Result<(), MintTokenError> {
         self.mint(
             coins,
             mint_to_identity,
@@ -308,32 +345,42 @@ impl<S: Spec> Bank<S> {
         mint_to_identity: impl Payable<S>,
         authorizer: impl Payable<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> Result<(), MintTokenError> {
         tracing::trace!(%authorizer, "Mint token request");
 
         let mint_to_identity = mint_to_identity.as_token_holder();
         let mut token = self
             .tokens
-            .get_or_err(&coins.token_id, state)?
-            .with_context(|| format!("Failed to get token_id={}", &coins.token_id))?;
+            .get(&coins.token_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .ok_or_else(|| CommonError::TokenNotFound {
+                token_id: coins.token_id,
+            })?;
 
         let authorizer = authorizer.as_token_holder();
-        token
-            .update_for_mint_if_allowed(authorizer, coins.amount)
-            .with_context(|| format!("Failed to mint token_id={}", &coins.token_id))?;
-        self.tokens.set(&coins.token_id, &token, state)?;
+        token.update_for_mint_if_allowed(authorizer, coins.amount)?;
+        self.tokens
+            .set(&coins.token_id, &token, state)
+            .map_err(CoreModuleError::state_write)?;
 
-        let to_balance: Amount = self
+        let current_to_balance = self
             .balances
-            .get(&(mint_to_identity, &coins.token_id), state)?
-            .unwrap_or_default()
+            .get(&(mint_to_identity, &coins.token_id), state)
+            .map_err(CoreModuleError::state_read)?
+            .unwrap_or_default();
+        let to_balance: Amount = current_to_balance
             .checked_add(coins.amount)
-            .ok_or(anyhow::Error::msg(
-                "Account balance overflow in the mint method of bank module",
-            ))?;
+            .ok_or_else(|| {
+                CommonError::Arithmetic(ArithmeticError::Overflow {
+                    base: current_to_balance,
+                    addend: coins.amount,
+                    message: format!("Mint account balance overflow {mint_to_identity}"),
+                })
+            })?;
 
         self.balances
-            .set(&(mint_to_identity, &coins.token_id), &to_balance, state)?;
+            .set(&(mint_to_identity, &coins.token_id), &to_balance, state)
+            .map_err(CoreModuleError::state_write)?;
 
         tracing::trace!(
             %authorizer,
@@ -380,7 +427,7 @@ impl<S: Spec> Bank<S> {
         token_id: TokenId,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> Result<(), FreezeTokenError> {
         let sender_ref = context.sender();
         let sender = sender_ref.as_token_holder();
 
@@ -388,14 +435,15 @@ impl<S: Spec> Bank<S> {
 
         let mut token = self
             .tokens
-            .get_or_err(&token_id, state)?
-            .with_context(|| format!("Failed to get token_id={}", &token_id))?;
+            .get(&token_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .ok_or_else(|| CommonError::TokenNotFound { token_id })?;
 
-        token
-            .freeze(sender)
-            .with_context(|| format!("Failed to freeze token_id={}", &token_id))?;
+        token.freeze(sender)?;
 
-        self.tokens.set(&token_id, &token, state)?;
+        self.tokens
+            .set(&token_id, &token, state)
+            .map_err(CoreModuleError::state_write)?;
 
         tracing::trace!(
             freezer = %sender,
@@ -422,14 +470,17 @@ impl<S: Spec> Bank<S> {
         token_id: TokenId,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> Result<(), UpdateAdminError> {
         let mut token = self
             .tokens
-            .get_or_err(&token_id, state)?
-            .with_context(|| format!("Failed to get token_id={}", &token_id))?;
+            .get(&token_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .ok_or_else(|| CommonError::TokenNotFound { token_id })?;
 
         token.update_admin(new_address, context.sender())?;
-        self.tokens.set(&token_id, &token, state)?;
+        self.tokens
+            .set(&token_id, &token, state)
+            .map_err(CoreModuleError::state_write)?;
         Ok(())
     }
 }
@@ -444,12 +495,38 @@ impl<S: Spec> Bank<S> {
         to: impl Payable<S>,
         coins: Coins,
         state: &mut impl StateAccessor,
-    ) -> Result<()> {
+    ) -> Result<(), TransferTokenError> {
         let from = from.as_token_holder();
         let to = to.as_token_holder();
 
         self.do_transfer(from, to, &coins.token_id, coins.amount, state)
-            .with_context(|| format!("Failed to transfer token_id={}", &coins.token_id))?;
+    }
+
+    /// Transfers the set of `coins` from the address `from` to the address `to` with an optional memo.
+    ///
+    /// Returns an error if the token ID doesn't exist.
+    pub fn transfer_from_with_memo(
+        &mut self,
+        from: impl Payable<S>,
+        to: impl Payable<S>,
+        coins: Coins,
+        memo: Option<String>,
+        state: &mut (impl StateAccessor + EventContainer),
+    ) -> Result<(), TransferTokenError> {
+        let from = from.as_token_holder();
+        let to = to.as_token_holder();
+
+        self.do_transfer(from, to, &coins.token_id, coins.amount, state)?;
+
+        self.emit_event(
+            state,
+            Event::TokenTransferred {
+                from: from.into(),
+                to: to.into(),
+                coins,
+                memo,
+            },
+        );
 
         Ok(())
     }
@@ -464,15 +541,22 @@ impl<S: Spec> Bank<S> {
         token_id: &TokenId,
         amount: Amount,
         state: &mut impl StateAccessor,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), TransferTokenError> {
         if from == to {
             let balance = self
                 .balances
-                .get(&(from, token_id), state)?
+                .get(&(from, token_id), state)
+                .map_err(CoreModuleError::state_read)?
                 .unwrap_or(Amount::ZERO);
 
             if amount > balance {
-                anyhow::bail!("Token transfer to self failed. Self: {from}, transfer amount: {amount}, balance: {balance}.")
+                return Err(TransferTokenError::InsufficientBalance {
+                    amount,
+                    balance,
+                    from: from.to_string(),
+                    to: to.to_string(),
+                    token_id: token_id.to_string(),
+                });
             }
 
             tracing::trace!("Token transfer succeeded because it was transferring tokens to self.");
@@ -488,18 +572,27 @@ impl<S: Spec> Bank<S> {
 
         let current_to_balance = self
             .balances
-            .get(&(to, token_id), state)?
+            .get(&(to, token_id), state)
+            .map_err(CoreModuleError::state_read)?
             .unwrap_or(Amount::ZERO);
-        let to_balance = current_to_balance.checked_add(amount).with_context(|| {
-            format!(
-                "Account balance overflow for {to} when adding {amount} to current balance {current_to_balance}"
-            )
+
+        let to_balance = current_to_balance.checked_add(amount).ok_or_else(|| {
+            CommonError::Arithmetic(ArithmeticError::Overflow {
+                base: current_to_balance,
+                addend: amount,
+                message: format!("Balance overflow for account {to}"),
+            })
         })?;
 
-        self.balances.set(&(from, token_id), &from_balance, state)?;
-        self.balances.set(&(to, token_id), &to_balance, state)?;
+        self.balances
+            .set(&(from, token_id), &from_balance, state)
+            .map_err(CoreModuleError::state_write)?;
+        self.balances
+            .set(&(to, token_id), &to_balance, state)
+            .map_err(CoreModuleError::state_write)?;
         Ok(())
     }
+
     // Check that amount can be deducted from address
     // Returns new balance after subtraction.
     fn decrease_balance_checked(
@@ -508,19 +601,24 @@ impl<S: Spec> Bank<S> {
         from: TokenHolderRef<'_, S>,
         amount: Amount,
         state: &mut impl StateAccessor,
-    ) -> anyhow::Result<Amount> {
+    ) -> Result<Amount, CommonError> {
         let balance = self
             .balances
-            .get(&(from, token_id), state)?
+            .get(&(from, token_id), state)
+            .map_err(CoreModuleError::state_read)?
             .unwrap_or(Amount::ZERO);
 
-        let new_balance = match balance.checked_sub(amount) {
-            Some(from_balance) => from_balance,
-            None => bail!(format!(
-                "Insufficient balance from={from}, got={balance}, needed={amount}",
-            )),
-        };
-        self.balances.set(&(from, token_id), &new_balance, state)?;
+        let new_balance = balance.checked_sub(amount).ok_or_else(|| {
+            CommonError::Arithmetic(ArithmeticError::Underflow {
+                base: balance,
+                subtrahend: amount,
+                message: format!("Insufficient balance for account {from}"),
+            })
+        })?;
+
+        self.balances
+            .set(&(from, token_id), &new_balance, state)
+            .map_err(CoreModuleError::state_write)?;
         Ok(new_balance)
     }
 
@@ -566,5 +664,11 @@ impl<S: Spec> Bank<S> {
             .tokens
             .get(token_id, state)?
             .map(|token| token.total_supply))
+    }
+}
+
+impl<S: Spec> RuntimeDiscriminant for CallMessage<S> {
+    fn runtime_discriminant() -> u8 {
+        crate::Bank::<S>::default().discriminant()
     }
 }

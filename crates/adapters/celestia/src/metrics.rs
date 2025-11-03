@@ -1,5 +1,5 @@
+use celestia_client::tx::TxInfo;
 use celestia_types::row_namespace_data::NamespaceData;
-use celestia_types::state::RawTxResponse;
 use sov_metrics::Metric;
 use std::fmt::Formatter;
 use std::io::Write;
@@ -56,10 +56,9 @@ impl Metric for GetBlockMeasurement {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // height is tag, the rest is field
         write!(
             buffer,
-            "{},height={} square_width={},fetch_header_us={},fetch_rows_us={},build_data_us={},total_time_us={},batch_rows={},batch_shares={},proof_rows={},proof_shares={}",
+            "{} height={},square_width={},fetch_header_us={},fetch_rows_us={},build_data_us={},total_time_us={},batch_rows={},batch_shares={},proof_rows={},proof_shares={}",
             self.measurement_name(),
             self.height,
             self.square_width,
@@ -77,9 +76,7 @@ impl Metric for GetBlockMeasurement {
 
 #[derive(Debug)]
 pub struct SuccessfulSubmitMeasurement {
-    pub da_height: i64,
-    pub gas_used: i64,
-    pub response_code: u32,
+    pub da_height: u64,
 }
 
 #[derive(Debug)]
@@ -95,7 +92,7 @@ pub(crate) struct BlobSubmitMeasurement {
 impl BlobSubmitMeasurement {
     pub fn new(
         namespace: RollupNamespace,
-        result: &Result<RawTxResponse, jsonrpsee::core::ClientError>,
+        result: &anyhow::Result<TxInfo>,
         bytes: usize,
         lock_acquisition_time: std::time::Duration,
         submit_time: std::time::Duration,
@@ -103,9 +100,7 @@ impl BlobSubmitMeasurement {
     ) -> Self {
         let success_metrics = match result {
             Ok(r) => Some(SuccessfulSubmitMeasurement {
-                da_height: r.height,
-                gas_used: r.gas_used,
-                response_code: r.code,
+                da_height: r.height.value(),
             }),
             Err(_err) => None,
         };
@@ -140,11 +135,7 @@ impl Metric for BlobSubmitMeasurement {
             self.total_time.as_micros(),
         )?;
         if let Some(success_metrics) = &self.success_metrics {
-            write!(
-                buffer,
-                ",status_code={},height={},gas_used={}",
-                success_metrics.response_code, success_metrics.da_height, success_metrics.gas_used,
-            )?;
+            write!(buffer, ",height={}", success_metrics.da_height,)?;
         }
 
         Ok(())
@@ -166,10 +157,10 @@ impl Metric for GetBlockHeaderMeasurement {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},height={},is_success={} total_time_us={}",
+            "{},is_success={} height={},total_time_us={}",
             self.measurement_name(),
-            self.height,
             self.is_success as u8,
+            self.height,
             self.fetch_header_time.as_micros(),
         )
     }

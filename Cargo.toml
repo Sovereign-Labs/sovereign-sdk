@@ -26,7 +26,6 @@ members = [
     "crates/utils/nearly-linear",
     "crates/utils/sov-zkvm-utils",
     "crates/utils/sov-build",
-    "crates/utils/sov-eip-712",
     "crates/utils/sov-rpc-eth-types",
     "crates/utils/sov-evm-soak-testing",
     # Module System
@@ -87,7 +86,9 @@ members = [
     "crates/adapters/celestia",
     "crates/adapters/risc0",
     "crates/adapters/sp1",
+    "crates/web3",
 ]
+default-members = ["crates/rollup-interface", "crates/adapters/mock-da", "crates/adapters/mock-zkvm", "crates/full-node/sov-blob-sender", "crates/full-node/sov-db", "crates/full-node/sov-sequencer", "crates/full-node/sov-ledger-apis", "crates/full-node/sov-rollup-apis", "crates/full-node/sov-stf-runner", "crates/full-node/sov-metrics", "crates/full-node/sov-api-spec", "crates/full-node/full-node-configs", "crates/utils/sov-rest-utils", "crates/utils/nearly-linear", "crates/utils/sov-zkvm-utils", "crates/utils/sov-build", "crates/module-system/hyperlane", "crates/module-system/sov-cli", "crates/module-system/sov-modules-stf-blueprint", "crates/module-system/sov-modules-rollup-blueprint", "crates/module-system/sov-modules-macros", "crates/module-system/sov-kernels", "crates/module-system/sov-state", "crates/module-system/sov-modules-api", "crates/module-system/sov-address", "crates/module-system/sov-test-utils", "crates/module-system/module-implementations/sov-accounts", "crates/module-system/module-implementations/sov-bank", "crates/module-system/module-implementations/sov-chain-state", "crates/module-system/module-implementations/sov-blob-storage", "crates/module-system/module-implementations/sov-evm", "crates/module-system/module-implementations/sov-paymaster", "crates/module-system/module-implementations/sov-prover-incentives", "crates/module-system/module-implementations/sov-attester-incentives", "crates/module-system/module-implementations/sov-sequencer-registry", "crates/module-system/module-implementations/sov-value-setter", "crates/module-system/module-implementations/sov-revenue-share", "crates/module-system/module-implementations/sov-synthetic-load", "crates/module-system/module-implementations/module-template", "crates/module-system/module-implementations/integration-tests", "crates/module-system/sov-capabilities", "crates/module-system/module-implementations/sov-uniqueness", "crates/utils/sov-node-client", "crates/universal-wallet/schema", "crates/universal-wallet/macros", "crates/universal-wallet/macro-helpers", "crates/utils/workspace-hack", "crates/web3"]
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
@@ -233,6 +234,7 @@ rayon = "1.10.0"
 reqwest = { version = "0.12", features = [
     "rustls-tls",
 ], default-features = false }
+rustls = { version = "0.23", default-features = false }
 serde = { version = "1.0.208", default-features = false, features = [
     "alloc",
     "derive",
@@ -263,9 +265,9 @@ bech32 = { version = "0.11" }
 derive_more = { version = "1.0", default-features = false, features = ["std"] }
 clap = { version = "4.5.16", features = ["derive"] }
 toml = { version = "0.8.19", features = ["parse"] }
-jsonrpsee = { version = "0.26.0" }
-jsonrpsee-types = { version = "0.26.0" }
-jsonrpsee-core = { version = "0.26.0" }
+jsonrpsee = { version = "0.26.0", default-features = false }
+jsonrpsee-types = { version = "0.26.0", default-features = false }
+jsonrpsee-core = { version = "0.26.0", default-features = false }
 schemars = { version = "0.8.21", features = ["derive"] }
 tempfile = "3.20.0"
 testcontainers = "0.25.0"
@@ -273,6 +275,7 @@ testcontainers-modules = "0.13.0"
 test-strategy = "0.4.0"
 tokio = { version = "1.42.2", default-features = false }
 tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-tungstenite = { version = "0.28.0", default-features = false }
 uuid = { version = "1.10", default-features = false } # v1.9 is important because it guarantees monotic UUIDv7 generation: https://github.com/uuid-rs/uuid/releases/tag/1.9.0.
 lazy_static = "1.5.0"
 num_cpus = "1.16"
@@ -283,11 +286,11 @@ risc0-build = "2.1"
 flume = { version = "0.11.1", features = ["async"] }
 
 # EVM dependencies
-ethereum-types = "0.14.1"
-ethers = { version = "=2.0.14" }
+ethereum-types = { version = "0.14.1", default-features = false }
+ethers = { version = "=2.0.14", default-features = false }
 
-alloy = { version = "1.0.37" }
-alloy-serde = { version = "1.0.37" }
+alloy = { version = "1.0.37", default-features = false, features = ["std", "essentials"] }
+alloy-serde = { version = "1.0.37", default-features = false }
 alloy-chains = { version = "0.2.14", default-features = false }
 alloy-primitives = { version = "1.4.0", default-features = false }
 alloy-sol-types = { version = "1.4.0", default-features = false }
@@ -300,8 +303,8 @@ alloy-rpc-types = { version = "1.0.37", features = [
     "eth",
 ], default-features = false }
 
-alloy-provider = { version = "1.0.37", features = ["ws"] }
-alloy-rpc-types-trace = { version = "1.0.37" }
+alloy-provider = { version = "1.0.37", default-features = false, features = ["ws"] }
+alloy-rpc-types-trace = { version = "1.0.37", default-features = false }
 reth-errors = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
 reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }

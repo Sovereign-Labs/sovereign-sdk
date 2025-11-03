@@ -1,0 +1,64 @@
+use std::time::Duration;
+
+use alloy::network::TransactionBuilder;
+use alloy::providers::Provider;
+use alloy::rpc::types::TransactionRequest;
+use alloy_primitives::{Address, B256};
+use futures::StreamExt;
+use tokio::time::timeout;
+
+use crate::evm::evm_test_helper::alloy_ws_client;
+use crate::evm::evm_test_helper::setup_test_rollup;
+use crate::evm::evm_test_helper::EVM_EXTENSION;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_watch_returns_receipt() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    let client = alloy_ws_client(rollup.http_addr).await;
+
+    let tx = TransactionRequest::default().with_to(Address::ZERO);
+
+    let pending = client.send_transaction(tx).await?;
+
+    // This should complete very quickly (not hang)
+    // If this times out, it proves WebSocket .watch() is broken
+    let tx_hash = timeout(Duration::from_secs(1), pending.watch()).await??;
+
+    assert_ne!(tx_hash, B256::ZERO);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_get_receipt() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    let client = alloy_ws_client(rollup.http_addr).await;
+
+    let tx = TransactionRequest::default().with_to(Address::ZERO);
+    let pending = client.send_transaction(tx).await?;
+    let hash = *pending.tx_hash();
+
+    let confirmed_hash = pending.watch().await?;
+
+    assert_eq!(confirmed_hash, hash);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_subscribe_new_heads() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_ws_client(rollup.http_addr).await;
+    let subscription = client.subscribe_blocks().await?;
+    rollup.wait_for_next_blocks(3).await;
+
+    let headers: Vec<_> = subscription.into_stream().take(3).collect().await;
+
+    assert_eq!(headers.len(), 3);
+    assert_eq!(headers[1].number, headers[0].number + 1);
+    assert_eq!(headers[2].number, headers[1].number + 1);
+
+    Ok(())
+}

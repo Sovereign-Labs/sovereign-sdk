@@ -65,8 +65,6 @@ pub enum SequencerNotReadyDetails {
         height_to_stop_at: RollupHeight,
         current_height: RollupHeight,
     },
-    /// The sequencer is running in replica mode and cannot accept transactions.
-    ReplicaMode,
     /// The sequencer is shutting down and cannot accept transactions.
     Shutdown,
 }

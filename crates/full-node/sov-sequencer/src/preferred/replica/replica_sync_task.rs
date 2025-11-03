@@ -1,6 +1,8 @@
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use async_trait::async_trait;
+use sov_rollup_interface::node::future_or_shutdown;
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -8,6 +10,7 @@ use tokio::time::Duration;
 // Process events in pages to avoid excessive memory consumption
 const PAGE_SIZE: usize = 2000;
 
+#[derive(Debug)]
 pub(crate) enum DBDataRejected {
     ExecutorBehind(DbData),
     ExecutorAhead(u64),
@@ -76,15 +79,16 @@ impl ReplicaSyncTask {
         shutdown_receiver: watch::Receiver<()>,
     ) {
         'outer: loop {
-            if shutdown_receiver.has_changed().unwrap_or(true) {
-                break 'outer;
-            }
-
-            let Some(mut data) = db_data_receiver.recv().await else {
+            let fut = future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+            let FutureOrShutdownOutput::Output(Some(mut data)) = fut.await else {
                 break 'outer;
             };
 
             'inner: loop {
+                if shutdown_receiver.has_changed().unwrap_or(true) {
+                    break 'outer;
+                }
+
                 match handler.on_db_event(data).await {
                     Ok(_) => {
                         // The data was applied on the executor.
@@ -93,14 +97,25 @@ impl ReplicaSyncTask {
 
                     Err(DBDataRejected::ExecutorAhead(executor_seq_nr)) => {
                         // The executor is ahead of the db drain the queue and wait until we catch up.
-                        while let Ok(new_data) = db_data_receiver.try_recv() {
-                            if new_data.sequence_number() > executor_seq_nr {
+                        loop {
+                            let fut =
+                                future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+
+                            let FutureOrShutdownOutput::Output(Some(new_data)) = fut.await else {
+                                break 'outer;
+                            };
+
+                            assert!(
+                                new_data.sequence_number() <= executor_seq_nr,
+                                "The sequence number must be consecutive"
+                            );
+
+                            if new_data.sequence_number() == executor_seq_nr {
                                 assert!(matches!(new_data, DbData::BatchStart(_)));
                                 data = new_data;
                                 continue 'inner;
                             }
                         }
-                        break 'inner;
                     }
 
                     Err(DBDataRejected::ExecutorBehind(db_data)) => {
@@ -207,7 +222,7 @@ mod tests {
                 TestCase::CompleteBatch(seq_nr, nb_of_txs) => {
                     index = 0;
                     let stored_batch = new_batch_to_store(seq_nr);
-                    db.begin_rollup_block(stored_batch.clone()).await.unwrap();
+                    db.begin_rollup_block(stored_batch).await.unwrap();
 
                     for i in 0..nb_of_txs {
                         let tx = FullyBakedTx::new(vec![i as u8]);
@@ -250,6 +265,7 @@ mod tests {
                         data.push(DbData::Transaction(
                             seq_nr,
                             FullyBakedTx::new(vec![i as u8]),
+                            TxHash::new([1; 32]),
                         ));
                     }
                     data.push(DbData::BatchEnd(new_batch_to_store(seq_nr)));
@@ -262,6 +278,7 @@ mod tests {
                     data.push(DbData::Transaction(
                         seq_nr,
                         FullyBakedTx::new(vec![index as u8]),
+                        TxHash::new([1; 32]),
                     ));
                     index += 1;
                 }
@@ -370,8 +387,8 @@ mod tests {
 
         let seq_nr = 3;
         let test_cases = to_db_data(&test_cases);
-        // We skip batch 1,2 and 3 so 15 db messages in total.
-        let expected = test_cases.iter().skip(15).cloned().collect();
+        // We skip batch 1, 2 so 10 db messages in total.
+        let expected = test_cases.iter().skip(10).cloned().collect();
         check_sync_task(test_cases.clone(), expected, seq_nr).await;
     }
 

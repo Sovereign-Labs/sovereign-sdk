@@ -332,7 +332,7 @@ mod tests {
                 blob_id: BlobInternalId::from(batch),
             };
 
-            db.begin_rollup_block(batch_to_store.clone()).await.unwrap();
+            db.begin_rollup_block(batch_to_store).await.unwrap();
 
             for (i, (tx, tx_hash)) in txs.iter().zip(tx_hashes.iter()).enumerate() {
                 db.add_tx(SequenceNumber::from(batch), i as u64, tx.clone(), *tx_hash)

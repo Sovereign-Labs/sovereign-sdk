@@ -1,5 +1,34 @@
+# 2025-11-01
+- #2006 Add associated Error type to the EVM module.
+
+# 2025-10-31
+- #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
+
+# 2025-10-29
+- #1996 Set gas limit to 1B on ETH API access.
+- #1838 Add binary WebSocket frame support to RPC server and client.
+- #1997 Fix `eth_sendTransaction` contract deployments without gas limit by converting `to: null` to `TxKind::Create`.
+
+# 2025-10-28
+- #1987 Added `newHeads` subscription to `eth_subscribe`.
+
+# 2025-10-27
+- #1981 **Breaking change** Adds support for celestia-client allowing direct use of RPC providers. Full message TBD.
+- #1976 Fixed `eth_subscribe` parameter parsing to accept standard Ethereum JSON-RPC positional parameters.
+
+# 2025-10-24
+- #1968 Implement EVM `BLOCKHASH` opcode with support for querying the last 256 block hashes.
+- #1966 **Resync breaking change**: Updates the schema generated for the `signature` and `public_key` fields on `Transaction` variants (both V0 and V1) to be byte arrays of the correct length. This is a follow-up on #1877, affecting only the web3 SDK functionality. However, this is a breaking change to the `CHAIN_HASH`, and therefore will invalidate existing transactions.
+
+# 2025-10-22
+- #1951 *Minor breaking change* Adds a new memo field to `Bank::TokenTransfer` events and a new callmessage which can set that field. This change requires resyncing any existing nodes due to the change in event serialization.
+- #1937 Reject log subscriptions with block filters.
+- #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
+The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
+
 # 2025-10-21
 - #1930 Add support for tracing pending blocks and transactions via `debug_traceBlockByNumber` and `debug_traceTransaction`.
+- #1936 Fixes warnings about metrics during rollup startup
 - #1933 Cleans up demo-rollup tests
 
 # 2025-10-20
@@ -33,6 +62,10 @@
 
 # 2025-10-10
 - #1840 DOn't panic on selfdestruct/blockhash. Return an error.
+
+# 2025-10-08
+- #1833 Adds a config option `pruner_max_batch_size` in the `storage` section of the rollup config. If the pruner appears to cause performance degradation, you can reduce the batch size here
+to decrease the number of writes it will attempt at each slot.
 
 # 2025-10-08
 - #1827 Implement eth_getBlockReceipts in EVM module.

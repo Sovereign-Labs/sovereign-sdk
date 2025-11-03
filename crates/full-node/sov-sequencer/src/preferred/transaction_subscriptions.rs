@@ -8,20 +8,24 @@ use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{FullyBakedTx, HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::common::SequencerTxStream;
+use crate::common::{SequencerTxStream, SubscriptionStreamError};
 use crate::preferred::{AcceptedTx, Confirmation};
 use crate::rest_api::ApiAcceptedTx;
 
-type TxStreamItem<S, Rt> = Result<ApiAcceptedTx<Confirmation<S, Rt>>, anyhow::Error>;
+type TxStreamItem<S, Rt> = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 type GetNextChunkFuture<S, Rt> = Pin<
     Box<
         dyn Future<
-                Output = anyhow::Result<(
-                    Vec<ApiAcceptedTx<Confirmation<S, Rt>>>,
-                    Option<BroadcastStream<AcceptedTx<Confirmation<S, Rt>>>>,
-                )>,
+                Output = Result<
+                    (
+                        Vec<ApiAcceptedTx<Confirmation<S, Rt>>>,
+                        Option<BroadcastStream<AcceptedTx<Confirmation<S, Rt>>>>,
+                    ),
+                    SubscriptionStreamError,
+                >,
             > + Send,
     >,
 >;
@@ -268,21 +272,23 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             self.tx_response_receiver.resubscribe(),
         )
         .map(|tx| tx.map(|tx| tx.into()))
-        .map_err(|e| anyhow::anyhow!("Error received from broadcast channel: {e}"))
+        .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
         .boxed()
     }
 
     pub async fn subscribe_starting_from_tx_number(
         &self,
         starting_from: Option<u64>,
-    ) -> anyhow::Result<SequencerTxStream<Confirmation<S, Rt>>> {
+    ) -> Result<SequencerTxStream<Confirmation<S, Rt>>, SubscriptionStreamError> {
         let Some(starting_from) = starting_from else {
             return Ok(self.subscribe());
         };
         let transaction_cache = self.inner.read().await;
         let next_tx_number = transaction_cache.next_tx_number;
         if starting_from > next_tx_number {
-            anyhow::bail!("Cannot subscribe starting from the future. The next tx number will be {next_tx_number} - try again later.");
+            return Err(SubscriptionStreamError::RequestedFutureData {
+                next_available: next_tx_number,
+            });
         }
 
         // If the caller is starting from the next tx number, we can just return the broadcast stream
@@ -322,10 +328,13 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
         starting_from: u64,
         tx_cache: ArcInner<S, Rt>,
         ledger_db: LedgerDb,
-    ) -> anyhow::Result<(
-        Vec<ApiAcceptedTx<Confirmation<S, Rt>>>,
-        Option<BroadcastStream<AcceptedTx<Confirmation<S, Rt>>>>,
-    )> {
+    ) -> Result<
+        (
+            Vec<ApiAcceptedTx<Confirmation<S, Rt>>>,
+            Option<BroadcastStream<AcceptedTx<Confirmation<S, Rt>>>>,
+        ),
+        SubscriptionStreamError,
+    > {
         let tx_cache = tx_cache.read().await;
         let next_tx_number = tx_cache.next_tx_number;
         let first_tx_not_needed = std::cmp::min(starting_from + CHUNK_SIZE, next_tx_number);
@@ -344,7 +353,9 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
         }
         // We can't subscribe starting from the future.
         if starting_from > next_tx_number {
-            anyhow::bail!("Cannot subscribe starting from the future. The next tx number will be {next_tx_number} - try again later.");
+            return Err(SubscriptionStreamError::RequestedFutureData {
+                next_available: next_tx_number,
+            });
         }
         // Get the next chunk of txs from the cache right away so that we can drop the lock.
         let txs_from_cache = tx_cache
@@ -383,7 +394,11 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
 
         let maybe_txs = ledger_db
             .get_transactions_range(starting_from, last_needed_tx_number, QueryMode::Full)
-            .await?;
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "Internal server error while serving tx stream");
+                SubscriptionStreamError::Internal
+            })?;
         let num_txs_requested_from_db = maybe_txs.len();
         let txs = maybe_txs
             .into_iter()
@@ -415,7 +430,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
         match subscription.poll_next(cx) {
             Poll::Ready(Some(e)) => Poll::Ready(Some(
                 e.map(|tx| tx.into())
-                    .map_err(|e| anyhow::anyhow!("Error polling subscription: {e}")),
+                    .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged),
             )),
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
@@ -424,7 +439,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
 }
 
 impl<S: Spec, Rt: Runtime<S>> Stream for AcceptedTxStream<S, Rt> {
-    type Item = Result<ApiAcceptedTx<Confirmation<S, Rt>>, anyhow::Error>;
+    type Item = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 
     // TODO: Verify that the delegated `poll` calls register this task for wakeup
     fn poll_next(

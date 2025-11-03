@@ -50,7 +50,7 @@ Blobs submitted to Celestia are integrated into Celestia’s data structure call
 
 Each blob submitted to Celestia is divided into [`Sparse Shares`](https://celestiaorg.github.io/celestia-app/specs/shares.html#overview) and included within the data square under its own unique namespace.
 
-For details on how an `ExtendedDataSquare` is structured, refer to Celestia's-[data square layout specification](https://celestiaorg.github.io/celestia-app/specs/data_square_layout.html) and [data structures specification](https://celestiaorg.github.io/celestia-app/specs/data_structures.html).
+For details on how an `ExtendedDataSquare` is structured, refer to Celestia's [data square layout specification](https://celestiaorg.github.io/celestia-app/specs/data_square_layout.html) and [data structures specification](https://celestiaorg.github.io/celestia-app/specs/data_structures.html).
 
 Celestia distributes data through an [`ExtendedHeader`](https://celestiaorg.github.io/celestia-app/specs/data_structures.html#header) within each block, 
 containing the `DataAvailabilityHeader`. 
@@ -75,7 +75,7 @@ A correct verification confirms:
 
 - The namespace immediately left (preceding shares) is strictly lower than the rollup's namespace.
 - The namespace immediately right (following shares) is strictly higher than the rollup's namespace.
-- All blobs within the rollup’s namespace are contiguous, leaving no gaps or omissions. But irrelevant shares of some blobs are not verified.
+- All blobs within the rollup's namespace are contiguous, leaving no gaps or omissions. However, irrelevant shares of some blobs are not verified.
 
 This verification can either:
 - Iterate over all rows containing rollup-relevant data and use [`NmtProof::verify_complete_namespace`](https://github.com/Sovereign-Labs/nmt-rs/blob/7b73324b92c8c43f9caa124ad4e5510be01c221d/src/nmt_proof.rs#L50), 
@@ -87,9 +87,9 @@ The same verification logic also applies efficiently to blocks containing no rol
 
 #### Checking _correctness_ of the data
 
-The current version of the adapter relies on sparsed shares V1 which support authored blobs as described in [CIP-21](https://cips.celestia.org/cip-021.html).
+The current version of the adapter relies on sparse shares V1 which support authored blobs as described in [CIP-21](https://cips.celestia.org/cip-021.html).
 
-To check correctness, a verifier compares each Blob with given prove and checks the following conditions:
+To check correctness, a verifier compares each Blob with given proof and checks the following conditions:
 
 1. The blob proof range starts at the beginning of namespace or immediately after the previous blob
 2. The first share of the blob has a signer address matching the blob sender and this share is the correct version
@@ -121,10 +121,73 @@ Each time a Celestia block is created,
 the DA service makes a series of RPC requests to obtain all of the relevant share data. 
 Then, it packages that data into the format expected by the DA verifier and returns.
 
+## Operations and Development
+
+
+### Configuration
+
+#### RPC Provider: QuickNode
+
+Please make sure to get through these guides:
+
+* https://www.quicknode.com/docs/celestia/celestia-grpc/overview
+* https://www.quicknode.com/guides/infrastructure/node-setup/run-a-celestia-light-node
+
+After that identify: 
+
+* **Endpoint host name**, for example: `your-quicknode-endpoint.celestia-mocha.quiknode.pro`
+* **Token**: The alphanumeric string that follows the endpoint name in the URL
+
+Also prepare celestia private key in hex format.
+
+```toml
+# This can be taken from "API access URL". websocket is recommended
+# This follows format: "ws://QUICK_NODE_ENDPOINT/API_TOKEN"
+rpc_url = "wss://your-quicknode-endpoint.celestia-mocha.quiknode.pro/your-api-token/"
+# This follows format: "https://QUICK_NODE_ENDPOINT:9090"
+grpc_url = "https://foo-bar-baz.celestia-mocha.quiknode.pro:9090"
+# API Token as is
+grpc_auth_token = "your-api-token"
+signer_private_key = "798f316d2feecd1c1af5cf7c40abeae2d719c12afef8ba10ea0d785eb2595322"
+```
+
+### Upgrading Celestia version
+
+When upgrading to a new version of Celestia, you'll need to update the docker images used for testing and development. 
+
+Follow these steps (all paths are from root of the repo):
+
+1. **Update version tags in [`docker/Makefile`](../../../docker/Makefile)**:
+   ```makefile
+   CELESTIA_DEVNET_VALIDATOR_TAG := v6.2.0-mocha  # Update this version
+   CELESTIA_DEVNET_BRIDGE_TAG := v0.28.2-mocha    # Update this version
+   ```
+
+2. **Update matching tags in `crates/adapters/celestia/src/test_helper/docker.rs`**:
+   ```rust
+   const VALIDATOR_TAG: &str = "v6.2.0-mocha";
+   const BRIDGE_TAG: &str = "v0.28.2-mocha";
+   ```
+
+3. **Build the new docker images**:
+   ```bash
+   cd docker
+   make build-celestia-devnet-images
+   ```
+
+4. **Push the images to the registry** ([requires authentication](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-with-a-personal-access-token-classic)):
+   ```bash
+   # Authenticate with GitHub Container Registry. You need a GitHub Personal Access Token with write:packages permission
+   echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+   make push-celestia-devnet-images
+   ```
+
+5. **Run tests** to verify the new version works correctly:
+   ```bash
+   cd ../crates/adapters/celestia
+   cargo test
+   ```
+
 ## License
 
-Licensed under the [Apache License, Version 2.0](../../../LICENSE).
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
-licensed as above, without any additional terms or conditions.
+See the [LICENSE](../../../LICENSE) file for license rights and limitations.

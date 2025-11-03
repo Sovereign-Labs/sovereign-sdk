@@ -659,7 +659,7 @@ fn transfer_with_various_gas_prices_and_scales() {
 
     // error that signals that admin didn't have enough funds to pay the gas price
     // it is a "success" error for tests that check possible overflows during gas calculation
-    let not_enough_funds_err = "Failed to transfer token";
+    let not_enough_funds_err = "Insufficient balance for account";
 
     // gas_price * desination_gas overflow u128, brought back to u128 by exchange_rate
     let big_destination_gas_price_overflows_u128 = TestCase {

@@ -1,11 +1,11 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{BlockHeader, Header};
-use alloy_eips::eip1559::ETHEREUM_BLOCK_GAS_LIMIT_30M;
 use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
 use sov_evm::{AccountData, Evm, EvmGenesisConfig, EvmRuntimeConfig, SpecId};
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
 
@@ -46,7 +46,7 @@ fn test_genesis_cfg() {
             evm.cfg_infallible(state),
             EvmRuntimeConfig {
                 chain_spec: sov_evm::EvmChainSpec {
-                    block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
+                    block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
                     coinbase: Address::from([3u8; 20]),
                     limit_contract_code_size: Some(5000),
                     hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
@@ -89,7 +89,7 @@ fn test_genesis_block() {
         let actual_block = &evm.blocks.get(&0, state).unwrap_infallible().unwrap();
         let expected_header = Header {
             state_root: actual_block.header().state_root(),
-            gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
+            gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
             beneficiary,
             excess_blob_gas: Some(0),
             base_fee_per_gas: Some(0),
@@ -114,7 +114,7 @@ fn default_config() -> EvmGenesisConfig {
         initial_base_fee: 70,
         genesis_timestamp: 50,
         chain_spec: sov_evm::EvmChainSpec {
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
             coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000),
             hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],

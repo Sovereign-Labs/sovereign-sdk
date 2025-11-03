@@ -65,7 +65,7 @@ generate_optimistic_runtime_with_kernel!(
     },
     transaction_priority_wrapper: |call: &sov_modules_api::FullyBakedTx| {
         use sov_modules_api::capabilities::TransactionAuthenticator;
-        let Ok(call) = Self::Auth::decode_serialized_tx(call) else {
+        let Ok((call, _)) = Self::Auth::decode_serialized_tx(call) else {
             return 0;
         };
         match call {
@@ -1591,7 +1591,6 @@ async fn test_rollup_emits_all_slot_notifications() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rollup_shuts_down_if_blob_sender_fails() {
-    sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -2381,7 +2380,6 @@ async fn replay_uses_correct_visible_slot_number() {
 /// - Check that the state root assertion suceeded on the node as well.
 #[tokio::test(flavor = "multi_thread")]
 async fn visible_hashes_match_across_node_and_sequencer() {
-    sov_test_utils::initialize_logging();
     const FINALIZATION_BLOCKS: u32 = 0;
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);

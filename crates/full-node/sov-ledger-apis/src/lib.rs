@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::Range;
 
-use anyhow::Context;
 use axum::extract::{Request, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::middleware::Next;
@@ -18,6 +17,7 @@ use sov_db::schema::types::{BatchNumber, EventNumber, TxNumber};
 use sov_modules_api::da::Time;
 pub use sov_modules_api::ApiTxEffect as TxEffect;
 use sov_modules_api::{EventModuleName, RuntimeEventResponse};
+use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::errors::{
     self, database_error_response_500, internal_server_error_response_500, not_found_404,
 };
@@ -644,7 +644,9 @@ where
                             )
                             .await
                         else {
-                            anyhow::bail!("Error fetching events for slot {}", slot_num);
+                            return Err(WsLedgerError::SlotFetchFailed {
+                                slot: slot_num.get(),
+                            });
                         };
 
                         Ok(SlotEvents {
@@ -665,8 +667,13 @@ where
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
             let subscription = state.ledger.subscribe_proof_saved().map(|data| {
-                AggregatedProof::try_from(data)
-                    .context("Failed to convert proof to REST API representation")
+                AggregatedProof::try_from(data).map_err(|e| {
+                    tracing::error!(
+                        error = %e,
+                        "Error converting aggregated proof to REST API representation"
+                    );
+                    WsLedgerError::AggregatedProofConvertFailed
+                })
             });
             serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
         })
@@ -696,7 +703,9 @@ where
                             )
                             .await
                         else {
-                            anyhow::bail!("Slot with number {} does not exist", slot_num);
+                            return Err(WsLedgerError::SlotNotFound {
+                                slot: slot_num.get(),
+                            });
                         };
                         Ok(Slot::<B, TxReceipt, E>::new(slot))
                     }
@@ -767,14 +776,13 @@ where
                                     .await
                                 {
                                     Ok(Some(slot)) => Ok(Slot::<B, TxReceipt, E>::new(slot)),
-                                    Ok(None) => Err(anyhow::anyhow!(
-                                        "Slot with number {} does not exist",
-                                        slot_number
-                                    )),
-                                    Err(err) => Err(anyhow::anyhow!(
-                                        "Failed to query slot with number: {}",
-                                        err.to_string()
-                                    )),
+                                    Ok(None) => Err(WsLedgerError::SlotNotFound { slot: slot_number.get() }),
+                                    Err(err) => {
+                                        tracing::error!(
+                                            error = %err,
+                                            "Database error while fetching slot by number"
+                                        );
+                                        Err(WsLedgerError::SlotFetchFailed { slot: slot_number.get() })},
                                 };
                                 tracing::trace!(%slot_number, "Preparing slot result for sending to websocket");
                                 slots.push(slot_result);
@@ -795,6 +803,42 @@ where
 
             serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
         })
+    }
+}
+
+#[derive(Debug)]
+enum WsLedgerError {
+    SlotFetchFailed { slot: u64 },
+    AggregatedProofConvertFailed,
+    SlotNotFound { slot: u64 },
+}
+
+impl ReportableWsError for WsLedgerError {
+    fn to_json(&self) -> String {
+        serde_json::to_string(&match self {
+            WsLedgerError::SlotFetchFailed { slot } => json_obj!({
+                "error": "INTERNAL_SERVER_ERROR",
+                "description": "Encountered an unexpected error while fetching slot data",
+                "details": {
+                    "slot_number": *slot,
+                },
+            }),
+            WsLedgerError::AggregatedProofConvertFailed => json_obj!({
+                "error": "INTERNAL_SERVER_ERROR",
+                "description": "Failed to convert proof to REST API representation",
+                "details": {},
+            }),
+            WsLedgerError::SlotNotFound { slot } => json_obj!({
+                "error": "NOT_FOUND",
+                "description": format!("Slot with number {slot} does not exist"),
+                "details": {
+                    "slot_number": *slot,
+                },
+            }),
+        })
+        .expect(
+            "Failed to serialize WsLedgerError literal to JSON. This is a bug, please report it.",
+        )
     }
 }
 

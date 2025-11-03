@@ -16,6 +16,7 @@ use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::*;
 use sov_modules_stf_blueprint::{PreExecError, Runtime};
+use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::{json_obj, to_json_object};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
@@ -28,14 +29,59 @@ use tracing::{info, trace};
 use crate::rest_api::ApiAcceptedTx;
 use crate::{SequencerNotReadyDetails, SlotNumber, TxHash, TxStatus, TxStatusManager};
 
-pub(crate) type SequencerTxStream<Confirmation> =
-    Pin<Box<dyn futures::Stream<Item = Result<ApiAcceptedTx<Confirmation>, anyhow::Error>> + Send>>;
+#[derive(Debug, Error, Clone, serde::Serialize, serde::Deserialize)]
+pub enum SubscriptionStreamError {
+    #[error("Subscription data was produced faster than it could be sent. Try again later.")]
+    Lagged,
+    #[error("Requested future data. The next available item is {next_available}")]
+    RequestedFutureData { next_available: u64 },
+    #[error("Internal server error")]
+    Internal,
+}
+
+impl ReportableWsError for SubscriptionStreamError {
+    fn to_json(&self) -> String {
+        serde_json::to_string(&match self {
+            SubscriptionStreamError::Lagged => {
+                json_obj!({
+                    "error": "LAGGED",
+                    "description": "Subscription data was produced faster than it could be sent. Try again later.",
+                    "details": {},
+                })
+            },
+            SubscriptionStreamError::RequestedFutureData { next_available } => {
+                json_obj!({
+                    "error": "REQUESTED_FUTURE_DATA",
+                    "description": "Attempted to subscribe to data that hasn't been produced yet.",
+                    "details": {
+                        "next_available": *next_available,
+                    },
+                })
+            },
+            SubscriptionStreamError::Internal => {
+                json_obj!({
+                    "error": "INTERNAL_SERVER_ERROR",
+                    "description": "An internal server error occurred.",
+                    "details": {},
+                })
+            },
+        }).expect("Failed to serialize SubscriptionStreamError literal to JSON. This is a bug, please report it.")
+    }
+}
+
+pub(crate) type SequencerTxStream<Confirmation> = Pin<
+    Box<
+        dyn futures::Stream<Item = Result<ApiAcceptedTx<Confirmation>, SubscriptionStreamError>>
+            + Send,
+    >,
+>;
 
 pub(crate) type SequencerEventStream<Rt> = Pin<
     Box<
         dyn futures::Stream<
-                Item = anyhow::Result<
+                Item = Result<
                     RuntimeEventResponse<<Rt as RuntimeEventProcessor>::RuntimeEvent>,
+                    SubscriptionStreamError,
                 >,
             > + Send,
     >,
@@ -63,7 +109,7 @@ pub trait Sequencer: Send + Sync + 'static {
     async fn subscribe_transactions(
         &self,
         _starting_from: Option<u64>,
-    ) -> Option<anyhow::Result<SequencerTxStream<Self::Confirmation>>> {
+    ) -> Option<Result<SequencerTxStream<Self::Confirmation>, SubscriptionStreamError>> {
         None
     }
 
@@ -493,13 +539,6 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
             return ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 message: format!("The preferred sequencer has reached the stop height {height_to_stop_at} and is no longer accepting transactions. Current height: {current_height}").to_string(),
-                details: Default::default(),
-            };
-        }
-        SequencerNotReadyDetails::ReplicaMode => {
-            return ErrorObject {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                message: "Sequencer is replica and cannot accept transactions".to_string(),
                 details: Default::default(),
             };
         }

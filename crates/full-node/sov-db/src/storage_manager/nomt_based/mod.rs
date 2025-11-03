@@ -491,7 +491,6 @@ where
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(StorageManagerFinalizationMetric {
-                da_height: block_header.height(),
                 preparation_time,
                 commit_time: apply_time,
                 pruning_commit_time,

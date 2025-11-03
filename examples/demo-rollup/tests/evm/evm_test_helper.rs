@@ -6,6 +6,7 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
+use alloy_provider::WsConnect;
 use ethers::core::abi::Address;
 use futures::future::join_all;
 use reqwest::Url;
@@ -22,7 +23,8 @@ use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 use sov_test_utils::LegacySimpleStorage;
 
-const SENDER_PRIV_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+pub(crate) const SENDER_PRIV_KEY: &str =
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     max_log_limit: 20000,
@@ -63,6 +65,18 @@ pub(crate) async fn create_simple_storage_client(
 ) -> SimpleStorageClient {
     let contract = LegacySimpleStorage::default();
     SimpleStorageClient::new(private_key, contract, rest_port).await
+}
+
+pub(crate) async fn alloy_ws_client(socket: SocketAddr) -> DynProvider {
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
+    let url = Url::parse(&format!("ws://{socket}/rpc")).unwrap();
+    let ws = WsConnect::new(url);
+    ProviderBuilder::new()
+        .wallet(signer)
+        .connect_ws(ws)
+        .await
+        .unwrap()
+        .erased()
 }
 
 pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {

@@ -46,6 +46,8 @@ impl<S: Spec> Module for ExampleModule<S> {
 
     type Event = Event;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
@@ -61,7 +63,7 @@ impl<S: Spec> Module for ExampleModule<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::SetValue(new_value) => Ok(self.set_value(new_value, context, state)?),
         }

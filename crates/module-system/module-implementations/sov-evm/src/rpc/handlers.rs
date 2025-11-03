@@ -1,4 +1,3 @@
-use crate::db::commit::FallibleDatabaseCommit;
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_primitives::{Address, U64};
@@ -12,6 +11,7 @@ use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::Database;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -73,13 +73,13 @@ where
         );
 
         let block_number_hex = self
-            .block_hashes
+            .block_hash_to_number
             .get(&block_hash, state)
             .unwrap_infallible()
             .map(|number| hex::encode(number.to_be_bytes()));
         let kind = details.unwrap_or_default().into();
         Ok(match block_number_hex {
-            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state),
+            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state)?,
             None => None,
         })
     }
@@ -97,7 +97,7 @@ where
             "EVM module JSON-RPC request to `eth_getBlockByNumber`"
         );
         let kind = details.unwrap_or_default().into();
-        Ok(self.get_block(block_number, kind, state))
+        Ok(self.get_block(block_number, kind, state)?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -216,7 +216,7 @@ where
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockReceipts`"
         );
-        Ok(self.get_receipts(block_number, state))
+        Ok(self.get_receipts(block_number, state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`
@@ -272,8 +272,8 @@ where
             state: changes,
         } = self.call(request, block_number, state)?;
         self.db(state)
-            .commit(changes)
-            .expect("Impossible as gas meter is initialized with INF");
+            .try_commit(changes)
+            .expect("Gas meter is initialized with INF");
         let gas_used = result.gas_used();
 
         // Charge for logs storage in the receipt
@@ -292,10 +292,12 @@ where
             logs_size as u32,
         )
         .map_err(into_rpc_error)?;
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter");
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
-            .expect("No underflow is possible here as we init EVM gas with gas meter gas");
+            .expect("Gas meter is initialized with INF");
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         Ok(U64::from(apply_margins(total_gas_used)?))

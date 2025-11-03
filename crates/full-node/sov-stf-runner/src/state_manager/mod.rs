@@ -387,6 +387,9 @@ where
         self.storage_manager
             .save_change_set(&block_header, stf_changes, ledger_change_set)?;
         let save_time = save_start.elapsed();
+
+        let updating_api_time = self.update_api_and_ledger_storage(&block_header).await?;
+
         let finalize_start = std::time::Instant::now();
         for finalized_transition in &finalized_transitions {
             self.storage_manager
@@ -398,8 +401,6 @@ where
             ?commit_time,
             "All finalized transitions are marked as finalized"
         );
-
-        let updating_api_time = self.update_api_and_ledger_storage(&block_header).await?;
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {

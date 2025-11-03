@@ -7,7 +7,6 @@ pub mod nomt;
 
 #[derive(Debug)]
 pub struct StateMaterializationMetrics {
-    pub version: u64,
     /// How many key-value items have been materialized for user space
     pub user_items: usize,
     /// How many key-value items have been materialized for kernel space.
@@ -23,9 +22,8 @@ pub struct StateMaterializationMetrics {
 }
 
 impl StateMaterializationMetrics {
-    pub(crate) fn new(version: u64) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            version,
             user_items: 0,
             kernel_items: 0,
             cumulative_keys_size: 0,
@@ -61,12 +59,10 @@ impl Metric for StateMaterializationMetrics {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // version as tag, rest as fields
         write!(
             buffer,
-            "{},version={} user_items={},kernel_items={},c_key_size={},c_value_size={},max_key_size={},max_value_size={}",
+            "{} user_items={},kernel_items={},c_key_size={},c_value_size={},max_key_size={},max_value_size={}",
             self.measurement_name(),
-            self.version,
             self.user_items,
             self.kernel_items,
             self.cumulative_keys_size,
