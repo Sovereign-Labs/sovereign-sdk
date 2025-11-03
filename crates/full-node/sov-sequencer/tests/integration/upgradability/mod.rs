@@ -265,7 +265,8 @@ async fn check_start_at(finalization_blocks: u32) {
 
     let mut last_height = RollupHeight::new(0);
     tokio::time::timeout(Duration::from_secs(25), async {
-        // Wait until the rollup reaches `stop_at_height`. At that point, we shutdown and `get_height` is expected to return errors.
+        // Wait until the rollup reaches `stop_at_height`.
+        // At that point, we shut down and `get_height` is expected to return errors.
         // The sleep is used to prevent a busy loop, not for correctness.
         while let Ok(height) = get_height(&client).await {
             test_rollup.da_service.produce_block_now().await.unwrap();

@@ -200,7 +200,7 @@ where
 
         let finalized_header_provider = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            shutdown_receiver.clone(),
+            secondary_shutdown_receiver.clone(),
             da_polling_interval,
         )
         .await?;
