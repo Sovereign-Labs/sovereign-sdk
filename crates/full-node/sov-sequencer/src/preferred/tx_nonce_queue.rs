@@ -71,40 +71,45 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     /// Check if there's a contiguous sequence of transactions from `current_nonce` to `tx_nonce` (inclusive).
     /// A nonce is considered "present" if it's either in the queue OR marked as last_executed.
     fn has_contiguous_sequence_to(&self, tx_nonce: u64, current_nonce: u64) -> bool {
-        match tx_nonce.cmp(&current_nonce) {
-            Ordering::Less => false, // tx is in the past
-            Ordering::Equal => true, // tx is ready now - no prerequisites necessary
-            Ordering::Greater => {
-                let mut expected = current_nonce;
+        // We know the user account's nonce cannot be lower than the state value.
+        // Sometimes the state value is stale for a short period of time, which is why we treat is
+        // as a lower bound only.
+        let lower_bound = current_nonce;
+        // last_executed is the last recorded transaction popped from the user's queue, so we know
+        // the account's nonce cannot be higher than this.
+        // We add 1 because `current_nonce` is the next valid nonce, while `last_executed` was the
+        // previous valid nonce (so the next transaction should have nonce `last_executed + 1`).
+        let upper_bound = current_nonce.max(self.last_executed.map(|n| n.saturating_add(1)).unwrap_or(0));
 
-                // Handle last_executed if it's in the range we care about.
-                // Sometimes the API state visible to the sequencer doesn't update fast enough and
-                // current_nonce is in the past; we use it as a lower bound for the real current
-                // nonce.
-                // Meanhile `last_executed` is known to have been the last tx popped from the queue
-                // for execution, so it's an upper bound on the user's real nonce. Therefore we
-                // leniently accept all txs within this range, and then check the actual queued
-                // keys past last_executed.
-                if let Some(exec_nonce) = self.last_executed {
-                    if exec_nonce >= current_nonce {
-                        expected = exec_nonce + 1;
-                    }
+
+        if tx_nonce < lower_bound {
+            // The transaction can never be valid.
+            return false;
+        } else if lower_bound <= tx_nonce && tx_nonce <= upper_bound {
+            // There is uncertainty about the user account's real nonce. In this range, leniently
+            // treat transactions as valid (the uncertainty will eventually resolve itself as API
+            // state updates).
+            return true;
+        } else if tx_nonce > upper_bound {
+            // The transaction's nonce is known to be greater than our upper bound estimate of the
+            // next valid nonce.
+            // We need to check if there's a contiguous set of transactions actually queued beyond
+            // the upper bound.
+            let mut expected = upper_bound;
+            for &nonce in self.txs.keys() {
+                if nonce >= tx_nonce {
+                    break;
                 }
-
-                // Now check the queued transactions for the rest
-                for &nonce in self.txs.keys() {
-                    if nonce > tx_nonce {
-                        break;
-                    }
-                    if nonce != expected {
-                        return false; // Gap found
-                    }
-                    expected += 1;
+                if nonce != expected {
+                    return false; // Gap found
                 }
-
-                // Return true if we've reached tx_nonce, meaning we have all prerequisites
-                expected >= tx_nonce
+                expected += 1;
             }
+
+            // Return true if we've reached tx_nonce, meaning we have all prerequisites
+            return expected >= tx_nonce;
+        } else {
+            unreachable!("The ranges checked are meant to be exhaustive");
         }
     }
 
@@ -364,8 +369,8 @@ mod tests {
         queue.insert(4, create_mock_queued_tx(4));
 
         // Should succeed up to the gap
-        assert!(queue.has_contiguous_sequence_to(1, 0));
         assert!(queue.has_contiguous_sequence_to(0, 0));
+        assert!(queue.has_contiguous_sequence_to(1, 0));
         assert!(queue.has_contiguous_sequence_to(2, 0));
 
         // Should fail when target is beyond the gap
