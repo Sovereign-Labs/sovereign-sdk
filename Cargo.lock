@@ -11837,7 +11837,6 @@ dependencies = [
  "jsonschema",
  "lazy_static",
  "proptest",
- "quick_cache",
  "rand 0.8.5",
  "reth-ethereum-primitives",
  "reth-primitives",
