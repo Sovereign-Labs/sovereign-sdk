@@ -8,7 +8,7 @@ use sov_modules_api::{Spec, StateAccessor};
 
 use super::EvmDb;
 use crate::db::{DbAccount, Error};
-use crate::{to_rollup_address, to_rollup_balance, ContractCreationPolicy};
+use crate::{to_rollup_address, to_rollup_balance};
 
 impl<'a, Ws: StateAccessor, S: Spec> TryDatabaseCommit for EvmDb<'a, Ws, S>
 where
@@ -74,13 +74,8 @@ where
     ) -> Result<(), <Self as TryDatabaseCommit>::Error> {
         if let Some(ref code) = account.code {
             if !code.is_empty() {
-                match self.cfg.contract_creation_policy {
-                    ContractCreationPolicy::Everyone => {}
-                    ContractCreationPolicy::Allowlist(ref allowlist) => {
-                        if !allowlist.contains(&address) {
-                            return Err(Error::ContractCreationDenied(address));
-                        }
-                    }
+                if !self.cfg.contract_creation_policy.allows(&address) {
+                    return Err(Error::ContractCreationDenied(address));
                 }
                 // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                 self.code

@@ -1,8 +1,9 @@
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::Address;
-use revm::primitives::{hardfork::SpecId, HashSet};
+use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
+use std::collections::BTreeSet;
 
 use crate::AccountData;
 
@@ -65,7 +66,17 @@ pub enum ContractCreationPolicy {
     #[default]
     Everyone,
     /// Only allowed addresses can create contracts
-    Allowlist(HashSet<Address>),
+    Allowlist(BTreeSet<Address>),
+}
+
+impl ContractCreationPolicy {
+    /// Returns true if address is allowed to deploy contracts by the policy. False otherwise
+    pub fn allows(&self, address: &Address) -> bool {
+        match self {
+            Self::Everyone => true,
+            Self::Allowlist(allowlist) => allowlist.contains(address),
+        }
+    }
 }
 
 /// Runtime configuration for EVM execution
