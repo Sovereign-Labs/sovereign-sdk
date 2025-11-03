@@ -1,5 +1,3 @@
-use std::sync::atomic::AtomicBool;
-
 use crate::preferred::replica::db_data::row_to_event;
 use crate::preferred::replica::db_data::rows;
 use crate::preferred::replica::db_data::DbData;
@@ -57,7 +55,7 @@ impl EventReceiverStartNotifier {
         self.replica_processed_first_batch
     }
 
-    pub(crate) fn set_replica_processed_first_batch(&self) {
+    pub(crate) fn set_replica_processed_first_batch(&mut self) {
         self.replica_processed_first_batch = true
     }
 }
