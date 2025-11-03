@@ -189,7 +189,6 @@ where
         tx_cache_writer,
         cache_warm_up_executor,
         start_replica_task_notifier,
-        replica_processed_first_batch: false,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));

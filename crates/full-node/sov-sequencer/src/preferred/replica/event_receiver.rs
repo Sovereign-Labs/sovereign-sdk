@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicBool;
+
 use crate::preferred::replica::db_data::row_to_event;
 use crate::preferred::replica::db_data::rows;
 use crate::preferred::replica::db_data::DbData;
@@ -31,17 +33,34 @@ pub(crate) enum EventReceiverError {
 
 pub(crate) struct EventReceiverStartNotifier {
     notify: watch::Sender<()>,
+    replica_processed_first_batch: AtomicBool,
 }
 
 impl EventReceiverStartNotifier {
     pub(crate) fn new() -> (Self, watch::Receiver<()>) {
         let (notify, mut receiver) = watch::channel(());
         receiver.borrow_and_update();
-        (Self { notify }, receiver)
+        (
+            Self {
+                notify,
+                replica_processed_first_batch: AtomicBool::new(false),
+            },
+            receiver,
+        )
     }
 
     pub(crate) fn notify(&self) {
         let _ = self.notify.send(());
+    }
+
+    pub(crate) fn replica_processed_first_batch(&self) -> bool {
+        self.replica_processed_first_batch
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_replica_processed_first_batch(&self) {
+        self.replica_processed_first_batch
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

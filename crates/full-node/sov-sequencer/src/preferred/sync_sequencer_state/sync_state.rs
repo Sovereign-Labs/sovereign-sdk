@@ -811,7 +811,9 @@ where
             "Exiting process_do_batch_start_replica"
         );
 
-        inner.replica_processed_first_batch = true;
+        inner
+            .start_replica_task_notifier
+            .set_replica_processed_first_batch();
 
         Ok(())
     }
