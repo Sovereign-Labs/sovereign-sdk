@@ -62,6 +62,7 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT);
     }
 
+    // Restart master.
     let test_rollup = {
         let builder = test_rollup.shutdown().await.unwrap();
         let test_rollup = builder.start_test_rollup().await.unwrap();
@@ -264,8 +265,6 @@ async fn test_replica_start_stop_many_times() {
 
         let expected_balance = AMOUNT * ((nb_of_txs * (i + 1)) as u128);
         assert_eq!(receiver_balance.0, expected_balance);
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     let _ = replica_test_rollup.shutdown().await;

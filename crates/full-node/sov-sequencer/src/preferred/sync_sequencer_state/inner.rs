@@ -8,14 +8,14 @@ use crate::preferred::block_executor::{
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
+use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
 use crate::preferred::{
-    current_visible_slot_number_according_to_node, exit_rollup,
-    get_next_sequence_number_according_to_node, is_lagging_less_than_ideal_amount,
-    next_visible_slot_number_increase, BatchCreationError, Confirmation, LedgerDb,
-    PreferredBatchToReplay, PreferredSequencerConfig,
+    current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
+    is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
+    Confirmation, LedgerDb, PreferredBatchToReplay, PreferredSequencerConfig,
     PreferredSequencerFetchBatchesToReplayMetrics, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
@@ -31,7 +31,7 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::{oneshot, watch};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// These two constants are used to calculate the comfortable batch size limit.
 /// Currently, this is 99% of the hard limit. After the comfortable limit is reached,
@@ -94,6 +94,7 @@ where
     pub(crate) rollup_exec_config: RollupBlockExecutorConfig<S>,
     pub(crate) tx_cache_writer: TxResultWriter<S, Rt>,
     pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
+    pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
 }
 
 // We submit metrics when this guard is dropped.
@@ -250,25 +251,6 @@ where
     }
 
     pub(crate) async fn trigger_recovery(&mut self, info: &StateUpdateInfo<S::Storage>) {
-        if self.is_replica() {
-            // Replicas don't run recovery. We let the main sequencer run catchup. If we fail-over
-            // midway, update_state() will automatically re-trigger recovery on this instance if
-            // necessary - if the previous master already recovered enough then we'll just continue
-            // operating.
-            //
-            // TODO: we do need to overwrite our state with the node's. Since recovery is expected
-            // to be very rare, and if it does happen that means the rollup has already had
-            // downtime and will already have had lost soft-confirmations, for now we'll require
-            // the user to manually reset replicas.
-            // To implement this properly we'd need to make sure we're 100% synced with the master
-            // on exactly when to stop overwriting from the node and start applying new
-            // transactions again. Probably by watching the `txs` table, so shouldn't be hard, but
-            // not trivial enough to implement it on the spot.
-            error!("We have encountered recovery conditions, but this is a replica sequencer. Recovery is currently unsupported for replicas. Please run a single master instance of the sequencer to restore the rollup to normal functionality. Wait for the rollup to be fully recovered, and then restart any replicas.");
-            exit_rollup(&self.shutdown_sender).await;
-            unreachable!();
-        }
-
         let recovery_strategy = self
             .seq_config
             .sequencer_kind_config
@@ -459,6 +441,14 @@ where
                     height_to_stop_at,
                 });
             }
+        }
+
+        if self.is_replica()
+            && !self
+                .start_replica_task_notifier
+                .replica_processed_first_batch()
+        {
+            return Err(SequencerNotReadyDetails::ReplicaNotReady);
         }
 
         self.is_ready.as_ref().map_err(|details| details.clone())?;
