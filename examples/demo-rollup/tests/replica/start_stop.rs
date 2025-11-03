@@ -25,6 +25,7 @@ async fn test_replica_start_stop() {
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
+    test_rollup.wait_for_next_blocks(10).await;
 
     let receiver_addr = random_address();
 
@@ -62,6 +63,7 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT);
     }
 
+    // Restart master.
     let test_rollup = {
         let builder = test_rollup.shutdown().await.unwrap();
         let test_rollup = builder.start_test_rollup().await.unwrap();
@@ -119,6 +121,7 @@ async fn test_replica_start_stop() {
             .await
             .unwrap();
 
+        test_rollup.wait_for_next_blocks(10).await;
         send_transfers(
             2 * nb_of_txs,
             nb_of_txs,
@@ -168,6 +171,7 @@ async fn test_replica_start_stop() {
             .await
             .unwrap();
 
+        test_rollup.wait_for_next_blocks(10).await;
         send_transfers(
             3 * nb_of_txs,
             nb_of_txs,
@@ -248,6 +252,8 @@ async fn test_replica_start_stop_many_times() {
             &test_rollup,
         )
         .await;
+
+        test_rollup.wait_for_next_blocks(10).await;
 
         wait_for_all_events_with_timeout(
             Duration::from_millis(100),
