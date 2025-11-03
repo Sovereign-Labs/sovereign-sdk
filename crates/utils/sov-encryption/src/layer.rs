@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -47,33 +47,44 @@ pub enum KeyUpdate {
 
 #[derive(Clone)]
 pub struct KeyCache {
-    // Map of slot number to encryption key (past, present, and future)
-    // Arc<RwLock<>> allows multiple threads to access safely
-    slot_key_map: Arc<RwLock<HashMap<u64, InternalKey>>>,
+    // Map of slot number to encryption key (sorted for efficient range queries)
+    slot_key_map: Arc<RwLock<BTreeMap<u64, InternalKey>>>,
+    // Cache of the most recent key for O(1) access in common case
+    current_key_cache: Arc<RwLock<Option<(u64, InternalKey)>>>,
 }
 
 impl KeyCache {
     pub fn new() -> Self {
         Self {
-            slot_key_map: Arc::new(RwLock::new(HashMap::new())),
+            slot_key_map: Arc::new(RwLock::new(BTreeMap::new())),
+            current_key_cache: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
-        let map = self.slot_key_map.read().unwrap();
-        
-        // Find the most recent key that was active at or before this slot
-        let mut best_key = None;
-        let mut best_slot = 0;
-
-        for (&slot, key) in map.iter() {
-            if slot <= slot_number && slot >= best_slot {
-                best_key = Some(key.clone());
-                best_slot = slot;
+        // Fast path: check if current key cache works (O(1))
+        if let Some((cached_slot, cached_key)) = self.current_key_cache.read().unwrap().as_ref() {
+            if slot_number >= *cached_slot {
+                debug!(
+                    "🔑 FAST PATH: Using cached key '{}' (slot {}) for slot {}",
+                    cached_key.id, cached_slot, slot_number
+                );
+                return Some(cached_key.clone());
             }
         }
 
-        best_key
+        // Slow path: historical lookup in BTreeMap (O(log n))
+        let map = self.slot_key_map.read().unwrap();
+        if let Some((_, key)) = map.range(..=slot_number).next_back() {
+            debug!(
+                "🔑 SLOW PATH: Historical lookup for slot {} found key '{}'",
+                slot_number, key.id
+            );
+            Some(key.clone())
+        } else {
+            debug!("🔑 NO KEY: No key available for slot {}", slot_number);
+            None
+        }
     }
 
     pub fn set_key_for_slot(&self, slot_number: u64, key: InternalKey) {
@@ -81,10 +92,27 @@ impl KeyCache {
             "🔑 KEY SET: '{}' for slot {}",
             key.id, slot_number
         );
+        
+        // Store in the main map
         self.slot_key_map
             .write()
             .unwrap()
-            .insert(slot_number, key);
+            .insert(slot_number, key.clone());
+        
+        // Update current key cache if this is the newest key
+        let mut current_cache = self.current_key_cache.write().unwrap();
+        let should_update = match current_cache.as_ref() {
+            Some((cached_slot, _)) => slot_number >= *cached_slot,
+            None => true,
+        };
+        
+        if should_update {
+            *current_cache = Some((slot_number, key));
+            debug!(
+                "💾 CACHE UPDATE: Updated current key cache for slot {}",
+                slot_number
+            );
+        }
     }
 
 
@@ -95,6 +123,16 @@ impl KeyCache {
     pub fn revoke_key(&self, key_id: String) {
         let mut map = self.slot_key_map.write().unwrap();
         map.retain(|_, key| key.id != key_id);
+        
+        // Clear current cache if it contains the revoked key
+        let mut current_cache = self.current_key_cache.write().unwrap();
+        if let Some((_, cached_key)) = current_cache.as_ref() {
+            if cached_key.id == key_id {
+                *current_cache = None;
+                warn!("Current key cache cleared due to key revocation");
+            }
+        }
+        
         warn!("Key '{}' revoked from all slots", key_id);
     }
 }
@@ -416,17 +454,33 @@ impl EncryptionLayer {
     /// Debug method to show key status
     pub fn debug_key_status(&self) {
         let map = self.key_cache.slot_key_map.read().unwrap();
+        let current_cache = self.key_cache.current_key_cache.read().unwrap();
         
         if map.is_empty() {
             warn!("🔍 KEY STATUS: No keys available");
         } else {
             info!("🔍 KEY STATUS: {} keys stored:", map.len());
-            let mut slots: Vec<_> = map.keys().cloned().collect();
-            slots.sort();
+            
+            // Show current cache status
+            match current_cache.as_ref() {
+                Some((slot, key)) => {
+                    info!("💾 CURRENT CACHE: Slot {} -> Key '{}'", slot, key.id);
+                }
+                None => {
+                    info!("💾 CURRENT CACHE: Empty");
+                }
+            }
+            
+            // Show recent keys (last 5)
+            let slots: Vec<_> = map.keys().rev().take(5).cloned().collect();
             for slot in slots {
                 if let Some(key) = map.get(&slot) {
                     info!("🔍   - Slot {}: Key '{}'", slot, key.id);
                 }
+            }
+            
+            if map.len() > 5 {
+                info!("🔍   ... and {} more historical keys", map.len() - 5);
             }
         }
     }
