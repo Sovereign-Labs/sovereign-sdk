@@ -14,6 +14,8 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, Re
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 
+const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct BasicJsonRpcRequest {
     jsonrpc: String,
@@ -67,13 +69,17 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let config = dev_node.get_config().await?;
     let da_service = CelestiaService::new(config, rollup_params).await;
     let signer = da_service.get_signer().await;
-
     let blob = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-    let height_before = da_service.get_head_block_header().await?.height();
-    let response = da_service.send_transaction(&blob).await.await??;
 
-    let (collected_batch_blobs, collected_proof_blobs) =
-        collect_all_blobs_between(&da_service, height_before).await?;
+    let (collected_batch_blobs, collected_proof_blobs, response) =
+        tokio::time::timeout(TEST_TIMEOUT, async {
+            let height_before = da_service.get_head_block_header().await?.height();
+            let response = da_service.send_transaction(&blob).await.await??;
+            let (batch_blobs, proof_blobs) =
+                collect_all_blobs_between(&da_service, height_before).await?;
+            Ok::<_, anyhow::Error>((batch_blobs, proof_blobs, response))
+        })
+        .await??;
 
     assert!(
         collected_proof_blobs.is_empty(),
@@ -92,11 +98,16 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
     let signer = da_service.get_signer().await;
 
-    let height_before = da_service.get_head_block_header().await?.height();
-    let response = da_service.send_proof(&zk_proof).await.await??;
+    let (collected_batch_blobs, collected_proof_blobs, response) =
+        tokio::time::timeout(TEST_TIMEOUT, async {
+            let height_before = da_service.get_head_block_header().await?.height();
+            let response = da_service.send_proof(&zk_proof).await.await??;
 
-    let (collected_batch_blobs, collected_proof_blobs) =
-        collect_all_blobs_between(&da_service, height_before).await?;
+            let (batch_blobs, proof_blobs) =
+                collect_all_blobs_between(&da_service, height_before).await?;
+            Ok::<_, anyhow::Error>((batch_blobs, proof_blobs, response))
+        })
+        .await??;
 
     assert!(
         collected_batch_blobs.is_empty(),
