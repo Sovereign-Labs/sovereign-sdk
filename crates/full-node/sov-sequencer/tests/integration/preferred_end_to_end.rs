@@ -1131,20 +1131,10 @@ async fn max_batch_size() {
             .unwrap_err();
 
         let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 512]);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
         let tx = tx_set_many_values(&admin.private_key, 2, vec![0; 512]);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap_err();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
     }
 
     test_rollup.force_close_batch().await.unwrap();
@@ -1152,12 +1142,8 @@ async fn max_batch_size() {
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
         let tx = tx_set_many_values(&admin.private_key, 2, vec![0; 512]);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        test_rollup.wait_for_sequencer_ready().await.unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }
 
@@ -2785,9 +2771,7 @@ async fn not_sequencer_safe_txs_are_restricted() {
         .await
         .unwrap();
 
-    // Wait for all blocks to be processed by the node+sequencer. TODO: better
-    // logic not prone to race conditions.
-    sleep(Duration::from_millis(500)).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let tx = generate_paymaster_tx::<TestRuntime<TestSpec>>(admin.private_key.clone());
     {
@@ -3053,6 +3037,7 @@ pub(crate) async fn setup_test_rollup_with_initial_state(
     // Wait for all blocks to be processed by the node+sequencer. TODO: better
     // logic not prone to race conditions.
     sleep(Duration::from_millis(500)).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
 
