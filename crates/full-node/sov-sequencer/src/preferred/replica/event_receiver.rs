@@ -56,7 +56,7 @@ impl EventReceiverStartNotifier {
     }
 
     pub(crate) fn set_replica_processed_first_batch(&mut self) {
-        self.replica_processed_first_batch = true
+        self.replica_processed_first_batch = true;
     }
 }
 
