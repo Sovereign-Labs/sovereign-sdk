@@ -65,7 +65,7 @@ generate_optimistic_runtime_with_kernel!(
     },
     transaction_priority_wrapper: |call: &sov_modules_api::FullyBakedTx| {
         use sov_modules_api::capabilities::TransactionAuthenticator;
-        let Ok((call, _)) = Self::Auth::decode_serialized_tx(call) else {
+        let Ok(call) = Self::Auth::decode_serialized_tx(call) else {
             return 0;
         };
         match call {

@@ -228,41 +228,17 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
 }
 
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
-#[cfg(feature = "native")]
-pub fn decode_solana_json_tx<S, D>(
-    raw_tx: &[u8],
-) -> Result<
-    (
-        D::Decodable,
-        sov_modules_api::capabilities::AuthorizationData<S>,
-    ),
-    FatalError,
->
+pub fn decode_solana_json_tx<S, D>(raw_tx: &[u8]) -> Result<D::Decodable, FatalError>
 where
     S: Spec,
     D: DispatchCall<Spec = S>,
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
-    use sov_modules_api::{capabilities::calculate_hash, PublicKey};
-
     let unpacked_message = unpack_solana_message::<S>(raw_tx)?;
     let solana_unsigned_tx: SolanaOffchainUnsignedTransaction<D, S> =
         serde_json::from_slice(unpacked_message.json_bytes())
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-    let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
-
-    let pub_key = unpacked_message.pub_key;
-    let credential_id = pub_key.credential_id();
-
-    let auth_data = sov_modules_api::capabilities::AuthorizationData {
-        uniqueness: unsigned_tx.uniqueness,
-        tx_hash: calculate_hash::<S>(raw_tx),
-        credential_id,
-        credentials: sov_modules_api::transaction::Credentials::new(pub_key),
-        default_address: credential_id.into(),
-    };
-
-    Ok((unsigned_tx.call(), auth_data))
+    Ok(solana_unsigned_tx.into_unsigned_tx().call())
 }
 
 pub fn authenticate<Accessor, S, D>(
