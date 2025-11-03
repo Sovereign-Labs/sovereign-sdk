@@ -25,7 +25,6 @@ async fn test_replica_start_stop() {
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    test_rollup.wait_for_next_blocks(10).await;
 
     let receiver_addr = random_address();
 
@@ -121,7 +120,6 @@ async fn test_replica_start_stop() {
             .await
             .unwrap();
 
-        test_rollup.wait_for_next_blocks(10).await;
         send_transfers(
             2 * nb_of_txs,
             nb_of_txs,
@@ -171,7 +169,6 @@ async fn test_replica_start_stop() {
             .await
             .unwrap();
 
-        test_rollup.wait_for_next_blocks(10).await;
         send_transfers(
             3 * nb_of_txs,
             nb_of_txs,
@@ -244,7 +241,6 @@ async fn test_replica_start_stop_many_times() {
             .await
             .unwrap();
 
-        test_rollup.wait_for_next_blocks(10).await;
         send_transfers(
             i * nb_of_txs,
             nb_of_txs,
@@ -269,8 +265,6 @@ async fn test_replica_start_stop_many_times() {
 
         let expected_balance = AMOUNT * ((nb_of_txs * (i + 1)) as u128);
         assert_eq!(receiver_balance.0, expected_balance);
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     let _ = replica_test_rollup.shutdown().await;

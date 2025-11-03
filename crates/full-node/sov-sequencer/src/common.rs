@@ -549,6 +549,13 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
                 details: Default::default(),
             };
         }
+        SequencerNotReadyDetails::ReplicaNotReady => {
+            return ErrorObject {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "The replica is waiting for the first batch from master".to_string(),
+                details: Default::default(),
+            };
+        }
     };
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,

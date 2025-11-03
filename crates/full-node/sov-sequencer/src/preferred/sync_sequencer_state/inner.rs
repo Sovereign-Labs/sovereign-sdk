@@ -95,6 +95,7 @@ where
     pub(crate) tx_cache_writer: TxResultWriter<S, Rt>,
     pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
+    pub(crate) replica_processed_first_batch: bool,
 }
 
 // We submit metrics when this guard is dropped.
@@ -441,6 +442,10 @@ where
                     height_to_stop_at,
                 });
             }
+        }
+
+        if self.is_replica() && !self.replica_processed_first_batch {
+            return Err(SequencerNotReadyDetails::ReplicaNotReady);
         }
 
         self.is_ready.as_ref().map_err(|details| details.clone())?;
