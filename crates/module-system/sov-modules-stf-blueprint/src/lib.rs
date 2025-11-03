@@ -439,10 +439,9 @@ where
         if let Some(encryption_layer) = encryption_layer {
             let slot_number = slot_header.height();
             tracing::info!(
-                "📦 STF: Setting slot {} for batch processing and decryption",
+                "📦 STF: Processing slot {} for batch processing and decryption",
                 slot_number
             );
-            encryption_layer.set_current_slot(slot_number);
         }
 
         start_timer!(start_slot);
