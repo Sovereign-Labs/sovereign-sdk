@@ -392,11 +392,9 @@ impl Metric for RunnerProcessStfChangesMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},da_height={} proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
+            "{} da_height={},proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
             self.measurement_name(),
-            // Tags
             self.da_height,
-            // Fields
             self.aggregated_proofs_count,
             self.finalized_transitions_count,
             self.total_time.as_micros(),

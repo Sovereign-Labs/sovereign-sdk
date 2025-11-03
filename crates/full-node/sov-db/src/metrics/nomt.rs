@@ -96,7 +96,6 @@ impl Metric for NomtBeginSessionMetric {
 
 #[derive(Debug)]
 pub struct StorageManagerFinalizationMetric {
-    pub da_height: u64,
     pub preparation_time: std::time::Duration,
     pub commit_time: std::time::Duration,
     pub pruning_commit_time: Option<std::time::Duration>,
@@ -110,9 +109,8 @@ impl Metric for StorageManagerFinalizationMetric {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},da_height={} prep_time_us={},commit_time_us={}",
+            "{} prep_time_us={},commit_time_us={}",
             self.measurement_name(),
-            self.da_height,
             self.preparation_time.as_micros(),
             self.commit_time.as_micros(),
         )?;
