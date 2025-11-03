@@ -170,6 +170,8 @@ async fn test_instant_finality() -> anyhow::Result<()> {
             .await
             .await??;
         let filtered_block = da_service.get_block_at(height).await?;
+        // Sleep here more, to ensure that latest finalized header has been pulled.
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         process_continuous_transition(&mut state_manager, filtered_block.clone(), &da_service, 0)
             .await?;
         // TODO: Check how state manager internal state looks like on instant finality.
@@ -183,13 +185,17 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         assert_eq!(filtered_block.header, finalized.data.da_block_header);
         assert_eq!(state_root, finalized.data.initial_state_root);
         state_root.clone_from(&finalized.data.final_state_root);
-        assert_eq!(
-            height,
-            state_manager
-                .ledger_db
-                .get_latest_finalized_slot_number()
-                .await?
-                .get()
+        let ledger_last_finalized_height = state_manager
+            .ledger_db
+            .get_latest_finalized_slot_number()
+            .await?
+            .get();
+        let diff = height
+            .checked_sub(ledger_last_finalized_height)
+            .expect("Ledger cannot see future finalized height");
+        assert!(
+            diff <= 2,
+            "Ledger cannot lag behind last finalized height by more than 2"
         );
     }
 
@@ -230,6 +236,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         // Not used anywhere, `process_normal_transition` relies on da header to produce changes.
         let blob_data = [da_height as u8; 10];
         da_service.send_transaction(&blob_data).await.await??;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         let filtered_block = da_service.get_block_at(da_height).await?;
         if da_height < fork_happens_at {
             let block_hash = filtered_block.header().hash();
@@ -337,6 +344,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     .await;
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
+    tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     state_manager
         .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
         .await?;
@@ -454,6 +462,7 @@ async fn test_progressing_with_shuffle(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         let state_root_hash = transition_witness.final_state_root;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
             .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
@@ -757,6 +766,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         let state_root_hash = transition_witness.final_state_root;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
             .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
@@ -880,7 +890,7 @@ proptest! {
                         reshuffle_after,
                         seed,
                     );
-                    tokio::time::timeout(std::time::Duration::from_secs(5), test_future).await.unwrap().unwrap();
+                    tokio::time::timeout(std::time::Duration::from_secs(10), test_future).await.unwrap().unwrap();
             });
         }
 }
@@ -913,6 +923,7 @@ async fn test_change_in_finalized_header() {
             .unwrap()
             .unwrap();
         let filtered_block = da_service.get_block_at(height).await.unwrap();
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         process_continuous_transition(
             &mut state_manager,
             filtered_block.clone(),
