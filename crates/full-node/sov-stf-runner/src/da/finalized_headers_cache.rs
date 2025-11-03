@@ -13,6 +13,7 @@ const MAX_RECENT_HEADERS: usize = 30;
 ///  * Storing N recent headers to reduce network calls
 #[derive(Debug)]
 pub struct DaServiceWithCachedFinalizedHeaders<Da: DaService> {
+    // TODO: Does it need to be Arc?
     da_service: Arc<Da>,
     last_finalized: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
     recent_headers: Arc<tokio::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,

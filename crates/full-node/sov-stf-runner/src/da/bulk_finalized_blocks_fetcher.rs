@@ -117,38 +117,6 @@ where
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use sov_mock_da::storable::StorableMockDaService;
-
-    use super::*;
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn check_that_all_blocks_are_collected_instant_finality() -> anyhow::Result<()> {
-        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
-        let blocks_number = 200;
-        for i in 1..=blocks_number {
-            da_service.send_transaction(&[i; 32]).await.await??;
-        }
-
-        let (sender, mut receiver) = tokio::sync::watch::channel(());
-        receiver.mark_unchanged();
-
-        let (mut fetcher, handle) =
-            FinalizedBlocksBulkFetcher::new(Arc::new(da_service), 0, 10, receiver).await?;
-
-        for i in 0..blocks_number {
-            let block = fetcher.get_block_at(i as u64).await?;
-            assert_eq!(i as u64, block.header().height());
-        }
-
-        // pre-fetcher might exit by that point.
-        let _ = sender.send(());
-        handle.await??;
-        Ok(())
-    }
-}
-
 pub(crate) struct BlockFetcher<Da: DaService> {
     da_service: Arc<Da>,
     blocks: tokio::sync::mpsc::Sender<Da::FilteredBlock>,
@@ -309,8 +277,40 @@ where
     match future_or_shutdown(fut, shutdown_receiver).await {
         FutureOrShutdownOutput::Output(res) => Some(res),
         FutureOrShutdownOutput::Shutdown => {
-            tracing::debug!("Shutting down block fetcher at {}", label);
+            tracing::debug!(%label, "Shutting down block fetcher");
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_mock_da::storable::StorableMockDaService;
+
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn check_that_all_blocks_are_collected_instant_finality() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+        let blocks_number = 200;
+        for i in 1..=blocks_number {
+            da_service.send_transaction(&[i; 32]).await.await??;
+        }
+
+        let (sender, mut receiver) = tokio::sync::watch::channel(());
+        receiver.mark_unchanged();
+
+        let (mut fetcher, handle) =
+            FinalizedBlocksBulkFetcher::new(Arc::new(da_service), 0, 10, receiver).await?;
+
+        for i in 0..blocks_number {
+            let block = fetcher.get_block_at(i as u64).await?;
+            assert_eq!(i as u64, block.header().height());
+        }
+
+        // pre-fetcher might exit by that point.
+        let _ = sender.send(());
+        handle.await??;
+        Ok(())
     }
 }
