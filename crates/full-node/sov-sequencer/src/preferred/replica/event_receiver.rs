@@ -33,7 +33,7 @@ pub(crate) enum EventReceiverError {
 
 pub(crate) struct EventReceiverStartNotifier {
     notify: watch::Sender<()>,
-    replica_processed_first_batch: AtomicBool,
+    replica_processed_first_batch: bool,
 }
 
 impl EventReceiverStartNotifier {
@@ -43,7 +43,7 @@ impl EventReceiverStartNotifier {
         (
             Self {
                 notify,
-                replica_processed_first_batch: AtomicBool::new(false),
+                replica_processed_first_batch: false,
             },
             receiver,
         )
@@ -55,12 +55,10 @@ impl EventReceiverStartNotifier {
 
     pub(crate) fn replica_processed_first_batch(&self) -> bool {
         self.replica_processed_first_batch
-            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub(crate) fn set_replica_processed_first_batch(&self) {
-        self.replica_processed_first_batch
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.replica_processed_first_batch = true
     }
 }
 
