@@ -353,13 +353,17 @@ mod tests {
             .unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
-        let mut sync_task =
-            ReplicaSyncTask::new_with_page_size(postgres_connection_string, shutdown_snd, 8)
+        let (mut sync_task, start_replica_task_notifier) =
+            ReplicaSyncTask::new_with_page_size(shutdown_snd, 8)
                 .await
                 .unwrap();
 
+        start_replica_task_notifier.notify();
+
         let (test_handler, mut recv) = TestHandler::new(exec_seq_nr);
-        sync_task.start(test_handler).await;
+        sync_task
+            .start(test_handler, postgres_connection_string)
+            .await;
 
         execute(db, test_cases).await;
 

@@ -545,27 +545,13 @@ where
             .checkpoint
             .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
-        // Update the `inner`'s state to reflect the new storage.
-        // These steps should match `process_final_catchup` except for the need to drop the db_event_subscription.
-        inner.is_ready = Ok(());
-        inner.has_finished_startup = true;
-        inner.latest_info = info;
-        let checkpoint = inner
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-        inner
-            .executor_events_sender
-            .force_update_api_state(checkpoint)
-            .await;
+
+        Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
 
         inner
             .executor
             .state_roots
             .retain(|height, _| *height > new_rollup_height);
-
-        let info = &inner.latest_info;
-        inner.update_api_ledger(info).await;
     }
 
     async fn process_final_catchup(
@@ -599,8 +585,25 @@ where
 
         // The executor is now caught up. Swap it in
         inner.executor.replace_state(*executor).await;
-        // Update the `inner`'s state to reflect the new storage.
-        // These steps should match `process_new_storage` except for the need to drop the db_event_subscription.
+        Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
+
+        drop(db_event_subscription);
+        drop(inner);
+
+        Ok(data)
+    }
+
+    async fn common_for_final_catchup_and_new_storage(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        info: StateUpdateInfo<S::Storage>,
+    ) {
+        let node_sequence_number =
+            get_next_sequence_number_according_to_node(&info, &mut Rt::default());
+
+        if node_sequence_number > inner.sequence_number_of_next_blob {
+            inner.sequence_number_of_next_blob = node_sequence_number;
+        }
+
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
         inner.latest_info = info;
@@ -612,14 +615,9 @@ where
             .executor_events_sender
             .force_update_api_state(checkpoint)
             .await;
-        drop(db_event_subscription);
 
         let info = &inner.latest_info;
         inner.update_api_ledger(info).await;
-
-        drop(inner);
-
-        Ok(data)
     }
 
     async fn process_prune_sequencer_db(&mut self, reason: &'static str) {
@@ -792,6 +790,8 @@ where
             "Entering process_do_batch_start_replica"
         );
 
+        println!("XX START {seq_nr_from_master:?} {seq_nr_of_next_blob_for_this_executor:?}");
+
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -812,6 +812,8 @@ where
             % seq_nr_of_next_blob_for_this_executor,
             "Exiting process_do_batch_start_replica"
         );
+
+        println!("XX START END {seq_nr_from_master:?} {seq_nr_of_next_blob_for_this_executor:?}");
 
         Ok(())
     }

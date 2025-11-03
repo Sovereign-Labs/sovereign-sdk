@@ -319,6 +319,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
 
     async fn prune(&mut self, up_to_including: SequenceNumber) -> anyhow::Result<()> {
         // Compound CTE statement to avoid multiple roundtrips
+
         run_with_retries!(
             &self.backoff_policy,
             sqlx::query(

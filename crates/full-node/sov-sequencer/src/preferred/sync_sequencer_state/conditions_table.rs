@@ -140,25 +140,15 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             // We wait until the replica is no more than one block behind the tip and override the replica’s sequencer with the node’s state.
             // At this stage, the replica can start accepting PG notifications from the master.
             if sync_status.distance() <= 1 {
+                inner.executor_events_sender.clean_all_batches_from_cache();
                 inner
                     .executor_events_sender
                     .flush_transactions_cache(info.next_tx_number)
                     .await;
 
-                inner.executor_events_sender.clean_all_batches_from_cache();
-
-                let mut rt = Rt::default();
-                let node_sequence_number =
-                    get_next_sequence_number_according_to_node(info, &mut rt);
-
-                inner.sequence_number_of_next_blob = node_sequence_number;
-
                 let executor = Some(Box::new(
                     inner.new_executor_with_empty_uncommitted_changes(info),
                 ));
-
-                inner.is_ready = Ok(());
-                inner.has_finished_startup = true;
 
                 return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
                     executor,

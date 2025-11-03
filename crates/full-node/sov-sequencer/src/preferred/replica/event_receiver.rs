@@ -49,7 +49,6 @@ pub(crate) struct EventReceiver {
     connection_string: String,
     db_data_sender: tokio::sync::mpsc::Sender<DbData>,
     shutdown_sender: watch::Sender<()>,
-    listener: PgListener,
     query_pool: PgPool,
     page_size: usize,
     ready_to_process_db_events_recv: watch::Receiver<()>,
@@ -76,24 +75,11 @@ impl EventReceiver {
             }
         };
 
-        // Create a dedicated listener for PostgreSQL LISTEN/NOTIFY
-        let mut listener = match PgListener::connect(&connection_string).await {
-            Ok(listener) => listener,
-            Err(e) => {
-                panic!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
-            }
-        };
-
-        if let Err(e) = listener.listen("events_changes").await {
-            panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
-        }
-
         (
             Self {
                 connection_string,
                 db_data_sender,
                 shutdown_sender,
-                listener,
                 query_pool,
                 page_size,
                 ready_to_process_db_events_recv,
@@ -115,9 +101,21 @@ impl EventReceiver {
                 return;
             }
 
+            // Create a dedicated listener for PostgreSQL LISTEN/NOTIFY
+            let mut listener = match PgListener::connect(&self.connection_string).await {
+                Ok(listener) => listener,
+                Err(e) => {
+                    panic!("Failed to create PostgreSQL listener: {e:?}. Replica shutting down.");
+                }
+            };
+
+            if let Err(e) = listener.listen("events_changes").await {
+                panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
+            }
+
             loop {
                 let fut = future_or_shutdown(
-                    self.fetch_data(start_event_id, prev_event_type),
+                    self.fetch_data(start_event_id, prev_event_type, &mut listener),
                     &shutdown_receiver,
                 );
 
@@ -163,7 +161,7 @@ impl EventReceiver {
                             }
                             EventReceiverError::DbRowDoesNotExist(event_id) => {
                                 panic!(
-                                    "Db row does not exist for event id: {event_id:?}. Replica shutting down."
+                                    "Db row does not exist for event id: {event_id:?} {start_event_id:?} {prev_event_type:?}. Replica shutting down."
                                 );
                             }
                         }
@@ -175,18 +173,19 @@ impl EventReceiver {
 
     async fn recv_notifications(
         &mut self,
+        listener: &mut PgListener,
     ) -> Result<EventsNotificationPayload, EventReceiverError> {
         let mut last_notification = None;
 
         // We only care about the latest notification from the DB,
         // since the backfill logic allows us to skip earlier ones.
-        while let Some(p) = self.listener.next_buffered() {
+        while let Some(p) = listener.next_buffered() {
             last_notification = Some(p);
         }
 
         let pg_notification = match last_notification {
             Some(notification) => notification,
-            None => self.listener.recv().await?,
+            None => listener.recv().await?,
         };
 
         let payload = pg_notification.payload();
@@ -198,12 +197,13 @@ impl EventReceiver {
         &mut self,
         start_event_id: Option<u64>,
         mut prev_event_type: Option<EventType>,
+        listener: &mut PgListener,
     ) -> Result<(u64, Option<EventType>), EventReceiverError> {
         let (start_event_id, target_event_id) = match start_event_id {
             // If we already have a start id, just wait for the next notification
             // and use its event_id as the target.
             Some(start_id) => {
-                let notify = self.recv_notifications().await?;
+                let notify = self.recv_notifications(listener).await?;
                 assert!(notify.event_id >= start_id);
                 (start_id, notify.event_id)
             }
@@ -211,8 +211,9 @@ impl EventReceiver {
             // Keep listening for events until a `BatchStart` notification is received,
             // then use that event's ID as both the starting and target event ID.
             None => loop {
-                let notify = self.listener.recv().await?;
+                let notify = listener.recv().await?;
                 let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
+
                 if matches!(notify.event_type, EventType::BatchStart) {
                     break (notify.event_id, notify.event_id);
                 }
