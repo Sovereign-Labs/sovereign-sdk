@@ -790,8 +790,6 @@ where
             "Entering process_do_batch_start_replica"
         );
 
-        println!("XX START {seq_nr_from_master:?} {seq_nr_of_next_blob_for_this_executor:?}");
-
         validate_db_data_from_replica(
             inner.has_finished_startup,
             &inner.is_ready,
@@ -812,8 +810,6 @@ where
             % seq_nr_of_next_blob_for_this_executor,
             "Exiting process_do_batch_start_replica"
         );
-
-        println!("XX START END {seq_nr_from_master:?} {seq_nr_of_next_blob_for_this_executor:?}");
 
         Ok(())
     }
