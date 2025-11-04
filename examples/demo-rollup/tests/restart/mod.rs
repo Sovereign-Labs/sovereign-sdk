@@ -287,6 +287,19 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     }
     std::env::remove_var("SOV_CRASH_ON_COMMIT");
 
+    // Give the OS time to clean up file handles after the crash
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Clean up RocksDB lock files that may remain after crashing
+    let lock_files = ["LOCK", "LOG", "LOG.old"];
+    let dbs = ["state-db", "archival-state-db", "accessory", "blob_sender"];
+    for lock_file in &lock_files {
+        for db in &dbs {
+            // Ignore any errors
+            let _ = std::fs::remove_file(rollup_storage_dir.path().join(db).join(lock_file));
+        }
+    }
+
     // Restart the rollup and check that no writes have been lost due to the crash on commit.
     let test_rollup = tokio::time::timeout(
         ROLLUP_START_TIMEOUT,
