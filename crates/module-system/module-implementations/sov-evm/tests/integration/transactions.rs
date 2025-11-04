@@ -151,7 +151,10 @@ fn test_executing_eth_transactions_several_blocks() {
             input: block.batch_txs().into(),
             assert: Box::new(move |_result, state| {
                 assert_eq!(block.nr, evm.block_number(state).unwrap().to::<u64>());
-                let block_from_evm = evm.get_block_by_number(None, None, state).unwrap().unwrap();
+                let block_from_evm = evm
+                    .get_block_by_number(Some(format!("{:x}", block.nr)), None, state)
+                    .unwrap()
+                    .unwrap();
 
                 if let BlockTransactions::Hashes(hashes) = &block_from_evm.transactions {
                     assert_eq!(hashes, &block.tx_hashes());
