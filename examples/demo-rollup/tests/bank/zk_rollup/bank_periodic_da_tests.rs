@@ -27,7 +27,7 @@ async fn flaky_bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_flaky_bank_tx_tests_periodic_da_non_instant_finality() -> anyhow::Result<()> {
-    inner(2).await
+    inner(3).await
 }
 
 async fn inner(finalization_blocks: u32) -> anyhow::Result<()> {

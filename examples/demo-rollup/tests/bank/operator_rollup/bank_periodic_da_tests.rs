@@ -67,7 +67,7 @@ async fn send_test_bank_txs(
     }
 
     // Will cause a batch to be produced.
-    da_service.produce_n_blocks_now(1).await.unwrap();
+    da_service.produce_n_blocks_now(1).await?;
 
     assert_slot_finality(client, slot_number, test_case.expected_head_finality()).await;
     assert_balance(client, initial_balance, token_id, user_address, None).await?;

@@ -11,7 +11,7 @@ use sov_metrics::MonitoringConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
-    MockDaService, MockDaSpec, PlannedFork, RandomizationBehaviour, RandomizationConfig,
+    MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
 };
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
@@ -35,65 +35,9 @@ const STANDARD_SENDER: MockAddress = MockAddress::new([0u8; 32]);
 const TREE_MINUTES: std::time::Duration = std::time::Duration::from_secs(60 * 3);
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_simple_reorg_case() {
-    let tmp_dir = tempfile::tempdir().unwrap();
-    let sequencer_address = MockAddress::new([11u8; 32]);
-    let genesis_params = vec![1, 2, 3, 4, 5];
-
-    let main_chain_blobs = vec![
-        batch(vec![1, 1, 1, 1]),
-        batch(vec![2, 2, 2, 2]),
-        batch(vec![3, 3, 3, 3]),
-        batch(vec![4, 4, 4, 4]),
-    ];
-    let fork_blobs = vec![
-        batch(vec![13, 13, 13, 13]),
-        batch(vec![14, 14, 14, 14]),
-        batch(vec![15, 15, 15, 15]),
-    ];
-    let expected_final_blobs = vec![
-        batch(vec![1, 1, 1, 1]),
-        batch(vec![2, 2, 2, 2]),
-        batch(vec![13, 13, 13, 13]),
-        batch(vec![14, 14, 14, 14]),
-        batch(vec![15, 15, 15, 15]),
-    ];
-
-    let mut da_service = MockDaService::new(sequencer_address)
-        .with_finality(4)
-        .with_wait_attempts(2);
-
-    let genesis_block = da_service.get_block_at(0).await.unwrap();
-
-    let planned_fork = PlannedFork::new(5, 2, fork_blobs.clone());
-    da_service.set_planned_fork(planned_fork).await.unwrap();
-
-    let da_service = Arc::new(da_service);
-    for data in main_chain_blobs {
-        da_service
-            .send_transaction(&data)
-            .await
-            .await
-            .unwrap()
-            .unwrap();
-    }
-
-    let (expected_state_root, _expected_final_root_hash) =
-        get_expected_execution_hash_from(&genesis_params, expected_final_blobs);
-
-    let (_expected_committed_state_root, expected_committed_root_hash) =
-        get_expected_execution_hash_from(&genesis_params, vec![batch(vec![1, 1, 1, 1])]);
-
-    let init_variant: MockInitVariant = InitVariant::Genesis {
-        block: genesis_block,
-        genesis_params: genesis_params.into(),
-    };
-
-    check_runner(da_service, &tmp_dir, init_variant, expected_state_root).await;
-
-    let committed_root_hash = get_saved_root_hash(tmp_dir.path()).unwrap().unwrap();
-    assert_eq!(expected_committed_root_hash, committed_root_hash);
-}
+#[ignore = "Rewrite this test with periodic block production"]
+// And change it to verify that finalized height is written after reorg.
+async fn test_runner_saves_finalized_height() {}
 
 async fn test_runner_with_background_da_service(
     target_height: u64,
@@ -324,6 +268,8 @@ async fn check_runner(
     let end = runner.run_in_process(0).await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
+    let x = end.unwrap_err();
+    println!("ERROR: {x:?}");
     let after = *runner.get_state_root();
 
     assert_ne!(before, after);

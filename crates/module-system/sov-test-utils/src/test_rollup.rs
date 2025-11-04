@@ -659,9 +659,9 @@ where
     pub async fn wait_for_rollup_to_shutdown(self, t: tokio::time::Duration) {
         timeout(t, self.rollup_task)
             .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
+            .expect("Failed to join rollup task before timeout.")
+            .expect("Rollup task panicked.")
+            .expect("Rollup execution returned an error");
     }
 
     /// Waits for the rollup to shutdown.

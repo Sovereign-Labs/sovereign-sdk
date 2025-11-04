@@ -1138,6 +1138,8 @@ async fn max_batch_size() {
     }
 
     test_rollup.force_close_batch().await.unwrap();
+    // Producing one more block to avoid lack of finalized
+    da_layer.produce_block().await.unwrap();
 
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
@@ -1467,10 +1469,12 @@ async fn max_batch_execution_time() {
 
 /// Test that the sequencer can compute state roots for itself to avoid panics.
 ///
-/// This test works by causing the node to fall far behind the sequencer in processsing rollup blocks.
-/// This is done by preventing the seuqencer batches from being included on DA, while still producing lots of DA blocks.
+/// This test works by causing the node to fall far behind the sequencer in processing rollup blocks.
+/// This is done by preventing the sequencer batches from being included on DA, while still producing lots of DA blocks.
 ///
-/// Since there are always new finalized blocks available, the sequencer will happily create new rollup blocks far in advance of the node, triggering the case we care about.
+/// Since there are always new finalized blocks available,
+/// the sequencer will happily create new rollup blocks far in advance of the node,
+/// triggering the case we care about.
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_STATE_ROOT_DELAY_BLOCKS", "1");
@@ -1529,10 +1533,7 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     for i in 0..100 {
         let tx = tx_set_value(&admin.private_key, i, i);
-        client
-            .send_raw_tx_to_sequencer_with_retry(&tx)
-            .await
-            .unwrap();
+        client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
@@ -1544,7 +1545,10 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         .await
         .unwrap();
     sleep(Duration::from_millis(200)).await;
-    test_rollup.shutdown().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(120), test_rollup.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 // The sequencer controls emitting ledger slots over websocket
