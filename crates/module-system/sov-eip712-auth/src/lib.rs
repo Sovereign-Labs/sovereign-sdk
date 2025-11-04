@@ -9,7 +9,8 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, Credentials, Transaction, TransactionVerificationError,
+    AuthenticatedTransactionAndRawHash, Credentials, PubKeyAndSignature, Transaction,
+    TransactionVerificationError,
 };
 use sov_modules_api::{
     CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize,
@@ -24,6 +25,13 @@ pub use crate::crypto_markers::{CryptoSpecWithSecp256k1, Secp256k1CryptoSpec};
 mod stub_evm_rpc;
 #[cfg(feature = "native")]
 pub use stub_evm_rpc::stub_evm_rpc;
+
+#[cfg(feature = "native")]
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Trait for providing schema to the EIP-712 authenticator.
 pub trait SchemaProvider {
@@ -82,8 +90,7 @@ where
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
-    ) -> Result<(Self::Decodable, AuthorizationData<S>), sov_modules_api::capabilities::FatalError>
-    {
+    ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
         let auth_variant: Eip712AuthenticatorInput = borsh::from_slice(&tx.data).map_err(|e| {
             sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
         })?;
@@ -239,15 +246,12 @@ fn verify_and_decode_tx<
                     .chain(tx_v1.unused_pub_keys.iter().cloned())
                     .collect::<Vec<_>>(),
             );
-            let msg = eip_712_msg::<S, D, SP>(&tx, raw_tx_hash)?;
-            multisig
-                .verify_signature(&msg, &tx_v1.signatures)
-                .map_err(|e| {
-                    AuthenticationError::FatalError(
-                        FatalError::SigVerificationFailed(e.to_string()),
-                        raw_tx_hash,
-                    )
-                })?;
+            verify_eip712_multisig_signature::<S, D, SP>(
+                &tx,
+                &multisig,
+                &tx_v1.signatures,
+                raw_tx_hash,
+            )?;
             let credential_id = multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
             let authorization_data = AuthorizationData {
                 uniqueness: tx_v1.uniqueness,
@@ -317,9 +321,14 @@ fn verify_eip712_signature<
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    let eip712_hash = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
 
-    tx.verify_signature(&eip712_hash, meter)
+    let eip712_hash = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
+    let res = tx
+        .verify_signature(&eip712_hash, meter)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())
@@ -328,5 +337,41 @@ fn verify_eip712_signature<
                 FatalError::SigVerificationFailed(e.to_string()),
                 raw_tx_hash,
             ),
-        })
+        });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
+}
+
+fn verify_eip712_multisig_signature<
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
+    D: DispatchCall<Spec = S>,
+    SP: SchemaProvider,
+>(
+    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    multisig: &Multisig<
+        <<S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec as CryptoSpec>::PublicKey,
+    >,
+    signatures: &[PubKeyAndSignature<<S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>],
+    raw_tx_hash: TxHash,
+) -> Result<(), AuthenticationError> {
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
+
+    let msg = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
+    let res = multisig.verify_signature(&msg, signatures).map_err(|e| {
+        AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(e.to_string()),
+            raw_tx_hash,
+        )
+    });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
 }
