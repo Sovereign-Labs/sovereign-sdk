@@ -412,6 +412,19 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
+    /// Serialize the transaction, appending the runtime's chain_hash.
+    /// This is the standard serialization for Sovereign signature signing.
+    pub fn serialized_with_chain_hash(
+        &self,
+        chain_hash: &[u8; 32],
+    ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
+        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
+            TransactionVerificationError::TransactionDeserializationError(e.to_string())
+        })?;
+        serialized_tx.extend_from_slice(chain_hash);
+        Ok(serialized_tx)
+    }
+
     /// Charge gas for verifying the transaction signature against the given message.
     pub fn charge_gas_for_signature(
         &self,
