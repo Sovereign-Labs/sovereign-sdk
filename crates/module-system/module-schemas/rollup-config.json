@@ -745,8 +745,7 @@
       "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
       "type": "object",
       "required": [
-        "max_log_limit",
-        "response_size_limit"
+        "max_log_limit"
       ],
       "properties": {
         "max_log_limit": {
@@ -756,6 +755,7 @@
         },
         "response_size_limit": {
           "description": "The maximum size of the response to the eth_getLogs RPC endpoint. Use 1MB - 30KB for a safe default.",
+          "default": 1017856,
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
