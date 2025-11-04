@@ -330,12 +330,25 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
+    let mut serialized_tx = borsh::to_vec(&tx.to_unsigned_transaction()).map_err(|e| {
+        AuthenticationError::FatalError(FatalError::DeserializationFailed(e.to_string()), raw_tx_hash)
+    })?;
+    serialized_tx.extend_from_slice(chain_hash);
+
+    tx.charge_gas_for_signature(&serialized_tx, meter).map_err(|e| match e {
+        TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
+        _ => AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(e.to_string()),
+            raw_tx_hash,
+        ),
+    })?;
+
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
         return known_result;
     }
 
-    let res = tx.verify(chain_hash, meter).map_err(|e| match e {
+    let res = tx.verify_signature_unmetered(&serialized_tx).map_err(|e| match e {
         TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
         _ => AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(e.to_string()),

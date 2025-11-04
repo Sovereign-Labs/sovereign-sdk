@@ -237,6 +237,8 @@ fn verify_and_decode_tx<
         }
         Transaction::V1(tx_v1) => {
             verify_chain_id(&tx_v1.details, raw_tx_hash)?;
+            // TODO: this logic is duplicated (and also doesn't charge gas for the credential), we
+            // should use extract_authorization_data_v1() here
             let multisig = Multisig::new(
                 tx_v1.min_signers,
                 tx_v1
@@ -321,14 +323,25 @@ fn verify_eip712_signature<
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
+    // TODO: this could be cached as well, but would require querying the cache before charging gas
+    // and then on cache hit using it to charge gas before short-circuiting
+    let eip712_hash = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
+
+    tx.charge_gas_for_signature(&eip712_hash, meter).map_err(|e| match e {
+        TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
+        _ => AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(e.to_string()),
+            raw_tx_hash,
+        ),
+    })?;
+
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
         return known_result;
     }
 
-    let eip712_hash = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
     let res = tx
-        .verify_signature(&eip712_hash, meter)
+        .verify_signature_unmetered(&eip712_hash)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())
