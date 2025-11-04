@@ -24,7 +24,12 @@ impl Default for SequencerKindConfig {
 pub struct SeqConfigExtension {
     pub max_log_limit: usize,
     /// The maximum size of the response to the eth_getLogs RPC endpoint. Use 1MB - 30KB for a safe default.
+    #[serde(default = "default_response_size_limit")]
     pub response_size_limit: usize,
+}
+
+fn default_response_size_limit() -> usize {
+    (1024 * 1024) - (1024 * 30) // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
 }
 
 /// Sequencer configuration.
