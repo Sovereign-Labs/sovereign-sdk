@@ -46,11 +46,12 @@ where
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
+        let separate_archival_state = config.separate_archival_state;
         let state_db = NomtStateDb::<H>::new(config)?;
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let flat_state = FlatStateDb::new(path, state_cache_size)?;
+        let flat_state = FlatStateDb::new(path, state_cache_size, separate_archival_state)?;
         Ok(Self {
             merklized_state: Arc::new(state_db),
             flat_state,
@@ -109,7 +110,7 @@ where
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.flat_state
-            .other
+            .archival
             .write_schemas(group.historical_state.pruning_batch)?;
         self.accessory
             .write_schemas(group.accessory.pruning_batch)?;
