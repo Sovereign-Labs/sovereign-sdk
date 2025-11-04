@@ -175,7 +175,7 @@ async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
     let randomization = RandomizationConfig {
         seed: HexHash::from([1; 32]),
         reorg_interval: 1..3,
-        // TODO: It also messes up things with shorer block_time. get back to this later
+        // TODO: It also messes up things with shorter block_time. get back to this later
         behaviour: RandomizationBehaviour::only_shuffle(20),
     };
     let da_config = build_da_config(finality, block_time_ms, randomization);

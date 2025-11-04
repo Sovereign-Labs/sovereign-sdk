@@ -804,7 +804,7 @@ where
     async fn process_finalized_state_transitions(
         &mut self,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
-        // DaService call # 1
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         let last_finalized_header = self
             .finalized_headers_provider
             .get_last_finalized_block_header()?;
@@ -822,7 +822,6 @@ where
 
         let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_transition
         {
-            // DaService call # 2
             self.finalized_headers_provider
                 .get_block_header_at(highest_seen_transition)
                 .await?
