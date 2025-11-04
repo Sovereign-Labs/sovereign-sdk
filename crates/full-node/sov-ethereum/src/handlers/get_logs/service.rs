@@ -26,9 +26,6 @@ use std::ops::Range;
 use std::ops::RangeInclusive;
 use thiserror::Error;
 
-/// Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
-const RESPONSE_SIZE_LIMIT: usize = (1024 * 1024) - (1024 * 30);
-
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Receipt for index {0} not found. The state may have already been pruned.")]
@@ -77,6 +74,7 @@ pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     logs: Vec<Log>,
     logs_serialized_size: usize,
     state: ApiStateAccessor<S>,
+    response_size_limit: Immutable<usize>,
     _phantom: PhantomData<(S, Seq)>,
 }
 
@@ -92,6 +90,7 @@ where
         cursor: Option<Cursor>,
         max_logs: usize,
         state: ApiStateAccessor<S>,
+        response_size_limit: usize,
     ) -> Self {
         Self {
             filter: filter.into(),
@@ -101,6 +100,7 @@ where
             evm: Evm::<S>::default(),
             logs: vec![],
             logs_serialized_size: 0,
+            response_size_limit: response_size_limit.into(),
             _phantom: PhantomData,
         }
     }
@@ -275,7 +275,7 @@ where
                 removed: false,
             };
             let log_size = serialized_size(&rpc_log);
-            if self.logs_serialized_size + log_size >= RESPONSE_SIZE_LIMIT {
+            if self.logs_serialized_size + log_size >= *self.response_size_limit {
                 return Ok(Some(Cursor {
                     block_height: header.number(),
                     tx_index_absolute,
