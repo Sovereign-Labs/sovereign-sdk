@@ -1,5 +1,6 @@
 # 2025-11-01
 - #2006 Add associated Error type to the EVM module.
+- #1953 Performance improvement for processing stf changes, but might delay writing finalized data to disk by 1 block
 
 # 2025-10-31
 - #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
