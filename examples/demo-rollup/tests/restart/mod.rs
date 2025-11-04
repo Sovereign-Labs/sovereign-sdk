@@ -335,13 +335,6 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 }
 
 fn tx_send_transfer(value_to_set: u128, key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
-    // let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
-    //     sov_value_setter::CallMessage::SetValueAndSleep {
-    //         value: value_to_set,
-    //         sleep_millis: 0,
-    //     },
-    // );
-
     let msg =
         <TestRuntime<TestSpec> as DispatchCall>::Decodable::Bank(sov_bank::CallMessage::Transfer {
             to: "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
