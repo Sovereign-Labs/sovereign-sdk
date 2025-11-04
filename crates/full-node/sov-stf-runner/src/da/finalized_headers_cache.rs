@@ -11,16 +11,17 @@ const MAX_RECENT_HEADERS: usize = 30;
 /// Wrapper around [`DaService`] that optimizes interaction with actual DA:
 ///  * Providing access to the last finalized header without actual network call
 ///  * Storing N recent headers to reduce network calls
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DaServiceWithCachedFinalizedHeaders<Da: DaService> {
-    // TODO: Does it need to be Arc?
+    // TODO: Remove Arc, DaService already clone!
     da_service: Arc<Da>,
     last_finalized: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
     recent_headers: Arc<tokio::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
-    finalized_headers_task: tokio::task::JoinHandle<()>,
+    finalized_headers_task: Arc<tokio::task::JoinHandle<()>>,
 }
 
 impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
+    #[allow(missing_docs)]
     pub async fn new(
         da_service: Arc<Da>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
@@ -54,7 +55,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
             da_service,
             last_finalized: finalized_receiver,
             recent_headers,
-            finalized_headers_task: finalized_header_handler,
+            finalized_headers_task: Arc::new(finalized_header_handler),
         })
     }
 }
@@ -90,6 +91,13 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
         }
         drop(cache);
         self.da_service.get_block_header_at(height).await
+    }
+
+    /// Currently does direct call to underlying [`DaService`], but can be optimized in the future too.
+    pub async fn get_head_block_header(
+        &self,
+    ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
+        self.da_service.get_head_block_header().await
     }
 }
 

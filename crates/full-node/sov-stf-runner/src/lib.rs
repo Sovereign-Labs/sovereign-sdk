@@ -15,3 +15,4 @@ pub use crate::config::{
 };
 pub use crate::http::rpc_module_to_router;
 pub use crate::runner::*;
+pub use da::DaServiceWithCachedFinalizedHeaders;

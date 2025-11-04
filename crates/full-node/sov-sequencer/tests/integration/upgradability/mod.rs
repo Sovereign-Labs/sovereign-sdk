@@ -315,7 +315,10 @@ async fn assert_rollup_processes_only_finalized_blocks(client: &NodeClient) {
     let last_finalized_slot_number = get_last_finalized_slot_number(client).await;
     let last_slot_number = get_last_slot_number(client).await;
     // During the upgrade procedure, rollup processes only finalized blocks.
-    assert_eq!(last_finalized_slot_number, last_slot_number);
+    assert_eq!(
+        last_finalized_slot_number,
+        last_slot_number,
+        "left is last finalized slot number {last_finalized_slot_number}, right is last slot number: {last_slot_number}");
 }
 
 async fn send_tx(
