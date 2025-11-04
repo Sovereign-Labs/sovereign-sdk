@@ -1,5 +1,4 @@
 use crate::{
-    db::commit::FallibleDatabaseCommit,
     get_spec_id,
     sov_evm::{SovEvm, StorageAccessInspector},
     EvmRuntimeConfig,
@@ -15,7 +14,7 @@ use revm::{
 };
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
-use revm_database_interface::DBErrorMarker;
+use revm_database_interface::{DBErrorMarker, TryDatabaseCommit};
 use sov_modules_api::macros::config_value;
 
 /// The maximum contract code size is 512KiB by default.
@@ -44,10 +43,7 @@ pub(crate) fn get_cfg_env(
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
-pub fn transact_commit<
-    DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
-    E: DBErrorMarker,
->(
+pub fn transact_commit<DB: Database<Error = E> + TryDatabaseCommit<Error = E>, E: DBErrorMarker>(
     mut db: &mut DB,
     block_env: &BlockEnv,
     tx: TxEnv,
@@ -55,7 +51,7 @@ pub fn transact_commit<
 ) -> Result<ExecutionResult, EVMError<E>> {
     let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg)?;
     // We don't use transact_commit as it does not support returning an error
-    db.commit(state)?;
+    db.try_commit(state)?;
     Ok(result)
 }
 

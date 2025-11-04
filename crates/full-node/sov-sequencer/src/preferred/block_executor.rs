@@ -32,7 +32,7 @@ use super::state_root_compute::StateRootComputeRequest;
 use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
-use crate::common::{generic_accept_tx_error, AcceptedTx};
+use crate::common::AcceptedTx;
 use crate::preferred::async_batch::{ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -85,7 +85,19 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                 reject_reason_to_error(reason, call)
             }
             RollupBlockExecutorError::UnsuccessfulTransaction { receipt } => {
-                generic_accept_tx_error(receipt)
+                let details = match receipt.receipt {
+                    sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
+                        reverted.reason.error_detail().unwrap_or(json_obj!({}))
+                    }
+                    _ => json_obj!({
+                        "error": format!("{:?}", receipt),
+                    }),
+                };
+                ErrorObject {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Transaction execution unsuccessful".to_string(),
+                    details,
+                }
             }
             RollupBlockExecutorError::UnexpectedFailure => ErrorObject {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
@@ -292,7 +304,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx)?;
+        let (call, _) = Rt::Auth::decode_serialized_tx(&baked_tx.tx)?;
         let call = Rt::wrap_call(call);
 
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {

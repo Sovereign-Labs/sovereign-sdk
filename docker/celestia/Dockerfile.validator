@@ -1,6 +1,11 @@
 # A dockerfile for the celestia validator in consensus layer
 # Based on:
 # https://github.com/celestiaorg/celestia-app/blob/main/Dockerfile
+
+ARG CELESTIA_APP_TAG=v6.2.0-mocha
+
+FROM ghcr.io/celestiaorg/celestia-app:${CELESTIA_APP_TAG} AS celestia-app
+
 FROM docker.io/alpine:3.20.1
 
 ENV CELESTIA_HOME=/root
@@ -13,13 +18,17 @@ RUN apk update && \
     rm grpcurl_1.8.7_linux_x86_64.tar.gz
 
 # Copy in the binary
-COPY --from=ghcr.io/celestiaorg/celestia-app:v5.0.2-mocha /bin/celestia-appd /bin/celestia-appd
+COPY --from=celestia-app /bin/celestia-appd /bin/celestia-appd
 
 COPY ./run-validator.sh /opt/entrypoint.sh
 COPY ./validator-healthcheck.sh /opt/validator-healthcheck.sh
 RUN chmod +x /opt/entrypoint.sh /opt/validator-healthcheck.sh
 
+# https://docs.docker.com/reference/dockerfile/#healthcheck
+HEALTHCHECK --interval=10s --timeout=5s --retries=30 --start-period=10s \
+    CMD ["/opt/validator-healthcheck.sh"]
+
 # p2p, rpc and prometheus port
 EXPOSE 26656 26657 1317 9090
 
-CMD /opt/entrypoint.sh
+CMD ["/opt/entrypoint.sh"]

@@ -45,6 +45,7 @@ impl<S: Spec> Module for TestAccessoryModule<S> {
     type Config = ();
     type CallMessage = CallMessage;
     type Event = ();
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,
@@ -60,7 +61,7 @@ impl<S: Spec> Module for TestAccessoryModule<S> {
         msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::SetAccessoryValue(value) => {
                 let unmetered_state = &mut state.to_unmetered();

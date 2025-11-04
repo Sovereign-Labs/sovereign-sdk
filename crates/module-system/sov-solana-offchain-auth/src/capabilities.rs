@@ -4,8 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::capabilities::{
-    AuthenticationError, BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
-    UnregisteredAuthenticationError,
+    BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec};
@@ -51,7 +50,13 @@ where
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
-    ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
+    ) -> Result<
+        (
+            Self::Decodable,
+            sov_modules_api::capabilities::AuthorizationData<S>,
+        ),
+        sov_modules_api::capabilities::FatalError,
+    > {
         use crate::authentication::decode_solana_json_tx;
 
         let auth_variant: SolanaOffchainAuthenticatorInput =
@@ -61,12 +66,10 @@ where
 
         match auth_variant {
             SolanaOffchainAuthenticatorInput::Standard(raw_tx) => {
-                let call = sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                sov_modules_api::capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)
             }
             SolanaOffchainAuthenticatorInput::SolanaOffchain(raw_tx) => {
-                let call = decode_solana_json_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(call)
+                decode_solana_json_tx::<S, Rt>(&raw_tx.data)
             }
         }
     }
@@ -136,31 +139,7 @@ where
             return Err(UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant);
         };
 
-        let (tx_and_raw_hash, auth_data, runtime_call) =
-            sov_modules_api::capabilities::authenticate::<_, S, Rt>(
-                &input.data,
-                &Rt::CHAIN_HASH,
-                state,
-            )
-            .map_err(|e| match e {
-                AuthenticationError::FatalError(err, hash) => {
-                    UnregisteredAuthenticationError::FatalError(err, hash)
-                }
-                AuthenticationError::OutOfGas(err) => {
-                    UnregisteredAuthenticationError::OutOfGas(err)
-                }
-            })?;
-
-        if Rt::allow_unregistered_tx(&runtime_call) {
-            Ok((tx_and_raw_hash, auth_data, runtime_call))
-        } else {
-            Err(UnregisteredAuthenticationError::FatalError(
-                FatalError::Other(
-                    "The runtime call included in the transaction was invalid.".to_string(),
-                ),
-                tx_and_raw_hash.raw_tx_hash,
-            ))?
-        }
+        sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(&input.data, state)
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {

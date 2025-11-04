@@ -59,13 +59,14 @@ impl<S: Spec> Module for TestHelper<S> {
     type Config = ();
     type CallMessage = TestHelperCallMessage<S>;
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         context: &sov_modules_api::Context<S>,
         state: &mut impl sov_modules_api::TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             TestHelperCallMessage::PayRevenueShare {
                 token_id,

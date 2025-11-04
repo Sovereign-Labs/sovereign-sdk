@@ -165,6 +165,52 @@ async fn handle_socket(socket: WebSocket, rpc_methods: RpcModule<()>) {
     tokio::spawn(handle_socket_read(receiver, socket_requests, rpc_methods));
 }
 
+async fn handle_rpc_message(
+    text: &str,
+    socket_responses: &tokio::sync::mpsc::Sender<Message>,
+    rpc_methods: &RpcModule<()>,
+    use_binary: bool,
+) {
+    // Buffer size picked up from `jsonrpsee` crate examples
+    match rpc_methods.raw_json_request(text, 1).await {
+        Ok((rpc_response, mut receiver)) => {
+            tracing::trace!("RPC request processed successfully: {}", rpc_response);
+            let response_message = if use_binary {
+                Message::Binary(rpc_response.to_string().into_bytes())
+            } else {
+                Message::Text(rpc_response.to_string())
+            };
+
+            if socket_responses.send(response_message).await.is_err() {
+                tracing::error!("Websocket sender has been closed, aborting websocket");
+                return;
+            }
+
+            if !receiver.is_closed() {
+                let subscription_responses = socket_responses.clone();
+                tokio::task::spawn(async move {
+                    tracing::trace!("Spawning subscription responses loop");
+                    while let Some(message) = receiver.recv().await {
+                        tracing::trace!("Subscription message received: {}", message);
+                        let sub_message = if use_binary {
+                            Message::Binary(message.to_string().into_bytes())
+                        } else {
+                            Message::Text(message.to_string())
+                        };
+                        if let Err(error) = subscription_responses.send(sub_message).await {
+                            tracing::error!(%error, "Error while sending RPC response");
+                        }
+                    }
+                    tracing::trace!("Subscription channel closed");
+                });
+            }
+        }
+        Err(error) => {
+            tracing::error!(%error, "Error while processing RPC request");
+        }
+    }
+}
+
 async fn handle_socket_read(
     mut socket_requests: futures_util::stream::SplitStream<WebSocket>,
     socket_responses: tokio::sync::mpsc::Sender<Message>,
@@ -174,44 +220,18 @@ async fn handle_socket_read(
         tracing::trace!(message = ?msg, "Message received from websocket");
         match msg {
             Message::Text(text) => {
-                // Buffer size picked up from `jsonrpsee` crate examples
-                match rpc_methods.raw_json_request(&text, 1).await {
-                    Ok((rpc_response, mut receiver)) => {
-                        tracing::trace!("RPC request processed successfully: {}", rpc_response);
-                        if socket_responses
-                            .send(Message::Text(rpc_response.to_string()))
-                            .await
-                            .is_err()
-                        {
-                            tracing::error!("Websocket sender has been closed, aborting websocket");
-                            break;
-                        }
-
-                        if !receiver.is_closed() {
-                            let subscription_responses = socket_responses.clone();
-                            tokio::task::spawn(async move {
-                                tracing::trace!("Spawning subscription responses loop");
-                                while let Some(message) = receiver.recv().await {
-                                    tracing::trace!("Subscription message received: {}", message);
-                                    if let Err(error) = subscription_responses
-                                        .send(Message::Text(message.to_string()))
-                                        .await
-                                    {
-                                        tracing::error!(%error, "Error while sending RPC response");
-                                    }
-                                }
-                                tracing::trace!("Subscription channel closed");
-                            });
-                        }
+                handle_rpc_message(&text, &socket_responses, &rpc_methods, false).await;
+            }
+            Message::Binary(data) => {
+                // Parse binary frame as UTF-8 JSON-RPC request
+                match std::str::from_utf8(&data) {
+                    Ok(text) => {
+                        handle_rpc_message(text, &socket_responses, &rpc_methods, true).await;
                     }
                     Err(error) => {
-                        tracing::error!(%error, "Error while processing RPC request");
+                        tracing::error!(%error, "Invalid UTF-8 in binary WebSocket frame");
                     }
                 }
-            }
-            // NOTE: No support for binary formats.
-            Message::Binary(_) => {
-                tracing::warn!("Binary JSON RPC messages are not supported");
             }
             Message::Pong(_) => {}
             Message::Ping(ping) => {
@@ -242,9 +262,13 @@ async fn handle_socket_write(
 
 #[cfg(test)]
 mod tests {
+    use futures_util::sink::SinkExt;
+    use futures_util::stream::StreamExt;
     use jsonrpsee::core::client::{ClientT, SubscriptionClientT};
     use jsonrpsee::core::JsonRawValue;
     use jsonrpsee::ws_client::WsClientBuilder;
+    use tokio_tungstenite::connect_async;
+    use tokio_tungstenite::tungstenite::Message as TungsteniteMessage;
 
     use super::*;
 
@@ -367,6 +391,38 @@ mod tests {
         .await?;
         subscription.unsubscribe().await?;
         assert_eq!(numbers, (0..10).collect::<Vec<u64>>());
+
+        shutdown_sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_binary_frames() -> anyhow::Result<()> {
+        let (addr, shutdown_sender) = build_and_start_test_server().await;
+
+        // Connect using raw tungstenite client to send binary frames
+        let (ws_stream, _) = connect_async(format!("ws://{addr}/rpc"))
+            .await
+            .expect("Failed to connect");
+        let (mut write, mut read) = ws_stream.split();
+
+        // Send a JSON-RPC request as binary frame
+        let request = r#"{"jsonrpc":"2.0","method":"test_hello","params":[],"id":1}"#;
+        write
+            .send(TungsteniteMessage::Binary(
+                request.as_bytes().to_vec().into(),
+            ))
+            .await?;
+
+        // Read binary response
+        let response = read.next().await.expect("No response")?;
+        match response {
+            TungsteniteMessage::Binary(data) => {
+                let response_text = std::str::from_utf8(&data)?;
+                assert!(response_text.contains("\"result\":\"hi\""));
+            }
+            _ => panic!("Expected binary response, got: {response:?}"),
+        }
 
         shutdown_sender.send(())?;
         Ok(())

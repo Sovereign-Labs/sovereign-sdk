@@ -405,6 +405,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 .await?;
 
         let mut rt = Self::Runtime::default();
+
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 
@@ -686,6 +687,7 @@ fn spawn_task_monitor(
 
         let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
+            _ = shutdown_sender.send(());
             false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
@@ -706,6 +708,7 @@ fn spawn_task_monitor(
         for handle in handles {
             if let Err(error) = handle.await {
                 tracing::error!(error = %error, "Additional background task joined with error");
+                _ = shutdown_sender.send(());
                 was_graceful = false;
             }
         }

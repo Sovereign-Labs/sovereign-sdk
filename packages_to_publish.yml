@@ -22,6 +22,7 @@
 - sov-zkvm-utils
 - sov-build
 - full-node-configs
+- sovereign-web3
 
 # Modules
 - sov-accounts

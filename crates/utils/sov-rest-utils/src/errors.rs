@@ -7,6 +7,18 @@ use tracing::error;
 
 use crate::{json_obj, ErrorObject};
 
+/// Errors that can be reported to clients over HTTP or WebSocket.
+pub trait ReportableWsError: std::fmt::Debug + Sized + Send + Sync + 'static {
+    /// Convert the error into a JSON string that can be sent over a WebSocket.
+    fn to_json(&self) -> String;
+
+    /// Whether the error is recoverable without closing the channel.
+    /// Defaults to false.
+    fn is_recoverable(&self) -> bool {
+        false
+    }
+}
+
 /// A 404 response useful as a [`axum::Router::fallback`].
 pub async fn global_404(OriginalUri(uri): OriginalUri) -> Response {
     ErrorObject {

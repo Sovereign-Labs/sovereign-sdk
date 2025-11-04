@@ -296,7 +296,7 @@ pub struct PaginatedEventResponse<E> {
 #[async_trait]
 pub trait LedgerStateProvider {
     /// The error type for fallible methods on this trait.
-    type Error: ToString + Send + Sync + 'static;
+    type Error: std::fmt::Display + Send + Sync + 'static;
 
     /// Get the latest rollup height in the ledger.
     async fn get_head_slot_number(&self) -> Result<SlotNumber, Self::Error>;

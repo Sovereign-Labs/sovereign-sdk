@@ -221,19 +221,28 @@ where
     #[cfg(feature = "native")]
     fn decode_serialized_tx(
         tx: &FullyBakedTx,
-    ) -> Result<Self::Decodable, sov_modules_api::capabilities::FatalError> {
+    ) -> Result<(Self::Decodable, AuthorizationData<S>), sov_modules_api::capabilities::FatalError>
+    {
         let auth_variant: EvmAuthenticatorInput = borsh::from_slice(&tx.data).map_err(|e| {
             sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
         })?;
 
         match auth_variant {
             EvmAuthenticatorInput::Evm(raw_tx) => {
-                let (call, _tx) = decode_evm_tx(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }))
+                let (call, tx) = decode_evm_tx(&raw_tx.data)?;
+                let hash = TxHash::new(**tx.hash());
+                let signer = recover_evm_signer(&tx, hash).map_err(|e| {
+                    sov_modules_api::capabilities::FatalError::DeserializationFailed(e.to_string())
+                })?;
+                let auth_data = extract_evm_authorization_data::<S>(signer, hash, tx.nonce());
+                Ok((
+                    EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }),
+                    auth_data,
+                ))
             }
             EvmAuthenticatorInput::Standard(raw_tx) => {
-                let call = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Standard(call))
+                let (call, auth) = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
+                Ok((EvmAuthenticatorInput::Standard(call), auth))
             }
         }
     }
@@ -308,34 +317,16 @@ where
         };
 
         let (tx_and_raw_hash, auth_data, runtime_call) =
-            sov_modules_api::capabilities::authenticate::<_, S, Rt>(
+            sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
                 &input.data,
-                &Rt::CHAIN_HASH,
                 state,
-            )
-            .map_err(|e| match e {
-                AuthenticationError::FatalError(err, hash) => {
-                    UnregisteredAuthenticationError::FatalError(err, hash)
-                }
-                AuthenticationError::OutOfGas(err) => {
-                    UnregisteredAuthenticationError::OutOfGas(err)
-                }
-            })?;
+            )?;
 
-        if Rt::allow_unregistered_tx(&runtime_call) {
-            Ok((
-                tx_and_raw_hash,
-                auth_data,
-                EvmAuthenticatorInput::Standard(runtime_call),
-            ))
-        } else {
-            Err(UnregisteredAuthenticationError::FatalError(
-                FatalError::Other(
-                    "The runtime call included in the transaction was invalid.".to_string(),
-                ),
-                tx_and_raw_hash.raw_tx_hash,
-            ))?
-        }
+        Ok((
+            tx_and_raw_hash,
+            auth_data,
+            EvmAuthenticatorInput::Standard(runtime_call),
+        ))
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {

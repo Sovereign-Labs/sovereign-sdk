@@ -52,6 +52,8 @@ use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{error, error_span, trace, warn};
 
+use crate::errors::ReportableWsError;
+
 /// Standard result type for API endpoints.
 pub type ApiResult<T> = Result<axum::Json<T>, Response>;
 
@@ -175,12 +177,13 @@ pub fn cors_layer_opt(
 
 /// A utility function for serving some data inside a [`futures::Stream`] over a
 /// WebSocket connection.
-pub async fn serve_generic_ws_subscription<S, M>(
+pub async fn serve_generic_ws_subscription<S, M, E>(
     mut socket: WebSocket,
     mut subscription: S,
     mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) where
-    S: futures::Stream<Item = anyhow::Result<M>> + Unpin,
+    S: futures::Stream<Item = Result<M, E>> + Unpin,
+    E: ReportableWsError,
     M: Clone + serde::Serialize + Send + Sync + 'static,
 {
     loop {
@@ -218,8 +221,14 @@ pub async fn serve_generic_ws_subscription<S, M>(
                         }
                     },
                     Some(Err(err)) => {
-                        warn!(?err, "WebSocket error while receiving data from internal Tokio channel");
-                        break;
+                        // Convert error to ErrorObject and send it to the client
+                        if let Err(send_err) = socket.send(ws::Message::Text(err.to_json())).await {
+                            warn!(err=?send_err, "WebSocket error while sending error");
+                            // keep the loop going.
+                        }
+                        if !err.is_recoverable() {
+                            break;
+                        }
                     },
                     None => {
                         // No more data to send.

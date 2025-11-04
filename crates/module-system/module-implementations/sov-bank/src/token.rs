@@ -16,6 +16,7 @@ use sov_modules_api::{impl_hash32_type, Spec};
 use sov_state::{BorshCodec, EncodeLike, StateItemEncoder};
 use thiserror::Error;
 
+use crate::error::{CommonError, FreezeTokenError, MintTokenError, UpdateAdminError};
 use crate::utils::{Payable, TokenHolder, TokenHolderRef};
 use crate::Amount;
 
@@ -228,10 +229,12 @@ impl<S: Spec> Token<S> {
 
     /// admins: Vec<Address> is used to determine if the token is frozen or not
     /// If the vector is empty when the function is called, this means the token is already frozen
-    pub(crate) fn freeze(&mut self, sender: TokenHolderRef<'_, S>) -> anyhow::Result<()> {
+    pub(crate) fn freeze(&mut self, sender: TokenHolderRef<'_, S>) -> Result<(), FreezeTokenError> {
         let sender = sender.as_token_holder();
         if self.admins.is_empty() {
-            bail!("Token {} is already frozen", self.name)
+            return Err(CommonError::TokenFrozen {
+                name: self.name.to_string(),
+            })?;
         }
         self.assert_is_admin(sender)?;
         self.admins = vec![];
@@ -242,13 +245,13 @@ impl<S: Spec> Token<S> {
         &mut self,
         new_admin: Option<S::Address>,
         admin_to_replace: &S::Address,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), UpdateAdminError> {
         // Check if the `admin_to_replace` is in the admin list.
         let Some(current_admin_pos) = self.find_admin_index(admin_to_replace) else {
-            bail!(
-                "Cannot update admin: `{admin_to_replace}` is not in the admin list for the specified token {}",
-                self.name
-            );
+            return Err(UpdateAdminError::AdminDoesNotExist {
+                admin_to_replace: admin_to_replace.to_string(),
+                token_name: self.name.to_string(),
+            });
         };
 
         if let Some(new_admin) = new_admin {
@@ -257,7 +260,10 @@ impl<S: Spec> Token<S> {
 
             // 1. If `new_admin` is already in the list, do nothing to avoid duplicates.
             if self.find_admin_index(&new_admin).is_some() {
-                bail!("`{new_admin}` is already a member of the admin list.");
+                return Err(UpdateAdminError::AdminAlreadyExists {
+                    new_admin: new_admin.to_string(),
+                    token_name: self.name.to_string(),
+                });
             };
 
             // 2. Replace the `admin_to_replace` with the `new_admin``.
@@ -282,21 +288,29 @@ impl<S: Spec> Token<S> {
         &mut self,
         authorizer: TokenHolderRef<'_, S>,
         amount: Amount,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), MintTokenError> {
         if self.admins.is_empty() {
-            bail!("Attempt to mint frozen token {}", self.name)
+            return Err(CommonError::TokenFrozen {
+                name: self.name.to_string(),
+            })?;
         }
 
         self.assert_is_admin(authorizer)?;
 
-        let new_supply = self
-            .total_supply
-            .checked_add(amount)
-            .ok_or(anyhow::Error::msg(
-                "Total Supply overflow in the mint method of bank module",
-            ))?;
+        let new_supply = self.total_supply.checked_add(amount).ok_or_else(|| {
+            CommonError::Arithmetic(crate::error::ArithmeticError::Overflow {
+                base: self.total_supply,
+                addend: amount,
+                message: "Total supply overflow when minting tokens".to_string(),
+            })
+        })?;
+
         if new_supply > self.supply_cap {
-            anyhow::bail!("Attempted to mint more than the supply cap of token. Max supply: {}. Current supply: {}. Minted amount: {}", self.supply_cap, self.total_supply, amount)
+            return Err(MintTokenError::SupplyCapExceeded {
+                new_supply,
+                supply_cap: self.supply_cap,
+                token_name: self.name.to_string(),
+            });
         }
 
         self.total_supply = new_supply;
@@ -304,14 +318,17 @@ impl<S: Spec> Token<S> {
         Ok(())
     }
 
-    fn assert_is_admin(&self, sender: TokenHolderRef<'_, S>) -> anyhow::Result<()> {
+    fn assert_is_admin(&self, sender: TokenHolderRef<'_, S>) -> Result<(), CommonError> {
         for minter in self.admins.iter() {
             if sender == minter.as_token_holder() {
                 return Ok(());
             }
         }
 
-        bail!("Sender {} is not an admin of token {}", sender, self.name)
+        Err(CommonError::NotAdmin {
+            caller: sender.to_string(),
+            token_name: self.name.clone(),
+        })
     }
 }
 

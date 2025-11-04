@@ -3,7 +3,6 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use anyhow::Context;
 use axum::extract::ws::WebSocket;
 use axum::extract::{ws, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
@@ -25,9 +24,10 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
 use tokio::sync::watch::Receiver;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer};
+use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
 
 /// [`StartFrom`] is used as a query parameter for the txs subscription
@@ -167,11 +167,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // Finally, convert the data into the type that we want to
             // serialize over the WS connection.
             .map(|data| {
-                data.context("Failed to subscribe to tx status updates")
-                    .map(|status| TxInfo {
-                        id: tx_hash.0,
-                        status,
-                    })
+                data.map(|status| TxInfo {
+                    id: tx_hash.0,
+                    status,
+                })
+                // Put an explicit type check to ensure we catch this if the set of errors expands.
+                .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged)
             })
             .boxed();
 
@@ -296,8 +297,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     async fn subscribe_txs_starting_from(
         start_from: Option<u64>,
         sequencer: Arc<Seq>,
-    ) -> Pin<Box<dyn futures::Stream<Item = anyhow::Result<ApiAcceptedTx<Seq::Confirmation>>> + Send>>
-    {
+    ) -> Pin<
+        Box<
+            dyn futures::Stream<
+                    Item = Result<ApiAcceptedTx<Seq::Confirmation>, SubscriptionStreamError>,
+                > + Send,
+        >,
+    > {
         let Some(stream) = sequencer.subscribe_transactions(start_from).await else {
             return futures::stream::empty().boxed();
         };
@@ -319,7 +325,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 .await
                 .map(|receiver| {
                     BroadcastStream::new(receiver)
-                        .map_err(|err| anyhow::anyhow!("Error creating broadcast stream: {err}"))
+                        .map_err(|_| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
                         .boxed()
                 })
                 .unwrap_or_else(|| futures::stream::empty().boxed());
@@ -355,7 +361,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 .await
                 .map(|receiver| {
                     BroadcastStream::new(receiver)
-                        .map_err(|err| anyhow::anyhow!("Error creating broadcast stream: {err}"))
+                        .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
                         .boxed()
                 })
                 .unwrap_or_else(|| futures::stream::empty().boxed());

@@ -6,11 +6,11 @@ mod block_executor;
 mod cache_warm_up_executor;
 mod db;
 mod executor_events;
-mod inner;
 mod preferred_blob_sender;
 mod replica;
 mod side_effects;
 mod state_root_compute;
+mod sync_sequencer_state;
 mod transaction_subscriptions;
 mod update_state;
 
@@ -25,7 +25,6 @@ use db::rocksdb::RocksDbBackend;
 use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use futures::Stream;
-use inner::*;
 use preferred_blob_sender::PreferredBlobSender;
 use serde_with::serde_as;
 use side_effects::SideEffectsTask;
@@ -54,6 +53,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use sync_sequencer_state::*;
 use tokio::sync::mpsc::{self};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
@@ -64,7 +64,7 @@ use transaction_subscriptions::TransactionCache;
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
     AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError, StateUpdateNotification,
-    WithCachedTxHashes,
+    SubscriptionStreamError, WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
@@ -237,6 +237,9 @@ where
             handles.push(worker);
         }
 
+        let (mut replica_task, start_replica_task_notifier) =
+            ReplicaSyncTask::new(shutdown_sender.clone()).await?;
+
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
             api_ledger_db.clone(),
@@ -252,7 +255,8 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
-            cache_warm_up_executor.clone(),
+            cache_warm_up_executor,
+            start_replica_task_notifier,
         );
 
         let synchronized_state_task = synchronized_state.start().await;
@@ -290,17 +294,17 @@ where
             if let Some(postgres_connection_string) =
                 &config.sequencer_kind_config.postgres_connection_string
             {
-                let mut replica_task = ReplicaSyncTask::new(
-                    postgres_connection_string.clone(),
-                    shutdown_sender.clone(),
-                )
-                .await?;
-
-                let replica_task_handle = replica_task.start(synchronized_state_updator).await;
+                let replica_task_handle = replica_task
+                    .start(
+                        synchronized_state_updator,
+                        postgres_connection_string.clone(),
+                    )
+                    .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);
             }
         }
+
         handles.push(tokio::spawn({
             update_state_task(
                 seq.clone(),
@@ -480,7 +484,7 @@ where
             let is_synced = info.sync_status.distance() <= distance_to_tip;
 
             self.synchronized_state_updator
-                .wait_for_node_resync_msg(info, "wait_for_node_resync")
+                .wait_for_node_resync_msg(info, distance_to_tip, "wait_for_node_resync")
                 .await
                 .map_err(|e| e.into_state_update_error())?;
 
@@ -806,8 +810,18 @@ where
         &self,
         starting_from: Option<u64>,
     ) -> Option<
-        anyhow::Result<
-            Pin<Box<dyn Stream<Item = anyhow::Result<ApiAcceptedTx<Self::Confirmation>>> + Send>>,
+        Result<
+            Pin<
+                Box<
+                    dyn Stream<
+                            Item = Result<
+                                ApiAcceptedTx<Self::Confirmation>,
+                                SubscriptionStreamError,
+                            >,
+                        > + Send,
+                >,
+            >,
+            SubscriptionStreamError,
         >,
     > {
         Some(
@@ -848,7 +862,7 @@ where
         // Check if this transaction has a configured delay
         let runtime = Rt::default();
         let call = match Rt::Auth::decode_serialized_tx(&baked_tx) {
-            Ok(call) => call,
+            Ok((call, _)) => call,
             Err(_) => {
                 return Err(ErrorObject {
                     status: StatusCode::BAD_REQUEST,
@@ -941,6 +955,7 @@ where
                         return Err(shut_down_error());
                     }
                 },
+                AcceptTxError::ReplicaMode => return Err(replica_mode_error()),
             },
         }
     }
@@ -955,6 +970,15 @@ where
         // way that facilitates random access to tx status information. That
         // means the sequencer only relies on the cache. FIXME(@neysofu).
         Ok(TxStatus::Unknown)
+    }
+}
+
+fn replica_mode_error() -> ErrorObject {
+    ErrorObject {
+        status: StatusCode::SERVICE_UNAVAILABLE,
+        message: "The sequencer is running in replica mode and cannot accept transactions"
+            .to_string(),
+        details: Default::default(),
     }
 }
 
@@ -1135,10 +1159,10 @@ async fn exit_rollup_inner(
     if shutdown_sender.send(()).is_err() {
         tracing::error!("Failed to send shutdown signal: {location}");
     }
-    sleep(Duration::from_secs(5)).await;
     let msg = format!("Calling std::process::exit(1): {location}");
     tracing::error!(msg);
     println!("{msg}");
+    sleep(Duration::from_secs(5)).await;
     std::process::exit(1);
 }
 

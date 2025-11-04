@@ -314,7 +314,7 @@ fn test_transfer_inbound_fails_various_edge_cases() {
         warp_route_id,
         other.address().to_sender(),
         Amount(101), // Amount is more than the amount of locked tokens
-        "Failed to transfer token",
+        "Insufficient balance for account",
     );
 
     // Check that the correct transfer still succeeds after all of these failures
@@ -351,7 +351,7 @@ fn test_transfer_remote_fails_if_not_enough_balance() {
             match result.tx_receipt {
                 TxEffect::Reverted(reason) => {
                     assert!(
-                        reason.reason.to_string().contains("Failed to transfer"),
+                        reason.reason.to_string().contains("Insufficient balance for account"),
                         "Transaction should be reverted with the correct error but reverted with: {}",
                         reason.reason
                     );
@@ -794,7 +794,7 @@ fn test_collateral_route() {
         warp_route_id,
         Amount(100),
         relayer.address(),
-        "Failed to transfer token",
+        "Insufficient balance for account",
     );
     // Inbound transfer should fail because the warp module has no tokens
     do_inbound_transfer_failure(
@@ -805,7 +805,7 @@ fn test_collateral_route() {
         warp_route_id,
         other.address().to_sender(),
         Amount(100),
-        "Failed to transfer token",
+        "Insufficient balance for account",
     );
     // Outbound transfer from the other user should succeed, since we minted the token to him
     do_outbound_transfer(
@@ -903,7 +903,7 @@ fn test_synthetic_route(
         warp_route_id,
         amount_received_inbound,
         relayer.address(),
-        format!("supply=0 is less than burn amount={amount_received_inbound}"),
+        format!("Underflow occurred: Total supply underflow when burning, 0 - {amount_received_inbound}"),
     );
     // Inbound transfer should succeed
     do_inbound_transfer_success_with_scaled_amount(
@@ -936,7 +936,7 @@ fn test_synthetic_route(
         warp_route_id,
         amount_bigger_than_balance,
         relayer.address(),
-        format!("supply={amount_received_inbound} is less than burn amount={amount_bigger_than_balance}"),
+        format!("Underflow occurred: Total supply underflow when burning, {amount_received_inbound} - {amount_bigger_than_balance}"),
     );
     // Outbound transfer should succeed
     do_outbound_transfer(

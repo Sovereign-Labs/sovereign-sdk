@@ -91,7 +91,8 @@ async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
     match &*response {
         RuntimeAnyJsonValue::Object(inner) => {
             let state_value = inner.get("value").unwrap();
-            let heavy_vec = state_value.as_array().unwrap();
+            println!("State value: {state_value:?}");
+            let heavy_vec = state_value.as_array().expect("HeavyVec is not an array");
             assert_eq!(heavy_vec.len(), expected as usize);
         }
         _ => panic!("Getting SyntheticLoad state value returned unexpected JSON shape."),

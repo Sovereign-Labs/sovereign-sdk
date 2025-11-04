@@ -234,7 +234,7 @@ impl HistoricalStateReader {
         let mut batch = SchemaBatch::default();
         let mut has_kernel_been_updated = false;
         let mut has_user_been_updated = false;
-        let mut metric = StateMaterializationMetrics::new(version.get());
+        let mut metric = StateMaterializationMetrics::new();
         let mut kernel_batch = VersionedSchemaBatch::default();
         let mut user_batch = VersionedSchemaBatch::default();
 

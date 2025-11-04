@@ -21,12 +21,12 @@ use crate::test_helpers::DemoRollupSpec;
 type TestSpec = DemoRollupSpec;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
+async fn flaky_bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
     inner(0).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_bank_tx_tests_periodic_da_non_instant_finality() -> anyhow::Result<()> {
+async fn flaky_flaky_bank_tx_tests_periodic_da_non_instant_finality() -> anyhow::Result<()> {
     inner(2).await
 }
 
@@ -155,6 +155,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
                 amount: Amount::new(100),
                 token_id,
             },
+            memo: None,
         },
     )
     .await?;
@@ -169,6 +170,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
                 amount: Amount::new(200),
                 token_id,
             },
+            memo: None,
         },
     )
     .await?;

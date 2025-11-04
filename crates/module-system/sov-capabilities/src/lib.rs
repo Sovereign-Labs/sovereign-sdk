@@ -183,12 +183,12 @@ where
     ) -> anyhow::Result<()> {
         let rewarded_prover_module = self.get_prover_token_holder(oprating_mode, state);
         // Transfer the penalty from the sequencer bank to the sequencer
-        self.bank.transfer_from(
+        Ok(self.bank.transfer_from(
             self.bank.id.clone().to_payable(),
             rewarded_prover_module.to_owned(),
             gas_coins(amount),
             state,
-        )
+        )?)
     }
 
     fn return_escrowed_funds_to_sequencer<

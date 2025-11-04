@@ -49,12 +49,14 @@ impl<S: Spec> Module for SyntheticLoad<S> {
 
     type Event = Event;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         _config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         self.init_module(state)
     }
 
@@ -63,7 +65,7 @@ impl<S: Spec> Module for SyntheticLoad<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         let mut state_wrapped = state.to_revertable();
         let state = &mut state_wrapped;
         let res = match msg {

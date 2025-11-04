@@ -3,6 +3,7 @@ use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
@@ -13,7 +14,7 @@ use sov_modules_api::{Context, GasSpec, Spec, TxState};
 use std::convert::Infallible;
 
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
-use crate::db::{self, commit::FallibleDatabaseCommit, metrics::MetricsDb};
+use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::{get_cfg_env, transact};
@@ -94,7 +95,7 @@ where
         save_elapsed!(execution_time SINCE execution);
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
-        db.commit(state_changes)
+        db.try_commit(state_changes)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
@@ -122,8 +123,7 @@ where
         let head = self
             .head
             .get(state)?
-            // Justified, we set it at `genesis` and leter only override it.
-            .expect("Impossible happened: Head must be set.");
+            .expect("Head is set in genesis and never deleted");
         save_elapsed!(get_head_time SINCE get_head_t);
 
         #[cfg(feature = "native")]
@@ -162,11 +162,10 @@ where
     fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
         let gas_meter = state
             .try_as_basic_gas_meter()
-            // Justified, `impl TxState` has access to `BasicGasState`.
-            .expect("The impossible happened: BasicGasState is absent.");
+            .expect("TxState should have BasicGasMeter");
         let funds = gas_meter
             .remaining_funds
-            .expect("This method is used in the context where the amount is set")
+            .expect("TxState gas meter has funds set")
             .0;
         let gas = gas_meter.remaining_gas.as_ref()[0];
         let price = gas_meter.gas_price.as_ref()[0].0;
@@ -181,14 +180,16 @@ where
     }
 
     fn sequencer_gas_used(&self, state: &mut impl TxState<S>) -> u64 {
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("TxState should have BasicGasMeter");
         let sequencer_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
         let evm_gas_to_sequencer_gas_ratio =
             <S as GasSpec>::gas_to_charge_per_evm_gas().as_ref()[0];
         sequencer_gas_used
             .checked_div(evm_gas_to_sequencer_gas_ratio)
-            .expect("gas_to_charge_per_evm_gas() is zero")
+            .expect("gas_to_charge_per_evm_gas() should not be zero")
     }
 
     fn create_receipt(
@@ -207,8 +208,7 @@ where
             tx.receipt
                 .log_index_start
                 .checked_add(tx.receipt.receipt.logs.len() as u64)
-                // Justified, we will never have that many logs.
-                .expect("Impossible happened: Log index overflow.")
+                .expect("We should never have more than u64::MAX logs")
         });
         let is_success = result.is_success();
         let gas_used = result.gas_used()
@@ -276,11 +276,8 @@ where
         let first_tx_index = head.transactions.end;
 
         let tx_index = first_tx_index
-            .checked_add(pending_tx_len)
-            .expect("The impossible happened: Tx index overflow.")
-            .checked_sub(1)
-            // Justified, can't underflow because `pending_tx_len` is greater than 0.
-            .expect("The impossible happened: Tx index underflow.");
+            .checked_add(pending_tx_len - 1)
+            .expect("We should never have more than u64::MAX transactions");
 
         self.transactions
             .set(&tx_index, &pending_transaction.transaction, state)?;
@@ -320,15 +317,13 @@ fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
 pub(crate) fn get_spec_id(spec: &[(u64, SpecId)], block_number: u64) -> SpecId {
-    match spec.binary_search_by_key(&block_number, |&(k, _)| k) {
-        Ok(index) => spec[index].1,
-        Err(index) => {
-            spec[index
-                .checked_sub(1)
-                .expect("EVM spec must start from block 0")]
-            .1
-        }
-    }
+    let index = match spec.binary_search_by_key(&block_number, |&(k, _)| k) {
+        Ok(index) => index,
+        Err(index) => index
+            .checked_sub(1)
+            .expect("EVM spec must start from block 0"),
+    };
+    spec[index].1
 }
 
 #[cfg(test)]
