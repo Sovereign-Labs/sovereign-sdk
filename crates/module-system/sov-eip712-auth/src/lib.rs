@@ -327,13 +327,16 @@ fn verify_eip712_signature<
     // and then on cache hit using it to charge gas before short-circuiting
     let eip712_hash = eip_712_msg::<S, D, SP>(tx, raw_tx_hash)?;
 
-    tx.charge_gas_for_signature(&eip712_hash, meter).map_err(|e| match e {
-        TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
-        _ => AuthenticationError::FatalError(
-            FatalError::SigVerificationFailed(e.to_string()),
-            raw_tx_hash,
-        ),
-    })?;
+    tx.charge_gas_for_signature(&eip712_hash, meter)
+        .map_err(|e| match e {
+            TransactionVerificationError::GasError(_) => {
+                AuthenticationError::OutOfGas(e.to_string())
+            }
+            _ => AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(e.to_string()),
+                raw_tx_hash,
+            ),
+        })?;
 
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::SafeVec;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
-use sov_rollup_interface::crypto::{Signature, SigVerificationError};
+use sov_rollup_interface::crypto::{SigVerificationError, Signature};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
@@ -436,7 +436,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         Ok(())
     }
 
-
     /// Verify the transaction signature against the provided message.
     /// *Does not* charge gas for verification. Callers are responsible for calling
     /// `charge_gas_for_signature()` with the same message for gas metering.
@@ -446,7 +445,8 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     ) -> Result<(), TransactionVerificationError<S::Gas>> {
         match &self {
             Transaction::V0(inner) => {
-                inner.signature
+                inner
+                    .signature
                     .verify(&inner.pub_key, msg)
                     .map_err(TransactionVerificationError::BadSignature)?;
             }
