@@ -113,7 +113,7 @@ ethereum-types = { workspace = true }
 ethers = { workspace = true }
 alloy = { workspace = true }
 alloy-primitives = { workspace = true }
-alloy-rpc-types-eth = "1.0.30"
+alloy-rpc-types-eth = "1.0.41"
 alloy-rpc-types-trace = { workspace = true }
 alloy-pubsub = "1.0"
 alloy-provider = { workspace = true, features = ["debug-api"] }
