@@ -147,7 +147,7 @@ setup_private_validator() {
   dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '0.0.0.0:26660' instrumentation.prometheus_listen_addr
 
   # Adjusting for faster block times. Default values are in comments above
-  # Currently disabled for being closer to actual mocha
+  # Currently disabled to be closer to actual mocha
 #  # Numbers are derived by trial and error.
 #  # timeout_commit = "11s"
 #  dasel put -f "$CONFIG_DIR/config/config.toml" -t string -v '3000ms' consensus.timeout_commit
