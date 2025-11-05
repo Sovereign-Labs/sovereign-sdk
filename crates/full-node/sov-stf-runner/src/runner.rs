@@ -429,7 +429,7 @@ where
     async fn wait_until_next_da_height_finalized_or_shutdown(
         &self,
         next_da_height: u64,
-        _shutdown_receiver: &watch::Receiver<()>,
+        shutdown_receiver: &watch::Receiver<()>,
     ) -> anyhow::Result<bool> {
         loop {
             let finalized_height = self
@@ -438,8 +438,15 @@ where
                 .height();
             if next_da_height > finalized_height {
                 info!(%finalized_height, %next_da_height, "Waiting until next DA height is finalized");
-                tokio::time::sleep(self.da_polling_interval).await;
-                continue;
+                match future_or_shutdown(
+                    tokio::time::sleep(self.da_polling_interval),
+                    shutdown_receiver,
+                )
+                .await
+                {
+                    FutureOrShutdownOutput::Shutdown => return Ok(true),
+                    FutureOrShutdownOutput::Output(()) => continue,
+                }
             } else {
                 break;
             }
