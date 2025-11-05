@@ -1,4 +1,4 @@
-# 2025-11-03
+# 2025-11-05
 - #2011 Introduce ContractCreationPolicy allowing to whitelist addresses that can deploy contracts.
 
 # 2025-11-01
