@@ -22,6 +22,6 @@ async fn denied() -> anyhow::Result<()> {
     let client = alloy_client_with_signer(rollup.http_addr, SECONDARY_SENDER_PRIV_KEY);
 
     let err = SimpleStorage::deploy(client).await.unwrap_err();
-    assert_eq!(err.to_string(), "server returned an error response: error code -32603: Revm error: Contract creation is only allowed from allowed addresses. 0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71 is not on the list");
+    assert_eq!(err.to_string(), "server returned an error response: error code 500: Contract creation is only allowed from allowed addresses. 0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71 is not on the list");
     Ok(())
 }
