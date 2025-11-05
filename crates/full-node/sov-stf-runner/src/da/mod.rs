@@ -1,6 +1,5 @@
 //! Helper utilities for interacting with the DA layer.
 
-#![allow(dead_code)]
 mod bulk_finalized_blocks_fetcher;
 mod finalized_headers_cache;
 

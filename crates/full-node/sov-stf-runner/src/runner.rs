@@ -300,7 +300,6 @@ where
 
             loop {
                 match future_or_shutdown(
-                    // TODO: change this.
                     get_target_block(&da_service_with_cache, &stop_at_rollup_height),
                     &shutdown_receiver,
                 )
@@ -430,7 +429,6 @@ where
     async fn wait_until_next_da_height_finalized_or_shutdown(
         &self,
         next_da_height: u64,
-        // TODO: remove this
         _shutdown_receiver: &watch::Receiver<()>,
     ) -> anyhow::Result<bool> {
         loop {

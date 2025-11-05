@@ -39,6 +39,7 @@ use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConf
 use sov_test_utils::{
     default_test_signed_transaction, generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint,
     TestSpec, TestUser, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
+    TEST_NORMAL_SHUTDOWN_TIMEOUT,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
@@ -1544,11 +1545,10 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         .produce_n_blocks_now(100)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
-    tokio::time::timeout(std::time::Duration::from_secs(120), test_rollup.shutdown())
-        .await
-        .unwrap()
-        .unwrap();
+    // Multiple normal shutdown by 10, as we shoot bunch fo blocks.
+    test_rollup
+        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT * 10)
+        .await;
 }
 
 // The sequencer controls emitting ledger slots over websocket

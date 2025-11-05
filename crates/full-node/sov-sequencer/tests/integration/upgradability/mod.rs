@@ -339,14 +339,14 @@ async fn send_tx(
 }
 
 async fn get_last_finalized_slot_number(client: &NodeClient) -> u64 {
-    get_block_height(client, true).await
+    get_slot_number(client, true).await
 }
 
 async fn get_last_slot_number(client: &NodeClient) -> u64 {
-    get_block_height(client, false).await
+    get_slot_number(client, false).await
 }
 
-async fn get_block_height(client: &NodeClient, finalized: bool) -> u64 {
+async fn get_slot_number(client: &NodeClient, finalized: bool) -> u64 {
     let url = if finalized {
         "/ledger/slots/finalized"
     } else {

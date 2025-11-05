@@ -804,7 +804,6 @@ where
     async fn process_finalized_state_transitions(
         &mut self,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         let last_finalized_header = self
             .finalized_headers_provider
             .get_last_finalized_block_header()?;
