@@ -1,4 +1,6 @@
 use dashmap::DashMap;
+use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_interface::{crypto::CredentialId, TxHash};
 use std::cmp::Ordering;
@@ -12,7 +14,7 @@ use crate::common::AcceptedTx;
 use super::sync_sequencer_state::{
     AcceptTxError, SequencerStateUpdator, SequencerStateUpdatorError,
 };
-use super::Confirmation;
+use super::{err_invalid_nonce, Confirmation};
 
 pub(crate) type TransactionReceiverResult<S, Rt> =
     Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>;
@@ -118,16 +120,94 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     }
 }
 
-#[derive(Default)]
-pub struct TxNonceQueues<S: Spec, Rt: Runtime<S>> {
-    queues: DashMap<CredentialId, AddressQueue<S, Rt>>,
+pub trait NonceQueueSubmitter<S: Spec, Rt: Runtime<S>> {
+    fn get_current_nonce_for_user(&self, credential_id: &CredentialId) -> u64;
+    fn submit_tx_for_execution(
+        &self,
+        baked_tx: &FullyBakedTx,
+        tx_hash: TxHash,
+        original_tx_queue_id: u64,
+        reason: &'static str,
+    ) -> impl std::future::Future<
+        Output = Result<
+            Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
+            SequencerStateUpdatorError,
+        >,
+    > + std::marker::Send;
 }
 
-#[allow(dead_code)]
-impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
-    pub fn new() -> Self {
+pub struct SequencerNonceQueueSubmitter<S: Spec, Rt: Runtime<S>> {
+    pub api_state: ApiState<S>,
+    pub state_updator: Arc<SequencerStateUpdator<S, Rt>>,
+}
+
+impl<S: Spec, Rt: Runtime<S>> Clone for SequencerNonceQueueSubmitter<S, Rt> {
+    fn clone(&self) -> Self {
         Self {
-            queues: DashMap::new(),
+            api_state: self.api_state.clone(),
+            state_updator: self.state_updator.clone(),
+        }
+    }
+}
+
+impl<S: Spec, Rt: Runtime<S>> NonceQueueSubmitter<S, Rt> for SequencerNonceQueueSubmitter<S, Rt> {
+    fn get_current_nonce_for_user(&self, credential_id: &CredentialId) -> u64 {
+        let mut state = self.api_state.default_api_state_accessor();
+        sov_uniqueness::Uniqueness::<S>::default()
+            .nonce(credential_id, &mut state)
+            .unwrap_infallible()
+            .unwrap_or_default()
+    }
+
+    async fn submit_tx_for_execution(
+        &self,
+        baked_tx: &FullyBakedTx,
+        tx_hash: TxHash,
+        original_tx_queue_id: u64,
+        reason: &'static str,
+    ) -> Result<
+        Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
+        SequencerStateUpdatorError,
+    > {
+        self.state_updator
+            .accept_tx_msg(baked_tx, tx_hash, original_tx_queue_id, reason)
+            .await
+    }
+}
+
+pub struct TxNonceQueues<Sb: NonceQueueSubmitter<S, Rt>, S: Spec, Rt: Runtime<S>> {
+    queues: Arc<DashMap<CredentialId, AddressQueue<S, Rt>>>,
+    submitter: Sb,
+    maximum_future_nonce_delta: u64,
+    future_nonce_transaction_timeout_millis: u64,
+}
+
+impl<Sb: NonceQueueSubmitter<S, Rt> + Clone, S: Spec, Rt: Runtime<S>> Clone
+    for TxNonceQueues<Sb, S, Rt>
+{
+    fn clone(&self) -> Self {
+        Self {
+            queues: self.queues.clone(),
+            submitter: self.submitter.clone(),
+            maximum_future_nonce_delta: self.maximum_future_nonce_delta,
+            future_nonce_transaction_timeout_millis: self.future_nonce_transaction_timeout_millis,
+        }
+    }
+}
+
+impl<Sb: NonceQueueSubmitter<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt: Runtime<S>>
+    TxNonceQueues<Sb, S, Rt>
+{
+    pub fn new(
+        submitter: Sb,
+        maximum_future_nonce_delta: u64,
+        future_nonce_transaction_timeout_millis: u64,
+    ) -> Self {
+        Self {
+            queues: Arc::new(DashMap::new()),
+            submitter,
+            maximum_future_nonce_delta,
+            future_nonce_transaction_timeout_millis,
         }
     }
 
@@ -139,16 +219,19 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
         self.queues.entry(credential_id)
     }
 
-    /// Enqueue a transaction (caller should hold lock from lock_for_address)
-    pub fn enqueue_from_lock(
+    /// Enqueue a transaction.
+    /// Caller needs to hold lock from lock_for_address. This function consumes the Entry holding
+    /// the lock inside the map, unlocking it after the function returns.
+    pub fn enqueue_and_unlock(
         queue_entry: dashmap::mapref::entry::Entry<CredentialId, AddressQueue<S, Rt>>,
+        result_sender: oneshot::Sender<
+            Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>,
+        >,
         tx: FullyBakedTx,
         tx_hash: TxHash,
         nonce: u64,
         original_tx_queue_id: u64,
-    ) -> oneshot::Receiver<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>>
-    {
-        let (result_sender, result_receiver) = oneshot::channel();
+    ) {
         let queued_tx = QueuedTx {
             tx,
             tx_hash,
@@ -164,8 +247,6 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
                 "Replaced queued transaction with same nonce"
             );
         }
-
-        result_receiver
     }
 
     /// Remove a transaction by nonce
@@ -200,7 +281,6 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
         &self,
         credential_id: CredentialId,
         mut expected_nonce: u64,
-        updator: Arc<SequencerStateUpdator<S, Rt>>,
     ) {
         loop {
             // Lock and check if next tx is ready
@@ -240,8 +320,9 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
             };
 
             // Execute the transaction (outside lock)
-            let result = updator
-                .accept_tx_msg(
+            let result = self
+                .submitter
+                .submit_tx_for_execution(
                     &queued_tx.tx,
                     queued_tx.tx_hash,
                     queued_tx.original_tx_queue_id,
@@ -269,6 +350,131 @@ impl<S: Spec, Rt: Runtime<S>> TxNonceQueues<S, Rt> {
             } else {
                 tracing::debug!("Transaction execution failed, stopping drain");
                 return;
+            }
+        }
+    }
+
+    /// Handle nonce-based transaction: either execute immediately, queue for later, or reject.
+    /// Returns the result from executing/queueing the transaction.
+    ///
+    /// The logic works as follows: if the transaction has a nonce a small (configurable) distance
+    /// into the future, it's added to a queue (alongside a callback oneshot), and this function
+    /// blocks on a loop waiting for either the oneshot result or a timeout.
+    /// Whenever a transaction with a current nonce arrives, it's executed normally *and* the queue
+    /// for that user is drained in a new background task: any contiguous range of transactions
+    /// with valid nonces at the head of the queue are drained and executed. Every time a
+    /// transaction is pulled from the queue it also forwards the results to the original oneshot,
+    /// so the original `accept_tx()` task receives the data and can return it to the user.
+    ///
+    /// If the original task does not get a response across the oneshot before the timeout, the
+    /// transaction is evicted from the queue, *unless* at that point there's already a queued
+    /// transaction for every nonce (all the pre-reqs are satisifed). In that case the assumption
+    /// is that it will get executed soon, provided all the txs are valid, so we don't evict. If
+    /// any pre-req is rejected, the following txs will be evicted on the next timeout (assuming a
+    /// new replacement pre-req with that nonce isn't submitted in the meantime of course).
+    pub async fn handle_nonce_based_tx(
+        &self,
+        baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
+        tx_nonce: u64,
+        credential_id: CredentialId,
+        original_tx_queue_id: u64,
+    ) -> Result<
+        Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
+        SequencerStateUpdatorError,
+    > {
+        // First acquire lock on this user's queue, before checking the nonce. Otherwise there can
+        // be a race condition if a new transaction were to execute after this tx checked its nonce
+        // but before it added itself to the queue.
+        let locked_user_queue = self.lock_for_address(credential_id);
+        let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+        let max_accepted_nonce = current_nonce + self.maximum_future_nonce_delta;
+
+        match tx_nonce {
+            nonce if nonce == current_nonce => {
+                // Transaction has a valid nonce, execute immediately.
+                drop(locked_user_queue); // Release the queue lock as we won't be using it
+                let res = self
+                    .submitter
+                    .submit_tx_for_execution(
+                        &baked_tx,
+                        tx_hash,
+                        original_tx_queue_id,
+                        "nonce_queue_immediate",
+                    )
+                    .await;
+
+                // If the transaction succeeded, the user's nonce will have incremented.
+                // Trigger a drain of the queue for any transactions which are now valid because of
+                // this.
+                if res.as_ref().is_ok_and(|r| r.is_ok()) {
+                    let queues = self.clone();
+                    let starting_nonce = current_nonce + 1; // Because we just submitted a transaction
+                    tokio::spawn(async move {
+                        queues
+                            .drain_any_ready_transactions(credential_id, starting_nonce)
+                            .await;
+                    });
+                }
+                res
+            }
+            nonce if nonce > current_nonce && nonce < max_accepted_nonce => {
+                // Transaction's nonce is in the future but within the queue threshold - enqueue it.
+                let (result_sender, mut results_receiver) = oneshot::channel();
+                Self::enqueue_and_unlock(
+                    locked_user_queue,
+                    result_sender,
+                    baked_tx,
+                    tx_hash,
+                    tx_nonce,
+                    original_tx_queue_id,
+                );
+
+                // Wait for either the transaction to be ready (prerequisites arrived) or timeout
+                loop {
+                    tokio::select! {
+                        rx = &mut results_receiver => {
+                            // The receiver contains the tx execution result.
+                            break rx.unwrap_or_else(|_| {
+                                // The oneshot sender was dropped. This should normally only happen
+                                // on shutdown, but if a stale transaction somehow ends up in the
+                                // queue it can be evicted (dropping it and the sender).
+                                // Since the transaction was queued and therefore had an incorrect
+                                // nonce to begin with, we conservatively reject with a nonce error.
+                                let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+                                err_invalid_nonce::<S, Rt>(
+                                    tx_hash,
+                                    tx_nonce,
+                                    current_nonce,
+                                    credential_id,
+                                )
+                            });
+                        },
+                        _ = tokio::time::sleep(std::time::Duration::from_millis(
+                                self.future_nonce_transaction_timeout_millis
+                        )) => {
+                            // Timeout waiting for prerequisite transactions
+                            let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+                            if self.has_prerequisites_to_nonce(&credential_id, tx_nonce, current_nonce) {
+                                // Still has a valid path to execution, keep waiting
+                                continue;
+                            } else {
+                                // No path to execution, evict and reject
+                                self.evict(&credential_id, tx_nonce);
+                                break err_invalid_nonce::<S, Rt>(
+                                    tx_hash,
+                                    tx_nonce,
+                                    current_nonce,
+                                    credential_id,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                // Invalid nonce: either in the past or too far in the future
+                err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, credential_id)
             }
         }
     }
@@ -308,8 +514,10 @@ mod tests {
         nonce: u8,
     ) {
         let to_queue = create_mock_queued_tx(nonce);
-        TxNonceQueues::enqueue_from_lock(
+        let (sender, _) = oneshot::channel();
+        TxNonceQueues::enqueue_and_unlock(
             entry,
+            sender,
             to_queue.tx,
             to_queue.tx_hash,
             nonce.into(),
@@ -667,9 +875,7 @@ mod tests {
         let handler = tokio::spawn(async move { mock_sequencer_state(msg_rx).await });
 
         // Drain starting from nonce 5 (3 and 4 should be silently evicted, 5 should execute)
-        queues
-            .drain_any_ready_transactions(credential_id, 5, updator.clone())
-            .await;
+        queues.drain_any_ready_transactions(credential_id, 5).await;
 
         // Close channels so handler task ends
         drop(updator);
@@ -702,9 +908,7 @@ mod tests {
         let handler = tokio::spawn(async move { mock_sequencer_state(msg_rx).await });
 
         // Drain starting from nonce 0
-        queues
-            .drain_any_ready_transactions(credential_id, 0, updator.clone())
-            .await;
+        queues.drain_any_ready_transactions(credential_id, 0).await;
 
         drop(updator);
 
