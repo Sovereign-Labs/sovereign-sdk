@@ -193,6 +193,9 @@ pub const TEST_DEFAULT_MOCK_DA_ON_ANY_SUBMIT: BlockProducingConfig =
 /// How much time it should take at worst to shutdown, even on slower machine
 pub const TEST_NORMAL_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
+/// Used in config for polling in other places.
+pub const TEST_MOCK_DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(30);
+
 /// Generates a default [`TxDetails`] for testing.
 pub fn default_test_tx_details<S: Spec>() -> TxDetails<S> {
     TxDetails {

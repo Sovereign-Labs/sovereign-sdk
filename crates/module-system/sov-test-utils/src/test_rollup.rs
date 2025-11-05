@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::postgres::create_postgres_container;
 use crate::postgres::CreatePostgresError;
 use crate::postgres::PostgresImage;
-use crate::Transaction;
+use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
     TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
@@ -309,7 +309,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         RollupConfig {
             storage: RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf()),
             runner: RunnerConfig {
-                da_polling_interval_ms: 30,
+                da_polling_interval_ms: TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
                 da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
                     &self.config.axum_host,

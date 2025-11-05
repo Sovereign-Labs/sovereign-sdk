@@ -23,9 +23,10 @@ use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::storage::NativeStorage;
 use sov_state::{ArrayWitness, ProverStorage, Storage, StorageRoot};
-use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::StateTransitionRunner;
+use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::TEST_MOCK_DA_POLLING_INTERVAL;
 use tempfile::TempDir;
 use tokio::sync::watch;
 
@@ -57,6 +58,13 @@ async fn test_runner_with_background_da_service(
         1,
     );
 
+    let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+        da_service.clone(),
+        shutdown_receiver.clone(),
+        TEST_MOCK_DA_POLLING_INTERVAL,
+    )
+    .await?;
+
     let stf = HashStf::new();
 
     let mut storage_manager: crate::helpers::runner_init::StorageManager =
@@ -69,7 +77,7 @@ async fn test_runner_with_background_da_service(
     let (sync_sender, mut sync_status_receiver) = watch::channel(SyncStatus::START);
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
     let da_sync_state =
-        make_da_sync_state(0, None, &ledger_db, da_service.as_ref(), sync_sender).await?;
+        make_da_sync_state(0, None, &ledger_db, &da_service_with_cache, sync_sender).await?;
 
     let (state_update_sender, _state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
@@ -104,6 +112,7 @@ async fn test_runner_with_background_da_service(
         None,
         None,
         da_sync_state,
+        da_service_with_cache,
     )
     .await?;
 
