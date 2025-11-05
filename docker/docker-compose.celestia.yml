@@ -1,6 +1,6 @@
 services:
   validator:
-    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v6.2.0-mocha
+    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v6.2.2-mocha
     hostname: validator
     environment:
       NO_COLOR: 1
