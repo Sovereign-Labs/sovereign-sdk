@@ -125,6 +125,7 @@ impl<M: ModuleInfo> HasRestApi<M::Spec> for &M {
 /// # impl<S: Spec> sov_modules_api::Module for MyModule<S> {
 /// #    type Spec = S;
 /// #    type Config = ();
+/// #    type Error = anyhow::Error;
 /// #    type CallMessage = ();
 /// #    type Event = ();
 /// #
@@ -133,7 +134,7 @@ impl<M: ModuleInfo> HasRestApi<M::Spec> for &M {
 /// #        _msg: Self::CallMessage,
 /// #        _context: &Context<Self::Spec>,
 /// #        _state: &mut impl sov_modules_api::state::TxState<S>,
-/// #    ) -> anyhow::Result<()> {
+/// #    ) -> Result<(), Self::Error> {
 /// #        unimplemented!()
 /// #    }
 /// # }

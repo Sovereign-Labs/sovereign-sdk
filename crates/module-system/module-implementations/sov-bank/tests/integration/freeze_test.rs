@@ -1,5 +1,5 @@
 use sov_bank::{Bank, TokenId};
-use sov_modules_api::{Amount, Error, TxEffect};
+use sov_modules_api::{Amount, TxEffect};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
 use crate::helpers::{setup, TestBankRuntimeEvent, TestData, RT, S};
@@ -47,16 +47,9 @@ fn freeze_token_happy_path() {
         }),
         assert: Box::new(move |result, _| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(message_1, format!("Failed to mint token_id={token_id}"));
-                assert_eq!(
-                    format!("Attempt to mint frozen token {token_name}"),
-                    message_2
-                );
+                let actual = contents.reason.to_string();
+                let expected = format!("Token mint error: Token is frozen: {token_name}");
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have reverted");
             }
@@ -90,13 +83,9 @@ fn freeze_another_time_fails() {
             .create_plain_message::<RT, Bank<S>>(sov_bank::CallMessage::Freeze { token_id }),
         assert: Box::new(move |result, _| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(format!("Failed to freeze token_id={token_id}"), message_1);
-                assert_eq!(format!("Token {token_name} is already frozen"), message_2);
+                let actual = contents.reason.to_string();
+                let expected = format!("Token freeze error: Token is frozen: {token_name}");
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have reverted");
             }
@@ -125,16 +114,11 @@ fn unauthorized_minter_cannot_freeze_token() {
             .create_plain_message::<RT, Bank<S>>(sov_bank::CallMessage::Freeze { token_id }),
         assert: Box::new(move |result, _| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                let message_2 = chain.next().unwrap().to_string();
-                assert!(chain.next().is_none());
-                assert_eq!(format!("Failed to freeze token_id={token_id}"), message_1);
-                assert_eq!(
-                    format!("Sender {unauthorized_address} is not an admin of token {token_name}"),
-                    message_2
+                let actual = contents.reason.to_string();
+                let expected = format!(
+                    "Token freeze error: Caller {unauthorized_address} is not an admin for token {token_name}"
                 );
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have reverted");
             }
@@ -153,10 +137,9 @@ fn test_freeze_fails_if_token_id_doesnt_exist() {
             .create_plain_message::<RT, Bank<S>>(sov_bank::CallMessage::Freeze { token_id }),
         assert: Box::new(move |result, _| {
             if let TxEffect::Reverted(contents) = result.tx_receipt {
-                let Error::ModuleError(err) = contents.reason;
-                let mut chain = err.chain();
-                let message_1 = chain.next().unwrap().to_string();
-                assert_eq!(format!("Failed to get token_id={token_id}"), message_1);
+                let actual = contents.reason.to_string();
+                let expected = format!("Token freeze error: Token not found: {token_id}");
+                assert_eq!(actual, expected);
             } else {
                 panic!("The transaction should have reverted");
             }

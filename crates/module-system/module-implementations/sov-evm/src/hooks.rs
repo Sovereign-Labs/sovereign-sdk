@@ -4,6 +4,7 @@ use crate::{Evm, PendingTransaction};
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::{TxReceipt, EMPTY_OMMER_ROOT_HASH};
 use alloy_primitives::{Bloom, Bytes, B256, B64, U256};
+use revm::primitives::constants::BLOCK_HASH_HISTORY;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -24,12 +25,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
         pre_state_user_root: &<S::Storage as Storage>::Root,
         state: &mut StateCheckpoint<S>,
     ) {
-        let mut parent_block = self
-            .head
-            .get(state)
-            .unwrap_infallible()
-            // This is justified. We set the head at genesis and never remove it — only overwrite it.
-            .expect("The impossible happened: Head block is empty");
+        let mut parent_block = self.head(state);
 
         let pre_state_user_root: [u8; 32] =
             pre_state_user_root.namespace_root(ProvableNamespace::User);
@@ -39,6 +35,15 @@ impl<S: Spec> BlockHooks for Evm<S> {
             // We have to force the conversion to [u8;32] to prevent the `from_slice` method from panicking
             B256::from_slice(&pre_state_user_root);
         self.head.set(&parent_block, state).unwrap_infallible();
+        let parent_header = &parent_block.header;
+        self.block_hashes
+            .set(&(parent_header.number), &parent_header.hash_slow(), state)
+            .unwrap_infallible();
+        if parent_header.number >= BLOCK_HASH_HISTORY {
+            self.block_hashes
+                .delete(&(parent_header.number - BLOCK_HASH_HISTORY), state)
+                .unwrap_infallible();
+        }
 
         let cfg = self.cfg_infallible(state);
 
@@ -46,8 +51,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .header
             .number
             .checked_add(1)
-            // This is justified. We will never have so many blocks.
-            .expect("The impossible happened: Block number overflow");
+            .expect("We should never have more than u64::MAX blocks");
 
         let new_timestamp = self
             .chain_state_module
@@ -72,20 +76,8 @@ impl<S: Spec> BlockHooks for Evm<S> {
     /// Logic executed at the end of the slot. Here, we generate an authenticated block and set it as the new head of the chain.
     /// It's important to note that the state root hash is not known at this moment, so we postpone setting this field until the begin_rollup_block_hook of the next slot.
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<S>) {
-        let block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            // This is justified. We set `pending_head` in `end_rollup_block_hook`.
-            .expect("The impossible happened: Pending block is empty");
-
-        let parent_block = self
-            .head
-            .get(state)
-            .unwrap_infallible()
-            // This is justified. We set the head at genesis and never remove it — only overwrite it.
-            .expect("The impossible happened: Head block is empty")
-            .seal();
+        let block_env = self.block_env(state).unwrap_infallible();
+        let parent_block = self.head(state).seal();
 
         let expected_block_number = parent_block.header.number.wrapping_add(1);
         assert_eq!(
@@ -150,8 +142,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let end_tx_index = start_tx_index
             .checked_add(pending_transactions.len() as u64)
-            // This is justified. We will never have that many txs.
-            .expect("The impossible happened: Tx count overflow");
+            .expect("We should never have more than u64::MAX transactions");
 
         let block = Block {
             header,
@@ -190,8 +181,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             .pending_head
             .get(state)
             .unwrap_infallible()
-            // Justified, we set `pending_head` in `end_rollup_block_hook`.
-            .expect("The impossible happened: the pending block should always be set.");
+            .expect("We set `pending_head` in `end_rollup_block_hook`");
 
         let user_space_root_hash: [u8; 32] = root_hash.namespace_root(ProvableNamespace::User);
         block.header.state_root = user_space_root_hash.into();
@@ -212,7 +202,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
             .set(&sealed_block.header.number, &sealed_block, state)
             .unwrap_infallible();
 
-        self.block_hashes
+        self.block_hash_to_number
             .set(
                 &sealed_block.header.seal(),
                 &sealed_block.header.number,
@@ -236,38 +226,9 @@ impl<S: Spec> Evm<S> {
                 crate_range_from(block_numbers.clone(), None, Some(last_to_remove));
 
             for block_number in block_numbers_to_remove {
-                let block = self
-                    .blocks
-                    .remove(&block_number, state)?
-                    // Safe because we already checked block_numbers.len()
-                    .expect("Impossible happened: no block available to prune");
-
-                let block_hash = block.header.hash();
-                self.block_hashes
-                    .remove(&block_hash, state)?
-                    // Safe, since we keep one block_hash per block.
-                    .expect("Impossible happened: no block_hasha available to prune");
-
-                for tx_idx in block.transactions {
-                    let transaction = self
-                        .transactions
-                        .remove(&tx_idx, state)?
-                        // Safe because we already checked transactions.len()
-                        // Safe, since we keep one tx_hash per tx.
-                        .expect("Impossible happened: no transaction_hashes available to prune");
-
-                    let tx_hash = transaction.signed_transaction.hash();
-
-                    self.transaction_hashes
-                        .remove(tx_hash, state)?
-                        // Safe, since we keep one tx_hash per tx.
-                        .expect("Impossible happened: no transaction_hashes available to prune");
-
-                    self.receipts
-                        .remove(&tx_idx, state)?
-                        // Safe because we already checked receipts.len()
-                        .expect("Impossible happened: no receipts available to prune");
-                }
+                self.prune_block(block_number, state).expect(
+                    "Prunning block should succeed as block_numbers indicate - block exists",
+                );
             }
 
             let new_block_numbers = crate_range_from(block_numbers, Some(last_to_remove + 1), None);
@@ -276,6 +237,34 @@ impl<S: Spec> Evm<S> {
         }
 
         Ok(())
+    }
+
+    fn prune_block(
+        &mut self,
+        number: u64,
+        state: &mut impl AccessoryStateReaderAndWriter,
+    ) -> Option<()> {
+        let block = self.blocks.remove(&number, state).unwrap_infallible()?;
+        let hash = block.header.hash();
+        self.block_hash_to_number
+            .remove(&hash, state)
+            .unwrap_infallible()?;
+
+        for tx_idx in block.transactions {
+            self.prune_tx(tx_idx, state)
+                .expect("Cascade tx delete should succeed as each tx belongs to a single block");
+        }
+        Some(())
+    }
+
+    fn prune_tx(&mut self, idx: u64, state: &mut impl AccessoryStateReaderAndWriter) -> Option<()> {
+        let transaction = self.transactions.remove(&idx, state).unwrap_infallible()?;
+        let tx_hash = transaction.signed_transaction.hash();
+        self.transaction_hashes
+            .remove(tx_hash, state)
+            .unwrap_infallible()?;
+        self.receipts.remove(&idx, state).unwrap_infallible()?;
+        Some(())
     }
 }
 

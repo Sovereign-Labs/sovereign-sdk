@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::SafeVec;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
-use sov_rollup_interface::crypto::SigVerificationError;
+use sov_rollup_interface::crypto::{SigVerificationError, Signature};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
@@ -59,11 +59,11 @@ impl<D: DispatchCall> TransactionCallable for D {
 pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// The signature of the transaction.
     #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
+    #[sov_wallet(display = "hex")]
     pub signature: C::Signature,
     /// The public key of the sender of the transaction.
     #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
+    #[sov_wallet(display = "hex")]
     pub pub_key: C::PublicKey,
     /// The runtime call of the transaction.
     #[sov_wallet(
@@ -268,6 +268,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
+    /// Convenience function to return the transaction bytes in the correct format ready for submission.
+    pub fn tx_bytes(&self) -> Vec<u8> {
+        borsh::to_vec(self).expect("Serialization should be never fail")
+    }
+
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
         let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
         tracing::trace!(transaction = ?this, "Deserialized transaction");
@@ -382,26 +387,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
-    /// Check whether the transaction has been signed correctly.
-    ///
-    /// # Errors
-    /// Returns an error if:
-    ///  * The signature is wrong
-    ///  * Serializing or hashing the transaction fails
-    ///  * Any operation runs out of gas
-    pub fn verify(
-        &self,
-        chain_hash: &[u8; 32],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<(), TransactionVerificationError<S::Gas>> {
-        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
-            TransactionVerificationError::TransactionDeserializationError(e.to_string())
-        })?;
-        serialized_tx.extend_from_slice(chain_hash);
-
-        self.verify_signature(&serialized_tx, meter)
-    }
-
     /// Creates a new transaction with the provided metadata.
     pub fn new_with_details_v0(
         pub_key: C::PublicKey,
@@ -427,8 +412,21 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
-    /// Verify the transaction signature against the provided message.
-    pub fn verify_signature(
+    /// Serialize the transaction, appending the runtime's chain_hash.
+    /// This is the standard serialization for Sovereign signature signing.
+    pub fn serialized_with_chain_hash(
+        &self,
+        chain_hash: &[u8; 32],
+    ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
+        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
+            TransactionVerificationError::TransactionDeserializationError(e.to_string())
+        })?;
+        serialized_tx.extend_from_slice(chain_hash);
+        Ok(serialized_tx)
+    }
+
+    /// Charge gas for verifying the transaction signature against the given message.
+    pub fn charge_gas_for_signature(
         &self,
         msg: &[u8],
         meter: &mut impl GasMeter<Spec = S>,
@@ -436,7 +434,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         match &self {
             Transaction::V0(inner) => {
                 MeteredSignature::new::<S>(inner.signature.clone())
-                    .verify(&inner.pub_key, msg, meter)
+                    .charge_gas(meter, msg)
                     .map_err(TransactionVerificationError::from)?;
             }
             Transaction::V1(inner) => {
@@ -446,6 +444,26 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
                         .charge_gas(meter, msg)
                         .map_err(TransactionVerificationError::from)?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Verify the transaction signature against the provided message.
+    /// *Does not* charge gas for verification. Callers are responsible for calling
+    /// `charge_gas_for_signature()` with the same message for gas metering.
+    pub fn verify_signature_unmetered(
+        &self,
+        msg: &[u8],
+    ) -> Result<(), TransactionVerificationError<S::Gas>> {
+        match &self {
+            Transaction::V0(inner) => {
+                inner
+                    .signature
+                    .verify(&inner.pub_key, msg)
+                    .map_err(TransactionVerificationError::BadSignature)?;
+            }
+            Transaction::V1(inner) => {
                 let all_signers = inner
                     .signatures
                     .iter()
@@ -501,6 +519,18 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
     }
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
+
+#[cfg(feature = "native")]
+impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
+    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
+    pub fn sign(
+        self,
+        private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+        chain_hash: &[u8; 32],
+    ) -> Transaction<R, S> {
+        Transaction::new_signed_tx(private_key, chain_hash, self)
+    }
+}
 
 impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     /// Creates a new [`UnsignedTransaction`] with the given arguments.

@@ -18,7 +18,7 @@ mod rpc;
 pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
-const GAS: u64 = 9000000u64;
+const GAS: u64 = 100_000_000u64;
 const MAX_FEE_PER_GAS: u64 = 100;
 const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
 
@@ -187,15 +187,15 @@ impl SimpleStorageClient {
 
 // Rollup interactions
 impl SimpleStorageClient {
-    pub async fn send_transactions_and_wait_slot<S: Spec, Rt: Runtime<S>>(
+    pub async fn send_transaction_and_wait_slot<S: Spec, Rt: Runtime<S>>(
         &self,
-        transactions: &[sov_modules_api::transaction::Transaction<Rt, S>],
+        transaction: &sov_modules_api::transaction::Transaction<Rt, S>,
     ) -> anyhow::Result<()> {
         let mut slot_subscription = self.node_client.client.subscribe_slots().await?;
 
         self.node_client
             .client
-            .send_txs_to_sequencer(transactions)
+            .send_tx_to_sequencer_with_retry(&transaction)
             .await?;
 
         let _ = slot_subscription.next().await;

@@ -1,34 +1,9 @@
 [da]
-# Connection string for SQL database to have stored blocks, for example":
-#  - "sqlite://demo_data/da.sqlite?mode=rwc"
-#  - "sqlite::memory:"
-#  - "postgresql://root:hunter2@aws.amazon.com/mock-da"
-connection_string = "sqlite://mock_da.sqlite?mode=rwc"
-# String representation of sequencer address.
-# For initial full node should match genesis of sequencer-registry.
-# It is going to be a DA address that blobs from this node will be associated with.
-sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
-finalization = 40 # Reorgs up to this depth are allowed. Set to zero for instant finality
-
-[da.block_producing.periodic]
-block_time_ms = 1_000
-
-# Alternative block producing modes:
-# [da.block_producing.manual] # Manual block production mode
-# Disable reorg for now, for better stability
-
-#[da.randomization] # Config for managing reorgs
-#seed = "0x0000000000000000000000000000000000000000000000000000000000000012"
-#reorg_interval = [10, 20]
-#[da.randomization.behaviour.shuffle_and_resize]
-## No drop
-#drop_percent = 0
-## No resize
-# adjust_head_height = [0, 1]
+url = "http://127.0.0.1:50051"
 
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
-path = "demo_data"
+path = "demo_data_replica"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
 # user_commit_concurrency = 4 # Number of concurrent commit workers for user state
 # user_hashtable_buckets = 15000000 # Expected state size, cannot be changed after creation
@@ -55,13 +30,13 @@ da_polling_interval_ms = 50
 
 [runner.http_config]
 bind_host = "127.0.0.1"
-bind_port = 12346
+bind_port = 12349
 # In case of the arollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
 # cors = "permissive" # CORS configuration: "permissive" or "restrictive"
 
 [monitoring]
-telegraf_address = "udp://127.0.0.1:8094"
+telegraf_address = "udp://127.0.0.1:8095"
 # Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
 # It is expected from the rollup node to produce metrics all the time,
 # so measurements are buffered by size and not sent by time.
@@ -104,10 +79,10 @@ batch_execution_time_limit_millis = 2000 # Do no more than 2000ms of work per ba
 num_cache_warmup_workers = 5
 # minimum_profit_per_tx = 0 # Minimum fee the preferred sequencer accepts per tx, in gas tokens
 # events_channel_size = 10000 # Size of Tokio channel for streaming events. Larger values increase memory usage
-# postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
+postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
 ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintain. Larger values increase lag in seeing DA info on chain, but allow more buffering when the DA layer is unstable
 # db_event_channel_size = 10000 # Event buffer size while update_state is running
-# is_replica = false # Run sequencer in read-only replica mode
+is_replica = true # Run sequencer in read-only replica mode
 
 # Alternative configuration for non-preferred sequencer. This is mutually exclusive with the preferred sequencer configuration:
 # [sequencer.standard]

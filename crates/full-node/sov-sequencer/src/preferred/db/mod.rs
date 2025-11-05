@@ -289,6 +289,11 @@ impl PreferredSequencerCache {
         blob_id
     }
 
+    pub fn clean_all_batches(&mut self) {
+        self.completed_blobs.clear();
+        self.in_progress_batch = None;
+    }
+
     pub async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
@@ -352,7 +357,7 @@ impl PreferredSequencerCache {
         self.event_stream = Some(sender);
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub(crate) struct BatchToStore {
     pub blob_id: BlobInternalId,
     pub sequence_number: SequenceNumber,
@@ -534,8 +539,9 @@ impl PreferredSequencerDb {
         prune_up_to_including: SequenceNumber,
     ) -> anyhow::Result<()> {
         if let Some(backend) = &mut self.backend {
-            let prune_up_to_including = prune_up_to_including.saturating_sub(PRUNING_LAG);
-            backend.prune(prune_up_to_including).await?;
+            if let Some(prune_up_to_including) = prune_up_to_including.checked_sub(PRUNING_LAG) {
+                backend.prune(prune_up_to_including).await?;
+            }
         }
         Ok(())
     }

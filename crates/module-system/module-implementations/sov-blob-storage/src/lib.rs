@@ -265,6 +265,7 @@ impl<S: Spec> Module for BlobStorage<S> {
     type Config = ();
     type CallMessage = NotInstantiable;
     type Event = ();
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,
@@ -280,7 +281,7 @@ impl<S: Spec> Module for BlobStorage<S> {
         _message: Self::CallMessage,
         _context: &sov_modules_api::Context<Self::Spec>,
         _state: &mut impl sov_modules_api::TxState<Self::Spec>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

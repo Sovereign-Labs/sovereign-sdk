@@ -1,20 +1,13 @@
 services:
   validator:
-    image: validator
+    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v6.2.0-mocha
     hostname: validator
-    build:
-      context: ./celestia
-      dockerfile: Dockerfile.validator
-    healthcheck:
-      # To see health check output:
-      # docker inspect --format "{{json .State.Health }}" docker-validator-1 | jq
-      test: ["CMD", "/opt/validator-healthcheck.sh"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-    # uncomment to provide amount of sequencers to provision (default: 1)
+    environment:
+      NO_COLOR: 1
+    # uncomment to provide amount of sequencers to provision (default: 5)
     # command: [ "/opt/entrypoint.sh", "2" ]
+    ports:
+      - "127.0.0.1:9090:9090"
     volumes:
       - type: bind
         source: ./credentials
@@ -22,23 +15,14 @@ services:
       - genesis:/genesis
 
   sequencer-0:
-    image: bridge
+    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.28.2-mocha
     hostname: sequencer-0
-    build:
-      context: ./celestia
-      dockerfile: Dockerfile.bridge
     depends_on:
       - validator
-    healthcheck:
-      # To see health check output:
-      # docker inspect --format "{{json .State.Health }}" docker-sequencer-0-1 | jq
-      test: ["CMD", "/opt/bridge-healthcheck.sh", "/credentials/bridge-0.jwt"]
-      interval: 5s
-      timeout: 5s
-      retries: 60
-      start_period: 10s
     # uncomment to provide the id of the sequencer (default: 0)
     # command: ["/opt/entrypoint.sh", "0"]
+    environment:
+      NO_COLOR: 1
     ports:
       - "127.0.0.1:${CELESTIA_PORT:-26658}:26658"
     volumes:
@@ -47,29 +31,6 @@ services:
         target: /credentials
         consistency: consistent
       - genesis:/genesis
-  #  #   Uncomment for another sequencer
-  #  #   remember to adjust services.validator.command
-  #  sequencer-1:
-  #    image: bridge
-  #    build:
-  #      context: .
-  #      dockerfile: Dockerfile.bridge
-  #    depends_on:
-  #      - validator
-  #    healthcheck:
-  #      test: [ "CMD", "/opt/bridge-healthcheck.sh", "/credentials/bridge-1.jwt" ]
-  #      interval: 10s
-  #      timeout: 5s
-  #      retries: 30
-  #      start_period: 10s
-  #    # The first argument is the id of the sequencer (default: 0)
-  #    command: [ "/opt/entrypoint.sh", "1" ]
-  #    ports:
-  #      # remap the default port as it's already used
-  #      - 127.0.0.1:${CELESTIA_PORT_1:-36658}:26658
-  #    volumes:
-  #      - credentials:/credentials:consistent
-  #      - genesis:/genesis
 
 volumes:
   # a temporary fs where the genesis hash is announced

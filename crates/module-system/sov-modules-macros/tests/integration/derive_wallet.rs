@@ -49,6 +49,7 @@ pub mod first_test_module {
         type Config = MockGenesisParams;
         type CallMessage = MyStruct;
         type Event = ();
+        type Error = anyhow::Error;
 
         fn genesis(
             &mut self,
@@ -111,6 +112,7 @@ pub mod second_test_module {
         type Config = ();
         type CallMessage = MyEnum;
         type Event = ();
+        type Error = anyhow::Error;
 
         fn genesis(
             &mut self,

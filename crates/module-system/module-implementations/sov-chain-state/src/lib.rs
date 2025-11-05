@@ -578,6 +578,8 @@ impl<S: Spec> Module for ChainState<S> {
 
     type Event = Event<S>;
 
+    type Error = anyhow::Error;
+
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
         &mut self,
@@ -594,7 +596,7 @@ impl<S: Spec> Module for ChainState<S> {
         message: Self::CallMessage,
         context: &sov_modules_api::Context<Self::Spec>,
         state: &mut impl sov_modules_api::TxState<Self::Spec>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         use sov_modules_api::EventEmitter;
         match message {
             CallMessage::TerminateSetupMode => {

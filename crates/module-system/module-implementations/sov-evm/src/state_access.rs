@@ -47,19 +47,14 @@ impl<S: Spec> Evm<S> {
         Ok(block)
     }
 
-    /// Gets tx by hash. Fails if prunned
+    /// Gets tx by idx. Fails if not found
     pub fn tx<Accessor: AccessoryStateReader>(
         &self,
-        hash: B256,
+        idx: u64,
         state: &mut Accessor,
     ) -> Result<TxSignedAndRecovered, EthApiError> {
-        let Some(idx) = self.tx_index(&hash, state) else {
-            return Err(EthApiError::PrunedHistoryUnavailable);
-        };
-        let Some(tx) = self.transaction(idx, state) else {
-            return Err(EthApiError::PrunedHistoryUnavailable);
-        };
-        Ok(tx)
+        self.transaction(idx, state)
+            .ok_or(EthApiError::UnknownTxIndex(idx))
     }
 
     /// Gets archival state before block `number`
@@ -88,6 +83,7 @@ impl<S: Spec> Evm<S> {
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
+            self.block_hashes.clone(),
             state,
             self.bank_module.clone(),
         )
@@ -108,9 +104,8 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<BlockEnv, Accessor::Error> {
-        Ok(self.block_env.get(state)?.expect(
-            "The impossible happened: block_env should be set in `begin_rollup_block_hook`",
-        ))
+        let block_env = self.block_env.get(state)?;
+        Ok(block_env.expect("block_env should be set in `begin_rollup_block_hook`"))
     }
 
     /// Get the Evm chain config.
@@ -118,11 +113,8 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<EvmRuntimeConfig, Accessor::Error> {
-        let cfg = self
-            .cfg
-            .get(state)? // The config must be set at genesis.
-            .expect("The impossible happened: EVM config is not set");
-        Ok(cfg)
+        let cfg = self.cfg.get(state)?;
+        Ok(cfg.expect("EVM config must be set in genesis"))
     }
 }
 
@@ -171,7 +163,9 @@ impl<S: Spec> Evm<S> {
         block_hash: &B256,
         state: &mut Accessor,
     ) -> Option<u64> {
-        self.block_hashes.get(block_hash, state).unwrap_infallible()
+        self.block_hash_to_number
+            .get(block_hash, state)
+            .unwrap_infallible()
     }
 
     /// Get the currently pending head block.
@@ -190,10 +184,8 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> RangeInclusive<u64> {
-        self.block_numbers
-            .get(state)
-            .unwrap_infallible()
-            .expect("Block numbers must be set in genesis")
+        let block_numbers = self.block_numbers.get(state).unwrap_infallible();
+        block_numbers.expect("Block numbers must be set in genesis")
     }
 
     /// Get the Evm chain config.
@@ -201,10 +193,13 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> EvmRuntimeConfig {
-        self.cfg
-            .get(state)
-            .unwrap_infallible()
-            // The config must be set at genesis.
-            .expect("EVM config must be set in genesis")
+        let cfg = self.cfg.get(state).unwrap_infallible();
+        cfg.expect("EVM config must be set in genesis")
+    }
+
+    /// Get head block
+    pub fn head<Accessor: InfallibleStateAccessor>(&self, state: &mut Accessor) -> Block {
+        let head = self.head.get(state).unwrap_infallible();
+        head.expect("Head is set in genesis and never deleted")
     }
 }

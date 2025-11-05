@@ -44,19 +44,15 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
     let latest_block = test_client
         .eth_get_block_by_number(Some("latest".to_owned()))
         .await;
-
-    assert_eq!(latest_block.base_fee_per_gas, Some(U256::zero()));
-
     let pending_block = test_client
         .eth_get_block_by_number(Some("pending".to_owned()))
         .await;
 
+    assert_eq!(latest_block, pending_block);
     assert_eq!(pending_block.base_fee_per_gas, Some(U256::zero()));
-
-    assert!(latest_block.number.unwrap().as_u64() > 0);
-    assert!(latest_block.number > earliest_block.number);
-    assert!(pending_block.number > latest_block.number);
     assert_eq!(pending_block.hash, Some(H256::zero()));
+    assert_eq!(earliest_block.number.unwrap().as_u64(), 0);
+    assert!(pending_block.number > earliest_block.number);
 
     // Nonce should be 0 before any transactions
     let nonce = test_client

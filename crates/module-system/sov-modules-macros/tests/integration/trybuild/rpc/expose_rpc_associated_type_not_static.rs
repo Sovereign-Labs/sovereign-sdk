@@ -2,7 +2,7 @@ use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::{expose_rpc, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
-    ApiStateAccessor, Context, DaSpec, DispatchCall, Error, Genesis, MessageCodec, Module,
+    ApiStateAccessor, Context, DaSpec, DispatchCall, Genesis, MessageCodec, Module,
     ModuleId, ModuleInfo, Spec, StateValue, TxState,
 };
 
@@ -51,6 +51,7 @@ pub mod my_module {
         type Spec = S;
         type Config = D;
         type CallMessage = ();
+        type Error = anyhow::Error;
         type Event = ();
 
         fn genesis(
@@ -71,7 +72,7 @@ pub mod my_module {
         ) -> anyhow::Result<()> {
             self.data
                 .set(10, state)
-                .map_err(|e| Error::ModuleError(e.into()))?;
+                .map_err(|e| anyhow::anyhow!(e))?;
             Ok(())
         }
     }

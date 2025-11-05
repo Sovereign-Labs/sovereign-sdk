@@ -8,6 +8,7 @@ use serde::Serialize;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FilterWithCursor {
     pub cursor: Option<String>,
+    #[serde(flatten)]
     pub filter: Filter,
 }
 

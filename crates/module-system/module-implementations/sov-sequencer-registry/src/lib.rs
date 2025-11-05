@@ -189,12 +189,14 @@ impl<S: Spec> Module for SequencerRegistry<S> {
 
     type Event = Event<S>;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         self.init_module(config, state)
     }
 
@@ -203,7 +205,7 @@ impl<S: Spec> Module for SequencerRegistry<S> {
         message: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match message {
             CallMessage::Register { da_address, amount } => {
                 Ok(self.register(&da_address, amount, context, state)?)

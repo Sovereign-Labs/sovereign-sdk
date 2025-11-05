@@ -102,13 +102,14 @@ where
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         _message: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<Self::Spec>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

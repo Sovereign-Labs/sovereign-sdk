@@ -121,8 +121,7 @@ impl SealedBlock {
     pub fn base_fee(&self) -> u64 {
         self.header
             .base_fee_per_gas
-            // This is justified. We set it at genesis and never remove it — only overwrite it.
-            .expect("The base_fee_per_gas must be set.")
+            .expect("We set it at genesis and never remove it — only overwrite it")
     }
 }
 
@@ -232,6 +231,23 @@ impl MaybeSealedBlock {
             Self::Sealed(block) => block.header.inner(),
             Self::Pending(pending) => &pending.header,
         }
+    }
+
+    /// The block header.
+    pub fn into_header(self) -> Header {
+        match self {
+            Self::Sealed(block) => block.header.into_inner(),
+            Self::Pending(pending) => pending.header,
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+impl From<MaybeSealedBlock> for Sealed<Header> {
+    fn from(block: MaybeSealedBlock) -> Sealed<Header> {
+        let hash = block.hash().unwrap_or_default();
+        let header = block.into_header();
+        Sealed::new_unchecked(header, hash)
     }
 }
 
