@@ -27,7 +27,7 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 0);
+    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 1);
     assert_eq!(by_number(&client, Pending).await?.unwrap().number, 1);
     assert_eq!(by_number(&client, 1.into()).await?.unwrap().number, 1);
     assert_eq!(by_number(&client, 2.into()).await?, None);
@@ -37,7 +37,7 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 1);
+    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 2);
     assert_eq!(by_number(&client, Pending).await?.unwrap().number, 2);
 
     assert_eq!(by_number(&client, 1.into()).await?.unwrap().number, 1);
@@ -67,7 +67,7 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    let latest_hash = by_number(&client, Latest).await?.unwrap().hash;
+    let latest_hash = by_number(&client, Pending).await?.unwrap().parent_hash;
     let latest = by_hash(&client, latest_hash).await?.unwrap();
     assert_eq!(latest.hash, latest_hash);
     assert_eq!(latest.number, 1);
@@ -90,8 +90,8 @@ async fn eth_get_block_receipts() -> anyhow::Result<()> {
     usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
     rollup.pause_preferred_batches().await;
 
-    let latest_receipts = client.get_block_receipts(BlockId::latest()).await?.unwrap();
-    assert_eq!(latest_receipts.len(), 0);
+    let empty_block_receipts = client.get_block_receipts(BlockId::from(1)).await?.unwrap();
+    assert_eq!(empty_block_receipts.len(), 0);
 
     let mut pending_receipts = client
         .get_block_receipts(BlockId::pending())

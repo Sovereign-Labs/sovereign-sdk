@@ -219,8 +219,8 @@ where
 
         Ok(match block_number_str.as_str() {
             "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
-            "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
-            "pending" => PendingOrBlock::Pending,
+            // We treat latest and pending the same to avoid foundry issues
+            "latest" | "pending" => PendingOrBlock::Pending,
             number => {
                 let number = u64::from_str_radix(number.trim_start_matches("0x"), 16)
                     .map_err(|e| EthApiError::InvalidBlockNumber(block_number_str, e))?;
@@ -238,11 +238,10 @@ where
         let block_numbers = self.block_numbers(state);
         let block_number = match block {
             BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                *block_numbers.end()
-            }
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
             BlockNumberOrTag::Number(nr) => nr,
-            BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+            // We treat latest and pending the same to avoid foundry issues
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => *block_numbers.end() + 1,
         };
         block_number
     }
@@ -322,21 +321,14 @@ where
         block_number: Option<String>,
         state: &'a mut ApiStateAccessor<S>,
     ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
-        let state = match block_number {
-            None => MaybeArchivalState::Current(state),
-            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
-            _ => {
-                let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
-                match pending_or_block_nr {
-                    PendingOrBlock::Pending => MaybeArchivalState::Current(state),
-                    PendingOrBlock::Number(number) => {
-                        let archival_state = state.get_archival_state(RollupHeight::new(number))?;
-                        MaybeArchivalState::Archival(archival_state.into())
-                    }
-                }
+        let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
+        match pending_or_block_nr {
+            PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
+            PendingOrBlock::Number(number) => {
+                let archival_state = state.get_archival_state(RollupHeight::new(number))?;
+                Ok(MaybeArchivalState::Archival(archival_state.into()))
             }
-        };
-        Ok(state)
+        }
     }
 
     fn resolve_block_env(

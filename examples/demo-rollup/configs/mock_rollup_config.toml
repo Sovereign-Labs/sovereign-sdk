@@ -30,6 +30,7 @@ block_time_ms = 1_000
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
+separate_archival_state = true
 # user_commit_concurrency = 4 # Number of concurrent commit workers for user state
 # user_hashtable_buckets = 15000000 # Expected state size, cannot be changed after creation
 # user_preallocate_ht = false # Whether to preallocate hashtable file for user db

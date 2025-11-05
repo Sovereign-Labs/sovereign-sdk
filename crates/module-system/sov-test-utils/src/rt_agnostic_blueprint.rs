@@ -1,10 +1,12 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use rockbound::SchemaBatch;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::schema::DeltaReader;
+use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::MockDaSpec;
+use sov_mock_da::{MockDaSpec, MockHash};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
@@ -15,46 +17,66 @@ use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
+use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::ProofBlobSender;
+use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 /// A basic, "vanilla" [`FullNodeBlueprint`] to be used for testing.
-#[derive(Default)]
-pub struct RtAgnosticBlueprint<S: Spec, R: RuntimeTrait<S>> {
-    phantom: PhantomData<(S, R)>,
+pub struct RtAgnosticBlueprint<
+    S: Spec,
+    R: RuntimeTrait<S>,
+    Manager = NativeStorageManager<
+        MockDaSpec,
+        ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
+    >,
+> {
+    phantom: PhantomData<(S, R, Manager)>,
 }
 
-impl<S, R> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R>
+impl<S: Spec, R: RuntimeTrait<S>, Manager> Default for RtAgnosticBlueprint<S, R, Manager> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<S, R, Manager> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager>
 where
     S: Spec + PluggableSpec,
     R: RuntimeTrait<S> + HasKernel<S> + HasCapabilities<S> + HasKernel<S>,
+    Manager: Send + Sync + 'static,
 {
     type Spec = S;
     type Runtime = R;
 }
 
 #[async_trait]
-impl<S, R> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R>
+impl<S, R, Manager> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager>
 where
-    S: Spec<
-            Da = MockDaSpec,
-            OuterZkvm = MockZkvm,
-            Storage = ProverStorage<
-                DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
-            >,
-        > + PluggableSpec,
+    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
+    Manager: Send
+        + Sync
+        + 'static
+        + HierarchicalStorageManager<
+            MockDaSpec,
+            StfState = <S as Spec>::Storage,
+            LedgerChangeSet = SchemaBatch,
+            LedgerState = DeltaReader,
+            StfChangeSet = <S::Storage as Storage>::ChangeSet,
+        >
+        + StorageManagerInitializer<S, StorableMockDaService>,
 {
     type DaService = StorableMockDaService;
 
-    type StorageManager = NativeStorageManager<
-        MockDaSpec,
-        ProverStorage<DefaultStorageSpec<<<Self::Spec as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
-    >;
+    type StorageManager = Manager;
 
     type ProverService = ParallelProverService<
         <Self::Spec as Spec>::Address,
@@ -131,7 +153,7 @@ where
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
     ) -> anyhow::Result<Self::StorageManager> {
-        NativeStorageManager::new(&rollup_config.storage.path)
+        Manager::from_config(rollup_config)
     }
 
     fn create_proof_sender(
@@ -140,5 +162,39 @@ where
         proof_blob_sender: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(proof_blob_sender))
+    }
+}
+
+trait StorageManagerInitializer<S: Spec, Da: DaService>: Sized {
+    fn from_config(config: &RollupConfig<S::Address, Da>) -> anyhow::Result<Self>;
+}
+
+impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
+    for NativeStorageManager<
+        MockDaSpec,
+        ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
+    >
+{
+    fn from_config(
+        config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
+    ) -> anyhow::Result<Self> {
+        NativeStorageManager::new(&config.storage.path)
+    }
+}
+
+impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
+    for NomtStorageManager<
+        MockDaSpec,
+        <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+        NomtProverStorage<
+            DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
+        >,
+    >
+{
+    fn from_config(
+        config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
+    ) -> anyhow::Result<Self> {
+        NomtStorageManager::new(config.storage.clone())
     }
 }

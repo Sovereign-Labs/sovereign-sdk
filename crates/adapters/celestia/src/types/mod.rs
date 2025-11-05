@@ -243,10 +243,10 @@ impl FilteredCelestiaBlock {
     pub(crate) fn new(
         rollup_batch_data: NamespaceRelevantData,
         rollup_proof_data: NamespaceRelevantData,
-        header: celestia_types::ExtendedHeader,
+        header: CelestiaHeader,
     ) -> anyhow::Result<Self> {
         Ok(FilteredCelestiaBlock {
-            header: CelestiaHeader::new(header.dah, header.header.into()),
+            header,
             rollup_batch_data,
             rollup_proof_data,
         })

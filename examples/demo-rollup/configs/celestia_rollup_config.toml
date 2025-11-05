@@ -32,8 +32,8 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 
 # The maximum time to wait for a response to an RPC query against Celestia node.
 # Default: 60 seconds
-# We set it to allow skipping 3 blocks on mocha testnet
-request_timeout_secs = 18
+# We set it to allow skipping 5 blocks on mocha testnet
+request_timeout_secs = 30
 
 # Options are "Low", "Medium" and "High"
 # Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
@@ -73,6 +73,7 @@ backoff_max_times = 10
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
+separate_archival_state = true
 
 [runner]
 # Block time for celestia is configured in `docker/run-validator.sh` and we try to set this one to be lower,

@@ -89,6 +89,13 @@ where
         )
     }
 
+    /// Adds additional accounts to the genesis config.
+    pub fn add_additional_accounts(mut self, num_accounts: usize, balance: Amount) -> Self {
+        self.high_level_basic
+            .add_accounts_with_balance(num_accounts, balance);
+        self
+    }
+
     /// Generates a new high-level genesis config.
     pub fn generate(reward_user: TestUser<S>) -> Self {
         Self::generate_with_additional_accounts(0, reward_user)

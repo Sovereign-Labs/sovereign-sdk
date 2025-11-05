@@ -117,7 +117,8 @@ alloy-rpc-types-eth = "1.0.30"
 alloy-rpc-types-trace = { workspace = true }
 alloy-pubsub = "1.0"
 alloy-provider = { workspace = true, features = ["debug-api"] }
-sov-rpc-eth-types = { workspace = true }
+sov-rpc-eth-types = { workspace = true}
+strum = { workspace = true }
 
 
 reqwest = { workspace = true }

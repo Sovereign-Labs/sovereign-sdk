@@ -16,6 +16,13 @@ use sov_modules_api::{
     ProvableStateReader, SafeString, Spec, TxHash,
 };
 
+#[cfg(feature = "native")]
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+
 /// The payload for a solana offchain message.
 /// Essentially a wrapper around `sov_modules_api::transaction::UnsignedTransaction` that also
 /// includes the chain_hash, in order to ensure the hash gets signed as part of the message.
@@ -154,7 +161,12 @@ fn verify_solana_signature<S: Spec>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    MeteredSignature::new::<S>(signature.clone())
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
+
+    let res = MeteredSignature::new::<S>(signature.clone())
         .verify(pub_key, signed_bytes, meter)
         .map_err(|e| match e {
             sov_modules_api::MeteredSigVerificationError::BadSignature(err) => {
@@ -168,7 +180,12 @@ fn verify_solana_signature<S: Spec>(
                     "Signature verification ran out of gas: {err}"
                 ))
             }
-        })
+        });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
 }
 
 fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage<S>, FatalError> {
@@ -228,41 +245,17 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
 }
 
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
-#[cfg(feature = "native")]
-pub fn decode_solana_json_tx<S, D>(
-    raw_tx: &[u8],
-) -> Result<
-    (
-        D::Decodable,
-        sov_modules_api::capabilities::AuthorizationData<S>,
-    ),
-    FatalError,
->
+pub fn decode_solana_json_tx<S, D>(raw_tx: &[u8]) -> Result<D::Decodable, FatalError>
 where
     S: Spec,
     D: DispatchCall<Spec = S>,
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
-    use sov_modules_api::{capabilities::calculate_hash, PublicKey};
-
     let unpacked_message = unpack_solana_message::<S>(raw_tx)?;
     let solana_unsigned_tx: SolanaOffchainUnsignedTransaction<D, S> =
         serde_json::from_slice(unpacked_message.json_bytes())
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-    let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
-
-    let pub_key = unpacked_message.pub_key;
-    let credential_id = pub_key.credential_id();
-
-    let auth_data = sov_modules_api::capabilities::AuthorizationData {
-        uniqueness: unsigned_tx.uniqueness,
-        tx_hash: calculate_hash::<S>(raw_tx),
-        credential_id,
-        credentials: sov_modules_api::transaction::Credentials::new(pub_key),
-        default_address: credential_id.into(),
-    };
-
-    Ok((unsigned_tx.call(), auth_data))
+    Ok(solana_unsigned_tx.into_unsigned_tx().call())
 }
 
 pub fn authenticate<Accessor, S, D>(
