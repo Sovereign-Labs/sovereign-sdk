@@ -2586,9 +2586,6 @@ async fn heavy_blob_submission_long_delay() {
             .unwrap()
     });
 
-    let client = test_rollup.api_client();
-    let key = &admin.private_key;
-
     let nonce = Arc::new(AtomicU64::new(0));
 
     let workers_timeout = Duration::from_secs(worker_timeout_secs);
