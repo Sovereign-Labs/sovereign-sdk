@@ -18,7 +18,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
-const VALIDATOR_TAG: &str = "v6.2.0-mocha";
+const VALIDATOR_TAG: &str = "v6.2.2-mocha";
 const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
 const BRIDGE_TAG: &str = "v0.28.2-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
