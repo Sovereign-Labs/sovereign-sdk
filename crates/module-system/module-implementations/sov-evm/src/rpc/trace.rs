@@ -76,7 +76,7 @@ where
 
         let block_env = self.block_env(state)?;
         let cfg = self.cfg(state)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
+        let cfg_env = get_cfg_env(&block_env, &cfg, None);
 
         Ok((maybe_archival_state, transactions, block_env, cfg_env))
     }

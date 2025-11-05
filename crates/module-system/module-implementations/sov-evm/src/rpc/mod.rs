@@ -25,7 +25,7 @@ use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecover
 use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
-use crate::Evm;
+use crate::{verify_contract_creation_allowlist, Evm};
 use maybe_archival_state::MaybeArchivalState;
 
 pub(crate) mod error;
@@ -183,11 +183,13 @@ where
     ) -> Result<ResultAndState, EthApiError> {
         let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env = prepare_call_env(&block_env, request.clone())?;
+        let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.db(state);
-
-        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)?)
+        let result = executor::transact(evm_db, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg)?;
+        Ok(result)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.

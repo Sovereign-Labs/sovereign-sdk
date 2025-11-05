@@ -24,8 +24,6 @@ pub enum Error<Ws: StateAccessor> {
     SelfDestructUnsupported,
     #[error("No block hash for block {0}")]
     BlockHashNotFound(BlockNumber),
-    #[error("Contract creation is only allowed from allowed addresses. {0} is not on the list")]
-    ContractCreationDenied(Address),
 }
 
 impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}

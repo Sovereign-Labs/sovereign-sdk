@@ -23,7 +23,7 @@
   ],
   "contract_creation_policy": {
     "allowlist": [
-      "0x5fbdb2315678afecb367f032d93f642f64180aa3"
+      "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
     ]
   },
   "initial_base_fee": 7,

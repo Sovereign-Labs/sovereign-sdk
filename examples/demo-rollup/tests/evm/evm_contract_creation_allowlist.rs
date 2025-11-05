@@ -11,7 +11,7 @@ async fn allowed() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client_with_signer(rollup.http_addr, SENDER_PRIV_KEY);
 
-    let _ = SimpleStorage::deploy(client.clone()).await?;
+    let _ = SimpleStorage::deploy(client).await?;
     Ok(())
 }
 
@@ -21,7 +21,7 @@ async fn denied() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client_with_signer(rollup.http_addr, SECONDARY_SENDER_PRIV_KEY);
 
-    let err = SimpleStorage::deploy(client.clone()).await.unwrap_err();
-    assert_eq!(err.to_string(), "server returned an error response: error code -32603: Revm error: Database error: Contract creation is only allowed from allowed addresses. 0x8BaF92120e06aA0791F1C0515Afe11423f56dEf2 is not on the list");
+    let err = SimpleStorage::deploy(client).await.unwrap_err();
+    assert_eq!(err.to_string(), "server returned an error response: error code -32603: Revm error: Contract creation is only allowed from allowed addresses. 0x3FE0233e6cf3c9753fcB7449987EC49C88aDDE71 is not on the list");
     Ok(())
 }

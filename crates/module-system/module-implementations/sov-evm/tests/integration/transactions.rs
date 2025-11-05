@@ -218,7 +218,7 @@ fn test_account_nonce() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let mut db = evm.db(state).unwrap();
+            let mut db = evm.db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 1);
         }),
@@ -230,7 +230,7 @@ fn test_account_nonce() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |_ctx, state| {
-            let mut db = evm.db(state).unwrap();
+            let mut db = evm.db(state);
             let from_acc = db.basic(from_addr).unwrap().unwrap();
             assert_eq!(from_acc.nonce, 2);
         }),
@@ -266,7 +266,7 @@ fn test_deploy_many_contracts() {
             // The two contracts have different addresses.
             assert_ne!(contract_addr_1, contract_addr_2);
 
-            let mut db = evm.db(state).unwrap();
+            let mut db = evm.db(state);
             let contract_1_account = db.basic(contract_addr_1).unwrap().unwrap();
             let contract_2_account = db.basic(contract_addr_2).unwrap().unwrap();
 
