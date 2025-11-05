@@ -68,7 +68,10 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
     let da_service = CelestiaService::new(config, rollup_params).await;
-    let signer = da_service.get_signer().await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
     let blob = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
     let (collected_batch_blobs, collected_proof_blobs, response) =
@@ -96,7 +99,10 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
 
     let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-    let signer = da_service.get_signer().await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
 
     let (collected_batch_blobs, collected_proof_blobs, response) =
         tokio::time::timeout(TEST_TIMEOUT, async {

@@ -1,3 +1,6 @@
+# 2025-11-05
+- #2025 Breaking change for DaService implementations: `DaService::get_signer` now returns option. It is possible to return None if DaService can be configured without signer.
+
 # 2025-11-01
 - #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
 - #2006 Add associated Error type to the EVM module.
