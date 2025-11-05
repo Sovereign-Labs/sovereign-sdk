@@ -17,6 +17,7 @@ mod update_state;
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
+use anyhow::Context;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -132,7 +133,10 @@ where
     ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
-        let da_address = da.get_signer().await;
+        let da_address = da
+            .get_signer()
+            .await
+            .context("Sequencer must have DaService configured with submit support")?;
 
         debug!(
             ?latest_state_update,

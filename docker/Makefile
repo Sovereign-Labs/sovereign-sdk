@@ -10,7 +10,7 @@ HYPERLANE_CLI_TAG := sov-integration-3
 
 # Celestia Docker image constants
 CELESTIA_DEVNET_VALIDATOR_IMAGE := ghcr.io/sovereign-labs/celestia-validator-devnet
-CELESTIA_DEVNET_VALIDATOR_TAG := v6.2.0-mocha
+CELESTIA_DEVNET_VALIDATOR_TAG := v6.2.2-mocha
 CELESTIA_DEVNET_BRIDGE_IMAGE := ghcr.io/sovereign-labs/celestia-bridge-devnet
 CELESTIA_DEVNET_BRIDGE_TAG := v0.28.2-mocha
 

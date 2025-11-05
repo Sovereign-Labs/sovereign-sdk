@@ -432,8 +432,8 @@ impl DaService for MockDaService {
             .collect())
     }
 
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
-        self.sequencer_da_address
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
+        Some(self.sequencer_da_address)
     }
 }
 

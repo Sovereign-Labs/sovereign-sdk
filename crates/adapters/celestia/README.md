@@ -159,13 +159,13 @@ Follow these steps (all paths are from root of the repo):
 
 1. **Update version tags in [`docker/Makefile`](../../../docker/Makefile)**:
    ```makefile
-   CELESTIA_DEVNET_VALIDATOR_TAG := v6.2.0-mocha  # Update this version
+   CELESTIA_DEVNET_VALIDATOR_TAG := v6.2.2-mocha  # Update this version
    CELESTIA_DEVNET_BRIDGE_TAG := v0.28.2-mocha    # Update this version
    ```
 
 2. **Update matching tags in `crates/adapters/celestia/src/test_helper/docker.rs`**:
    ```rust
-   const VALIDATOR_TAG: &str = "v6.2.0-mocha";
+   const VALIDATOR_TAG: &str = "v6.2.2-mocha";
    const BRIDGE_TAG: &str = "v0.28.2-mocha";
    ```
 
