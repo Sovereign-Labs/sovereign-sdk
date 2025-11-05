@@ -1,4 +1,4 @@
-use crate::{to_rollup_address, AccountStorageKey, EvmRuntimeConfig};
+use crate::{to_rollup_address, AccountStorageKey};
 use alloy_primitives::{Address, BlockHash, BlockNumber, B256, U256};
 use derive_more::Debug;
 use derive_more::{Deref, Into};
@@ -43,7 +43,6 @@ pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
     pub(crate) state: &'a mut Ws,
     pub(crate) bank_module: sov_bank::Bank<S>,
-    pub(crate) cfg: EvmRuntimeConfig,
 }
 
 impl<'a, Ws: TxState<S>, S: Spec> Database for EvmDb<'a, Ws, S>

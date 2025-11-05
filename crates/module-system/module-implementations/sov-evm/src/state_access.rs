@@ -78,20 +78,15 @@ impl<S: Spec> Evm<S> {
 /// User state reads
 impl<S: Spec> Evm<S> {
     /// Get a EvmDb instance for the supplied state.
-    pub fn db<'a, Ws: StateReader<User>>(
-        &self,
-        state: &'a mut Ws,
-    ) -> Result<EvmDb<'a, Ws, S>, Ws::Error> {
-        let cfg = self.cfg(state)?;
-        Ok(EvmDb::new(
+    pub fn db<'a, Ws: StateReader<User>>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
+        EvmDb::new(
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
             self.block_hashes.clone(),
             state,
             self.bank_module.clone(),
-            cfg,
-        ))
+        )
     }
 
     /// Get the value from a storage slot.

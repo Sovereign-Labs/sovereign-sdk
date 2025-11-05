@@ -110,7 +110,7 @@ where
     ) -> RpcResult<U256> {
         let mut state = self.resolve_state(block_number, state)?;
         let balance = self
-            .db(state.deref_mut())?
+            .db(state.deref_mut())
             .basic(address)
             .map_err(EthApiError::from)?
             .map(|account| account.balance)
@@ -271,9 +271,9 @@ where
             result,
             state: changes,
         } = self.call(request, block_number, state)?;
-        self.db(state)?
+        self.db(state)
             .try_commit(changes)
-            .map_err(EthApiError::from)?;
+            .expect("Gas meter is initialized with INF");
         let gas_used = result.gas_used();
 
         // Charge for logs storage in the receipt

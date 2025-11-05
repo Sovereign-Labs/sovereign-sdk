@@ -92,7 +92,7 @@ where
         // Setup execution environment (fetches block, preloads transactions, sets up state)
         let (mut state, txs_to_trace, block_env, cfg_env) =
             self.setup_trace_execution(block_number, state)?;
-        let mut evm_db = self.db(state.deref_mut())?;
+        let mut evm_db = self.db(state.deref_mut());
 
         // Trace all transactions in the block
         let mut traces = vec![];
@@ -128,7 +128,7 @@ where
         // Setup execution environment (fetches block, preloads transactions, sets up state)
         let (mut state, txs_to_replay, block_env, cfg_env) =
             self.setup_trace_execution(traced_tx.block_number, state)?;
-        let mut evm_db = self.db(state.deref_mut())?;
+        let mut evm_db = self.db(state.deref_mut());
 
         // Replay previous transactions in the block
         for tx in txs_to_replay {

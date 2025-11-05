@@ -22,12 +22,7 @@ fn test_genesis_data() {
     runner.query_visible_state(move |state| {
         let evm = Evm::<S>::default();
         let account = &cfg.accounts[0];
-        let account_info = evm
-            .db(state)
-            .unwrap()
-            .basic(account.address)
-            .unwrap()
-            .unwrap();
+        let account_info = evm.db(state).basic(account.address).unwrap().unwrap();
 
         assert_eq!(
             &account_info,

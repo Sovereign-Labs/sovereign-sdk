@@ -23,7 +23,7 @@ fn test_simple_transfer() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |ctx, state| {
-            let mut db = evm.db(state).unwrap();
+            let mut db = evm.db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
             // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm

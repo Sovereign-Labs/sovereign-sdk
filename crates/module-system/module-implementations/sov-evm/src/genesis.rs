@@ -81,7 +81,7 @@ where
         acc: AccountData,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
-        let mut evm_db = self.db(state)?;
+        let mut evm_db = self.db(state);
         evm_db.insert_account_info(
             acc.address,
             AccountInfo {
