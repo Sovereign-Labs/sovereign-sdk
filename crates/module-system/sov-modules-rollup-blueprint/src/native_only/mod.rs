@@ -230,7 +230,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: sequencer,
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await,
+                    da_address: da_service.get_signer().await.context("XX")?,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -260,7 +260,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: sequencer,
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await,
+                    da_address: da_service.get_signer().await.context("XX")?,
                 })
             }
         }
