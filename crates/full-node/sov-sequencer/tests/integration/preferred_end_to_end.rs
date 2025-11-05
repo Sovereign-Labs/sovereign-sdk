@@ -16,7 +16,7 @@ use serde_json::Number;
 use sov_api_spec::types::{
     self as api_types, SequencerListEventsPage, SequencerListEventsResponse, TxReceiptResult,
 };
-use sov_api_spec::{Client, WsSubscription};
+use sov_api_spec::{types, Client, Error, WsSubscription};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -1076,6 +1076,9 @@ async fn seq_out_of_gas_for_pre_checks() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn max_batch_size() {
+    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
+    //     "warn",
+    // );
     let max_batch_size = 1024;
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -1085,11 +1088,24 @@ async fn max_batch_size() {
     )
     .await;
 
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer
-        .produce_and_wait_for_n_slots((TEST_FINALIZATION_BLOCKS + 2) as u64)
-        .await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    test_rollup.progress_beyond_genesis().await;
+    test_rollup.wait_for_sequencer_ready().await.expect(
+        "Sequencer is not ready after initial empty blocks for creation of finalized slots",
+    );
+
+    let validate_expected_error = |resp: Error<types::ApiError>| {
+        let error_str = resp.to_string();
+        let pattern1 = "Transaction cannot be included in the batch";
+        let pattern2 = "The transaction is too large";
+        assert!(
+            error_str.contains(pattern1),
+            "pattern: {pattern1} not found, actual error: {error_str}"
+        );
+        assert!(
+            error_str.contains(pattern2),
+            "pattern: {pattern2} not found, actual error: {error_str}"
+        );
+    };
 
     let client = test_rollup.api_client().clone();
 
@@ -1097,58 +1113,59 @@ async fn max_batch_size() {
     {
         let tx = tx_set_many_values(&admin.private_key, 0, vec![0; 1024]);
 
-        let resp = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap_err();
-
-        let error_str = resp.to_string();
-        assert!(
-            error_str.contains("Transaction cannot be included in the batch"),
-            "actual error: {error_str}"
-        );
+        let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
+        validate_expected_error(resp);
     }
 
     test_rollup.pause_preferred_batches().await;
     // The first and third transactions are processed, but the second and fourth are too large to be included in the batch.
     {
         let tx = tx_set_many_values(&admin.private_key, 0, vec![0; 128]);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
         let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 1024]);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap_err();
+        let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
+        validate_expected_error(resp);
 
         let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 512]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![0; 512]);
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
+        validate_expected_error(resp);
     }
-
     test_rollup.force_close_batch().await.unwrap();
     // Producing couple more block to avoid lack of finalized
-    da_layer
-        .produce_and_wait_for_n_slots((TEST_FINALIZATION_BLOCKS + 1) as u64)
-        .await;
-    println!("2");
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-    println!("3");
+    test_rollup
+        .da_service
+        .produce_n_blocks_now((TEST_FINALIZATION_BLOCKS + 3) as usize)
+        .await
+        .unwrap();
+    test_rollup
+        .wait_for_node_synced()
+        .await
+        .expect("Node is not synced after big txs");
+    // test_rollup
+    //     .wait_for_sequencer_ready()
+    //     .await
+    //     .expect("Sequencer is not ready before final tx");
+    // for _ in 0..1 {
+    //     let slot = tokio::time::timeout(
+    //         std::time::Duration::from_millis(500),
+    //         slot_subscription.next(),
+    //     )
+    //     .await
+    //     .unwrap()
+    //     .unwrap()
+    //     .unwrap();
+    //     tracing::info!("SLOT: {:?}", slot.batches);
+    // }
+    // TODO: Validate values
+    // TODO: Wait for slots.
 
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![0; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }
@@ -1577,7 +1594,7 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         .unwrap();
     let actual_value = response.value;
     // We could've check actual value, but that's not the point of this test.
-    println!("VALUE: {:?}", actual_value);
+    println!("VALUE: {actual_value:?}");
 
     tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
         .await

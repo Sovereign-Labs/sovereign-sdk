@@ -58,6 +58,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
+use tokio_stream::StreamExt;
 
 /// Specifies how to source the genesis data for a rollup.
 #[derive(Derivative)]
@@ -909,6 +910,34 @@ where
         });
         let rollup = builder.start().await?;
         Ok(rollup)
+    }
+
+    pub async fn progress_beyond_genesis(&self) {
+        let mut slot_subscription = self.api_client().subscribe_slots().await.unwrap();
+        let finalization_blocks = self.rollup_config.da.finalization_blocks;
+        self.da_service
+            .produce_n_blocks_now(finalization_blocks as usize)
+            .await
+            .expect("Failed to produce finalization blocks");
+        self.wait_for_node_synced().await.unwrap();
+        let poll_time =
+            std::time::Duration::from_millis(self.rollup_config.runner.da_polling_interval_ms) * 2;
+        // Extra
+        for _ in 0..2 {
+            self.da_service.produce_block_now().await.unwrap();
+            tokio::time::sleep(poll_time).await;
+        }
+
+        for _ in 0..finalization_blocks {
+            let _slot = tokio::time::timeout(
+                std::time::Duration::from_millis(3000),
+                slot_subscription.next(),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        }
     }
 }
 
