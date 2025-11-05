@@ -495,14 +495,8 @@ impl DaService for CelestiaService {
         .await
     }
 
-    // TODO: Follow up: Should this become and Result or Option?
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
-        match self.signer_address.clone() {
-            None => {
-                panic!("Node is not configured for submission, signer address is unknown");
-            }
-            Some(signer) => signer,
-        }
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
+        self.signer_address.clone()
     }
 }
 

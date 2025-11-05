@@ -18,7 +18,7 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
-const VALIDATOR_TAG: &str = "v6.2.0-mocha";
+const VALIDATOR_TAG: &str = "v6.2.2-mocha";
 const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
 const BRIDGE_TAG: &str = "v0.28.2-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
@@ -301,7 +301,7 @@ async fn test_service_starts() -> anyhow::Result<()> {
     tracing::info!("CONFIG: {:?}", config);
     let da_service = CelestiaService::new(config, crate::test_helper::ROLLUP_PARAMS_DEV).await;
     let signer = da_service.get_signer().await;
-    assert_eq!(signer, dev_node.get_signer_address(0).await?);
+    assert_eq!(signer, Some(dev_node.get_signer_address(0).await?));
     let header_1 = da_service.get_head_block_header().await?;
     let blob = vec![0, 1, 2, 3, 4];
     let _result = da_service.send_transaction(&blob).await.await??;
