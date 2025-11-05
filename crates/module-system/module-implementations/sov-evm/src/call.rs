@@ -12,7 +12,6 @@ use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Context, GasSpec, Spec, TxState};
-use sov_rpc_eth_types::EthApiError;
 #[cfg(feature = "native")]
 use std::convert::Infallible;
 
@@ -24,7 +23,7 @@ use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
 use crate::{gas_metering_mode, Evm, EvmRuntimeConfig, GasMeteringMode, PendingTransaction};
-use anyhow::Context as _;
+use anyhow::{bail, Context as _};
 
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
@@ -308,14 +307,14 @@ pub(crate) fn verify_contract_creation_allowlist(
     state_changes: &HashMap<Address, Account>,
     signer: &Address,
     cfg: &EvmRuntimeConfig,
-) -> Result<(), EthApiError> {
+) -> Result<(), anyhow::Error> {
     if cfg.contract_creation_policy.allows(signer) {
         return Ok(());
     }
     for account in state_changes.values() {
         if let Some(ref code) = account.info.code {
             if !code.is_empty() {
-                return Err(EthApiError::EvmCustom(format!("Contract creation is only allowed from allowed addresses. {signer} is not on the list")));
+                bail!("Contract creation is only allowed from allowed addresses. {signer} is not on the list");
             }
         }
     }

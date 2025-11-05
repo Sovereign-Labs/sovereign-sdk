@@ -20,6 +20,7 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
 use crate::db::EvmDb;
+use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::get_cfg_env;
@@ -188,7 +189,8 @@ where
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let evm_db: EvmDb<_, S> = self.db(state);
         let result = executor::transact(evm_db, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg)
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
     }
 
