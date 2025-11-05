@@ -38,6 +38,7 @@ sov-rollup-interface = { workspace = true }
 # For storable service
 sea-orm = { version = "1.1", features = [
     "sqlx-sqlite",
+    "sqlx-postgres",
     "runtime-tokio-rustls",
     "macros",
     "with-chrono",
