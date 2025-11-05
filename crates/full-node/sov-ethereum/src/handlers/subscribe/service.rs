@@ -196,7 +196,7 @@ where
                 .expect("Failed to serialize subscription message");
 
         self.sink.send(msg).await.inspect_err(|err| {
-            tracing::info!(%err, "The subscription client disconnected from the server.");
+            tracing::debug!(%err, "The subscription client disconnected from the server.");
         })
     }
 }
