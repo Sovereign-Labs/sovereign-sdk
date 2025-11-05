@@ -228,6 +228,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         .client
         .subscribe_slots_with_children(IncludeChildren::new(true))
         .await?;
+    // TODO: Why 5 blocks specifically, and not 3 or 10?
     for _ in 0..5 {
         test_rollup.da_service.produce_block_now().await?;
         let _ = slot_subscription.next().await.unwrap().unwrap();
@@ -251,7 +252,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         test_rollup.da_service.produce_block_now().await.unwrap();
         let slot = slot_subscription.next().await.unwrap().unwrap();
         assert_eq!(slot.number, i);
-        assert!(slot.batches[0].tx_range.end == i - 5);
+        assert_eq!(slot.batches[0].tx_range.end, i - 5);
 
         let response = test_rollup
             .client
@@ -266,6 +267,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
     // Sleep to ensure that any pending commits have finished
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // TODO: wait for expected slot + wait for sequencer readiness
 
     // Send one more transaction which should crash on commit.
     {
@@ -273,14 +275,12 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         let tx = tx_send_transfer(AMOUNT_TO_SEND, admin.private_key(), 10);
         test_rollup
             .api_client()
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
-        test_rollup.force_close_batch().await.unwrap();
+            .send_raw_tx_to_sequencer(&tx)
+            .await?;
+        test_rollup.force_close_batch().await?;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        test_rollup.da_service.produce_block_now().await.unwrap();
+        // Produce 2 blocks, just to make sure that finalization is happening
+        test_rollup.da_service.produce_n_blocks_now(2).await?;
         test_rollup
             .wait_for_rollup_to_crash(std::time::Duration::from_secs(10))
             .await?;

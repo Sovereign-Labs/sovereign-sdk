@@ -86,6 +86,11 @@ const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfi
     block_wait_timeout_ms: None,
 };
 
+#[derive(Debug, serde::Deserialize)]
+struct ValueResponse {
+    value: u32,
+}
+
 pub struct DaLayerWithSubscription {
     da_layer: Arc<RwLock<StorableMockDaLayer>>,
     state_update_subscription: WsSubscription<StateUpdateNotification>,
@@ -489,11 +494,6 @@ async fn test_archival_state_with_pruning() {
 
     // Assert that the earlier transactions sent just before the sequencer went into recovery was
     // flushed and processed by the node
-    #[derive(Debug, serde::Deserialize)]
-    struct ValueResponse {
-        #[allow(unused)]
-        value: u32,
-    }
 
     let mut success_count = 0;
     let mut pruned_count = 0;
@@ -790,10 +790,6 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Assert that the earlier transactions sent just before the sequencer went into recovery was
     // flushed and processed by the node
-    #[derive(Debug, serde::Deserialize)]
-    struct ValueResponse {
-        value: u32,
-    }
     let response = test_rollup
         .client
         .query_rest_endpoint::<ValueResponse>("/modules/value-setter/state/value")
@@ -825,7 +821,9 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     );
 
     tracing::info!("All asserts successful, shutting down rollup");
-    test_rollup.shutdown().await.unwrap();
+    test_rollup
+        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT)
+        .await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -930,10 +928,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     }
 
     // Assert that the earlier transaction sent before shutdown was processed
-    #[derive(Debug, serde::Deserialize)]
-    struct ValueResponse {
-        value: u32,
-    }
     let response = test_rollup
         .client
         .query_rest_endpoint::<ValueResponse>("/modules/value-setter/state/value")
@@ -1092,7 +1086,10 @@ async fn max_batch_size() {
     .await;
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    da_layer
+        .produce_and_wait_for_n_slots((TEST_FINALIZATION_BLOCKS + 2) as u64)
+        .await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
 
@@ -1142,12 +1139,16 @@ async fn max_batch_size() {
 
     test_rollup.force_close_batch().await.unwrap();
     // Producing couple more block to avoid lack of finalized
-    da_layer.produce_and_wait_for_n_slots(3).await;
+    da_layer
+        .produce_and_wait_for_n_slots((TEST_FINALIZATION_BLOCKS + 1) as u64)
+        .await;
+    println!("2");
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    println!("3");
 
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
         let tx = tx_set_many_values(&admin.private_key, 2, vec![0; 512]);
-        test_rollup.wait_for_sequencer_ready().await.unwrap();
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }
@@ -1526,31 +1527,62 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     test_rollup
         .da_service
-        .produce_n_blocks_now(5)
+        .produce_n_blocks_now((TEST_FINALIZATION_BLOCKS + 2) as usize)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
-    test_rollup.da_service.set_delay_blobs_by(100).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    tracing::warn!("#### 1");
+    let blocks_to_delay: u64 = 100;
+    test_rollup
+        .da_service
+        .set_delay_blobs_by(blocks_to_delay as u32)
+        .await;
+    tracing::warn!("#### 2");
 
     let client = test_rollup.api_client().clone();
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
-    for i in 0..100 {
+    // In this loop, transactions should be accepted, but node sees empty DA blocks, because current blobs are delayed
+    for i in 0..blocks_to_delay {
+        test_rollup.wait_for_node_synced().await.unwrap();
         let tx = tx_set_value(&admin.private_key, i, i);
         client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-
         test_rollup.da_service.produce_block_now().await.unwrap();
-        slot_subscription.next().await;
+        let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
+    // Now almost all blobs are still delayed, only first has landed
 
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let acceptable_block_processing_time = std::time::Duration::from_millis(500);
+
+    let total_waiting_time = acceptable_block_processing_time * blocks_to_delay as u32;
+
+    // Producing more blocks, so all delayed blobs are flushed.
     test_rollup
         .da_service
-        .produce_n_blocks_now(100)
+        .produce_n_blocks_now(blocks_to_delay as usize)
         .await
         .unwrap();
-    // Multiple normal shutdown by 10, as we shoot bunch fo blocks.
-    test_rollup
-        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT * 10)
-        .await;
+    if let Some(sleep_time) =
+        TestRollup::<TestBlueprint>::POLLING_TIMEOUT.checked_sub(total_waiting_time)
+    {
+        tokio::time::sleep(sleep_time).await;
+    }
+    test_rollup.wait_for_node_synced().await.unwrap();
+
+    let response = test_rollup
+        .client
+        .query_rest_endpoint::<ValueResponse>("/modules/value-setter/state/value")
+        .await
+        .unwrap();
+    let actual_value = response.value;
+    // We could've check actual value, but that's not the point of this test.
+    println!("VALUE: {:?}", actual_value);
+
+    tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 // The sequencer controls emitting ledger slots over websocket
@@ -2430,14 +2462,14 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         .unwrap();
 
     #[derive(Debug, serde::Deserialize)]
-    struct StateRootResponse {
+    struct StateRootValue {
         root_hashes: Vec<u8>,
     }
     #[derive(Debug, serde::Deserialize)]
-    struct ValueResponse {
-        value: StateRootResponse,
+    struct StateRootResponse {
+        value: StateRootValue,
     }
-    async fn get_state_root(test_rollup: &TestRollup<TestBlueprint>) -> StateRootResponse {
+    async fn get_state_root(test_rollup: &TestRollup<TestBlueprint>) -> StateRootValue {
         let state_root_url = format!(
             "{}/modules/hooks-count/state/latest-state-root/",
             test_rollup.api_client().baseurl()
@@ -2450,7 +2482,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
             .await
             .unwrap();
         let response = response
-            .json::<ValueResponse>()
+            .json::<StateRootResponse>()
             .await
             .expect("Hooks must have run");
         response.value
@@ -2691,10 +2723,6 @@ async fn flaky_test_hooks_state_is_visible() {
         .unwrap();
 
     let query_hook_counter = |hook_name: &'static str| async {
-        #[derive(Debug, serde::Deserialize)]
-        struct ValueResponse {
-            value: u32,
-        }
         let hook_name = hook_name.to_string();
         client
             .query_rest_endpoint::<ValueResponse>(&format!(

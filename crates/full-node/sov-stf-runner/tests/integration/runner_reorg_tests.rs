@@ -277,8 +277,6 @@ async fn check_runner(
     let end = runner.run_in_process(0).await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
-    let x = end.unwrap_err();
-    println!("ERROR: {x:?}");
     let after = *runner.get_state_root();
 
     assert_ne!(before, after);
