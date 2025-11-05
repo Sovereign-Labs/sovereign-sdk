@@ -1,3 +1,6 @@
+# 2025-11-05
+- #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
+
 # 2025-11-01
 - #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
 - #2006 Add associated Error type to the EVM module.
