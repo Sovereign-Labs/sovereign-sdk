@@ -1034,6 +1034,7 @@ async fn seq_out_of_gas_for_pre_checks() {
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(5).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     test_rollup.pause_preferred_batches().await;
@@ -1075,6 +1076,7 @@ async fn seq_out_of_gas_for_pre_checks() {
     }
     test_rollup.resume_preferred_batches().await;
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    // TODO: What's the point of this waiting?
     da_layer.produce_and_wait_for_n_slots(2).await;
 }
 
@@ -1139,8 +1141,8 @@ async fn max_batch_size() {
     }
 
     test_rollup.force_close_batch().await.unwrap();
-    // Producing one more block to avoid lack of finalized
-    da_layer.produce_block().await.unwrap();
+    // Producing couple more block to avoid lack of finalized
+    da_layer.produce_and_wait_for_n_slots(3).await;
 
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
