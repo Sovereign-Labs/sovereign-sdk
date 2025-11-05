@@ -250,8 +250,9 @@ pub trait DaService: Clone + Send + Sync + 'static {
         None
     }
 
-    /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`]
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address;
+    /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`].
+    /// If `None` means that instance of DaService is not capable of sending blobs and can be used only in node mode.
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address>;
 }
 
 /// Retry the given async function with the given backoff policy.

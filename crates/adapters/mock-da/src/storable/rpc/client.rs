@@ -190,7 +190,7 @@ impl DaService for StorableMockDaClient {
         Ok(proofs)
     }
 
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         let url = self.url("/signer").expect("Bad url");
         let response = self
             .client
@@ -202,6 +202,6 @@ impl DaService for StorableMockDaClient {
         let signer_response: SignerResponse = handle_response(response)
             .await
             .expect("Failed to parse signer response");
-        signer_response.address
+        Some(signer_response.address)
     }
 }
