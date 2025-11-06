@@ -157,18 +157,22 @@ async fn ws_rpc_handler(
 //    where subscription responses are piped to the writer task.
 // 2. Writer task listens to [`tokio::sync::mpsc::Receiver`] and writes responses to websocket.
 async fn handle_socket(socket: WebSocket, rpc_methods: RpcModule<()>) {
+    // After split, the send handle can no longer tell whether the channel has been closed, so 
+    // we add an mpsc to tell us.
     let (sender, receiver) = socket.split();
+    let (close_sender, close_receiver) = tokio::sync::watch::channel(());
 
     let (socket_requests, socket_responses) = tokio::sync::mpsc::channel(10);
 
-    tokio::spawn(handle_socket_write(socket_responses, sender));
-    tokio::spawn(handle_socket_read(receiver, socket_requests, rpc_methods));
+    tokio::spawn(handle_socket_write(socket_responses, sender, close_receiver));
+    tokio::spawn(handle_socket_read(receiver, socket_requests, rpc_methods, close_sender));
 }
 
 async fn handle_socket_read(
     mut socket_requests: futures_util::stream::SplitStream<WebSocket>,
     socket_responses: tokio::sync::mpsc::Sender<Message>,
     rpc_methods: RpcModule<()>,
+    close_sender: tokio::sync::watch::Sender<()>,
 ) {
     while let Some(Ok(msg)) = socket_requests.next().await {
         tracing::trace!(message = ?msg, "Message received from websocket");
@@ -187,19 +191,31 @@ async fn handle_socket_read(
                             break;
                         }
 
+                        // If the message we just received is a subscription, we need to spawn a handler for it.
                         if !receiver.is_closed() {
                             let subscription_responses = socket_responses.clone();
+                            let mut close_receiver = close_sender.subscribe();
                             tokio::task::spawn(async move {
                                 tracing::trace!("Spawning subscription responses loop");
-                                while let Some(message) = receiver.recv().await {
-                                    tracing::trace!("Subscription message received: {}", message);
-                                    if let Err(error) = subscription_responses
-                                        .send(Message::Text(message.to_string()))
-                                        .await
-                                    {
-                                        tracing::error!(%error, "Error while sending RPC response");
+                                    loop { 
+                                        tokio::select! {
+                                        _ = close_receiver.changed() => {
+                                            break;
+                                        }
+                                        message = receiver.recv() => {
+                                            if let Some(message) = message {
+                                                if let Err(error) = subscription_responses
+                                                    .send(Message::Text(message.to_string()))
+                                                    .await
+                                                {
+                                                    tracing::error!(%error, "Error while sending RPC response from child writer");
+                                                }
+                                            } else {
+                                                break;
+                                            }
+                                        }
                                     }
-                                }
+                                } 
                                 tracing::trace!("Subscription channel closed");
                             });
                         }
@@ -226,17 +242,30 @@ async fn handle_socket_read(
         }
     }
     tracing::trace!("WebSocket read handler finished");
+    let _ = close_sender.send(()); // If all the listeners have dropped, we don't care that the notification drops too.
 }
 
 async fn handle_socket_write(
     mut socket_requests: tokio::sync::mpsc::Receiver<Message>,
     mut socket_responses: futures_util::stream::SplitSink<WebSocket, Message>,
+    mut close_receiver: tokio::sync::watch::Receiver<()>,
 ) {
-    while let Some(response) = socket_requests.recv().await {
-        if let Err(error) = socket_responses.send(response).await {
-            tracing::error!(%error, "Error while sending RPC response");
+    loop {
+        tokio::select! {
+            _ = close_receiver.changed() => {
+                tracing::trace!("Websocket write handler finished due to dropped ws connection.");
+                return;
+            }
+            response = socket_requests.recv() => {
+                if let Some(response) = response {
+                    if let Err(error) = socket_responses.send(response).await {
+                        tracing::error!(%error, "Error while sending RPC response from writer");
+                    }
+                } else {
+                    return;
+                }
+            }
         }
-        tracing::trace!("Message sent to websocket");
     }
 }
 
