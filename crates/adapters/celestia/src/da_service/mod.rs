@@ -276,6 +276,7 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> anyhow::Result<FilteredCelestiaBlock> {
+        tracing::trace!(height, "Getting block, firing requests");
         let start_get_block = Instant::now();
 
         let header_future = run_maybe_retryable_async_fn_with_retries(
@@ -299,10 +300,10 @@ impl CelestiaService {
             rollup_batch_rows_future,
             rollup_proof_rows_future,
         )?;
+        let futures_time = start_get_block.elapsed();
+        tracing::trace!(height, time = ?futures_time, "All requests have been completed, building relevant data..");
 
         let square_width = header.dah.square_width();
-
-        let futures_time = start_get_block.elapsed();
 
         let build_relevant_data_start = std::time::Instant::now();
         let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
@@ -329,6 +330,7 @@ impl CelestiaService {
             };
             tracker.submit(get_block_measurement);
         });
+        tracing::trace!(height, "get_block_at metrics send, returning");
         FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
     }
 
