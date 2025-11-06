@@ -1,18 +1,19 @@
+use alloy::eips::BlockNumberOrTag;
+use alloy::providers::DynProvider;
 use alloy::rpc::types::Filter;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{network::Network, providers::Provider};
 use alloy_primitives::U256;
 use anyhow::Result;
 use futures::future::try_join_all;
+use sov_eth_client::LogsWithCursorProvider;
 use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
-use sov_eth_client::LogsWithCursorProvider;
 use std::net::SocketAddr;
 use std::time::Instant;
-use alloy::eips::BlockNumberOrTag;
 
-use crate::{alloy_client, fund_worker_accounts, validate_worker_count};
 use crate::derive_worker_key;
+use crate::{alloy_client, fund_worker_accounts, validate_worker_count};
 
 /// Spawns multiple log test workers, runs them, and retrieves all generated logs.
 pub async fn run_logs_test(
@@ -29,8 +30,20 @@ pub async fn run_logs_test(
     fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
     let from_block = root_client.get_block_number().await?;
 
-    // Spawn workers
-    let produce_logs = Instant::now();
+    produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
+    retrieve_logs(root_client, from_block).await?;
+
+    Ok(())
+}
+
+async fn produce_logs(
+    rpc_addr: SocketAddr,
+    private_key: &str,
+    num_workers: usize,
+    tx_count: usize,
+    logs_per_tx: usize,
+) -> Result<()> {
+    let timer = Instant::now();
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
@@ -54,21 +67,22 @@ pub async fn run_logs_test(
     println!(
         "Produced {} logs in {:?}",
         num_workers * tx_count * logs_per_tx,
-        produce_logs.elapsed()
+        timer.elapsed()
     );
+    Ok(())
+}
 
-    // Retrieve and count all logs
+async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<()> {
     let filter: Filter = Filter::new()
         .from_block(from_block)
         .to_block(BlockNumberOrTag::Pending);
-    let fetch_logs = Instant::now();
-    let logs = root_client.get_all_logs_with_cursor(&filter).await?;
+    let timer = Instant::now();
+    let logs = client.get_all_logs_with_cursor(&filter).await?;
     println!(
         "Retrieved {} logs in {:?}",
         logs.len(),
-        fetch_logs.elapsed()
+        timer.elapsed()
     );
-
     Ok(())
 }
 
