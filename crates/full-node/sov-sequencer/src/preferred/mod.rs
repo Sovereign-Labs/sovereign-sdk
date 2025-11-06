@@ -68,7 +68,7 @@ use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::{debug, error, info, trace};
 use transaction_subscriptions::TransactionCache;
-use tx_nonce_queue::SequencerNonceQueueSubmitter;
+use tx_nonce_queue::SequencerTxExecutionBackend;
 
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
@@ -104,7 +104,7 @@ where
     _runtime: PhantomData<(Rt, Da)>,
     config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
-    tx_nonce_queues: Arc<TxNonceQueues<SequencerNonceQueueSubmitter<S, Rt>, S, Rt>>,
+    tx_nonce_queues: Arc<TxNonceQueues<SequencerTxExecutionBackend<S, Rt>, S, Rt>>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     shutdown_sender: watch::Sender<()>,
@@ -288,7 +288,7 @@ where
 
         let synchronized_state_updator = Arc::new(synchronized_state_updator);
         let nonce_queues = TxNonceQueues::new(
-            SequencerNonceQueueSubmitter {
+            SequencerTxExecutionBackend {
                 api_state: api_state.clone(),
                 state_updator: synchronized_state_updator.clone(),
             },
@@ -914,7 +914,7 @@ where
             }
             UniquenessData::Nonce(tx_nonce) => {
                 self.tx_nonce_queues
-                    .handle_nonce_based_tx(
+                    .handle_new_tx(
                         baked_tx,
                         tx_hash,
                         tx_nonce,
