@@ -45,6 +45,7 @@ sov-rollup-interface = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-state = { workspace = true }
+sov-uniqueness = { workspace = true }
 sov-db = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true }
