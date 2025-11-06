@@ -82,7 +82,7 @@ done
 # Actual testing is going to be run here
 
 echo "Preparing Web3 JS SDK"
-cd web3-js-sdk
+cd ../../typescript
 
 pnpm install
 pnpm build
