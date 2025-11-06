@@ -231,6 +231,7 @@ mod tests {
     use openapiv3::{
         IntegerType, OpenAPI, Operation, PathItem, ReferenceOr, Schema, SchemaKind, Type,
     };
+    use std::num::NonZero;
 
     use super::*;
 
@@ -354,7 +355,8 @@ mod tests {
                 cors: sov_stf_runner::CorsConfiguration::Permissive,
             },
             save_tx_bodies: false,
-            concurrent_sync_tasks: None,
+            concurrent_sync_tasks: 1,
+            pre_fetched_blocks_capacity: NonZero::new(1).unwrap(),
         }
     }
 

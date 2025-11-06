@@ -52,6 +52,7 @@ separate_archival_state = true
 da_polling_interval_ms = 50
 # da_total_timeout_secs = 600 # Total timeout for DA service including re-orgs and retries
 # concurrent_sync_tasks = 5 # Number of concurrent tasks to get blocks from DA service
+# pre_fetched_blocks_capacity = 20 # How many blocks pre-fetcher put into the channel for the node to consume before holding off next requests
 # save_tx_bodies = false # Whether to save transaction bodies to the database
 
 [runner.http_config]

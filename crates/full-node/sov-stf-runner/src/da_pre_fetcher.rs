@@ -11,9 +11,6 @@ use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::sync::mpsc::Receiver;
 use tracing::{info_span, Instrument as _};
 
-// With the block size up to 10 MB, it should fit into 32 GB of RAM.
-const MAX_BLOCKS: usize = 1_000;
-
 /// Service that pre-fetcher blocks from given start height up to last finalized height at the moment of construction.
 /// After that it proxies all requests to underlying DaService.
 pub struct FinalizedBlocksBulkFetcher<Da: DaService> {
@@ -31,9 +28,10 @@ where
         da_service: Arc<Da>,
         start_height: u64,
         bulk_size: u8,
+        channel_capacity: usize,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<(Self, tokio::task::JoinHandle<anyhow::Result<()>>)> {
-        let (blocks_sender, blocks_receiver) = tokio::sync::mpsc::channel(MAX_BLOCKS);
+        let (blocks_sender, blocks_receiver) = tokio::sync::mpsc::channel(channel_capacity);
 
         let last_finalized_height = da_service
             .get_last_finalized_block_header()
@@ -300,7 +298,7 @@ mod tests {
         receiver.mark_unchanged();
 
         let (mut fetcher, handle) =
-            FinalizedBlocksBulkFetcher::new(Arc::new(da_service), 0, 10, receiver).await?;
+            FinalizedBlocksBulkFetcher::new(Arc::new(da_service), 0, 3, 30, receiver).await?;
 
         for i in 0..blocks_number {
             let block = fetcher.get_block_at(i as u64).await?;
