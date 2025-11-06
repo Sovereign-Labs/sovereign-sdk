@@ -305,17 +305,17 @@ alloy-rpc-types = { version = "1.0.37", features = [
 
 alloy-provider = { version = "1.0.37", default-features = false, features = ["ws"] }
 alloy-rpc-types-trace = { version = "1.0.37", default-features = false }
-reth-errors = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
-reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
-reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2", default-features = false }
-revm = { version = "29.0.1", features = ["serde"], default-features = false }
-revm-database-interface = { version = "7.0.5", default-features = false }
-revm-context = { version = "9.1.0", default-features = false }
-revm-handler = { version = "9.1.0", default-features = false }
-revm-context-interface = { version = "10.2.0", default-features = false }
-revm-inspector = { version = "10.0.1", default-features = false }
-revm-inspectors = { version = "0.30.0", default-features = false }
+reth-errors = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0", default-features = false }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0", default-features = false }
+reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0", default-features = false }
+reth-ethereum-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0", default-features = false }
+revm = { version = "31.0.0", features = ["serde"], default-features = false }
+revm-database-interface = { version = "8.0.4", default-features = false }
+revm-context = { version = "11.0.0", default-features = false }
+revm-handler = { version = "12.0.0", default-features = false }
+revm-context-interface = { version = "12.0.0", default-features = false }
+revm-inspector = { version = "12.0.0", default-features = false }
+revm-inspectors = { version = "0.32.0", default-features = false }
 secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "global-context",
     "recovery",
