@@ -670,7 +670,7 @@ where
             .await
             .expect("Failed to join rollup task before timeout.")
             .expect("Rollup task panicked.")
-            .expect("Rollup execution returned an error");
+            .expect("Rollup execution returned an error.");
     }
 
     /// Waits for the rollup to shutdown.

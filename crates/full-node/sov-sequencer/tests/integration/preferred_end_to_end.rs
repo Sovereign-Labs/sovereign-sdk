@@ -52,6 +52,7 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
+
 const DELAYED_TX_DELAY_MS: u64 = 500;
 
 generate_optimistic_runtime_with_kernel!(
@@ -244,18 +245,14 @@ async fn test_archival_state_is_immediately_available() {
         MAX_BATCH_EXECUTION_TIME_MILLIS,
     )
     .await;
+    test_rollup.progress_beyond_genesis().await;
 
-    let nb_of_blocks = 5;
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
-
     // Send a transaction and close the batch
     let tx = tx_set_value(&admin.private_key, 0, 1);
     test_rollup
         .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
+        .send_raw_tx_to_sequencer(&tx)
         .await
         .unwrap();
 
@@ -268,14 +265,12 @@ async fn test_archival_state_is_immediately_available() {
         let tx = tx_set_value(&admin.private_key, 0, i);
         test_rollup
             .api_client()
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
+            .send_raw_tx_to_sequencer(&tx)
             .await
             .unwrap();
         test_rollup.force_close_batch().await.unwrap();
         // Produce a some extra slots to ensure that the rollup block number and slot number aren't the same. This increases coverage for free.
-        da_layer.produce_and_wait_for_n_slots(2).await;
+        da_layer.produce_and_wait_for_n_slots(3).await;
         for j in 0..i {
             query_set_value(&test_rollup, Some(j), j).await.unwrap();
         }
@@ -590,9 +585,7 @@ async fn sequencer_filled_up_block() {
     )
     .await;
 
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
-
+    test_rollup.progress_beyond_genesis().await;
     let client = test_rollup.api_client().clone();
 
     {
@@ -690,20 +683,17 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     )
     .await;
 
-    let client = test_rollup.api_client().clone();
-    // Sleep for the rollup to start up
-    sleep(Duration::from_millis(500)).await;
+    test_rollup.progress_beyond_genesis().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    // Finalise some blocks
+    let client = test_rollup.api_client().clone();
+
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(8).await;
 
     // Sanity check tx that the rollup works
     let tx_update_one = tx_set_value(&admin.private_key, 0, 8);
     client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_update_one),
-        })
+        .send_raw_tx_to_sequencer(&tx_update_one)
         .await
         .unwrap();
 
@@ -719,9 +709,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     const UPDATE_TWO_VALUE: u64 = 19;
     let tx_update_two = tx_set_value(&admin.private_key, 0, UPDATE_TWO_VALUE);
     client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_update_two),
-        })
+        .send_raw_tx_to_sequencer(&tx_update_two)
         .await
         .unwrap();
 
@@ -754,9 +742,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     let tx_update_vec = tx_set_many_values(&admin.private_key, 2, vec![UPDATE_VEC_VALUE]);
     tracing::info!("Trying to send transaction during recovery - expecing rejection");
     let err = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_update_vec),
-        })
+        .send_raw_tx_to_sequencer(&tx_update_vec)
         .await
         .unwrap_err();
     assert!(
@@ -770,15 +756,12 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
         let _ = da_layer.produce_block().await;
         sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
     }
-    sleep(Duration::from_millis(100)).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
     // This transaction will be soft-confirmed. The assertion should pass at this stage.
     client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_update_vec),
-        })
+        .send_raw_tx_to_sequencer(&tx_update_vec)
         .await
         .unwrap();
 
@@ -821,9 +804,10 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     );
 
     tracing::info!("All asserts successful, shutting down rollup");
-    test_rollup
-        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT)
-        .await;
+    tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2283,18 +2267,12 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
+        // TODO: Finality??
         1000, // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
     )
     .await;
 
-    // Produce a the exact minimum number of blocks to ensure that the sequencer has a finalized slot.
-    // If we change the finalized slot in the test framework, this number will need to be updated.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(4)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.progress_beyond_genesis().await;
 
     let client = test_rollup.api_client().clone();
 
@@ -2303,17 +2281,16 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     let third_tx = tx_set_value(&admin.private_key, 1, 8);
     let fourth_tx = tx_set_value(&admin.private_key, 2, 9);
 
-    // Submit the first tx. This should succeed. This verifies that our initialization works fine *and* causes the sequencer to be close out its current batch.
+    // Submit the first tx. This should succeed.
+    // This verifies that our initialization works fine *and* causes the sequencer to be closing out its current batch.
     client.send_raw_tx_to_sequencer(&first_tx).await.unwrap();
 
     // Produce a new block that includes this first tx.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(1)
-        .await
-        .unwrap();
-    // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(1200)).await;
+    for _ in 0..1 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        // Wait until the new batch is almost processed. How do we know though?
+        sleep(Duration::from_millis(600)).await;
+    }
 
     // Produce a second large delay tx and a second block since - for some reason - the sequencer seems to be holding one extra finalized slot in reserve.
     // This is now needed to exhaust the sequencer's buffer and prevent flakiness allowing us to test the downtime.
@@ -2323,14 +2300,12 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         .await
         .unwrap();
 
-    // Produce a new block that includes this first tx. It will take 1200 ms to get processed, so start soon.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(1)
-        .await
-        .unwrap();
+    // Produce a news block that includes this first tx. It will take 1200 ms to get processed, so start soon.
     // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(1000)).await;
+    for _ in 0..1 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        sleep(Duration::from_millis(450)).await;
+    }
 
     // Send off the delayed tx. It should arrive at the sequencer immediately and begin sleeping.
     let delayed_tx_handle = tokio::spawn({
@@ -2361,13 +2336,8 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         "Expected error to contain 'The sequencer is temporarily overloaded', got: {third_tx_response}"
     );
     // Produce blocks to ensure that the sequencer has room to process the following txs
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(3)
-        .await
-        .unwrap();
-    // Sleep until these new blocks can be processed
-    tokio::time::sleep(Duration::from_millis(220)).await;
+    test_rollup.progress_beyond_genesis().await;
+    test_rollup.wait_for_node_synced().await.unwrap();
 
     // Send a fourth tx. It should succeed *before* the speedbumped tx is processed.
     let fourth_tx_handle = tokio::spawn({
