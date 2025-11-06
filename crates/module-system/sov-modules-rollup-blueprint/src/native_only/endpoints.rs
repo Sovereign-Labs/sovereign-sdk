@@ -231,6 +231,7 @@ mod tests {
     use openapiv3::{
         IntegerType, OpenAPI, Operation, PathItem, ReferenceOr, Schema, SchemaKind, Type,
     };
+    use std::num::NonZero;
 
     use super::*;
 
@@ -355,6 +356,7 @@ mod tests {
             },
             save_tx_bodies: false,
             concurrent_sync_tasks: None,
+            pre_fetched_blocks_capacity: NonZero::new(1).unwrap(),
         }
     }
 

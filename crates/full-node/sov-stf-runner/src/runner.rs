@@ -214,6 +214,7 @@ where
             da_service.clone(),
             first_unprocessed_height_at_startup,
             runner_config.get_concurrent_sync_tasks(),
+            runner_config.pre_fetched_blocks_capacity.get(),
             shutdown_receiver.clone(),
         )
         .await?;

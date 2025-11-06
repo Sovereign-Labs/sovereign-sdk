@@ -404,6 +404,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),
             concurrent_sync_tasks: Some(1),
+            pre_fetched_blocks_capacity: NonZero::new(3).unwrap(),
             save_tx_bodies: false,
         },
         da: da_config,
