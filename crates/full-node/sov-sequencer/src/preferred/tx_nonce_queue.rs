@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::ApiState;
@@ -19,6 +20,16 @@ use super::{err_invalid_nonce, Confirmation};
 
 pub(crate) type TransactionReceiverResult<S, Rt> =
     Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>;
+
+/// The possible actions the queue can take upon receiving a transaction, based on the
+/// transaction's nonce.
+enum Action<S: Spec, Rt: Runtime<S>> {
+    ExecuteNow(FullyBakedTx),
+    WaitForQueue(
+        oneshot::Receiver<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>>,
+    ),
+    Reject(u64),
+}
 
 struct QueuedTx<S: Spec, Rt: Runtime<S>> {
     pub tx: FullyBakedTx,
@@ -176,6 +187,9 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
 }
 
 pub struct TxNonceQueues<Sb: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
+    /// SAFETY: A reference to an internal entry should not be held across an await point, else
+    /// dashmap can deadlock.
+    /// To ensure this, we never hold a reference an AddressQueue inside an async function.
     queues: Arc<DashMap<CredentialId, AddressQueue<S, Rt>>>,
     submitter: Sb,
     maximum_future_nonce_delta: u64,
@@ -251,16 +265,28 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
 
     /// Remove a transaction by nonce
     fn evict(&self, credential_id: &CredentialId, nonce: u64) -> Option<QueuedTx<S, Rt>> {
-        let mut entry = self.queues.get_mut(credential_id)?;
-        let tx = entry.remove(nonce)?;
+        match self.queues.entry(*credential_id) {
+            Entry::Vacant(_) => None,
+            Entry::Occupied(mut entry) => {
+                let queue = entry.get_mut();
+                let tx = queue.remove(nonce)?;
 
-        // Clean up empty queue
-        if entry.is_empty() {
-            drop(entry);
-            self.queues.remove(credential_id);
+                // Clean up empty queue
+                if queue.is_empty() {
+                    entry.remove();
+                }
+
+                Some(tx)
+            }
         }
+    }
 
-        Some(tx)
+    fn cleanup_queue_if_empty(&self, credential_id: &CredentialId) {
+        if let Entry::Occupied(entry) = self.queues.entry(*credential_id) {
+            if entry.get().is_empty() {
+                entry.remove();
+            }
+        }
     }
 
     /// Check if there's a contiguous sequence of transactions up to target_nonce
@@ -276,50 +302,58 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             .unwrap_or(tx_nonce == current_nonce)
     }
 
+    fn get_maybe_next_valid_tx(
+        &self,
+        credential_id: &CredentialId,
+        next_valid_nonce: u64,
+    ) -> Option<QueuedTx<S, Rt>> {
+        let Some(mut queue_lock) = self.queues.get_mut(&credential_id) else {
+            return None; // No queue for this address
+        };
+
+        // Check if head has the expected nonce
+        loop {
+            let Some(head_entry) = queue_lock.head() else {
+                return None; // Empty queue, should normally not happen but fine if it does
+            };
+            match head_entry.key().cmp(&next_valid_nonce) {
+                Ordering::Less => {
+                    // Stale transaction in queue - evict and ignore.
+                    // This should not normally happen either, but we handle it to avoid a deadlock
+                    // if it does happen for any reason.
+                    head_entry.remove();
+                    continue;
+                }
+                Ordering::Greater => {
+                    // First transaction starts in the future - nothing ready to execute yet
+                    return None;
+                }
+                Ordering::Equal => {
+                    // First transaction is the next expected nonce. Pop it and mark as executing.
+                    let nonce = *head_entry.key();
+                    let tx = head_entry.remove();
+                    queue_lock.mark_executing(nonce);
+                    return Some(tx);
+                }
+            }
+        }
+    }
+
     /// Drain all ready transactions starting from expected_nonce until a gap or error
+    /// SAFETY: This function is async. We do not explicitly hold any references to entries inside
+    /// DashMap as local variables; all queue manipulations happen inside sync functions.
     async fn drain_any_ready_transactions(
         &self,
-        credential_id: CredentialId,
+        credential_id: &CredentialId,
         mut expected_nonce: u64,
     ) {
         loop {
-            // Lock and check if next tx is ready
-            let queued_tx = {
-                let mut queue_lock = match self.queues.get_mut(&credential_id) {
-                    Some(queue) => queue,
-                    None => return, // No queue for this address
-                };
-
-                // Check if head has the expected nonce
-                let tx = loop {
-                    let head_entry = match queue_lock.head() {
-                        Some(entry) => entry,
-                        None => return, // Empty queue
-                    };
-                    match head_entry.key().cmp(&expected_nonce) {
-                        Ordering::Less => {
-                            // Stale transaction in queue - evict and ignore.
-                            head_entry.remove();
-                            continue;
-                        }
-                        Ordering::Greater => {
-                            // First transaction starts in the future - nothing ready to drain yet
-                            return;
-                        }
-                        Ordering::Equal => {
-                            // First transaction is the next expected nonce. Pop it and mark as executing.
-                            let nonce = *head_entry.key();
-                            let tx = head_entry.remove();
-                            queue_lock.mark_executing(nonce);
-                            break tx;
-                        }
-                    }
-                };
-
-                tx
+            // Get the next valid tx - as long as there is one. If not, we're done.
+            let Some(queued_tx) = self.get_maybe_next_valid_tx(credential_id, expected_nonce)
+            else {
+                return;
             };
 
-            // Execute the transaction (outside lock)
             let result = self
                 .submitter
                 .execute_tx(
@@ -337,20 +371,54 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             // correctly propagated to the user. If the receiver is no longer listening, ignore.
             let _ = queued_tx.result_sender.send(result);
 
-            // After the waiting task has been notified, clean up the queue if it's empty
-            if let Some(queue) = self.queues.get_mut(&credential_id) {
-                if queue.is_empty() {
-                    drop(queue);
-                    self.queues.remove(&credential_id);
-                }
-            }
+            // *After* the waiting task has been notified, clean up the queue if it's empty.
+            // We do this at the end, to make sure we keep the `last_executed` information while
+            // the transaction is executing, ensuring it is safe from eviction from the queue
+            // mid-execution even if the nonce from the state is slightly stale.
+            self.cleanup_queue_if_empty(credential_id);
 
             if should_continue {
                 expected_nonce += 1;
             } else {
-                tracing::debug!("Transaction execution failed, stopping drain");
+                tracing::debug!("Transaction execution failed, stopping nonce queue drain");
                 return;
             }
+        }
+    }
+
+    fn determine_action(
+        &self,
+        baked_tx: FullyBakedTx,
+        tx_hash: TxHash,
+        tx_nonce: u64,
+        credential_id: CredentialId,
+        original_tx_queue_id: u64,
+    ) -> Action<S, Rt> {
+        // First acquire lock on this user's queue, before checking the nonce. Otherwise there can
+        // be a race condition if a new transaction were to execute after this tx checked its nonce
+        // but before it added itself to the queue.
+        let locked_user_queue = self.lock_for_address(credential_id);
+        let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+        let max_accepted_nonce = current_nonce + self.maximum_future_nonce_delta;
+
+        if tx_nonce == current_nonce {
+            // Transaction has a valid nonce, execute immediately.
+            Action::ExecuteNow(baked_tx)
+        } else if current_nonce < tx_nonce && tx_nonce < max_accepted_nonce {
+            // Transaction's nonce is in the future but within the queue threshold - enqueue it.
+            let (result_sender, results_receiver) = oneshot::channel();
+            Self::enqueue_and_unlock(
+                locked_user_queue,
+                result_sender,
+                baked_tx,
+                tx_hash,
+                tx_nonce,
+                original_tx_queue_id,
+            );
+            Action::WaitForQueue(results_receiver)
+        } else {
+            // Invalid nonce: either in the past or too far in the future
+            Action::Reject(current_nonce)
         }
     }
 
@@ -372,6 +440,9 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     /// is that it will get executed soon, provided all the txs are valid, so we don't evict. If
     /// any pre-req is rejected, the following txs will be evicted on the next timeout (assuming a
     /// new replacement pre-req with that nonce isn't submitted in the meantime of course).
+    ///
+    /// SAFETY: This function is async. We do not explicitly hold any references to entries inside
+    /// DashMap as local variables; all queue manipulations happen inside sync functions.
     pub async fn handle_new_tx(
         &self,
         baked_tx: FullyBakedTx,
@@ -383,17 +454,16 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
         SequencerStateUpdatorError,
     > {
-        // First acquire lock on this user's queue, before checking the nonce. Otherwise there can
-        // be a race condition if a new transaction were to execute after this tx checked its nonce
-        // but before it added itself to the queue.
-        let locked_user_queue = self.lock_for_address(credential_id);
-        let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
-        let max_accepted_nonce = current_nonce + self.maximum_future_nonce_delta;
+        let action = self.determine_action(
+            baked_tx,
+            tx_hash,
+            tx_nonce,
+            credential_id,
+            original_tx_queue_id,
+        );
 
-        match tx_nonce {
-            nonce if nonce == current_nonce => {
-                // Transaction has a valid nonce, execute immediately.
-                drop(locked_user_queue); // Release the queue lock as we won't be using it
+        match action {
+            Action::ExecuteNow(baked_tx) => {
                 let res = self
                     .submitter
                     .execute_tx(
@@ -406,34 +476,22 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
 
                 // If the transaction succeeded, the user's nonce will have incremented.
                 // Trigger a drain of the queue for any transactions which are now valid because of
-                // this.
+                // this, in a background task.
                 if res.as_ref().is_ok_and(|r| r.is_ok()) {
                     let queues = self.clone();
-                    let starting_nonce = current_nonce + 1; // Because we just submitted a transaction
+                    let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
                         queues
-                            .drain_any_ready_transactions(credential_id, starting_nonce)
+                            .drain_any_ready_transactions(&credential_id, starting_nonce)
                             .await;
                     });
                 }
                 res
             }
-            nonce if nonce > current_nonce && nonce < max_accepted_nonce => {
-                // Transaction's nonce is in the future but within the queue threshold - enqueue it.
-                let (result_sender, mut results_receiver) = oneshot::channel();
-                Self::enqueue_and_unlock(
-                    locked_user_queue,
-                    result_sender,
-                    baked_tx,
-                    tx_hash,
-                    tx_nonce,
-                    original_tx_queue_id,
-                );
-
-                // Wait for either the transaction to be ready (prerequisites arrived) or timeout
+            Action::WaitForQueue(mut queue_rx) => {
                 loop {
                     tokio::select! {
-                        rx = &mut results_receiver => {
+                        rx = &mut queue_rx => {
                             // The receiver contains the tx execution result.
                             break rx.unwrap_or_else(|_| {
                                 // The oneshot sender was dropped. This should normally only happen
@@ -472,8 +530,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     }
                 }
             }
-            _ => {
-                // Invalid nonce: either in the past or too far in the future
+            Action::Reject(current_nonce) => {
                 err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, credential_id)
             }
         }
@@ -828,7 +885,7 @@ mod tests {
         }
 
         // Drain starting from nonce 5 (3 and 4 should be silently evicted, 5 should execute)
-        queues.drain_any_ready_transactions(credential_id, 5).await;
+        queues.drain_any_ready_transactions(&credential_id, 5).await;
 
         let executed_nonces = backend.get_executed_nonces();
         assert_eq!(
@@ -853,7 +910,7 @@ mod tests {
         }
 
         // Drain starting from nonce 0
-        queues.drain_any_ready_transactions(credential_id, 0).await;
+        queues.drain_any_ready_transactions(&credential_id, 0).await;
 
         // Should have executed exactly 2 transactions (0 and 1), then stopped at gap
         let executed_nonces = backend.get_executed_nonces();
