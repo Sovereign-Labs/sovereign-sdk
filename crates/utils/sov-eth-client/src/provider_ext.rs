@@ -7,6 +7,7 @@ use sov_rpc_eth_types::LogsWithMaybeCursor;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LogsWithCursorParams {
+    #[serde(flatten)]
     pub filter: Filter,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
