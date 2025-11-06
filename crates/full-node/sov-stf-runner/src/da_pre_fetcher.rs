@@ -31,6 +31,8 @@ where
         channel_capacity: usize,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<(Self, tokio::task::JoinHandle<anyhow::Result<()>>)> {
+        // TODO: ERROR IF bulk_size > channel_capacity!!!
+        tracing::info!(%start_height, %bulk_size, ?channel_capacity, "Initializing FinalizedBlocksBulkFetcher");
         let (blocks_sender, blocks_receiver) = tokio::sync::mpsc::channel(channel_capacity);
 
         let last_finalized_height = da_service
@@ -74,6 +76,8 @@ where
     /// Wrapper around [`DaService::get_block_at`]
     #[tracing::instrument(skip(self))]
     pub async fn get_block_at(&mut self, height: u64) -> Result<Da::FilteredBlock, Da::Error> {
+        tracing::trace!("getting block");
+        // Expects blocks in range [start_height, last_finalized_height] (inclusive)
         if height > self.last_finalized_height || height < self.start_height {
             tracing::trace!(
                 height,
@@ -83,11 +87,13 @@ where
             );
             return self.da_service.get_block_at(height).await;
         }
+        tracing::trace!(height, "Requested height is inside pre-fetched range..");
 
         let span = info_span!("recv_channel_blocks");
         let block_opt = async {
             while let Some(block) = self.blocks.recv().await {
                 let block_height = block.header().height();
+                tracing::trace!(height = block_height, "Inspecting block");
                 self.start_height = block_height;
                 if block_height == height {
                     return Some(block);
@@ -103,6 +109,7 @@ where
         .await;
 
         if let Some(block) = block_opt {
+            tracing::trace!("Return block fetched from channel");
             Ok(block)
         } else {
             tracing::info!(
@@ -134,6 +141,7 @@ where
         last_finalized_height: u64,
         bulk_size: u8,
     ) -> Self {
+        tracing::info!(start_height, last_height = %last_finalized_height, bulk_size, "Initializing BlockFetcher");
         BlockFetcher {
             da_service,
             blocks,
@@ -171,13 +179,23 @@ where
         tracing::trace!(
             start = self.start_height,
             last_finalized_height = self.last_finalized_height,
+            bulk_size = self.bulk_size,
             "Running bulk block fetcher"
         );
+        let mut first_fetched_height: Option<u64> = None;
+        let mut last_fetched_height: Option<u64> = None;
+        let start_time = std::time::Instant::now();
+        // actually puts blocks in range [start_height, last_finalized_height) (exclusive of last_finalized_height)
         while self.start_height < self.last_finalized_height {
             let start_height = self.start_height;
             let end_height = std::cmp::min(
                 start_height + self.bulk_size as u64,
                 self.last_finalized_height,
+            );
+            tracing::trace!(
+                start_height,
+                end_height,
+                "loop iteration, going to reserve permit"
             );
 
             // Before doing a bunch of concurrent calls to DaService,
@@ -193,6 +211,7 @@ where
             {
                 Some(p) => p?,
                 None => {
+                    tracing::trace!("Stopping because couldn't reserve more permits");
                     break;
                 }
             };
@@ -226,13 +245,19 @@ where
                     Some(Some(block_result)) => {
                         let block = block_result?;
                         blocks_fetched += 1;
+                        let this_height = block.header().height();
                         permit
                             .next()
                             .expect("reserved less permits that bulk_size. Bug")
                             .send(block);
+                        if first_fetched_height.is_none() {
+                            first_fetched_height = Some(this_height);
+                        }
+                        last_fetched_height = Some(this_height);
                     }
                     Some(None) => {
                         // Stream ended
+                        tracing::trace!("Stopping because stream ended");
                         break;
                     }
                     None => {
@@ -243,6 +268,7 @@ where
             }
 
             if blocks_fetched == 0 {
+                tracing::trace!("Fetched zero blocks, breaking");
                 break;
             }
 
@@ -257,7 +283,14 @@ where
             self.start_height = end_height + 1;
         }
 
-        tracing::info!("BlockFetcher synced all finalized headers");
+        tracing::info!(
+            start = self.start_height,
+            last_finalized_at_start = self.last_finalized_height,
+            ?first_fetched_height,
+            ?last_fetched_height,
+            commpletion_time = ?start_time.elapsed(),
+            "BlockFetcher synced all finalized headers"
+        );
 
         Ok(())
     }
