@@ -1,7 +1,6 @@
 # Sovereign SDK Web3.js
 
 [![CI](https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/typescript.ci.yml/badge.svg)](https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/typescript.ci.yml)
-[![codecov](https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/master/graph/badge.svg?token=s8yNoGfFGE)](https://codecov.io/gh/Sovereign-Labs/sovereign-sdk)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![pnpm](https://img.shields.io/badge/maintained%20with-pnpm-cc00ff.svg)](https://pnpm.io/)
 
