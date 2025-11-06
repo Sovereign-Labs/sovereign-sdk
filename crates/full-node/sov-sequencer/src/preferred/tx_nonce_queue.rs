@@ -92,7 +92,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
             // treat transactions as valid (the uncertainty will eventually resolve itself as API
             // state updates).
             true
-        } else { // tx_nonce > upper_bound 
+        } else {
             // The transaction's nonce is known to be greater than our upper bound estimate of the
             // next valid nonce.
             // We need to check if there's a contiguous set of transactions actually queued beyond
@@ -129,10 +129,7 @@ pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>> {
         original_tx_queue_id: u64,
         reason: &'static str,
     ) -> impl std::future::Future<
-        Output = Result<
-            Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
-            SequencerStateUpdatorError,
-        >,
+        Output = Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>,
     > + std::marker::Send;
 }
 
@@ -489,7 +486,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
 mod tests {
     use super::*;
     use crate::preferred::{DoNewTxError, RollupBlockExecutorError};
-    use sov_modules_api::{TxProcessingError, TransactionReceipt, SkippedTxContents};
+    use sov_modules_api::{SkippedTxContents, TransactionReceipt, TxProcessingError};
     use sov_test_utils::runtime::TestOptimisticRuntime;
     use sov_test_utils::TestSpec;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -517,7 +514,7 @@ mod tests {
         entry: dashmap::mapref::entry::Entry<CredentialId, AddressQueue<TestSpec, TestRuntime>>,
         nonce: u8,
     ) -> oneshot::Receiver<
-        Result<TransactionReceiverResult<TestSpec, TestRuntime>, SequencerStateUpdatorError>
+        Result<TransactionReceiverResult<TestSpec, TestRuntime>, SequencerStateUpdatorError>,
     > {
         let to_queue = create_mock_queued_tx(nonce);
         let (sender, receiver) = oneshot::channel();
@@ -908,7 +905,12 @@ mod tests {
         }
 
         fn get_executed_nonces(&self) -> Vec<u64> {
-            self.executed_txs.lock().unwrap().iter().map(|(_, n)| *n).collect()
+            self.executed_txs
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(_, n)| *n)
+                .collect()
         }
 
         fn increment_nonce(&self) {
@@ -928,7 +930,10 @@ mod tests {
             _original_tx_queue_id: u64,
             _reason: &'static str,
         ) -> Result<
-            Result<oneshot::Receiver<AcceptedTx<Confirmation<TestSpec, TestRuntime>>>, AcceptTxError<TestSpec>>,
+            Result<
+                oneshot::Receiver<AcceptedTx<Confirmation<TestSpec, TestRuntime>>>,
+                AcceptTxError<TestSpec>,
+            >,
             SequencerStateUpdatorError,
         > {
             // Add delay if configured
@@ -984,11 +989,14 @@ mod tests {
     }
 
     /// Helper to create a default TxNonceQueues for tests that don't care about specific config
-    fn default_test_tx_nonce_queues() -> (TxNonceQueues<MockTxExecutionBackend, TestSpec, TestRuntime>, MockTxExecutionBackend) {
+    fn default_test_tx_nonce_queues() -> (
+        TxNonceQueues<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        MockTxExecutionBackend,
+    ) {
         let backend = MockTxExecutionBackend::new();
         let queues = TxNonceQueues::new(
             backend.clone(),
-            100, // generous max_future_nonce_delta
+            100,   // generous max_future_nonce_delta
             60000, // 60 second timeout (won't trigger in normal tests)
         );
         (queues, backend)
@@ -999,7 +1007,7 @@ mod tests {
         let backend = MockTxExecutionBackend::new().with_current_nonce(0);
         let queues = TxNonceQueues::new(
             backend.clone(),
-            10, // max_future_nonce_delta
+            10,   // max_future_nonce_delta
             5000, // timeout (long enough to not trigger)
         );
 
@@ -1098,9 +1106,18 @@ mod tests {
                     sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
                         match contents.error {
                             TxProcessingError::CheckUniquenessFailed(msg) => {
-                                assert!(msg.contains("bad nonce"), "Error should mention bad nonce: {}", msg);
-                                assert!(msg.contains("expected: 5"), "Error should mention expected nonce 5: {}", msg);
-                                assert!(msg.contains("found: 4"), "Error should mention found nonce 4: {}", msg);
+                                assert!(
+                                    msg.contains("bad nonce"),
+                                    "Error should mention bad nonce: \"{msg}\"",
+                                );
+                                assert!(
+                                    msg.contains("expected: 5"),
+                                    "Error should mention expected nonce 5: \"{msg}\"",
+                                );
+                                assert!(
+                                    msg.contains("found: 4"),
+                                    "Error should mention found nonce 4: \"{msg}\"",
+                                );
                             }
                             _ => panic!("Expected CheckUniquenessFailed error"),
                         }
@@ -1154,7 +1171,10 @@ mod tests {
                     sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
                         match contents.error {
                             TxProcessingError::CheckUniquenessFailed(msg) => {
-                                assert!(msg.contains("bad nonce"), "Error should mention bad nonce: {}", msg);
+                                assert!(
+                                    msg.contains("bad nonce"),
+                                    "Error should mention bad nonce: \"{msg}\"",
+                                );
                             }
                             _ => panic!("Expected CheckUniquenessFailed error"),
                         }
@@ -1282,21 +1302,26 @@ mod tests {
         match inner.unwrap_err() {
             AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                 RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
-            )) => {
-                match receipt.receipt {
-                    sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
-                        match contents.error {
-                            TxProcessingError::CheckUniquenessFailed(msg) => {
-                                assert!(msg.contains("bad nonce"), "Error should mention bad nonce: {}", msg);
-                                assert!(msg.contains("expected: 0"), "Error should mention expected nonce 0: {}", msg);
-                                assert!(msg.contains("found: 1"), "Error should mention found nonce 1: {}", msg);
-                            }
-                            _ => panic!("Expected CheckUniquenessFailed error"),
-                        }
+            )) => match receipt.receipt {
+                sov_rollup_interface::stf::TxEffect::Skipped(contents) => match contents.error {
+                    TxProcessingError::CheckUniquenessFailed(msg) => {
+                        assert!(
+                            msg.contains("bad nonce"),
+                            "Error should mention bad nonce: \"{msg}\"",
+                        );
+                        assert!(
+                            msg.contains("expected: 0"),
+                            "Error should mention expected nonce 0: \"{msg}\"",
+                        );
+                        assert!(
+                            msg.contains("found: 1"),
+                            "Error should mention found nonce 1: \"{msg}\"",
+                        );
                     }
-                    _ => panic!("Expected Skipped receipt"),
-                }
-            }
+                    _ => panic!("Expected CheckUniquenessFailed error"),
+                },
+                _ => panic!("Expected Skipped receipt"),
+            },
             _ => panic!("Expected UnsuccessfulTransaction error"),
         }
 
@@ -1417,26 +1442,31 @@ mod tests {
         let inner = result.unwrap();
 
         // The inner result should be an error (AcceptTxError with nonce error)
-        assert!(inner.is_err(), "Should have nonce error when sender dropped");
+        assert!(
+            inner.is_err(),
+            "Should have nonce error when sender dropped"
+        );
 
         // Verify it's a nonce error
         match inner.unwrap_err() {
             AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                 RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
-            )) => {
-                match receipt.receipt {
-                    sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
-                        match contents.error {
-                            TxProcessingError::CheckUniquenessFailed(msg) => {
-                                assert!(msg.contains("bad nonce"), "Error should mention bad nonce: {}", msg);
-                            }
-                            _ => panic!("Expected CheckUniquenessFailed error, got: {:?}", contents.error),
-                        }
+            )) => match receipt.receipt {
+                sov_rollup_interface::stf::TxEffect::Skipped(contents) => match contents.error {
+                    TxProcessingError::CheckUniquenessFailed(msg) => {
+                        assert!(
+                            msg.contains("bad nonce"),
+                            "Error should mention bad nonce: \"{msg}\"",
+                        );
                     }
-                    _ => panic!("Expected Skipped receipt"),
-                }
-            }
-            other => panic!("Expected nonce error, got: {:?}", other),
+                    _ => panic!(
+                        "Expected CheckUniquenessFailed error, got: {:?}",
+                        contents.error
+                    ),
+                },
+                _ => panic!("Expected Skipped receipt"),
+            },
+            other => panic!("Expected nonce error, got: {other:?}"),
         }
 
         // Verify no TXs were executed

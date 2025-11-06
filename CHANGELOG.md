@@ -3,6 +3,8 @@
 - #2032 Upgrade Reth/Revm to 1.9.0
 - #2036 Extends documentation of runner config
 - #2042 Fixes runner polling issue
+- #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
+  - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
 
 # 2025-11-05
 - #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
@@ -10,9 +12,6 @@
 - #2025 Breaking change for DaService implementations: `DaService::get_signer` now returns option. It is possible to return None if DaService can be configured without signer.
 - #2030 Adds new optional parameter to the rollup_config.toml: `runner.pre_fetched_blocks_capacity` with default value 20. 
   This has an effect on how many blocks pre-fetcher is going to fetch before waiting for node to consume them.
-# 2025-11-03
-- #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
-  - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
 
 # 2025-11-01
 - #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
