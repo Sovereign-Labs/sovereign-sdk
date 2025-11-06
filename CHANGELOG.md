@@ -1,5 +1,7 @@
 # 2025-11-05
 - #2025 Breaking change for DaService implementations: `DaService::get_signer` now returns option. It is possible to return None if DaService can be configured without signer.
+- #2030 Adds new optional parameter to the rollup_config.toml: `runner.pre_fetched_blocks_capacity` with default value 20. 
+  This has an effect on how many blocks pre-fetcher is going to fetch before waiting for node to consume them.
 
 # 2025-11-01
 - #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
