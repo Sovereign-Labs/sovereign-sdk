@@ -181,6 +181,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         _sequencer: Arc<Seq>,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _shutdown_receiver: watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -218,7 +219,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?;
 
                 let mut endpoints = self
-                    .sequencer_additional_apis(sequencer.clone(), rollup_config)
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                    )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
                     SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
@@ -250,7 +255,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?;
 
                 let mut endpoints = self
-                    .sequencer_additional_apis(sequencer.clone(), rollup_config)
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                    )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
                     SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),

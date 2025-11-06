@@ -2,6 +2,7 @@
 - #2032 Upgrade Reth/Revm to 1.9.0
 
 # 2025-11-05
+- #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
 - #2011 Introduce ContractCreationPolicy allowing to whitelist addresses that can deploy contracts.
 - #2025 Breaking change for DaService implementations: `DaService::get_signer` now returns option. It is possible to return None if DaService can be configured without signer.
 - #2030 Adds new optional parameter to the rollup_config.toml: `runner.pre_fetched_blocks_capacity` with default value 20. 

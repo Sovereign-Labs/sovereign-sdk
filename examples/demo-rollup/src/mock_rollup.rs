@@ -101,6 +101,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         &self,
         sequencer: Arc<Seq>,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -110,6 +111,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
             buffer_raw_txs: true,
+            shutdown_receiver,
         };
 
         Ok(NodeEndpoints {
