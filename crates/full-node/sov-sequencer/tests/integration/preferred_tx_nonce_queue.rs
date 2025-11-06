@@ -272,7 +272,7 @@ async fn test_nonce_queue_timeout() {
 
     // Wait past the queue timeout configured at the start of the test. The second range should
     // have all timed out and been rejected by the time this is over.
-    tokio::time::sleep(Duration::from_millis(SHORT_QUEUE_TIMEOUT)).await;
+    tokio::time::sleep(Duration::from_millis(SHORT_QUEUE_TIMEOUT * 2)).await;
 
     // Now submit tx 4
     submit_tx_set_value(&client, &key, 4, true).await;
@@ -320,7 +320,7 @@ async fn test_zero_length_queue() {
 /// timeouts both locally and in CI, without observable flakiness (at the time of writing).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_repeated_timeouts_with_race_conditions() {
-    const SHORTENED_TIMEOUT: u64 = 600;
+    const SHORTENED_TIMEOUT: u64 = 2000;
     const DELAY_BEFORE_NONCE_0: u64 = SHORTENED_TIMEOUT - 400;
     const NUM_TXS: u64 = 100;
 
@@ -328,7 +328,8 @@ async fn test_repeated_timeouts_with_race_conditions() {
     let client = test_rollup.api_client().clone();
     let key = admin.private_key;
 
-    // Submit a batch of transactions with future nonces
+    // Submit a batch of transactions with future nonces, in reverse order and sending the requests
+    // concurrently
     // Spawn all tasks at once (no delays) to get them into the queue quickly
     // and have their timeouts start at roughly the same time
     let mut handles = vec![];

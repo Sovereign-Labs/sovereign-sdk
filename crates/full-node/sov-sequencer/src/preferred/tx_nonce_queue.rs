@@ -307,7 +307,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         credential_id: &CredentialId,
         next_valid_nonce: u64,
     ) -> Option<QueuedTx<S, Rt>> {
-        let Some(mut queue_lock) = self.queues.get_mut(&credential_id) else {
+        let Some(mut queue_lock) = self.queues.get_mut(credential_id) else {
             return None; // No queue for this address
         };
 
