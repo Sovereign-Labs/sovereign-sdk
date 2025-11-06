@@ -1,7 +1,6 @@
-use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
 use alloy::providers::{Provider, ProviderBuilder};
-use alloy::rpc::types::{Filter, TransactionRequest};
+use alloy::rpc::types::{TransactionRequest};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
@@ -10,10 +9,7 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
-use std::time::Instant;
-
-use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
-use sov_eth_client::LogsWithCursorProvider;
+use crate::{logs::run_logs_test, uniswap::UniSoakTest};
 
 mod logs;
 mod simple_storage;
@@ -158,64 +154,6 @@ async fn fund_worker_accounts(
 
         root_client.send_transaction(tx).await?.watch().await?;
     }
-    Ok(())
-}
-
-/// Spawns multiple log test workers, runs them, and retrieves all generated logs.
-async fn run_logs_test(
-    rpc_addr: SocketAddr,
-    private_key: &str,
-    tx_count: usize,
-    logs_per_tx: usize,
-    num_workers: usize,
-) -> Result<()> {
-    validate_worker_count(num_workers)?;
-    // Set up root account and fund workers
-    let root_signer: PrivateKeySigner = private_key.parse()?;
-    let root_client = alloy_client(rpc_addr, root_signer.clone())?;
-    fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
-    let from_block = root_client.get_block_number().await?;
-
-    // Spawn workers
-    let produce_logs = Instant::now();
-    let mut handles = Vec::with_capacity(num_workers);
-    for worker_idx in 0..num_workers {
-        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone())?;
-
-        handles.push(tokio::spawn(async move {
-            match LogsSoakTest::new(client, worker_idx).await {
-                Ok(test) => {
-                    if let Err(e) = test.run(tx_count, logs_per_tx).await {
-                        eprintln!("Worker {worker_idx} error during run: {e:?}");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Worker {worker_idx} failed to deploy contracts: {e:?}");
-                }
-            }
-            Ok::<(), anyhow::Error>(())
-        }));
-    }
-    try_join_all(handles).await?;
-    println!(
-        "Produced {} logs in {:?}",
-        num_workers * tx_count * logs_per_tx,
-        produce_logs.elapsed()
-    );
-
-    // Retrieve and count all logs
-    let filter: Filter = Filter::new()
-        .from_block(from_block)
-        .to_block(BlockNumberOrTag::Pending);
-    let fetch_logs = Instant::now();
-    let logs = root_client.get_all_logs_with_cursor(&filter).await?;
-    println!(
-        "Retrieved {} logs in {:?}",
-        logs.len(),
-        fetch_logs.elapsed()
-    );
-
     Ok(())
 }
 
