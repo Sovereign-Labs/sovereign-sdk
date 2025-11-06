@@ -159,6 +159,7 @@ where
         sync_state: Arc<DaSyncState>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
+        tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
         let mut background_handles = Vec::new();
 
         // This sender is not used immediately,
@@ -213,7 +214,7 @@ where
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
             da_service.clone(),
             first_unprocessed_height_at_startup,
-            runner_config.get_concurrent_sync_tasks(),
+            runner_config.concurrent_sync_tasks,
             runner_config.pre_fetched_blocks_capacity.get(),
             shutdown_receiver.clone(),
         )

@@ -321,7 +321,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                     &self.config.axum_host,
                     self.config.axum_port,
                 ),
-                concurrent_sync_tasks: Some(1),
+                concurrent_sync_tasks: 1,
                 pre_fetched_blocks_capacity: NonZero::new(3).unwrap(),
                 save_tx_bodies: false,
             },
