@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use dashmap::DashMap;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::ApiState;
@@ -19,7 +20,7 @@ use super::{err_invalid_nonce, Confirmation};
 pub(crate) type TransactionReceiverResult<S, Rt> =
     Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>;
 
-pub struct QueuedTx<S: Spec, Rt: Runtime<S>> {
+struct QueuedTx<S: Spec, Rt: Runtime<S>> {
     pub tx: FullyBakedTx,
     pub tx_hash: TxHash,
     pub original_tx_queue_id: u64,
@@ -27,7 +28,7 @@ pub struct QueuedTx<S: Spec, Rt: Runtime<S>> {
         oneshot::Sender<Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>>,
 }
 
-pub struct AddressQueue<S: Spec, Rt: Runtime<S>> {
+struct AddressQueue<S: Spec, Rt: Runtime<S>> {
     txs: BTreeMap<u64, QueuedTx<S, Rt>>,
     /// Tracks a nonce that has been removed from the queue for execution but hasn't completed yet,
     /// since it's no longer in the queue but it still satisfies the prerequisite for future nonces
@@ -120,17 +121,16 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
 
 /// This trait encodes the functionality that the TxNonceQueues need for handling submission of
 /// queued transactions.
+#[async_trait]
 pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>> {
     fn get_current_nonce_for_user(&self, credential_id: &CredentialId) -> u64;
-    fn execute_tx(
+    async fn execute_tx(
         &self,
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
-    ) -> impl std::future::Future<
-        Output = Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>,
-    > + std::marker::Send;
+    ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>;
 }
 
 /// The Sequencer backend is a standard implementation when the TxNonceQueues object is used in the
@@ -152,6 +152,7 @@ impl<S: Spec, Rt: Runtime<S>> Clone for SequencerTxExecutionBackend<S, Rt> {
     }
 }
 
+#[async_trait]
 impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecutionBackend<S, Rt> {
     fn get_current_nonce_for_user(&self, credential_id: &CredentialId) -> u64 {
         let mut state = self.api_state.default_api_state_accessor();
@@ -167,10 +168,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         reason: &'static str,
-    ) -> Result<
-        Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
-        SequencerStateUpdatorError,
-    > {
+    ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
         self.state_updator
             .accept_tx_msg(baked_tx, tx_hash, original_tx_queue_id, reason)
             .await
@@ -214,7 +212,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     }
 
     /// Lock the queue for a specific address for atomic nonce check + enqueue
-    pub fn lock_for_address(
+    fn lock_for_address(
         &self,
         credential_id: CredentialId,
     ) -> dashmap::mapref::entry::Entry<CredentialId, AddressQueue<S, Rt>> {
@@ -224,7 +222,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     /// Enqueue a transaction.
     /// Caller needs to hold lock from lock_for_address. This function consumes the Entry holding
     /// the lock inside the map, unlocking it after the function returns.
-    pub fn enqueue_and_unlock(
+    fn enqueue_and_unlock(
         queue_entry: dashmap::mapref::entry::Entry<CredentialId, AddressQueue<S, Rt>>,
         result_sender: oneshot::Sender<
             Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>,
@@ -252,7 +250,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     }
 
     /// Remove a transaction by nonce
-    pub fn evict(&self, credential_id: &CredentialId, nonce: u64) -> Option<QueuedTx<S, Rt>> {
+    fn evict(&self, credential_id: &CredentialId, nonce: u64) -> Option<QueuedTx<S, Rt>> {
         let mut entry = self.queues.get_mut(credential_id)?;
         let tx = entry.remove(nonce)?;
 
@@ -266,7 +264,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     }
 
     /// Check if there's a contiguous sequence of transactions up to target_nonce
-    pub fn has_prerequisites_to_nonce(
+    fn has_prerequisites_to_nonce(
         &self,
         credential_id: &CredentialId,
         tx_nonce: u64,
@@ -279,7 +277,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     }
 
     /// Drain all ready transactions starting from expected_nonce until a gap or error
-    pub async fn drain_any_ready_transactions(
+    async fn drain_any_ready_transactions(
         &self,
         credential_id: CredentialId,
         mut expected_nonce: u64,
@@ -287,14 +285,14 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         loop {
             // Lock and check if next tx is ready
             let queued_tx = {
-                let mut queue = match self.queues.get_mut(&credential_id) {
+                let mut queue_lock = match self.queues.get_mut(&credential_id) {
                     Some(queue) => queue,
                     None => return, // No queue for this address
                 };
 
                 // Check if head has the expected nonce
                 let tx = loop {
-                    let head_entry = match queue.head() {
+                    let head_entry = match queue_lock.head() {
                         Some(entry) => entry,
                         None => return, // Empty queue
                     };
@@ -312,7 +310,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                             // First transaction is the next expected nonce. Pop it and mark as executing.
                             let nonce = *head_entry.key();
                             let tx = head_entry.remove();
-                            queue.mark_executing(nonce);
+                            queue_lock.mark_executing(nonce);
                             break tx;
                         }
                     }
@@ -918,6 +916,7 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl TxExecutionBackend<TestSpec, TestRuntime> for MockTxExecutionBackend {
         fn get_current_nonce_for_user(&self, _credential_id: &CredentialId) -> u64 {
             self.current_nonce.load(Ordering::SeqCst)
@@ -929,13 +928,8 @@ mod tests {
             tx_hash: TxHash,
             _original_tx_queue_id: u64,
             _reason: &'static str,
-        ) -> Result<
-            Result<
-                oneshot::Receiver<AcceptedTx<Confirmation<TestSpec, TestRuntime>>>,
-                AcceptTxError<TestSpec>,
-            >,
-            SequencerStateUpdatorError,
-        > {
+        ) -> Result<TransactionReceiverResult<TestSpec, TestRuntime>, SequencerStateUpdatorError>
+        {
             // Add delay if configured
             if !self.execution_delay.is_zero() {
                 tokio::time::sleep(self.execution_delay).await;
@@ -965,16 +959,13 @@ mod tests {
 
             // Simulate successful execution
             let (tx, rx) = oneshot::channel();
-            let baked_tx_clone = baked_tx.clone();
-            tokio::spawn(async move {
-                let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
-                    tx: baked_tx_clone,
-                    tx_hash,
-                    confirmation: create_default_confirmation(),
-                });
+            let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
+                tx: baked_tx.clone(),
+                tx_hash,
+                confirmation: create_default_confirmation(),
             });
 
-            // Auto-increment nonce on successful execution
+            // Increment nonce on successful execution
             self.increment_nonce();
 
             Ok(Ok(rx))
