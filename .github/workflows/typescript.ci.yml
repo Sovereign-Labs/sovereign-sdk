@@ -30,10 +30,11 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: ./typescript/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: "pnpm"
+          cache-dependency-path: "./typescript/pnpm-lock.yaml"
       # bun is used to compile indexer
       - uses: oven-sh/setup-bun@v2
         with:
