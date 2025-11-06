@@ -1,5 +1,7 @@
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
+use alloy_consensus::Sealed;
+use alloy_rpc_types::Header;
 use alloy_rpc_types::pubsub::Params;
 use alloy_rpc_types::pubsub::SubscriptionKind;
 use alloy_rpc_types::Filter;
@@ -35,8 +37,19 @@ where
     let kind: SubscriptionKind = parameters.next()?;
     let params: Params = parameters.optional_next()?.unwrap_or_default();
 
-    let log_filter = match validate_params_for_log_subscription(kind, params) {
-        Ok(log_filter) => log_filter,
+     match validate_params_subscription(kind, params) {
+        Ok(SupportedSubscriptionParams::Logs(filter)) =>  {
+            let accepted_sink = pending.accept().await?;
+            let _task = tokio::spawn(async move {
+                stream_logs(accepted_sink, filter, ethereum.clone()).await;
+            });
+        }
+        Ok(SupportedSubscriptionParams::NewHeads) =>  {
+            let accepted_sink = pending.accept().await?;
+            let _task = tokio::spawn(async move {
+                stream_new_heads(accepted_sink, ethereum.clone()).await;
+            });
+        }
         Err(e) => {
             let rpc_err = to_jsonrpsee_error_object(e, ETH_RPC_ERROR);
             pending.reject(rpc_err).await;
@@ -44,12 +57,7 @@ where
         }
     };
 
-    let accepted_sink = pending.accept().await?;
-
-    let _task = tokio::spawn(async move {
-        stream_logs(accepted_sink, log_filter, ethereum.clone()).await;
-    });
-
+    
     Ok(())
 }
 
@@ -145,32 +153,107 @@ async fn stream_logs<S, Seq>(
     }
 }
 
+
+async fn stream_new_heads<S, Seq>(
+    accepted_sink: SubscriptionSink,
+    ethereum: Arc<Ethereum<S, Seq>>,
+) where
+    S: Spec,
+    Seq: Sequencer<Spec = S>,
+    S::Address: FromVmAddress<EthereumAddress>,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+{
+    let evm = Evm::<S>::default();
+    let state = &mut ethereum.api_state_accessor();
+
+    
+    let mut last_sent_block_number = *evm.block_numbers(state).end();
+
+    let state_updates = &mut ethereum.sequencer.api_state().checkpoint_receiver();
+
+    while state_updates.changed().await.is_ok() {
+        let state = &mut ethereum.api_state_accessor();
+        let all_block_numbers = evm.block_numbers(state);
+        let block_number = *all_block_numbers.end();
+        if block_number < last_sent_block_number {
+            tracing::error!(block_number, last_sent_block_number, "Block number is less than last sent block number. This means the chain re-orged!");
+            panic!("Block number is less than last sent block number. This means the chain re-orged!");
+        }
+
+        if block_number != last_sent_block_number {
+            for unsent_block_number in (last_sent_block_number + 1)..=block_number {
+                last_sent_block_number = unsent_block_number;
+                let block = evm.get_maybe_sealed_block(unsent_block_number, state).unwrap_or_else(|| panic!("The impossible happend: failed to get sealed block by number for a block in range. Block number: {unsent_block_number}. Current range: {all_block_numbers:?}"));
+                let hash = block.hash().unwrap_or_default();
+                let header = Sealed::new_unchecked(block.header().clone(), hash);
+                let header = Header::from_consensus(header, None, None);
+
+                let msg = SubscriptionMessage::new(
+                    accepted_sink.method_name(),
+                    accepted_sink.subscription_id(),
+                    &header,
+                )
+                .unwrap_or_else(|err| {
+                    panic!("Impossible: can't serialize header. Header: {header:?}, Err: {err:?}",)
+                });
+
+                if let Err(err) = accepted_sink.send(msg).await {
+                    tracing::info!(%err, "The subscription client disconnected from the server.");
+                    return;
+                }
+
+            }
+        }
+
+    }
+}
+
 #[derive(Error, Debug)]
 enum ParamsValidationError {
     #[error("Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor")]
     BlockOptionParam,
     #[error("Boolean parameters are not supported in LOG subscriptions")]
     BoolParam,
-    #[error("Only LOG subscriptions are supported")]
-    OnlyLogSubscription,
+    #[error("Only LOG or NEW_HEADS subscriptions are supported")]
+    OnlyLogOrNewHeadsSubscription,
+    #[error("No paramaters are supported for NEW_HEADS subscriptions")]
+    ParamsForNewHeadsSubscription,
 }
 
-fn validate_params_for_log_subscription(
+enum SupportedSubscriptionParams {
+    Logs(Box<Filter>),
+    NewHeads,
+}
+
+fn validate_params_subscription(
     kind: SubscriptionKind,
     params: Params,
-) -> Result<Box<Filter>, ParamsValidationError> {
-    if kind != SubscriptionKind::Logs {
-        return Err(ParamsValidationError::OnlyLogSubscription);
-    }
-    match params {
-        Params::Logs(filter) => {
-            if filter.block_option == FilterBlockOption::default() {
-                Ok(filter)
-            } else {
-                Err(ParamsValidationError::BlockOptionParam)
-            }
+) -> Result<SupportedSubscriptionParams, ParamsValidationError> {
+    match kind {
+        SubscriptionKind::Logs =>{
+            let filter = match params {
+                Params::Logs(filter) => {
+                    if filter.block_option == FilterBlockOption::default() {
+                        filter
+                    } else {
+                        return Err(ParamsValidationError::BlockOptionParam)
+                    }
+                }
+                Params::Bool(_) => return Err(ParamsValidationError::BoolParam),
+                Params::None => Default::default(),
+            };
+            return Ok(SupportedSubscriptionParams::Logs(filter));
         }
-        Params::Bool(_) => Err(ParamsValidationError::BoolParam),
-        Params::None => Ok(Default::default()),
+        SubscriptionKind::NewHeads => {
+            if params != Params::None {
+                return Err(ParamsValidationError::ParamsForNewHeadsSubscription);
+            }
+            return Ok(SupportedSubscriptionParams::NewHeads);
+        }
+        _ => {
+            return Err(ParamsValidationError::OnlyLogOrNewHeadsSubscription);
+        }
     }
+
+   
 }
