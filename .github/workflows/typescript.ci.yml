@@ -3,8 +3,12 @@ name: CI (TypeScript)
 on:
   push:
     branches: ["nightly", "stable", "dev"]
+    paths: &typescript-paths
+      - "typescript/**"
+      - "crates/universal-wallet/**"
   pull_request:
     types: [opened, synchronize]
+    paths: *typescript-paths
   workflow_dispatch: {}
 
 jobs:
