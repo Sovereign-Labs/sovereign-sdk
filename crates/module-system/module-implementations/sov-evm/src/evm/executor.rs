@@ -25,7 +25,7 @@ pub const DEFAULT_MAX_CONTRACT_CODE_SIZE: usize = 512 * 1024;
 // Copies context-dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
     block_env: &BlockEnv,
-    cfg: EvmRuntimeConfig,
+    cfg: &EvmRuntimeConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
@@ -102,6 +102,8 @@ mod tests {
     use revm::primitives::hardfork::SpecId;
     use sov_modules_api::macros::config_value;
 
+    use crate::ContractCreationPolicy;
+
     use super::*;
 
     #[test]
@@ -117,13 +119,14 @@ mod tests {
                 ..Default::default()
             },
             hardforks: vec![(0, SpecId::CANCUN)],
+            contract_creation_policy: ContractCreationPolicy::Everyone,
         };
 
         let mut template_cfg_env = CfgEnv::default();
         template_cfg_env.chain_id = 2;
         template_cfg_env.disable_base_fee = true;
 
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(template_cfg_env));
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(template_cfg_env));
 
         let mut expected_cfg_env = CfgEnv::default();
         expected_cfg_env.chain_id = config_value!("CHAIN_ID");
