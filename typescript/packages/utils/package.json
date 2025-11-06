@@ -1,0 +1,35 @@
+{
+  "name": "@sovereign-sdk/utils",
+  "version": "0.0.4",
+  "description": "Utility package providing common util functions used across sovereign packages",
+  "scripts": {
+    "build": "tsup",
+    "ci": "biome ci",
+    "fix": "biome check --write",
+    "lint": "biome lint",
+    "test": "vitest run"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "files": ["dist", "README.md", "package.json"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "4.0.7"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

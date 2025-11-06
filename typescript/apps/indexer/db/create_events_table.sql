@@ -1,0 +1,8 @@
+CREATE TABLE rollup_events (
+    id SERIAL PRIMARY KEY,
+    number INTEGER NOT NULL UNIQUE,
+    key TEXT NOT NULL,
+    value JSONB NOT NULL,
+    module TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
