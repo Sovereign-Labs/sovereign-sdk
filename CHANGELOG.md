@@ -1,3 +1,27 @@
+# 2025-11-06
+- #2032 Upgrade Reth/Revm to 1.9.0
+
+# 2025-11-05
+- #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
+- #2011 Introduce ContractCreationPolicy allowing to whitelist addresses that can deploy contracts.
+- #2025 Breaking change for DaService implementations: `DaService::get_signer` now returns option. It is possible to return None if DaService can be configured without signer.
+- #2030 Adds new optional parameter to the rollup_config.toml: `runner.pre_fetched_blocks_capacity` with default value 20. 
+  This has an effect on how many blocks pre-fetcher is going to fetch before waiting for node to consume them.
+
+# 2025-11-01
+- #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
+- #2006 Add associated Error type to the EVM module.
+- #2008 Treat `Latest` as `Pending` in EVM module to avoid foundry issues.
+
+# 2025-10-31
+- #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
+- #2007 Changes celestia rollup metrics, please switch to new dashboard.
+
+# 2025-10-29
+- #1996 Set gas limit to 1B on ETH API access.
+- #1838 Add binary WebSocket frame support to RPC server and client.
+- #1997 Fix `eth_sendTransaction` contract deployments without gas limit by converting `to: null` to `TxKind::Create`.
+
 # 2025-10-28
 - #1987 Added `newHeads` subscription to `eth_subscribe`.
 

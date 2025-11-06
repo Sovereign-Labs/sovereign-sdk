@@ -105,6 +105,7 @@ where
         &self,
         sequencer: Arc<Seq>,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,

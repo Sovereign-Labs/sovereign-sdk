@@ -27,7 +27,8 @@ pub(crate) async fn start_http_server(
     let listener = tokio::net::TcpListener::bind(listen_address_http).await?;
     let rest_address = listener.local_addr()?;
 
-    let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
+    let (rpc_router, server_handle) =
+        rpc_module_to_router(methods, cors_configuration, shutdown_receiver.clone());
 
     let handle = tokio::spawn(async move {
         tracing::info!(%rest_address, "Starting HTTP server");
@@ -67,6 +68,7 @@ pub(crate) async fn start_http_server(
 pub fn rpc_module_to_router(
     methods: RpcModule<()>,
     cors_config: CorsConfiguration,
+    shutdown_receiver: watch::Receiver<()>,
 ) -> (axum::Router, jsonrpsee::server::ServerHandle) {
     let (stop_handle, server_handle) = jsonrpsee::server::stop_channel();
 
@@ -102,9 +104,11 @@ pub fn rpc_module_to_router(
     (
         axum::Router::new().route(
             "/",
-            axum::routing::get(move |ws_upgrade| ws_rpc_handler(ws_upgrade, methods.clone()))
-                .post_service(rpc_service)
-                .layer(cors_layer),
+            axum::routing::get(move |ws_upgrade| {
+                ws_rpc_handler(ws_upgrade, methods.clone(), shutdown_receiver)
+            })
+            .post_service(rpc_service)
+            .layer(cors_layer),
         ),
         server_handle,
     )
@@ -144,9 +148,10 @@ async fn measure_time(
 async fn ws_rpc_handler(
     ws: axum::extract::ws::WebSocketUpgrade,
     rpc_methods: RpcModule<()>,
+    shutdown_receiver: watch::Receiver<()>,
 ) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |socket| async move {
-        handle_socket(socket, rpc_methods).await;
+        handle_socket(socket, rpc_methods, shutdown_receiver.clone()).await;
     })
 }
 
@@ -156,71 +161,117 @@ async fn ws_rpc_handler(
 //    In the case of subscriptions, the reader task clones `tokio::sync::mpsc::Sender` and spawns another task,
 //    where subscription responses are piped to the writer task.
 // 2. Writer task listens to [`tokio::sync::mpsc::Receiver`] and writes responses to websocket.
-async fn handle_socket(socket: WebSocket, rpc_methods: RpcModule<()>) {
+//
+// When the WebSocket closes, the writer task exits and drops the socket_responses receiver,
+// which causes all subscription forwarding tasks to stop sending (their send() calls will fail).
+async fn handle_socket(
+    socket: WebSocket,
+    rpc_methods: RpcModule<()>,
+    shutdown_receiver: watch::Receiver<()>,
+) {
     let (sender, receiver) = socket.split();
 
     let (socket_requests, socket_responses) = tokio::sync::mpsc::channel(10);
 
-    tokio::spawn(handle_socket_write(socket_responses, sender));
-    tokio::spawn(handle_socket_read(receiver, socket_requests, rpc_methods));
+    tokio::spawn(handle_socket_write(
+        socket_responses,
+        sender,
+        shutdown_receiver.clone(),
+    ));
+    tokio::spawn(handle_socket_read(
+        receiver,
+        socket_requests,
+        rpc_methods,
+        shutdown_receiver.clone(),
+    ));
+}
+
+async fn handle_rpc_message(
+    text: &str,
+    socket_responses: &tokio::sync::mpsc::Sender<Message>,
+    rpc_methods: &RpcModule<()>,
+    use_binary: bool,
+) {
+    // Buffer size picked up from `jsonrpsee` crate examples
+    match rpc_methods.raw_json_request(text, 1).await {
+        Ok((rpc_response, mut receiver)) => {
+            tracing::trace!("RPC request processed successfully: {}", rpc_response);
+            let response_message = if use_binary {
+                Message::Binary(rpc_response.to_string().into_bytes())
+            } else {
+                Message::Text(rpc_response.to_string())
+            };
+
+            if socket_responses.send(response_message).await.is_err() {
+                tracing::error!("Websocket sender has been closed, aborting websocket");
+                return;
+            }
+
+            if !receiver.is_closed() {
+                let subscription_responses = socket_responses.clone();
+                tokio::task::spawn(async move {
+                    tracing::trace!("Spawning subscription responses loop");
+                    while let Some(message) = receiver.recv().await {
+                        tracing::trace!("Subscription message received: {}", message);
+                        let sub_message = if use_binary {
+                            Message::Binary(message.to_string().into_bytes())
+                        } else {
+                            Message::Text(message.to_string())
+                        };
+                        if let Err(error) = subscription_responses.send(sub_message).await {
+                            tracing::debug!(%error, "WebSocket closed, stopping subscription forwarding");
+                            break;
+                        }
+                    }
+                    tracing::trace!("Subscription forwarding task finished");
+                });
+            }
+        }
+        Err(error) => {
+            tracing::error!(%error, "Error while processing RPC request");
+        }
+    }
 }
 
 async fn handle_socket_read(
     mut socket_requests: futures_util::stream::SplitStream<WebSocket>,
     socket_responses: tokio::sync::mpsc::Sender<Message>,
     rpc_methods: RpcModule<()>,
+    mut shutdown_receiver: watch::Receiver<()>,
 ) {
-    while let Some(Ok(msg)) = socket_requests.next().await {
-        tracing::trace!(message = ?msg, "Message received from websocket");
-        match msg {
-            Message::Text(text) => {
-                // Buffer size picked up from `jsonrpsee` crate examples
-                match rpc_methods.raw_json_request(&text, 1).await {
-                    Ok((rpc_response, mut receiver)) => {
-                        tracing::trace!("RPC request processed successfully: {}", rpc_response);
-                        if socket_responses
-                            .send(Message::Text(rpc_response.to_string()))
-                            .await
-                            .is_err()
-                        {
+    loop {
+        tokio::select! {
+            Some(Ok(msg)) = socket_requests.next() => {
+                tracing::trace!(message = ?msg, "Message received from websocket");
+                match msg {
+                    Message::Text(text) => {
+                        handle_rpc_message(&text, &socket_responses, &rpc_methods, false).await;
+                    }
+                    Message::Binary(data) => {
+                        // Parse binary frame as UTF-8 JSON-RPC request
+                        match std::str::from_utf8(&data) {
+                            Ok(text) => {
+                                handle_rpc_message(text, &socket_responses, &rpc_methods, true).await;
+                            }
+                            Err(error) => {
+                                tracing::error!(%error, "Invalid UTF-8 in binary WebSocket frame");
+                            }
+                        }
+                    }
+                    Message::Pong(_) => {}
+                    Message::Ping(ping) => {
+                        if socket_responses.send(Message::Pong(ping)).await.is_err() {
                             tracing::error!("Websocket sender has been closed, aborting websocket");
                             break;
                         }
-
-                        if !receiver.is_closed() {
-                            let subscription_responses = socket_responses.clone();
-                            tokio::task::spawn(async move {
-                                tracing::trace!("Spawning subscription responses loop");
-                                while let Some(message) = receiver.recv().await {
-                                    tracing::trace!("Subscription message received: {}", message);
-                                    if let Err(error) = subscription_responses
-                                        .send(Message::Text(message.to_string()))
-                                        .await
-                                    {
-                                        tracing::error!(%error, "Error while sending RPC response");
-                                    }
-                                }
-                                tracing::trace!("Subscription channel closed");
-                            });
-                        }
                     }
-                    Err(error) => {
-                        tracing::error!(%error, "Error while processing RPC request");
+                    Message::Close(_) => {
+                        break;
                     }
                 }
             }
-            // NOTE: No support for binary formats.
-            Message::Binary(_) => {
-                tracing::warn!("Binary JSON RPC messages are not supported");
-            }
-            Message::Pong(_) => {}
-            Message::Ping(ping) => {
-                if socket_responses.send(Message::Pong(ping)).await.is_err() {
-                    tracing::error!("Websocket sender has been closed, aborting websocket");
-                    break;
-                }
-            }
-            Message::Close(_) => {
+            _ = shutdown_receiver.changed() => {
+                tracing::debug!("Shutdown signal received, stopping WebSocket read handler");
                 break;
             }
         }
@@ -231,13 +282,24 @@ async fn handle_socket_read(
 async fn handle_socket_write(
     mut socket_requests: tokio::sync::mpsc::Receiver<Message>,
     mut socket_responses: futures_util::stream::SplitSink<WebSocket, Message>,
+    mut shutdown_receiver: watch::Receiver<()>,
 ) {
-    while let Some(response) = socket_requests.recv().await {
-        if let Err(error) = socket_responses.send(response).await {
-            tracing::error!(%error, "Error while sending RPC response");
+    loop {
+        tokio::select! {
+            Some(response) = socket_requests.recv() => {
+                if let Err(error) = socket_responses.send(response).await {
+                    tracing::debug!(%error, "WebSocket closed, stopping writer task");
+                    break;
+                }
+                tracing::trace!("Message sent to websocket");
+            }
+            _ = shutdown_receiver.changed() => {
+                tracing::debug!("Shutdown signal received, stopping WebSocket write handler");
+                break;
+            }
         }
-        tracing::trace!("Message sent to websocket");
     }
+    tracing::trace!("WebSocket write handler finished");
 }
 
 #[cfg(test)]
