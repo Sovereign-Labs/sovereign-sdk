@@ -83,6 +83,7 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                 }
             }
             _ = interval.tick() => {
+                // TODO: Need to add a way to know if future above has been cancelled.
                 requested_height = check_height(requested_height);
             }
             _ = &mut sleep => {
