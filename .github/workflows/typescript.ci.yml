@@ -23,11 +23,13 @@ jobs:
       - name: Cache turbo build setup
         uses: actions/cache@v4
         with:
-          path: .turbo
+          path: "./typescript/.turbo"
           key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-turbo-
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ./typescript/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
