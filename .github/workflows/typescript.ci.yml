@@ -1,0 +1,49 @@
+name: CI (TypeScript)
+
+on:
+  push:
+    branches: ["nightly", "stable", "dev"]
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./typescript
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache turbo build setup
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: "pnpm"
+      # bun is used to compile indexer
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.5
+      - name: Install dependencies
+        run: pnpm install
+      - name: Lint and Format
+        run: pnpm run ci
+        # Need to build wasm package first
+      - name: Build
+        run: pnpm build
+      - name: Test
+        run: pnpm coverage
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Check docs build
+        run: pnpm run docs
