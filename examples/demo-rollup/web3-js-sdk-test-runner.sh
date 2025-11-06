@@ -89,7 +89,7 @@ pnpm build
 
 pnpm exec vitest --project integration --exclude apps/** --passWithNoTests=false || {
     echo "=== Demo Rollup output ==="
-    cat ../demo_rollup_log.log
+    cat ../examples/demo-rollup/demo_rollup_log.log
     exit 1
 }
 echo "Integration tests passed!"
