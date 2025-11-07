@@ -16,6 +16,7 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -95,7 +96,7 @@ where
             let mut state = self.ethereum.api_state_accessor();
             let pending_block = self.evm.pending_block(&mut state);
 
-            for block_number in block_watermark.advance(..pending_block.header.number + 1) {
+            for block_number in block_watermark.advance(..pending_block.header.number) {
                 let block = self.get_block(block_number, &mut state)?;
                 self.send_block_header(&block).await?;
             }
@@ -143,17 +144,19 @@ where
     ) -> Result<(), DisconnectError> {
         for (log_index_in_tx, log) in receipt.receipt.logs.iter().enumerate() {
             if filter.matches(log) {
-                let rpc_log = alloy_rpc_types::Log {
-                    inner: log.clone(),
-                    block_hash: block.hash(),
-                    block_number: Some(block.number()),
-                    block_timestamp: Some(time.as_millis().try_into().unwrap_or_default()),
-                    transaction_hash: Some(receipt.transaction_hash),
-                    transaction_index: Some(receipt.transaction_index),
-                    log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
-                    removed: false,
+                let rpc_log = LogWithExecutionTimestamp {
+                    log: alloy_rpc_types::Log {
+                        inner: log.clone(),
+                        block_hash: block.hash(),
+                        block_number: Some(block.number()),
+                        block_timestamp: Some(block.timestamp()),
+                        transaction_hash: Some(receipt.transaction_hash),
+                        transaction_index: Some(receipt.transaction_index),
+                        log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
+                        removed: false,
+                    },
+                    time_executed_ms: time.as_millis().try_into().unwrap_or_default(),
                 };
-
                 self.send(&rpc_log).await?;
             }
         }

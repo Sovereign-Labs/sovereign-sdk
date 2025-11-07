@@ -2,6 +2,7 @@ use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
+use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::{
     state::StateOverride, Block, BlockNumberOrTag, BlockOverrides, FeeHistory, Transaction,
     TransactionReceipt, TransactionRequest,
@@ -17,6 +18,7 @@ use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
 use sov_rpc_eth_types::EthApiError;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use tracing::debug;
 
@@ -211,7 +213,8 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Vec<TransactionReceipt>>> {
+    ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
+    {
         debug!(
             block_number,
             "EVM module JSON-RPC request to `eth_getBlockReceipts`"
@@ -225,7 +228,7 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<TransactionReceipt>> {
+    ) -> RpcResult<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>> {
         debug!(
             %hash,
             "EVM module JSON-RPC request to `eth_getTransactionReceipt`"

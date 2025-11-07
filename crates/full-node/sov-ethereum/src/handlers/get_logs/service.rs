@@ -21,6 +21,7 @@ use sov_evm::{Evm, MaybeSealedBlock, Receipt};
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -75,7 +76,7 @@ pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     cursor: Immutable<Option<Cursor>>,
     max_logs: Immutable<usize>,
     evm: Evm<S>,
-    logs: Vec<Log>,
+    logs: Vec<LogWithExecutionTimestamp>,
     logs_serialized_size: usize,
     state: ApiStateAccessor<S>,
     _phantom: PhantomData<(S, Seq)>,
@@ -266,15 +267,18 @@ where
             if !self.filter.matches(&log) {
                 continue;
             }
-            let rpc_log = Log {
-                inner: log,
-                block_hash: block.hash(),
-                block_number: Some(receipt.block_number),
-                block_timestamp: Some(time.as_millis().try_into().unwrap_or_default()),
-                transaction_hash: Some(receipt.transaction_hash),
-                transaction_index: Some(receipt.transaction_index),
-                log_index: Some(receipt.log_index_start + idx as u64),
-                removed: false,
+            let rpc_log = LogWithExecutionTimestamp {
+                log: Log {
+                    inner: log,
+                    block_hash: block.hash(),
+                    block_number: Some(receipt.block_number),
+                    block_timestamp: Some(block.timestamp()),
+                    transaction_hash: Some(receipt.transaction_hash),
+                    transaction_index: Some(receipt.transaction_index),
+                    log_index: Some(receipt.log_index_start + idx as u64),
+                    removed: false,
+                },
+                time_executed_ms: time.as_millis().try_into().unwrap_or_default(),
             };
             let log_size = serialized_size(&rpc_log);
             if self.logs_serialized_size + log_size >= RESPONSE_SIZE_LIMIT {
@@ -325,14 +329,15 @@ where
     }
 }
 
-fn serialized_size(log: &Log) -> usize {
+fn serialized_size(log: &LogWithExecutionTimestamp) -> usize {
     b"\"{address\":".len() + 44 // 20 byte address, hex-encoded + open/close quotes and 0x
-        + b",\"data\":".len() + 4 + log.inner.data.data.len() * 2 // 32 byte data, hex-encoded + open/close quotes and 0x + quotation marks
-        + b",\"topics\":[]".len() + log.inner.topics().len() * 68 // 32 byte topic, hex-encoded + open/close quotes and 0x
+        + b",\"data\":".len() + 4 + log.log.inner.data.data.len() * 2 // 32 byte data, hex-encoded + open/close quotes and 0x + quotation marks
+        + b",\"topics\":[]".len() + log.log.inner.topics().len() * 68 // 32 byte topic, hex-encoded + open/close quotes and 0x
         + b",\"blockHash\":".len() + 68 // Block hash (0x-prefixed + 32 data bytes) + quotation marks
         + b",\"transactionHash\":".len() + 68 // Transaction hash (0x-prefixed + 32 data bytes) + quotation mark
         + b",\"blockNumber\":".len() + 14 // Assume a billion blocks (plus open/close quotes and 0x prefix)
         + b",\"blockTimestamp\":".len() + 16 // Conservatively assume a long time (current unix timestamp is only 8 hex digits, this assumes 12)
+        + b",\"timeExecutedMs\":".len() + 19 // Time executed in milliseconds
         + b",\"transactionIndex\":".len() + 12 // Conservatively assume millions of txs per block (plus open/close quotes and 0x prefix)    
         + b",\"logIndex\":".len() + 14 // Conservatively assume 256 logs per tx
         + b",\"removed\":false}".len() // false is longer than true
