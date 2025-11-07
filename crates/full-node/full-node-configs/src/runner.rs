@@ -22,11 +22,12 @@ pub struct RunnerConfig {
     pub da_total_timeout_secs: u64,
     /// HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.
     pub http_config: HttpServerConfig,
-    /// How many concurrent tasks to prefetch DA block during sync
+    /// How many concurrent tasks to prefetch DA block during sync.
     #[serde(default = "default_concurrent_sync_tasks")]
     pub concurrent_sync_tasks: u8,
     /// How many blocks maximum will be stored in memory.
     /// It affects total concurrent requests done do DA service.
+    /// It should be larger than `concurrent_sync_tasks.
     #[serde(default = "default_prefetch_blocks_capacity")]
     pub pre_fetched_blocks_capacity: NonZero<usize>,
     /// Whether to save transaction bodies to the database.

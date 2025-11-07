@@ -32,7 +32,7 @@ where
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<(Self, tokio::task::JoinHandle<anyhow::Result<()>>)> {
         if bulk_size as usize > channel_capacity {
-            anyhow::bail!("pre_fetched_blocks_capacity={channel_capacity} should be larger than concurrent_sync_tasks={bulk_size");
+            anyhow::bail!("pre_fetched_blocks_capacity={channel_capacity} should be larger than concurrent_sync_tasks={bulk_size}");
         }
         tracing::info!(%start_height, %bulk_size, ?channel_capacity, "Initializing FinalizedBlocksBulkFetcher");
         let (blocks_sender, blocks_receiver) = tokio::sync::mpsc::channel(channel_capacity);
