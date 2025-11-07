@@ -34,42 +34,42 @@ async fn handle_socket(
     rpc_methods: RpcModule<()>,
     shutdown_receiver: watch::Receiver<()>,
 ) {
-    let (sender, receiver) = socket.split();
+    let (ws_writer, ws_reader) = socket.split();
 
-    let (socket_requests, socket_responses) = mpsc::channel(128);
+    let (msg_tx, msg_rx) = mpsc::channel(128);
 
     spawn(handle_socket_write(
-        socket_responses,
-        sender,
+        msg_rx,
+        ws_writer,
         shutdown_receiver.clone(),
     ));
     spawn(handle_socket_read(
-        receiver,
-        socket_requests,
+        ws_reader,
+        msg_tx,
         rpc_methods,
         shutdown_receiver.clone(),
     ));
 }
 
 async fn handle_socket_read(
-    mut socket_requests: SplitStream<WebSocket>,
-    socket_responses: mpsc::Sender<Message>,
+    mut ws_reader: SplitStream<WebSocket>,
+    msg_tx: mpsc::Sender<Message>,
     rpc_methods: RpcModule<()>,
     mut shutdown_receiver: watch::Receiver<()>,
 ) {
     loop {
         select! {
-            Some(Ok(msg)) = socket_requests.next() => {
+            Some(Ok(msg)) = ws_reader.next() => {
                 trace!(message = ?msg, "Message received from websocket");
                 match msg {
                     Message::Text(text) => {
-                        handle_rpc_message(&text, &socket_responses, &rpc_methods, false).await;
+                        handle_rpc_message(&text, &msg_tx, &rpc_methods, false).await;
                     }
                     Message::Binary(data) => {
                         // Parse binary frame as UTF-8 JSON-RPC request
                         match std::str::from_utf8(&data) {
                             Ok(text) => {
-                                handle_rpc_message(text, &socket_responses, &rpc_methods, true).await;
+                                handle_rpc_message(text, &msg_tx, &rpc_methods, true).await;
                             }
                             Err(error) => {
                                 error!(%error, "Invalid UTF-8 in binary WebSocket frame");
@@ -78,7 +78,7 @@ async fn handle_socket_read(
                     }
                     Message::Pong(_) => {}
                     Message::Ping(ping) => {
-                        if socket_responses.send(Message::Pong(ping)).await.is_err() {
+                        if msg_tx.send(Message::Pong(ping)).await.is_err() {
                             error!("Websocket sender has been closed, aborting websocket");
                             break;
                         }
@@ -99,7 +99,7 @@ async fn handle_socket_read(
 
 async fn handle_rpc_message(
     text: &str,
-    socket_responses: &mpsc::Sender<Message>,
+    msg_tx: &mpsc::Sender<Message>,
     rpc_methods: &RpcModule<()>,
     use_binary: bool,
 ) {
@@ -115,7 +115,7 @@ async fn handle_rpc_message(
         Message::Text(rpc_response.to_string())
     };
 
-    if socket_responses.send(response_message).await.is_err() {
+    if msg_tx.send(response_message).await.is_err() {
         return error!("Websocket sender has been closed, aborting websocket");
     }
     if receiver.is_closed() {
@@ -123,17 +123,17 @@ async fn handle_rpc_message(
     }
 
     trace!("Spawning subscription responses loop");
-    let subscription_responses = socket_responses.clone();
+    let subscription_msg_tx = msg_tx.clone();
     spawn(handle_subscription_response(
         receiver,
-        subscription_responses,
+        subscription_msg_tx,
         use_binary,
     ));
 }
 
 async fn handle_subscription_response(
     mut receiver: mpsc::Receiver<Box<JsonRawValue>>,
-    subscription_responses: mpsc::Sender<Message>,
+    msg_tx: mpsc::Sender<Message>,
     use_binary: bool,
 ) {
     while let Some(message) = receiver.recv().await {
@@ -143,7 +143,7 @@ async fn handle_subscription_response(
         } else {
             Message::Text(message.to_string())
         };
-        if let Err(error) = subscription_responses.send(sub_message).await {
+        if let Err(error) = msg_tx.send(sub_message).await {
             debug!(%error, "WebSocket closed, stopping subscription forwarding");
             break;
         }
@@ -152,14 +152,14 @@ async fn handle_subscription_response(
 }
 
 async fn handle_socket_write(
-    mut socket_requests: mpsc::Receiver<Message>,
-    mut socket_responses: SplitSink<WebSocket, Message>,
+    mut msg_rx: mpsc::Receiver<Message>,
+    mut ws_writer: SplitSink<WebSocket, Message>,
     mut shutdown_receiver: watch::Receiver<()>,
 ) {
     loop {
         select! {
-            Some(response) = socket_requests.recv() => {
-                if let Err(error) = socket_responses.send(response).await {
+            Some(response) = msg_rx.recv() => {
+                if let Err(error) = ws_writer.send(response).await {
                     debug!(%error, "WebSocket closed, stopping writer task");
                     break;
                 }
