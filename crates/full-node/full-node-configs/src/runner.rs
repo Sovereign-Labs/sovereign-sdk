@@ -27,7 +27,7 @@ pub struct RunnerConfig {
     pub concurrent_sync_tasks: u8,
     /// How many blocks maximum will be stored in memory.
     /// It affects total concurrent requests done do DA service.
-    /// It should be larger than `concurrent_sync_tasks.
+    /// It should be larger than `concurrent_sync_tasks`.
     #[serde(default = "default_prefetch_blocks_capacity")]
     pub pre_fetched_blocks_capacity: NonZero<usize>,
     /// Whether to save transaction bodies to the database.
