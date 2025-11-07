@@ -118,7 +118,7 @@ async fn evm_test_log_subscription_with_pending_blcok() {
     for log in logs_from_subscription {
         assert!(log.block_hash.is_none());
         assert_eq!(log.block_number.unwrap(), block_nr);
-        assert!(log.block_timestamp.unwrap() == 0);
+        assert_ne!(log.block_timestamp.unwrap(), 0);
     }
 }
 

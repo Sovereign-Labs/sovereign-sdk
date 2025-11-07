@@ -55,9 +55,9 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let new_timestamp = self
             .chain_state_module
-            .get_time(state)
+            .get_oracle_time_with_fallback(state)
             .unwrap_infallible()
-            .as_millis() as u64;
+            .secs() as u64;
 
         let new_pending_env = create_block_env(
             self.base_fee(),

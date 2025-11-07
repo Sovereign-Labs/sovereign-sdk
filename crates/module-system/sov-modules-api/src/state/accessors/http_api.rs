@@ -543,7 +543,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         // Allow about 1gigagas for API access
         let gas_meter = BasicGasMeter::new_with_funds_and_gas(
             Amount::MAX,
-            [ETHEREUM_BLOCK_GAS_LIMIT_30M * 33, ETHEREUM_BLOCK_GAS_LIMIT_30M * 33].into(),
+            [
+                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
+                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
+            ]
+            .into(),
             gas_price,
         );
 
@@ -600,7 +604,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         // Allow about 1gigagas for API access
         let gas_meter = BasicGasMeter::new_with_funds_and_gas(
             Amount::MAX,
-            [ETHEREUM_BLOCK_GAS_LIMIT_30M * 33, ETHEREUM_BLOCK_GAS_LIMIT_30M * 33].into(),
+            [
+                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
+                ETHEREUM_BLOCK_GAS_LIMIT_30M * 33,
+            ]
+            .into(),
             <S::Gas as Gas>::Price::ZEROED,
         );
         Self {

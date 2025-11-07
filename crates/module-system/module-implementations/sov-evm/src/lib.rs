@@ -45,6 +45,7 @@ use sov_modules_api::{
     AccessoryStateMap, AccessoryStateValue, Context, DaSpec, GenesisState, Module, ModuleId,
     ModuleInfo, Spec, StateMap, StateValue, StateVec, TxState,
 };
+use sov_rollup_interface::da::Time;
 use sov_state::codec::BcsCodec;
 
 use crate::account_storage_key::AccountStorageKey;
@@ -127,7 +128,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: Receipts.
     #[state]
-    pub receipts: AccessoryStateMap<u64, Receipt, BcsCodec>,
+    pub receipts: AccessoryStateMap<u64, (Receipt, Time), BcsCodec>,
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]

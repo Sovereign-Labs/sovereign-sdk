@@ -27,10 +27,7 @@ pub struct SeqConfigExtension {
 
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-#[schemars(
-    bound = "Address: JsonSchema, Sc: JsonSchema",
-    rename = "SequencerConfig"
-)]
+#[schemars(rename = "SequencerConfig")]
 pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
@@ -121,6 +118,46 @@ pub enum RecoveryStrategy {
     TryToSave,
 }
 
+/// Configuration for the timing oracle.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct TimingOracleConfig {
+    #[serde(default = "default_oracle_priority_fee_percentage")]
+    /// The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.
+    pub priority_fee_percentage: u8,
+    /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
+    #[serde(default = "default_oracle_max_fee")]
+    pub max_fee: u128,
+    /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
+    #[serde(default = "default_oracle_interval_millis")]
+    pub interval_millis: u64,
+    /// The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.
+    #[serde(default)]
+    pub private_key_hex: Option<String>,
+}
+
+impl Default for TimingOracleConfig {
+    fn default() -> Self {
+        Self {
+            priority_fee_percentage: default_oracle_priority_fee_percentage(),
+            max_fee: default_oracle_max_fee(),
+            interval_millis: default_oracle_interval_millis(),
+            private_key_hex: None,
+        }
+    }
+}
+
+pub const fn default_oracle_interval_millis() -> u64 {
+    50
+}
+
+pub const fn default_oracle_max_fee() -> u128 {
+    1_000_000_000_000
+}
+
+pub const fn default_oracle_priority_fee_percentage() -> u8 {
+    0
+}
+
 /// Configuration for [`PreferredSequencer`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct PreferredSequencerConfig {
@@ -160,6 +197,9 @@ pub struct PreferredSequencerConfig {
     #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
+    /// Configuration for the timing oracle.
+    #[serde(default)]
+    pub timing_oracle: TimingOracleConfig,
 }
 
 impl Default for PreferredSequencerConfig {
@@ -175,6 +215,7 @@ impl Default for PreferredSequencerConfig {
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
             num_cache_warmup_workers: default_num_cache_warmup_workers(),
+            timing_oracle: TimingOracleConfig::default(),
         }
     }
 }

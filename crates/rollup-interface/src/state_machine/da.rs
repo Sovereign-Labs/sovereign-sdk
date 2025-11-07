@@ -335,6 +335,11 @@ impl Time {
     pub const fn as_millis(&self) -> i64 {
         self.millis
     }
+
+    /// Returns true if the time is at the epoch (0 milliseconds since the unix epoch)
+    pub const fn is_unix_epoch(&self) -> bool {
+        self.millis == 0
+    }
 }
 
 /// Contains all the blobs from the relevant namespaces in the DA block.
