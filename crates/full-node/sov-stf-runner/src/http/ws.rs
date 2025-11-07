@@ -38,12 +38,12 @@ async fn handle_socket(
 
     let (msg_tx, msg_rx) = mpsc::channel(128);
 
-    spawn(handle_socket_write(
+    spawn(socket_writer_task(
         msg_rx,
         ws_writer,
         shutdown_receiver.clone(),
     ));
-    spawn(handle_socket_read(
+    spawn(socket_reader_task(
         ws_reader,
         msg_tx,
         rpc_methods,
@@ -51,7 +51,7 @@ async fn handle_socket(
     ));
 }
 
-async fn handle_socket_read(
+async fn socket_reader_task(
     mut ws_reader: SplitStream<WebSocket>,
     msg_tx: mpsc::Sender<Message>,
     rpc_methods: RpcModule<()>,
@@ -124,14 +124,14 @@ async fn handle_rpc_message(
 
     trace!("Spawning subscription responses loop");
     let subscription_msg_tx = msg_tx.clone();
-    spawn(handle_subscription_response(
+    spawn(subscription_forwarder_task(
         receiver,
         subscription_msg_tx,
         use_binary,
     ));
 }
 
-async fn handle_subscription_response(
+async fn subscription_forwarder_task(
     mut receiver: mpsc::Receiver<Box<JsonRawValue>>,
     msg_tx: mpsc::Sender<Message>,
     use_binary: bool,
@@ -151,7 +151,7 @@ async fn handle_subscription_response(
     trace!("Subscription forwarding task finished");
 }
 
-async fn handle_socket_write(
+async fn socket_writer_task(
     mut msg_rx: mpsc::Receiver<Message>,
     mut ws_writer: SplitSink<WebSocket, Message>,
     mut shutdown_receiver: watch::Receiver<()>,
