@@ -240,6 +240,7 @@ async fn test_transaction_priority() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_state_is_immediately_available() {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("warn,sov=info");
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
