@@ -4,6 +4,7 @@ use axum::response::IntoResponse;
 use futures::stream::{SplitSink, SplitStream};
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
+use jsonrpsee::core::JsonRawValue;
 use jsonrpsee::RpcModule;
 use tokio::sync::{mpsc, watch};
 use tokio::{select, spawn};
@@ -103,44 +104,51 @@ async fn handle_rpc_message(
     use_binary: bool,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
-    match rpc_methods.raw_json_request(text, 1).await {
-        Ok((rpc_response, mut receiver)) => {
-            trace!("RPC request processed successfully: {}", rpc_response);
-            let response_message = if use_binary {
-                Message::Binary(rpc_response.to_string().into_bytes())
-            } else {
-                Message::Text(rpc_response.to_string())
-            };
+    let (rpc_response, receiver) = match rpc_methods.raw_json_request(text, 1).await {
+        Ok(res) => res,
+        Err(error) => return error!(%error, "Error while processing RPC request"),
+    };
+    trace!("RPC request processed successfully: {}", rpc_response);
+    let response_message = if use_binary {
+        Message::Binary(rpc_response.to_string().into_bytes())
+    } else {
+        Message::Text(rpc_response.to_string())
+    };
 
-            if socket_responses.send(response_message).await.is_err() {
-                error!("Websocket sender has been closed, aborting websocket");
-                return;
-            }
+    if socket_responses.send(response_message).await.is_err() {
+        return error!("Websocket sender has been closed, aborting websocket");
+    }
+    if receiver.is_closed() {
+        return;
+    }
 
-            if !receiver.is_closed() {
-                let subscription_responses = socket_responses.clone();
-                tokio::task::spawn(async move {
-                    trace!("Spawning subscription responses loop");
-                    while let Some(message) = receiver.recv().await {
-                        trace!("Subscription message received: {}", message);
-                        let sub_message = if use_binary {
-                            Message::Binary(message.to_string().into_bytes())
-                        } else {
-                            Message::Text(message.to_string())
-                        };
-                        if let Err(error) = subscription_responses.send(sub_message).await {
-                            debug!(%error, "WebSocket closed, stopping subscription forwarding");
-                            break;
-                        }
-                    }
-                    trace!("Subscription forwarding task finished");
-                });
-            }
-        }
-        Err(error) => {
-            error!(%error, "Error while processing RPC request");
+    trace!("Spawning subscription responses loop");
+    let subscription_responses = socket_responses.clone();
+    spawn(handle_subscription_response(
+        receiver,
+        subscription_responses,
+        use_binary,
+    ));
+}
+
+async fn handle_subscription_response(
+    mut receiver: mpsc::Receiver<Box<JsonRawValue>>,
+    subscription_responses: mpsc::Sender<Message>,
+    use_binary: bool,
+) {
+    while let Some(message) = receiver.recv().await {
+        trace!("Subscription message received: {}", message);
+        let sub_message = if use_binary {
+            Message::Binary(message.to_string().into_bytes())
+        } else {
+            Message::Text(message.to_string())
+        };
+        if let Err(error) = subscription_responses.send(sub_message).await {
+            debug!(%error, "WebSocket closed, stopping subscription forwarding");
+            break;
         }
     }
+    trace!("Subscription forwarding task finished");
 }
 
 async fn handle_socket_write(

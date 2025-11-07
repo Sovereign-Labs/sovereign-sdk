@@ -11,6 +11,7 @@ use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
 use tower_layer::Layer;
+use ws::ws_rpc_handler;
 
 mod ws;
 
