@@ -121,7 +121,7 @@ pub trait Runtime<S: Spec>:
     /// Checks if a system transaction should be rejected based on the totality of its context. For example, 
     /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
     #[cfg(feature = "native")]
-    fn is_unauthorized_system_tx(&self, _call: &Self::Decodable, _context: &Context<S>) -> bool {
+    fn is_unauthorized_system_tx(&self, _call: &Self::Decodable, _context: &Context<S>, _state: &mut impl crate::TxState<S>) -> bool {
         false
     }
 }

@@ -171,10 +171,6 @@ pub struct ChainState<S: Spec> {
     #[state]
     time: VersionedStateValue<Time>,
 
-    /// The current time, as reported by the timing oracle
-    #[state]
-    oracle_time: StateValue<Time>,
-
     /// The mode that the rollup is operating in.
     #[state]
     operating_mode: StateValue<OperatingMode>,
@@ -246,6 +242,12 @@ pub struct ChainState<S: Spec> {
     /// The admin address. This address is allowed to terminate setup mode early.
     #[state]
     admin_address: StateValue<S::Address>,
+
+
+    /// The current time, as reported by the timing oracle
+    #[state]
+    oracle_time: StateValue<Time>,
+
 }
 
 /// Reject any SetOracleTime calls from anyone not explicitly whitelisted in the sequencer config.

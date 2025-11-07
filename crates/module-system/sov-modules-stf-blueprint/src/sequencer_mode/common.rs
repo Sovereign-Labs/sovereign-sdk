@@ -31,7 +31,7 @@ where
     RT: Runtime<S>,
     I: StateProvider<S>,
 {
-    if runtime.is_unauthorized_system_tx(&message, ctx) {
+    if runtime.is_unauthorized_system_tx(&message, ctx, &mut working_set) {
         // It's expected that transactions will revert, so we log them at the info level.
         info!(
             error = %"Unauthorized system transaction",

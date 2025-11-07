@@ -161,9 +161,7 @@ async fn update_timestamp_task<S, Rt, Da>(
                     tracing::error!(error = ?e, "Error submitting timestamp oracle update tx");
                 }
                 consecutive_failures += 1;
-            }
-            // Log a success message on recovery
-            if consecutive_failures != 0 {
+            } else {
                 consecutive_failures = 0;
                 tracing::info!(%timestamp, "Successfully submitted timestamp oracle update tx");
             }
@@ -412,15 +410,18 @@ where
 
 
         let oracle_config = config.sequencer_kind_config.timing_oracle;
-        handles.push(tokio::spawn({
-            update_timestamp_task(
-                seq.clone(),
-                shutdown_receiver.clone(),
-                oracle_key,
-                PriorityFeeBips::from_percentage(oracle_config.priority_fee_percentage as u64),
-                Amount::new(oracle_config.max_fee),
-            )
-        }));
+        //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master 
+        if Rt::default().maybe_set_oracle_timestamp(0).is_some()  && !config.sequencer_kind_config.is_replica {
+            handles.push(tokio::spawn({
+                update_timestamp_task(
+                    seq.clone(),
+                    shutdown_receiver.clone(),
+                    oracle_key,
+                    PriorityFeeBips::from_percentage(oracle_config.priority_fee_percentage as u64),
+                    Amount::new(oracle_config.max_fee),
+                )
+            }));
+        }
 
         Ok((seq, handles))
     }
