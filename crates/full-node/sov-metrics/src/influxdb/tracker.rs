@@ -536,6 +536,36 @@ impl Metric for BatchMetrics {
     }
 }
 
+/// Metrics for an WebSocket request with a single response - for example `eth_sendRawTransaction`.
+#[derive(Debug)]
+pub struct RpcMetrics {
+    /// HTTP method.
+    pub request_name: &'static str,
+    /// Time it took for the inner handler to finish processing.
+    /// Does not include request reading and response writing.
+    pub handler_processing_time: std::time::Duration,
+    /// The status code of the response.
+    pub status: i32,
+}
+
+impl Metric for RpcMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_rpc_handlers"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        // TODO: Avoid allocating with safe_telegraf_string if needed for perf.
+        let request_name = safe_telegraf_string(self.request_name);
+        let status = self.status;
+        let processing_time_us = self.handler_processing_time.as_micros();
+        write!(
+            buffer,
+            "{},request_name={request_name},status={status} processing_time_us={processing_time_us}",
+            self.measurement_name(),
+        )
+    }
+}
+
 /// Metrics for an HTTP subsystem.
 /// Can be applied to REST API or JSON RPC.
 #[derive(Debug)]

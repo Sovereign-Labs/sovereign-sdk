@@ -23,6 +23,7 @@ sov-uniqueness = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
+sov-metrics = { workspace = true, features = ["native"] }
 
 borsh = { workspace = true }
 serde = { workspace = true }
