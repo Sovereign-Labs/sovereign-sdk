@@ -1,19 +1,21 @@
 use alloy::eips::BlockNumberOrTag;
 use alloy::providers::DynProvider;
-use alloy::rpc::types::Filter;
+use alloy::rpc::types::{Filter, Log};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{network::Network, providers::Provider};
 use alloy_primitives::U256;
+use alloy_pubsub::Subscription;
 use anyhow::Result;
 use futures::future::try_join_all;
+use futures::StreamExt;
 use sov_eth_client::LogsWithCursorProvider;
 use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
 use std::net::SocketAddr;
 use std::time::Instant;
 
-use crate::derive_worker_key;
-use crate::{alloy_client, fund_worker_accounts, validate_worker_count};
+use crate::{alloy_client, fund_worker_accounts, validate_worker_count, LogsRetrievalMode};
+use crate::{alloy_ws_client, derive_worker_key};
 
 /// Spawns multiple log test workers, runs them, and retrieves all generated logs.
 pub async fn run_logs_test(
@@ -22,16 +24,31 @@ pub async fn run_logs_test(
     tx_count: usize,
     logs_per_tx: usize,
     num_workers: usize,
+    mode: LogsRetrievalMode,
 ) -> Result<()> {
     validate_worker_count(num_workers)?;
     // Set up root account and fund workers
     let root_signer: PrivateKeySigner = private_key.parse()?;
-    let root_client = alloy_client(rpc_addr, root_signer.clone())?;
+    let root_client = alloy_ws_client(rpc_addr, root_signer.clone()).await?;
     fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
-    let from_block = root_client.get_block_number().await?;
 
-    produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
-    retrieve_logs(root_client, from_block).await?;
+    match mode {
+        LogsRetrievalMode::Subscription { capacity } => {
+            let subscription = root_client
+                .subscribe_logs(&Filter::new())
+                .channel_size(capacity)
+                .await?;
+            let expected_count = tx_count * logs_per_tx * num_workers;
+            produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
+            let handle = tokio::spawn(stream_logs(subscription, expected_count));
+            handle.await??;
+        }
+        LogsRetrievalMode::WithCursor => {
+            let from_block = root_client.get_block_number().await?;
+            produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
+            retrieve_logs(root_client, from_block).await?;
+        }
+    }
 
     Ok(())
 }
@@ -78,11 +95,22 @@ async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<()> {
         .to_block(BlockNumberOrTag::Pending);
     let timer = Instant::now();
     let logs = client.get_all_logs_with_cursor(&filter).await?;
-    println!(
-        "Retrieved {} logs in {:?}",
-        logs.len(),
-        timer.elapsed()
-    );
+    println!("Retrieved {} logs in {:?}", logs.len(), timer.elapsed());
+    Ok(())
+}
+
+async fn stream_logs(subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
+    let timer = Instant::now();
+    let mut stream = subscription.into_stream();
+    let mut count = 0;
+    while let Some(_item) = stream.next().await {
+        count += 1;
+        if count == expected_count {
+            break;
+        }
+    }
+    assert_eq!(count, expected_count);
+    println!("Streamed {} logs in {:?}", expected_count, timer.elapsed());
     Ok(())
 }
 

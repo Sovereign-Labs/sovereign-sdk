@@ -1,6 +1,7 @@
+use crate::{logs::run_logs_test, uniswap::UniSoakTest};
 use alloy::network::TransactionBuilder;
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::rpc::types::{TransactionRequest};
+use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
@@ -9,7 +10,6 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
-use crate::{logs::run_logs_test, uniswap::UniSoakTest};
 
 mod logs;
 mod simple_storage;
@@ -65,7 +65,22 @@ enum TestType {
         /// Number of parallel workers to spawn
         #[arg(short, long, default_value = "1")]
         num_workers: usize,
+
+        #[command(subcommand)]
+        mode: LogsRetrievalMode,
     },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+enum LogsRetrievalMode {
+    /// Retrieve logs using eth_subscribe
+    Subscription {
+        /// Channel capacity for the subscription
+        #[arg(short, long, default_value = "100000")]
+        capacity: usize,
+    },
+    /// Retrieve logs using cursor-based pagination
+    WithCursor,
 }
 
 /// Derives a unique private key for a worker by tweaking the root key.
@@ -87,6 +102,22 @@ pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Re
     let client = ProviderBuilder::new()
         .wallet(signer)
         .connect_http(url)
+        .erased();
+    Ok(client)
+}
+
+/// Creates an Alloy WS client connected to the specified RPC server.
+pub(crate) async fn alloy_ws_client(
+    rpc_addr: SocketAddr,
+    signer: PrivateKeySigner,
+) -> Result<DynProvider> {
+    let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
+    let ws = WsConnect::new(url);
+    let client = ProviderBuilder::new()
+        .wallet(signer)
+        .connect_ws(ws)
+        .await
+        .unwrap()
         .erased();
     Ok(client)
 }
@@ -179,6 +210,7 @@ async fn main() -> Result<()> {
             tx_count,
             logs_per_tx,
             num_workers,
+            mode,
         } => {
             run_logs_test(
                 args.rpc_addr,
@@ -186,6 +218,7 @@ async fn main() -> Result<()> {
                 tx_count,
                 logs_per_tx,
                 num_workers,
+                mode,
             )
             .await?;
         }
