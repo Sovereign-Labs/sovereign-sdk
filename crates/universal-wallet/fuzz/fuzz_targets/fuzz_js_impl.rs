@@ -13,8 +13,8 @@ fuzz_target!(|input: FuzzInput| {
     let schema_json = serde_json::to_string(&schema).expect("failed to serialize schema");
     let input_json = serde_json::to_string(&input).expect("failed to serialize input");
 
-    let js_dir =
-        std::env::var("SOV_UNIVERSAL_WALLET_FUZZ_JS_DIR").unwrap_or_else(|_| "./js".to_string());
+    let js_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../typescript/packages/serializers");
 
     let js_output = Command::new("bun")
         .arg("scripts/fuzz-harness.ts")

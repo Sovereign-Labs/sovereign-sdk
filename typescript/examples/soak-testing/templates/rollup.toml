@@ -1,0 +1,35 @@
+[da]
+connection_string = "sqlite://mock_da.sqlite?mode=rwc"
+sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
+finalization = 10
+[da.block_producing.periodic]
+block_time_ms = 3_000
+
+[storage]
+path = "./rollup-starter-data"
+
+[runner]
+genesis_height = 0
+da_polling_interval_ms = 1000
+
+[runner.http_config]
+bind_host = "127.0.0.1"
+bind_port = 12346
+
+[monitoring]
+telegraf_address = "127.0.0.1:8094"
+
+[proof_manager]
+aggregated_proof_block_jump = 1
+prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+max_number_of_transitions_in_db = 100
+max_number_of_transitions_in_memory = 20
+
+
+[sequencer]
+max_batch_size_bytes = 1048576
+max_concurrent_blobs = 128
+max_allowed_node_distance_behind = 10
+da_address = "0000000000000000000000000000000000000000000000000000000000000000"
+rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+[sequencer.preferred]

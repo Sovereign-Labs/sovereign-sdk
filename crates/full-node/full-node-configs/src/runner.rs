@@ -22,8 +22,13 @@ pub struct RunnerConfig {
     pub da_total_timeout_secs: u64,
     /// HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.
     pub http_config: HttpServerConfig,
-    /// How many concurrent tasks to get block from DA service
-    pub concurrent_sync_tasks: Option<u8>,
+    /// How many concurrent tasks to prefetch DA block during sync
+    #[serde(default = "default_concurrent_sync_tasks")]
+    pub concurrent_sync_tasks: u8,
+    /// How many blocks maximum will be stored in memory.
+    /// It affects total concurrent requests done do DA service.
+    #[serde(default = "default_prefetch_blocks_capacity")]
+    pub pre_fetched_blocks_capacity: NonZero<usize>,
     /// Whether to save transaction bodies to the database.
     #[serde(default)]
     pub save_tx_bodies: bool,
@@ -33,11 +38,12 @@ fn default_da_total_timeout_sec() -> u64 {
     600
 }
 
-impl RunnerConfig {
-    pub fn get_concurrent_sync_tasks(&self) -> u8 {
-        self.concurrent_sync_tasks
-            .unwrap_or(DEFAULT_CONCURRENT_SYNC_TASKS)
-    }
+fn default_concurrent_sync_tasks() -> u8 {
+    5
+}
+
+fn default_prefetch_blocks_capacity() -> NonZero<usize> {
+    NonZero::new(20).unwrap()
 }
 
 /// Configuration for HTTP server(s) exposed by the node.

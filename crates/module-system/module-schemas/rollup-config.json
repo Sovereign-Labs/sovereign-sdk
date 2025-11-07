@@ -710,11 +710,9 @@
       ],
       "properties": {
         "concurrent_sync_tasks": {
-          "description": "How many concurrent tasks to get block from DA service",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "description": "How many concurrent tasks to prefetch DA block during sync",
+          "default": 5,
+          "type": "integer",
           "format": "uint8",
           "minimum": 0.0
         },
@@ -738,6 +736,13 @@
               "$ref": "#/definitions/HttpServerConfig"
             }
           ]
+        },
+        "pre_fetched_blocks_capacity": {
+          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service.",
+          "default": 20,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1.0
         },
         "save_tx_bodies": {
           "description": "Whether to save transaction bodies to the database.",

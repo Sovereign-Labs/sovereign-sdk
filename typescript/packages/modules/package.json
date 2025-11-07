@@ -1,0 +1,42 @@
+{
+  "name": "@sovereign-sdk/modules",
+  "version": "0.1.7",
+  "description": "A package providing convenient helpers for interacting with core Sovereign SDK modules",
+  "scripts": {
+    "build": "tsup",
+    "ci": "biome ci",
+    "fix": "biome check --write",
+    "lint": "biome lint",
+    "test": "vitest run **/*.test.ts",
+    "test:integration": "vitest run **/*.integration-test.ts"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "files": ["dist", "README.md", "package.json"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "4.0.7",
+    "@sovereign-sdk/signers": "workspace:^"
+  },
+  "peerDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sovereign-sdk/web3": "workspace:^",
+    "@sovereign-sdk/utils": "workspace:^"
+  }
+}

@@ -65,18 +65,33 @@ where
         let mut block = self.get_block(pending_block.header.number - 1, &mut state)?;
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-        while state_updates.changed().await.is_ok() {
-            let mut state = self.ethereum.api_state_accessor();
-            let pending_block = self.evm.pending_block(&mut state);
+        let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
 
-            for tx_idx in tx_watermark.advance(..pending_block.transactions.end) {
-                let receipt = self.get_receipt(tx_idx, &mut state)?;
+        loop {
+            tokio::select! {
+                result = state_updates.changed() => {
+                    if result.is_err() {
+                        tracing::debug!("Subscription state updates channel closed, terminating logs subscription");
+                        break;
+                    }
 
-                if block.number() != receipt.block_number {
-                    block = self.get_block(receipt.block_number, &mut state)?;
+                    let mut state = self.ethereum.api_state_accessor();
+                    let pending_block = self.evm.pending_block(&mut state);
+
+                    for tx_idx in tx_watermark.advance(..pending_block.transactions.end) {
+                        let receipt = self.get_receipt(tx_idx, &mut state)?;
+
+                        if block.number() != receipt.block_number {
+                            block = self.get_block(receipt.block_number, &mut state)?;
+                        }
+
+                        self.send_matching_logs(&receipt, &block, &filter).await?;
+                    }
                 }
-
-                self.send_matching_logs(&receipt, &block, &filter).await?;
+                _ = shutdown_receiver.changed() => {
+                    tracing::info!("Shutdown signal received, terminating logs subscription gracefully");
+                    break;
+                }
             }
         }
         Ok(())
@@ -89,13 +104,28 @@ where
         let mut block_watermark = Watermark::new(..pending_block.header.number + 1);
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-        while state_updates.changed().await.is_ok() {
-            let mut state = self.ethereum.api_state_accessor();
-            let pending_block = self.evm.pending_block(&mut state);
+        let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
 
-            for block_number in block_watermark.advance(..pending_block.header.number + 1) {
-                let block = self.get_block(block_number, &mut state)?;
-                self.send_block_header(&block).await?;
+        loop {
+            tokio::select! {
+                result = state_updates.changed() => {
+                    if result.is_err() {
+                        tracing::debug!("Subscription state updates channel closed, terminating blocks subscription");
+                        break;
+                    }
+
+                    let mut state = self.ethereum.api_state_accessor();
+                    let pending_block = self.evm.pending_block(&mut state);
+
+                    for block_number in block_watermark.advance(..pending_block.header.number + 1) {
+                        let block = self.get_block(block_number, &mut state)?;
+                        self.send_block_header(&block).await?;
+                    }
+                }
+                _ = shutdown_receiver.changed() => {
+                    tracing::info!("Shutdown signal received, terminating blocks subscription gracefully");
+                    break;
+                }
             }
         }
         Ok(())
@@ -166,7 +196,7 @@ where
                 .expect("Failed to serialize subscription message");
 
         self.sink.send(msg).await.inspect_err(|err| {
-            tracing::info!(%err, "The subscription client disconnected from the server.");
+            tracing::debug!(%err, "The subscription client disconnected from the server.");
         })
     }
 }
