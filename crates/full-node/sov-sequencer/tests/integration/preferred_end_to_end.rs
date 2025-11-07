@@ -239,7 +239,6 @@ async fn test_transaction_priority() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_state_is_immediately_available() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("warn,sov=info");
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -253,7 +252,9 @@ async fn test_archival_state_is_immediately_available() {
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Send a transaction and close the batch
-    let tx = tx_set_value(&admin.private_key, 0, 1);
+    let mut generation = 0;
+    let tx = tx_set_value(&admin.private_key, generation, 1);
+    generation += 1;
     test_rollup
         .api_client()
         .send_raw_tx_to_sequencer(&tx)
@@ -261,25 +262,36 @@ async fn test_archival_state_is_immediately_available() {
         .unwrap();
 
     test_rollup.force_close_batch().await.unwrap();
+    test_rollup.tenderly_produce_blocks(2).await.unwrap();
+    test_rollup.wait_for_node_synced().await.unwrap();
+    // Height after the first value has been set, we don't care much about before that.
+    let height_at_start = test_rollup.height().await.get();
 
     // Now the archival state for each block should immediately be available (as soon as the previous block is closed).
     // Let's test this in a loop
-    for i in 2..10 {
+    let final_height = height_at_start + 10;
+
+    for (i, height) in (height_at_start..=final_height).enumerate() {
         // Send a transaction to ensure the previous batch is closed.
         // Why generation was zero?
-        let tx = tx_set_value(&admin.private_key, 0, i);
-        // Failure point No finalized slots available
+        let value_to_set = i + 2;
+        let tx = tx_set_value(&admin.private_key, generation, value_to_set as u64);
         test_rollup
             .api_client()
             .send_raw_tx_to_sequencer(&tx)
             .await
             .unwrap();
+        generation += 1;
         test_rollup.force_close_batch().await.unwrap();
         // Produce a some extra slots to ensure that the rollup block number and slot number aren't the same. This increases coverage for free.
         test_rollup.tenderly_produce_blocks(2).await.unwrap();
         test_rollup.wait_for_node_synced().await.unwrap();
-        for j in 0..i {
-            query_set_value(&test_rollup, Some(j), j).await.unwrap();
+        // Start from 1, because at height zero value is None
+        for (j, past_height) in (height_at_start..height).enumerate() {
+            let expected_value = (j + 1) as u64;
+            query_set_value(&test_rollup, Some(past_height), expected_value)
+                .await
+                .unwrap();
         }
     }
 }
@@ -3344,10 +3356,10 @@ async fn query_set_value_helper(
         return Err(anyhow::anyhow!("API request failed: {:?}", response));
     }
 
-    debug!(?response, "Querying value");
-    let found_value = response["value"].as_u64().unwrap_or_default();
+    debug!(?response, "Queried state value");
+    let found_value = response["value"].as_u64();
 
-    anyhow::ensure!(found_value == expected);
+    anyhow::ensure!(found_value == Some(expected));
 
     Ok(())
 }
