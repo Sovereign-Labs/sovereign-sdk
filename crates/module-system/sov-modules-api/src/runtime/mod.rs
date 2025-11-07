@@ -15,6 +15,9 @@ use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
 use crate::transaction::TransactionCallable;
 #[cfg(feature = "native")]
+#[cfg(feature = "native")]
+use crate::Context;
+#[cfg(feature = "native")]
 use crate::FullyBakedTx;
 use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
 
@@ -107,6 +110,19 @@ pub trait Runtime<S: Spec>:
     #[cfg(feature = "native")]
     fn get_transaction_priority(&self, _call: &FullyBakedTx) -> u32 {
         0
+    }
+
+    /// Returns a call message to set the oracle timestamp if the runtime supports it.
+    #[cfg(feature = "native")]
+    fn maybe_set_oracle_timestamp(&self, _millis_since_epoch: i64) -> Option<<Self as DispatchCall>::Decodable> {
+        None
+    }
+
+    /// Checks if a system transaction should be rejected based on the totality of its context. For example, 
+    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    #[cfg(feature = "native")]
+    fn is_unauthorized_system_tx(&self, _call: &Self::Decodable, _context: &Context<S>) -> bool {
+        false
     }
 }
 

@@ -6,6 +6,7 @@ use crate::EthereumAuthenticator;
 use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
+use sov_modules_api::da::Time;
 use alloy_consensus::BlockHeader;
 use alloy_consensus::TxReceipt;
 use alloy_eips::eip1898::ParseBlockNumberError;
@@ -201,11 +202,11 @@ where
         let mut tx_range_absolut = block.tx_range();
         tx_range_absolut = self.apply_tx_level_cursor(tx_range_absolut, block.number())?;
         for tx_idx_absolute in tx_range_absolut {
-            let receipt = self.get_receipt(tx_idx_absolute)?;
+            let (receipt, time) = self.get_receipt(tx_idx_absolute)?;
             if !self.filter.matches_bloom(receipt.bloom()) {
                 continue;
             }
-            if let Some(cursor) = self.scan_tx(tx_idx_absolute, receipt, &block)? {
+            if let Some(cursor) = self.scan_tx(tx_idx_absolute, receipt, &block, time)? {
                 return Ok(Some(cursor));
             }
         }
@@ -244,6 +245,7 @@ where
         tx_index_absolute: u64,
         receipt: Receipt,
         block: &MaybeSealedBlock,
+        time: Time,
     ) -> Result<Option<Cursor>> {
         let header = block.header();
         let logs = receipt.receipt.logs;
@@ -268,7 +270,7 @@ where
                 inner: log,
                 block_hash: block.hash(),
                 block_number: Some(receipt.block_number),
-                block_timestamp: Some(header.timestamp),
+                block_timestamp: Some(time.as_millis().try_into().unwrap_or_default()),
                 transaction_hash: Some(receipt.transaction_hash),
                 transaction_index: Some(receipt.transaction_index),
                 log_index: Some(receipt.log_index_start + idx as u64),
@@ -288,7 +290,7 @@ where
         Ok(None)
     }
 
-    fn get_receipt(&mut self, tx_idx: u64) -> Result<Receipt> {
+    fn get_receipt(&mut self, tx_idx: u64) -> Result<(Receipt, Time)> {
         self.evm.receipt(tx_idx, &mut self.state).ok_or_else(|| {
             tracing::error!(
                 tx_idx,

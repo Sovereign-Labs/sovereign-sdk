@@ -13,6 +13,7 @@ use alloy_rpc_types::{BlockTransactionsKind, Header};
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
@@ -157,8 +158,8 @@ where
     ) -> Option<TransactionReceipt> {
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let receipt = self.receipt(number, state)?;
-        Some(build_rpc_receipt(block, tx, number, receipt))
+        let (receipt, time) = self.receipt(number, state)?;
+        Some(build_rpc_receipt(block, tx, number, receipt, time))
     }
 
     fn get_receipts(
@@ -292,11 +293,16 @@ where
         let end = start + pending_transactions_len;
 
         let pending_block_number = head_block.header.number + 1;
+        let time = self
+            .chain_state_module
+            .get_oracle_time_with_fallback(state)
+            .unwrap_infallible()
+            .secs() as u64;
 
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
             number: pending_block_number,
-            timestamp: 0, // Pending block does not have a timestamp yet
+            timestamp: time,
             excess_blob_gas: current_block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
@@ -335,10 +341,14 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                if number == state.rollup_height_to_access().get() || (number == state.rollup_height_to_access().get() + 1) {
+                if number == state.rollup_height_to_access().get()
+                    || (number == state.rollup_height_to_access().get() + 1)
+                {
                     return Ok(MaybeArchivalState::Current(state));
                 }
-                let archival_state = state.get_archival_state(RollupHeight::new(number)).map_err(|_| EthApiError::UnknownBlockOrTxIndex)?;
+                let archival_state = state
+                    .get_archival_state(RollupHeight::new(number))
+                    .map_err(|_| EthApiError::UnknownBlockOrTxIndex)?;
                 Ok(MaybeArchivalState::Archival(archival_state.into()))
             }
             PendingOrBlock::Invalid(invalid) => {
@@ -382,6 +392,7 @@ pub(crate) fn build_rpc_receipt(
     tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
+    time: Time,
 ) -> TransactionReceipt {
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
@@ -404,7 +415,7 @@ pub(crate) fn build_rpc_receipt(
             inner: log,
             block_hash,
             block_number,
-            block_timestamp: Some(block.timestamp()),
+            block_timestamp: Some(time.as_millis().try_into().unwrap_or_default()),
             transaction_hash: Some(transaction_hash),
             transaction_index: Some(transaction_index),
             log_index: Some(receipt.log_index_start + tx_log_idx as u64),

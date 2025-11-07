@@ -33,6 +33,7 @@ mod authenticate;
 #[cfg(feature = "native")]
 mod helpers;
 
+use sov_rollup_interface::da::Time;
 use alloy_primitives::{Address, BlockHash, B256};
 use alloy_primitives::{BlockNumber, U256};
 pub use authenticate::{
@@ -127,7 +128,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: Receipts.
     #[state]
-    pub receipts: AccessoryStateMap<u64, Receipt, BcsCodec>,
+    pub receipts: AccessoryStateMap<u64, (Receipt, Time), BcsCodec>,
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]

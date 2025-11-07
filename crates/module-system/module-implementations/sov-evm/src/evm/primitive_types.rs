@@ -6,6 +6,7 @@ use alloy_consensus::{
     transaction::Recovered, Header,
 };
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
+use sov_rollup_interface::da::Time;
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use derive_more::{Deref, DerefMut, From};
@@ -62,13 +63,15 @@ impl TxSignedAndRecovered {
 pub struct PendingTransaction {
     pub(crate) transaction: TxSignedAndRecovered,
     pub(crate) receipt: Receipt,
+    pub(crate) time: Time,
 }
 
 impl PendingTransaction {
-    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt) -> Self {
+    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt, time: Time) -> Self {
         Self {
             transaction,
             receipt,
+            time,
         }
     }
 }
