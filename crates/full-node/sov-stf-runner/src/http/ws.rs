@@ -10,6 +10,16 @@ use tokio::sync::{mpsc, watch};
 use tokio::{select, spawn};
 use tracing::{debug, error, trace};
 
+/// Convert content to a WebSocket message, using binary or text encoding
+fn to_ws_message(content: impl ToString, use_binary: bool) -> Message {
+    let content_str = content.to_string();
+    if use_binary {
+        Message::Binary(content_str.into_bytes())
+    } else {
+        Message::Text(content_str)
+    }
+}
+
 pub async fn ws_rpc_handler(
     ws: WebSocketUpgrade,
     rpc_methods: RpcModule<()>,
@@ -110,11 +120,7 @@ async fn handle_rpc_message(
         Err(error) => return error!(%error, "Error while processing RPC request"),
     };
     trace!("RPC request processed successfully: {}", rpc_response);
-    let response_message = if use_binary {
-        Message::Binary(rpc_response.to_string().into_bytes())
-    } else {
-        Message::Text(rpc_response.to_string())
-    };
+    let response_message = to_ws_message(rpc_response, use_binary);
 
     if msg_tx.send(response_message).await.is_err() {
         return error!("Websocket sender has been closed, aborting websocket");
@@ -143,11 +149,7 @@ async fn subscription_forwarder_task(
         select! {
             Some(message) = receiver.recv() => {
                 trace!("Subscription message received: {}", message);
-                let sub_message = if use_binary {
-                    Message::Binary(message.to_string().into_bytes())
-                } else {
-                    Message::Text(message.to_string())
-                };
+                let sub_message = to_ws_message(message, use_binary);
                 if let Err(error) = msg_tx.send(sub_message).await {
                     debug!(%error, "WebSocket closed, stopping subscription forwarding");
                     break;
