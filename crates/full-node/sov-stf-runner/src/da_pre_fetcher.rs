@@ -12,7 +12,7 @@ use tokio::sync::mpsc::Receiver;
 use tracing::{info_span, Instrument as _};
 
 /// Service that pre-fetcher blocks from given start height up to last finalized height at the moment of construction.
-/// After that it proxies all requests to underlying DaService.
+/// After that it proxies all requests to underlying [`DaService`].
 pub struct FinalizedBlocksBulkFetcher<Da: DaService> {
     da_service: Arc<Da>,
     blocks: Receiver<Da::FilteredBlock>,
@@ -31,7 +31,9 @@ where
         channel_capacity: usize,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<(Self, tokio::task::JoinHandle<anyhow::Result<()>>)> {
-        // TODO: ERROR IF bulk_size > channel_capacity!!!
+        if bulk_size as usize > channel_capacity {
+            anyhow::bail!("pre_fetched_blocks_capacity={channel_capacity} should be larger than concurrent_sync_tasks={bulk_size");
+        }
         tracing::info!(%start_height, %bulk_size, ?channel_capacity, "Initializing FinalizedBlocksBulkFetcher");
         let (blocks_sender, blocks_receiver) = tokio::sync::mpsc::channel(channel_capacity);
 
@@ -76,9 +78,9 @@ where
     /// Wrapper around [`DaService::get_block_at`]
     #[tracing::instrument(skip(self))]
     pub async fn get_block_at(&mut self, height: u64) -> Result<Da::FilteredBlock, Da::Error> {
-        tracing::trace!("getting block");
-        // Expects blocks in range [start_height, last_finalized_height] (inclusive)
-        if height > self.last_finalized_height || height < self.start_height {
+        tracing::trace!(height, "getting block");
+        // Expects pre-fetched blocks in range [start_height, last_finalized_height) (exclusive)
+        if height >= self.last_finalized_height || height < self.start_height {
             tracing::trace!(
                 height,
                 start_height = self.start_height,
@@ -87,7 +89,7 @@ where
             );
             return self.da_service.get_block_at(height).await;
         }
-        tracing::trace!(height, "Requested height is inside pre-fetched range..");
+        tracing::trace!(height, "Requested height is inside pre-fetched range.");
 
         let span = info_span!("recv_channel_blocks");
         let block_opt = async {
@@ -185,7 +187,8 @@ where
         let mut first_fetched_height: Option<u64> = None;
         let mut last_fetched_height: Option<u64> = None;
         let start_time = std::time::Instant::now();
-        // actually puts blocks in range [start_height, last_finalized_height) (exclusive of last_finalized_height)
+        // Puts blocks in range [start_height, last_finalized_height).
+        // (exclusive of last_finalized_height)
         while self.start_height < self.last_finalized_height {
             let start_height = self.start_height;
             let end_height = std::cmp::min(
@@ -256,12 +259,10 @@ where
                         last_fetched_height = Some(this_height);
                     }
                     Some(None) => {
-                        // Stream ended
                         tracing::trace!("Stopping because stream ended");
                         break;
                     }
                     None => {
-                        // Shutdown signal received
                         return Ok(());
                     }
                 }

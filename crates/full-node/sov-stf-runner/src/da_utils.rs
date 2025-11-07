@@ -51,6 +51,8 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     tokio::pin!(sleep);
 
     loop {
+        // Maybe instead of `interval.tick` we should use total_timeout?
+        // Because it is for rewind.
         tokio::select! {
             result = da_service.get_block_at(requested_height) => {
                 tracing::trace!(
