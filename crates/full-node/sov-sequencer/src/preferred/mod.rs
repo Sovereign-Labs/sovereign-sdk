@@ -116,6 +116,7 @@ async fn update_timestamp_task<S, Rt, Da>(
     key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
     oracle_priority_fee_bips: PriorityFeeBips,
     oracle_max_fee: Amount,
+    interval_millis: u64,
 ) where
     S: Spec,
     Rt: Runtime<S>,
@@ -123,7 +124,7 @@ async fn update_timestamp_task<S, Rt, Da>(
 {
     use borsh::BorshSerialize;
     let runtime = Rt::default();
-    let mut ticker = tokio::time::interval(Duration::from_millis(50));
+    let mut ticker = tokio::time::interval(Duration::from_millis(interval_millis));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut consecutive_failures = 0;
     loop {
@@ -419,6 +420,7 @@ where
                     oracle_key,
                     PriorityFeeBips::from_percentage(oracle_config.priority_fee_percentage as u64),
                     Amount::new(oracle_config.max_fee),
+                    oracle_config.interval_millis,
                 )
             }));
         }
