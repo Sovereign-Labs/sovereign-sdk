@@ -14,14 +14,9 @@ mod state_root_compute;
 mod transaction_subscriptions;
 mod update_state;
 
-use std::str::FromStr;
-use sov_modules_api::transaction::PriorityFeeBips;
-use sov_modules_api::Amount;
-use sov_modules_api::capabilities::UniquenessData;
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
-use sov_modules_api::transaction::UnsignedTransaction;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -37,11 +32,15 @@ use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::capabilities::{BlobSelector, RollupHeight, TransactionAuthenticator};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
-use sov_modules_api::transaction::TxDetails;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::transaction::PriorityFeeBips;
+use sov_modules_api::transaction::TxDetails;
+use sov_modules_api::transaction::UnsignedTransaction;
+use sov_modules_api::Amount;
 use sov_modules_api::{
     ApiTxEffect, FullyBakedTx, RejectReason, Runtime, RuntimeEventProcessor, RuntimeEventResponse,
     Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber, *,
@@ -57,6 +56,7 @@ use std::marker::PhantomData;
 use std::num::NonZero;
 use std::path::Path;
 use std::pin::Pin;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -128,24 +128,33 @@ async fn update_timestamp_task<S, Rt, Da>(
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut consecutive_failures = 0;
     loop {
-            tokio::select! {
-            _ = ticker.tick() => {}
-            _ =shutdown_receiver.changed() => {
-                break;
-                }
-       }
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
-        let timestamp: i64 = now.as_millis().try_into().expect("Converting unix timestamp to i64 number of milliseconds failed");
+        tokio::select! {
+             _ = ticker.tick() => {}
+             _ =shutdown_receiver.changed() => {
+                 break;
+                 }
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap();
+        let timestamp: i64 = now
+            .as_millis()
+            .try_into()
+            .expect("Converting unix timestamp to i64 number of milliseconds failed");
         let message = Rt::maybe_set_oracle_timestamp(&runtime, timestamp);
         if let Some(message) = message {
-            let details =  TxDetails::<S> {
-                max_priority_fee_bips: oracle_priority_fee_bips, 
-                max_fee: oracle_max_fee, 
+            let details = TxDetails::<S> {
+                max_priority_fee_bips: oracle_priority_fee_bips,
+                max_fee: oracle_max_fee,
                 gas_limit: None,
                 chain_id: config_value!("CHAIN_ID"),
             };
-            
-            let unsigned_tx = UnsignedTransaction::<Rt, S>::new_with_details(message,  UniquenessData::Generation(timestamp as u64), details);
+
+            let unsigned_tx = UnsignedTransaction::<Rt, S>::new_with_details(
+                message,
+                UniquenessData::Generation(timestamp as u64),
+                details,
+            );
             let mut utx_bytes: Vec<u8> = Vec::new();
             BorshSerialize::serialize(&unsigned_tx, &mut utx_bytes).unwrap();
             utx_bytes.extend_from_slice(&Rt::CHAIN_HASH);
@@ -158,7 +167,7 @@ async fn update_timestamp_task<S, Rt, Da>(
             let baked_tx = Rt::Auth::encode_with_standard_auth(raw_tx);
             if let Err(e) = seq.accept_tx(baked_tx).await {
                 // Reduce log spam by only logging 1 of every 100 consecutive failures
-                if consecutive_failures % 100 == 0{
+                if consecutive_failures % 100 == 0 {
                     tracing::error!(error = ?e, "Error submitting timestamp oracle update tx");
                 }
                 consecutive_failures += 1;
@@ -167,7 +176,9 @@ async fn update_timestamp_task<S, Rt, Da>(
                 tracing::info!(%timestamp, "Successfully submitted timestamp oracle update tx");
             }
         } else {
-            tracing::info!("Timing oracle is not enabled. Shutting down timestamp oracle update task");
+            tracing::info!(
+                "Timing oracle is not enabled. Shutting down timestamp oracle update task"
+            );
             break;
         }
     }
@@ -207,13 +218,19 @@ where
             }
             None => {
                 let key = <S::CryptoSpec as CryptoSpec>::PrivateKey::generate();
-                tracing::info!("Generated ephemeral oracle key with pubkey hex: 0x{}", hex::encode(key.pub_key().as_ref()));
+                tracing::info!(
+                    "Generated ephemeral oracle key with pubkey hex: 0x{}",
+                    hex::encode(key.pub_key().as_ref())
+                );
                 key
             }
         };
         let oracle_address = oracle_key.pub_key().credential_id().into();
         if !config.admin_addresses.contains(&oracle_address) {
-            tracing::info!("Adding oracle address {} to sequencer's admin address list", oracle_address);
+            tracing::info!(
+                "Adding oracle address {} to sequencer's admin address list",
+                oracle_address
+            );
             config.admin_addresses.push(oracle_address);
         }
         let latest_state_update = state_update_receiver.borrow().clone();
@@ -409,10 +426,11 @@ where
             }
         }));
 
-
         let oracle_config = config.sequencer_kind_config.timing_oracle;
-        //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master 
-        if Rt::default().maybe_set_oracle_timestamp(0).is_some()  && !config.sequencer_kind_config.is_replica {
+        //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master
+        if Rt::default().maybe_set_oracle_timestamp(0).is_some()
+            && !config.sequencer_kind_config.is_replica
+        {
             handles.push(tokio::spawn({
                 update_timestamp_task(
                     seq.clone(),

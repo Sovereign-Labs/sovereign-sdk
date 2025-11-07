@@ -27,9 +27,7 @@ pub struct SeqConfigExtension {
 
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-#[schemars(
-    rename = "SequencerConfig"
-)]
+#[schemars(rename = "SequencerConfig")]
 pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
@@ -119,7 +117,6 @@ pub enum RecoveryStrategy {
     /// invalidated, the sequencer will be penalized for every invalid batch!
     TryToSave,
 }
-
 
 /// Configuration for the timing oracle.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
@@ -222,7 +219,6 @@ impl Default for PreferredSequencerConfig {
         }
     }
 }
-
 
 pub const fn default_num_cache_warmup_workers() -> usize {
     3

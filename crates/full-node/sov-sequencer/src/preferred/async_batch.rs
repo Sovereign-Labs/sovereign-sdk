@@ -201,13 +201,15 @@ impl<S: Spec> AsyncBatchResponder<S> {
         let start_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
         self.unix_timestamp_micros
             .store(start_time, Ordering::SeqCst);
-        if !self.is_responsible_for_gating_admins || sender_is_allowed(
-            runtime,
-            call,
-            context.sender(),
-            context.sequencer_da_address(),
-            self.admins.as_slice(),
-        ) {
+        if !self.is_responsible_for_gating_admins
+            || sender_is_allowed(
+                runtime,
+                call,
+                context.sender(),
+                context.sequencer_da_address(),
+                self.admins.as_slice(),
+            )
+        {
             TxControlFlow::ContinueProcessing(())
         } else {
             self.send_item(Err(RejectReason::SenderMustBeAdmin));

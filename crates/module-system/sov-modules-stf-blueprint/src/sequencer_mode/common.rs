@@ -45,7 +45,9 @@ where
             events: vec![], // As in Ethereum, reverted transactions don't emit events
             receipt: TxEffect::Reverted(RevertedTxContents {
                 gas_used: *transaction_consumption.base_fee(),
-                reason: ModuleError::ModuleError(anyhow::anyhow!("Unauthorized system transaction")),
+                reason: ModuleError::ModuleError(anyhow::anyhow!(
+                    "Unauthorized system transaction"
+                )),
             }),
         };
         return (
@@ -54,7 +56,7 @@ where
                 receipt,
             },
             tx_scratchpad,
-        )
+        );
     }
     let tx_result = attempt_tx(tx, message, ctx, runtime, &mut working_set);
     let (tx_scratchpad, receipt, transaction_consumption) = match tx_result {

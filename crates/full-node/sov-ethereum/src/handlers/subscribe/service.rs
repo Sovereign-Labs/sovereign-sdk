@@ -7,13 +7,13 @@ use jsonrpsee::DisconnectError;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
 use serde::Serialize;
-use sov_modules_api::da::Time;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
 use sov_evm::MaybeSealedBlock;
 use sov_evm::Receipt;
 use sov_modules_api::capabilities::HasKernel;
+use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
@@ -77,7 +77,8 @@ where
                     block = self.get_block(receipt.block_number, &mut state)?;
                 }
 
-                self.send_matching_logs(&receipt, &block, &filter, time).await?;
+                self.send_matching_logs(&receipt, &block, &filter, time)
+                    .await?;
             }
         }
         Ok(())
@@ -122,7 +123,11 @@ where
             .inspect_err(|_| tracing::error!(number, "Block does not exist"))
     }
 
-    fn get_receipt(&self, idx: u64, state: &mut ApiStateAccessor<S>) -> Result<(Receipt, Time), Error> {
+    fn get_receipt(
+        &self,
+        idx: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<(Receipt, Time), Error> {
         self.evm
             .receipt(idx, state)
             .ok_or(Error::ReceiptDoesNotExist)

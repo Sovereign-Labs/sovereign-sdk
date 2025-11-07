@@ -2,12 +2,12 @@
 #![doc = include_str!("../README.md")]
 
 use schemars::JsonSchema;
-use sov_modules_api::InnerEnumVariant;
 use sov_modules_api::capabilities::{BlockGasInfo, RollupHeight};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::sov_universal_wallet::UniversalWallet;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
+use sov_modules_api::InnerEnumVariant;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateValue, ModuleRestApi, PrivilegedKernelAccessor,
     StateCheckpoint, StateMap, VersionReader,
@@ -243,11 +243,9 @@ pub struct ChainState<S: Spec> {
     #[state]
     admin_address: StateValue<S::Address>,
 
-
     /// The current time, as reported by the timing oracle
     #[state]
     oracle_time: StateValue<Time>,
-
 }
 
 /// Reject any SetOracleTime calls from anyone not explicitly whitelisted in the sequencer config.
@@ -256,19 +254,13 @@ fn is_safe_for_sequencer<S: Spec>(
     call: InnerEnumVariant<'_>,
     _sequencer_address: &<S::Da as DaSpec>::Address,
 ) -> bool {
-    if let Some(call) = call.inner().downcast_ref::<CallMessage>() {
-        match call {
-            CallMessage::SetOracleTime { .. } => {
-                false
-            }
-            _ => true,
-        }
+    if let Some(CallMessage::SetOracleTime { .. }) = call.inner().downcast_ref::<CallMessage>() {
+        false
     } else {
         // Calls to other modules are safe as far as we're concerned
         true
     }
 }
-
 
 impl<S: Spec> ChainState<S> {
     /// Returns the slot number of the current slot using a `BootstrapWorkingSet`. This value is likely

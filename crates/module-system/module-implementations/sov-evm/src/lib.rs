@@ -33,7 +33,6 @@ mod authenticate;
 #[cfg(feature = "native")]
 mod helpers;
 
-use sov_rollup_interface::da::Time;
 use alloy_primitives::{Address, BlockHash, B256};
 use alloy_primitives::{BlockNumber, U256};
 pub use authenticate::{
@@ -46,6 +45,7 @@ use sov_modules_api::{
     AccessoryStateMap, AccessoryStateValue, Context, DaSpec, GenesisState, Module, ModuleId,
     ModuleInfo, Spec, StateMap, StateValue, StateVec, TxState,
 };
+use sov_rollup_interface::da::Time;
 use sov_state::codec::BcsCodec;
 
 use crate::account_storage_key::AccountStorageKey;

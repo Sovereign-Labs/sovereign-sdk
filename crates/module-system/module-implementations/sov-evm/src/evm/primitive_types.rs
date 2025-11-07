@@ -6,7 +6,6 @@ use alloy_consensus::{
     transaction::Recovered, Header,
 };
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844};
-use sov_rollup_interface::da::Time;
 use alloy_primitives::TxHash;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use derive_more::{Deref, DerefMut, From};
@@ -14,6 +13,7 @@ use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
+use sov_rollup_interface::da::Time;
 
 /// Signed ethereum transaction
 pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;

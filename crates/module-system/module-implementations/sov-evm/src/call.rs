@@ -10,7 +10,6 @@ use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Context, GasSpec, Spec, TxState};
-use sov_state::EncodeLike;
 #[cfg(feature = "native")]
 use std::convert::Infallible;
 
@@ -114,7 +113,9 @@ where
 
         start_timer!(set_state);
         // Note that we get the time unconditionally here, as we want to store the time in the pending transaction and have consistent gas metering across zk/native
-        let time = self.chain_state_module.get_oracle_time_with_fallback(state)?;
+        let time = self
+            .chain_state_module
+            .get_oracle_time_with_fallback(state)?;
         let pending_tx = PendingTransaction::new(tx, receipt, time);
         self.pending_transactions.push(&pending_tx, state)?;
         save_elapsed!(set_state_time SINCE set_state);
@@ -285,8 +286,14 @@ where
         self.transactions
             .set(&tx_index, &pending_transaction.transaction, state)?;
 
-        self.receipts
-            .set(&tx_index, &(pending_transaction.receipt.clone(), pending_transaction.time.clone()), state)?;
+        self.receipts.set(
+            &tx_index,
+            &(
+                pending_transaction.receipt.clone(),
+                pending_transaction.time.clone(),
+            ),
+            state,
+        )?;
 
         let hash = pending_transaction.transaction.signed_transaction.hash();
         self.transaction_hashes.set(hash, &tx_index, state)?;
