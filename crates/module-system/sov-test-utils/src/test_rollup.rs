@@ -657,7 +657,7 @@ where
     R: FullNodeBlueprint<Native> + Default + 'static,
 {
     /// Default timeout for polling operations in seconds.
-    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
     /// Helper to get api_client
     pub fn api_client(&self) -> &sov_api_spec::client::Client {
@@ -913,6 +913,7 @@ where
     }
 
     pub async fn progress_beyond_genesis(&self) {
+        // We do we need slot?
         let mut slot_subscription = self.api_client().subscribe_slots().await.unwrap();
         let finalization_blocks = self.rollup_config.da.finalization_blocks;
         self.da_service
@@ -920,13 +921,8 @@ where
             .await
             .expect("Failed to produce finalization blocks");
         self.wait_for_node_synced().await.unwrap();
-        let poll_time =
-            std::time::Duration::from_millis(self.rollup_config.runner.da_polling_interval_ms) * 2;
         // Extra
-        for _ in 0..2 {
-            self.da_service.produce_block_now().await.unwrap();
-            tokio::time::sleep(poll_time).await;
-        }
+        self.tenderly_produce_blocks(2).await.unwrap();
 
         for _ in 0..finalization_blocks {
             let _slot = tokio::time::timeout(
@@ -938,6 +934,17 @@ where
             .unwrap()
             .unwrap();
         }
+    }
+
+    pub async fn tenderly_produce_blocks(&self, n: usize) -> anyhow::Result<()> {
+        let da_polling_interval =
+            std::time::Duration::from_millis(self.rollup_config.runner.da_polling_interval_ms);
+        let pause_between = da_polling_interval * 2;
+        for _ in 0..n {
+            self.da_service.produce_block_now().await?;
+            tokio::time::sleep(pause_between).await;
+        }
+        Ok(())
     }
 }
 

@@ -97,8 +97,12 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
-    for _ in 0..20 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
+    let padding_to_shutdown = 20;
+    test_rollup
+        .tenderly_produce_blocks(padding_to_shutdown)
+        .await
+        .unwrap();
+    for _ in 0..padding_to_shutdown {
         let _slot = slot_subscription.next().await.unwrap().unwrap();
     }
 

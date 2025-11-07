@@ -85,11 +85,8 @@ async fn test_mixed_nonce_and_generation_transactions() {
     );
 
     let (test_rollup, test_user) = create_test_rollup().await;
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(3)
-        .await
-        .unwrap();
+    test_rollup.progress_beyond_genesis().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.client.client.clone();
 
