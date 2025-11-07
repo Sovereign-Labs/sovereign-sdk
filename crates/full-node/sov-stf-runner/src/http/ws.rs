@@ -115,24 +115,24 @@ async fn handle_rpc_message(
     shutdown_receiver: &watch::Receiver<()>,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
-    let (rpc_response, receiver) = match rpc_methods.raw_json_request(text, 1).await {
+    let (response, response_stream) = match rpc_methods.raw_json_request(text, 1).await {
         Ok(res) => res,
         Err(error) => return error!(%error, "Error while processing RPC request"),
     };
-    trace!("RPC request processed successfully: {}", rpc_response);
-    let response_message = to_ws_message(rpc_response, use_binary);
+    trace!("RPC request processed successfully: {}", response);
+    let response_message = to_ws_message(response, use_binary);
 
     if msg_tx.send(response_message).await.is_err() {
         return error!("Websocket sender has been closed, aborting websocket");
     }
-    if receiver.is_closed() {
+    if response_stream.is_closed() {
         return;
     }
 
     trace!("Spawning subscription responses loop");
     let subscription_msg_tx = msg_tx.clone();
     spawn(subscription_forwarder_task(
-        receiver,
+        response_stream,
         subscription_msg_tx,
         use_binary,
         shutdown_receiver.clone(),
