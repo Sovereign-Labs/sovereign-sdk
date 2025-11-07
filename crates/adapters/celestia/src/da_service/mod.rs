@@ -237,14 +237,16 @@ impl CelestiaService {
         let client = &self.read_client;
         let result =
             tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
+        let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
         tracing::trace!(
             height,
             is_success,
+            ?response_time,
             "Call to header.GetByHeight is completed"
         );
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetBlockHeaderMeasurement::new(start.elapsed(), is_success));
+            tracker.submit(GetBlockHeaderMeasurement::new(response_time, is_success));
         });
         let extended_header = flatten_timeout(result)?;
         Ok(extended_header.into())
@@ -344,10 +346,15 @@ impl CelestiaService {
             self.read_client.header().network_head(),
         )
         .await;
+        let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
-        tracing::trace!(is_success, "Call to header.NetworkHead is completed");
+        tracing::trace!(
+            is_success,
+            ?response_time,
+            "Call to header.NetworkHead is completed"
+        );
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetChainHeadMeasurement::new(start.elapsed(), is_success));
+            tracker.submit(GetChainHeadMeasurement::new(response_time, is_success));
         });
         let header = flatten_timeout(result)?;
 
