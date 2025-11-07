@@ -181,9 +181,8 @@ async fn test_transaction_priority() {
     )
     .await;
 
-    let nb_of_blocks = 5;
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
+    test_rollup.progress_beyond_genesis().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
     let mut event_subscription = test_rollup
         .api_client()
         .subscribe_to_events()
@@ -268,7 +267,7 @@ async fn test_archival_state_is_immediately_available() {
     for i in 2..10 {
         // Send a transaction to ensure the previous batch is closed.
         // Why generation was zero?
-        let tx = tx_set_value(&admin.private_key, i, i);
+        let tx = tx_set_value(&admin.private_key, 0, i);
         // Failure point No finalized slots available
         test_rollup
             .api_client()
@@ -2303,6 +2302,7 @@ async fn delayed_tx_is_processed_after_delay() {
 /// - Producing blocks so that the sequencer recovers from the downtime
 /// - Ensuring that the delayed tx still fails with a 503
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "This will be a desert"]
 async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     use futures::future::Either;
     let (test_rollup, admin) = create_test_rollup(

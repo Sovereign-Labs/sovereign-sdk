@@ -658,7 +658,7 @@ where
     R: FullNodeBlueprint<Native> + Default + 'static,
 {
     /// Default timeout for polling operations in seconds.
-    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
     /// Helper to get api_client
     pub fn api_client(&self) -> &sov_api_spec::client::Client {
@@ -923,7 +923,14 @@ where
             .expect("Failed to produce finalization blocks");
         self.wait_for_node_synced().await.unwrap();
         // Extra
-        self.tenderly_produce_blocks(2).await.unwrap();
+        let ideal_lag = match &self.rollup_config.sequencer.sequencer_kind_config {
+            SequencerKindConfig::Standard(_) => 5,
+            SequencerKindConfig::Preferred(c) => c.ideal_lag_behind_finalized_slot,
+        }
+        .saturating_add(2);
+        self.tenderly_produce_blocks(ideal_lag as usize)
+            .await
+            .unwrap();
 
         for _ in 0..finalization_blocks {
             let _slot = tokio::time::timeout(

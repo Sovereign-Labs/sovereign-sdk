@@ -26,7 +26,7 @@ async fn flaky_bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_flaky_bank_tx_tests_periodic_da_non_instant_finality() -> anyhow::Result<()> {
+async fn flaky_bank_tx_tests_periodic_da_non_instant_finality() -> anyhow::Result<()> {
     inner(3).await
 }
 
@@ -199,6 +199,11 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
         assert_aggregated_proof(1, 1, client).await?;
     }
 
+    // Due to polling nature of finalized header, we cannot know for sure that this slot is finalized now.
+    // So we wait 2 more slots
+    for _ in 0..2 {
+        let _slot = slots_subscription.next().await.unwrap()?;
+    }
     if let Some(finalized_rollup_height) = test_case.get_latest_finalized_slot_after(slot_batch_n) {
         assert_slot_finality(client, finalized_rollup_height, FinalityStatus::Finalized).await;
     }
