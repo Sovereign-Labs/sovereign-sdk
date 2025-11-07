@@ -179,7 +179,7 @@ where
     )
     .await;
 
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     let da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();

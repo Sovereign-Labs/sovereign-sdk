@@ -913,7 +913,7 @@ where
         Ok(rollup)
     }
 
-    pub async fn progress_beyond_genesis(&self) {
+    pub async fn produce_enough_finalized_slots(&self) {
         // We do we need slot?
         let mut slot_subscription = self.api_client().subscribe_slots().await.unwrap();
         let finalization_blocks = self.rollup_config.da.finalization_blocks;
@@ -944,9 +944,10 @@ where
         }
     }
 
+    /// Produce DA blocks, but wait enough time in between, that finalized header poller sees each of them.
     pub async fn tenderly_produce_blocks(&self, n: usize) -> anyhow::Result<()> {
         let da_polling_interval =
-            std::time::Duration::from_millis(self.rollup_config.runner.da_polling_interval_ms);
+            Duration::from_millis(self.rollup_config.runner.da_polling_interval_ms);
         let pause_between = da_polling_interval * 2;
         for _ in 0..n {
             self.da_service.produce_block_now().await?;

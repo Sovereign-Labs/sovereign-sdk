@@ -181,7 +181,7 @@ async fn test_transaction_priority() {
     )
     .await;
 
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
     let mut event_subscription = test_rollup
         .api_client()
@@ -248,7 +248,7 @@ async fn test_archival_state_is_immediately_available() {
         TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
     )
     .await;
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Send a transaction and close the batch
@@ -283,10 +283,10 @@ async fn test_archival_state_is_immediately_available() {
             .unwrap();
         generation += 1;
         test_rollup.force_close_batch().await.unwrap();
-        // Produce a some extra slots to ensure that the rollup block number and slot number aren't the same. This increases coverage for free.
+        // Produce a some extra slots to ensure that the rollup height and slot number aren't the same.
+        // This increases coverage for free.
         test_rollup.tenderly_produce_blocks(2).await.unwrap();
         test_rollup.wait_for_node_synced().await.unwrap();
-        // Start from 1, because at height zero value is None
         for (j, past_height) in (height_at_start..height).enumerate() {
             let expected_value = (j + 1) as u64;
             query_set_value(&test_rollup, Some(past_height), expected_value)
@@ -300,8 +300,8 @@ async fn test_archival_state_is_immediately_available() {
 /// which the sequencer ought to know how to respond.
 #[derive(Debug, Clone, Arbitrary)]
 pub(crate) enum TestingAction {
-    /// Never generated automatically because tests would slow down wayyy too
-    /// much. Useful for debugging.
+    /// Never generated automatically because tests would slow down waaay too much.
+    /// Useful for debugging.
     #[weight(0)]
     Sleep { duration_ms: u64 },
     /// The node is immediately shutdown and restarted, to catch possible losses
@@ -610,7 +610,7 @@ async fn sequencer_filled_up_block() {
     )
     .await;
 
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
     let client = test_rollup.api_client().clone();
 
@@ -712,7 +712,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     )
     .await;
 
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
@@ -743,7 +743,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
         .unwrap();
 
     tracing::info!(
-        "Producing subsequent DA blocks while sequencer is paused, to exceet deferred_slots_count"
+        "Producing subsequent DA blocks while sequencer is paused, to exceed deferred_slots_count"
     );
     // This can be lower than DEFERRED_SLOTS_COUNT because the sequencer takes into account a)
     // possible node lag and b) a 90% threshold.
@@ -769,7 +769,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     // check that both had an effect by querying the separate state items.
     const UPDATE_VEC_VALUE: u8 = 12;
     let tx_update_vec = tx_set_many_values(&admin.private_key, 2, vec![UPDATE_VEC_VALUE]);
-    tracing::info!("Trying to send transaction during recovery - expecing rejection");
+    tracing::info!("Trying to send transaction during recovery - expecting rejection");
     let err = client
         .send_raw_tx_to_sequencer(&tx_update_vec)
         .await
@@ -890,8 +890,9 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let builder = test_rollup.shutdown().await.unwrap();
 
     tracing::info!("Producing DA blocks while rollup is shut down, to exceed deferred_slots_count");
-    // This can be lower than DEFERRED_SLOTS_COUNT because the sequencer takes into account a)
-    // possible node lag and b) a 90% threshold.
+    // This can be lower than DEFERRED_SLOTS_COUNT because the sequencer takes into account
+    // a)possible node lag
+    // b) a 90% threshold.
     da_service.produce_n_blocks_now(30).await.unwrap();
 
     // Restart the rollup
@@ -1091,9 +1092,6 @@ async fn seq_out_of_gas_for_pre_checks() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn max_batch_size() {
-    // sov_test_utils::logging::initialize_or_change_logging_with_filter(
-    //     "warn",
-    // );
     let max_batch_size = 1024;
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -1105,7 +1103,7 @@ async fn max_batch_size() {
     )
     .await;
 
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.expect(
         "Sequencer is not ready after initial empty blocks for creation of finalized slots",
     );
@@ -1152,9 +1150,9 @@ async fn max_batch_size() {
         validate_expected_error(resp);
     }
     test_rollup.force_close_batch().await.unwrap();
-    test_rollup.resume_preferred_batches().await;
     // Producing couple more block to avoid lack of finalized
-    test_rollup.tenderly_produce_blocks(10).await.unwrap();
+    test_rollup.resume_preferred_batches().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup
         .wait_for_node_synced()
         .await
@@ -1167,8 +1165,6 @@ async fn max_batch_size() {
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
         let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
-        // FAILURE: No finalized slots available
-        // "reason": String("No finalized slots available")}, message: "The sequencer is temporarily overloaded. Try again in a few seconds", status: 503
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }
@@ -1403,7 +1399,7 @@ async fn max_batch_execution_time() {
     let get_next_block = |rollup_client: Client, should_have_batch: bool| {
         let da_service = test_rollup.da_service.clone();
         async move {
-            tokio::time::sleep(Duration::from_millis(500)).await; // Ensure the batch has time to close, if applciable
+            tokio::time::sleep(Duration::from_millis(500)).await; // Ensure the batch has time to close, if applicable
             let mut slot_subscription = rollup_client
                 .subscribe_slots_with_children(IncludeChildren::new(true))
                 .await
@@ -1450,7 +1446,7 @@ async fn max_batch_execution_time() {
         // The second batch wasn't full - it should still be open
         get_next_block(client.clone(), false).await;
 
-        // The next tx will put our executoin time over 1000ms causing the batch to be closed
+        // The next tx will put our execution time over 1000ms causing the batch to be closed
         let tx = tx_set_value_and_sleep(&admin.private_key, 1, 3, 600);
         let _ = client
             .accept_tx(&api_types::AcceptTxBody {
@@ -1552,18 +1548,15 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     test_rollup
-        .da_service
-        .produce_n_blocks_now((TEST_FINALIZATION_BLOCKS + 2) as usize)
+        .tenderly_produce_blocks((TEST_FINALIZATION_BLOCKS + 2) as usize)
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    tracing::warn!("#### 1");
     let blocks_to_delay: u64 = 100;
     test_rollup
         .da_service
         .set_delay_blobs_by(blocks_to_delay as u32)
         .await;
-    tracing::warn!("#### 2");
 
     let client = test_rollup.api_client().clone();
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
@@ -2002,7 +1995,7 @@ async fn seq_many_invalid_txs() {
 /// Here's how the test works currently - feel free to change this as the sequencer logic evolves.
 ///  1. Produce enough empty *DA blocks* that the sequencer will produce an empty batch
 ///  2. Before including that first empty batch on DA, submit a transaction to the sequencer which asserts the correct visible slot number.
-///      This will cause the sequencer to start bulding a new batch on top of the updated state.
+///      This will cause the sequencer to start building a new batch on top of the updated state.
 ///  3. Include the empty batch on DA, and wait for the node to process it. This triggers a call to `update_state` in the sequencer, which will panic on error.
 ///  4. Accept the sequencer's new batch (which contains the transaction asserting the correct visible slot number) onto the DA layer. Defensively assert that it
 ///     gets processed correctly by the node.
@@ -2328,7 +2321,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     )
     .await;
 
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
 
     let client = test_rollup.api_client().clone();
 
@@ -2393,7 +2386,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         "Expected error to contain 'The sequencer is temporarily overloaded', got: {third_tx_response}"
     );
     // Produce blocks to ensure that the sequencer has room to process the following txs
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_node_synced().await.unwrap();
 
     // Send a fourth tx. It should succeed *before* the speedbumped tx is processed.
@@ -2420,7 +2413,8 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         }
     }
 
-    // Send a delayed tx to ensure that it's processed as expected. This rules out unforunate errors like a bug in our handling of this tx type.
+    // Send a delayed tx to ensure that it's processed as expected.
+    // This rules out unfortunate errors like a bug in our handling of this tx type.
     client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(tx_delayed_call(&admin.private_key, 3)),
@@ -2445,7 +2439,7 @@ async fn replay_uses_correct_visible_slot_number() {
 /// - Query the current state root from the sequencer.
 /// - Send a transaction that asserts the correct state root. Ensure it is accepted
 /// - Produce a block, triggering the sequencer to close out its current batch and post it on DA
-/// - Check that the state root assertion suceeded on the node as well.
+/// - Check that the state root assertion succeeded on the node as well.
 #[tokio::test(flavor = "multi_thread")]
 async fn visible_hashes_match_across_node_and_sequencer() {
     const FINALIZATION_BLOCKS: u32 = 0;
@@ -2718,7 +2712,7 @@ async fn heavy_blob_submission_long_delay() {
 /// to DA (ensuring that the state changes are not visible to the node), then querying the state via the REST API.
 // TODO(@neysofu): unflaky it.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Broken by removal of /batches endpoint, will be testable again when we add node/sequencer state comparision support"]
+#[ignore = "Broken by removal of /batches endpoint, will be testable again when we add node/sequencer state comparison support"]
 async fn flaky_test_hooks_state_is_visible() {
     const FINALIZATION_BLOCKS: u32 = 3;
     let genesis_config =
@@ -3224,7 +3218,7 @@ pub(crate) async fn run_action_against_test_rollup(
             // This is a more complex action, as the sequencer cannot accept transactions on
             // startup until a StateUpdateInfo from the node has been processed.
             let test_rollup = test_rollup.restart().await?;
-            test_rollup.da_service.produce_block_now().await.unwrap();
+            test_rollup.da_service.produce_block_now().await?;
             sleep(Duration::from_millis(1500)).await;
             return Ok(test_rollup);
         }

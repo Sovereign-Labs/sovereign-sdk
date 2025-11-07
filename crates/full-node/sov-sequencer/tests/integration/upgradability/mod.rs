@@ -74,6 +74,7 @@ async fn test_start_at() {
 async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let collector = LogCollector::new(Level::ERROR);
     let subscriber = registry().with(collector.clone());
+    // To make it runnable in standard cargo test.
     let _guard = subscriber.set_default();
 
     let stop_at_height = RollupHeight::new(3);
@@ -90,13 +91,11 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     // This is for make rollup operational, so rollup will give out slot notifications.
     test_rollup
-        .da_service
-        .produce_n_blocks_now((finalization_blocks + 1) as usize)
+        .tenderly_produce_blocks((finalization_blocks + 1) as usize)
         .await
         .unwrap();
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
-
     let padding_to_shutdown = 20;
     test_rollup
         .tenderly_produce_blocks(padding_to_shutdown)
@@ -211,8 +210,7 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     // This is for make rollup operational, so rollup will give out slot notifications.
     test_rollup
-        .da_service
-        .produce_n_blocks_now((finalization_blocks + 1) as usize)
+        .tenderly_produce_blocks((finalization_blocks + 1) as usize)
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -267,8 +265,7 @@ async fn check_start_at(finalization_blocks: u32) {
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     test_rollup
-        .da_service
-        .produce_n_blocks_now((finalization_blocks + 1) as usize)
+        .tenderly_produce_blocks((finalization_blocks + 1) as usize)
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -280,7 +277,7 @@ async fn check_start_at(finalization_blocks: u32) {
     tokio::time::timeout(Duration::from_secs(30), async {
         // Wait until the rollup reaches `stop_at_height`.
         // At that point, we shut down and `get_height` is expected to return errors.
-        // The sleep is used to prevent a busy loop, not for correctness.
+        // The slot waiting is used to prevent a busy loop, not for correctness.
         while let Ok(height) = get_height(&client).await {
             test_rollup.da_service.produce_block_now().await.unwrap();
             slot_subscription.next().await;

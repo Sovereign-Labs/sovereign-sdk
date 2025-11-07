@@ -79,7 +79,7 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
     let (test_rollup, test_user) = create_test_rollup().await;
-    test_rollup.progress_beyond_genesis().await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.client.client.clone();
