@@ -738,7 +738,7 @@
           ]
         },
         "pre_fetched_blocks_capacity": {
-          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service. It should be larger than `concurrent_sync_tasks.",
+          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service. It should be larger than `concurrent_sync_tasks`.",
           "default": 20,
           "type": "integer",
           "format": "uint",
