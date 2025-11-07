@@ -126,11 +126,6 @@ pub trait DaService: Clone + Send + Sync + 'static {
     /// The error type for fallible methods.
     type Error: Debug + Send + Sync + Display;
 
-    /// Subsequent calls of [`DaService::send_transaction`] guarantee that the
-    /// transactions are published and land in the DA layer in the same order as
-    /// the method calls.
-    const GUARANTEES_TRANSACTION_ORDERING: bool = false;
-
     /// Fetch the block at the given height, waiting for one to be mined if necessary.
     ///
     /// The returned block may not be final, and can be reverted without a consensus violation.
