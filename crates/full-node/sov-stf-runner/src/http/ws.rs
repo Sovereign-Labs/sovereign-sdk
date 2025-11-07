@@ -63,13 +63,13 @@ async fn socket_reader_task(
                 trace!(message = ?msg, "Message received from websocket");
                 match msg {
                     Message::Text(text) => {
-                        handle_rpc_message(&text, &msg_tx, &rpc_methods, false).await;
+                        handle_rpc_message(&text, &msg_tx, &rpc_methods, false, &shutdown_receiver).await;
                     }
                     Message::Binary(data) => {
                         // Parse binary frame as UTF-8 JSON-RPC request
                         match std::str::from_utf8(&data) {
                             Ok(text) => {
-                                handle_rpc_message(text, &msg_tx, &rpc_methods, true).await;
+                                handle_rpc_message(text, &msg_tx, &rpc_methods, true, &shutdown_receiver).await;
                             }
                             Err(error) => {
                                 error!(%error, "Invalid UTF-8 in binary WebSocket frame");
@@ -102,6 +102,7 @@ async fn handle_rpc_message(
     msg_tx: &mpsc::Sender<Message>,
     rpc_methods: &RpcModule<()>,
     use_binary: bool,
+    shutdown_receiver: &watch::Receiver<()>,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
     let (rpc_response, receiver) = match rpc_methods.raw_json_request(text, 1).await {
@@ -128,6 +129,7 @@ async fn handle_rpc_message(
         receiver,
         subscription_msg_tx,
         use_binary,
+        shutdown_receiver.clone(),
     ));
 }
 
@@ -135,17 +137,26 @@ async fn subscription_forwarder_task(
     mut receiver: mpsc::Receiver<Box<JsonRawValue>>,
     msg_tx: mpsc::Sender<Message>,
     use_binary: bool,
+    mut shutdown_receiver: watch::Receiver<()>,
 ) {
-    while let Some(message) = receiver.recv().await {
-        trace!("Subscription message received: {}", message);
-        let sub_message = if use_binary {
-            Message::Binary(message.to_string().into_bytes())
-        } else {
-            Message::Text(message.to_string())
-        };
-        if let Err(error) = msg_tx.send(sub_message).await {
-            debug!(%error, "WebSocket closed, stopping subscription forwarding");
-            break;
+    loop {
+        select! {
+            Some(message) = receiver.recv() => {
+                trace!("Subscription message received: {}", message);
+                let sub_message = if use_binary {
+                    Message::Binary(message.to_string().into_bytes())
+                } else {
+                    Message::Text(message.to_string())
+                };
+                if let Err(error) = msg_tx.send(sub_message).await {
+                    debug!(%error, "WebSocket closed, stopping subscription forwarding");
+                    break;
+                }
+            }
+            _ = shutdown_receiver.changed() => {
+                debug!("Shutdown signal received, stopping subscription forwarder");
+                break;
+            }
         }
     }
     trace!("Subscription forwarding task finished");
