@@ -710,7 +710,7 @@
       ],
       "properties": {
         "concurrent_sync_tasks": {
-          "description": "How many concurrent tasks to prefetch DA block during sync",
+          "description": "How many concurrent tasks to prefetch DA block during sync.",
           "default": 5,
           "type": "integer",
           "format": "uint8",
@@ -738,7 +738,7 @@
           ]
         },
         "pre_fetched_blocks_capacity": {
-          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service.",
+          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service. It should be larger than `concurrent_sync_tasks.",
           "default": 20,
           "type": "integer",
           "format": "uint",
