@@ -165,10 +165,11 @@ pub(crate) async fn assert_slot_finality(
         .await
         .unwrap();
 
+    let actual_finality = slot.finality_status.into();
     assert_eq!(
         expected_finality,
-        slot.finality_status.into(),
-        "Wrong finality status for rollup height {rollup_height}"
+        actual_finality,
+        "Wrong finality status for rollup height {rollup_height}: expected: {expected_finality:?} got: {actual_finality:?}"
     );
 }
 

@@ -62,7 +62,7 @@ async fn send_test_bank_txs(
 
     let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
     let mut processed_slot = slots_subscription.next().await.unwrap()?;
-    while processed_slot.number < slot_number {
+    while processed_slot.number <= slot_number {
         processed_slot = slots_subscription.next().await.unwrap()?;
     }
 
@@ -77,7 +77,8 @@ async fn send_test_bank_txs(
         let tx = build_transfer_token_tx(&key, token_id, recipient_address, 10, nonce);
 
         let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
-        while processed_slot.number < slot_number {
+        // Wait a litle more to make sure finality is correct
+        while processed_slot.number <= slot_number {
             processed_slot = slots_subscription.next().await.unwrap()?;
         }
 

@@ -245,7 +245,7 @@ async fn test_archival_state_is_immediately_available() {
         TEST_BLOB_PROCESSING_TIMEOUT,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         0,
-        TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
+        BlockProducingConfig::Manual,
     )
     .await;
     test_rollup.produce_enough_finalized_slots().await;
@@ -289,7 +289,7 @@ async fn test_archival_state_is_immediately_available() {
         test_rollup.wait_for_node_synced().await.unwrap();
         for (j, past_height) in (height_at_start..height).enumerate() {
             let expected_value = (j + 1) as u64;
-            query_set_value(&test_rollup, Some(past_height), expected_value)
+            query_set_value(&test_rollup, Some(past_height), Some(expected_value))
                 .await
                 .unwrap();
         }
@@ -1067,7 +1067,7 @@ async fn seq_out_of_gas_for_pre_checks() {
             .await
             .unwrap();
 
-        query_set_value(&test_rollup, None, 7).await.unwrap();
+        query_set_value(&test_rollup, None, Some(7)).await.unwrap();
     }
 
     // The second transaction will be rejected because of the slot gas limit.
@@ -2013,23 +2013,25 @@ async fn query_historical_values() {
     }));
     let tx_builder = |key| tx_set_value(&key, 0, 7);
     let assertions = |test_rollup| async move {
-        query_set_value(&test_rollup, Some(2), 7).await.unwrap();
-        query_set_value(&test_rollup, Some(0), 0).await.unwrap();
-        query_set_value_by_slot_number(&test_rollup, Some(8), 7)
+        query_set_value(&test_rollup, Some(2), Some(7))
             .await
             .unwrap();
-        query_set_value_by_slot_number(&test_rollup, Some(7), 0)
+        query_set_value(&test_rollup, Some(0), None).await.unwrap();
+        query_set_value_by_slot_number(&test_rollup, Some(8), Some(7))
             .await
             .unwrap();
-        query_set_value_by_slot_number(&test_rollup, Some(1), 0)
+        query_set_value_by_slot_number(&test_rollup, Some(7), Some(0))
+            .await
+            .unwrap();
+        query_set_value_by_slot_number(&test_rollup, Some(1), None)
             .await
             .unwrap();
         // Query some future heights/slot numbers to be sure they don't panic
-        assert!(query_set_value(&test_rollup, Some(100000), 0)
+        assert!(query_set_value(&test_rollup, Some(100000), None)
             .await
             .is_err());
         assert!(
-            query_set_value_by_slot_number(&test_rollup, Some(100000), 0)
+            query_set_value_by_slot_number(&test_rollup, Some(100000), None)
                 .await
                 .is_err()
         );
@@ -3291,11 +3293,11 @@ pub(crate) async fn run_action_against_test_rollup(
                     %value,
                     "Historical query of value",
                 );
-                query_set_value(&test_rollup, Some(slot_number.get()), *value).await?;
+                query_set_value(&test_rollup, Some(slot_number.get()), Some(*value)).await?;
             }
         }
         TestingAction::QuerySetValue => {
-            query_set_value(&test_rollup, None, test_state.current_value).await?;
+            query_set_value(&test_rollup, None, Some(test_state.current_value)).await?;
         }
     }
 
@@ -3305,7 +3307,7 @@ pub(crate) async fn run_action_against_test_rollup(
 async fn query_set_value(
     test_rollup: &TestRollup<TestBlueprint>,
     rollup_height: Option<u64>,
-    expected: u64,
+    expected: Option<u64>,
 ) -> anyhow::Result<()> {
     query_set_value_helper(
         test_rollup,
@@ -3318,7 +3320,7 @@ async fn query_set_value(
 async fn query_set_value_by_slot_number(
     test_rollup: &TestRollup<TestBlueprint>,
     slot_number: Option<u64>,
-    expected: u64,
+    expected: Option<u64>,
 ) -> anyhow::Result<()> {
     query_set_value_helper(
         test_rollup,
@@ -3331,7 +3333,7 @@ async fn query_set_value_by_slot_number(
 async fn query_set_value_helper(
     test_rollup: &TestRollup<TestBlueprint>,
     query_param: Option<String>,
-    expected: u64,
+    expected: Option<u64>,
 ) -> anyhow::Result<()> {
     let url = format!(
         "/modules/value-setter/state/value{}",
@@ -3353,7 +3355,7 @@ async fn query_set_value_helper(
     debug!(?response, "Queried state value");
     let found_value = response["value"].as_u64();
 
-    anyhow::ensure!(found_value == Some(expected));
+    anyhow::ensure!(found_value == expected);
 
     Ok(())
 }
