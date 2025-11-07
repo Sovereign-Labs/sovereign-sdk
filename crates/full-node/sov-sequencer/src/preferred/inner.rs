@@ -559,7 +559,7 @@ where
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
-        self.do_batch_start(visible_slot_number_after_increase, visible_increase)
+        self.do_batch_start(visible_slot_number_after_increase, visible_increase, true)
             .await
     }
 }
@@ -574,6 +574,7 @@ where
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_increase: NonZero<u8>,
+        is_master: bool,
     ) -> Result<(), BatchCreationError> {
         if self.executor.has_in_progress_batch() {
             return Ok(());
@@ -608,6 +609,7 @@ where
             visible_increase,
             node_state_root: node_state_root.clone(),
             minimum_profit_per_tx: min_profit_per_tx,
+            is_responsible_for_gating_admins: is_master,
         };
 
         let old_checkpoint = self
@@ -2025,6 +2027,7 @@ where
             .do_batch_start(
                 batch_from_master.visible_slot_number_after_increase,
                 batch_from_master.visible_slots_to_advance,
+                false,
             )
             .await?;
 

@@ -43,6 +43,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
         tx_profit_threshold: u128,
         sequencer_admins: Arc<Vec<S::Address>>,
         address: S::Address,
+        is_responsible_for_gating_admins: bool,
     ) -> Self {
         Self::Async {
             txs_receiver,
@@ -54,6 +55,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
                 tx_profit_threshold,
                 // This will get overwritten by the pre-flight hook.
                 unix_timestamp_micros: AtomicU64::new(0),
+                is_responsible_for_gating_admins,
             },
         }
     }
@@ -165,6 +167,7 @@ pub struct AsyncBatchResponder<S: Spec> {
     /// We use an atomic u64 to avoid requiring a mutex. Note that this is set during the pre-flight hook.
     /// and read during the post-tx hook. It may not be meaningful before the pre-flight hook is called.
     unix_timestamp_micros: AtomicU64,
+    is_responsible_for_gating_admins: bool,
 }
 
 impl<S: Spec> AsyncBatchResponder<S> {
@@ -183,6 +186,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             admins: self.admins.clone(),
             tx_profit_threshold: self.tx_profit_threshold,
             unix_timestamp_micros: AtomicU64::new(0),
+            is_responsible_for_gating_admins: self.is_responsible_for_gating_admins,
         }
     }
 }
@@ -197,7 +201,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         let start_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
         self.unix_timestamp_micros
             .store(start_time, Ordering::SeqCst);
-        if sender_is_allowed(
+        if !self.is_responsible_for_gating_admins || sender_is_allowed(
             runtime,
             call,
             context.sender(),
