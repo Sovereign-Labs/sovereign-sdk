@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "lib": ["es2020", "dom"],
+    "module": "esnext",
+    "target": "es6",
+    "moduleResolution": "bundler",
+    "sourceMap": true,
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "noEmitOnError": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": [],
+    "jsx": "react",
+    "noEmit": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "packages/integration-tests",
+    "apps/indexer",
+    "examples"
+  ]
+}

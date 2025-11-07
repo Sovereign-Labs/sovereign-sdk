@@ -1,0 +1,44 @@
+{
+  "name": "@sovereign-sdk/multisig",
+  "version": "0.1.1",
+  "description": "Multisig functionality for Sovereign SDK applications",
+  "scripts": {
+    "build": "tsup",
+    "ci": "biome ci",
+    "fix": "biome check --write",
+    "lint": "biome lint",
+    "test": "vitest run **/*.test.ts",
+    "test:integration": "vitest run **/*.integration-test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "files": ["dist", "README.md", "package.json"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "@sovereign-sdk/types": "workspace:^",
+    "@sovereign-sdk/web3": "workspace:^",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3",
+    "vitest": "4.0.7"
+  },
+  "peerDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@sovereign-sdk/signers": "workspace:^",
+    "@sovereign-sdk/utils": "workspace:^"
+  }
+}

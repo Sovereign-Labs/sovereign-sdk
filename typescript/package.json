@@ -1,0 +1,34 @@
+{
+    "name": "sovereign-sdk",
+    "private": true,
+    "version": "0.0.0",
+    "description": "Sovereign SDK JS monorepo",
+    "packageManager": "pnpm@9.0.0",
+    "scripts": {
+        "ci": "turbo ci",
+        "fix": "turbo fix",
+        "lint": "turbo lint",
+        "typecheck": "turbo typecheck",
+        "test": "turbo test",
+        "test:integration": "turbo test:integration",
+        "coverage": "vitest --coverage --project unit",
+        "build": "turbo build",
+        "pkg-version": "changeset version && pnpm install --lockfile-only && turbo fix",
+        "release": "turbo build && changeset publish",
+        "docs": "pnpm typedoc"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@changesets/cli": "^2.27.9"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^1.9.2",
+        "@vitest/coverage-v8": "4.0.7",
+        "turbo": "^2.6.0",
+        "typedoc": "^0.28.4",
+        "vite-plugin-wasm": "^3.4.1",
+        "vitest": "4.0.7"
+    }
+}
