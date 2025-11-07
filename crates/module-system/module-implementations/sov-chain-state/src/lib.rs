@@ -689,7 +689,7 @@ impl<S: Spec> Module for ChainState<S> {
             CallMessage::SetOracleTime {
                 milliseconds_since_epoch,
             } => {
-                let time = Time::from_secs(milliseconds_since_epoch);
+                let time = Time::from_millis(milliseconds_since_epoch);
                 self.oracle_time.set(&time, state)?;
                 self.emit_event(
                     state,
