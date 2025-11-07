@@ -10,7 +10,7 @@ const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 
 /// Tries to fetch block at given height.
 /// If `DaSyncState.target_height` becomes lower in the case of re-org, the function fetches a new head instead.
-/// Because DaSyncState is polling target height periodically,
+/// Because [`DaSyncState`] is polling target height periodically,
 /// there is a possibility that this function won't notice change in target height if the polling interval of DaSyncState is too high.
 /// To mitigate this, it retries to call `get_block_at` several times before giving up and returning an error.
 pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
@@ -77,15 +77,12 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                         } else if attempt >= MAX_GET_BLOCK_ATTEMPTS {
                             anyhow::bail!("Failed to fetch block after {MAX_GET_BLOCK_ATTEMPTS} attempts. Last error: {:?}", err);
                         } else {
-                            // What if the target height is not updated, and we've returning early.
-                            // Basically we should note that if the polling interval is more than (block_time * attempts) it will error in case of rewind.
                             tracing::info!(requestable_height, attempt, "Height hasn't changed, retrying again.");
                         }
                     }
                 }
             }
             _ = interval.tick() => {
-                // TODO: Need to add a way to know if future above has been cancelled.
                 requested_height = check_height(requested_height);
             }
             _ = &mut sleep => {
