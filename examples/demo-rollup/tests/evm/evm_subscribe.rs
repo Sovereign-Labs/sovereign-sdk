@@ -11,6 +11,7 @@ use alloy_primitives::TxHash;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use alloy_provider::Provider;
+use alloy_rpc_types_eth::BlockNumberOrTag;
 use alloy_rpc_types_eth::Filter;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
@@ -136,6 +137,52 @@ async fn evm_test_log_subscription_with_block_range_returns_an_error() -> anyhow
     assert_eq!(data.get(), "\"Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor\"");
 
     Ok(())
+}
+
+
+// Tests for block range with pending blocks.
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
+    let (test_rollup, evm_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let mut log_collector = LogCollector::new();
+
+    let contract_address = evm_client.alloy_deploy_contract().await;
+    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.pause_preferred_batches().await;
+
+    let nb_of_txs = 100;
+
+    let sub = evm_client.alloy_subscribe_logs(&Filter::new().from_block(BlockNumberOrTag::Pending).to_block(BlockNumberOrTag::Pending)).await;
+
+    log_collector
+        .spawn_log_watcher(sub, Some(nb_of_txs as usize))
+        .await;
+
+    let mut tx_hashes = Vec::new();
+
+    for i in 0..nb_of_txs {
+        let hash = evm_client.alloy_set_value(contract_address, i).await;
+        tx_hashes.push(hash);
+    }
+
+    log_collector.wait().await;
+
+    let logs_from_subscription = log_collector.logs().await;
+    assert_eq!(logs_from_subscription.len(), nb_of_txs as usize);
+
+    let block_nr = evm_client
+        .eth_get_block_by_number(Some("pending".to_string()))
+        .await
+        .number
+        .unwrap()
+        .as_u64();
+
+    // Verify conditions for logs in the pending block.
+    for log in logs_from_subscription {
+        assert!(log.block_hash.is_none());
+        assert_eq!(log.block_number.unwrap(), block_nr);
+        assert_ne!(log.block_timestamp.unwrap(), 0);
+    }
 }
 
 // Subscription test with filtering.
