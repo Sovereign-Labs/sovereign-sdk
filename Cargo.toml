@@ -194,7 +194,7 @@ nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "24b8e4132f20c7c808
 anyhow = { version = "1.0.95" }
 async-trait = "0.1.81"
 arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
-console-subscriber = "0.4"
+console-subscriber = "0.5"
 
 axum = { version = "0.7.9", default-features = false }
 axum-server = { version = "0.6", features = ["tls-rustls"] }
