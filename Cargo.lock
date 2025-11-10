@@ -13225,6 +13225,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "sov-address",
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-universal-wallet",
