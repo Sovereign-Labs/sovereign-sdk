@@ -15,7 +15,7 @@ pub use influx_db_nonnative::{
 #[cfg(feature = "native")]
 pub use influxdb::{
     init_metrics_tracker, safe_telegraf_string, timestamp, track_metrics, BatchMetrics,
-    BatchOutcome, HttpMetrics, Metric, MetricsTracker, MonitoringConfig, RunnerMetrics,
+    BatchOutcome, HttpMetrics, Metric, MetricsTracker, MonitoringConfig, RpcMetrics, RunnerMetrics,
     RunnerProcessStfChangesMetrics, SlotProcessingMetrics, TelegrafSocketConfig, TransactionEffect,
     TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime,
     ZkVmExecutionChunk,

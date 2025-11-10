@@ -232,13 +232,21 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        tracing::trace!(height, "Making call to header.GetByHeight");
         let start = std::time::Instant::now();
         let client = &self.read_client;
         let result =
             tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
+        let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
+        tracing::trace!(
+            height,
+            is_success,
+            ?response_time,
+            "Call to header.GetByHeight is completed"
+        );
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetBlockHeaderMeasurement::new(start.elapsed(), is_success));
+            tracker.submit(GetBlockHeaderMeasurement::new(response_time, is_success));
         });
         let extended_header = flatten_timeout(result)?;
         Ok(extended_header.into())
@@ -252,6 +260,7 @@ impl CelestiaService {
         let start = std::time::Instant::now();
         let client = &self.read_client;
         let ns = self.rollup_namespace(&namespace);
+        tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
         let result = tokio::time::timeout(
             self.request_timeout,
             client.share().get_namespace_data(height, namespace),
@@ -259,6 +268,7 @@ impl CelestiaService {
         .await;
         let is_success = matches!(result, Ok(Ok(_)));
         let response_time = start.elapsed();
+        tracing::trace!(height, %ns, ?is_success, ?response_time, "Call to share.GetNamespaceData is completed");
         let measurement = GetNamespaceDataMeasurement::new(ns, response_time, is_success);
         sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
         flatten_timeout(result)
@@ -268,6 +278,7 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> anyhow::Result<FilteredCelestiaBlock> {
+        tracing::trace!(height, "Getting block, firing requests");
         let start_get_block = Instant::now();
 
         let header_future = run_maybe_retryable_async_fn_with_retries(
@@ -291,10 +302,10 @@ impl CelestiaService {
             rollup_batch_rows_future,
             rollup_proof_rows_future,
         )?;
+        let futures_time = start_get_block.elapsed();
+        tracing::trace!(height, time = ?futures_time, "All requests have been completed, building relevant data..");
 
         let square_width = header.dah.square_width();
-
-        let futures_time = start_get_block.elapsed();
 
         let build_relevant_data_start = std::time::Instant::now();
         let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
@@ -321,21 +332,29 @@ impl CelestiaService {
             };
             tracker.submit(get_block_measurement);
         });
+        tracing::trace!(height, "get_block_at metrics send, returning");
         FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
     }
 
     async fn get_head_block_header_inner(
         &self,
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
+        tracing::trace!("Making call to header.NetworkHead");
         let start = std::time::Instant::now();
         let result = tokio::time::timeout(
             self.request_timeout,
             self.read_client.header().network_head(),
         )
         .await;
+        let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
+        tracing::trace!(
+            is_success,
+            ?response_time,
+            "Call to header.NetworkHead is completed"
+        );
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit(GetChainHeadMeasurement::new(start.elapsed(), is_success));
+            tracker.submit(GetChainHeadMeasurement::new(response_time, is_success));
         });
         let header = flatten_timeout(result)?;
 

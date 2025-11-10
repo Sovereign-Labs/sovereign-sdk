@@ -13,6 +13,7 @@ pub use sov_evm::EthereumAuthenticator;
 #[cfg(feature = "local")]
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
+use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
@@ -259,9 +260,28 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    let start = std::time::Instant::now();
+
     let data: Bytes = parameters.one()?;
 
-    process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await
+    let result = process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await;
+
+    // Track metrics
+    {
+        let duration = start.elapsed();
+        let status = if let Err(e) = &result { e.code() } else { 0 };
+        let metrics = RpcMetrics {
+            request_name: "eth_sendRawTransaction",
+            handler_processing_time: duration,
+            status,
+        };
+
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(metrics);
+        });
+    }
+
+    result
 }
 
 pub async fn realtime_send_raw_transaction<S, Seq>(
@@ -275,14 +295,31 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    let start = std::time::Instant::now();
     let data: Bytes = parameters.one()?;
 
-    process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
+    let res = process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
         let evm = sov_evm::Evm::<S>::default();
         evm.get_transaction_receipt(
             tx_hash,
             &mut ethereum.sequencer.api_state().default_api_state_accessor(),
         )
     })
-    .await
+    .await;
+
+    // Track metrics
+    {
+        let duration = start.elapsed();
+        let status = if let Err(e) = &res { e.code() } else { 0 };
+        let metrics = RpcMetrics {
+            request_name: "realtime_sendRawTransaction",
+            handler_processing_time: duration,
+            status,
+        };
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(metrics);
+        });
+    }
+
+    res
 }

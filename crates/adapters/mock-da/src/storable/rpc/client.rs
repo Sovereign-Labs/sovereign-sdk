@@ -66,8 +66,6 @@ impl DaService for StorableMockDaClient {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
-
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let url = self.url(&format!("/blocks/{height}"))?;
         let response = self.client.get(url).send().await?;
