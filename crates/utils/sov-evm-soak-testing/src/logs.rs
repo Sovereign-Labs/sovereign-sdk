@@ -13,6 +13,7 @@ use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
 use std::net::SocketAddr;
 use std::time::Instant;
+use tokio::sync::broadcast;
 
 use crate::{alloy_client, fund_worker_accounts, validate_worker_count, LogsRetrievalMode};
 use crate::{alloy_ws_client, derive_worker_key};
@@ -99,14 +100,53 @@ async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<()> {
     Ok(())
 }
 
-async fn stream_logs(subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
+async fn stream_logs(mut subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
     let timer = Instant::now();
-    let mut stream = subscription.into_stream();
+    // let mut stream = subscription.into_stream();
     let mut count = 0;
-    while let Some(_item) = stream.next().await {
-        count += 1;
-        if count == expected_count {
-            break;
+    let mut timeouts = 0;
+    loop {
+        match tokio::time::timeout(std::time::Duration::from_secs(1), subscription.recv()).await {
+            Ok(Ok(_item)) => {
+                // On successful recv, drain all available messages before `await`ing again
+                count += 1;
+                loop {
+                    match subscription.try_recv() {
+                        Ok(_item) => {
+                            count += 1;
+                        }
+                        Err(broadcast::error::TryRecvError::Lagged(amount)) => {
+                                println!("Subscription lagged by {amount} during try_recv");
+                            let amount: usize = amount.try_into().expect("Failed to convert u64 to usize");
+                            count += amount;
+                        }
+                        Err(_) => {
+                            break;
+                        }
+                    }
+                }
+                if count == expected_count {
+                    break;
+                }
+            },
+            Ok(Err(e)) => match e {
+                broadcast::error::RecvError::Closed => {
+                    println!("Subscription closed");
+                    break;
+                },
+                broadcast::error::RecvError::Lagged(amount) => {
+                    println!("Subscription lagged by {amount}");
+                    let amount: usize = amount.try_into().expect("Failed to convert u64 to usize");
+                    count += amount;
+                }
+            },
+            Err(_) => {
+                println!("Timeout receiving log {count}. Timeouts: {timeouts} (shutdown after 10 timeouts)");
+                timeouts += 1;
+                if timeouts >= 10 {
+                    break;
+                }
+            }
         }
     }
     assert_eq!(count, expected_count);

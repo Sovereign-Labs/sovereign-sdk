@@ -7,6 +7,7 @@ use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
+use tracing_subscriber::EnvFilter;
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
@@ -174,6 +175,10 @@ async fn fund_worker_accounts(
 ) -> Result<()> {
     let root_balance = root_client.get_balance(root_signer.address()).await?;
     let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
+    if transfer_amount == U256::ZERO {
+        tracing::warn!("Root balance is too low to fund all workers. Skipping funding. This is fine if the paymaster is enabled.");
+        return Ok(());
+    }
 
     for worker_idx in 0..num_workers {
         let worker_signer: PrivateKeySigner =
@@ -198,6 +203,11 @@ async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Res
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    tracing_subscriber::fmt()
+    .with_env_filter(
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")),
+    )
+    .init();
 
     match args.test {
         TestType::Uniswap { count, num_workers } => {
