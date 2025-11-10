@@ -303,7 +303,6 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     .unwrap_or(true); // Prune if no last_executed
 
                 if should_prune {
-                    drop(queue); // Drop the reference before removing
                     entry.remove();
                 }
             }
@@ -525,7 +524,6 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // Mark this nonce as executed (even though DB persistence is still pending),
                 // then trigger a drain of the queue for any transactions which are now valid.
                 if res.as_ref().is_ok_and(|r| r.is_ok()) {
-                    // Mark nonce as executed to prevent race condition with concurrent transactions
                     self.mark_nonce_executed(&credential_id, tx_nonce);
 
                     let queues = self.clone();
@@ -938,9 +936,10 @@ mod tests {
         let credential_id = CredentialId::from([1u8; 32]);
 
         // Enqueue transactions with nonces 3, 4, 5
+        let mut handles = vec![];
         for nonce in [3, 4, 5] {
             let entry = queues.lock_for_address(credential_id);
-            enqueue_mock_queued_tx(entry, nonce);
+            handles.push(enqueue_mock_queued_tx(entry, nonce));
         }
 
         // Drain starting from nonce 5 (3 and 4 should be silently evicted, 5 should execute)
@@ -953,8 +952,14 @@ mod tests {
             "Should execute only nonce 5, not stale nonces 3 and 4"
         );
 
-        // Verify queue is empty (and therefore pruned)
-        assert!(queues.queues.get(&credential_id).is_none());
+        let mut handles = handles.into_iter();
+        assert!(handles.next().unwrap().await.is_err());
+        assert!(handles.next().unwrap().await.is_err());
+        assert!(handles.next().unwrap().await.unwrap().unwrap().unwrap().await.is_ok());
+
+        // Verify queue is empty
+        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 6);
+        assert!(queues.queues.get(&credential_id).is_none_or(|q| q.is_empty()));
     }
 
     #[tokio::test]
@@ -990,6 +995,7 @@ mod tests {
         executed_txs: Arc<Mutex<Vec<(TxHash, u64)>>>,
         should_fail_nonce: Option<u64>,
         execution_delay: Duration,
+        db_delay: Duration,
     }
 
     #[allow(dead_code)]
@@ -1000,6 +1006,7 @@ mod tests {
                 executed_txs: Arc::new(Mutex::new(Vec::new())),
                 should_fail_nonce: None,
                 execution_delay: Duration::from_millis(0),
+                db_delay: Duration::from_millis(0),
             }
         }
 
@@ -1010,6 +1017,11 @@ mod tests {
 
         fn with_execution_delay(mut self, delay: Duration) -> Self {
             self.execution_delay = delay;
+            self
+        }
+
+        fn with_db_delay(mut self, delay: Duration) -> Self {
+            self.db_delay = delay;
             self
         }
 
@@ -1027,8 +1039,8 @@ mod tests {
                 .collect()
         }
 
-        fn increment_nonce(&self) {
-            self.current_nonce.fetch_add(1, Ordering::SeqCst);
+        fn set_nonce(&self, new_nonce: u64) {
+            self.current_nonce.store(new_nonce, Ordering::SeqCst);
         }
     }
 
@@ -1046,7 +1058,7 @@ mod tests {
             _reason: &'static str,
         ) -> Result<TransactionReceiverResult<TestSpec, TestRuntime>, SequencerStateUpdatorError>
         {
-            // Add delay if configured
+            // Simulate execution delay (state transition time)
             if !self.execution_delay.is_zero() {
                 tokio::time::sleep(self.execution_delay).await;
             }
@@ -1073,16 +1085,29 @@ mod tests {
             // Track execution
             self.executed_txs.lock().unwrap().push((tx_hash, tx_nonce));
 
-            // Simulate successful execution
+            // Create oneshot channel for DB persistence simulation
             let (tx, rx) = oneshot::channel();
-            let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
-                tx: baked_tx.clone(),
-                tx_hash,
-                confirmation: create_default_confirmation(),
-            });
 
-            // Increment nonce on successful execution
-            self.increment_nonce();
+            // Spawn task to simulate DB persistence delay
+            // The nonce is only incremented after the DB operation "completes"
+            let backend = self.clone();
+            let baked_tx_clone = baked_tx.clone();
+            tokio::spawn(async move {
+                // Simulate DB persistence delay
+                if !backend.db_delay.is_zero() {
+                    tokio::time::sleep(backend.db_delay).await;
+                }
+
+                // Increment nonce (simulates API state update after DB persistence)
+                backend.set_nonce(tx_nonce + 1);
+
+                // Send result
+                let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
+                    tx: baked_tx_clone,
+                    tx_hash,
+                    confirmation: create_default_confirmation(),
+                });
+            });
 
             Ok(Ok(rx))
         }
@@ -1578,5 +1603,129 @@ mod tests {
 
         // Verify no TXs were executed
         assert!(backend.get_executed_nonces().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_race_condition_with_db_delay() {
+        // This test verifies that the race condition is fixed:
+        // - TX A (nonce N) executes successfully, but DB persistence is slow
+        // - TX B (nonce N+1) arrives before DB completes
+        // - Without the fix: B would see current_nonce=N and get queued (deadlock!)
+        // - With the fix: B sees last_executed=N, so current_nonce becomes N+1, and executes immediately
+
+        let backend = MockTxExecutionBackend::new()
+            .with_current_nonce(0)
+            .with_db_delay(Duration::from_millis(200)); // Slow DB
+
+        let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+        let credential_id = CredentialId::from([1u8; 32]);
+
+        // Submit TX A with nonce 0 - should execute immediately
+        let handle_a = tokio::spawn({
+            let queues = queues.clone();
+            async move {
+                queues
+                    .handle_new_tx(
+                        create_test_tx(0),
+                        TxHash::from([0; 32]),
+                        0,
+                        credential_id,
+                        0,
+                    )
+                    .await
+            }
+        });
+
+        // Wait for execution to complete but NOT for DB to complete
+        // The execution itself is instant, but DB persistence takes 200ms
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // At this point:
+        // - TX A has executed (state transition complete)
+        // - last_executed is set to 0
+        // - But API state still shows nonce=0 (DB hasn't completed)
+
+        // Submit TX B with nonce 1 - should execute immediately because last_executed=0
+        let handle_b = tokio::spawn({
+            let queues = queues.clone();
+            async move {
+                queues
+                    .handle_new_tx(
+                        create_test_tx(1),
+                        TxHash::from([1; 32]),
+                        1,
+                        credential_id,
+                        0,
+                    )
+                    .await
+            }
+        });
+
+        // Both transactions should succeed
+        let result_a = handle_a.await.unwrap();
+        assert!(result_a.is_ok(), "TX A should not have sequencer error");
+        let rx_a = result_a.unwrap().unwrap();
+        assert!(rx_a.await.is_ok(), "TX A should succeed");
+
+        let result_b = handle_b.await.unwrap();
+        assert!(result_b.is_ok(), "TX B should not have sequencer error");
+        let rx_b = result_b.unwrap().unwrap();
+        assert!(rx_b.await.is_ok(), "TX B should succeed despite DB delay");
+
+        // Verify both executed in order
+        assert_eq!(
+            backend.get_executed_nonces(),
+            vec![0, 1],
+            "Both transactions should execute in order despite DB delay"
+        );
+
+        // Verify final nonce (after DB completes)
+        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 2);
+    }
+
+    #[tokio::test]
+    async fn test_queue_cleanup_respects_last_executed() {
+        // This test verifies that cleanup_queue_if_empty() doesn't prune a queue
+        // if last_executed is still tracking useful information
+
+        let backend = MockTxExecutionBackend::new()
+            .with_current_nonce(0)
+            .with_db_delay(Duration::from_millis(100));
+
+        let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+        let credential_id = CredentialId::from([1u8; 32]);
+
+        // Submit TX with nonce 0
+        let result = queues
+            .handle_new_tx(
+                create_test_tx(0),
+                TxHash::from([0; 32]),
+                0,
+                credential_id,
+                0,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // At this point, last_executed=0 but API state still shows nonce=0 (DB delay)
+        // The queue should exist (even though it's empty) because last_executed tracks useful info
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Try to cleanup - should NOT prune because last_executed=0 >= current_nonce=0
+        queues.cleanup_queue_if_empty(&credential_id);
+        assert!(
+            queues.queues.contains_key(&credential_id),
+            "Queue should not be pruned while last_executed tracks useful info"
+        );
+
+        // Now wait for DB to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Try cleanup again - now should prune because last_executed=0 < current_nonce=1
+        queues.mark_completed(&credential_id);
+        assert!(
+            !queues.queues.contains_key(&credential_id),
+            "Queue should be pruned after API state catches up"
+        );
     }
 }
