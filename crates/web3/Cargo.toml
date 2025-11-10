@@ -27,6 +27,7 @@ reqwest = { workspace = true, features = ["json", "blocking"], optional = true }
 [dev-dependencies]
 sovereign-web3 = { path = ".", features = ["schema"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-address = { workspace = true, features = ["native", "evm"] }
 hex = { workspace = true }
 base64 = { workspace = true }
 

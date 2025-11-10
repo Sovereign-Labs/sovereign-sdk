@@ -2,6 +2,7 @@ use base64::Engine;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::PrivateKey;
 use sovereign_web3::schema::{json, Serializer, TransactionBuilder};
+use sov_address::EthereumAddress;
 
 const CHAIN_ID: u64 = 4321;
 
@@ -33,6 +34,9 @@ fn test_basic_schema_transaction_submission() {
         .unwrap();
     let tx_bytes = unsigned_tx.bytes_for_signing(&serializer).unwrap();
 
+    let address = EthereumAddress::from_str(
+        "0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1",
+    );
     // demo rollup uses paymaster so tx will succeed without funds
     // TODO: i think we need to use evm
     let private_key = Ed25519PrivateKey::generate();
