@@ -1,6 +1,7 @@
 # 2025-11-06
 - #2032 Upgrade Reth/Revm to 1.9.0
 - #2036 Extends documentation of runner config
+- #2042 Fixes runner polling issue
 
 # 2025-11-05
 - #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
