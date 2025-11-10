@@ -215,7 +215,7 @@ where
                 );
             }
             tracing::info!(
-                old_blok = %filtered_block.header().display(),
+                old_block = %filtered_block.header().display(),
                 new_block = %new_block.header().display(),
                 time = ?start.elapsed(),
                 "Chosen fork point"
