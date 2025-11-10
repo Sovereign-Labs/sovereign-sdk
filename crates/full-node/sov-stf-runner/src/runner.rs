@@ -207,7 +207,6 @@ where
             stf_info_sender,
             state_height_tracker,
             sync_state.clone(),
-            da_polling_interval,
             da_total_timeout,
         )?;
 
@@ -485,7 +484,6 @@ where
                 self.da_service.as_ref(),
                 self.sync_state.as_ref(),
                 next_da_height,
-                self.da_polling_interval,
                 self.da_total_timeout,
             )
             .await?
