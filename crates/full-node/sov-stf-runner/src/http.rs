@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;

@@ -12043,6 +12043,8 @@ dependencies = [
  "sov-eth-client",
  "sov-test-utils",
  "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
