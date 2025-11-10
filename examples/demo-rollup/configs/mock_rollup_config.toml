@@ -103,7 +103,7 @@ batch_execution_time_limit_millis = 2000 # Do no more than 2000ms of work per ba
 # The sequencer optimistically pre-executes transactions across multiple worker threads.
 # This warms up caches so the main transaction executor can run with ready-to-use data.
 # This variable determines the number of worker threads.
-num_cache_warmup_workers = 5
+num_cache_warmup_workers = 0
 # minimum_profit_per_tx = 0 # Minimum fee the preferred sequencer accepts per tx, in gas tokens
 # events_channel_size = 10000 # Size of Tokio channel for streaming events. Larger values increase memory usage
 # postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions

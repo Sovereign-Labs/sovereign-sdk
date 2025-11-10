@@ -896,16 +896,19 @@ fn validate_db_data_from_replica<S: Spec>(
     }
 
     if let Err(err) = is_ready {
+        tracing::debug!(?err, "Replica not ready");
         return Err(ReplicaError::NotReady(err.clone(), ret));
     }
 
     if seq_nr_for_this_executor > seq_nr_from_master {
+        tracing::debug!(%seq_nr_for_this_executor, %seq_nr_from_master, "Replica is ahead of master.");
         return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
             seq_nr_for_this_executor,
         )));
     }
 
     if seq_nr_for_this_executor < seq_nr_from_master {
+        tracing::debug!(%seq_nr_for_this_executor, %seq_nr_from_master, "Replica is behind master.");
         return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(ret)));
     }
 
