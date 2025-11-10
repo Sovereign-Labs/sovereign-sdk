@@ -29,7 +29,9 @@ async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_he
 
 /// Tries to fetch block at given height.
 /// If `DaSyncState.target_height` becomes lower in the case of re-org, the function fetches a new head instead.
-/// It does not handle case when reorg happens, but the length of new change isn't changed or increased. This should be handled by the caller.
+/// Because DaSyncState is polling target height periodically,
+/// there is a possibility that this function won't notice change in target height if the polling interval of DaSyncState is too high.
+/// To mitigate this, it retries to call `get_block_at` several times before giving up and returning an error.
 pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     da_service: &Da,
     sync_state: &DaSyncState,
