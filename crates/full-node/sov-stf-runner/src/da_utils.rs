@@ -8,13 +8,15 @@ use sov_rollup_interface::node::DaSyncState;
 
 const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 
+/// This function never terminates unless there's reorg.
+/// So it should be used in `tokio::select` with some other future that will terminate eventually
 async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_height: u64) -> u64 {
     let mut rx = sync_state.sync_status_sender.subscribe();
     loop {
         let status = *rx.borrow_and_update();
         let target_height = status.target_da_height();
         // It is allowed to query height following head,
-        // this is normal when node is fully synced and waits for the next block
+        // this is normal when the node is fully synced and waits for the next block
         if target_height.saturating_add(1) < requested_height {
             return target_height;
         }
@@ -27,6 +29,7 @@ async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_he
 
 /// Tries to fetch block at given height.
 /// If `DaSyncState.target_height` becomes lower in the case of re-org, the function fetches a new head instead.
+/// It does not handle case when reorg happens, but the length of new change isn't changed or increased. This should be handled by the caller.
 pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     da_service: &Da,
     sync_state: &DaSyncState,
