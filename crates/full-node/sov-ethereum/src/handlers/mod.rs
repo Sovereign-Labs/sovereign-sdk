@@ -17,7 +17,6 @@ use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_sequencer::Sequencer;
@@ -28,13 +27,6 @@ use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
-/// Txs with nonce in the future of more than this threshold are rejected immediately. If the nonce is in the future but below the threshold, we'll buffer it
-/// for a little while.
-const FUTURE_NONCE_THRESHOLD: u64 = 100;
-/// How long to wait between retries.
-const SLEEP_DURATION_MS: u64 = 10;
-/// The maximum amount of time to buffer a tx with a future nonce. Provides an upper bound in case retry attempts are taking too long.
-const MAX_BUFFER_DURATION_MS: u128 = 200;
 
 async fn process_raw_transaction<S, Seq, T, F>(
     data: Bytes,
@@ -65,10 +57,9 @@ where
         .api_state()
         .default_api_state_accessor()
         .to_provable_reader();
-    let _ =
-        <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
-            to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
-        })?;
+    let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
+        to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
+    })?;
 
     ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
         to_jsonrpsee_error_object(

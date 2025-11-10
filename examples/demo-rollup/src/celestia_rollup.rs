@@ -128,7 +128,6 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
-            buffer_raw_txs: true,
             shutdown_receiver,
         };
 

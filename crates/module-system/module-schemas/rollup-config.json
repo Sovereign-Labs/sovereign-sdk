@@ -337,13 +337,6 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "future_nonce_transaction_timeout_millis": {
-          "description": "The timeout after which a transaction with a near-future nonce (bounded by `maximum_future_nonce_delta`) will be dropped and forgotten by the sequencer. Increasing this value increases the leniency with which out-of-order transactions are considered a \"simultaneous batch\" which should be reordered, but can increase memory usage and queue lock contention.",
-          "default": 2000,
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
         "ideal_lag_behind_finalized_slot": {
           "description": "The ideal lag behind the finalized slot number.",
           "default": 10,
@@ -355,13 +348,6 @@
           "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
           "default": false,
           "type": "boolean"
-        },
-        "maximum_future_nonce_delta": {
-          "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly impacts the maximum \"batch\" of transactions that can be simultaneously sent to the sequencer out of order.",
-          "default": 100,
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
         },
         "minimum_profit_per_tx": {
           "description": "The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero. Sequencers should set this to a non-zero value if they wish to cover their DA costs.",
