@@ -235,7 +235,8 @@ async fn handle_rpc_message(
             Err(error) => {
                 tracing::error!(%error, "Error while processing RPC request");
             }
-        }});
+        }
+    });
 }
 
 async fn handle_socket_read(
@@ -314,7 +315,7 @@ async fn handle_socket_write(
                     break;
                 }
                 tracing::trace!("{} messages sent to websocket", num_items);
-                
+
             }
             _ = shutdown_receiver.changed() => {
                 tracing::debug!("Shutdown signal received, stopping WebSocket write handler");

@@ -116,8 +116,9 @@ async fn stream_logs(mut subscription: Subscription<Log>, expected_count: usize)
                             count += 1;
                         }
                         Err(broadcast::error::TryRecvError::Lagged(amount)) => {
-                                println!("Subscription lagged by {amount} during try_recv");
-                            let amount: usize = amount.try_into().expect("Failed to convert u64 to usize");
+                            println!("Subscription lagged by {amount} during try_recv");
+                            let amount: usize =
+                                amount.try_into().expect("Failed to convert u64 to usize");
                             count += amount;
                         }
                         Err(_) => {
@@ -128,12 +129,12 @@ async fn stream_logs(mut subscription: Subscription<Log>, expected_count: usize)
                 if count == expected_count {
                     break;
                 }
-            },
+            }
             Ok(Err(e)) => match e {
                 broadcast::error::RecvError::Closed => {
                     println!("Subscription closed");
                     break;
-                },
+                }
                 broadcast::error::RecvError::Lagged(amount) => {
                     println!("Subscription lagged by {amount}");
                     let amount: usize = amount.try_into().expect("Failed to convert u64 to usize");

@@ -7,10 +7,10 @@ use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
-use tracing_subscriber::EnvFilter;
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
+use tracing_subscriber::EnvFilter;
 
 mod logs;
 mod simple_storage;
@@ -204,10 +204,10 @@ async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Res
 async fn main() -> Result<()> {
     let args = Args::parse();
     tracing_subscriber::fmt()
-    .with_env_filter(
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")),
-    )
-    .init();
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("debug")),
+        )
+        .init();
 
     match args.test {
         TestType::Uniswap { count, num_workers } => {
