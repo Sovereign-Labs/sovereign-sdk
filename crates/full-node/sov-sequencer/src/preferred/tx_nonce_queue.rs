@@ -281,12 +281,42 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         }
     }
 
+    /// Clean up a user's queue if it's empty and last_executed is stale.
+    ///
+    /// A queue is only removed if:
+    /// 1. It has no queued transactions, AND
+    /// 2. Either last_executed is None, OR last_executed < current_nonce (meaning API state has caught up)
+    ///
+    /// This prevents premature pruning when last_executed is tracking a recently-executed transaction
+    /// whose DB persistence hasn't completed yet.
     fn cleanup_queue_if_empty(&self, credential_id: &CredentialId) {
         if let Entry::Occupied(entry) = self.queues.entry(*credential_id) {
-            if entry.get().is_empty() {
-                entry.remove();
+            let queue = entry.get();
+            if queue.is_empty() {
+                // Only prune if last_executed is stale (or not set)
+                // last_executed = N means "executed nonce N, next valid is N+1"
+                // current_nonce = M means "next valid nonce is M"
+                // So last_executed is stale when N < M (i.e., API state has caught up past last_executed)
+                let current_nonce = self.submitter.get_current_nonce_for_user(credential_id);
+                let should_prune = queue.last_executed
+                    .map(|n| n < current_nonce)
+                    .unwrap_or(true); // Prune if no last_executed
+
+                if should_prune {
+                    drop(queue); // Drop the reference before removing
+                    entry.remove();
+                }
             }
         }
+    }
+
+    /// Mark a nonce as executed (state transition complete, but DB persistence not yet complete).
+    /// This is used to prevent a race condition where a transaction's DB operation hasn't completed
+    /// yet (so API state still shows the old nonce), but a subsequent transaction arrives and should
+    /// execute immediately rather than getting queued.
+    fn mark_nonce_executed(&self, credential_id: &CredentialId, nonce: u64) {
+        let mut queue = self.queues.entry(*credential_id).or_insert_with(AddressQueue::new);
+        queue.mark_executing(nonce);
     }
 
     /// Check if there's a contiguous sequence of transactions up to target_nonce
@@ -398,7 +428,24 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         // be a race condition if a new transaction were to execute after this tx checked its nonce
         // but before it added itself to the queue.
         let locked_user_queue = self.lock_for_address(credential_id);
-        let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+
+        // Get the API state nonce (may be stale if recent transactions haven't been persisted to DB yet)
+        let api_state_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+
+        // Get last_executed if it exists - this tracks transactions that have been accepted for
+        // execution but whose DB persistence may not have completed yet
+        let last_executed = match &locked_user_queue {
+            Entry::Occupied(entry) => entry.get().last_executed,
+            Entry::Vacant(_) => None,
+        };
+
+        // Compute effective current nonce: max of API state or last_executed + 1
+        // This prevents a race condition where a transaction gets queued even though its
+        // prerequisite has already been accepted for execution (but API state not updated yet)
+        let current_nonce = api_state_nonce.max(
+            last_executed.map(|n| n.saturating_add(1)).unwrap_or(0)
+        );
+
         let max_accepted_nonce = current_nonce + self.maximum_future_nonce_delta;
 
         if tx_nonce == current_nonce {
@@ -475,9 +522,12 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     .await;
 
                 // If the transaction succeeded, the user's nonce will have incremented.
-                // Trigger a drain of the queue for any transactions which are now valid because of
-                // this, in a background task.
+                // Mark this nonce as executed (even though DB persistence is still pending),
+                // then trigger a drain of the queue for any transactions which are now valid.
                 if res.as_ref().is_ok_and(|r| r.is_ok()) {
+                    // Mark nonce as executed to prevent race condition with concurrent transactions
+                    self.mark_nonce_executed(&credential_id, tx_nonce);
+
                     let queues = self.clone();
                     let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
@@ -534,6 +584,15 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, credential_id)
             }
         }
+    }
+
+    /// Mark a transaction as completed after DB persistence finishes.
+    ///
+    /// This should be called after a transaction's database operation completes successfully.
+    /// It will clean up the user's queue if it's empty and the last_executed tracking information
+    /// is no longer needed (i.e., API state has caught up).
+    pub fn mark_completed(&self, credential_id: &CredentialId) {
+        self.cleanup_queue_if_empty(credential_id);
     }
 }
 

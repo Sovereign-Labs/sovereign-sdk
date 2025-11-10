@@ -906,14 +906,14 @@ where
 
         let tx_len = baked_tx.data.len();
 
-        let outer_res = match uniqueness {
+        let (outer_res, is_nonce_based) = match uniqueness {
             UniquenessData::Generation(_) => {
-                self.synchronized_state_updator
+                (self.synchronized_state_updator
                     .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-                    .await
+                    .await, false)
             }
             UniquenessData::Nonce(tx_nonce) => {
-                self.tx_nonce_queues
+                (self.tx_nonce_queues
                     .handle_new_tx(
                         baked_tx,
                         tx_hash,
@@ -921,7 +921,7 @@ where
                         credential_id,
                         original_tx_queue_id,
                     )
-                    .await
+                    .await, true)
             }
         };
 
@@ -938,7 +938,14 @@ where
         };
 
         match res {
-            Ok(rx) => rx.await.map_err(database_error_500),
+            Ok(rx) => {
+                let result = rx.await.map_err(database_error_500)?;
+                // After DB persistence completes, notify the nonce queue so it can clean up if needed
+                if is_nonce_based {
+                    self.tx_nonce_queues.mark_completed(&credential_id);
+                }
+                Ok(result)
+            }
             Err(e) => match e {
                 AcceptTxError::SequencerOverloaded503 => {
                     return Err(sequencer_overloaded_503("Other"));
