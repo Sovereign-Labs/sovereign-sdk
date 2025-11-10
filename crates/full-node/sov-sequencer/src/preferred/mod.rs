@@ -907,13 +907,14 @@ where
         let tx_len = baked_tx.data.len();
 
         let (outer_res, is_nonce_based) = match uniqueness {
-            UniquenessData::Generation(_) => {
-                (self.synchronized_state_updator
+            UniquenessData::Generation(_) => (
+                self.synchronized_state_updator
                     .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-                    .await, false)
-            }
-            UniquenessData::Nonce(tx_nonce) => {
-                (self.tx_nonce_queues
+                    .await,
+                false,
+            ),
+            UniquenessData::Nonce(tx_nonce) => (
+                self.tx_nonce_queues
                     .handle_new_tx(
                         baked_tx,
                         tx_hash,
@@ -921,8 +922,9 @@ where
                         credential_id,
                         original_tx_queue_id,
                     )
-                    .await, true)
-            }
+                    .await,
+                true,
+            ),
         };
 
         let res = match outer_res {

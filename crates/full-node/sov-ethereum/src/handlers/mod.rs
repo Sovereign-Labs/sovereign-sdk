@@ -14,7 +14,6 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
-use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::Runtime;

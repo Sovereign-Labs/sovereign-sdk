@@ -43,16 +43,16 @@ struct AddressQueue<S: Spec, Rt: Runtime<S>> {
     txs: BTreeMap<u64, QueuedTx<S, Rt>>,
     /// Tracks a nonce that has been removed from the queue for execution but hasn't completed yet,
     /// since it's no longer in the queue but it still satisfies the prerequisite for future nonces
-    last_executed: Option<u64>,
+    last_popped: Option<u64>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> Debug for AddressQueue<S, Rt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{{ nonces: {:?}, last_executed: {:?} }}",
+            "{{ nonces: {:?}, last_popped: {:?} }}",
             self.txs.keys().cloned().collect::<Vec<_>>(),
-            self.last_executed
+            self.last_popped
         )
     }
 }
@@ -61,7 +61,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     fn new() -> Self {
         Self {
             txs: BTreeMap::new(),
-            last_executed: None,
+            last_popped: None,
         }
     }
 
@@ -78,23 +78,25 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     }
 
     /// Mark a nonce as currently being executed (removed from queue but not yet committed).
-    fn mark_executing(&mut self, nonce: u64) {
-        self.last_executed = Some(nonce);
+    fn set_last_popped(&mut self, nonce: u64) {
+        self.last_popped = Some(nonce);
+    }
+
+    /// Returns the next expected nonce based on the last popped transaction (if any).
+    fn next_nonce_from_popped(&self) -> u64 {
+        self.last_popped.map(|n| n.saturating_add(1)).unwrap_or(0)
     }
 
     /// Check if there's a contiguous sequence of transactions from `current_nonce` to `tx_nonce` (inclusive).
-    /// A nonce is considered "present" if it's either in the queue OR marked as last_executed.
+    /// A nonce is considered "present" if it's either in the queue OR marked as last_popped.
     fn has_contiguous_sequence_to(&self, tx_nonce: u64, current_nonce: u64) -> bool {
         // We know the user account's nonce cannot be lower than the state value.
         // Sometimes the state value is stale for a short period of time, which is why we treat is
         // as a lower bound only.
         let lower_bound = current_nonce;
-        // last_executed is the last recorded transaction popped from the user's queue, so we know
+        // last_popped is the last recorded transaction popped from the user's queue, so we know
         // the account's nonce cannot be higher than this.
-        // We add 1 because `current_nonce` is the next valid nonce, while `last_executed` was the
-        // previous valid nonce (so the next transaction should have nonce `last_executed + 1`).
-        let upper_bound =
-            current_nonce.max(self.last_executed.map(|n| n.saturating_add(1)).unwrap_or(0));
+        let upper_bound = current_nonce.max(self.next_nonce_from_popped());
 
         if tx_nonce < lower_bound {
             // The transaction can never be valid.
@@ -281,26 +283,25 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         }
     }
 
-    /// Clean up a user's queue if it's empty and last_executed is stale.
+    /// Clean up a user's queue if it's empty and last_popped is stale.
     ///
     /// A queue is only removed if:
     /// 1. It has no queued transactions, AND
-    /// 2. Either last_executed is None, OR last_executed < current_nonce (meaning API state has caught up)
+    /// 2. Either last_popped is None, OR last_popped < current_nonce (meaning API state has caught up)
     ///
-    /// This prevents premature pruning when last_executed is tracking a recently-executed transaction
+    /// This prevents premature pruning when last_popped is tracking a recently-executed transaction
     /// whose DB persistence hasn't completed yet.
     fn cleanup_queue_if_empty(&self, credential_id: &CredentialId) {
         if let Entry::Occupied(entry) = self.queues.entry(*credential_id) {
             let queue = entry.get();
             if queue.is_empty() {
-                // Only prune if last_executed is stale (or not set)
-                // last_executed = N means "executed nonce N, next valid is N+1"
+                // Only prune if last_popped is stale (or not set)
+                // last_popped = N means "executed nonce N, next valid is N+1"
                 // current_nonce = M means "next valid nonce is M"
-                // So last_executed is stale when N < M (i.e., API state has caught up past last_executed)
+                // So last_popped is stale when N < M (i.e., API state has caught up past
+                // last_popped)
                 let current_nonce = self.submitter.get_current_nonce_for_user(credential_id);
-                let should_prune = queue.last_executed
-                    .map(|n| n < current_nonce)
-                    .unwrap_or(true); // Prune if no last_executed
+                let should_prune = queue.last_popped.map(|n| n < current_nonce).unwrap_or(true); // Prune if no last_popped
 
                 if should_prune {
                     entry.remove();
@@ -313,9 +314,12 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     /// This is used to prevent a race condition where a transaction's DB operation hasn't completed
     /// yet (so API state still shows the old nonce), but a subsequent transaction arrives and should
     /// execute immediately rather than getting queued.
-    fn mark_nonce_executed(&self, credential_id: &CredentialId, nonce: u64) {
-        let mut queue = self.queues.entry(*credential_id).or_insert_with(AddressQueue::new);
-        queue.mark_executing(nonce);
+    fn mark_popped(&self, credential_id: &CredentialId, nonce: u64) {
+        let mut queue = self
+            .queues
+            .entry(*credential_id)
+            .or_insert_with(AddressQueue::new);
+        queue.set_last_popped(nonce);
     }
 
     /// Check if there's a contiguous sequence of transactions up to target_nonce
@@ -361,7 +365,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     // First transaction is the next expected nonce. Pop it and mark as executing.
                     let nonce = *head_entry.key();
                     let tx = head_entry.remove();
-                    queue_lock.mark_executing(nonce);
+                    queue_lock.set_last_popped(nonce);
                     return Some(tx);
                 }
             }
@@ -400,12 +404,6 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             // correctly propagated to the user. If the receiver is no longer listening, ignore.
             let _ = queued_tx.result_sender.send(result);
 
-            // *After* the waiting task has been notified, clean up the queue if it's empty.
-            // We do this at the end, to make sure we keep the `last_executed` information while
-            // the transaction is executing, ensuring it is safe from eviction from the queue
-            // mid-execution even if the nonce from the state is slightly stale.
-            self.cleanup_queue_if_empty(credential_id);
-
             if should_continue {
                 expected_nonce += 1;
             } else {
@@ -431,19 +429,17 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         // Get the API state nonce (may be stale if recent transactions haven't been persisted to DB yet)
         let api_state_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
 
-        // Get last_executed if it exists - this tracks transactions that have been accepted for
-        // execution but whose DB persistence may not have completed yet
-        let last_executed = match &locked_user_queue {
-            Entry::Occupied(entry) => entry.get().last_executed,
-            Entry::Vacant(_) => None,
+        // Get the next nonce based on what we've popped from the queue - this tracks transactions
+        // that have been accepted for execution but whose DB persistence may not have completed yet
+        let next_nonce_from_queue = match &locked_user_queue {
+            Entry::Occupied(entry) => entry.get().next_nonce_from_popped(),
+            Entry::Vacant(_) => 0,
         };
 
-        // Compute effective current nonce: max of API state or last_executed + 1
+        // Compute effective current nonce: max of API state or next nonce from queue
         // This prevents a race condition where a transaction gets queued even though its
         // prerequisite has already been accepted for execution (but API state not updated yet)
-        let current_nonce = api_state_nonce.max(
-            last_executed.map(|n| n.saturating_add(1)).unwrap_or(0)
-        );
+        let current_nonce = api_state_nonce.max(next_nonce_from_queue);
 
         let max_accepted_nonce = current_nonce + self.maximum_future_nonce_delta;
 
@@ -510,6 +506,13 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
 
         match action {
             Action::ExecuteNow(baked_tx) => {
+                // Conceptually, the TX goes straight to the head of the queue and is immediately
+                // popped.
+                // We obviously don't physically insert and pop it, but we mark it as the last
+                // popped for accounting purposes. E.g. since we have this tx, it can now satisfy
+                // prerequisite checks for any queued txs.
+                self.mark_popped(&credential_id, tx_nonce);
+
                 let res = self
                     .submitter
                     .execute_tx(
@@ -521,11 +524,8 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     .await;
 
                 // If the transaction succeeded, the user's nonce will have incremented.
-                // Mark this nonce as executed (even though DB persistence is still pending),
-                // then trigger a drain of the queue for any transactions which are now valid.
+                // Trigger a drain of the queue for any transactions which are now valid.
                 if res.as_ref().is_ok_and(|r| r.is_ok()) {
-                    self.mark_nonce_executed(&credential_id, tx_nonce);
-
                     let queues = self.clone();
                     let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
@@ -587,7 +587,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     /// Mark a transaction as completed after DB persistence finishes.
     ///
     /// This should be called after a transaction's database operation completes successfully.
-    /// It will clean up the user's queue if it's empty and the last_executed tracking information
+    /// It will clean up the user's queue if it's empty and the last_popped tracking information
     /// is no longer needed (i.e., API state has caught up).
     pub fn mark_completed(&self, credential_id: &CredentialId) {
         self.cleanup_queue_if_empty(credential_id);
@@ -734,7 +734,7 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_last_executed_at_start() {
+    fn test_has_contiguous_sequence_with_last_popped_at_start() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
         // Queue has [1, 2, 3]
@@ -749,9 +749,9 @@ mod tests {
         assert!(!queue.has_contiguous_sequence_to(1, 0));
 
         // Now we mark tx 0 as executing, even though the user's nonce isn't updated yet
-        queue.mark_executing(0);
+        queue.set_last_popped(0);
 
-        // Should succeed - last_executed fills the first position
+        // Should succeed - last_popped fills the first position
         assert!(queue.has_contiguous_sequence_to(4, 0));
         assert!(queue.has_contiguous_sequence_to(3, 0));
         assert!(queue.has_contiguous_sequence_to(2, 0));
@@ -763,13 +763,13 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_last_executed_alone() {
+    fn test_has_contiguous_sequence_with_last_popped_alone() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Empty queue, but last_executed = 5
-        queue.mark_executing(5);
+        // Empty queue, but last_popped = 5
+        queue.set_last_popped(5);
 
-        // Should succeed when target equals last_executed
+        // Should succeed when target equals last_popped
         assert!(queue.has_contiguous_sequence_to(5, 5));
         // And for the next valid nonce, too, despite the queue being empty
         assert!(queue.has_contiguous_sequence_to(6, 5));
@@ -781,13 +781,13 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_last_executed_stale() {
+    fn test_has_contiguous_sequence_with_last_popped_stale() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Queue has [2, 3], last_executed = 0 (stale, before current_nonce)
+        // Queue has [2, 3], last_popped = 0 (stale, before current_nonce)
         queue.insert(2, create_mock_queued_tx(2));
         queue.insert(3, create_mock_queued_tx(3));
-        queue.mark_executing(0);
+        queue.set_last_popped(0);
 
         // Should succeed - stale marker doesn't affect check starting at 2
         assert!(queue.has_contiguous_sequence_to(3, 2));
@@ -797,13 +797,13 @@ mod tests {
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_last_executed_nonce_is_stale() {
+    fn test_has_contiguous_sequence_with_last_popped_nonce_is_stale() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Queue has [5, 6], last_executed = 4
+        // Queue has [5, 6], last_popped = 4
         queue.insert(5, create_mock_queued_tx(2));
         queue.insert(6, create_mock_queued_tx(3));
-        queue.mark_executing(4);
+        queue.set_last_popped(4);
 
         // Nonce is stale at 1 but we know 4 is already executing, so should succeed
         assert!(queue.has_contiguous_sequence_to(4, 1));
@@ -816,19 +816,19 @@ mod tests {
         assert!(!queue.has_contiguous_sequence_to(0, 1));
         // 1 matches the user's current nonce
         assert!(queue.has_contiguous_sequence_to(1, 1));
-        // 2 and 3 are between the current nonce and the last_executed, so we keep them in the
+        // 2 and 3 are between the current nonce and the last_popped, so we keep them in the
         // queue for now
         assert!(queue.has_contiguous_sequence_to(2, 1));
         assert!(queue.has_contiguous_sequence_to(3, 1));
     }
 
     #[test]
-    fn test_has_contiguous_sequence_with_gap_after_last_executed() {
+    fn test_has_contiguous_sequence_with_gap_after_last_popped() {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
-        // Queue has [2], last_executed = 0 (with gap)
+        // Queue has [2], last_popped = 0 (with gap)
         queue.insert(2, create_mock_queued_tx(2));
-        queue.mark_executing(0);
+        queue.set_last_popped(0);
 
         // Since we're currently executing 0, then nonce 1 is valid
         assert!(queue.has_contiguous_sequence_to(1, 0));
@@ -955,11 +955,22 @@ mod tests {
         let mut handles = handles.into_iter();
         assert!(handles.next().unwrap().await.is_err());
         assert!(handles.next().unwrap().await.is_err());
-        assert!(handles.next().unwrap().await.unwrap().unwrap().unwrap().await.is_ok());
+        assert!(handles
+            .next()
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap()
+            .await
+            .is_ok());
 
         // Verify queue is empty
         assert_eq!(backend.get_current_nonce_for_user(&credential_id), 6);
-        assert!(queues.queues.get(&credential_id).is_none_or(|q| q.is_empty()));
+        assert!(queues
+            .queues
+            .get(&credential_id)
+            .is_none_or(|q| q.is_empty()));
     }
 
     #[tokio::test]
@@ -1611,7 +1622,7 @@ mod tests {
         // - TX A (nonce N) executes successfully, but DB persistence is slow
         // - TX B (nonce N+1) arrives before DB completes
         // - Without the fix: B would see current_nonce=N and get queued (deadlock!)
-        // - With the fix: B sees last_executed=N, so current_nonce becomes N+1, and executes immediately
+        // - With the fix: B sees last_popped=N, so current_nonce becomes N+1, and executes immediately
 
         let backend = MockTxExecutionBackend::new()
             .with_current_nonce(0)
@@ -1642,10 +1653,10 @@ mod tests {
 
         // At this point:
         // - TX A has executed (state transition complete)
-        // - last_executed is set to 0
+        // - last_popped is set to 0
         // - But API state still shows nonce=0 (DB hasn't completed)
 
-        // Submit TX B with nonce 1 - should execute immediately because last_executed=0
+        // Submit TX B with nonce 1 - should execute immediately because last_popped=0
         let handle_b = tokio::spawn({
             let queues = queues.clone();
             async move {
@@ -1684,9 +1695,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_queue_cleanup_respects_last_executed() {
+    async fn test_queue_cleanup_respects_last_popped() {
         // This test verifies that cleanup_queue_if_empty() doesn't prune a queue
-        // if last_executed is still tracking useful information
+        // if last_popped is still tracking useful information
 
         let backend = MockTxExecutionBackend::new()
             .with_current_nonce(0)
@@ -1707,21 +1718,21 @@ mod tests {
             .await;
         assert!(result.is_ok());
 
-        // At this point, last_executed=0 but API state still shows nonce=0 (DB delay)
-        // The queue should exist (even though it's empty) because last_executed tracks useful info
+        // At this point, last_popped=0 but API state still shows nonce=0 (DB delay)
+        // The queue should exist (even though it's empty) because last_popped tracks useful info
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        // Try to cleanup - should NOT prune because last_executed=0 >= current_nonce=0
+        // Try to cleanup - should NOT prune because last_popped=0 >= current_nonce=0
         queues.cleanup_queue_if_empty(&credential_id);
         assert!(
             queues.queues.contains_key(&credential_id),
-            "Queue should not be pruned while last_executed tracks useful info"
+            "Queue should not be pruned while last_popped tracks useful info"
         );
 
         // Now wait for DB to complete
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Try cleanup again - now should prune because last_executed=0 < current_nonce=1
+        // Try cleanup again - now should prune because last_popped=0 < current_nonce=1
         queues.mark_completed(&credential_id);
         assert!(
             !queues.queues.contains_key(&credential_id),
