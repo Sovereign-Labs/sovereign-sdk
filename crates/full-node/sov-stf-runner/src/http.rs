@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
@@ -187,50 +188,54 @@ async fn handle_socket(
 }
 
 async fn handle_rpc_message(
-    text: &str,
+    text: String,
     socket_responses: &tokio::sync::mpsc::Sender<Message>,
     rpc_methods: &RpcModule<()>,
     use_binary: bool,
 ) {
-    // Buffer size picked up from `jsonrpsee` crate examples
-    match rpc_methods.raw_json_request(text, 1).await {
-        Ok((rpc_response, mut receiver)) => {
-            tracing::trace!("RPC request processed successfully: {}", rpc_response);
-            let response_message = if use_binary {
-                Message::Binary(rpc_response.to_string().into_bytes())
-            } else {
-                Message::Text(rpc_response.to_string())
-            };
+    // Spawn a task per inbound request
+    let socket_responses = socket_responses.clone();
+    let rpc_methods = rpc_methods.clone();
+    tokio::spawn(async move {
+        // Buffer size picked up from `jsonrpsee` crate examples
+        match rpc_methods.raw_json_request(&text, 1).await {
+            Ok((rpc_response, mut receiver)) => {
+                tracing::trace!("RPC request processed successfully: {}", rpc_response);
+                let response_message = if use_binary {
+                    Message::Binary(rpc_response.to_string().into_bytes())
+                } else {
+                    Message::Text(rpc_response.to_string())
+                };
 
-            if socket_responses.send(response_message).await.is_err() {
-                tracing::error!("Websocket sender has been closed, aborting websocket");
-                return;
-            }
+                if socket_responses.send(response_message).await.is_err() {
+                    tracing::error!("Websocket sender has been closed, aborting websocket");
+                    return;
+                }
 
-            if !receiver.is_closed() {
-                let subscription_responses = socket_responses.clone();
-                tokio::task::spawn(async move {
-                    tracing::trace!("Spawning subscription responses loop");
-                    while let Some(message) = receiver.recv().await {
-                        tracing::trace!("Subscription message received: {}", message);
-                        let sub_message = if use_binary {
-                            Message::Binary(message.to_string().into_bytes())
-                        } else {
-                            Message::Text(message.to_string())
-                        };
-                        if let Err(error) = subscription_responses.send(sub_message).await {
-                            tracing::debug!(%error, "WebSocket closed, stopping subscription forwarding");
-                            break;
+                if !receiver.is_closed() {
+                    let subscription_responses = socket_responses.clone();
+                    tokio::task::spawn(async move {
+                        tracing::trace!("Spawning subscription responses loop");
+                        while let Some(message) = receiver.recv().await {
+                            tracing::trace!("Subscription message received: {}", message);
+                            let sub_message = if use_binary {
+                                Message::Binary(message.to_string().into_bytes())
+                            } else {
+                                Message::Text(message.to_string())
+                            };
+                            if let Err(error) = subscription_responses.send(sub_message).await {
+                                tracing::debug!(%error, "WebSocket closed, stopping subscription forwarding");
+                                break;
+                            }
                         }
-                    }
-                    tracing::trace!("Subscription forwarding task finished");
-                });
+                        tracing::trace!("Subscription forwarding task finished");
+                    });
+                }
             }
-        }
-        Err(error) => {
-            tracing::error!(%error, "Error while processing RPC request");
-        }
-    }
+            Err(error) => {
+                tracing::error!(%error, "Error while processing RPC request");
+            }
+        }});
 }
 
 async fn handle_socket_read(
@@ -245,11 +250,11 @@ async fn handle_socket_read(
                 tracing::trace!(message = ?msg, "Message received from websocket");
                 match msg {
                     Message::Text(text) => {
-                        handle_rpc_message(&text, &socket_responses, &rpc_methods, false).await;
+                        handle_rpc_message(text, &socket_responses, &rpc_methods, false).await;
                     }
                     Message::Binary(data) => {
                         // Parse binary frame as UTF-8 JSON-RPC request
-                        match std::str::from_utf8(&data) {
+                        match String::from_utf8(data) {
                             Ok(text) => {
                                 handle_rpc_message(text, &socket_responses, &rpc_methods, true).await;
                             }
@@ -284,14 +289,32 @@ async fn handle_socket_write(
     mut socket_responses: futures_util::stream::SplitSink<WebSocket, Message>,
     mut shutdown_receiver: watch::Receiver<()>,
 ) {
+    let mut pending = Vec::with_capacity(128);
     loop {
         tokio::select! {
             Some(response) = socket_requests.recv() => {
-                if let Err(error) = socket_responses.send(response).await {
+                // Drain all available messages into the pending buffer (up to 128)
+                // Then send as a batch and flush once
+                pending.push(response);
+                while let Ok(response) = socket_requests.try_recv() {
+                    pending.push(response);
+                    if pending.len() >= 128 {
+                        break;
+                    }
+                }
+                let num_items = pending.len();
+                for item in pending.drain(..) {
+                    if let Err(error) = socket_responses.feed(item).await {
+                        tracing::debug!(%error, "WebSocket closed, stopping writer task");
+                        break;
+                    }
+                }
+                if let Err(error) = socket_responses.flush().await {
                     tracing::debug!(%error, "WebSocket closed, stopping writer task");
                     break;
                 }
-                tracing::trace!("Message sent to websocket");
+                tracing::trace!("{} messages sent to websocket", num_items);
+                
             }
             _ = shutdown_receiver.changed() => {
                 tracing::debug!("Shutdown signal received, stopping WebSocket write handler");
@@ -299,7 +322,6 @@ async fn handle_socket_write(
             }
         }
     }
-    tracing::trace!("WebSocket write handler finished");
 }
 
 #[cfg(test)]
