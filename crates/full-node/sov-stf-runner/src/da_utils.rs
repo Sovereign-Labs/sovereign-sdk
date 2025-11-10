@@ -52,7 +52,8 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     // We allow chain to consecutively rewind of `MAX_GET_BLOCK_ATTEMPTS` after that it will error
     for attempt in 1..=MAX_GET_BLOCK_ATTEMPTS {
         // If the head rolled back below requested height, we will try to request the head instead.
-        let rolled_back_head_future = get_new_head_height_if_roll_back(sync_state, height);
+        let rolled_back_head_future =
+            get_new_head_height_if_roll_back(sync_state, requested_height);
         // DaService suppose to do all necessary retries on failures.
         // Runner only limits the total time of this activity.
         let get_block_future =
