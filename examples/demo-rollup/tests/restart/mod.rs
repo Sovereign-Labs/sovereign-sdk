@@ -154,6 +154,7 @@ async fn start_stop_empty(
         (Level::WARN, "Skipping pruning of sequence number because it's already been pruned".to_string()),
         (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
         (Level::WARN, "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string()),
+        (Level::WARN, "DA head rolled back below requested height, retrying with new head".to_string()),
     ];
 
     let mut recorded_errors_warnings =
@@ -549,6 +550,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
             Level::WARN,
             "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string(),
         ),
+        (Level::WARN, "DA head rolled back below requested height, retrying with new head".to_string())
     ];
     recorded_errors_warnings.retain(|e| !known.contains(e));
     // We could've checked `.is_empty`, but in case of failure, we will see errors immediately.

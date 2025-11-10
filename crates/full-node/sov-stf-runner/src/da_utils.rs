@@ -51,21 +51,17 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
 
     let mut requested_height = height;
 
-    // During each iteration of the loop, it will try to fetch da block at given height
-    // If head rolls back below requested,
-    // requested height will be changed to height and new iteration of the loop continues
-    // We allow chain to consecutively rewind of `MAX_GET_BLOCK_ATTEMPTS` after that it will error
+    // Retry up to MAX_GET_BLOCK_ATTEMPTS times if the chain reorgs during fetch.
+    // Each iteration races between fetching the block and detecting a reorg.
     for attempt in 1..=MAX_GET_BLOCK_ATTEMPTS {
-        // If the head rolled back below requested height, we will try to request the head instead.
         let rolled_back_head_future =
             get_new_head_height_if_roll_back(sync_state, requested_height);
-        // DaService suppose to do all necessary retries on failures.
-        // Runner only limits the total time of this activity.
+        // DaService handles its own retries for transient failures.
+        // We only enforce a total timeout per attempt.
         let get_block_future =
             tokio::time::timeout(da_total_timeout, da_service.get_block_at(requested_height));
         tokio::select! {
             get_block_result = get_block_future => {
-                // Just flatten timeout, but return as is
                 match get_block_result {
                     Ok(inner_result) => {
                         return inner_result.map_err(|error| anyhow::anyhow!("Error from DaService: {error:?}"));
@@ -80,12 +76,12 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
                     requested_height,
                     new_da_head_height = rolled_back_height,
                     attempt,
-                    ouf_of_attempts = MAX_GET_BLOCK_ATTEMPTS,
-                    "DA head has rolled back below requested height. Updating requested height and retrying");
+                    out_of_attempts = MAX_GET_BLOCK_ATTEMPTS,
+                    "DA head rolled back below requested height, retrying with new head");
                 requested_height = rolled_back_height;
             }
         }
     }
 
-    anyhow::bail!("Failed to fetch block after {MAX_GET_BLOCK_ATTEMPTS} of attempts");
+    anyhow::bail!("Failed to fetch block after {MAX_GET_BLOCK_ATTEMPTS} consecutive reorgs");
 }
