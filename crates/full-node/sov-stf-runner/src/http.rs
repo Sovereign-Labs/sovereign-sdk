@@ -171,7 +171,7 @@ async fn handle_socket(
 ) {
     let (sender, receiver) = socket.split();
 
-    let (socket_requests, socket_responses) = tokio::sync::mpsc::channel(10);
+    let (socket_requests, socket_responses) = tokio::sync::mpsc::channel(128);
 
     tokio::spawn(handle_socket_write(
         socket_responses,
