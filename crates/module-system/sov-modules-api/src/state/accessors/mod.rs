@@ -37,7 +37,7 @@ pub use checkpoints::{ChangeSet, StateCheckpoint};
 pub use genesis::GenesisStateAccessor;
 pub use internals::AccessoryDelta;
 pub use kernel::{BootstrapWorkingSet, KernelStateAccessor};
-pub use scratchpad::{PreExecWorkingSet, RevertableTxState, TxChangeSet, TxScratchpad, WorkingSet};
+pub use scratchpad::{LayeredRevertableTxState, LayerResult, PreExecWorkingSet, RevertableTxState, TxChangeSet, TxScratchpad, WorkingSet};
 pub use temp_cache::BorshSerializedSize;
 
 use self::seal::UniversalStateAccessor;

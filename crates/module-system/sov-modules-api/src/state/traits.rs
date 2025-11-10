@@ -22,6 +22,7 @@ use crate::state::accessors::StateMetricsProvider;
 #[cfg(any(feature = "test-utils", feature = "evm"))]
 use crate::UnmeteredStateWrapper;
 use crate::{Gas, GasMeter, GasMeteringError, GasSpec, RevertableTxState, Spec};
+use crate::state::accessors::LayeredRevertableTxState;
 
 /// A type that can both read and write the normal "user-space" state of the rollup.
 ///
@@ -106,6 +107,13 @@ pub trait TxState<S: Spec>:
     /// You *MUST* call .commit() to save the changes from the resulting accessor if you want them to be persisted
     fn to_revertable(&mut self) -> RevertableTxState<S, Self> {
         RevertableTxState::new(self)
+    }
+
+    /// Converts this state accessor into a [`LayeredRevertableTxState`].
+    ///
+    /// You *MUST* call .commit_layer() to save the changes from the resulting accessor if you want them to be persisted
+    fn add_revertable_layer(&mut self) -> LayeredRevertableTxState<S, Self> {
+        LayeredRevertableTxState::new(self)
     }
 }
 
