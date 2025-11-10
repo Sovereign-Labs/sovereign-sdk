@@ -17,6 +17,7 @@ mod params;
 mod service;
 pub(crate) mod watermark;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum SubscriptionRequest {
     Logs(Box<Filter>),
     Heads,

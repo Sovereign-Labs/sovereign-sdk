@@ -1,7 +1,7 @@
-use alloy::eips::BlockNumberOrTag;
+use crate::{logs::run_logs_test, uniswap::UniSoakTest};
 use alloy::network::TransactionBuilder;
-use alloy::providers::{Provider, ProviderBuilder};
-use alloy::rpc::types::{Filter, TransactionRequest};
+use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
@@ -10,10 +10,6 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
-use std::time::Instant;
-
-use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
-use sov_eth_client::LogsWithCursorProvider;
 
 mod logs;
 mod simple_storage;
@@ -69,7 +65,22 @@ enum TestType {
         /// Number of parallel workers to spawn
         #[arg(short, long, default_value = "1")]
         num_workers: usize,
+
+        #[command(subcommand)]
+        mode: LogsRetrievalMode,
     },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+enum LogsRetrievalMode {
+    /// Retrieve logs using eth_subscribe
+    Subscription {
+        /// Channel capacity for the subscription
+        #[arg(short, long, default_value = "100000")]
+        capacity: usize,
+    },
+    /// Retrieve logs using cursor-based pagination
+    WithCursor,
 }
 
 /// Derives a unique private key for a worker by tweaking the root key.
@@ -91,6 +102,22 @@ pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Re
     let client = ProviderBuilder::new()
         .wallet(signer)
         .connect_http(url)
+        .erased();
+    Ok(client)
+}
+
+/// Creates an Alloy WS client connected to the specified RPC server.
+pub(crate) async fn alloy_ws_client(
+    rpc_addr: SocketAddr,
+    signer: PrivateKeySigner,
+) -> Result<DynProvider> {
+    let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
+    let ws = WsConnect::new(url);
+    let client = ProviderBuilder::new()
+        .wallet(signer)
+        .connect_ws(ws)
+        .await
+        .unwrap()
         .erased();
     Ok(client)
 }
@@ -161,64 +188,6 @@ async fn fund_worker_accounts(
     Ok(())
 }
 
-/// Spawns multiple log test workers, runs them, and retrieves all generated logs.
-async fn run_logs_test(
-    rpc_addr: SocketAddr,
-    private_key: &str,
-    tx_count: usize,
-    logs_per_tx: usize,
-    num_workers: usize,
-) -> Result<()> {
-    validate_worker_count(num_workers)?;
-    // Set up root account and fund workers
-    let root_signer: PrivateKeySigner = private_key.parse()?;
-    let root_client = alloy_client(rpc_addr, root_signer.clone())?;
-    fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
-    let from_block = root_client.get_block_number().await?;
-
-    // Spawn workers
-    let produce_logs = Instant::now();
-    let mut handles = Vec::with_capacity(num_workers);
-    for worker_idx in 0..num_workers {
-        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone())?;
-
-        handles.push(tokio::spawn(async move {
-            match LogsSoakTest::new(client, worker_idx).await {
-                Ok(test) => {
-                    if let Err(e) = test.run(tx_count, logs_per_tx).await {
-                        eprintln!("Worker {worker_idx} error during run: {e:?}");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Worker {worker_idx} failed to deploy contracts: {e:?}");
-                }
-            }
-            Ok::<(), anyhow::Error>(())
-        }));
-    }
-    try_join_all(handles).await?;
-    println!(
-        "Produced {} logs in {:?}",
-        num_workers * tx_count * logs_per_tx,
-        produce_logs.elapsed()
-    );
-
-    // Retrieve and count all logs
-    let filter: Filter = Filter::new()
-        .from_block(from_block)
-        .to_block(BlockNumberOrTag::Pending);
-    let fetch_logs = Instant::now();
-    let logs = root_client.get_all_logs_with_cursor(&filter).await?;
-    println!(
-        "Retrieved {} logs in {:?}",
-        logs.len(),
-        fetch_logs.elapsed()
-    );
-
-    Ok(())
-}
-
 /// Runs the SimpleStorage soak test.
 async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
     let signer: PrivateKeySigner = private_key.parse()?;
@@ -241,6 +210,7 @@ async fn main() -> Result<()> {
             tx_count,
             logs_per_tx,
             num_workers,
+            mode,
         } => {
             run_logs_test(
                 args.rpc_addr,
@@ -248,6 +218,7 @@ async fn main() -> Result<()> {
                 tx_count,
                 logs_per_tx,
                 num_workers,
+                mode,
             )
             .await?;
         }

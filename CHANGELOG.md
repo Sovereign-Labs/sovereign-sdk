@@ -1,4 +1,5 @@
 # 2025-11-06
+- #2039 Add WebSocket subscription support to EVM logs soak tests.
 - #2032 Upgrade Reth/Revm to 1.9.0
 
 # 2025-11-05
