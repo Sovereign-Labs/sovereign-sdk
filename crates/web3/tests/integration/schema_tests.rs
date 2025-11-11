@@ -2,11 +2,14 @@ use base64::Engine;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::PrivateKey;
 use sovereign_web3::schema::{json, Serializer, TransactionBuilder};
-use sov_address::EthereumAddress;
 
 const CHAIN_ID: u64 = 4321;
 
+// Run with: cargo test -- --ignored
+// This is intended as a simple manual smoke test against a pre-running local demo rollup
+// to ensure things are still working end-to-end. Will add more comprehensive tests later.
 #[test]
+#[ignore]
 fn test_basic_schema_transaction_submission() {
     let serializer = Serializer::from_url("http://0.0.0.0:12346/rollup/schema").unwrap();
     let call = json!({
@@ -34,15 +37,11 @@ fn test_basic_schema_transaction_submission() {
         .unwrap();
     let tx_bytes = unsigned_tx.bytes_for_signing(&serializer).unwrap();
 
-    let address = EthereumAddress::from_str(
-        "0x90f8bf6a479f320ead074411a4b0e7944ea8c9c1",
-    );
     // demo rollup uses paymaster so tx will succeed without funds
-    // TODO: i think we need to use evm
     let private_key = Ed25519PrivateKey::generate();
     let signature = private_key.sign(&tx_bytes).as_ref().to_vec();
     let pub_key = private_key.pub_key().bytes().to_vec();
-    let signed_tx = unsigned_tx.to_signed(signature, pub_key);
+    let signed_tx = unsigned_tx.to_signed(pub_key, signature);
 
     let tx_bytes = serializer.serialize_tx(&signed_tx).unwrap();
     let encoded_tx = base64::prelude::BASE64_STANDARD.encode(tx_bytes);
@@ -55,5 +54,5 @@ fn test_basic_schema_transaction_submission() {
         .send()
         .unwrap();
 
-    println!("Response: {:?}", response);
+    assert!(response.status().is_success(), "Request failed");
 }
