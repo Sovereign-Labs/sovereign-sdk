@@ -1,5 +1,6 @@
 import type SovereignClient from "@sovereign-sdk/client";
 import type { Signer } from "@sovereign-sdk/signers";
+import type { Transaction, UnsignedTransaction } from "@sovereign-sdk/types";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
 import type { DeepPartial } from "../utils";
@@ -8,8 +9,6 @@ import {
   type StandardRollup,
   type StandardRollupContext,
   type StandardRollupSpec,
-  type Transaction,
-  type UnsignedTransaction,
   createStandardRollup,
   standardTypeBuilder,
 } from "./standard-rollup";
@@ -117,12 +116,12 @@ export class SolanaSignableRollup<RuntimeCall> {
   private async submitSerializedMessage(
     serializedMessage: Uint8Array,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
-    return await this.inner.http.post<
-      string,
-      SovereignClient.Sequencer.TxCreateResponse
-    >(this.solanaEndpoint, {
-      body: Base64.fromUint8Array(serializedMessage),
-    });
+    return await this.inner.http.post<SovereignClient.Sequencer.TxCreateResponse>(
+      this.solanaEndpoint,
+      {
+        body: Base64.fromUint8Array(serializedMessage),
+      },
+    );
   }
 
   /**

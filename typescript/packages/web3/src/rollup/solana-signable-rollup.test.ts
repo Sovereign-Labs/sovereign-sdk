@@ -9,28 +9,22 @@ import {
 } from "./solana-signable-rollup";
 import { StandardRollup } from "./standard-rollup";
 
-vi.mock("@sovereign-sdk/client");
-
 function createMockClient(overrides?: {
   chainId?: number;
   chainName?: string;
   chainHash?: string;
 }) {
-  const mockClient = new SovereignClient();
+  const mockClient = new SovereignClient({ fetch: vi.fn() });
   const chainId = overrides?.chainId || 1;
 
   mockClient.rollup = {
-    constants: {
-      retrieve: vi.fn().mockResolvedValue({ chain_id: chainId }),
-    },
-    schema: {
-      retrieve: vi.fn().mockResolvedValue({
-        schema: overrides?.chainName ? { chain_name: overrides.chainName } : {},
-        chain_hash:
-          overrides?.chainHash ||
-          "0x0000000000000000000000000000000000000000000000000000000000000000",
-      }),
-    },
+    constants: vi.fn().mockResolvedValue({ chain_id: chainId }),
+    schema: vi.fn().mockResolvedValue({
+      schema: overrides?.chainName ? { chain_name: overrides.chainName } : {},
+      chain_hash:
+        overrides?.chainHash ||
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+    }),
   } as any;
 
   return mockClient;
@@ -63,12 +57,8 @@ describe("SolanaSignableRollup", () => {
   it("should delegate all StandardRollup methods", async () => {
     const mockClient = createMockClient();
 
-    // Add sequencer mock for transaction submission
-    mockClient.sequencer = {
-      txs: {
-        create: vi.fn().mockResolvedValue({ id: "test-hash" }),
-      },
-    } as any;
+    // Mock the post method for transaction submission
+    mockClient.post = vi.fn().mockResolvedValue({ id: "test-hash" });
 
     const rollup = await createSolanaSignableRollup({
       client: mockClient,
@@ -117,9 +107,8 @@ describe("SolanaSignableRollup", () => {
 
   it("should work without any configuration", async () => {
     const mockClient = createMockClient();
-    vi.mocked(SovereignClient).mockImplementation(() => mockClient as any);
 
-    const rollup = await createSolanaSignableRollup();
+    const rollup = await createSolanaSignableRollup({ client: mockClient });
 
     expect(rollup).toBeInstanceOf(SolanaSignableRollup);
     expect(rollup.context.defaultTxDetails.chain_id).toBe(1);
