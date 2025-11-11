@@ -1,10 +1,12 @@
+# 2025-11-11
+- #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
+  - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
+
 # 2025-11-06
 - #2039 Add WebSocket subscription support to EVM logs soak tests.
 - #2032 Upgrade Reth/Revm to 1.9.0
 - #2036 Extends documentation of runner config
 - #2042 Fixes runner polling issue
-- #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
-  - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
 
 # 2025-11-05
 - #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
