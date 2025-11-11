@@ -153,7 +153,7 @@ where
         let Some(resolved_version) = self.get_version_to_use(version) else {
             return Ok(None);
         };
-        let _span = tracing::debug_span!("version", ?resolved_version, passed = ?version).entered();
+        let _span = tracing::debug_span!("NomtProverStorage::read_value", ?resolved_version, passed_version = ?version).entered();
         // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
         let key_vec = key.as_ref().to_vec();
         let val = match N::NAMESPACE {
