@@ -20,11 +20,22 @@ async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_he
     loop {
         let status = *rx.borrow_and_update();
         let target_height = status.target_da_height();
+        tracing::trace!(?status, "Received SyncStatus update from the channel");
         // Requesting one block ahead of the current head is normal behavior
         // when the node is fully synced and waiting for the next block.
         if target_height.saturating_add(1) < requested_height {
+            tracing::trace!(
+                requested_height,
+                target_height,
+                "Received head is below expected, exit condition hit"
+            );
             return target_height;
         }
+        tracing::trace!(
+            requested_height,
+            target_height,
+            "Received head is in expected range, keep waiting for new value"
+        );
         if rx.changed().await.is_err() {
             // Sender dropped, fall back to reading the atomic value
             return sync_state.target_da_height.load(Ordering::Relaxed);

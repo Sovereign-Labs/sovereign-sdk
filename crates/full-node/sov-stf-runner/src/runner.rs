@@ -760,7 +760,6 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     stop_at_rollup_height: Option<RollupHeight>,
     ledger_db: &LedgerDb,
     da_service: &Da,
-    sync_status_sender: watch::Sender<SyncStatus>,
 ) -> anyhow::Result<Arc<DaSyncState>> {
     let next_item_numbers = ledger_db.get_next_items_numbers()?;
     let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
@@ -772,6 +771,22 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
         .await?
         .height();
 
+    let initial_sync_status = SyncStatus::Syncing {
+        synced_da_height: da_height_processed,
+        target_da_height,
+    };
+
+    let (sync_status_sender, _sync_status_receiver) =
+        tokio::sync::watch::channel(initial_sync_status);
+
+    tracing::debug!(
+        da_height_processed,
+        genesis_da_height,
+        target_da_height,
+        ?stop_at_rollup_height,
+        ?initial_sync_status,
+        "Initializing new instance of DaSyncState"
+    );
     let sync_state = Arc::new(DaSyncState {
         synced_da_height: da_height_processed.into(),
         target_da_height: AtomicU64::new(target_da_height),
