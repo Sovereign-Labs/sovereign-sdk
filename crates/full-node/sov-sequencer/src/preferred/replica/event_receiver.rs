@@ -10,7 +10,7 @@ use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tracing::{error, trace};
+use tracing::{debug, error, trace};
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
 
@@ -128,6 +128,7 @@ impl EventReceiver {
                 panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
             }
 
+            debug!("Relica event receiver started.");
             loop {
                 let fut = future_or_shutdown(
                     self.fetch_data(start_event_id, prev_event_type, &mut listener),
@@ -146,14 +147,14 @@ impl EventReceiver {
                     }
                     Err(err) => {
                         match err {
-                            EventReceiverError::ParsingError(e) => {
+                            EventReceiverError::ParsingError(err) => {
                                 // This should never happen, so we shut down the replica immediately
                                 panic!(
-                                    "Failed to parse notification: {e:?}. Shutting down replica."
+                                    "Failed to parse notification: {err:?}. Shutting down replica."
                                 );
                             }
-                            EventReceiverError::DbError(e) => {
-                                error!("Failed to receive notifications from database: {e:?}. Shutting down replica.");
+                            EventReceiverError::DbError(err) => {
+                                error!(?err, ?start_event_id, "Failed to receive notifications from database. Shutting down replica.");
 
                                 if shutdown_receiver.has_changed().unwrap_or(true) {
                                     break;
@@ -230,6 +231,7 @@ impl EventReceiver {
                 let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
 
                 if matches!(notify.event_type, EventType::BatchStart) {
+                    debug!(?notify, "Relica received first BatchStart notification.");
                     break (notify.event_id, notify.event_id);
                 }
             },

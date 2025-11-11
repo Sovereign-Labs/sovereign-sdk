@@ -1087,7 +1087,6 @@ where
         None,
         Box::new(InfiniteHeight),
         sync_state,
-        DA_POLLING_INTERVAL,
         std::time::Duration::from_millis(3_600_000),
         da_header_provider,
     )?;

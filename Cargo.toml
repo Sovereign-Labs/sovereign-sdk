@@ -291,6 +291,7 @@ ethers = { version = "=2.0.14", default-features = false }
 
 alloy = { version = "1.0.37", default-features = false, features = ["std", "essentials"] }
 alloy-serde = { version = "1.0.37", default-features = false }
+alloy-pubsub = { version = "1.0.37", default-features = false }
 alloy-chains = { version = "0.2.14", default-features = false }
 alloy-primitives = { version = "1.4.0", default-features = false }
 alloy-sol-types = { version = "1.4.0", default-features = false }

@@ -180,8 +180,9 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                     slot_number_according_to_node=%info.slot_number,
                     %current_visible_slot_number,
                     deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
-                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold.");
-            panic!("Replica does not support automatic recovery.");
+                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Replica will keep syncing.");
+
+            PreferredSeqOperation::WaitForNodeResyncToTip
         }
         // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
         (_, _, _, _, true) => {

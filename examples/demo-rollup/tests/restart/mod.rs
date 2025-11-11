@@ -15,8 +15,8 @@ use sov_bank::{config_gas_token_id, Coins};
 use sov_db::storage_manager::NomtStorageManager;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
-use sov_mock_da::BlockProducingConfig;
 use sov_mock_da::MockHash;
+use sov_mock_da::{BlockProducingConfig, MockDaConfig};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Amount;
@@ -420,6 +420,8 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
     let second_chunk = 4;
     let jump_size = first_chunk + second_chunk;
 
+    let mock_da_dir = tempfile::tempdir()?;
+
     let rollup_builder = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
         BlockProducingConfig::Periodic {
@@ -437,9 +439,10 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
             sequencer_conf.disable_state_root_consistency_checks = true;
         }
         c.aggregated_proof_block_jump = jump_size;
+    })
+    .set_da_config(|da_config| {
+        da_config.connection_string = MockDaConfig::sqlite_in_dir(mock_da_dir.path()).unwrap();
     });
-
-    let mock_da_dir = &rollup_storage_dir;
 
     {
         let mut storable_mock_da_layer =

@@ -206,12 +206,12 @@ pub async fn initialize_runner(
         .create_state_after(&finalized_header)
         .unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
-    let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
 
     let da_sync_state =
-        make_da_sync_state(0, None, &ledger_db, &da_service_with_cache, sync_sender)
+        make_da_sync_state(0, None, &ledger_db, &da_service_with_cache)
             .await
             .unwrap();
+    let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
     let (state_update_sender, state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await

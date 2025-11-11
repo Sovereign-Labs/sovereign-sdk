@@ -54,6 +54,7 @@ impl StorableMockDaLayer {
 
         entity::setup_db(&conn).await?;
         let last_seen_block = entity::query_last_saved_block(&conn).await?;
+        tracing::trace!(?last_seen_block, "Initializing StorableMockDaLayer from DB");
         let next_height = (last_seen_block.height as u32)
             .checked_add(1)
             .expect("next_height overflow");

@@ -74,10 +74,9 @@ async fn test_runner_with_background_da_service(
     let genesis_header = block.header().clone();
     let (_, ledger_state) = storage_manager.create_state_after(&genesis_header).unwrap();
 
-    let (sync_sender, mut sync_status_receiver) = watch::channel(SyncStatus::START);
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
-    let da_sync_state =
-        make_da_sync_state(0, None, &ledger_db, &da_service_with_cache, sync_sender).await?;
+    let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache).await?;
+    let mut sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
     let (state_update_sender, _state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
