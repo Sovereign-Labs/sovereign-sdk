@@ -50,7 +50,8 @@ STATE_ROOT_DELAY_BLOCKS = 3
 UNREGISTERED_BLOBS_PER_SLOT = 5
 # How many past transaction generations into the past to keep per-account buckets for
 # Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
-PAST_TRANSACTION_GENERATIONS = 5
+# Preferrably to use milliseconds as a value in tx
+PAST_TRANSACTION_GENERATIONS = 5_000
 # The maximum number of transactions hashes we remember per credential. 
 # Higher numbers allow accounts to send more transactions without updating their generation number. 
 # This is more user friendly for power users, but increases the worst case cost of the uniqueness check.
