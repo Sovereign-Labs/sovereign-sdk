@@ -136,6 +136,48 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
         }
     }
 
+    /// Commits the top layer to the layer below it, or to the inner state if this is the last layer.
+    /// 
+    /// This is a variant that takes `&mut self` instead of consuming `self`.
+    /// 
+    /// # Panics
+    /// Panics if there are no layers to commit.
+    pub fn commit_layer_mut(&mut self) {
+        if self.layers.is_empty() {
+            panic!("Cannot commit layer: no layers exist");
+        }
+        
+        let layer = self.layers.pop().unwrap();
+        if self.layers.is_empty() {
+            // This was the last layer, commit to inner state
+            for event in layer.events {
+                self.inner.add_type_erased_event(event);
+            }
+            for (key, value) in layer.writes {
+                if let Some(value) = value {
+                    self.inner.set_value(key.0, &key.1, value);
+                } else {
+                    self.inner.delete_value(key.0, &key.1);
+                }
+            }
+            self.inner.update_cache_with(layer.temp_cache);
+        } else {
+            // Commit to the layer below
+            let lower_layer = self.layers.last_mut().unwrap();
+            
+            // Merge events
+            lower_layer.events.extend(layer.events);
+            
+            // Merge writes (top layer takes precedence)
+            for (key, value) in layer.writes {
+                lower_layer.writes.insert(key, value);
+            }
+            
+            // Merge cache
+            lower_layer.temp_cache.update_with(layer.temp_cache);
+        }
+    }
+
     /// Reverts and discards the top layer.
     /// 
     /// # Panics
@@ -150,6 +192,20 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
         
         self.layers.pop();
         self
+    }
+
+    /// Reverts and discards the top layer.
+    /// 
+    /// This is a variant that takes `&mut self` instead of consuming `self`.
+    /// 
+    /// # Panics
+    /// Panics if there are no layers to revert.
+    pub fn revert_layer_mut(&mut self) {
+        if self.layers.is_empty() {
+            panic!("Cannot revert layer: no layers exist");
+        }
+        
+        self.layers.pop();
     }
 
     /// Gets the current number of layers.
