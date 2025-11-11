@@ -158,10 +158,7 @@ impl Serializer {
     ///
     /// * [`SerializerError::ChainHash`] - If the chain hash cannot be calculated from the schema
     pub fn chain_hash(&self) -> Result<[u8; 32], SerializerError> {
-        Ok(self
-            .schema
-            .chain_hash()
-            .map_err(SerializerError::ChainHash)?)
+        self.schema.chain_hash().map_err(SerializerError::ChainHash)
     }
 
     /// Serializes an unsigned transaction to binary format.
