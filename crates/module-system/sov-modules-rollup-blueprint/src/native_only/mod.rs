@@ -401,17 +401,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             }
         };
 
-        let (sync_status_sender, sync_status_receiver) =
-            tokio::sync::watch::channel(SyncStatus::START);
-
         let da_sync_state = make_da_sync_state(
             genesis_slot_number,
             stop_at_rollup_height,
             &ledger_db,
             da_service.as_ref(),
-            sync_status_sender,
         )
         .await?;
+
+        let sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
         let state_update_info =
             query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())

@@ -1,93 +1,98 @@
 //! Helper utilities for interacting with the DA layer.
+
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 
 const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 
-/// Tries to fetch block at given height.
-/// If `DaSyncState.target_height` becomes lower in the case of re-org, the function fetches a new head instead.
-/// Because [`DaSyncState`] is polling target height periodically,
-/// there is a possibility that this function won't notice change in target height if the polling interval of DaSyncState is too high.
-/// To mitigate this, it retries to call `get_block_at` several times before giving up and returning an error.
+/// Waits for the DA head to roll back below the requested height.
+///
+/// This function blocks indefinitely until a reorg occurs. It must be used in `tokio::select!`
+/// with another future that will eventually complete (e.g., `get_block_at`).
+///
+/// Returns the new target height once it drops below `requested_height - 1`.
+/// Note: Requesting `target_height + 1` is normal when the node is synced and waiting for the next block.
+async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_height: u64) -> u64 {
+    let mut rx = sync_state.sync_status_sender.subscribe();
+    loop {
+        let status = *rx.borrow_and_update();
+        let target_height = status.target_da_height();
+        tracing::trace!(?status, "Received SyncStatus update from the channel");
+        // Requesting one block ahead of the current head is normal behavior
+        // when the node is fully synced and waiting for the next block.
+        if target_height.saturating_add(1) < requested_height {
+            tracing::trace!(
+                requested_height,
+                target_height,
+                "Received head is below expected, exit condition hit"
+            );
+            return target_height;
+        }
+        tracing::trace!(
+            requested_height,
+            target_height,
+            "Received head is in expected range, keep waiting for new value"
+        );
+        if rx.changed().await.is_err() {
+            // Sender dropped, fall back to reading the atomic value
+            return sync_state.target_da_height.load(Ordering::Relaxed);
+        }
+    }
+}
+
+/// Fetches a DA block at the given height with reorg awareness.
+///
+/// If the DA head rolls back during the fetch (reorg detected), this function automatically
+/// retries with the new head height. Allows up to `MAX_GET_BLOCK_ATTEMPTS` consecutive reorgs
+/// before returning an error.
 pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     da_service: &Da,
     sync_state: &DaSyncState,
     height: u64,
-    polling_interval: Duration,
     da_total_timeout: Duration,
 ) -> anyhow::Result<Da::FilteredBlock> {
     tracing::trace!(
         height,
-        ?polling_interval,
         total_timeout = ?da_total_timeout,
         "Fetch polling for a block"
     );
+
     let mut requested_height = height;
-    let mut interval = tokio::time::interval(polling_interval);
 
-    let check_height = |h| -> u64 {
-        let target_height = sync_state.target_da_height.load(Ordering::Relaxed);
-        // Allow requesting height next after head, this is a normal operation.
-        let highest_allowed_to_request = target_height.saturating_add(1);
-
-        if highest_allowed_to_request < h {
-            tracing::info!(
-                new_head_height = target_height,
-                h,
-                "Head height decreased below currently requesting, re-requesting at new head"
-            );
-            target_height
-        } else {
-            h
-        }
-    };
-
-    let mut attempt = 0;
-    let sleep = tokio::time::sleep(da_total_timeout);
-    tokio::pin!(sleep);
-
-    loop {
-        // Maybe instead of `interval.tick` we should use total_timeout?
-        // Because it is for rewind.
+    // Retry up to MAX_GET_BLOCK_ATTEMPTS times if the chain reorgs during fetch.
+    // Each iteration races between fetching the block and detecting a reorg.
+    for attempt in 1..=MAX_GET_BLOCK_ATTEMPTS {
+        let rolled_back_head_future =
+            get_new_head_height_if_roll_back(sync_state, requested_height);
+        // DaService handles its own retries for transient failures.
+        // We only enforce a total timeout per attempt.
+        let get_block_future =
+            tokio::time::timeout(da_total_timeout, da_service.get_block_at(requested_height));
         tokio::select! {
-            result = da_service.get_block_at(requested_height) => {
-                tracing::trace!(
-                    requested_height,
-                    original_height = height,
-                    is_err = result.is_err(),
-                    attempt,
-                    "Received result from `get_block_at`");
-                match result {
-                    Ok(block) => {
-                        tracing::trace!(block_header = %block.header().display(), "Block fetched, returning");
-                        return Ok(block);
+            get_block_result = get_block_future => {
+                match get_block_result {
+                    Ok(inner_result) => {
+                        return inner_result.map_err(|error| anyhow::anyhow!("Error from DaService: {error:?}"));
                     }
-                    Err(err) => {
-                        tracing::trace!(?err, requested_height, attempt, "Error fetching block");
-                        attempt += 1;
-                        let requestable_height = check_height(requested_height);
-                        if requestable_height != requested_height {
-                            tracing::info!(requestable_height, "Request able height has changed, trying again");
-                            requested_height = requestable_height;
-                            continue;
-                        } else if attempt >= MAX_GET_BLOCK_ATTEMPTS {
-                            anyhow::bail!("Failed to fetch block after {MAX_GET_BLOCK_ATTEMPTS} attempts. Last error: {:?}", err);
-                        } else {
-                            tracing::info!(requestable_height, attempt, "Height hasn't changed, retrying again.");
-                        }
+                    Err(_) => {
+                        anyhow::bail!("Timeout getting block from DaService after {da_total_timeout:?}");
                     }
                 }
             }
-            _ = interval.tick() => {
-                requested_height = check_height(requested_height);
-            }
-            _ = &mut sleep => {
-                anyhow::bail!("Total timeout after {:?} while trying fetching block at height {}", da_total_timeout, requested_height);
+            rolled_back_height = rolled_back_head_future => {
+                tracing::warn!(
+                    requested_height,
+                    new_da_head_height = rolled_back_height,
+                    attempt,
+                    out_of_attempts = MAX_GET_BLOCK_ATTEMPTS,
+                    "DA head rolled back below requested height, retrying with new head");
+                requested_height = rolled_back_height;
             }
         }
     }
+
+    anyhow::bail!("Failed to fetch block after {MAX_GET_BLOCK_ATTEMPTS} consecutive reorgs");
 }
