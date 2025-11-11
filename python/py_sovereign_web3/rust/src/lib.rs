@@ -1,6 +1,7 @@
-use pyo3::prelude::*;
+use pyo3::types::PyDict;
+use pyo3::{prelude::*, types::PyType};
 use pyo3::exceptions::PyValueError;
-use sovereign_web3::schema::{Serializer, UnsignedTransaction, Transaction, TransactionBuilder, UniquenessData};
+use ::sovereign_web3::schema::{Serializer, UnsignedTransaction, Transaction, TransactionBuilder, UniquenessData};
 
 /// Python wrapper for the Rust Serializer struct
 #[pyclass]
@@ -56,6 +57,47 @@ struct PyUnsignedTransaction {
 
 #[pymethods]
 impl PyUnsignedTransaction {
+    /// Create a new unsigned transaction
+    #[new]
+    #[pyo3(signature = (runtime_call, chain_id=None, uniqueness=None, max_fee=None, max_priority_fee_bips=None, gas_limit=None))]
+    fn new(
+        runtime_call: &Bound<'_, PyDict>,
+        chain_id: Option<u64>,
+        uniqueness: Option<&PyUniquenessData>,
+        max_fee: Option<u128>,
+        max_priority_fee_bips: Option<u64>,
+        gas_limit: Option<Vec<u64>>,
+    ) -> PyResult<Self> {
+        use ::sovereign_web3::schema::{default_uniqueness, TxDetails, DEFAULT_MAX_FEE, DEFAULT_MAX_PRIORITY_FEE_BIPS};
+
+        // Convert Python dict to JSON Value
+        let call: serde_json::Value = pythonize::depythonize_bound(runtime_call.clone())
+            .map_err(|e| PyValueError::new_err(format!("Failed to convert runtime_call to JSON: {}", e)))?;
+
+        // Use provided uniqueness or default
+        let uniqueness = match uniqueness {
+            Some(u) => u.inner,
+            None => default_uniqueness()
+                .map_err(|e| PyValueError::new_err(format!("Failed to create default uniqueness: {}", e)))?,
+        };
+
+        // Create transaction details with defaults
+        let details = TxDetails {
+            max_priority_fee_bips: max_priority_fee_bips.unwrap_or(DEFAULT_MAX_PRIORITY_FEE_BIPS),
+            max_fee: max_fee.unwrap_or(DEFAULT_MAX_FEE),
+            gas_limit: Some(gas_limit).flatten(),
+            chain_id: chain_id.unwrap(), // todo: raise exception
+        };
+
+        let unsigned_tx = UnsignedTransaction {
+            runtime_call: call,
+            uniqueness,
+            details,
+        };
+
+        Ok(PyUnsignedTransaction { inner: unsigned_tx })
+    }
+
     /// Get bytes that should be signed (includes chain hash)
     fn bytes_for_signing(&self, serializer: &PySerializer) -> PyResult<Vec<u8>> {
         let bytes = self.inner.bytes_for_signing(&serializer.inner)
@@ -104,72 +146,10 @@ impl PyUniquenessData {
     /// Create default uniqueness (timestamp-based)
     #[staticmethod]
     fn default() -> PyResult<Self> {
-        use sovereign_web3::schema::default_uniqueness;
+        use ::sovereign_web3::schema::default_uniqueness;
         let uniqueness = default_uniqueness()
             .map_err(|e| PyValueError::new_err(format!("Failed to create default uniqueness: {}", e)))?;
         Ok(PyUniquenessData { inner: uniqueness })
-    }
-}
-
-/// Python wrapper for TransactionBuilder
-#[pyclass]
-struct PyTransactionBuilder {
-    inner: TransactionBuilder,
-}
-
-#[pymethods]
-impl PyTransactionBuilder {
-    /// Create a new transaction builder with a runtime call (JSON object)
-    #[new]
-    fn new(call_json: &str) -> PyResult<Self> {
-        let call: serde_json::Value = serde_json::from_str(call_json)
-            .map_err(|e| PyValueError::new_err(format!("Invalid JSON for runtime call: {}", e)))?;
-
-        Ok(PyTransactionBuilder {
-            inner: TransactionBuilder::new(call),
-        })
-    }
-
-    /// Set priority fee in basis points
-    fn priority_fee_bips(self, priority_fee_bips: u64) -> Self {
-        PyTransactionBuilder {
-            inner: self.inner.priority_fee_bips(priority_fee_bips),
-        }
-    }
-
-    /// Set maximum fee
-    fn max_fee(self, max_fee: u128) -> Self {
-        PyTransactionBuilder {
-            inner: self.inner.max_fee(max_fee),
-        }
-    }
-
-    /// Set uniqueness data
-    fn uniqueness(self, uniqueness: &PyUniquenessData) -> Self {
-        PyTransactionBuilder {
-            inner: self.inner.uniqueness(uniqueness.inner),
-        }
-    }
-
-    /// Set gas limit (None for unlimited, Some(list) for specific limits)
-    fn gas_limit(self, gas_limit: Option<Vec<u64>>) -> Self {
-        PyTransactionBuilder {
-            inner: self.inner.gas_limit(gas_limit),
-        }
-    }
-
-    /// Set chain ID (required)
-    fn chain_id(self, chain_id: u64) -> Self {
-        PyTransactionBuilder {
-            inner: self.inner.chain_id(chain_id),
-        }
-    }
-
-    /// Build the unsigned transaction
-    fn build(self) -> PyResult<PyUnsignedTransaction> {
-        let unsigned_tx = self.inner.build()
-            .map_err(|e| PyValueError::new_err(format!("Failed to build transaction: {}", e)))?;
-        Ok(PyUnsignedTransaction { inner: unsigned_tx })
     }
 }
 
@@ -180,6 +160,5 @@ fn sovereign_web3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyUnsignedTransaction>()?;
     m.add_class::<PyTransaction>()?;
     m.add_class::<PyUniquenessData>()?;
-    m.add_class::<PyTransactionBuilder>()?;
     Ok(())
 }
