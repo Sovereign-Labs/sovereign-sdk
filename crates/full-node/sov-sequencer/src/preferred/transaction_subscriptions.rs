@@ -135,6 +135,16 @@ pub(crate) struct TransactionCache<S: Spec, Rt: Runtime<S>> {
     tx_response_receiver: broadcast::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
 }
 
+impl<S: Spec, Rt: Runtime<S>> Clone for TransactionCache<S, Rt> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            ledger_db: self.ledger_db.clone(),
+            tx_response_receiver: self.tx_response_receiver.resubscribe(),
+        }
+    }
+}
+
 impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
     pub fn write_handle(&self) -> TxResultWriter<S, Rt> {
         TxResultWriter {

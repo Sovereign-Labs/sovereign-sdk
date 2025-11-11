@@ -178,15 +178,7 @@ where
     let encoded_tx = Seq::Rt::encode_with_solana_offchain_auth(raw_tx);
 
     // Submit to sequencer (similar to axum_accept_tx but with Solana auth)
-    let tx_with_hash = tokio::spawn(async move { sequencer.accept_tx(encoded_tx).await })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "A panic occurred while accepting a Solana offchain transaction");
-            sov_rest_utils::errors::internal_server_error_response_500(
-                "An internal error occurred while processing the transaction",
-            )
-        })?
-    .map_err(|e| {
+    let tx_with_hash = sequencer.accept_tx(encoded_tx).await.map_err(|e| {
         if e.status.is_server_error() {
             tracing::error!(error = ?e, "Error accepting Solana offchain transaction");
         }

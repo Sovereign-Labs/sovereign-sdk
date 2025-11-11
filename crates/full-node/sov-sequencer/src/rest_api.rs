@@ -237,20 +237,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             Seq::Spec,
         >>::encode_with_standard_auth(raw_tx);
 
-        let tx_with_hash = tokio::spawn(async move { state.sequencer.accept_tx(baked_tx).await })
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "A panic occurred while accepting a transaction");
-                sov_rest_utils::errors::internal_server_error_response_500(
-                    "An internal error occurred while processing the transaction",
-                )
-            })?
-            .map_err(|e| {
-                if e.status.is_server_error() {
-                    tracing::error!(error = ?e, "Error accepting transaction");
-                }
-                IntoResponse::into_response(e)
-            })?;
+        let tx_with_hash = state.sequencer.accept_tx(baked_tx).await.map_err(|e| {
+            if e.status.is_server_error() {
+                tracing::error!(error = ?e, "Error accepting transaction");
+            }
+            IntoResponse::into_response(e)
+        })?;
 
         Ok(TxInfoWithConfirmation {
             id: tx_with_hash.tx_hash,
