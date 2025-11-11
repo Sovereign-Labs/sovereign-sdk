@@ -7,7 +7,6 @@ use alloy_primitives::U256;
 use alloy_pubsub::Subscription;
 use anyhow::Result;
 use futures::future::try_join_all;
-use futures::StreamExt;
 use sov_eth_client::LogsWithCursorProvider;
 use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
