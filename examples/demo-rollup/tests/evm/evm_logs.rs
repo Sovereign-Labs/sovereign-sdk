@@ -34,7 +34,12 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     assert_eq!(receipt_logs, logs);
     assert_eq!(receipt_logs.len(), 1);
     assert_eq!(receipt_logs[0].block_hash, None);
-    assert_ne!(receipt_logs[0].block_timestamp.expect("block timestamp should be present"), 0);
+    assert_ne!(
+        receipt_logs[0]
+            .block_timestamp
+            .expect("block timestamp should be present"),
+        0
+    );
 
     Ok(())
 }
@@ -308,6 +313,27 @@ async fn evm_test_get_logs_at_max_response_size() {
     }
 
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn evm_test_get_logs_at_max_response_size_without_cursor_throws_error() {
+    let nb_of_txs = 3;
+    let nb_of_logs_per_tx: u32 = 5000;
+
+    let rollup_and_client = RollupAndClient::new(20_000).await;
+
+    rollup_and_client
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
+        .await;
+
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let err = rollup_and_client
+        .client
+        .get_logs_allow_error()
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"), "Unexpected error: {}", err);
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -139,7 +139,6 @@ async fn evm_test_log_subscription_with_block_range_returns_an_error() -> anyhow
     Ok(())
 }
 
-
 // Tests for block range with pending blocks.
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
@@ -152,7 +151,13 @@ async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
 
     let nb_of_txs = 100;
 
-    let sub = evm_client.alloy_subscribe_logs(&Filter::new().from_block(BlockNumberOrTag::Pending).to_block(BlockNumberOrTag::Pending)).await;
+    let sub = evm_client
+        .alloy_subscribe_logs(
+            &Filter::new()
+                .from_block(BlockNumberOrTag::Pending)
+                .to_block(BlockNumberOrTag::Pending),
+        )
+        .await;
 
     log_collector
         .spawn_log_watcher(sub, Some(nb_of_txs as usize))

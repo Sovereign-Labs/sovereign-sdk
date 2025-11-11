@@ -293,7 +293,6 @@ where
         let end = start + pending_transactions_len;
 
         let pending_block_number = head_block.header.number + 1;
-       
 
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
