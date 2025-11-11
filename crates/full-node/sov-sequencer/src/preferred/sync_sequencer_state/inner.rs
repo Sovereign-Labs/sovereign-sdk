@@ -624,6 +624,7 @@ where
             state_roots,
             data: start_block_data,
             checkpoint: old_checkpoint,
+            sequence_number,
         };
 
         self.cache_warm_up_executor
@@ -683,7 +684,7 @@ where
             });
         }
 
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
