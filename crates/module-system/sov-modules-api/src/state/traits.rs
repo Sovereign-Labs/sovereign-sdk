@@ -118,8 +118,7 @@ pub trait TxState<S: Spec>:
 }
 
 /// Blanket implementation for types that satisfy all the required trait bounds.
-impl<S: Spec, T> TxState<S> for T
-where
+impl<S: Spec, T> TxState<S> for T where
     T: StateReader<User, Error: Into<anyhow::Error>>
         + StateReader<Kernel, Error = <Self as StateReader<User>>::Error>
         + StateWriter<Kernel, Error = <Self as StateReader<User>>::Error>
@@ -130,7 +129,7 @@ where
         + PerBlockCache
         + GasMeter<Spec = S>
         + Sized
-        + StateMetricsProvider,
+        + StateMetricsProvider
 {
 }
 
