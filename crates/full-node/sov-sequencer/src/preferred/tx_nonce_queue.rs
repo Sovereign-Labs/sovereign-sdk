@@ -436,17 +436,21 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             Entry::Vacant(_) => 0,
         };
 
-        // Compute effective current nonce: max of API state or next nonce from queue
-        // This prevents a race condition where a transaction gets queued even though its
-        // prerequisite has already been accepted for execution (but API state not updated yet)
-        let current_nonce = api_state_nonce.max(next_nonce_from_queue);
+        // Compute highest nonce that can possibly be valid for execution.
+        // Since we know the api state nonce updates late, we take the nonce reported by the queue
+        // from its `last_popped` value. Since we popped a transaction with that nonce from the
+        // queue, we know we definitely don't need to queue transactions with that nonce or lower.
+        let highest_executable_nonce = api_state_nonce.max(next_nonce_from_queue);
 
-        let max_accepted_nonce = current_nonce + self.maximum_future_nonce_delta;
+        let max_accepted_nonce = highest_executable_nonce + self.maximum_future_nonce_delta;
 
-        if tx_nonce == current_nonce {
-            // Transaction has a valid nonce, execute immediately.
+        if api_state_nonce <= tx_nonce && tx_nonce <= highest_executable_nonce {
+            // We send for execution all transactions between the lower bound of the API state
+            // nonce and the upper bound of the last nonce to be popped from the queue.
+            // Some of these may be invalid, they will be rejected by the executor. We definitely
+            // know however that we don't need to queue any of them, as mentioned above.
             Action::ExecuteNow(baked_tx)
-        } else if current_nonce < tx_nonce && tx_nonce < max_accepted_nonce {
+        } else if highest_executable_nonce < tx_nonce && tx_nonce <= max_accepted_nonce {
             // Transaction's nonce is in the future but within the queue threshold - enqueue it.
             let (result_sender, results_receiver) = oneshot::channel();
             Self::enqueue_and_unlock(
@@ -459,8 +463,8 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             );
             Action::WaitForQueue(results_receiver)
         } else {
-            // Invalid nonce: either in the past or too far in the future
-            Action::Reject(current_nonce)
+            // Invalid nonce: either in the past or too far in the future.
+            Action::Reject(api_state_nonce)
         }
     }
 
