@@ -39,16 +39,12 @@ impl StateLayer {
     }
 }
 
-/// Result type for layer operations that may return either more layers or the inner state.
-pub enum LayerResult<'a, S: Spec, State> {
-    /// There are more layers remaining in the LayeredRevertableTxState.
-    HasMoreLayers(LayeredRevertableTxState<'a, S, State>),
-    /// This was the last layer, returning the inner state.
-    InnerState(&'a mut State),
-}
-
 /// A multi-layered revertable state that wraps a [`TxState`] and tracks writes and events 
 /// across multiple layers using a vector-based approach to avoid unbounded recursion.
+///
+/// When initialized with [`LayeredRevertableTxState::new`], there are no layers and all operations
+/// are applied directly to the inner state. Layers can be added via [`LayeredRevertableTxState::add_revertable_layer`],
+/// and when layers exist, operations are applied to the outermost layer.
 ///
 /// Changes can be committed or reverted layer by layer via [`LayeredRevertableTxState::commit_layer`]
 /// and [`LayeredRevertableTxState::revert_layer`].
@@ -69,14 +65,19 @@ impl<S: Spec, I: StateMetricsProvider> StateMetricsProvider for LayeredRevertabl
 }
 
 impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
-    /// Creates a new [`LayeredRevertableTxState`] from the provided [`TxState`] with one initial layer.
+    /// Creates a new [`LayeredRevertableTxState`] from the provided [`TxState`] with no layers.
+    /// 
+    /// When there are no layers, all operations are applied directly to the inner state.
+    /// When layers are added via [`LayeredRevertableTxState::add_revertable_layer`], operations
+    /// are applied to the outermost layer.
     ///
     /// # Important
-    /// You *MUST* call [`LayeredRevertableTxState::commit_layer`] to save any changes made to this state.
+    /// You *MUST* call [`LayeredRevertableTxState::commit_layer`] to save any changes made to layers.
+    /// Changes made when there are no layers are applied directly to the inner state and do not need to be committed.
     pub fn new(inner: &'a mut I) -> Self {
         Self {
             inner,
-            layers: vec![StateLayer::new()],
+            layers: Vec::new(),
             phantom: PhantomData,
         }
     }
@@ -90,70 +91,77 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
 
     /// Commits the top layer to the layer below it, or to the inner state if this is the last layer.
     /// 
-    /// Returns `LayerResult::HasMoreLayers` if there are more layers remaining after the commit,
-    /// or `LayerResult::InnerState` if this was the last layer.
-    pub fn commit_layer(mut self) -> LayerResult<'a, S, I> {
-        if let Some(layer) = self.layers.pop() {
-            if self.layers.is_empty() {
-                // This was the last layer, commit to inner state
-                for event in layer.events {
-                    self.inner.add_type_erased_event(event);
-                }
-                for (key, value) in layer.writes {
-                    if let Some(value) = value {
-                        self.inner.set_value(key.0, &key.1, value);
-                    } else {
-                        self.inner.delete_value(key.0, &key.1);
-                    }
-                }
-                self.inner.update_cache_with(layer.temp_cache);
-                LayerResult::InnerState(self.inner)
-            } else {
-                // Commit to the layer below
-                let lower_layer = self.layers.last_mut().unwrap();
-                
-                // Merge events
-                lower_layer.events.extend(layer.events);
-                
-                // Merge writes (top layer takes precedence)
-                for (key, value) in layer.writes {
-                    lower_layer.writes.insert(key, value);
-                }
-                
-                // Merge cache
-                lower_layer.temp_cache.update_with(layer.temp_cache);
-                
-                LayerResult::HasMoreLayers(self)
+    /// # Panics
+    /// Panics if there are no layers to commit.
+    /// 
+    /// Returns `LayeredRevertableTxState` with the layer committed.
+    /// If this was the last layer, commits to inner state and returns `LayeredRevertableTxState` with no layers.
+    pub fn commit_layer(mut self) -> Self {
+        if self.layers.is_empty() {
+            panic!("Cannot commit layer: no layers exist");
+        }
+        
+        let layer = self.layers.pop().unwrap();
+        if self.layers.is_empty() {
+            // This was the last layer, commit to inner state
+            for event in layer.events {
+                self.inner.add_type_erased_event(event);
             }
+            for (key, value) in layer.writes {
+                if let Some(value) = value {
+                    self.inner.set_value(key.0, &key.1, value);
+                } else {
+                    self.inner.delete_value(key.0, &key.1);
+                }
+            }
+            self.inner.update_cache_with(layer.temp_cache);
+            // Return self with no layers
+            self
         } else {
-            // No layers to commit, return inner state
-            LayerResult::InnerState(self.inner)
+            // Commit to the layer below
+            let lower_layer = self.layers.last_mut().unwrap();
+            
+            // Merge events
+            lower_layer.events.extend(layer.events);
+            
+            // Merge writes (top layer takes precedence)
+            for (key, value) in layer.writes {
+                lower_layer.writes.insert(key, value);
+            }
+            
+            // Merge cache
+            lower_layer.temp_cache.update_with(layer.temp_cache);
+            
+            self
         }
     }
 
     /// Reverts and discards the top layer.
     /// 
-    /// Returns `LayerResult::HasMoreLayers` if there are more layers remaining after the revert,
-    /// or `LayerResult::InnerState` if this was the last layer.
-    pub fn revert_layer(mut self) -> LayerResult<'a, S, I> {
-        if self.layers.len() > 1 {
-            // Discard the top layer and return the remaining layers
-            self.layers.pop();
-            LayerResult::HasMoreLayers(self)
-        } else {
-            // This was the last layer, return inner state
-            LayerResult::InnerState(self.inner)
+    /// # Panics
+    /// Panics if there are no layers to revert.
+    /// 
+    /// Returns `LayeredRevertableTxState` with the layer removed.
+    /// If this was the last layer, returns `LayeredRevertableTxState` with no layers.
+    pub fn revert_layer(mut self) -> Self {
+        if self.layers.is_empty() {
+            panic!("Cannot revert layer: no layers exist");
         }
+        
+        self.layers.pop();
+        self
     }
 
     /// Gets the current number of layers.
+    /// Returns 0 if no layers have been added.
     pub fn layer_depth(&self) -> usize {
         self.layers.len()
     }
 
     /// Gets the current top layer for write operations.
+    /// Panics if no layers exist (should only be called when layers are present).
     fn current_layer_mut(&mut self) -> &mut StateLayer {
-        self.layers.last_mut().expect("LayeredRevertableTxState should always have at least one layer")
+        self.layers.last_mut().expect("LayeredRevertableTxState should have at least one layer")
     }
 }
 
@@ -193,13 +201,23 @@ impl<S: Spec, I: TxState<S>> UniversalStateAccessor for LayeredRevertableTxState
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        // Write to the current (top) layer
-        self.current_layer_mut().writes.insert((namespace, key.clone()), Some(value));
+        if self.layers.is_empty() {
+            // No layers, write directly to inner state
+            self.inner.set_value(namespace, key, value);
+        } else {
+            // Write to the current (top) layer
+            self.current_layer_mut().writes.insert((namespace, key.clone()), Some(value));
+        }
     }
 
     fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
-        // Mark as deleted in the current (top) layer
-        self.current_layer_mut().writes.insert((namespace, key.clone()), None);
+        if self.layers.is_empty() {
+            // No layers, delete directly from inner state
+            self.inner.delete_value(namespace, key);
+        } else {
+            // Mark as deleted in the current (top) layer
+            self.current_layer_mut().writes.insert((namespace, key.clone()), None);
+        }
     }
 }
 
@@ -221,30 +239,55 @@ impl<S: Spec, I: TxState<S>> PerBlockCache for LayeredRevertableTxState<'_, S, I
         slot_key: Option<SlotKey>,
         value: T,
     ) {
-        // Cache in the current (top) layer
-        self.current_layer_mut().temp_cache.set(slot_key, value);
+        if self.layers.is_empty() {
+            // No layers, cache directly in inner state
+            self.inner.put_cached(slot_key, value);
+        } else {
+            // Cache in the current (top) layer
+            self.current_layer_mut().temp_cache.set(slot_key, value);
+        }
     }
 
     fn delete_cached<T: 'static + Send + Sync>(&mut self, slot_key: Option<SlotKey>) {
-        // Delete from the current (top) layer
-        self.current_layer_mut().temp_cache.delete::<T>(slot_key);
+        if self.layers.is_empty() {
+            // No layers, delete directly from inner state
+            self.inner.delete_cached::<T>(slot_key);
+        } else {
+            // Delete from the current (top) layer
+            self.current_layer_mut().temp_cache.delete::<T>(slot_key);
+        }
     }
 
     fn update_cache_with(&mut self, other: TempCache) {
-        // Update the current (top) layer's cache
-        self.current_layer_mut().temp_cache.update_with(other);
+        if self.layers.is_empty() {
+            // No layers, update inner state cache directly
+            self.inner.update_cache_with(other);
+        } else {
+            // Update the current (top) layer's cache
+            self.current_layer_mut().temp_cache.update_with(other);
+        }
     }
 }
 
 impl<S: Spec, I: TxState<S>> EventContainer for LayeredRevertableTxState<'_, S, I> {
     fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
-        // Add event to the current (top) layer
-        self.current_layer_mut().events.push(TypeErasedEvent::new(event_key, event));
+        if self.layers.is_empty() {
+            // No layers, add event directly to inner state
+            self.inner.add_event(event_key, event);
+        } else {
+            // Add event to the current (top) layer
+            self.current_layer_mut().events.push(TypeErasedEvent::new(event_key, event));
+        }
     }
 
     fn add_type_erased_event(&mut self, event: TypeErasedEvent) {
-        // Add event to the current (top) layer
-        self.current_layer_mut().events.push(event);
+        if self.layers.is_empty() {
+            // No layers, add event directly to inner state
+            self.inner.add_type_erased_event(event);
+        } else {
+            // Add event to the current (top) layer
+            self.current_layer_mut().events.push(event);
+        }
     }
 }
 
@@ -279,23 +322,7 @@ impl<S: Spec, I: TxState<S>> ProvableStateWriter<User> for LayeredRevertableTxSt
 impl<S: Spec, I: TxState<S>> ProvableStateWriter<KernelType> for LayeredRevertableTxState<'_, S, I> {}
 impl<S: Spec, I: TxState<S>> AccessoryStateWriter for LayeredRevertableTxState<'_, S, I> {}
 
-// Specialized implementation of `add_revertable_layer()` for `LayeredRevertableTxState`.
-// This overrides the default trait implementation to add a layer directly to the existing
-// vector instead of creating a wrapper. However, the trait signature requires returning
-// a new LayeredRevertableTxState, so we add the layer and then wrap it.
-impl<'a, S: Spec, I: TxState<S>> TxState<S> for LayeredRevertableTxState<'a, S, I> {
-    fn add_revertable_layer(&mut self) -> LayeredRevertableTxState<'_, S, Self> {
-        // Call the inherent method to add a layer to the existing vector
-        // This uses the vector-based approach to prevent recursion
-        LayeredRevertableTxState::add_revertable_layer(self);
-        // Return a new LayeredRevertableTxState wrapping self
-        // This is necessary because the trait method signature requires returning a new instance
-        LayeredRevertableTxState::new(self)
-    }
-}
-
-// Note: `LayeredRevertableTxState` implements `TxState<S>` via both the blanket implementation
-// and the specialized implementation above. Rust will prefer the specialized implementation.
+// Note: `LayeredRevertableTxState` implements `TxState<S>` via the blanket implementation.
 // The direct method `add_revertable_layer()` returns `&mut Self` and uses the vector-based
 // approach to prevent unbounded recursion.
 
@@ -316,6 +343,79 @@ mod tests {
     type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
+    fn test_no_layers_direct_access() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+        
+        let mut working_set = WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+        
+        // Create layered state with no layers
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+        assert_eq!(layered_state.layer_depth(), 0);
+        
+        // Write some data - should go directly to inner state
+        let namespace = User::NAMESPACE;
+        let key = SlotKey::from_slice(b"test_key");
+        let value = SlotValue::from("test_value");
+        
+        layered_state.set_value(namespace, &key, value.clone());
+        
+        // Verify it's in the inner state directly
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value.clone()));
+        
+        // Commit should panic since there are no layers
+        // (Changes were applied directly to inner state, no commit needed)
+        // Verify the value is already in inner state
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value.clone()));
+        
+        // Trying to commit with no layers should panic
+        let result = std::panic::catch_unwind(|| {
+            layered_state.commit_layer();
+        });
+        assert!(result.is_err(), "Expected panic when committing with no layers");
+    }
+
+    #[test]
+    fn test_add_layer_after_direct_access() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+        
+        let mut working_set = WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+        
+        // Create layered state with no layers
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+        
+        let namespace = User::NAMESPACE;
+        let key = SlotKey::from_slice(b"test_key");
+        let value1 = SlotValue::from("value1");
+        let value2 = SlotValue::from("value2");
+        
+        // Write directly to inner (no layers)
+        layered_state.set_value(namespace, &key, value1.clone());
+        
+        // Add a layer
+        layered_state.add_revertable_layer();
+        assert_eq!(layered_state.layer_depth(), 1);
+        
+        // Now writes go to the layer
+        layered_state.set_value(namespace, &key, value2.clone());
+        
+        // Should see value2 (from layer)
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value2.clone()));
+        
+        // Revert the layer - should return LayeredRevertableTxState with no layers
+        let layered_state = layered_state.revert_layer();
+        // Should have no layers now
+        assert_eq!(layered_state.layer_depth(), 0);
+        // Should see value1 from inner (direct write before layer was added)
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value1));
+    }
+
+    #[test]
     fn test_single_layer_commit() {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
@@ -333,14 +433,11 @@ mod tests {
         layered_state.set_value(namespace, &key, value.clone());
         
         // Commit the layer
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(inner) => {
-                // Should return inner state since this was the only layer
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key, &mut metric), Some(value));
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState, got HasMoreLayers"),
-        }
+        let layered_state = layered_state.commit_layer();
+        // Should have no layers now and value should be in inner state
+        assert_eq!(layered_state.layer_depth(), 0);
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value));
     }
 
     #[test]
@@ -360,15 +457,13 @@ mod tests {
         
         layered_state.set_value(namespace, &key, value.clone());
         
-        // Revert the layer
-        match layered_state.revert_layer() {
-            LayerResult::InnerState(inner) => {
-                // Should return inner state and the write should be gone
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key, &mut metric), None);
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState, got HasMoreLayers"),
-        }
+        // Revert the layer - should return LayeredRevertableTxState with no layers
+        let layered_state = layered_state.revert_layer();
+        // Should have no layers now
+        assert_eq!(layered_state.layer_depth(), 0);
+        // The write should be gone (it was in the layer)
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None);
     }
 
     #[test]
@@ -398,11 +493,8 @@ mod tests {
         // Update key2 in second layer
         layered_state.set_value(namespace, &key2, value2_updated.clone());
         
-        // Commit second layer - should return HasMoreLayers since there's still layer1
-        let mut layered_state = match layered_state.commit_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers when committing layer2, got InnerState"),
-        };
+        // Commit second layer - should return LayeredRevertableTxState with layer1 remaining
+        let mut layered_state = layered_state.commit_layer();
         
         // Verify the commit merged correctly - layer1 should now have the updated value
         let mut metric = StateAccessMetric::new_read();
@@ -410,17 +502,14 @@ mod tests {
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(layered_state.get_value(namespace, &key2, &mut metric), Some(value2_updated.clone()), "key2 should have been updated to value2_updated");
         
-        // Commit first layer - should return InnerState since this is the last layer
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(inner) => {
-                // inner is &mut WorkingSet, verify final state
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key1, &mut metric), Some(value1), "key1 should be in final state");
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key2, &mut metric), Some(value2_updated), "key2 should have updated value in final state");
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState after committing last layer"),
-        }
+        // Commit first layer - should return LayeredRevertableTxState with no layers
+        let layered_state = layered_state.commit_layer();
+        assert_eq!(layered_state.layer_depth(), 0);
+        // Verify final state through the layered state
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key1, &mut metric), Some(value1), "key1 should be in final state");
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key2, &mut metric), Some(value2_updated), "key2 should have updated value in final state");
     }
 
     #[test]
@@ -450,11 +539,8 @@ mod tests {
         // Update key2 in second layer
         layered_state.set_value(namespace, &key2, value2_updated.clone());
         
-        // Revert second layer - should return HasMoreLayers since layer1 remains
-        let mut layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers when reverting layer2, got InnerState"),
-        };
+        // Revert second layer - should return LayeredRevertableTxState with layer1 remaining
+        let mut layered_state = layered_state.revert_layer();
         
         // Verify the revert worked - should have original values from layer1
         let mut metric = StateAccessMetric::new_read();
@@ -463,15 +549,13 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key2, &mut metric), Some(value2.clone()), "key2 should have original value2 after revert");
         
         // Commit first layer
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(inner) => {
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key1, &mut metric), Some(value1), "key1 should be in final state");
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key2, &mut metric), Some(value2), "key2 should have original value2 in final state");
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState after committing last layer"),
-        }
+        let layered_state = layered_state.commit_layer();
+        assert_eq!(layered_state.layer_depth(), 0);
+        // Verify final state through the layered state
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key1, &mut metric), Some(value1), "key1 should be in final state");
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key2, &mut metric), Some(value2), "key2 should have original value2 in final state");
     }
 
     #[test]
@@ -510,19 +594,12 @@ mod tests {
         layered_state.add_event("test", "event2");
         
         // Revert second layer - event2 should be lost
-        let layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers when reverting layer2"),
-        };
+        let layered_state = layered_state.revert_layer();
         
         // Commit first layer - only event1 should remain
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(_inner) => {
-                // Events are committed to inner state, we can't easily verify them in this test
-                // but the structure ensures proper isolation
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState after committing last layer"),
-        }
+        let _layered_state = layered_state.commit_layer();
+        // Events are committed to inner state, we can't easily verify them in this test
+        // but the structure ensures proper isolation
     }
 
     #[test]
@@ -545,10 +622,7 @@ mod tests {
         assert_eq!(layered_state.get_cached::<String>(Some(cache_key.clone())), Some(&"cached_value2".to_string()));
         
         // Revert second layer
-        let layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers when reverting layer2"),
-        };
+        let layered_state = layered_state.revert_layer();
         
         // Should see first layer's cached value
         assert_eq!(layered_state.get_cached::<String>(Some(cache_key)), Some(&"cached_value1".to_string()));
@@ -583,13 +657,10 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None);
         
         // Commit and verify delete is persisted
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(inner) => {
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key, &mut metric), None, "Deleted value should not exist after commit");
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState"),
-        }
+        let layered_state = layered_state.commit_layer();
+        assert_eq!(layered_state.layer_depth(), 0);
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None, "Deleted value should not exist after commit");
     }
 
     #[test]
@@ -627,10 +698,7 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value2.clone()));
         
         // Revert second layer - should restore value1
-        let mut layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers"),
-        };
+        let mut layered_state = layered_state.revert_layer();
         
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value1.clone()));
@@ -667,18 +735,12 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value3.clone()));
         
         // Revert layer3 - should see value2
-        let mut layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers"),
-        };
+        let mut layered_state = layered_state.revert_layer();
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value2.clone()));
         
         // Revert layer2 - should see value1
-        let mut layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers"),
-        };
+        let mut layered_state = layered_state.revert_layer();
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value1.clone()));
     }
@@ -736,13 +798,10 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None);
         
         // Commit and verify delete is persisted
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(inner) => {
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key, &mut metric), None, "Deleted value from inner state should not exist after commit");
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState"),
-        }
+        let layered_state = layered_state.commit_layer();
+        assert_eq!(layered_state.layer_depth(), 0);
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None, "Deleted value from inner state should not exist after commit");
     }
 
     #[test]
@@ -785,10 +844,7 @@ mod tests {
         assert_eq!(layered_state.get_cached::<String>(Some(cache_key.clone())), Some(&"value2".to_string()));
         
         // Revert layer2 - should see value1
-        let layered_state = match layered_state.revert_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers"),
-        };
+        let layered_state = layered_state.revert_layer();
         assert_eq!(layered_state.get_cached::<String>(Some(cache_key)), Some(&"value1".to_string()));
     }
 
@@ -846,30 +902,21 @@ mod tests {
         assert_eq!(layered_state.layer_depth(), 3);
         
         // Commit layer3 -> layer2
-        let mut layered_state = match layered_state.commit_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers"),
-        };
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 2);
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value3.clone()));
         
         // Commit layer2 -> layer1
-        let mut layered_state = match layered_state.commit_layer() {
-            LayerResult::HasMoreLayers(state) => state,
-            LayerResult::InnerState(_) => panic!("Expected HasMoreLayers"),
-        };
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 1);
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value3.clone()));
         
         // Commit layer1 -> inner state
-        match layered_state.commit_layer() {
-            LayerResult::InnerState(inner) => {
-                let mut metric = StateAccessMetric::new_read();
-                assert_eq!(inner.get_value(namespace, &key, &mut metric), Some(value3));
-            }
-            LayerResult::HasMoreLayers(_) => panic!("Expected InnerState"),
-        }
+        let layered_state = layered_state.commit_layer();
+        assert_eq!(layered_state.layer_depth(), 0);
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), Some(value3));
     }
 }

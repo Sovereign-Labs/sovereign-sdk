@@ -105,33 +105,15 @@ pub trait TxState<S: Spec>:
     /// Converts this state accessor into a layered revertable state.
     ///
     /// You *MUST* call .commit_layer() to save the changes from the resulting accessor if you want them to be persisted
-    fn add_revertable_layer(&mut self) -> LayeredRevertableTxState<'_, S, Self>;
+    fn to_revertable_layered(&mut self) -> LayeredRevertableTxState<'_, S, Self> {
+        LayeredRevertableTxState::new(self)
+    }
 
     /// Converts this state accessor into a [`RevertableTxState`].
     ///
     /// You *MUST* call .commit() to save the changes from the resulting accessor if you want them to be persisted
     fn to_revertable(&mut self) -> RevertableTxState<S, Self> {
         RevertableTxState::new(self)
-    }
-}
-
-// Note: This blanket implementation conflicts with the explicit implementation for LayeredRevertableTxState,
-// but Rust will prefer the more specific explicit implementation when there's a conflict.
-impl<S: Spec, T> TxState<S> for T where
-    T: StateReader<User, Error: Into<anyhow::Error>>
-        + StateReader<Kernel, Error = <Self as StateReader<User>>::Error>
-        + StateWriter<Kernel, Error = <Self as StateReader<User>>::Error>
-        + StateWriter<User, Error = <Self as StateReader<User>>::Error>
-        + StateWriter<Accessory, Error = Infallible>
-        + VersionReader
-        + EventContainer
-        + PerBlockCache
-        + GasMeter<Spec = S>
-        + Sized
-        + StateMetricsProvider
-{
-    fn add_revertable_layer(&mut self) -> LayeredRevertableTxState<'_, S, Self> {
-        LayeredRevertableTxState::new(self)
     }
 }
 

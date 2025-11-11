@@ -8,7 +8,7 @@ mod tests;
 pub use accessors::UnmeteredStateWrapper;
 pub use accessors::{
     AccessoryDelta, BootstrapWorkingSet, BorshSerializedSize, ChangeSet, GenesisStateAccessor,
-    KernelStateAccessor, LayerResult, LayeredRevertableTxState, PreExecWorkingSet, RevertableTxState, StateCheckpoint,
+    KernelStateAccessor, LayeredRevertableTxState, PreExecWorkingSet, RevertableTxState, StateCheckpoint,
     StateMetricsProvider, StateProvider, TxChangeSet, TxScratchpad, WorkingSet,
 };
 #[cfg(feature = "native")]

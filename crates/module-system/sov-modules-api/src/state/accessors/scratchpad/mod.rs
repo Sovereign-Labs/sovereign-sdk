@@ -14,7 +14,7 @@ mod revertable_tx_state;
 mod tx_scratchpad;
 mod working_set;
 
-pub use layered_revertable_tx_state::{LayeredRevertableTxState, LayerResult};
+pub use layered_revertable_tx_state::LayeredRevertableTxState;
 pub use pre_exec_working_set::PreExecWorkingSet;
 pub use revertable_tx_state::RevertableTxState;
 pub use tx_scratchpad::{TxChangeSet, TxScratchpad};
