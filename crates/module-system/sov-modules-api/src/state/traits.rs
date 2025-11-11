@@ -117,6 +117,23 @@ pub trait TxState<S: Spec>:
     }
 }
 
+/// Blanket implementation for types that satisfy all the required trait bounds.
+impl<S: Spec, T> TxState<S> for T
+where
+    T: StateReader<User, Error: Into<anyhow::Error>>
+        + StateReader<Kernel, Error = <Self as StateReader<User>>::Error>
+        + StateWriter<Kernel, Error = <Self as StateReader<User>>::Error>
+        + StateWriter<User, Error = <Self as StateReader<User>>::Error>
+        + StateWriter<Accessory, Error = Infallible>
+        + VersionReader
+        + EventContainer
+        + PerBlockCache
+        + GasMeter<Spec = S>
+        + Sized
+        + StateMetricsProvider,
+{
+}
+
 /// A cache that persists items *without serializing them*. Items persist for at most the duration of the block.
 ///
 /// Note that values may be evicted from the cache at any time based on memory pressure, even if the end of the block has not yet been reached.
