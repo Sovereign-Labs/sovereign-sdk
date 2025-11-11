@@ -279,6 +279,26 @@ impl<S: Spec, I: TxState<S>> ProvableStateWriter<User> for LayeredRevertableTxSt
 impl<S: Spec, I: TxState<S>> ProvableStateWriter<KernelType> for LayeredRevertableTxState<'_, S, I> {}
 impl<S: Spec, I: TxState<S>> AccessoryStateWriter for LayeredRevertableTxState<'_, S, I> {}
 
+// Specialized implementation of `add_revertable_layer()` for `LayeredRevertableTxState`.
+// This overrides the default trait implementation to add a layer directly to the existing
+// vector instead of creating a wrapper. However, the trait signature requires returning
+// a new LayeredRevertableTxState, so we add the layer and then wrap it.
+impl<'a, S: Spec, I: TxState<S>> TxState<S> for LayeredRevertableTxState<'a, S, I> {
+    fn add_revertable_layer(&mut self) -> LayeredRevertableTxState<'_, S, Self> {
+        // Call the inherent method to add a layer to the existing vector
+        // This uses the vector-based approach to prevent recursion
+        LayeredRevertableTxState::add_revertable_layer(self);
+        // Return a new LayeredRevertableTxState wrapping self
+        // This is necessary because the trait method signature requires returning a new instance
+        LayeredRevertableTxState::new(self)
+    }
+}
+
+// Note: `LayeredRevertableTxState` implements `TxState<S>` via both the blanket implementation
+// and the specialized implementation above. Rust will prefer the specialized implementation.
+// The direct method `add_revertable_layer()` returns `&mut Self` and uses the vector-based
+// approach to prevent unbounded recursion.
+
 #[cfg(feature = "test-utils")]
 impl<S: Spec, I: TxState<S>> AccessoryStateReader for LayeredRevertableTxState<'_, S, I> {}
 
