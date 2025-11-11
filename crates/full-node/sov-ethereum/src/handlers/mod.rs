@@ -4,6 +4,7 @@ use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
 pub use get_logs::{Cursor, LogHandlers};
+use jsonrpsee::types::error::INTERNAL_ERROR_MSG;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -169,75 +170,80 @@ pub(crate) mod signer {
         S::Address: FromVmAddress<EthereumAddress>,
         Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
     {
-        let mut transaction_request: TransactionRequest = parameters.one()?;
+        // Spawn the task to avoid task cancellation
+        tokio::spawn(async move {
+            let mut transaction_request: TransactionRequest = parameters.one()?;
 
-        let evm = Evm::<S>::default();
+            let evm = Evm::<S>::default();
 
-        // get from, return error if none
-        let from = transaction_request
-            .from
-            .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
+            // get from, return error if none
+            let from = transaction_request
+                .from
+                .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
 
-        // return error if not in signers
-        if !ethereum.eth_signer.addresses().contains(&from) {
-            return Err(to_jsonrpsee_error_object(
-                "From address not in signers",
-                ETH_RPC_ERROR,
-            ));
-        }
+            // return error if not in signers
+            if !ethereum.eth_signer.addresses().contains(&from) {
+                return Err(to_jsonrpsee_error_object(
+                    "From address not in signers",
+                    ETH_RPC_ERROR,
+                ));
+            }
 
-        let raw_evm_tx = {
-            let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
+            let raw_evm_tx = {
+                let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
 
-            // set nonce if none
-            transaction_request.nonce.get_or_insert_with(|| {
-                evm.get_transaction_count(from, None, &mut state)
-                    .unwrap_or_default()
-                    .to::<u64>()
-            });
+                // set nonce if none
+                transaction_request.nonce.get_or_insert_with(|| {
+                    evm.get_transaction_count(from, None, &mut state)
+                        .unwrap_or_default()
+                        .to::<u64>()
+                });
 
-            let chain_id = evm
-                .chain_id(&mut state)
-                .expect("Failed to get chain id")
-                .map(|id| id.to())
-                .unwrap_or(config_value!("CHAIN_ID"));
-            transaction_request.chain_id = Some(chain_id);
+                let chain_id = evm
+                    .chain_id(&mut state)
+                    .expect("Failed to get chain id")
+                    .map(|id| id.to())
+                    .unwrap_or(config_value!("CHAIN_ID"));
+                transaction_request.chain_id = Some(chain_id);
 
-            let estimated_gas = evm.eth_estimate_gas(
-                transaction_request.clone(),
-                Some("pending".to_string()),
-                &mut state,
-            )?;
-            transaction_request.gas = Some(estimated_gas.to::<u64>());
+                let estimated_gas = evm.eth_estimate_gas(
+                    transaction_request.clone(),
+                    Some("pending".to_string()),
+                    &mut state,
+                )?;
+                transaction_request.gas = Some(estimated_gas.to::<u64>());
 
-            let transaction = transaction_request
-                .build_typed_tx()
-                .map_err(|_| EthApiError::TransactionConversionError)?;
+                let transaction = transaction_request
+                    .build_typed_tx()
+                    .map_err(|_| EthApiError::TransactionConversionError)?;
 
-            // sign transaction
-            let signed_tx = ethereum
-                .eth_signer
-                .sign_transaction(transaction, &from)
+                // sign transaction
+                let signed_tx = ethereum
+                    .eth_signer
+                    .sign_transaction(transaction, &from)
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+                RlpEvmTransaction {
+                    rlp: signed_tx.encoded_2718(),
+                }
+            };
+            let (tx_hash, raw_message) = ethereum
+                .make_raw_tx(raw_evm_tx)
                 .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-            RlpEvmTransaction {
-                rlp: signed_tx.encoded_2718(),
-            }
-        };
-        let (tx_hash, raw_message) = ethereum
-            .make_raw_tx(raw_evm_tx)
-            .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
-        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+            ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
+                to_jsonrpsee_error_object(
+                    format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                    ETH_RPC_ERROR,
+                )
+            })?;
 
-        ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
-            to_jsonrpsee_error_object(
-                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-                ETH_RPC_ERROR,
-            )
-        })?;
-
-        Ok(tx_hash)
+            Ok(tx_hash)
+        })
+        .await
+        .map_err(|e| to_jsonrpsee_error_object(e, INTERNAL_ERROR_MSG))?
     }
 }
 
@@ -254,7 +260,12 @@ where
 {
     let data: Bytes = parameters.one()?;
 
-    process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await
+    // Spawn the task to avoid task cancellation
+    tokio::spawn(
+        async move { process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await },
+    )
+    .await
+    .map_err(|e| to_jsonrpsee_error_object(e, INTERNAL_ERROR_MSG))? // return the result of the inner task, mapping panic to internal error
 }
 
 pub async fn realtime_send_raw_transaction<S, Seq>(
@@ -270,12 +281,17 @@ where
 {
     let data: Bytes = parameters.one()?;
 
-    process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
-        let evm = sov_evm::Evm::<S>::default();
-        evm.get_transaction_receipt(
-            tx_hash,
-            &mut ethereum.sequencer.api_state().default_api_state_accessor(),
-        )
+    // Spawn the task to avoid task cancellation
+    tokio::spawn(async move {
+        process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
+            let evm = sov_evm::Evm::<S>::default();
+            evm.get_transaction_receipt(
+                tx_hash,
+                &mut ethereum.sequencer.api_state().default_api_state_accessor(),
+            )
+        })
+        .await
     })
     .await
+    .map_err(|e| to_jsonrpsee_error_object(e, INTERNAL_ERROR_MSG))? // return the result of the inner task, mapping panic to internal error
 }
