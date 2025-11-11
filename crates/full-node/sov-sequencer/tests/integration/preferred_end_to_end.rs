@@ -1299,15 +1299,8 @@ async fn test_sequencer_event_stream_filtering() {
     .await;
 
     // Set up the rollup the usual way.
-    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    for _ in 0..5 {
-        let _ = slot_subscription.next().await.unwrap().unwrap();
-    }
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let mut all_events = test_rollup
         .api_client()
@@ -2278,6 +2271,7 @@ async fn txs_that_enter_before_downtime_are_dropped() {
     let client = test_rollup.api_client().clone();
 
     let first_tx = tx_set_value_and_sleep(&admin.private_key, 0, 0, long_sleep_tx_millis);
+    let second_large_tx = tx_set_value_and_sleep(&admin.private_key, 1, 0, long_sleep_tx_millis);
     let delayed_tx = tx_delayed_call(&admin.private_key, 1);
     let third_tx = tx_set_value(&admin.private_key, 1, 8);
     let fourth_tx = tx_set_value(&admin.private_key, 2, 9);
@@ -2294,11 +2288,10 @@ async fn txs_that_enter_before_downtime_are_dropped() {
         .await
         .unwrap();
     // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(long_sleep_tx_millis)).await;
+    sleep(Duration::from_millis(long_sleep_tx_millis - 100)).await;
 
     // Produce a second large delay tx and a second block since - for some reason - the sequencer seems to be holding one extra finalized slot in reserve.
     // This is now needed to exhaust the sequencer's buffer and prevent flakiness allowing us to test the downtime.
-    let second_large_tx = tx_set_value_and_sleep(&admin.private_key, 1, 0, long_sleep_tx_millis);
     client
         .send_raw_tx_to_sequencer(&second_large_tx)
         .await
@@ -2311,7 +2304,7 @@ async fn txs_that_enter_before_downtime_are_dropped() {
         .await
         .unwrap();
     // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(1000)).await;
+    sleep(Duration::from_millis(max_batch_execution_millis)).await;
 
     // Send off the delayed tx. It should arrive at the sequencer immediately and begin sleeping.
     let delayed_tx_handle = tokio::spawn({
