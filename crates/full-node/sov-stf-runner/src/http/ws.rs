@@ -82,13 +82,13 @@ async fn socket_reader_task(
             };
             match msg {
                 Message::Text(text) => {
-                    handle_rpc_message(text, &msg_tx, &rpc_methods, false, &shutdown_receiver).await;
+                    spawn(handle_rpc_message(text, msg_tx.clone(), rpc_methods.clone(), false, shutdown_receiver.clone()));
                 }
                 Message::Binary(data) => {
                     // Parse binary frame as UTF-8 JSON-RPC request
                     match String::from_utf8(data) {
                         Ok(text) => {
-                            handle_rpc_message(text, &msg_tx, &rpc_methods, true, &shutdown_receiver).await;
+                            spawn(handle_rpc_message(text, msg_tx.clone(), rpc_methods.clone(), true, shutdown_receiver.clone()));
                         }
                         Err(error) => {
                             error!(%error, "Invalid UTF-8 in binary WebSocket frame");
@@ -112,10 +112,10 @@ async fn socket_reader_task(
 
 async fn handle_rpc_message(
     text: String,
-    msg_tx: &mpsc::Sender<Message>,
-    rpc_methods: &RpcModule<()>,
+    msg_tx: mpsc::Sender<Message>,
+    rpc_methods: RpcModule<()>,
     use_binary: bool,
-    shutdown_receiver: &watch::Receiver<()>,
+    shutdown_receiver: watch::Receiver<()>,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
     let (response, response_stream) = match rpc_methods.raw_json_request(&text, 1).await {
