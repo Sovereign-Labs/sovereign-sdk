@@ -35,7 +35,6 @@ impl<T: DeserializeOwned> RecvMany for Subscription<T> {
                 Err(TryRecvError::Empty) => break,
             }
         }
-        println!("Subscription recevied {count} items");
         Ok(count)
     }
 }

@@ -111,6 +111,7 @@ async fn stream_logs(
     while count < expected_count && timeouts < 10 {
         match timeout(Duration::from_secs(1), subscription.recv_many()).await {
             Ok(Ok(received)) => {
+                println!("Subscription recevied {received} items");
                 count += received;
             }
             Ok(Err(RecvManyError::Closed)) => {
