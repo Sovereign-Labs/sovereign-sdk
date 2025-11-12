@@ -12040,6 +12040,7 @@ dependencies = [
  "futures",
  "rand 0.8.5",
  "reqwest 0.12.23",
+ "serde",
  "sov-eth-client",
  "sov-test-utils",
  "tokio",

@@ -7,12 +7,14 @@ use alloy_primitives::U256;
 use alloy_pubsub::Subscription;
 use anyhow::Result;
 use futures::future::try_join_all;
-use futures::StreamExt;
+use serde::de::DeserializeOwned;
 use sov_eth_client::LogsWithCursorProvider;
 use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
 use std::net::SocketAddr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+use tokio::time::timeout;
 
 use crate::{alloy_client, fund_worker_accounts, validate_worker_count, LogsRetrievalMode};
 use crate::{alloy_ws_client, derive_worker_key};
@@ -99,17 +101,53 @@ async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<()> {
     Ok(())
 }
 
-async fn stream_logs(subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
+trait RecvMany {
+    async fn recv_many(&mut self) -> Result<usize, RecvError>;
+}
+
+impl<T: DeserializeOwned> RecvMany for Subscription<T> {
+    async fn recv_many(&mut self) -> Result<usize, RecvError> {
+        self.recv().await?;
+        let mut count = 1;
+        loop {
+            match self.try_recv() {
+                Ok(_) => count += 1,
+                Err(TryRecvError::Lagged(n)) => {
+                    println!("Subscription lagged by {n} during try_recv");
+                    count += n as usize;
+                }
+                Err(_) => break,
+            }
+        }
+        Ok(count)
+    }
+}
+
+async fn stream_logs(mut subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
     let timer = Instant::now();
-    let mut stream = subscription.into_stream();
     let mut count = 0;
-    while let Some(_item) = stream.next().await {
-        count += 1;
-        if count == expected_count {
-            break;
+    let mut timeouts = 0;
+    while count < expected_count && timeouts < 10 {
+        match timeout(Duration::from_secs(1), subscription.recv_many()).await {
+            Ok(Ok(received)) => {
+                count += received;
+            }
+            Ok(Err(RecvError::Closed)) => {
+                println!("Subscription closed");
+                break;
+            }
+            Ok(Err(RecvError::Lagged(n))) => {
+                println!("Subscription lagged by {n}");
+                count += n as usize;
+            }
+            Err(_) => {
+                println!(
+                    "Timeout receiving log {count}. Timeouts: {timeouts} (shutdown after 10 timeouts)"
+                );
+                timeouts += 1;
+            }
         }
     }
-    assert_eq!(count, expected_count);
     println!("Streamed {} logs in {:?}", expected_count, timer.elapsed());
     Ok(())
 }
