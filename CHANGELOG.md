@@ -1,3 +1,6 @@
+# 2025-11-12
+- #2071 Optimize WebSocket message delivery by batching writes. Messages are now grouped (up to 128 at a time) and flushed together, reducing system calls and improving throughput for WebSocket subscriptions.
+
 # 2025-11-11
 - #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
   - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
