@@ -12,6 +12,9 @@ use tokio::spawn;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, trace};
 
+/// Capacity for channels forwarding subscription messages
+const BUF_SIZE: usize = 128;
+
 /// Convert content to a WebSocket message, using binary or text encoding
 fn to_ws_message(content: impl ToString, use_binary: bool) -> Message {
     let content_str = content.to_string();
@@ -48,7 +51,7 @@ async fn handle_socket(
 ) {
     let (ws_writer, ws_reader) = socket.split();
 
-    let (msg_tx, msg_rx) = mpsc::channel(128);
+    let (msg_tx, msg_rx) = mpsc::channel(BUF_SIZE);
 
     spawn(socket_writer_task(
         msg_rx,
@@ -119,7 +122,7 @@ async fn handle_rpc_message(
     shutdown_receiver: watch::Receiver<()>,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
-    let (response, response_stream) = match rpc_methods.raw_json_request(&text, 1).await {
+    let (response, response_stream) = match rpc_methods.raw_json_request(&text, BUF_SIZE).await {
         Ok(res) => res,
         Err(error) => return error!(%error, "Error while processing RPC request"),
     };
