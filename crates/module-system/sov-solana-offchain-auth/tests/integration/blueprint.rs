@@ -24,7 +24,7 @@ use sov_sequencer::{ProofBlobSender, Sequencer, TxStatus};
 use sov_stf_runner::RollupConfig;
 use sov_test_utils::RtAgnosticBlueprint;
 
-use sov_solana_offchain_auth::capabilities::SolanaOffchainAuthenticatorTrait;
+use sov_solana_offchain_auth::SolanaOffchainAuthenticatorTrait;
 
 /// A test blueprint that extends RtAgnosticBlueprint with Solana offchain auth endpoints
 pub struct SolanaOffchainAuthBlueprint<S: Spec, R: RuntimeTrait<S>> {
