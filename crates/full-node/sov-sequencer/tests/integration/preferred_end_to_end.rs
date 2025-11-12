@@ -1838,7 +1838,8 @@ async fn seq_many_invalid_txs() {
     }
 
     let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, txs, 1_000_000);
+    let generation = config_value!("PAST_TRANSACTION_GENERATIONS") + txs;
+    let tx = tx_set_value(&admin.private_key, generation, 1_000_000);
 
     client
         .send_raw_tx_to_sequencer_with_retry(&tx)

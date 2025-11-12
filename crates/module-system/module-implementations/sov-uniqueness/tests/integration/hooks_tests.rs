@@ -1,6 +1,7 @@
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{CredentialId, HexHash, TxEffect};
+use sov_modules_api::macros::config_value;
 use sov_test_utils::{TransactionTestCase, TxProcessingError};
 use sov_uniqueness::Uniqueness;
 
@@ -132,8 +133,9 @@ fn send_tx_bad_generation_too_old() {
     let (admin, mut runner, evm_account) = setup();
 
     // initialise generation
+    let generation = config_value!("PAST_TRANSACTION_GENERATIONS") + 10;
     runner.execute_transaction(TransactionTestCase {
-        input: generate_default_tx(UniquenessData::Generation(10), &admin, &evm_account),
+        input: generate_default_tx(UniquenessData::Generation(generation), &admin, &evm_account),
         assert: Box::new(move |ctx, _state| {
             assert!(ctx.tx_receipt.is_successful());
         }),

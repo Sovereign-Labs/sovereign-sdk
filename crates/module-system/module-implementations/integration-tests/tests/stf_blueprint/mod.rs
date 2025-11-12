@@ -339,7 +339,8 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
     admin: &TestUser<S>,
     not_admin: &TestUser<S>,
 ) -> Vec<FullyBakedTx> {
-    let mut generation = 10;
+    let original_generation = config_value!("PAST_TRANSACTION_GENERATIONS") + 10;
+    let mut generation = original_generation;
     let mut txs: Vec<FullyBakedTx> = Vec::new();
     for status in statuses {
         match status {
@@ -355,7 +356,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                 generation += 1;
             }
             TxStatus::BadGeneration => {
-                if generation == 10 {
+                if generation == original_generation {
                     panic!("The first transaction will always have a valid generation");
                 } else {
                     let tx = create_tx_valid::<RT>(
