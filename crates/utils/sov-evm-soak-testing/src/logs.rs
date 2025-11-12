@@ -7,16 +7,15 @@ use alloy_primitives::U256;
 use alloy_pubsub::Subscription;
 use anyhow::Result;
 use futures::future::try_join_all;
-use serde::de::DeserializeOwned;
 use sov_eth_client::LogsWithCursorProvider;
 use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
-use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 use tokio::time::timeout;
 use tokio::try_join;
 
+use crate::recv_many::{RecvMany, RecvManyError};
 use crate::{alloy_client, fund_worker_accounts, validate_worker_count, LogsRetrievalMode};
 use crate::{alloy_ws_client, derive_worker_key};
 
@@ -102,29 +101,6 @@ async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<(usize, D
     Ok((logs.len(), timer.elapsed()))
 }
 
-trait RecvMany {
-    async fn recv_many(&mut self) -> Result<usize, RecvError>;
-}
-
-impl<T: DeserializeOwned> RecvMany for Subscription<T> {
-    async fn recv_many(&mut self) -> Result<usize, RecvError> {
-        self.recv().await?;
-        let mut count = 1;
-        loop {
-            match self.try_recv() {
-                Ok(_) => count += 1,
-                Err(TryRecvError::Lagged(n)) => {
-                    println!("Subscription lagged by {n} during try_recv");
-                    count += n as usize;
-                }
-                Err(_) => break,
-            }
-        }
-        println!("Subscription recevied {count} items");
-        Ok(count)
-    }
-}
-
 async fn stream_logs(
     mut subscription: Subscription<Log>,
     expected_count: usize,
@@ -137,13 +113,9 @@ async fn stream_logs(
             Ok(Ok(received)) => {
                 count += received;
             }
-            Ok(Err(RecvError::Closed)) => {
+            Ok(Err(RecvManyError::Closed)) => {
                 println!("Subscription closed");
                 break;
-            }
-            Ok(Err(RecvError::Lagged(n))) => {
-                println!("Subscription lagged by {n}");
-                count += n as usize;
             }
             Err(_) => {
                 println!(

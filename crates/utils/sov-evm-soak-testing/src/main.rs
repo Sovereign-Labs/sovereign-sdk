@@ -14,6 +14,7 @@ use tracing::warn;
 use tracing_subscriber::EnvFilter;
 
 mod logs;
+pub(crate) mod recv_many;
 mod simple_storage;
 mod uniswap;
 
