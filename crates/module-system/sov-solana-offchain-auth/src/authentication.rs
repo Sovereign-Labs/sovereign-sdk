@@ -12,8 +12,7 @@ use sov_modules_api::transaction::{
     self, AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
 };
 use sov_modules_api::{
-    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSignature,
-    ProvableStateReader, SafeString, Spec, TxHash,
+    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSigVerificationError, MeteredSignature, ProvableStateReader, SafeString, Signature, Spec, TxHash
 };
 
 #[cfg(feature = "native")]
@@ -161,26 +160,35 @@ fn verify_solana_signature<S: Spec>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
+    // Charge gas first, before checking the cache
+    MeteredSignature::new::<S>(signature.clone())
+        .charge_gas(meter, signed_bytes)
+        .map_err(|e| match e {
+            MeteredSigVerificationError::GasError(e) => {
+                AuthenticationError::OutOfGas(format!(
+                    "Signature verification ran out of gas: {e}"
+                ))
+            }
+            MeteredSigVerificationError::BadSignature(e) => {
+                AuthenticationError::FatalError(
+                    FatalError::SigVerificationFailed(e.to_string()),
+                    raw_tx_hash
+                )
+            }
+        })?;
+
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
         return known_result;
     }
 
-    let res = MeteredSignature::new::<S>(signature.clone())
-        .verify(pub_key, signed_bytes, meter)
-        .map_err(|e| match e {
-            sov_modules_api::MeteredSigVerificationError::BadSignature(err) => {
-                AuthenticationError::FatalError(
-                    FatalError::SigVerificationFailed(err.to_string()),
-                    raw_tx_hash,
-                )
-            }
-            sov_modules_api::MeteredSigVerificationError::GasError(err) => {
-                AuthenticationError::OutOfGas(format!(
-                    "Signature verification ran out of gas: {err}"
-                ))
-            }
-        });
+    // Now do the unmetered verification
+    let res = signature.verify(pub_key, signed_bytes).map_err(|err| {
+        AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(err.to_string()),
+            raw_tx_hash,
+        )
+    });
 
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
