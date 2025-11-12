@@ -54,8 +54,8 @@ pub enum FutureOrShutdownOutput<O> {
 /// * `debug!(%name, "Stream/channel closed, stopping task")` on close
 ///
 /// # Example
-/// ```rust
-/// consume_until_shutdown!(
+/// ```ignore
+/// sov_rollup_interface::consume_until_shutdown!(
 ///     "WebSocket reader",
 ///     ws_reader.next(),
 ///     shutdown_rx,
