@@ -15,6 +15,7 @@ use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::error::{RecvError, TryRecvError};
 use tokio::time::timeout;
+use tokio::try_join;
 
 use crate::{alloy_client, fund_worker_accounts, validate_worker_count, LogsRetrievalMode};
 use crate::{alloy_ws_client, derive_worker_key};
@@ -41,9 +42,10 @@ pub async fn run_logs_test(
                 .channel_size(capacity)
                 .await?;
             let expected_count = tx_count * logs_per_tx * num_workers;
-            produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
-            let handle = tokio::spawn(stream_logs(subscription, expected_count));
-            handle.await??;
+            try_join!(
+                produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx),
+                stream_logs(subscription, expected_count)
+            )?;
         }
         LogsRetrievalMode::WithCursor => {
             let from_block = root_client.get_block_number().await?;
