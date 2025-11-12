@@ -10,6 +10,7 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
+use tracing::warn;
 use tracing_subscriber::EnvFilter;
 
 mod logs;
@@ -174,6 +175,10 @@ async fn fund_worker_accounts(
     num_workers: usize,
 ) -> Result<()> {
     let root_balance = root_client.get_balance(root_signer.address()).await?;
+    if root_balance == U256::ZERO {
+        warn!("Root balance is 0. Skipping funding. This is fine if the paymaster is enabled.");
+        return Ok(());
+    }
     let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
 
     for worker_idx in 0..num_workers {
