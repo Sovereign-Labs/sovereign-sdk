@@ -78,6 +78,36 @@ impl PyTxDetails {
             },
         }
     }
+
+    #[getter]
+    fn get_chain_id(&self) -> u64 {
+        self.inner.chain_id
+    }
+
+    #[setter]
+    fn set_chain_id(&mut self, chain_id: u64) {
+        self.inner.chain_id = chain_id;
+    }
+
+    #[getter]
+    fn get_max_fee(&self) -> u128 {
+        self.inner.max_fee
+    }
+
+    #[setter]
+    fn set_max_fee(&mut self, max_fee: u128) {
+        self.inner.max_fee = max_fee;
+    }
+
+    #[getter]
+    fn get_max_priority_fee_bips(&self) -> u64 {
+        self.inner.max_priority_fee_bips
+    }
+
+    #[setter]
+    fn set_max_priority_fee_bips(&mut self, max_priority_fee_bips: u64) {
+        self.inner.max_priority_fee_bips = max_priority_fee_bips;
+    }
 }
 
 #[pyclass(name = "UnsignedTransaction")]
@@ -95,7 +125,7 @@ impl PyUnsignedTransaction {
         uniqueness: Option<&PyUniquenessData>,
     ) -> PyResult<Self> {
         let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
-            PyValueError::new_err(format!("Failed to convert runtime_call to JSON: {}", e))
+            PyValueError::new_err(format!("Failed to convert runtime_call dict to JSON: {}", e))
         })?;
 
         let uniqueness = match uniqueness {
