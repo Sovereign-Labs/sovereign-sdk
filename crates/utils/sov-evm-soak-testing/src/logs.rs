@@ -35,7 +35,7 @@ pub async fn run_logs_test(
     let root_client = alloy_ws_client(rpc_addr, root_signer.clone()).await?;
     fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
 
-    match mode {
+    let ((logs_count, logs_time), (stream_count, stream_time)) = match mode {
         LogsRetrievalMode::Subscription { capacity } => {
             let subscription = root_client
                 .subscribe_logs(&Filter::new())
@@ -45,14 +45,18 @@ pub async fn run_logs_test(
             try_join!(
                 produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx),
                 stream_logs(subscription, expected_count)
-            )?;
+            )
         }
         LogsRetrievalMode::WithCursor => {
             let from_block = root_client.get_block_number().await?;
-            produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
-            retrieve_logs(root_client, from_block).await?;
+            try_join!(
+                produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx),
+                retrieve_logs(root_client, from_block)
+            )
         }
-    }
+    }?;
+    println!("Produced {logs_count} logs in {logs_time:?}");
+    println!("Streamed {stream_count} logs in {stream_time:?}");
 
     Ok(())
 }
@@ -63,7 +67,7 @@ async fn produce_logs(
     num_workers: usize,
     tx_count: usize,
     logs_per_tx: usize,
-) -> Result<()> {
+) -> Result<(usize, Duration)> {
     let timer = Instant::now();
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
@@ -85,22 +89,17 @@ async fn produce_logs(
         }));
     }
     try_join_all(handles).await?;
-    println!(
-        "Produced {} logs in {:?}",
-        num_workers * tx_count * logs_per_tx,
-        timer.elapsed()
-    );
-    Ok(())
+    Ok((num_workers * tx_count * logs_per_tx, timer.elapsed()))
 }
 
-async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<()> {
+async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<(usize, Duration)> {
     let filter: Filter = Filter::new()
         .from_block(from_block)
         .to_block(BlockNumberOrTag::Pending);
     let timer = Instant::now();
     let logs = client.get_all_logs_with_cursor(&filter).await?;
     println!("Retrieved {} logs in {:?}", logs.len(), timer.elapsed());
-    Ok(())
+    Ok((logs.len(), timer.elapsed()))
 }
 
 trait RecvMany {
@@ -121,11 +120,15 @@ impl<T: DeserializeOwned> RecvMany for Subscription<T> {
                 Err(_) => break,
             }
         }
+        println!("Subscription recevied {count} items");
         Ok(count)
     }
 }
 
-async fn stream_logs(mut subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
+async fn stream_logs(
+    mut subscription: Subscription<Log>,
+    expected_count: usize,
+) -> Result<(usize, Duration)> {
     let timer = Instant::now();
     let mut count = 0;
     let mut timeouts = 0;
@@ -150,8 +153,7 @@ async fn stream_logs(mut subscription: Subscription<Log>, expected_count: usize)
             }
         }
     }
-    println!("Streamed {} logs in {:?}", expected_count, timer.elapsed());
-    Ok(())
+    Ok((count, timer.elapsed()))
 }
 
 pub struct LogsSoakTest<P, N> {
