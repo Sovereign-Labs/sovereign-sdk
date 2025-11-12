@@ -1,7 +1,7 @@
 use sov_modules_api::capabilities::UniquenessData;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{CredentialId, HexHash, TxEffect};
-use sov_modules_api::macros::config_value;
 use sov_test_utils::{TransactionTestCase, TxProcessingError};
 use sov_uniqueness::Uniqueness;
 

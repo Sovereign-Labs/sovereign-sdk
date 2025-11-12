@@ -740,13 +740,26 @@ fn test_granular_policies() {
         // Transaction 1.
         runner.do_value_setter_tx(&setup.user, TxOutcome::Executed);
         // Set up a high generation for the next test. Transaction 2.
-        runner.do_value_setter_tx_with_generation(&setup.user, 500, TxOutcome::Executed);
+        let high_generation = config_value!("PAST_TRANSACTION_GENERATIONS") * 3;
+        runner.do_value_setter_tx_with_generation(
+            &setup.user,
+            high_generation,
+            TxOutcome::Executed,
+        );
         // Check that skipped transactions do not decrement the limit
         runner.do_value_setter_tx_with_generation(&setup.user, 1, TxOutcome::Skipped);
         // Should still have one more tx left. Transaction 3.
-        runner.do_value_setter_tx_with_generation(&setup.user, 501, TxOutcome::Executed);
+        runner.do_value_setter_tx_with_generation(
+            &setup.user,
+            high_generation + 1,
+            TxOutcome::Executed,
+        );
         // The third tx should fail due to no longer being covered
-        runner.do_value_setter_tx_with_generation(&setup.user, 502, TxOutcome::Skipped);
+        runner.do_value_setter_tx_with_generation(
+            &setup.user,
+            high_generation + 2,
+            TxOutcome::Skipped,
+        );
 
         // Other users should be unaffected by the first user having used up his coverage
         // User 2, transactions 1 and 2
