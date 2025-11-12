@@ -337,7 +337,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
         )
     })?;
 
-    tx.charge_gas_for_signature(&serialized_tx, meter)
+    tx.charge_gas_for_signature(serialized_tx.len(), meter)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())
