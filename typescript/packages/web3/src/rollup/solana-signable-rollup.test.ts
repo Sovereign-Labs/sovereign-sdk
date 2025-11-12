@@ -1,6 +1,6 @@
 import SovereignClient from "@sovereign-sdk/client";
 import type { Signer } from "@sovereign-sdk/signers";
-import { Ed25519Signer } from "@sovereign-sdk/signers";
+import { Ed25519Signer, LedgerSolanaSigner } from "@sovereign-sdk/signers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SolanaSignableRollup,
@@ -317,6 +317,106 @@ describe("SolanaSignableRollup", () => {
       // Compare the entire POST body with the expected JSON from the Rust test
       const actualJson = JSON.stringify(capturedPayload);
       expect(actualJson).toBe(expectedJson);
+    });
+  });
+
+  describe("solanaAuto authenticator", () => {
+    it("should use 'solana' authenticator for LedgerSolanaSigner", async () => {
+      const mockClient = createMockClient();
+
+      // Capture the actual payload sent to the endpoint
+      let capturedPayload: any;
+      mockClient.post = vi
+        .fn()
+        .mockImplementation((path: string, options: any) => {
+          capturedPayload = options;
+          return Promise.resolve({ id: "test-tx-hash" });
+        });
+
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: () =>
+          createMockSerializer({ schema: { chain_name: "TestChain" } }),
+      });
+
+      // Create a real LedgerSolanaSigner instance and mock its methods
+      const ledgerSigner = new LedgerSolanaSigner();
+      vi.spyOn(ledgerSigner, "publicKey").mockResolvedValue(new Uint8Array(32));
+      vi.spyOn(ledgerSigner, "sign").mockResolvedValue(new Uint8Array(64));
+
+      await rollup.signAndSubmitTransaction(
+        {
+          runtime_call: { test: "call" },
+          uniqueness: { generation: 123 },
+          details: {
+            max_priority_fee_bips: 0,
+            max_fee: "1000",
+            gas_limit: null,
+            chain_id: 1,
+          },
+        } as any,
+        {
+          signer: ledgerSigner,
+          authenticator: "solanaAuto",
+        },
+      );
+
+      // Verify that spec-compliant message was sent (it will have the preamble)
+      const bodyJson = JSON.parse(JSON.stringify(capturedPayload));
+      const decodedBody = Buffer.from(bodyJson.body, "base64");
+
+      // Check for Solana offchain signing domain in preamble
+      // The spec-compliant message has a 4-byte length prefix, then the preamble starts with 0xff
+      expect(decodedBody[4]).toBe(0xff); // Skip 4-byte length prefix
+      const signingDomain = new TextDecoder().decode(decodedBody.slice(5, 20)); // 4 + 1 + 15 = 20
+      expect(signingDomain).toBe("solana offchain");
+    });
+
+    it("should use 'solanaSimple' authenticator for Ed25519Signer", async () => {
+      const mockClient = createMockClient();
+
+      // Capture the actual payload sent to the endpoint
+      let capturedPayload: any;
+      mockClient.post = vi
+        .fn()
+        .mockImplementation((path: string, options: any) => {
+          capturedPayload = options;
+          return Promise.resolve({ id: "test-tx-hash" });
+        });
+
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: () =>
+          createMockSerializer({ schema: { chain_name: "TestChain" } }),
+      });
+
+      // Create a regular Ed25519Signer
+      const ed25519Signer = createMockSigner();
+
+      await rollup.signAndSubmitTransaction(
+        {
+          runtime_call: { test: "call" },
+          uniqueness: { generation: 123 },
+          details: {
+            max_priority_fee_bips: 0,
+            max_fee: "1000",
+            gas_limit: null,
+            chain_id: 1,
+          },
+        } as any,
+        {
+          signer: ed25519Signer,
+          authenticator: "solanaAuto",
+        },
+      );
+
+      // Verify that simple message was sent (no preamble)
+      const bodyJson = JSON.parse(JSON.stringify(capturedPayload));
+      const decodedBody = Buffer.from(bodyJson.body, "base64");
+
+      // Simple message starts with a length prefix (4 bytes) followed by the JSON message
+      // It should NOT have the 0xff signing domain marker
+      expect(decodedBody[0]).not.toBe(0xff);
     });
   });
 
