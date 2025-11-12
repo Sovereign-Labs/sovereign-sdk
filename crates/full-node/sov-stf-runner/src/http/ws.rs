@@ -1,15 +1,19 @@
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::WebSocketUpgrade;
 use axum::response::IntoResponse;
+use axum::Error;
 use futures::stream::{SplitSink, SplitStream};
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use jsonrpsee::core::JsonRawValue;
 use jsonrpsee::RpcModule;
-use sov_rollup_interface::consume_until_shutdown;
+use sov_rollup_interface::{consume_many_until_shutdown, consume_until_shutdown};
 use tokio::spawn;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, trace};
+
+/// Capacity for channels forwarding subscription messages
+const BUF_SIZE: usize = 128;
 
 /// Convert content to a WebSocket message, using binary or text encoding
 fn to_ws_message(content: impl ToString, use_binary: bool) -> Message {
@@ -47,7 +51,7 @@ async fn handle_socket(
 ) {
     let (ws_writer, ws_reader) = socket.split();
 
-    let (msg_tx, msg_rx) = mpsc::channel(128);
+    let (msg_tx, msg_rx) = mpsc::channel(BUF_SIZE);
 
     spawn(socket_writer_task(
         msg_rx,
@@ -82,13 +86,13 @@ async fn socket_reader_task(
             };
             match msg {
                 Message::Text(text) => {
-                    handle_rpc_message(&text, &msg_tx, &rpc_methods, false, &shutdown_receiver).await;
+                    spawn(handle_rpc_message(text, msg_tx.clone(), rpc_methods.clone(), false, shutdown_receiver.clone()));
                 }
                 Message::Binary(data) => {
                     // Parse binary frame as UTF-8 JSON-RPC request
-                    match std::str::from_utf8(&data) {
+                    match String::from_utf8(data) {
                         Ok(text) => {
-                            handle_rpc_message(text, &msg_tx, &rpc_methods, true, &shutdown_receiver).await;
+                            spawn(handle_rpc_message(text, msg_tx.clone(), rpc_methods.clone(), true, shutdown_receiver.clone()));
                         }
                         Err(error) => {
                             error!(%error, "Invalid UTF-8 in binary WebSocket frame");
@@ -111,14 +115,14 @@ async fn socket_reader_task(
 }
 
 async fn handle_rpc_message(
-    text: &str,
-    msg_tx: &mpsc::Sender<Message>,
-    rpc_methods: &RpcModule<()>,
+    text: String,
+    msg_tx: mpsc::Sender<Message>,
+    rpc_methods: RpcModule<()>,
     use_binary: bool,
-    shutdown_receiver: &watch::Receiver<()>,
+    shutdown_receiver: watch::Receiver<()>,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
-    let (response, response_stream) = match rpc_methods.raw_json_request(text, 1).await {
+    let (response, response_stream) = match rpc_methods.raw_json_request(&text, BUF_SIZE).await {
         Ok(res) => res,
         Err(error) => return error!(%error, "Error while processing RPC request"),
     };
@@ -162,21 +166,36 @@ async fn subscription_forwarder_task(
     }
 }
 
+const MAX_WRITE_BATCH_SIZE: usize = 128;
+
 async fn socket_writer_task(
     mut msg_rx: mpsc::Receiver<Message>,
     mut ws_writer: SplitSink<WebSocket, Message>,
     mut shutdown_receiver: watch::Receiver<()>,
 ) {
-    consume_until_shutdown! {
+    let mut pending = Vec::with_capacity(MAX_WRITE_BATCH_SIZE);
+    consume_many_until_shutdown! {
         "WebSocket writer",
-        msg_rx.recv(),
+        msg_rx.recv_many(&mut pending, MAX_WRITE_BATCH_SIZE),
         shutdown_receiver,
-        response => {
-            if let Err(error) = ws_writer.send(response).await {
+        count => {
+            if let Err(error) = write_batch(&mut pending, &mut ws_writer).await {
                 debug!(%error, "WebSocket closed, stopping writer task");
                 break;
             }
-            trace!("Message sent to websocket");
         }
     }
+}
+
+async fn write_batch(
+    buf: &mut Vec<Message>,
+    ws_writer: &mut SplitSink<WebSocket, Message>,
+) -> Result<(), Error> {
+    let count = buf.len();
+    for item in buf.drain(..) {
+        ws_writer.feed(item).await?;
+    }
+    ws_writer.flush().await?;
+    trace!("{count} messages sent to websocket");
+    Ok(())
 }

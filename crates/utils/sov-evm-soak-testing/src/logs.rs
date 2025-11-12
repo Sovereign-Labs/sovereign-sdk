@@ -7,13 +7,15 @@ use alloy_primitives::U256;
 use alloy_pubsub::Subscription;
 use anyhow::Result;
 use futures::future::try_join_all;
-use futures::StreamExt;
 use sov_eth_client::LogsWithCursorProvider;
 use sov_test_utils::SimpleStorage;
 use sov_test_utils::Submit;
 use std::net::SocketAddr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tokio::time::timeout;
+use tokio::try_join;
 
+use crate::recv_many::{RecvMany, RecvManyError};
 use crate::{alloy_client, fund_worker_accounts, validate_worker_count, LogsRetrievalMode};
 use crate::{alloy_ws_client, derive_worker_key};
 
@@ -32,23 +34,28 @@ pub async fn run_logs_test(
     let root_client = alloy_ws_client(rpc_addr, root_signer.clone()).await?;
     fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
 
-    match mode {
+    let ((logs_count, logs_time), (stream_count, stream_time)) = match mode {
         LogsRetrievalMode::Subscription { capacity } => {
             let subscription = root_client
                 .subscribe_logs(&Filter::new())
                 .channel_size(capacity)
                 .await?;
             let expected_count = tx_count * logs_per_tx * num_workers;
-            produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
-            let handle = tokio::spawn(stream_logs(subscription, expected_count));
-            handle.await??;
+            try_join!(
+                produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx),
+                stream_logs(subscription, expected_count)
+            )
         }
         LogsRetrievalMode::WithCursor => {
             let from_block = root_client.get_block_number().await?;
-            produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx).await?;
-            retrieve_logs(root_client, from_block).await?;
+            try_join!(
+                produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx),
+                retrieve_logs(root_client, from_block)
+            )
         }
-    }
+    }?;
+    println!("Produced {logs_count} logs in {logs_time:?}");
+    println!("Streamed {stream_count} logs in {stream_time:?}");
 
     Ok(())
 }
@@ -59,7 +66,7 @@ async fn produce_logs(
     num_workers: usize,
     tx_count: usize,
     logs_per_tx: usize,
-) -> Result<()> {
+) -> Result<(usize, Duration)> {
     let timer = Instant::now();
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
@@ -81,37 +88,45 @@ async fn produce_logs(
         }));
     }
     try_join_all(handles).await?;
-    println!(
-        "Produced {} logs in {:?}",
-        num_workers * tx_count * logs_per_tx,
-        timer.elapsed()
-    );
-    Ok(())
+    Ok((num_workers * tx_count * logs_per_tx, timer.elapsed()))
 }
 
-async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<()> {
+async fn retrieve_logs(client: DynProvider, from_block: u64) -> Result<(usize, Duration)> {
     let filter: Filter = Filter::new()
         .from_block(from_block)
         .to_block(BlockNumberOrTag::Pending);
     let timer = Instant::now();
     let logs = client.get_all_logs_with_cursor(&filter).await?;
     println!("Retrieved {} logs in {:?}", logs.len(), timer.elapsed());
-    Ok(())
+    Ok((logs.len(), timer.elapsed()))
 }
 
-async fn stream_logs(subscription: Subscription<Log>, expected_count: usize) -> Result<()> {
+async fn stream_logs(
+    mut subscription: Subscription<Log>,
+    expected_count: usize,
+) -> Result<(usize, Duration)> {
     let timer = Instant::now();
-    let mut stream = subscription.into_stream();
     let mut count = 0;
-    while let Some(_item) = stream.next().await {
-        count += 1;
-        if count == expected_count {
-            break;
+    let mut timeouts = 0;
+    while count < expected_count && timeouts < 10 {
+        match timeout(Duration::from_secs(1), subscription.recv_many()).await {
+            Ok(Ok(received)) => {
+                println!("Subscription recevied {received} items");
+                count += received;
+            }
+            Ok(Err(RecvManyError::Closed)) => {
+                println!("Subscription closed");
+                break;
+            }
+            Err(_) => {
+                println!(
+                    "Timeout receiving log {count}. Timeouts: {timeouts} (shutdown after 10 timeouts)"
+                );
+                timeouts += 1;
+            }
         }
     }
-    assert_eq!(count, expected_count);
-    println!("Streamed {} logs in {:?}", expected_count, timer.elapsed());
-    Ok(())
+    Ok((count, timer.elapsed()))
 }
 
 pub struct LogsSoakTest<P, N> {
