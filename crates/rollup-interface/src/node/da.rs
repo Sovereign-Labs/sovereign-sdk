@@ -126,7 +126,7 @@ pub trait DaService: Clone + Send + Sync + 'static {
     /// The error type for fallible methods.
     type Error: Debug + Send + Sync + Display;
 
-    /// Fetch the block at the given height, waiting for one to be mined if necessary.
+    /// Fetch the block at the given height, **waiting for one to be mined** if necessary.
     ///
     /// The returned block may not be final, and can be reverted without a consensus violation.
     /// Calls to this method for the same height are allowed to return different results.

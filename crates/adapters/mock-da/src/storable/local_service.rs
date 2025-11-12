@@ -24,6 +24,7 @@ use crate::{
 const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
 // Time to accommodate rare cases of lock waiting time or latency to the database.
 const EXTRA_TIME_FOR_MAX_BLOCK: Duration = Duration::from_secs(10);
+const GET_BLOCK_ATTEMPTS: usize = 10;
 
 impl BlockProducingConfig {
     fn get_max_waiting_time_for_block(&self) -> Duration {
@@ -368,15 +369,27 @@ impl StorableMockDaService {
 
         let height = height as u32;
 
-        self.wait_for_height(height).await?;
+        for _ in 0..GET_BLOCK_ATTEMPTS {
+            self.wait_for_height(height).await?;
+            let block = {
+                let da_layer = self.da_layer.read().await;
+                match da_layer.get_block_at(height).await {
+                    Ok(block) => block,
+                    Err(err) => {
+                        tracing::trace!(error = ?err, "Error from DaLayer");
+                        let error_string = err.to_string();
+                        if error_string.contains("has not been produced yet") {
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!(err));
+                    }
+                }
+            };
 
-        let block = {
-            let da_layer = self.da_layer.read().await;
-            da_layer.get_block_at(height).await?
-        };
-
-        tracing::trace!(block_header = %block.header().display(), "Block retrieved");
-        Ok(block)
+            tracing::trace!(block_header = %block.header().display(), "Block retrieved");
+            return Ok(block);
+        }
+        anyhow::bail!("Failed to get block after {GET_BLOCK_ATTEMPTS} attempts");
     }
 
     pub(crate) async fn get_block_header_at_inner(
