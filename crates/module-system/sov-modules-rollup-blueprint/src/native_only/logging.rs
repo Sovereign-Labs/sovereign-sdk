@@ -60,8 +60,16 @@ pub fn initialize_logging() -> Option<OtelGuard> {
 
     if let Some(otel) = otel.as_ref() {
         layers = layers
-            .and_then(otel.otel_tracing_layer().with_filter(get_env_filter()))
-            .and_then(otel.otel_logging_layer().with_filter(get_env_filter()))
+            .and_then(
+                otel.otel_tracing_layer()
+                    .with_filter(get_env_filter())
+                    .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP)),
+            )
+            .and_then(
+                otel.otel_logging_layer()
+                    .with_filter(get_env_filter())
+                    .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP)),
+            )
             .boxed();
     }
 
