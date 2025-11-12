@@ -54,26 +54,32 @@ paths:
       operationId: "hyperlane_igp_quote_dispatch"
       tags: [Mailbox]
       parameters:
-        - name: destination-domain
+        - name: destination_domain
           in: query
           description: The destination domain ID.
           required: true
           schema:
             type: integer
             format: uint32
-        - name: relayer-address
+        - name: relayer
           in: query
           description: The address of relayer. Could be optional if default relayer address is present.
           required: false
           schema:
             type: string
-        - name: gas-limit
+        - name: gas_limit
           in: query
           description: The gas limit to use for the interchain transfer.
           required: true
           schema:
             type: integer
             format: uint128
+        - name: recipient_address
+          in: query
+          description: The address of the recipient.
+          required: true
+          schema:
+            $ref: "#/components/schemas/HyperlaneAddress"
       responses:
         "200":
           $ref: "#/components/responses/QuoteDispatchResponse"
