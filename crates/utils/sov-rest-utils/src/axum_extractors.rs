@@ -139,7 +139,7 @@ mod tests {
                     status: StatusCode::BAD_REQUEST,
                     message: "Invalid query string".to_string(),
                     details: json_obj!({
-                        "error": "Failed to deserialize query string"
+                        "error": "invalid digit found in string"
                     }),
                 }
             );
