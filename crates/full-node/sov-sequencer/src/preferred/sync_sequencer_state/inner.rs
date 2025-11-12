@@ -520,8 +520,20 @@ where
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
-        self.do_batch_start(visible_slot_number_after_increase, visible_increase)
-            .await
+        let maybe_seq_nr = self
+            .do_batch_start(visible_slot_number_after_increase, visible_increase)
+            .await?;
+
+        if let Some(sequence_number) = maybe_seq_nr {
+            tracing::debug!(
+                %visible_increase,
+                %visible_slot_number_after_increase,
+                %sequence_number,
+                "Sequencer created a new batch"
+            );
+        }
+
+        Ok(())
     }
 
     pub(crate) fn new_executor_with_empty_uncommitted_changes(
@@ -569,9 +581,9 @@ where
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_increase: NonZero<u8>,
-    ) -> Result<(), BatchCreationError> {
+    ) -> Result<Option<SequenceNumber>, BatchCreationError> {
         if self.executor.has_in_progress_batch() {
-            return Ok(());
+            return Ok(None);
         }
 
         if let Some(height_to_stop_at) = self.stop_at_rollup_height {
@@ -624,6 +636,7 @@ where
             state_roots,
             data: start_block_data,
             checkpoint: old_checkpoint,
+            sequence_number,
         };
 
         self.cache_warm_up_executor
@@ -640,7 +653,7 @@ where
             )
             .await;
 
-        Ok(())
+        Ok(Some(sequence_number))
     }
 
     pub(crate) async fn do_new_tx(
@@ -683,7 +696,7 @@ where
             });
         }
 
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone());
+        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (

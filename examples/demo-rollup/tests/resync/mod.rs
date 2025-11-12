@@ -333,6 +333,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
         (Level::WARN, "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works.".to_string()),
         (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
         (Level::WARN, "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string()),
+        (Level::WARN, "Cache warm up task: Transaction could not be applied on the executor.".to_string()),
     ];
 
     let mut recorded_errors_warnings =
