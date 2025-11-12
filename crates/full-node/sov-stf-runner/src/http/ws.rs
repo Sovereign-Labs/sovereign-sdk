@@ -1,12 +1,13 @@
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::WebSocketUpgrade;
 use axum::response::IntoResponse;
+use axum::Error;
 use futures::stream::{SplitSink, SplitStream};
 use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use jsonrpsee::core::JsonRawValue;
 use jsonrpsee::RpcModule;
-use sov_rollup_interface::consume_until_shutdown;
+use sov_rollup_interface::{consume_many_until_shutdown, consume_until_shutdown};
 use tokio::spawn;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, trace};
@@ -162,21 +163,36 @@ async fn subscription_forwarder_task(
     }
 }
 
+const MAX_WRITE_BATCH_SIZE: usize = 128;
+
 async fn socket_writer_task(
     mut msg_rx: mpsc::Receiver<Message>,
     mut ws_writer: SplitSink<WebSocket, Message>,
     mut shutdown_receiver: watch::Receiver<()>,
 ) {
-    consume_until_shutdown! {
+    let mut pending = Vec::with_capacity(MAX_WRITE_BATCH_SIZE);
+    consume_many_until_shutdown! {
         "WebSocket writer",
-        msg_rx.recv(),
+        msg_rx.recv_many(&mut pending, MAX_WRITE_BATCH_SIZE),
         shutdown_receiver,
-        response => {
-            if let Err(error) = ws_writer.send(response).await {
+        count => {
+            if let Err(error) = write_batch(&mut pending, &mut ws_writer).await {
                 debug!(%error, "WebSocket closed, stopping writer task");
                 break;
             }
-            trace!("Message sent to websocket");
         }
     }
+}
+
+async fn write_batch(
+    buf: &mut Vec<Message>,
+    ws_writer: &mut SplitSink<WebSocket, Message>,
+) -> Result<(), Error> {
+    let count = buf.len();
+    for item in buf.drain(..) {
+        ws_writer.feed(item).await?;
+    }
+    ws_writer.flush().await?;
+    trace!("{count} messages sent to websocket");
+    Ok(())
 }
