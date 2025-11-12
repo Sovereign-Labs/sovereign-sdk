@@ -35,7 +35,7 @@ pub mod test_utils;
 use std::fmt::Debug;
 
 use axum::body::Body;
-use axum::extract::ws::{self, WebSocket};
+use axum::extract::ws::WebSocket;
 use axum::extract::Request;
 use axum::http::{HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
