@@ -10,6 +10,7 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
+use tracing_subscriber::EnvFilter;
 
 mod logs;
 mod simple_storage;
@@ -197,6 +198,8 @@ async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Res
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or("debug".into());
+    tracing_subscriber::fmt().with_env_filter(filter).init();
     let args = Args::parse();
 
     match args.test {
