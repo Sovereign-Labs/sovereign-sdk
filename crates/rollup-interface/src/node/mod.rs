@@ -91,3 +91,28 @@ macro_rules! consume_until_shutdown {
         }
     };
 }
+
+/// Same as consume_until_shutdown but consumes elements in batches
+#[macro_export]
+macro_rules! consume_many_until_shutdown {
+    (
+        $name:expr,
+        $recv_many:expr,
+        $shutdown:expr,
+        $var:ident => $body:block
+    ) => {
+        let name = $name;
+        loop {
+            tokio::select! {
+                _ = $shutdown.changed() => {
+                    tracing::debug!(%name, "Shutdown signal received, stopping task");
+                    break;
+                }
+                count = $recv_many => {
+                    tracing::trace!(%name, "{count} messages received");
+                    $body
+                }
+            }
+        }
+    };
+}

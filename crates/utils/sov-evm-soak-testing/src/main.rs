@@ -10,8 +10,11 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
+use tracing::warn;
+use tracing_subscriber::EnvFilter;
 
 mod logs;
+pub(crate) mod recv_many;
 mod simple_storage;
 mod uniswap;
 
@@ -173,6 +176,10 @@ async fn fund_worker_accounts(
     num_workers: usize,
 ) -> Result<()> {
     let root_balance = root_client.get_balance(root_signer.address()).await?;
+    if root_balance == U256::ZERO {
+        warn!("Root balance is 0. Skipping funding. This is fine if the paymaster is enabled.");
+        return Ok(());
+    }
     let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
 
     for worker_idx in 0..num_workers {
@@ -197,6 +204,8 @@ async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Res
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or("debug".into());
+    tracing_subscriber::fmt().with_env_filter(filter).init();
     let args = Args::parse();
 
     match args.test {
