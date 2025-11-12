@@ -1,7 +1,10 @@
+use pyo3::exceptions::PyValueError;
 use pyo3::types::PyDict;
 use pyo3::{prelude::*, types::PyType};
-use pyo3::exceptions::PyValueError;
-use sovereign_web3::schema::{Serializer, Transaction, TxDetails, UniquenessData, UnsignedTransaction, default_uniqueness, DEFAULT_MAX_FEE, DEFAULT_MAX_PRIORITY_FEE_BIPS};
+use sovereign_web3::schema::{
+    default_uniqueness, Serializer, Transaction, TxDetails, UniquenessData, UnsignedTransaction,
+    DEFAULT_MAX_FEE, DEFAULT_MAX_PRIORITY_FEE_BIPS,
+};
 
 #[pyclass(name = "Serializer")]
 struct PySerializer {
@@ -19,26 +22,34 @@ impl PySerializer {
 
     #[classmethod]
     fn from_url(_cls: &Bound<'_, PyType>, url: &str) -> PyResult<Self> {
-        let serializer = Serializer::from_url(url)
-            .map_err(|e| PyValueError::new_err(format!("Failed to fetch schema from URL: {}", e)))?;
+        let serializer = Serializer::from_url(url).map_err(|e| {
+            PyValueError::new_err(format!("Failed to fetch schema from URL: {}", e))
+        })?;
         Ok(PySerializer { inner: serializer })
     }
 
     fn chain_hash(&self) -> PyResult<Vec<u8>> {
-        let hash = self.inner.chain_hash()
+        let hash = self
+            .inner
+            .chain_hash()
             .map_err(|e| PyValueError::new_err(format!("Failed to get chain hash: {}", e)))?;
         Ok(hash.to_vec())
     }
 
     fn serialize_unsigned_tx(&self, unsigned_tx: &PyUnsignedTransaction) -> PyResult<Vec<u8>> {
-        let bytes = self.inner.serialize_unsigned_tx(&unsigned_tx.inner)
-            .map_err(|e| PyValueError::new_err(format!("Failed to serialize unsigned transaction: {}", e)))?;
+        let bytes = self
+            .inner
+            .serialize_unsigned_tx(&unsigned_tx.inner)
+            .map_err(|e| {
+                PyValueError::new_err(format!("Failed to serialize unsigned transaction: {}", e))
+            })?;
         Ok(bytes)
     }
 
     fn serialize_tx(&self, tx: &PyTransaction) -> PyResult<Vec<u8>> {
-        let bytes = self.inner.serialize_tx(&tx.inner)
-            .map_err(|e| PyValueError::new_err(format!("Failed to serialize transaction: {}", e)))?;
+        let bytes = self.inner.serialize_tx(&tx.inner).map_err(|e| {
+            PyValueError::new_err(format!("Failed to serialize transaction: {}", e))
+        })?;
         Ok(bytes)
     }
 }
@@ -83,13 +94,15 @@ impl PyUnsignedTransaction {
         details: &PyTxDetails,
         uniqueness: Option<&PyUniquenessData>,
     ) -> PyResult<Self> {
-        let call: serde_json::Value = pythonize::depythonize(runtime_call)
-            .map_err(|e| PyValueError::new_err(format!("Failed to convert runtime_call to JSON: {}", e)))?;
+        let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
+            PyValueError::new_err(format!("Failed to convert runtime_call to JSON: {}", e))
+        })?;
 
         let uniqueness = match uniqueness {
             Some(u) => u.inner,
-            None => default_uniqueness()
-                .map_err(|e| PyValueError::new_err(format!("Failed to create default uniqueness: {}", e)))?,
+            None => default_uniqueness().map_err(|e| {
+                PyValueError::new_err(format!("Failed to create default uniqueness: {}", e))
+            })?,
         };
 
         let unsigned_tx = UnsignedTransaction {
@@ -102,7 +115,9 @@ impl PyUnsignedTransaction {
     }
 
     fn bytes_for_signing(&self, serializer: &PySerializer) -> PyResult<Vec<u8>> {
-        let bytes = self.inner.bytes_for_signing(&serializer.inner)
+        let bytes = self
+            .inner
+            .bytes_for_signing(&serializer.inner)
             .map_err(|e| PyValueError::new_err(format!("Failed to get signing bytes: {}", e)))?;
         Ok(bytes)
     }
@@ -142,15 +157,17 @@ impl PyUniquenessData {
 
     #[staticmethod]
     fn default() -> PyResult<Self> {
-        let uniqueness = default_uniqueness()
-            .map_err(|e| PyValueError::new_err(format!("Failed to create default uniqueness: {}", e)))?;
+        let uniqueness = default_uniqueness().map_err(|e| {
+            PyValueError::new_err(format!("Failed to create default uniqueness: {}", e))
+        })?;
         Ok(PyUniquenessData { inner: uniqueness })
     }
 }
 
 #[pymodule(name = "sovereign_web3")]
-mod py_sovereign_web3 { 
+mod py_sovereign_web3 {
     #[pymodule_export]
-    use super::{PySerializer, PyUnsignedTransaction, PyTransaction, PyUniquenessData, PyTxDetails};
+    use super::{
+        PySerializer, PyTransaction, PyTxDetails, PyUniquenessData, PyUnsignedTransaction,
+    };
 }
-
