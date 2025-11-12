@@ -7,7 +7,7 @@ use futures_util::sink::SinkExt;
 use futures_util::stream::StreamExt;
 use jsonrpsee::core::JsonRawValue;
 use jsonrpsee::RpcModule;
-use sov_rollup_interface::{consume_many_until_shutdown, consume_until_shutdown};
+use sov_rollup_interface::consume_until_shutdown;
 use tokio::spawn;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, error, trace};
@@ -174,13 +174,18 @@ async fn socket_writer_task(
     mut shutdown_receiver: watch::Receiver<()>,
 ) {
     let mut pending = Vec::with_capacity(MAX_WRITE_BATCH_SIZE);
-    consume_many_until_shutdown! {
-        "WebSocket writer",
-        msg_rx.recv_many(&mut pending, MAX_WRITE_BATCH_SIZE),
-        shutdown_receiver,
-        count => {
-            if let Err(error) = write_batch(&mut pending, &mut ws_writer).await {
-                debug!(%error, "WebSocket closed, stopping writer task");
+    let name = "WebSocket writer";
+    loop {
+        tokio::select! {
+            count = (msg_rx.recv_many(&mut pending, MAX_WRITE_BATCH_SIZE)) => {
+                trace!(%name, "{count} messages received");
+                if let Err(error) = write_batch(&mut pending, &mut ws_writer).await {
+                    debug!(%error,"WebSocket closed, stopping writer task");
+                    break;
+                }
+            }
+            _ = shutdown_receiver.changed() => {
+                debug!(%name, "Shutdown signal received, stopping task");
                 break;
             }
         }
