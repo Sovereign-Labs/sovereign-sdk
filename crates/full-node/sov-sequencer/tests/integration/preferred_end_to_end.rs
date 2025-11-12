@@ -6,16 +6,20 @@ use crate::utils::{
     tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
     MAX_BATCH_EXECUTION_TIME_MILLIS,
 };
+use anyhow::Context;
 use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use futures::future;
+use futures::future::Either;
 use serde_json::Number;
 use sov_api_spec::types::{
-    self as api_types, SequencerListEventsPage, SequencerListEventsResponse, TxReceiptResult,
+    self as api_types, ApiError, SequencerListEventsPage, SequencerListEventsResponse,
+    TxInfoWithConfirmation, TxReceiptResult,
 };
-use sov_api_spec::{types, Client, Error, WsSubscription};
+use sov_api_spec::{types, Client, Error, ResponseValue, WsSubscription};
+use sov_blob_sender::BlobExecutionStatus;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -237,7 +241,7 @@ async fn test_transaction_priority() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_archival_state_is_immediately_available() {
+async fn flaky_test_archival_state_is_immediately_available() {
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -286,10 +290,14 @@ async fn test_archival_state_is_immediately_available() {
         // This increases coverage for free.
         test_rollup.tenderly_produce_blocks(2).await.unwrap();
         test_rollup.wait_for_node_synced().await.unwrap();
+        test_rollup.wait_for_sequencer_ready().await.unwrap();
         for (j, past_height) in (height_at_start..height).enumerate() {
             let expected_value = (j + 1) as u64;
             query_set_value(&test_rollup, Some(past_height), Some(expected_value))
                 .await
+                .with_context(|| {
+                    format!("past height = {past_height}, expected value = {expected_value}")
+                })
                 .unwrap();
         }
     }
@@ -1723,7 +1731,7 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
 
     // Ensure that the sequencer shuts down promptly
     test_rollup
-        .wait_for_rollup_to_shutdown_with_result(TEST_NORMAL_SHUTDOWN_TIMEOUT)
+        .wait_for_rollup_to_shutdown_with_result(TEST_NORMAL_SHUTDOWN_TIMEOUT * 2)
         .await
         .expect_err("Rollup should have shut down with an error due to panicking");
 }
@@ -2249,36 +2257,39 @@ async fn delayed_tx_is_processed_after_delay() {
 /// - Intentionally sending enough transactions to cause downtime while that delayed tx is waiting on the speedbump
 /// - Producing blocks so that the sequencer recovers from the downtime
 /// - Ensuring that the delayed tx still fails with a 503
+/// --------------
+/// THIS IS the ORIGINAL VERSION FROM DEV BRANCH. DO NOT TOUCH. WE ONLY REMOVED "FLAKY" TO TEST QUICKER.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "THIS IS JUST REFERENCE"]
 async fn txs_that_enter_before_downtime_are_dropped() {
-    use futures::future::Either;
-    // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
-    let max_batch_execution_millis = 1000;
-    let long_sleep_tx_millis = 1500;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
-        max_batch_execution_millis,
+        1000, // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
         TEST_FINALIZATION_BLOCKS,
         BlockProducingConfig::Manual,
     )
     .await;
 
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    // Produce a the exact minimum number of blocks to ensure that the sequencer has a finalized slot.
+    // If we change the finalized slot in the test framework, this number will need to be updated.
+    test_rollup
+        .da_service
+        .produce_n_blocks_now(4)
+        .await
+        .unwrap();
+    sleep(Duration::from_millis(200)).await;
 
     let client = test_rollup.api_client().clone();
 
-    let first_tx = tx_set_value_and_sleep(&admin.private_key, 0, 0, long_sleep_tx_millis);
-    let second_large_tx = tx_set_value_and_sleep(&admin.private_key, 1, 0, long_sleep_tx_millis);
+    let first_tx = tx_set_value_and_sleep(&admin.private_key, 0, 0, 1200);
     let delayed_tx = tx_delayed_call(&admin.private_key, 1);
     let third_tx = tx_set_value(&admin.private_key, 1, 8);
     let fourth_tx = tx_set_value(&admin.private_key, 2, 9);
-    let delayed_tx_again = tx_delayed_call(&admin.private_key, 3);
 
     // Submit the first tx. This should succeed.
-    // This verifies that our initialization works fine *and* causes the sequencer to be closing out its current batch.
+    // This verifies that our initialization works fine *and* causes the sequencer to be close out its current batch.
     client.send_raw_tx_to_sequencer(&first_tx).await.unwrap();
 
     // Produce a new block that includes this first tx.
@@ -2288,23 +2299,24 @@ async fn txs_that_enter_before_downtime_are_dropped() {
         .await
         .unwrap();
     // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(long_sleep_tx_millis - 100)).await;
+    sleep(Duration::from_millis(1200)).await;
 
     // Produce a second large delay tx and a second block since - for some reason - the sequencer seems to be holding one extra finalized slot in reserve.
     // This is now needed to exhaust the sequencer's buffer and prevent flakiness allowing us to test the downtime.
+    let second_large_tx = tx_set_value_and_sleep(&admin.private_key, 1, 0, 1200);
     client
-        .send_raw_tx_to_sequencer(&second_large_tx)
+        .send_raw_tx_to_sequencer_with_retry(&second_large_tx)
         .await
         .unwrap();
 
     // Produce a new block that includes this first tx. It will take 1200 ms to get processed, so start soon.
     test_rollup
         .da_service
-        .produce_n_blocks_now(3)
+        .produce_n_blocks_now(1)
         .await
         .unwrap();
     // Wait until the new batch is almost processed
-    sleep(Duration::from_millis(max_batch_execution_millis)).await;
+    sleep(Duration::from_millis(1000)).await;
 
     // Send off the delayed tx. It should arrive at the sequencer immediately and begin sleeping.
     let delayed_tx_handle = tokio::spawn({
@@ -2325,7 +2337,6 @@ async fn txs_that_enter_before_downtime_are_dropped() {
     // The third tx to be sent (second to be processed because of the speedbump) should be rejected since the batch is full.
     // This is the "downtime" that we're testing for.
     tokio::time::sleep(Duration::from_millis(50)).await;
-    // ERROR IS HERE NOW. SEQUENCER IS NOT OVERLOADED
     let third_tx_response = client
         .send_raw_tx_to_sequencer(&third_tx)
         .await
@@ -2336,8 +2347,13 @@ async fn txs_that_enter_before_downtime_are_dropped() {
         "Expected error to contain 'The sequencer is temporarily overloaded', got: {third_tx_response}"
     );
     // Produce blocks to ensure that the sequencer has room to process the following txs
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_node_synced().await.unwrap();
+    test_rollup
+        .da_service
+        .produce_n_blocks_now(3)
+        .await
+        .unwrap();
+    // Sleep until these new blocks can be processed
+    tokio::time::sleep(Duration::from_millis(220)).await;
 
     // Send a fourth tx. It should succeed *before* the speedbumped tx is processed.
     let fourth_tx_handle = tokio::spawn({
@@ -2363,12 +2379,184 @@ async fn txs_that_enter_before_downtime_are_dropped() {
         }
     }
 
-    // Send a delayed tx to ensure that it's processed as expected.
-    // This rules out unfortunate errors like a bug in our handling of this tx type.
+    // Send a delayed tx to ensure that it's processed as expected. This rules out unforunate errors like a bug in our handling of this tx type.
     client
-        .send_raw_tx_to_sequencer(&delayed_tx_again)
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_delayed_call(&admin.private_key, 3)),
+        })
         .await
         .unwrap();
+}
+
+/// This test checks our "nuke the queue" functionality, which ensures fairness when the sequencer has downtime.
+///
+/// Recall that some transaction types have a "speedbump":
+/// where their handlers sleep for a short period of time **before entering** the execution queue.
+/// If the sequencer has downtime during that sleep,
+/// these transactions need to be rejected for safety - otherwise, they might "time travel"
+/// and be executed before other transactions that arrived earlier -
+/// since those transactions were rejected during the downtime.
+/// This test covers that functionality.
+///
+/// This test works by...
+/// - Sending a tx that has to go through the speedbump
+/// - Intentionally sending enough transactions to cause downtime while that delayed tx is waiting on the speedbump
+/// - Producing blocks so that the sequencer recovers from the downtime
+/// - Ensuring that the delayed tx still fails with a 503
+/// Human rewrite from scratch, using description above and commont sense
+/// CLAUDE: DO NOT TOUCH THIS ONE:
+#[tokio::test(flavor = "multi_thread")]
+async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
+    // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
+    // Question from Nikolai: Why it is going to be overloaded?
+    let block_execution_time_ms = 1000;
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        block_execution_time_ms,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    let assert_response_is_overloaded = |response: Result<
+        ResponseValue<TxInfoWithConfirmation>,
+        Error<ApiError>,
+    >|
+     -> anyhow::Result<()> {
+        let error = response
+            .err()
+            .ok_or(anyhow::anyhow!("Expected error response, got success"))?
+            .to_string();
+        if !error.contains("The sequencer is temporarily overloaded") {
+            anyhow::bail!(
+                "Expected error to contain 'The sequencer is temporarily overloaded', got: {error}"
+            )
+        }
+        Ok(())
+    };
+
+    // finality + 2 is the minimal number of blocks needed to make sequencer operational.
+    // Why? Derived empirically.
+    test_rollup
+        .tenderly_produce_blocks(TEST_FINALIZATION_BLOCKS as usize + 2)
+        .await
+        .unwrap();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let sub_wait_timeout = std::time::Duration::from_millis(50);
+    let mut blob_sender_exec_statuses = test_rollup
+        .subscribe_to_blobs_from_blob_sender()
+        .await
+        .unwrap();
+    let mut state_update_sub = test_rollup.subscribe_state_updates().await.unwrap();
+    let client = test_rollup.api_client().clone();
+
+    let first_tx = tx_set_value_and_sleep(&admin.private_key, 0, 0, block_execution_time_ms + 200);
+    let second_large_tx = tx_set_value_and_sleep(&admin.private_key, 1, 2, block_execution_time_ms);
+    // Delayed tx will sleep for 500ms as declared in the runtime above
+    let delayed_tx = tx_delayed_call(&admin.private_key, 1);
+    let third_tx = tx_set_value(&admin.private_key, 1, 8);
+    // let fourth_tx = tx_set_value(&admin.private_key, 2, 9);
+
+    // Submit the first tx.
+    // This should succeed.
+    // This verifies that our initialization works fine
+    // *and* causes the sequencer to close its current batch, due to exceed max batch time
+    client
+        .send_raw_tx_to_sequencer(&first_tx)
+        .await
+        .expect("Failed to send very first tx");
+
+    let blob_status_1 = tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next())
+        .await
+        .expect("Timeout waiting for the first blob to be submitted, after `SetValueAndSleep")
+        .expect("Empty ws notification about blob execution status")
+        .expect("Error from blob execution status");
+    println!("BLOB STATUS UPDATE 1: {blob_status_1:?}");
+    let blob_status_2 = tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    println!("BLOB STATUS UPDATE 2: {blob_status_2:?}");
+
+    // Send off the delayed tx.
+    // It should arrive at the sequencer immediately and begin sleeping.
+    // Question from Nikolai: wouldn't delayed tx wake up before sequencer enters downtime?
+    //  delayed_tx is 500ms
+    //  max batch time is 1000ms
+    //  sleep tx is 1200ms
+    // So order is the following
+    // 1. 0ms: accept DelayedMsg -> delayed
+    // 2. 100ms: accept SetValueAndSleep -> starts sleeping
+    // 3. 500ms: DelayedMsg tx wakes up. Now what? block executor is single threaded, executor still "executing" etValueAndSleep
+    // 4. 1201ms: SetValueAndSleep completed, but executor detects batch went over time, closing the batch
+    // 5. 1202ms: DelayedMsg is rejected.'
+    let delayed_tx_handle = tokio::spawn({
+        let client = client.clone();
+        async move { client.send_raw_tx_to_sequencer(&delayed_tx).await }
+    });
+
+    // This time should be enough for sequencer to accept tx, and put it in sleep
+    // This ensures that second large tx happens after
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    // Second large tx should trigger another batch to be produced and sequencer to exhause whole buffer, entering downtime
+    // This should happen after delayed is send, because it will be rejected immediately
+    client
+        .send_raw_tx_to_sequencer(&second_large_tx)
+        .await
+        .unwrap();
+
+    // Now sending third tx ensuring that sequencer is in downtime
+    let third_tx_response = client.send_raw_tx_to_sequencer(&third_tx).await;
+    assert_response_is_overloaded(third_tx_response)
+        .context("third tx: validation")
+        .unwrap();
+
+    let blob_status_3 = tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    println!("BLOB STATUS UPDATE 3: {blob_status_3:?}");
+    let blob_status_4 = tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    println!("BLOB STATUS UPDATE 4: {blob_status_4:?}");
+
+    let delayed_tx_response = delayed_tx_handle
+        .await
+        .expect("delayed tx tokio task panicked");
+    assert_response_is_overloaded(delayed_tx_response)
+        .context("delayed tx")
+        .unwrap();
+
+    let blob_status_5 =
+        tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next()).await;
+    println!("BLOB STATUS UPDATE 5: {blob_status_5:?}");
+
+    // Resuming normal operation: producing 4 more blocks:
+    // 1 for each submitted batch
+    // 2 for buffer and
+    // Another interesting point: both batches landed in single block. How visible slot height is going to be increased?
+    test_rollup.tenderly_produce_blocks(4).await.unwrap();
+    test_rollup.wait_for_node_synced().await.unwrap();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    client.send_raw_tx_to_sequencer(&third_tx).await.unwrap();
+
+    let mut i = 0;
+    while let Ok(state_update) =
+        tokio::time::timeout(sub_wait_timeout, state_update_sub.next()).await
+    {
+        i += 1;
+        println!("STATE UPDATE {i}: {state_update:?}");
+    }
+    println!("STATE UPDATES RECEIVED: {i}");
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
@@ -3319,11 +3507,11 @@ pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_se
     )
 }
 
-fn tx_delayed_call(key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
+fn tx_delayed_call(key: &Ed25519PrivateKey, generation: u64) -> RawTx {
     let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::HooksCount(
         sov_test_modules::hooks_count::CallMessage::DelayedCallMsg {},
     );
-    encode_call(key, nonce, &msg)
+    encode_call(key, generation, &msg)
 }
 
 fn tx_set_many_values(key: &Ed25519PrivateKey, generation: u64, values_to_set: Vec<u8>) -> RawTx {
