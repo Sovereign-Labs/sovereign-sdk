@@ -19,7 +19,7 @@ use sov_api_spec::types::{
     TxInfoWithConfirmation, TxReceiptResult,
 };
 use sov_api_spec::{types, Client, Error, ResponseValue, WsSubscription};
-use sov_blob_sender::BlobExecutionStatus;
+use sov_blob_sender::BlobSubmissionStatus;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -2403,7 +2403,7 @@ async fn txs_that_enter_before_downtime_are_dropped() {
 /// - Intentionally sending enough transactions to cause downtime while that delayed tx is waiting on the speedbump
 /// - Producing blocks so that the sequencer recovers from the downtime
 /// - Ensuring that the delayed tx still fails with a 503
-/// Human rewrite from scratch, using description above and commont sense
+/// Human rewrite from scratch, using the description above and common sense
 /// CLAUDE: DO NOT TOUCH THIS ONE:
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
@@ -2474,12 +2474,18 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
         .expect("Timeout waiting for the first blob to be submitted, after `SetValueAndSleep")
         .expect("Empty ws notification about blob execution status")
         .expect("Error from blob execution status");
-    println!("BLOB STATUS UPDATE 1: {blob_status_1:?}");
+
+    matches!(
+        blob_status_1.blob_submission_status,
+        BlobSubmissionStatus::MustSubmit
+    );
+    // println!("BLOB STATUS UPDATE 1: {blob_status_1:?}");
     let blob_status_2 = tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next())
         .await
         .unwrap()
         .unwrap()
         .unwrap();
+    // matches!(blob_status_1.blob_submission_status, BlobSubmissionStatus::Published {});
     println!("BLOB STATUS UPDATE 2: {blob_status_2:?}");
 
     // Send off the delayed tx.
@@ -2507,7 +2513,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
     client
         .send_raw_tx_to_sequencer(&second_large_tx)
         .await
-        .unwrap();
+        .expect("Second large tx should succeed");
 
     // Now sending third tx ensuring that sequencer is in downtime
     let third_tx_response = client.send_raw_tx_to_sequencer(&third_tx).await;
@@ -2520,7 +2526,11 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
         .unwrap()
         .unwrap()
         .unwrap();
-    println!("BLOB STATUS UPDATE 3: {blob_status_3:?}");
+    // println!("BLOB STATUS UPDATE 3: {blob_status_3:?}");
+    matches!(
+        blob_status_3.blob_submission_status,
+        BlobSubmissionStatus::MustSubmit
+    );
     let blob_status_4 = tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next())
         .await
         .unwrap()
@@ -2533,7 +2543,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
         .expect("delayed tx tokio task panicked");
     assert_response_is_overloaded(delayed_tx_response)
         .context("delayed tx")
-        .unwrap();
+        .expect("delayed tx has been accepted when it shouldn't");
 
     let blob_status_5 =
         tokio::time::timeout(sub_wait_timeout, blob_sender_exec_statuses.next()).await;
