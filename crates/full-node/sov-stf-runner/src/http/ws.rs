@@ -82,11 +82,11 @@ async fn socket_reader_task(
             };
             match msg {
                 Message::Text(text) => {
-                    handle_rpc_message(&text, &msg_tx, &rpc_methods, false, &shutdown_receiver).await;
+                    handle_rpc_message(text, &msg_tx, &rpc_methods, false, &shutdown_receiver).await;
                 }
                 Message::Binary(data) => {
                     // Parse binary frame as UTF-8 JSON-RPC request
-                    match std::str::from_utf8(&data) {
+                    match String::from_utf8(data) {
                         Ok(text) => {
                             handle_rpc_message(text, &msg_tx, &rpc_methods, true, &shutdown_receiver).await;
                         }
@@ -111,14 +111,14 @@ async fn socket_reader_task(
 }
 
 async fn handle_rpc_message(
-    text: &str,
+    text: String,
     msg_tx: &mpsc::Sender<Message>,
     rpc_methods: &RpcModule<()>,
     use_binary: bool,
     shutdown_receiver: &watch::Receiver<()>,
 ) {
     // Buffer size picked up from `jsonrpsee` crate examples
-    let (response, response_stream) = match rpc_methods.raw_json_request(text, 1).await {
+    let (response, response_stream) = match rpc_methods.raw_json_request(&text, 1).await {
         Ok(res) => res,
         Err(error) => return error!(%error, "Error while processing RPC request"),
     };
