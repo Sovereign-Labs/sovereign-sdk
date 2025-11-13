@@ -12,7 +12,6 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use futures::future;
-use futures::future::Either;
 use serde_json::Number;
 use sov_api_spec::types::{
     self as api_types, ApiError, SequencerListEventsPage, SequencerListEventsResponse,
@@ -1667,10 +1666,11 @@ async fn rollup_shuts_down_if_blob_sender_fails() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rollup_shuts_down_if_blob_processing_timeouts() {
+    let blob_processing_timeout_secs = 1;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
-        1,
+        blob_processing_timeout_secs,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         TEST_FINALIZATION_BLOCKS,
         BlockProducingConfig::Manual,
@@ -1688,11 +1688,14 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
         .await
         .unwrap();
 
-    // Close the batch and submit it.  It won't be received because we don't create any more blocks
+    // Close the batch and submit it. It won't be received because we don't create any more blocks
     test_rollup.force_close_batch().await.unwrap();
 
     test_rollup
-        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT)
+        .wait_for_rollup_to_shutdown(
+            TEST_NORMAL_SHUTDOWN_TIMEOUT
+                + std::time::Duration::from_secs(blob_processing_timeout_secs),
+        )
         .await;
 }
 
