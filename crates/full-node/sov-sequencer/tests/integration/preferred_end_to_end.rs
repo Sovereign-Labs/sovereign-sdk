@@ -55,7 +55,7 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
-const DELAYED_TX_DELAY_MS: u64 = 500;
+const DELAYED_TX_DELAY_MS: u64 = 2500;
 
 generate_optimistic_runtime_with_kernel!(
     TestRuntime <=
@@ -2402,13 +2402,18 @@ async fn txs_that_enter_before_downtime_are_dropped() {
 /// - Intentionally sending enough transactions to cause downtime while that delayed tx is waiting on the speedbump
 /// - Producing blocks so that the sequencer recovers from the downtime
 /// - Ensuring that the delayed tx still fails with a 503
-/// Human rewrite from scratch, using the description above and common sense
-/// CLAUDE: DO NOT TOUCH THIS ONE:
+/// -----
+/// Correctness of this test can be validated by disabling queue id check:
+///  - https://github.com/Sovereign-Labs/sovereign-sdk/blob/e921a2bc5a395f807b73ccda2f41dac74c2a1b8e/crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs#L739
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
     // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
     // Question from Nikolai: Why it is going to be overloaded?
     let block_execution_time_ms = 1000;
+    assert!(
+        block_execution_time_ms * 2 < DELAYED_TX_DELAY_MS,
+        "Test relies on delay being larger than 2 max batch times"
+    );
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -2444,12 +2449,6 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
     test_rollup.wait_for_node_synced().await.unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let sub_wait_timeout = std::time::Duration::from_millis(50);
-    // let mut blob_sender_exec_statuses = test_rollup
-    //     .subscribe_to_blobs_from_blob_sender()
-    //     .await
-    //     .unwrap();
-    let mut state_update_sub = test_rollup.subscribe_state_updates().await.unwrap();
     let client = test_rollup.api_client().clone();
 
     let max_attempts = 10;
@@ -2460,12 +2459,13 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
     // On each loop we send DelayedCallMsg and SetValueAndSleep and save their results in a vector.
     // Delayed sent first, SetValueAndSleep shortly after.
     // If SetValueAndSleep succeeds, it means that sequencer still has finalized slots.
-    // In this case, DelayedCallMsg will be accept first thing in the *next* batch without affecting it much.
+    // In this case, DelayedCallMsg will be accepted first thing in the *next* batch without affecting it much.
     // If SetValueAndSleep fails, we stop loop, assuming it triggered overload.
     // Then after loop we check:
     //  * The first iteration should always succeed: that's baseline that sequencer is ok.
     //  * The last iteration should fail with particular error: sequencer got overloaded
 
+    // TODO: Adjust this to new times
     // High level picture of the last finalized slot:
     // 1. 0ms: accept DelayedMsg -> delayed
     // 2. 100ms: accept SetValueAndSleep -> starts sleeping
@@ -2495,25 +2495,19 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
             break;
         }
     }
-
     // There should be at least 1 success and 1 error
     assert!(results.len() >= 2);
     let results_sent = results.len();
     let (the_first_set_and_sleep_response, the_first_delayed) = results.remove(0);
-    the_first_set_and_sleep_response.expect("First SetAndSleep should always succeed");
+    the_first_set_and_sleep_response.expect("first etValueAndSleep should always succeed");
     the_first_delayed
         .await
-        .expect("First delayed tx is panicked")
-        .expect("First delayed tx should always succeed");
+        .expect("first DelayedMsg is panicked")
+        .expect("first DelayedMsg should always succeed");
     let (the_last_set_and_sleep_response, the_last_delayed) = results.pop().unwrap();
 
     assert_response_is_overloaded(the_last_set_and_sleep_response)
-        .context("set and sleep")
-        .expect("Last SetAndSleep");
-    let the_last_delayed_response = the_last_delayed.await.expect("lat delayed tx is panicked");
-    assert_response_is_overloaded(the_last_delayed_response)
-        .context("delayed")
-        .expect("Last SetAndSleep");
+        .expect("last SetValueAndSleep should be rejected due to overload");
 
     // Resuming normal operation: producing more blocks:
     // 1 for each submitted batch
@@ -2525,6 +2519,11 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
         .await
         .unwrap();
     test_rollup.wait_for_node_synced().await.unwrap();
+
+    let the_last_delayed_response = the_last_delayed.await.expect("last DelayedMsg is panicked");
+    assert_response_is_overloaded(the_last_delayed_response)
+        .expect("last DelayedMsg should be rejected rejected due to overload");
+
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let last_tx = tx_set_value_and_sleep(
@@ -2533,16 +2532,10 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped_human_rewrite() {
         31337,
         block_execution_time_ms + 200,
     );
-    client.send_raw_tx_to_sequencer(&last_tx).await.unwrap();
-
-    let mut i = 0;
-    while let Ok(state_update) =
-        tokio::time::timeout(sub_wait_timeout, state_update_sub.next()).await
-    {
-        i += 1;
-        println!("STATE UPDATE {i}: {state_update:?}");
-    }
-    println!("STATE UPDATES RECEIVED: {i}");
+    client
+        .send_raw_tx_to_sequencer(&last_tx)
+        .await
+        .expect("Sequencer is not operating normally");
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
