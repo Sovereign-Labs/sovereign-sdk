@@ -140,11 +140,11 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
         details: TxDetails<S>,
-        generation_numbers: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
+        nonces: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
     ) -> Transaction<RT, S> {
         let pub_key = key.pub_key();
-        let generation = *generation_numbers.get(&pub_key).unwrap_or(&0);
-        generation_numbers.insert(pub_key, generation + 1);
+        let nonce = *nonces.get(&pub_key).unwrap_or(&0);
+        nonces.insert(pub_key, nonce + 1);
         Transaction::<RT, S>::new_signed_tx(
             &key,
             chain_hash,
@@ -153,7 +153,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
                 details.chain_id,
                 details.max_priority_fee_bips,
                 details.max_fee,
-                UniquenessData::Generation(generation),
+                UniquenessData::Nonce(nonce),
                 details.gas_limit,
             ),
         )
@@ -165,9 +165,9 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         key: <S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
         details: TxDetails<S>,
-        generations: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
+        nonces: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
     ) -> RawTx {
-        let tx = Self::sign(msg, key, chain_hash, details, generations);
+        let tx = Self::sign(msg, key, chain_hash, details, nonces);
 
         RawTx {
             data: borsh::to_vec(&tx).unwrap(),
