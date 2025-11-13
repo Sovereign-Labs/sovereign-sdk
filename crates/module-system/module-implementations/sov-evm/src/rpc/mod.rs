@@ -10,6 +10,7 @@ use alloy_rpc_types::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
+use reth_primitives::BlockBody;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -95,6 +96,24 @@ where
         Ok(txs)
     }
 
+    fn get_block_body(
+        &self,
+        block: &MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<BlockBody, EthApiError> {
+        let tx_range = block.tx_range();
+        let transactions = tx_range
+            .into_iter()
+            .map(|idx| Ok::<_, EthApiError>(self.tx(idx, state)?.signed_transaction))
+            .collect::<Result<_, _>>()?;
+        let body = BlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: None,
+        };
+        Ok(body)
+    }
+
     fn get_block(
         &self,
         block_number: Option<String>,
@@ -105,8 +124,12 @@ where
             return Ok(None);
         };
         let transactions = self.get_block_transactions(&block, kind, state)?;
+        let block_size = alloy_consensus::Block::rlp_length_for(
+            block.header(),
+            &self.get_block_body(&block, state)?,
+        );
         Ok(Some(Block {
-            header: Header::from_sealed(block.into()),
+            header: Header::from_consensus(block.into(), None, Some(U256::from(block_size))),
             transactions,
             uncles: vec![],
             withdrawals: None,
