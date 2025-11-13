@@ -42,10 +42,10 @@ pub enum TxOutcome {
 // Use a trait to circumvent the orphan rule and add `do_value_setter_tx` to TestRunner
 pub trait DoValueSetterTx<S: Spec> {
     fn do_value_setter_tx(&mut self, user: &TestUser<S>, expected_outcome: TxOutcome);
-    fn do_value_setter_tx_with_generation(
+    fn do_value_setter_tx_with_nonce(
         &mut self,
         user: &TestUser<S>,
-        generation: u64,
+        nonce: u64,
         expected_outcome: TxOutcome,
     );
 }
@@ -93,10 +93,10 @@ where
         };
     }
 
-    fn do_value_setter_tx_with_generation(
+    fn do_value_setter_tx_with_nonce(
         &mut self,
         user: &TestUser<S>,
-        generation: u64,
+        nonce: u64,
         expected_outcome: TxOutcome,
     ) {
         match expected_outcome {
@@ -109,7 +109,7 @@ where
                 );
                 let input =
                     TransactionType::PreAuthenticated(input.to_serialized_authenticated_tx(
-                        &mut HashMap::from([(user.private_key().pub_key(), generation)]),
+                        &mut HashMap::from([(user.private_key().pub_key(), nonce)]),
                     ));
                 self.execute_skipped_transaction(TransactionTestCase {
                     input,
@@ -130,7 +130,7 @@ where
                 );
                 let input =
                     TransactionType::PreAuthenticated(input.to_serialized_authenticated_tx(
-                        &mut HashMap::from([(user.private_key().pub_key(), generation)]),
+                        &mut HashMap::from([(user.private_key().pub_key(), nonce)]),
                     ));
                 self.execute_transaction(TransactionTestCase {
                     input,
