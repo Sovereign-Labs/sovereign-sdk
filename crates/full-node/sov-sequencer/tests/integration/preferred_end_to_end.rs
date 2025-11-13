@@ -422,7 +422,8 @@ impl Default for TestState {
         Self {
             value_by_slot_number: Default::default(),
             _current_slot_number: Default::default(),
-            next_generation: 10, // initialize to a higher generation so that "invalid generation" actions are always possible
+            // initialize to a higher generation so that "invalid generation" actions are always possible
+            next_generation: config_value!("PAST_TRANSACTION_GENERATIONS") + 10,
             current_value: Default::default(),
         }
     }
@@ -1855,7 +1856,8 @@ async fn seq_many_invalid_txs() {
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, txs, 1_000_000);
+    let generation = config_value!("PAST_TRANSACTION_GENERATIONS") + txs;
+    let tx = tx_set_value(&admin.private_key, generation, 1_000_000);
 
     client
         .send_raw_tx_to_sequencer_with_retry(&tx)
@@ -2942,11 +2944,6 @@ async fn restart_after_big_batch_regression() {
     preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions).await;
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone)]
-struct X {
-    data: Vec<Vec<u8>>,
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_batch_production_with_immediate_finalization() {
     let actions = vec![
@@ -3208,9 +3205,12 @@ pub(crate) async fn run_action_against_test_rollup(
                     test_state.current_value,
                 ),
                 InvalidGeneration::TooOld => {
-                    let bad_generation = test_state.next_generation
-                        - 1
-                        - config_value!("PAST_TRANSACTION_GENERATIONS");
+                    let bad_generation = test_state
+                        .next_generation
+                        .checked_sub(1)
+                        .expect("Next generation is to low for TooOld scenario")
+                        .checked_sub(config_value!("PAST_TRANSACTION_GENERATIONS"))
+                        .expect("Next generation is to low for TooOld scenario");
                     tx_set_value(key, bad_generation, test_state.current_value + 1)
                 }
             };

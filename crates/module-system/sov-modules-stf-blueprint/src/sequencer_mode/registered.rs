@@ -796,7 +796,8 @@ where
 
     // Begin the transaction processing phase.
     let raw_tx_hash = validated_output.0.raw_tx_hash;
-    let span = tracing::info_span!("transaction", id = %raw_tx_hash, idx = %idx).entered();
+    let span =
+        tracing::info_span!("process_transaction", tx_hash = %raw_tx_hash, idx = %idx).entered();
 
     #[cfg(feature = "native")]
     assert_eq!(

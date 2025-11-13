@@ -23,8 +23,6 @@ pub struct EthRpcConfig {
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
     pub extension: SeqConfigExtension,
-    /// Whether to buffer raw transactions with a future nonce. If true, we'll retry the transaction a few times to see if the missing intermediate nonce was consumed.
-    pub buffer_raw_txs: bool,
     /// Shutdown signal receiver for graceful termination
     pub shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
@@ -41,7 +39,6 @@ where
         #[cfg(feature = "local")]
         eth_signer,
         extension,
-        buffer_raw_txs,
         shutdown_receiver,
     } = eth_rpc_config;
 
@@ -50,7 +47,6 @@ where
         #[cfg(feature = "local")]
         eth_signer,
         extension,
-        buffer_raw_txs,
         shutdown_receiver,
     });
 
@@ -109,7 +105,6 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     #[cfg(feature = "local")]
     eth_signer: Signers,
     extension: SeqConfigExtension,
-    buffer_raw_txs: bool,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
 

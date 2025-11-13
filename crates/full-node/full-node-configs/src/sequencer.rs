@@ -167,6 +167,18 @@ pub struct PreferredSequencerConfig {
     #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
+    /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
+    /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
+    /// sequencer out of order.
+    #[serde(default = "default_maximum_future_nonce_delta")]
+    pub maximum_future_nonce_delta: u64,
+    /// The timeout after which a transaction with a near-future nonce (bounded by
+    /// `maximum_future_nonce_delta`) will be dropped and forgotten by the sequencer. Increasing
+    /// this value increases the leniency with which out-of-order transactions are considered a
+    /// "simultaneous batch" which should be reordered, but can increase memory usage and queue
+    /// lock contention.
+    #[serde(default = "default_future_nonce_transaction_timeout_millis")]
+    pub future_nonce_transaction_timeout_millis: u64,
 }
 
 impl Default for PreferredSequencerConfig {
@@ -182,8 +194,19 @@ impl Default for PreferredSequencerConfig {
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
             num_cache_warmup_workers: default_num_cache_warmup_workers(),
+            maximum_future_nonce_delta: default_maximum_future_nonce_delta(),
+            future_nonce_transaction_timeout_millis:
+                default_future_nonce_transaction_timeout_millis(),
         }
     }
+}
+
+pub const fn default_maximum_future_nonce_delta() -> u64 {
+    100
+}
+
+pub const fn default_future_nonce_transaction_timeout_millis() -> u64 {
+    2_000
 }
 
 pub const fn default_num_cache_warmup_workers() -> usize {
