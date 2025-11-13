@@ -615,7 +615,12 @@ async fn sequencer_filled_up_block() {
     )
     .await;
 
-    test_rollup.produce_enough_finalized_slots().await;
+    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
+    // This means finalized blocks + 2 as buffer.
+    test_rollup
+        .tenderly_produce_blocks((TEST_FINALIZATION_BLOCKS + 2) as usize)
+        .await
+        .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
     let client = test_rollup.api_client().clone();
 
@@ -634,13 +639,7 @@ async fn sequencer_filled_up_block() {
             Some(gas_to_charge),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
-
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
         // Produce a second huge transaction
         // This should fail with "Out of Gas" because:
@@ -654,12 +653,7 @@ async fn sequencer_filled_up_block() {
             Amount::MAX.saturating_div(Amount::new(4)),
         );
 
-        let err = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx_2),
-            })
-            .await
-            .unwrap_err();
+        let err = client.send_raw_tx_to_sequencer(&tx_2).await.unwrap_err();
         assert!(
             err.to_string()
                 .contains("The gas to charge is greater than the funds available in the meter"),
@@ -676,12 +670,7 @@ async fn sequencer_filled_up_block() {
             Some(small_gas_amount),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx_3),
-            })
-            .await
-            .unwrap();
+        client.send_raw_tx_to_sequencer(&tx_3).await.unwrap();
 
         // Produce another huge transaction
         // This should be accepted because the sequencer starts a new batch.
