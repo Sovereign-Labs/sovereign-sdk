@@ -10,7 +10,6 @@ use anyhow::Context;
 use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use borsh::{BorshDeserialize, BorshSerialize};
 use futures::future;
 use serde_json::Number;
 use sov_api_spec::types::{
