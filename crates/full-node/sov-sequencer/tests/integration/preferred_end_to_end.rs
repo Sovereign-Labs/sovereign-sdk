@@ -9,13 +9,13 @@ use crate::utils::{
 use backon::Retryable;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use sov_full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use futures::future;
 use serde_json::Number;
 use sov_api_spec::types::{
     self as api_types, SequencerListEventsPage, SequencerListEventsResponse, TxReceiptResult,
 };
 use sov_api_spec::{Client, WsSubscription};
+use sov_full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;

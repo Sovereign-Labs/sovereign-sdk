@@ -4869,23 +4869,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
-name = "full-node-configs"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "insta",
- "schemars 0.8.22",
- "serde",
- "sov-db",
- "sov-metrics",
- "sov-mock-da",
- "sov-modules-api",
- "sov-rollup-interface",
- "toml 0.8.23",
- "tracing",
-]
-
-[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11780,7 +11763,6 @@ dependencies = [
  "demo-stf-json-client",
  "ethereum-types",
  "ethers",
- "full-node-configs",
  "futures",
  "hex",
  "prometheus_exporter",
@@ -11807,6 +11789,7 @@ dependencies = [
  "sov-db",
  "sov-eth-client",
  "sov-ethereum",
+ "sov-full-node-configs",
  "sov-kernels",
  "sov-metrics",
  "sov-mock-da",
@@ -12049,6 +12032,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-full-node-configs"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "insta",
+ "schemars 0.8.22",
+ "serde",
+ "sov-db",
+ "sov-metrics",
+ "sov-mock-da",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "toml 0.8.23",
+ "tracing",
+]
+
+[[package]]
 name = "sov-hyperlane-integration"
 version = "0.3.0"
 dependencies = [
@@ -12227,11 +12227,11 @@ dependencies = [
 name = "sov-module-schemas"
 version = "0.3.0"
 dependencies = [
- "full-node-configs",
  "schemars 0.8.22",
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-full-node-configs",
  "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
@@ -12662,7 +12662,6 @@ dependencies = [
  "derivative",
  "derive_more 1.0.0",
  "flume",
- "full-node-configs",
  "futures",
  "hex",
  "jsonrpsee",
@@ -12684,6 +12683,7 @@ dependencies = [
  "sov-blob-storage",
  "sov-chain-state",
  "sov-db",
+ "sov-full-node-configs",
  "sov-kernels",
  "sov-metrics",
  "sov-mock-da",
@@ -12740,7 +12740,7 @@ dependencies = [
 
 [[package]]
 name = "sov-soak-testing"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -12777,7 +12777,7 @@ dependencies = [
 
 [[package]]
 name = "sov-soak-testing-lib"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -12907,7 +12907,6 @@ dependencies = [
  "bincode",
  "borsh",
  "derivative",
- "full-node-configs",
  "futures",
  "futures-util",
  "hex",
@@ -12921,6 +12920,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "sov-db",
+ "sov-full-node-configs",
  "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
@@ -13132,7 +13132,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "alloy-dyn-abi",
  "alloy-primitives",
@@ -13157,7 +13157,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bech32 0.11.0",
  "borsh",
@@ -13173,7 +13173,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "sov-universal-wallet-macro-helpers",

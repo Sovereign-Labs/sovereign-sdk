@@ -1,12 +1,12 @@
 use crate::test_helpers::build_transfer_token_tx;
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::TokenId;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{

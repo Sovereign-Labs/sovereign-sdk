@@ -2,12 +2,21 @@
 
 mod mempool;
 
+use self::mempool::{Mempool, MempoolCursor, MempoolTx};
+use crate::common::{
+    loop_call_update_state, loop_send_tx_notifications, pre_exec_err_to_accept_tx_err,
+    sender_is_allowed, tx_auth, AcceptedTx, EmptyConfirmation, Sequencer, TxStatusBlobSenderHooks,
+    WithCachedTxHashes,
+};
+use crate::{
+    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxHash, TxStatus, TxStatusManager,
+};
 use anyhow::Context;
 use async_trait::async_trait;
 use axum::http::StatusCode;
-pub use sov_full_node_configs::sequencer::StdSequencerConfig;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
+pub use sov_full_node_configs::sequencer::StdSequencerConfig;
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
 use sov_modules_api::rest::utils::ErrorObject;
@@ -29,16 +38,6 @@ use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::{debug, error, trace, warn};
-
-use self::mempool::{Mempool, MempoolCursor, MempoolTx};
-use crate::common::{
-    loop_call_update_state, loop_send_tx_notifications, pre_exec_err_to_accept_tx_err,
-    sender_is_allowed, tx_auth, AcceptedTx, EmptyConfirmation, Sequencer, TxStatusBlobSenderHooks,
-    WithCachedTxHashes,
-};
-use crate::{
-    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxHash, TxStatus, TxStatusManager,
-};
 
 struct Inner<S, Rt, Da>
 where

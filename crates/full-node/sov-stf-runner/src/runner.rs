@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
+use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use sov_metrics::RunnerMetrics;
 
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
