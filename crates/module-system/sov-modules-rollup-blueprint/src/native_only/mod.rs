@@ -181,6 +181,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         _sequencer: Arc<Seq>,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _shutdown_receiver: watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -218,7 +219,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?;
 
                 let mut endpoints = self
-                    .sequencer_additional_apis(sequencer.clone(), rollup_config)
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                    )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
                     SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
@@ -230,7 +235,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: sequencer,
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await,
+                    da_address: da_service.get_signer().await.context(
+                        "Full node with standard sequencer require DaService with signer support",
+                    )?,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -248,7 +255,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?;
 
                 let mut endpoints = self
-                    .sequencer_additional_apis(sequencer.clone(), rollup_config)
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                    )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
                     SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
@@ -260,7 +271,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: sequencer,
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await,
+                    da_address: da_service.get_signer().await.context(
+                        "Full node with preferred sequencer require DaService with signer support",
+                    )?,
                 })
             }
         }
@@ -388,23 +401,22 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             }
         };
 
-        let (sync_status_sender, sync_status_receiver) =
-            tokio::sync::watch::channel(SyncStatus::START);
-
         let da_sync_state = make_da_sync_state(
             genesis_slot_number,
             stop_at_rollup_height,
             &ledger_db,
             da_service.as_ref(),
-            sync_status_sender,
         )
         .await?;
+
+        let sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
         let state_update_info =
             query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())
                 .await?;
 
         let mut rt = Self::Runtime::default();
+
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 
@@ -686,6 +698,7 @@ fn spawn_task_monitor(
 
         let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
+            _ = shutdown_sender.send(());
             false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
@@ -706,6 +719,7 @@ fn spawn_task_monitor(
         for handle in handles {
             if let Err(error) = handle.await {
                 tracing::error!(error = %error, "Additional background task joined with error");
+                _ = shutdown_sender.send(());
                 was_graceful = false;
             }
         }

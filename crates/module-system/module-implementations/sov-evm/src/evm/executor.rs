@@ -1,5 +1,4 @@
 use crate::{
-    db::commit::FallibleDatabaseCommit,
     get_spec_id,
     sov_evm::{SovEvm, StorageAccessInspector},
     EvmRuntimeConfig,
@@ -15,7 +14,7 @@ use revm::{
 };
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
-use revm_database_interface::DBErrorMarker;
+use revm_database_interface::{DBErrorMarker, TryDatabaseCommit};
 use sov_modules_api::macros::config_value;
 
 /// The maximum contract code size is 512KiB by default.
@@ -26,7 +25,7 @@ pub const DEFAULT_MAX_CONTRACT_CODE_SIZE: usize = 512 * 1024;
 // Copies context-dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
     block_env: &BlockEnv,
-    cfg: EvmRuntimeConfig,
+    cfg: &EvmRuntimeConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
@@ -44,10 +43,7 @@ pub(crate) fn get_cfg_env(
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
-pub fn transact_commit<
-    DB: Database<Error = E> + FallibleDatabaseCommit<Error = E>,
-    E: DBErrorMarker,
->(
+pub fn transact_commit<DB: Database<Error = E> + TryDatabaseCommit<Error = E>, E: DBErrorMarker>(
     mut db: &mut DB,
     block_env: &BlockEnv,
     tx: TxEnv,
@@ -55,7 +51,7 @@ pub fn transact_commit<
 ) -> Result<ExecutionResult, EVMError<E>> {
     let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg)?;
     // We don't use transact_commit as it does not support returning an error
-    db.commit(state)?;
+    db.try_commit(state)?;
     Ok(result)
 }
 
@@ -106,6 +102,8 @@ mod tests {
     use revm::primitives::hardfork::SpecId;
     use sov_modules_api::macros::config_value;
 
+    use crate::ContractCreationPolicy;
+
     use super::*;
 
     #[test]
@@ -121,13 +119,14 @@ mod tests {
                 ..Default::default()
             },
             hardforks: vec![(0, SpecId::CANCUN)],
+            contract_creation_policy: ContractCreationPolicy::Everyone,
         };
 
         let mut template_cfg_env = CfgEnv::default();
         template_cfg_env.chain_id = 2;
         template_cfg_env.disable_base_fee = true;
 
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(template_cfg_env));
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(template_cfg_env));
 
         let mut expected_cfg_env = CfgEnv::default();
         expected_cfg_env.chain_id = config_value!("CHAIN_ID");

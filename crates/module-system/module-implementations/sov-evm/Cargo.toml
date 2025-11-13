@@ -32,6 +32,7 @@ thiserror = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true, features = ["deref_mut"] }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 derive-new = { workspace = true }
@@ -44,7 +45,6 @@ jsonrpsee = { workspace = true, features = [
 ], optional = true }
 schemars = { workspace = true }
 tracing = { workspace = true }
-quick_cache = { workspace = true }
 
 alloy-eips = { workspace = true, features = ["std"] }
 # `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there

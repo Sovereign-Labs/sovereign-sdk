@@ -54,6 +54,10 @@ pub struct RollupDbConfig {
     pub pruner_versions_to_keep: Option<usize>,
     /// Maximum number of keys to prune in a single batch.
     pub pruner_max_batch_size: Option<usize>,
+
+    /// Whether to use a separate db for archival state.
+    #[serde(default)]
+    pub separate_archival_state: bool,
 }
 
 impl RollupDbConfig {
@@ -88,6 +92,7 @@ impl RollupDbConfig {
             pruner_block_interval: Some(100),
             pruner_versions_to_keep: Some(20),
             pruner_max_batch_size: None,
+            separate_archival_state: false,
         }
     }
 

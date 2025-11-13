@@ -1,85 +1,18 @@
-use std::num::NonZero;
 use std::str::FromStr;
-use std::time::Duration;
 
-use anyhow::Context;
-use celestia_types::nmt::Namespace;
-use serde_json::{json, Value};
-use sov_rollup_interface::da::{DaVerifier, RelevantBlobs};
-use sov_rollup_interface::node::da::DaService;
-use wiremock::matchers::{bearer_token, body_partial_json, method, path};
-use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
-
-use crate::config::default_request_timeout_seconds;
-use crate::da_service::{
-    extract_relevant_blobs, get_extraction_proof, CelestiaConfig, CelestiaService,
-};
+use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
-use crate::test_helper::{raw_blob_from_data, ADDR_1, ADDR_2, ROLLUP_PARAMS_DEV};
+use crate::test_helper::{ADDR_1, ADDR_2, ROLLUP_PARAMS_DEV};
 use crate::types::{BlobWithSender, FilteredCelestiaBlock};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
-
-struct RpcIdEchoResponder {
-    response_result: Value,
-}
-
-impl Respond for RpcIdEchoResponder {
-    fn respond(&self, request: &Request) -> ResponseTemplate {
-        let request_body_json: Result<Value, _> = serde_json::from_slice(&request.body);
-
-        let response_id = match request_body_json {
-            Ok(json_value) => json_value.get("id").cloned().unwrap_or(Value::Null),
-            Err(_) => Value::Null,
-        };
-
-        ResponseTemplate::new(200).set_body_json(json!({
-            "id": response_id,
-            "jsonrpc": "2.0",
-            "result": self.response_result
-        }))
-    }
-}
-
-async fn setup_test_service(
-    timeout_sec: Option<u64>,
-    rollup_params: RollupParams,
-) -> (MockServer, CelestiaConfig, CelestiaService) {
-    setup_service(timeout_sec, rollup_params).await
-}
-
-// Last return value is namespace
-async fn setup_service(
-    timeout_sec: Option<u64>,
-    params: RollupParams,
-) -> (MockServer, CelestiaConfig, CelestiaService) {
-    // Start a background HTTP server on a random local port
-    let mock_server = MockServer::start().await;
-
-    let address = CelestiaAddress::from_str(ADDR_1).unwrap();
-
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .and(body_partial_json(json!({
-            "method": "state.AccountAddress"
-        })))
-        .respond_with(RpcIdEchoResponder {
-            response_result: json!(address.to_string()),
-        })
-        .mount(&mock_server)
-        .await;
-
-    let timeout_sec = timeout_sec
-        .map(|t| NonZero::new(t).unwrap())
-        .unwrap_or_else(default_request_timeout_seconds);
-    let mut config = CelestiaConfig::dev_config(&mock_server.uri());
-    config.signer_address = Some(address);
-    config.celestia_rpc_timeout_seconds = timeout_sec;
-
-    let da_service = CelestiaService::new(config.clone(), params).await;
-
-    (mock_server, config, da_service)
-}
+use crate::CelestiaService;
+use anyhow::Context;
+use celestia_types::nmt::Namespace;
+use sov_rollup_interface::common::HexHash;
+use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
+use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::da::SlotData;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct BasicJsonRpcRequest {
@@ -89,86 +22,106 @@ struct BasicJsonRpcRequest {
     params: serde_json::Value,
 }
 
+async fn collect_all_blobs_between(
+    da_service: &CelestiaService,
+    height_before: u64,
+) -> anyhow::Result<(Vec<BlobWithSender>, Vec<BlobWithSender>)> {
+    let height_after = da_service.get_head_block_header().await?.height();
+    let mut collected_batch_blobs = Vec::new();
+    let mut collected_proof_blobs = Vec::new();
+
+    for height in height_before..=height_after {
+        let block = da_service.get_block_at(height).await?;
+        // Tiny self check.
+        assert_eq!(block.header().height(), height);
+        let relevant_blobs = da_service.extract_relevant_blobs(&block);
+        let RelevantBlobs {
+            batch_blobs,
+            proof_blobs,
+        } = relevant_blobs;
+        collected_batch_blobs.extend(batch_blobs);
+        collected_proof_blobs.extend(proof_blobs);
+    }
+
+    Ok((collected_batch_blobs, collected_proof_blobs))
+}
+
+fn assert_single_blob(
+    mut blobs: Vec<BlobWithSender>,
+    expected_signer: CelestiaAddress,
+    expected_hash: HexHash,
+    expected_data: &[u8],
+) {
+    assert_eq!(1, blobs.len());
+    let mut fetched_blob = blobs.pop().unwrap();
+    assert_eq!(fetched_blob.sender, expected_signer);
+    assert_eq!(fetched_blob.hash, expected_hash);
+    fetched_blob.blob.advance(fetched_blob.total_len());
+    assert_eq!(fetched_blob.verified_data(), expected_data);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
-    let (mock_server, config, da_service) = setup_test_service(None, rollup_params).await;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let config = dev_node.get_config().await?;
+    let da_service = CelestiaService::new(config, rollup_params).await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
 
     let blob = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-
-    let raw_blob = raw_blob_from_data(
-        rollup_params.rollup_batch_namespace,
-        blob.clone(),
-        config.signer_address.as_ref().unwrap(),
-    );
-    let tx_config = celestia_rpc::TxConfig::default();
-
-    let expected_tx_hash = "05D9016060072AA71B007A6CFB1B895623192D6616D513017964C3BFCD047282";
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .and(bearer_token(config.celestia_rpc_auth_token))
-        .and(body_partial_json(json!({
-                "method": "state.SubmitPayForBlob",
-                "params": [
-                    [raw_blob?],
-                    tx_config
-                ]
-            })))
-        .respond_with(RpcIdEchoResponder {
-            response_result: json!({
-                        "height": 30497,
-                        "txhash": expected_tx_hash,
-                        "codespace": "",
-                        "code": 0,
-                        "data": "12260A242F636F736D6F732E62616E6B2E763162657461312E4D736753656E64526573706F6E7365",
-                        "raw_log": "[]",
-                        "logs": [],
-                        "info": "",
-                        "gas_wanted": 10000000,
-                        "gas_used": 69085,
-                        "timestamp": "",
-                        "events": [],
-                    })
-        })
-        .up_to_n_times(1)
-        .mount(&mock_server)
-        .await;
-
+    let height_before = da_service.get_head_block_header().await?.height();
     let response = da_service.send_transaction(&blob).await.await??;
-    assert_eq!(
-        response.da_transaction_id.to_string(),
-        format!("0x{expected_tx_hash}")
+
+    let (collected_batch_blobs, collected_proof_blobs) =
+        collect_all_blobs_between(&da_service, height_before).await?;
+
+    assert!(
+        collected_proof_blobs.is_empty(),
+        "Proof should not appear when sending batch blobs"
     );
+    assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_submit_proof_correct() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let config = dev_node.get_config().await?;
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
+
+    let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
+
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_proof(&zk_proof).await.await??;
+
+    let (collected_batch_blobs, collected_proof_blobs) =
+        collect_all_blobs_between(&da_service, height_before).await?;
+
+    assert!(
+        collected_batch_blobs.is_empty(),
+        "Batch blobs should not be sent when submitting proofs"
+    );
+    assert_single_blob(collected_proof_blobs, signer, response.blob_hash, &zk_proof);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "when toxiproxy added"]
 async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
-    let (mock_server, _config, da_service) = setup_test_service(None, ROLLUP_PARAMS_DEV).await;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let config = dev_node.get_config().await?;
+    // TODO: disable retries
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-
-    // Do not check API token or expected body here.
-    // Only interested in behaviour on response
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .respond_with(|req: &Request| {
-            let request: BasicJsonRpcRequest = serde_json::from_slice(&req.body).unwrap();
-            let response_json = json!({
-                "jsonrpc": "2.0",
-                "id": request.id,
-                "error": {
-                    "code": 1,
-                    "message": ": out of gas"
-                }
-            });
-            ResponseTemplate::new(200)
-                .append_header("Content-Type", "application/json")
-                .set_body_json(response_json)
-        })
-        .up_to_n_times(4)
-        .mount(&mock_server)
-        .await;
 
     let error = da_service
         .send_transaction(&blob)
@@ -182,21 +135,14 @@ async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "when toxiproxy added"]
 async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
-    let (mock_server, _config, da_service) = setup_test_service(None, ROLLUP_PARAMS_DEV).await;
-
-    let error_response = ResponseTemplate::new(500).set_body_bytes("Internal Error".as_bytes());
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let config = dev_node.get_config().await?;
+    // TODO: disable retries
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-
-    // Do not check API token or expected body here.
-    // Only interested in behaviour on response
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .respond_with(error_response)
-        .up_to_n_times(4)
-        .mount(&mock_server)
-        .await;
 
     let error = da_service
         .send_transaction(&blob)
@@ -213,41 +159,14 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "when toxiproxy added"]
 async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
-    let timeout = 1;
-    let (mock_server, _config, da_service) =
-        setup_test_service(Some(timeout), ROLLUP_PARAMS_DEV).await;
-
-    let response_json = json!({
-        "jsonrpc": "2.0",
-        "id": 0,
-        "result": {
-            "data": "122A0A282F365",
-            "events": ["some event"],
-            "gas_used": 70522,
-            "gas_wanted": 133540,
-            "height": 26,
-            "logs":  [],
-            "raw_log": "",
-            "txhash": "C9FEFD6D35FCC73F9E7D5C74E1D33F0B7666936876F2AD75E5D0FB2944BFADF2"
-        }
-    });
-
-    let error_response = ResponseTemplate::new(200)
-        .append_header("Content-Type", "application/json")
-        .set_delay(Duration::from_secs(timeout) + Duration::from_millis(100))
-        .set_body_json(response_json);
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let config = dev_node.get_config().await?;
+    // TODO: disable retries
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-
-    // Do not check API token or expected body here.
-    // Only interested in behaviour on response
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .respond_with(error_response)
-        .up_to_n_times(4)
-        .mount(&mock_server)
-        .await;
 
     let error = da_service
         .send_transaction(&blob)
@@ -398,12 +317,8 @@ async fn verification_error(
     expected_err_pattern: &str,
     rollup_params: RollupParams,
 ) -> anyhow::Result<()> {
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
-
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -421,12 +336,9 @@ async fn verification_error(
 async fn verification_fails_if_tx_missing() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -451,13 +363,10 @@ async fn verification_fails_if_tx_missing() {
 async fn verification_fails_if_not_all_blobs_are_proven() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
+    let relevant_blobs = extract_relevant_blobs(&block);
 
-    let mut relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
     // drop the proof for last batch
     relevant_proofs.batch.inclusion_proof.pop();
 
@@ -478,9 +387,7 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_blobs_from_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
-    let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_service(None, rollup_params).await;
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
+    let relevant_blobs = extract_relevant_blobs(&block);
     assert_eq!(relevant_blobs.batch_blobs.len(), 1);
     assert_eq!(relevant_blobs.proof_blobs.len(), 0);
 }
@@ -489,12 +396,9 @@ async fn test_blobs_from_padded_namespace() {
 async fn verification_for_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -507,12 +411,9 @@ async fn verification_for_padded_namespace() {
 async fn verification_fails_if_there_is_less_blobs_than_proofs() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let mut relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     // push one extra blob proof
     relevant_proofs
@@ -535,13 +436,9 @@ async fn verification_fails_if_there_is_less_blobs_than_proofs() {
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_fails_for_incorrect_namespace() {
     let block = with_rollup_proof_data::filtered_block();
-    let rollup_params = with_rollup_proof_data::ROLLUP_PARAMS;
-    let (_, _, da_service) = setup_test_service(None, rollup_params).await;
 
-    let relevant_blobs = da_service.extract_relevant_blobs(&block);
-    let relevant_proofs = da_service
-        .get_extraction_proof(&block, &relevant_blobs)
-        .await;
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     // create a verifier with a different namespace than the da_service
     let verifier = CelestiaVerifier::new(RollupParams {
@@ -558,55 +455,6 @@ async fn verification_fails_for_incorrect_namespace() {
             .contains("InvalidRowProof(ProofError(Invalid(InvalidRoot)))"),
         "Actual error: {error}"
     );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_submit_proof() -> anyhow::Result<()> {
-    let rollup_params = ROLLUP_PARAMS_DEV;
-    let (mock_server, config, da_service) = setup_test_service(None, rollup_params).await;
-
-    let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
-
-    let raw_blob = raw_blob_from_data(
-        rollup_params.rollup_proof_namespace,
-        zk_proof.clone(),
-        config.signer_address.as_ref().unwrap(),
-    );
-    let tx_config = celestia_rpc::TxConfig::default();
-
-    Mock::given(method("POST"))
-        .and(path("/"))
-        .and(bearer_token(config.celestia_rpc_auth_token))
-        .and(body_partial_json(json!({
-                "method": "state.SubmitPayForBlob",
-                "params": [
-                    [raw_blob?],
-                    tx_config
-                ]
-            })))
-        .respond_with(RpcIdEchoResponder {
-            response_result: json!({
-                      "height": 30497,
-                        "txhash": "05D9016060072AA71B007A6CFB1B895623192D6616D513017964C3BFCD047282",
-                        "codespace": "",
-                        "code": 0,
-                        "data": "12260A242F636F736D6F732E62616E6B2E763162657461312E4D736753656E64526573706F6E7365",
-                        "raw_log": "[]",
-                        "logs": [],
-                        "info": "",
-                        "gas_wanted": 10000000,
-                        "gas_used": 69085,
-                        "timestamp": "",
-                        "events": [],
-                })
-        })
-        .up_to_n_times(1)
-        .mount(&mock_server)
-        .await;
-
-    da_service.send_proof(&zk_proof).await.await??;
-
-    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -650,10 +498,8 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
         }
     };
 
-    for ((block, rollup_params, _signers), payload) in cases {
-        let (_, _, da_service) = setup_test_service(None, rollup_params).await;
-
-        let mut relevant_blobs = da_service.extract_relevant_blobs(&block);
+    for ((block, _rollup_params, _signers), payload) in cases {
+        let mut relevant_blobs = extract_relevant_blobs(&block);
 
         let expected_batches = payload.batches();
         assert_payload(&mut relevant_blobs.batch_blobs, expected_batches);
@@ -669,12 +515,15 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
 // Run celestia dev environment.
 // It does not require authentication.
 // The script will take payload for each test block and regenerate test data.
-// Payload was generated ages ago, so we just read it from file
+// The Payload was generated ages ago, so we just read it from the file
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn regenerate_test_data() -> anyhow::Result<()> {
-    let client =
-        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
 
     let signer = CelestiaAddress::from_str(ADDR_1)?;
 
@@ -698,8 +547,11 @@ async fn regenerate_test_data() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
-    let client =
-        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
 
     let signer = CelestiaAddress::from_str(ADDR_1)?;
     with_several_small_rollup_batches::update_test_data(&client, &signer).await;
@@ -714,8 +566,11 @@ async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn generate_mocha_testnet_blocks() -> anyhow::Result<()> {
-    let client =
-        jsonrpsee::http_client::HttpClientBuilder::default().build("http://127.0.0.1:26658")?;
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
 
     from_testnet_no_shares::update_test_data(&client).await;
     from_testnet_with_tail_padding::update_test_data(&client).await;

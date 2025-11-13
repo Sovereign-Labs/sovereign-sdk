@@ -14,10 +14,7 @@ readme = "README.md"
 workspace = true
 
 [dependencies]
-jsonrpsee = { workspace = true, features = [
-    "macros",
-    "server",
-], optional = true }
+jsonrpsee = { workspace = true, features = ["server-core"], optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
@@ -64,6 +61,7 @@ utoipa = { workspace = true, optional = true }
 utoipa-swagger-ui = { workspace = true, optional = true }
 unwrap-infallible = { workspace = true }
 nearly-linear = { workspace = true }
+quick_cache = { workspace = true, optional = true }
 
 [dev-dependencies]
 sov-state = { workspace = true, features = ["native", "test-utils"] }
@@ -110,6 +108,7 @@ native = [
     "clap",
     "jsonrpsee",
     "heck",
+    "quick_cache",
     "serde_yaml",
     "sov-bank/native",
     "sov-db",

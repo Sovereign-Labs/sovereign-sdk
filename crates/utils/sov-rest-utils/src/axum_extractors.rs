@@ -4,6 +4,7 @@
 
 #![deny(missing_docs)]
 
+use std::error::Error;
 use std::fmt::Debug;
 
 use axum::extract::FromRequestParts;
@@ -30,12 +31,20 @@ impl<T: DeserializeOwned> Query<T> {
     pub fn try_from_uri(uri: &Uri) -> Result<Self, ErrorObject> {
         axum::extract::Query::<T>::try_from_uri(uri)
             .map(|q| Self(q.0))
-            .map_err(|err| ErrorObject {
-                status: StatusCode::BAD_REQUEST,
-                message: "Invalid query string".to_string(),
-                details: json_obj!({
-                    "error": err.to_string(),
-                }),
+            .map_err(|err| {
+                let error_message = err
+                    .source()
+                    .and_then(|source| source.source())
+                    .map(|root_cause| root_cause.to_string())
+                    .unwrap_or_else(|| err.to_string());
+
+                ErrorObject {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Invalid query string".to_string(),
+                    details: json_obj!({
+                        "error": error_message,
+                    }),
+                }
             })
     }
 }
@@ -94,6 +103,30 @@ mod tests {
             integer: u8,
         }
 
+        #[derive(Debug, serde::Deserialize)]
+        struct InvalidQuery {
+            #[allow(unused)]
+            unsupported: u128,
+        }
+
+        #[test]
+        fn test_query_unsupported_type_error_contains_reason_for_error() {
+            let uri = uri_with_query_params([("unsupported", "123456789012345678901234567890")]);
+            let result = Query::<InvalidQuery>::try_from_uri(&uri);
+            let err = result.unwrap_err();
+
+            assert_eq!(
+                err,
+                ErrorObject {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Invalid query string".to_string(),
+                    details: json_obj!({
+                        "error": "u128 is not supported"
+                    }),
+                }
+            );
+        }
+
         #[test]
         fn query_serde_error() {
             let uri = uri_with_query_params([("integer", "foo")]);
@@ -106,7 +139,7 @@ mod tests {
                     status: StatusCode::BAD_REQUEST,
                     message: "Invalid query string".to_string(),
                     details: json_obj!({
-                        "error": "Failed to deserialize query string"
+                        "error": "invalid digit found in string"
                     }),
                 }
             );

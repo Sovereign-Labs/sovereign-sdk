@@ -1,12 +1,12 @@
 //! Utilities to check Celestia adapter in production settings.
 
-use std::collections::HashMap;
-use std::hash::{DefaultHasher, Hash, Hasher};
-
+use anyhow::Context;
 use rand::RngCore;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
 use sov_rollup_interface::node::da::{DaService, SlotData};
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::CelestiaService;
 
@@ -32,7 +32,10 @@ async fn check_blobs_roundtrip(
     blobs: &[Vec<u8>],
 ) -> anyhow::Result<()> {
     let mut sent_blobs: HashMap<u64, HexHash> = HashMap::with_capacity(blobs.len());
-    let sender = da_service.get_signer().await;
+    let sender = da_service
+        .get_signer()
+        .await
+        .context("Checker can only run with DaService supporting submission")?;
 
     let head_before = da_service.get_head_block_header().await?;
     // Padding from the previous round

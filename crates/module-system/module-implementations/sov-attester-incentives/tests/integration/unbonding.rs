@@ -2,7 +2,6 @@ use sov_attester_incentives::{CustomError, UnbondingInfo};
 use sov_mock_da::MockAddress;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::RegistrationError;
-use sov_modules_api::Error::ModuleError;
 use sov_modules_api::{Amount, Spec, StateAccessorError};
 use sov_rollup_interface::common::SlotNumber;
 use sov_test_utils::runtime::TestRunner;
@@ -156,18 +155,14 @@ fn try_unbond_too_early() {
             match &result.tx_receipt {
                 sov_modules_api::TxEffect::Reverted(reason) => {
                     assert_eq!(
-                        reason.reason,
-                        ModuleError(
-                            RegistrationError::<
-                                MockAddress,
-                                MockAddress,
-                                StateAccessorError<<S as Spec>::Gas>,
-                                _,
-                            >::Custom(
-                                CustomError::UnbondingNotFinalized(addr)
-                            )
-                            .into(),
-                        ),
+                        reason.reason.to_string(),
+                        RegistrationError::<
+                            MockAddress,
+                            MockAddress,
+                            StateAccessorError<<S as Spec>::Gas>,
+                            _,
+                        >::Custom(CustomError::UnbondingNotFinalized(addr))
+                        .to_string(),
                         "Transaction reverted, but with unexpected reason"
                     );
                 }
@@ -228,18 +223,16 @@ fn try_skip_two_phase_unbonding() {
             match &result.tx_receipt {
                 sov_modules_api::TxEffect::Reverted(reason) => {
                     assert_eq!(
-                        reason.reason,
-                        ModuleError(
-                            RegistrationError::<
-                                MockAddress,
-                                MockAddress,
-                                StateAccessorError<<S as Spec>::Gas>,
-                                _,
-                            >::Custom(
-                                CustomError::AttesterIsNotUnbonding(addr)
-                            )
-                            .into(),
-                        ),
+                        reason.reason.to_string(),
+                        RegistrationError::<
+                            MockAddress,
+                            MockAddress,
+                            StateAccessorError<<S as Spec>::Gas>,
+                            _,
+                        >::Custom(CustomError::AttesterIsNotUnbonding(
+                            addr
+                        ))
+                        .to_string(),
                         "Transaction reverted, but with unexpected reason"
                     );
                 }
@@ -292,18 +285,16 @@ fn try_bond_while_unbonding() {
             match &result.tx_receipt {
                 sov_modules_api::TxEffect::Reverted(reason) => {
                     assert_eq!(
-                        reason.reason,
-                        ModuleError(
-                            RegistrationError::<
-                                MockAddress,
-                                MockAddress,
-                                StateAccessorError<<S as Spec>::Gas>,
-                                _,
-                            >::Custom(CustomError::AttesterIsUnbonding(
-                                attester_address
-                            ))
-                            .into(),
-                        ),
+                        reason.reason.to_string(),
+                        RegistrationError::<
+                            MockAddress,
+                            MockAddress,
+                            StateAccessorError<<S as Spec>::Gas>,
+                            _,
+                        >::Custom(CustomError::AttesterIsUnbonding(
+                            attester_address
+                        ))
+                        .to_string(),
                         "Transaction reverted, but with unexpected reason"
                     );
                 }

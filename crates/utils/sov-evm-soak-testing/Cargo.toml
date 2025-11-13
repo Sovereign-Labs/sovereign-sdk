@@ -14,11 +14,15 @@ tokio = { workspace = true }
 anyhow = { workspace = true }
 alloy = { workspace = true }
 alloy-primitives = { workspace = true }
+alloy-pubsub = { workspace = true }
 sov-test-utils = { workspace = true }
 rand = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

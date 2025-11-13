@@ -86,12 +86,14 @@ impl<S: Spec> Module for StateConsistency<S> {
 
     type Event = Event<S>;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         _config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         self.accessory_value.set(&0, state)?;
         Ok(())
     }
@@ -101,7 +103,7 @@ impl<S: Spec> Module for StateConsistency<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::UpdateValue { old_check, new } => {
                 self.update_value(old_check, new, context, state)

@@ -3,6 +3,9 @@ use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
+use revm::primitives::HashMap;
+use revm::state::Account;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
@@ -13,14 +16,14 @@ use sov_modules_api::{Context, GasSpec, Spec, TxState};
 use std::convert::Infallible;
 
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
-use crate::db::{self, commit::FallibleDatabaseCommit, metrics::MetricsDb};
+use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
 use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
-use crate::{gas_metering_mode, Evm, GasMeteringMode, PendingTransaction};
-use anyhow::Context as _;
+use crate::{gas_metering_mode, Evm, EvmRuntimeConfig, GasMeteringMode, PendingTransaction};
+use anyhow::{bail, Context as _};
 
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
@@ -39,7 +42,14 @@ where
         context: &Context<S>,
         state: &mut impl TxState<S>,
         tx: TransactionSigned,
-    ) -> anyhow::Result<(CfgEnv, BlockEnv, TxEnv, TxSignedAndRecovered, u64)> {
+    ) -> anyhow::Result<(
+        EvmRuntimeConfig,
+        CfgEnv,
+        BlockEnv,
+        TxEnv,
+        TxSignedAndRecovered,
+        u64,
+    )> {
         let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
@@ -59,9 +69,9 @@ where
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
         let tx = TxSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());
         let cfg = self.cfg(state)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
+        let cfg_env = get_cfg_env(&block_env, &cfg, None);
 
-        Ok((cfg_env, block_env, tx_env, tx, pending_len))
+        Ok((cfg, cfg_env, block_env, tx_env, tx, pending_len))
     }
 
     pub(crate) fn execute_call(
@@ -78,7 +88,8 @@ where
         }
 
         start_timer!(fetch_state);
-        let (cfg, block, tx_env, tx, pending_len) = self.fetch_state(context, state, tx)?;
+        let (cfg, cfg_env, block, tx_env, tx, pending_len) =
+            self.fetch_state(context, state, tx)?;
         save_elapsed!(fetch_state_time SINCE fetch_state);
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
@@ -87,14 +98,15 @@ where
         let ExecResultAndState {
             result,
             state: state_changes,
-        } = match transact(&mut db, &block, tx_env, cfg) {
+        } = match transact(&mut db, &block, tx_env, cfg_env) {
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
         save_elapsed!(execution_time SINCE execution);
+        verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg)?;
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
-        db.commit(state_changes)
+        db.try_commit(state_changes)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
@@ -289,6 +301,24 @@ where
 
         Ok(())
     }
+}
+
+pub(crate) fn verify_contract_creation_allowlist(
+    state_changes: &HashMap<Address, Account>,
+    signer: &Address,
+    cfg: &EvmRuntimeConfig,
+) -> Result<(), anyhow::Error> {
+    if cfg.contract_creation_policy.allows(signer) {
+        return Ok(());
+    }
+    for account in state_changes.values() {
+        if let Some(ref code) = account.info.code {
+            if !code.is_empty() {
+                bail!("Contract creation is only allowed from allowed addresses. {signer} is not on the list");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn on_error<S: Spec>(

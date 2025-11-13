@@ -1,15 +1,15 @@
 error: Chain state field not found. The Genesis macro may only be used if your runtime contains the `sov_chain_state::ChainState` module with the name `chain_state`. If you need a custom chain name, reach out to the SDK developers for support.
-   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:19
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:108:19
     |
-107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+108 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                   ^^^^^^^
     |
     = note: this error originates in the derive macro `Genesis` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0310]: the parameter type `T` may not live long enough
-   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:108:28
     |
-107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+108 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^
     |                            |
     |                            the parameter type `T` must be valid for the static lifetime...
@@ -23,13 +23,13 @@ note: ...that is required by this bound
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider adding an explicit lifetime bound
     |
-108 | struct Runtime<S: Spec, T: TestSpec + 'static> {
+109 | struct Runtime<S: Spec, T: TestSpec + 'static> {
     |                                     +++++++++
 
 error[E0310]: the parameter type `T` may not live long enough
-   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:108:28
     |
-107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+108 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^
     |                            |
     |                            the parameter type `T` must be valid for the static lifetime...
@@ -43,13 +43,13 @@ note: ...that is required by this bound
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider adding an explicit lifetime bound
     |
-108 | struct Runtime<S: Spec, T: TestSpec + 'static> {
+109 | struct Runtime<S: Spec, T: TestSpec + 'static> {
     |                                     +++++++++
 
 error[E0310]: the parameter type `T` may not live long enough
-   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:107:28
+   --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:108:28
     |
-107 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
+108 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^
     |                            |
     |                            the parameter type `T` must be valid for the static lifetime...
@@ -63,13 +63,13 @@ note: ...that is required by this bound
     = note: this error originates in the derive macro `DispatchCall` (in Nightly builds, run with -Z macro-backtrace for more info)
 help: consider adding an explicit lifetime bound
     |
-108 | struct Runtime<S: Spec, T: TestSpec + 'static> {
+109 | struct Runtime<S: Spec, T: TestSpec + 'static> {
     |                                     +++++++++
 
 error[E0308]: mismatched types
-  --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:73:22
+  --> tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs:74:22
    |
-73 |                 .set(10, state)
+74 |                 .set(10, state)
    |                  --- ^^ expected `&D`, found integer
    |                  |
    |                  arguments to this method are incorrect

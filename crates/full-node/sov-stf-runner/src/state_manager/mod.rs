@@ -96,7 +96,6 @@ where
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
     da_sync_state: Arc<DaSyncState>,
-    da_polling_interval: std::time::Duration,
     da_total_timeout: std::time::Duration,
 }
 
@@ -121,7 +120,6 @@ where
         stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
-        da_polling_interval: std::time::Duration,
         da_total_timeout: std::time::Duration,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -135,7 +133,6 @@ where
             max_provable_slot_number_tracker: state_height_tracker,
             is_initialized: false,
             da_sync_state,
-            da_polling_interval,
             da_total_timeout,
         })
     }
@@ -218,7 +215,7 @@ where
                 );
             }
             tracing::info!(
-                old_blok = %filtered_block.header().display(),
+                old_block = %filtered_block.header().display(),
                 new_block = %new_block.header().display(),
                 time = ?start.elapsed(),
                 "Chosen fork point"
@@ -773,7 +770,6 @@ where
                         da_service,
                         self.da_sync_state.as_ref(),
                         next_candidate_height,
-                        self.da_polling_interval,
                         self.da_total_timeout,
                     ),
                     da_service.get_head_block_header(),

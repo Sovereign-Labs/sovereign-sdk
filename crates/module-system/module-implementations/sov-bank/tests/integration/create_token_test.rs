@@ -346,16 +346,14 @@ fn test_create_token_fails_with_duplicate_ids() {
             }),
             assert: Box::new(move |result, _state| {
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let sov_modules_api::Error::ModuleError(err) = contents.reason;
-                    assert_eq!(
-                        err.to_string(),
-                        format!(
-                            "Token with id already exists {}, name={} minter={}",
-                            token_id,
-                            token_name,
-                            minter.address()
-                        )
+                    let actual = contents.reason.to_string();
+                    let expected = format!(
+                        "Token creation error: Token with id already exists {}, name={} minter={}",
+                        token_id,
+                        token_name,
+                        minter.address()
                     );
+                    assert_eq!(actual, expected);
                 } else {
                     panic!("The transaction should have failed");
                 }

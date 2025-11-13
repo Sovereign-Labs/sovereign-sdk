@@ -196,11 +196,11 @@ pub async fn initialize_runner(
         .create_state_after(&finalized_header)
         .unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
-    let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
 
-    let da_sync_state = make_da_sync_state(0, None, &ledger_db, da_service.as_ref(), sync_sender)
+    let da_sync_state = make_da_sync_state(0, None, &ledger_db, da_service.as_ref())
         .await
         .unwrap();
+    let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
     let (state_update_sender, state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await
@@ -403,7 +403,8 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             da_polling_interval_ms: get_da_polling_interval_ms(&da_config),
             da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),
-            concurrent_sync_tasks: Some(1),
+            concurrent_sync_tasks: 1,
+            pre_fetched_blocks_capacity: NonZero::new(3).unwrap(),
             save_tx_bodies: false,
         },
         da: da_config,

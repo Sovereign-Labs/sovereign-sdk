@@ -39,11 +39,13 @@ pub use authenticate::{
     authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
 };
 pub use revm::primitives::hardfork::SpecId;
+use serde::Serialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
 use sov_modules_api::{
-    AccessoryStateMap, AccessoryStateValue, Context, DaSpec, GenesisState, Module, ModuleId,
-    ModuleInfo, Spec, StateMap, StateValue, StateVec, TxState,
+    err_detail, AccessoryStateMap, AccessoryStateValue, Context, CoreModuleError, DaSpec,
+    ErrorContext, ErrorDetail, GenesisState, Module, ModuleId, ModuleInfo, Spec, StateMap,
+    StateValue, StateVec, TxState,
 };
 use sov_state::codec::BcsCodec;
 
@@ -57,6 +59,7 @@ pub use crate::evm::primitive_types::{Receipt, SealedBlock};
 pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
 use revm::state::Bytecode;
+use thiserror::Error;
 
 /// These values are associated with EIP-4844, which we do not support, but they must be set to a value other than None for CANCUN.
 const EXCESS_BLOB_GAS: u64 = 0;
@@ -81,6 +84,10 @@ pub struct Evm<S: Spec> {
     /// Mapping from code hash to code. Used for lazy-loading code into a contract account.
     #[state]
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
+
+    /// A set of addresses that are allowed to deploy new contracts
+    #[state]
+    pub(crate) contract_creation_allowlist: StateMap<Address, (), BcsCodec>,
 
     /// Mapping from block number to block hash. Used by EVM blockhash opcode. Contains only last 256 values.
     #[state]
@@ -153,6 +160,29 @@ pub struct Evm<S: Spec> {
     phantom: core::marker::PhantomData<S>,
 }
 
+/// The top-level error type for all EVM module operations.
+///
+/// This enum wraps all specific error types that can occur during different
+/// EVM operations, providing a unified error interface for the module.
+#[derive(Debug, Error, Serialize)]
+pub enum Error {
+    /// An error occurred in a core module operation.
+    #[error(transparent)]
+    CoreModuleError(#[from] CoreModuleError),
+}
+
+impl ErrorDetail for Error {
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(err_detail!(self))
+    }
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(err: anyhow::Error) -> Self {
+        CoreModuleError::Generic(err).into()
+    }
+}
+
 impl<S: Spec> Module for Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
@@ -164,6 +194,8 @@ where
     type CallMessage = CallMessage;
 
     type Event = ();
+
+    type Error = Error;
 
     fn genesis(
         &mut self,
@@ -179,8 +211,8 @@ where
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        self.execute_call(msg, context, state)
+    ) -> Result<(), Error> {
+        Ok(self.execute_call(msg, context, state)?)
     }
 }
 

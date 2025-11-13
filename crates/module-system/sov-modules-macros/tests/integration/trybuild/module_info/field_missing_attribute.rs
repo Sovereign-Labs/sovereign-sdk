@@ -23,6 +23,8 @@ impl<S: Spec> Module for TestStruct<S> {
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn call(
         &mut self,
         _message: Self::CallMessage,

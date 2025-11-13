@@ -41,6 +41,7 @@ where
             None,
             ethereum.extension.max_log_limit,
             state,
+            ethereum.extension.response_size_limit,
         );
         Ok(service.logs_for_filter().await?.logs)
     }
@@ -53,8 +54,13 @@ where
         let state = ethereum.api_state_accessor();
         let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
         let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
-        let service =
-            LogsService::<S, Seq>::new(filter, cursor, ethereum.extension.max_log_limit, state);
+        let service = LogsService::<S, Seq>::new(
+            filter,
+            cursor,
+            ethereum.extension.max_log_limit,
+            state,
+            ethereum.extension.response_size_limit,
+        );
         Ok(service.logs_for_filter().await?)
     }
 }

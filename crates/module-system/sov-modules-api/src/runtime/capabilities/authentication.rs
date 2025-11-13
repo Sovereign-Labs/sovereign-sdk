@@ -52,6 +52,9 @@ pub trait TransactionAuthenticator<S: Spec> {
 
     /// Authenticates a transaction (typically by checking the signature) and deserializes its contents
     /// into an executable message.
+    /// For rollups running a preferred sequencer it is expected that implementations cache signature
+    /// checks during native execution, and the preferred sequencer will attempt to pre-populate this
+    /// cache to parallelise signature checks.
     fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
@@ -96,6 +99,45 @@ pub trait TransactionAuthenticator<S: Spec> {
     }
 }
 
+#[cfg(feature = "native")]
+/// A helper type intended for caching the results of signature verification outside of the ZKVM.
+/// In particular, the preferred sequencer expects a cache to be available and attempts to warm it
+/// upon receiving a transaction, prior to executing it inside the STF.
+///
+/// # Type Parameter
+/// - `T`: The success type of the verification result. Can be `()` if only success/failure is
+///   stored.
+///
+/// # Usage Example
+/// ```rust,ignore
+/// #[cfg(feature = "native")]
+/// static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+///     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+///
+/// fn verify_signature(...) -> Result<(), AuthenticationError> {
+///     #[cfg(feature = "native")]
+///     if let Some(cached) = SIGNATURE_CACHE.get(&tx_hash) {
+///         return cached;
+///     }
+///
+///     let result = /* actual verification */;
+///
+///     #[cfg(feature = "native")]
+///     SIGNATURE_CACHE.insert(tx_hash, result.clone());
+///
+///     result
+/// }
+/// ```
+pub type SignatureVerificationCache<T> =
+    quick_cache::sync::Cache<TxHash, Result<T, AuthenticationError>>;
+
+#[cfg(feature = "native")]
+/// The default size for signature verification caches.
+///
+/// At 5k TPS, this gives us 50 seconds of cache lifetime. This should be long enough that
+/// signatures almost always last until the node has processed the block.
+pub const DEFAULT_SIGNATURE_CACHE_SIZE: usize = 250_000;
+
 /// See [`RollupAuthenticator`].
 #[derive(std::fmt::Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub enum AuthenticatorInput {
@@ -106,6 +148,10 @@ pub enum AuthenticatorInput {
     /// backwards-compatible way.
     Standard(RawTx),
 }
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Canonical implementation of [`TransactionAuthenticator`].
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -154,11 +200,7 @@ where
         let AuthenticatorInput::Standard(input) = borsh::from_slice(&batch.tx.data)
             .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?;
 
-        Ok(crate::capabilities::authenticate::<_, S, Rt>(
-            &input.data,
-            &Rt::CHAIN_HASH,
-            pre_exec_ws,
-        )?)
+        authenticate_unregistered::<Accessor, S, Rt>(&input.data, pre_exec_ws)
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {
@@ -288,13 +330,45 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    tx.verify(chain_hash, meter).map_err(|e| match e {
-        TransactionVerificationError::GasError(_) => AuthenticationError::OutOfGas(e.to_string()),
-        _ => AuthenticationError::FatalError(
-            FatalError::SigVerificationFailed(e.to_string()),
+    let serialized_tx = tx.serialized_with_chain_hash(chain_hash).map_err(|e| {
+        AuthenticationError::FatalError(
+            FatalError::DeserializationFailed(e.to_string()),
             raw_tx_hash,
-        ),
-    })
+        )
+    })?;
+
+    tx.charge_gas_for_signature(&serialized_tx, meter)
+        .map_err(|e| match e {
+            TransactionVerificationError::GasError(_) => {
+                AuthenticationError::OutOfGas(e.to_string())
+            }
+            _ => AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(e.to_string()),
+                raw_tx_hash,
+            ),
+        })?;
+
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
+
+    let res = tx
+        .verify_signature_unmetered(&serialized_tx)
+        .map_err(|e| match e {
+            TransactionVerificationError::GasError(_) => {
+                AuthenticationError::OutOfGas(e.to_string())
+            }
+            _ => AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(e.to_string()),
+                raw_tx_hash,
+            ),
+        });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
 }
 
 /// Extracts authorization data from a verified transaction.
@@ -424,6 +498,35 @@ pub fn authenticate<
         };
 
     verify_and_decode_tx::<S, D>(raw_tx_hash, tx, chain_hash, state)
+}
+
+/// Authenticate raw unregistered sov-transaction.
+pub fn authenticate_unregistered<
+    Accessor: ProvableStateReader<sov_state::User, Spec = S>,
+    S: Spec,
+    Rt: Runtime<S> + DispatchCall<Spec = S>,
+>(
+    raw_tx: &[u8],
+    pre_exec_ws: &mut Accessor,
+) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
+    let (tx_and_raw_hash, auth_data, runtime_call) =
+        authenticate::<_, S, Rt>(raw_tx, &Rt::CHAIN_HASH, pre_exec_ws).map_err(|e| match e {
+            AuthenticationError::FatalError(err, hash) => {
+                UnregisteredAuthenticationError::FatalError(err, hash)
+            }
+            AuthenticationError::OutOfGas(err) => UnregisteredAuthenticationError::OutOfGas(err),
+        })?;
+
+    if Rt::allow_unregistered_tx(&runtime_call) {
+        Ok((tx_and_raw_hash, auth_data, runtime_call))
+    } else {
+        Err(UnregisteredAuthenticationError::FatalError(
+            FatalError::Other(
+                "The runtime call included in the transaction was invalid.".to_string(),
+            ),
+            tx_and_raw_hash.raw_tx_hash,
+        ))?
+    }
 }
 
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.

@@ -2,6 +2,7 @@
 
 mod mempool;
 
+use anyhow::Context;
 use async_trait::async_trait;
 use axum::http::StatusCode;
 pub use sov_full_node_configs::sequencer::StdSequencerConfig;
@@ -126,7 +127,9 @@ where
         let checkpoint =
             StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
 
-        let da_address = da.get_signer().await;
+        let da_address = da.get_signer().await.context(
+            "Standard sequencer require DaService to be configured with submitting support",
+        )?;
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let (blob_sender, blob_sender_handle) = BlobSender::new(

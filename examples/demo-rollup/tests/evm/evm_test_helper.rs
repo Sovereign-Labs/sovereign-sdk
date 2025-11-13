@@ -23,10 +23,14 @@ use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 use sov_test_utils::LegacySimpleStorage;
 
-const SENDER_PRIV_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+pub(crate) const SENDER_PRIV_KEY: &str =
+    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+pub(crate) const SECONDARY_SENDER_PRIV_KEY: &str =
+    "0x96eeea10d406ba7d4e74f7bb9e71b6378165162e4e42fd31c937f7728bbaa7b2";
 
 pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     max_log_limit: 20000,
+    response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
 };
 
 /// Starts test rollup node.  
@@ -78,13 +82,17 @@ pub(crate) async fn alloy_ws_client(socket: SocketAddr) -> DynProvider {
         .erased()
 }
 
-pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
+pub(crate) fn alloy_client_with_signer(socket: SocketAddr, private_key: &str) -> DynProvider {
+    let signer: PrivateKeySigner = private_key.parse().unwrap();
     let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
     ProviderBuilder::new()
         .wallet(signer)
         .connect_http(url)
         .erased()
+}
+
+pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
+    alloy_client_with_signer(socket, SENDER_PRIV_KEY)
 }
 
 /// Deploys a test contract on the test rollup.

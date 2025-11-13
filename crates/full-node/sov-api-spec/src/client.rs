@@ -194,12 +194,21 @@ impl Client {
                             err
                         ))),
                     },
-                    Ok(Message::Binary(msg)) => {
-                        tracing::warn!(
-                            ?msg,
-                            "Received unsupported binary message from WebSocket connection"
-                        );
-                        None
+                    Ok(Message::Binary(data)) => {
+                        // Parse binary frame as UTF-8 JSON
+                        match std::str::from_utf8(&data) {
+                            Ok(text) => match serde_json::from_str(text) {
+                                Ok(tx_status) => Some(Ok(tx_status)),
+                                Err(err) => Some(Err(anyhow::anyhow!(
+                                    "failed to deserialize JSON from binary frame: {}",
+                                    err
+                                ))),
+                            },
+                            Err(err) => Some(Err(anyhow::anyhow!(
+                                "invalid UTF-8 in binary WebSocket frame: {}",
+                                err
+                            ))),
+                        }
                     }
                     // All other kinds of messages are ignored because
                     // `tokio-tungstenite` ought to handle all

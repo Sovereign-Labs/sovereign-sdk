@@ -392,11 +392,9 @@ impl Metric for RunnerProcessStfChangesMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},da_height={} proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
+            "{} da_height={},proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
             self.measurement_name(),
-            // Tags
             self.da_height,
-            // Fields
             self.aggregated_proofs_count,
             self.finalized_transitions_count,
             self.total_time.as_micros(),
@@ -532,6 +530,36 @@ impl Metric for BatchMetrics {
             self.processing_time.as_micros(),
             self.transactions_count,
             self.ignored_transactions_count,
+        )
+    }
+}
+
+/// Metrics for an WebSocket request with a single response - for example `eth_sendRawTransaction`.
+#[derive(Debug)]
+pub struct RpcMetrics {
+    /// HTTP method.
+    pub request_name: &'static str,
+    /// Time it took for the inner handler to finish processing.
+    /// Does not include request reading and response writing.
+    pub handler_processing_time: std::time::Duration,
+    /// The status code of the response.
+    pub status: i32,
+}
+
+impl Metric for RpcMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_rpc_handlers"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        // TODO: Avoid allocating with safe_telegraf_string if needed for perf.
+        let request_name = safe_telegraf_string(self.request_name);
+        let status = self.status;
+        let processing_time_us = self.handler_processing_time.as_micros();
+        write!(
+            buffer,
+            "{},request_name={request_name},status={status} processing_time_us={processing_time_us}",
+            self.measurement_name(),
         )
     }
 }

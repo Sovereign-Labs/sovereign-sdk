@@ -1,6 +1,5 @@
 use borsh::BorshSerialize;
 use sha2::Digest;
-use sov_modules_api::Error::ModuleError;
 use sov_modules_api::{CryptoSpec, PrivateKey, Spec};
 use sov_test_modules::access_pattern::{
     AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages, HooksConfig,
@@ -418,15 +417,10 @@ fn test_setting_value_not_admin() {
         ),
         assert: Box::new(move |result, _state| {
             match &result.tx_receipt {
-                sov_modules_api::TxEffect::Reverted(reason) => match &reason.reason {
-                    ModuleError(err) => {
-                        assert!(err
-                            .chain()
-                            .next()
-                            .unwrap()
-                            .to_string()
-                            .contains("sender is not an admin"));
-                    }
+                sov_modules_api::TxEffect::Reverted(reason) => {
+                    let actual = reason.reason.to_string();
+                    let expected = format!("The transaction sender is not an admin of the access patterns module. Sender {}", non_admin.address());
+                    assert_eq!(actual, expected);
                 },
                 unexpected => panic!("Expected transaction to revert, but got: {unexpected:?}"),
             };

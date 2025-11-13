@@ -74,6 +74,7 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
     type Config = ();
     type CallMessage = call::CallMessage<S>;
     type Event = Event<S>;
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,
@@ -89,7 +90,7 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
         message: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl sov_modules_api::TxState<Self::Spec>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match message {
             CallMessage::ClaimRewards { relayer_address } => {
                 self.claim(relayer_address, context, state)?;

@@ -7,7 +7,17 @@ pub mod derived_holder;
 mod test_utils;
 
 pub use capability::ReserveGasError;
+/// Error types for bank module operations.
+///
+/// This module contains all error types that can occur during bank operations
+/// such as token creation, transfers, minting, burning, and administrative actions.
+pub mod error;
 mod genesis;
+/// The main error type for bank module operations.
+///
+/// This is a re-export of the top-level `Error` enum from the error module,
+/// providing a convenient way to access bank operation errors.
+pub use error::Error;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
@@ -75,6 +85,8 @@ impl<S: Spec> Module for Bank<S> {
 
     type Event = Event<S>;
 
+    type Error = error::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
@@ -89,7 +101,7 @@ impl<S: Spec> Module for Bank<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             call::CallMessage::CreateToken {
                 token_name,
@@ -119,6 +131,9 @@ impl<S: Spec> Module for Bank<S> {
 
             call::CallMessage::Transfer { to, coins } => {
                 Ok(self.transfer(&to, coins, context, state)?)
+            }
+            call::CallMessage::TransferWithMemo { to, coins, memo } => {
+                Ok(self.transfer_with_memo(&to, coins, Some(memo.into()), context, state)?)
             }
             call::CallMessage::Burn { coins } => Ok(self.burn_from_eoa(coins, context, state)?),
             call::CallMessage::Mint {

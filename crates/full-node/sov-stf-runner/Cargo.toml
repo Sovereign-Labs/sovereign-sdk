@@ -26,7 +26,7 @@ serde = { workspace = true }
 strum = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 sov-full-node-configs = { workspace = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+jsonrpsee = { workspace = true, default-features = false, features = ["server"] }
 tokio = { workspace = true, features = ["net", "sync", "rt-multi-thread", "time"] }
 hex = { workspace = true }
 tracing = { workspace = true }
@@ -50,6 +50,7 @@ proptest = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 rand = { workspace = true, features = ["small_rng"] }
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+tokio-tungstenite = { workspace = true }
 
 sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }

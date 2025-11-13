@@ -6,7 +6,7 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_mock_zkvm::MockZkvm;
-use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::prelude::*;
 use sov_modules_api::rest::HasRestApi;
@@ -177,13 +177,14 @@ impl<S: Spec> Module for ModuleWithVersionedStateAccessInSlotHook<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         _msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -270,7 +271,7 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     let tx = test_signed_transaction::<RT, TestSpec>(
         key,
         call_message,
-        generation,
+        UniquenessData::Generation(generation),
         &<RT as Runtime<TestSpec>>::CHAIN_HASH,
         tx_details,
     );

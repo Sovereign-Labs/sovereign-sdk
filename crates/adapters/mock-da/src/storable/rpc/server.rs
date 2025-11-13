@@ -190,7 +190,11 @@ pub(crate) async fn get_proofs_at_handler(
 pub(crate) async fn get_signer_handler(
     State(state): State<AppState>,
 ) -> Result<Json<SignerResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let address = state.da_service.get_signer().await;
+    let address = state
+        .da_service
+        .get_signer()
+        .await
+        .expect("MockDa always has signer");
     Ok(Json(SignerResponse { address }))
 }
 
