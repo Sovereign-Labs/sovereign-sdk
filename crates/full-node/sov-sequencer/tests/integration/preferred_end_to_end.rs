@@ -467,21 +467,16 @@ async fn txs_below_min_fee_are_rejected() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 7);
-    let Err(e) = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
+    let error = client
+        .send_raw_tx_to_sequencer(&tx)
         .await
-    else {
-        panic!("Tx must have been rejected for insufficient fee");
-    };
-    let err_message = e.to_string();
+        .expect_err("Tx must have been rejected for insufficient fee");
+    let err_message = error.to_string();
     assert!(
         err_message.contains("This transaction did not pay a sufficient net fee."),
         "Full error message does not contain expect part: {err_message}"
@@ -501,9 +496,10 @@ async fn test_archival_state_with_pruning() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
     let client = test_rollup.api_client().clone();
 
     for i in 0..150 {
@@ -1037,8 +1033,7 @@ async fn seq_out_of_gas_for_pre_checks() {
     )
     .await;
 
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
@@ -1055,12 +1050,7 @@ async fn seq_out_of_gas_for_pre_checks() {
             Some(gas_to_charge),
             max_amount_limit,
         );
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
         query_set_value(&test_rollup, None, Some(7)).await.unwrap();
     }
@@ -1080,9 +1070,6 @@ async fn seq_out_of_gas_for_pre_checks() {
         assert!(error_str.contains("More transactions were submitted that the sequencer is allowed to put into a single batch."));
     }
     test_rollup.resume_preferred_batches().await;
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    // TODO: What's the point of this waiting?
-    da_layer.produce_and_wait_for_n_slots(2).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1180,17 +1167,10 @@ async fn test_sequencer_getters() {
     )
     .await;
 
-    // Set up the rollup the usual way.
-    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    for _ in 0..5 {
-        let _ = slot_subscription.next().await.unwrap().unwrap();
-    }
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
+    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     let mut responses: Vec<TxInfoWithConfirmation> = Vec::new();
     let mut tx_number = 0;
     // Create a helper function to check that the tx endpoint responds with the expected txs.
@@ -1369,17 +1349,8 @@ async fn max_batch_execution_time() {
     )
     .await;
 
-    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    for _ in 0..5 {
-        let _ = slot_subscription.next().await.unwrap().unwrap();
-    }
-    tokio::time::sleep(Duration::from_millis(10)).await; // Ensure that the slots have propagated to the sequencer
-
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
     let client = test_rollup.api_client().clone();
 
     // A helper function to get the next block and assert that it has the expected number of batches.
@@ -1614,8 +1585,14 @@ async fn test_rollup_emits_all_slot_notifications() {
         .await
         .unwrap();
 
+    let slot_timeout = std::time::Duration::from_millis(MAX_BATCH_EXECUTION_TIME_MILLIS);
+
     for _ in 0..nb_of_blocks {
-        let slot = slot_subscription.next().await.unwrap().unwrap();
+        let slot = tokio::time::timeout(slot_timeout, slot_subscription.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
         tracing::info!("received slot {}", slot.number);
     }
 
@@ -2315,13 +2292,14 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
     //  * The first iteration should always succeed: that's baseline that sequencer is ok.
     //  * The last iteration should fail with particular error: sequencer got overloaded
 
-    // TODO: Adjust this to new times
     // High level picture of the last finalized slot:
     // 1. 0ms: accept DelayedMsg -> delayed
     // 2. 100ms: accept SetValueAndSleep -> starts sleeping
-    // 3. 500ms: DelayedMsg tx wakes up. Now what? block executor is single threaded, executor still "executing" etValueAndSleep
-    // 4. 1201ms: SetValueAndSleep completed, but executor detects batch went over time, closing the batch
-    // 5. 1202ms: DelayedMsg is rejected.
+    // 3. 1201ms: SetValueAndSleep completed, but executor detects batch went over time, closing the batch.
+    // 4. Now it detects there's no more finalized slots available, enters "downtime".
+    //    It clears the queue and rejects all messages that were sleeping. This means that DelayedMessage is rejected straight away
+    // 5. Produce more blocks to create finalized slots.
+    // 6. 2500ms If the queue had not been cleared, DelayedMsg would wake up and be executed.
     for _ in 0..max_attempts {
         let set_value_and_sleep = tx_set_value_and_sleep(
             &admin.private_key,
