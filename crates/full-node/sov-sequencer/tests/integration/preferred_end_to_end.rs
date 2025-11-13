@@ -1381,12 +1381,7 @@ async fn max_batch_execution_time() {
         // For now, the first tx should be accepted. Since its execution time exceeds our target of 1000 ms, the batch should be closed now;
         let tx = tx_set_value_and_sleep(&admin.private_key, 0, 1, 1200);
         tracing::info!("Submitting first tx");
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
         tracing::info!("Tx received, fetching next block");
         // The fist batch should have been closed
@@ -1395,57 +1390,32 @@ async fn max_batch_execution_time() {
         // The second tx isn't big enough to fill the batch, so it should still be open afterwards
         tracing::info!("Submitting second tx");
         let tx = tx_set_value_and_sleep(&admin.private_key, 0, 2, 500);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         tracing::info!("Tx received, fetching next block");
         // The second batch wasn't full - it should still be open
         get_next_block(client.clone(), false).await;
 
         // The next tx will put our execution time over 1000ms causing the batch to be closed
         let tx = tx_set_value_and_sleep(&admin.private_key, 1, 3, 600);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         // The second batch should be full now.
         get_next_block(client.clone(), true).await;
 
         // This next transaction shouldn't trigger batch production
         let tx = tx_set_value_and_sleep(&admin.private_key, 1, 4, 500);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         get_next_block(client.clone(), false).await;
 
         // Sleep for 500 ms. This should *not* trigger batch production since only block execution time counts.
         tokio::time::sleep(Duration::from_millis(500)).await;
         // Send a tx that takes 400 ms. This should not trigger batch production since our running total is only 900 ms
         let tx = tx_set_value_and_sleep(&admin.private_key, 2, 5, 400);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         get_next_block(client.clone(), false).await;
 
         // The fifth transaction should fill the batch and trigger batch production
         let tx = tx_set_value_and_sleep(&admin.private_key, 3, 5, 160);
-        let _ = client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         get_next_block(client.clone(), true).await;
     }
 
