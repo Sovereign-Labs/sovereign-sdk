@@ -3487,8 +3487,9 @@ dependencies = [
 
 [[package]]
 name = "nomt-core"
-version = "1.0.0-preview"
-source = "git+https://github.com/thrumdev/nomt.git?rev=24b8e4132f20c7c8083b83dd51c52098225cf6a9#24b8e4132f20c7c8083b83dd51c52098225cf6a9"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "feeb4e411c8185c33c906539b78330a8478a2d4819de338efb6511b33cc73207"
 dependencies = [
  "arrayvec",
  "bitvec",
