@@ -163,6 +163,10 @@ pub trait Sequencer: Send + Sync + 'static {
     /// implementation itself is responsible for "encoding" the transaction.
     ///
     /// Can return an error if transaction is invalid or mempool is full.
+    ///
+    /// Safe for use in cancellable APIs, but the actual transaction submission cannot safely be
+    /// cancelled and will continue executing even if the thread `accept_tx()` was called on is
+    /// killed.
     async fn accept_tx(
         &self,
         tx: FullyBakedTx,
@@ -391,7 +395,7 @@ pub async fn react_to_state_updates<S, Fut>(
 }
 
 pub async fn loop_call_update_state<Seq: Sequencer>(
-    seq: Arc<Seq>,
+    seq: Seq,
     state_update_receiver: StateUpdateReceiver<<Seq::Spec as Spec>::Storage>,
     shutdown_receiver: watch::Receiver<()>,
 ) {
