@@ -32,7 +32,6 @@ async fn flaky_bank_tx_tests_secured_by_operator() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn bank_events_test() -> anyhow::Result<()> {
-    println!("S0");
     let test_case = TestCase {
         wait_for_aggregated_proof: false,
         finalization_blocks: 0,
@@ -40,7 +39,6 @@ async fn bank_events_test() -> anyhow::Result<()> {
 
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Operator).await?;
 
-    println!("S01");
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
@@ -50,30 +48,23 @@ async fn bank_events_test() -> anyhow::Result<()> {
 
     let nb_of_txs = 3;
 
-    println!("S1");
     let mut event_subscription = test_rollup
         .api_client()
         .subscribe_to_events_with_filter("Bank/TokenCreated")
         .await
         .unwrap();
 
-    println!("S11");
     let initial_balance = 1000;
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
     let slot_number = send_tx_and_wait_for_status(&[tx], &test_rollup.client).await?;
 
-    println!("S111");
     for nonce in 1..=nb_of_txs {
-        println!("n {nonce}");
-
         let tx = build_transfer_token_tx(&key, token_id, recipient_address, 10, nonce);
         let slot_number = send_tx_and_wait_for_status(&[tx], &test_rollup.client).await?;
     }
 
-    println!("S2");
-
-    for i in 0..5 {
+    for i in 0..nb_of_txs {
         println!("i {i}");
         let mut event = event_subscription.next().await.unwrap().unwrap();
         println!("EVENT {:?}", event);
