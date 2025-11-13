@@ -90,7 +90,7 @@ pub(crate) type SequencerEventStream<Rt> = Pin<
 /// The [`Sequencer`] trait is responsible for accepting transactions and
 /// assembling them into batches.
 #[async_trait]
-pub trait Sequencer: Send + Sync + 'static {
+pub trait Sequencer: Clone + Send + Sync + 'static {
     /// What data is returned to clients when a transaction is accepted.
     type Confirmation: Clone + serde::Serialize + Send + Sync + 'static;
     /// The rollup spec.

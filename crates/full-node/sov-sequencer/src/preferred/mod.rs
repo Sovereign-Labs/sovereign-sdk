@@ -94,7 +94,7 @@ const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer i
 /// A [`Sequencer`] with instant transaction confirmation.
 #[derive(derivative::Derivative)]
 #[derivative(Clone(bound = ""))]
-pub struct PreferredSequencer<S, Rt, Da> (Arc<PreferredSequencerFields<S, Rt, Da>>)
+pub struct PreferredSequencer<S, Rt, Da>(Arc<PreferredSequencerFields<S, Rt, Da>>)
 where
     S: Spec,
     Rt: Runtime<S>,
@@ -104,7 +104,7 @@ impl<S, Rt, Da> Deref for PreferredSequencer<S, Rt, Da>
 where
     S: Spec,
     Rt: Runtime<S>,
-    Da: DaService<Spec = S::Da>
+    Da: DaService<Spec = S::Da>,
 {
     type Target = PreferredSequencerFields<S, Rt, Da>;
 

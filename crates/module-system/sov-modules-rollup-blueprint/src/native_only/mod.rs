@@ -179,7 +179,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Injects additional HTTP APIs for the sequencer.
     async fn sequencer_additional_apis<Seq>(
         &self,
-        _sequencer: Arc<Seq>,
+        _sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _shutdown_receiver: watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
@@ -233,7 +233,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     api_state: sequencer.api_state(),
                     endpoints,
                     background_handles,
-                    proof_sender: sequencer,
+                    proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address: da_service.get_signer().await.context(
                         "Full node with standard sequencer require DaService with signer support",
@@ -269,7 +269,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     api_state: sequencer.api_state(),
                     endpoints,
                     background_handles,
-                    proof_sender: sequencer,
+                    proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address: da_service.get_signer().await.context(
                         "Full node with preferred sequencer require DaService with signer support",
