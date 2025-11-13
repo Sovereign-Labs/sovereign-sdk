@@ -40,34 +40,30 @@ async fn bank_events_test() -> anyhow::Result<()> {
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Operator).await?;
 
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
-    let reward_addr = <TestSpec as Spec>::Address::from_str(
-        "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
-    )?;
-
+    let (key, _, token_id, recipient_address) = create_keys_and_addresses();
     let nb_of_txs = 3;
 
     let mut event_subscription = test_rollup
         .api_client()
-        .subscribe_to_events_with_filter("Bank/TokenCreated")
+        .subscribe_to_events_with_filter("Bank/TokenTransferred")
         .await
         .unwrap();
 
     let initial_balance = 1000;
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
-    let slot_number = send_tx_and_wait_for_status(&[tx], &test_rollup.client).await?;
+    send_tx_and_wait_for_status(&[tx], &test_rollup.client).await?;
 
     for nonce in 1..=nb_of_txs {
         let tx = build_transfer_token_tx(&key, token_id, recipient_address, 10, nonce);
-        let slot_number = send_tx_and_wait_for_status(&[tx], &test_rollup.client).await?;
+        send_tx_and_wait_for_status(&[tx], &test_rollup.client).await?;
     }
 
-    for i in 0..nb_of_txs {
-        println!("i {i}");
-        let mut event = event_subscription.next().await.unwrap().unwrap();
-        println!("EVENT {:?}", event);
+    for _ in 1..=nb_of_txs {
+        // Wait for all the tx events or fail with timeout.
+        tokio::time::timeout(std::time::Duration::from_secs(1), event_subscription.next())
+            .await
+            .unwrap();
     }
 
     Ok(())

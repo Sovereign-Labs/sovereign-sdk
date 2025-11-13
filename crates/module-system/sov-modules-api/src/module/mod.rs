@@ -197,7 +197,6 @@ pub trait EventEmitter: ModuleInfo {
 
 fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
     let event_debug = format!("{event:?}");
-
     // Hacky logic to get the first identifier in the Debug representation.
     let event_identifier = event_debug
         .split(|c: char| !(c.is_alphanumeric() || c == '_'))
