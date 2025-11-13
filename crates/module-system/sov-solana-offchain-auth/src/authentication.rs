@@ -164,7 +164,7 @@ fn verify_solana_signature<S: Spec>(
 ) -> Result<(), AuthenticationError> {
     // Charge gas first, before checking the cache
     MeteredSignature::new::<S>(signature.clone())
-        .charge_gas(meter, signed_bytes)
+        .charge_gas(meter, signed_bytes.len())
         .map_err(|e| match e {
             MeteredSigVerificationError::GasError(e) => {
                 AuthenticationError::OutOfGas(format!("Signature verification ran out of gas: {e}"))
@@ -180,7 +180,7 @@ fn verify_solana_signature<S: Spec>(
         return known_result;
     }
 
-    // Now do the unmetered verification
+    // Now perform the verification (unmetered)
     let res = signature.verify(pub_key, signed_bytes).map_err(|err| {
         AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(err.to_string()),
