@@ -12,7 +12,9 @@ use sov_modules_api::transaction::{
     self, AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
 };
 use sov_modules_api::{
-    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSigVerificationError, MeteredSignature, ProvableStateReader, SafeString, Signature, Spec, TxHash
+    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter,
+    MeteredSigVerificationError, MeteredSignature, ProvableStateReader, SafeString, Signature,
+    Spec, TxHash,
 };
 
 #[cfg(feature = "native")]
@@ -165,16 +167,12 @@ fn verify_solana_signature<S: Spec>(
         .charge_gas(meter, signed_bytes)
         .map_err(|e| match e {
             MeteredSigVerificationError::GasError(e) => {
-                AuthenticationError::OutOfGas(format!(
-                    "Signature verification ran out of gas: {e}"
-                ))
+                AuthenticationError::OutOfGas(format!("Signature verification ran out of gas: {e}"))
             }
-            MeteredSigVerificationError::BadSignature(e) => {
-                AuthenticationError::FatalError(
-                    FatalError::SigVerificationFailed(e.to_string()),
-                    raw_tx_hash
-                )
-            }
+            MeteredSigVerificationError::BadSignature(e) => AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(e.to_string()),
+                raw_tx_hash,
+            ),
         })?;
 
     #[cfg(feature = "native")]
