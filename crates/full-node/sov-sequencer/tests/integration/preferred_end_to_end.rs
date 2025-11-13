@@ -16,7 +16,7 @@ use sov_api_spec::types::{
     self as api_types, ApiError, SequencerListEventsPage, SequencerListEventsResponse,
     TxInfoWithConfirmation, TxReceiptResult,
 };
-use sov_api_spec::{types, Client, Error, ResponseValue, WsSubscription};
+use sov_api_spec::{types, Error, ResponseValue, WsSubscription};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -1355,26 +1355,23 @@ async fn max_batch_execution_time() {
 
     // A helper function to get the next block and assert that it has the expected number of batches.
     // Because it's async, we pass a clone of the client to avoid borrow checking headaches.
-    let get_next_block = |rollup_client: Client, should_have_batch: bool| {
-        let da_service = test_rollup.da_service.clone();
-        async move {
-            tokio::time::sleep(Duration::from_millis(500)).await; // Ensure the batch has time to close, if applicable
-            let mut slot_subscription = rollup_client
-                .subscribe_slots_with_children(IncludeChildren::new(true))
-                .await
-                .unwrap();
-            da_service.produce_block_now().await.unwrap();
-            let slot = slot_subscription.next().await.unwrap().unwrap();
-            let expected_batches = if should_have_batch { 1 } else { 0 };
-            assert_eq!(
-                slot.batches.len(),
-                expected_batches,
-                "Expected {} batches, but got {} in slot number {}.",
-                expected_batches,
-                slot.batches.len(),
-                slot.number
-            );
-        }
+    let get_next_block = async |should_have_batch: bool| {
+        tokio::time::sleep(Duration::from_millis(500)).await; // Ensure the batch has time to close, if applicable
+        let mut slot_subscription = client
+            .subscribe_slots_with_children(IncludeChildren::new(true))
+            .await
+            .unwrap();
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        let slot = slot_subscription.next().await.unwrap().unwrap();
+        let expected_batches = if should_have_batch { 1 } else { 0 };
+        assert_eq!(
+            slot.batches.len(),
+            expected_batches,
+            "Expected {} batches, but got {} in slot number {}.",
+            expected_batches,
+            slot.batches.len(),
+            slot.number
+        );
     };
 
     {
@@ -1385,7 +1382,7 @@ async fn max_batch_execution_time() {
 
         tracing::info!("Tx received, fetching next block");
         // The fist batch should have been closed
-        get_next_block(client.clone(), true).await;
+        get_next_block(true).await;
 
         // The second tx isn't big enough to fill the batch, so it should still be open afterwards
         tracing::info!("Submitting second tx");
@@ -1393,30 +1390,30 @@ async fn max_batch_execution_time() {
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         tracing::info!("Tx received, fetching next block");
         // The second batch wasn't full - it should still be open
-        get_next_block(client.clone(), false).await;
+        get_next_block(false).await;
 
         // The next tx will put our execution time over 1000ms causing the batch to be closed
         let tx = tx_set_value_and_sleep(&admin.private_key, 1, 3, 600);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         // The second batch should be full now.
-        get_next_block(client.clone(), true).await;
+        get_next_block(true).await;
 
         // This next transaction shouldn't trigger batch production
         let tx = tx_set_value_and_sleep(&admin.private_key, 1, 4, 500);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        get_next_block(client.clone(), false).await;
+        get_next_block(false).await;
 
         // Sleep for 500 ms. This should *not* trigger batch production since only block execution time counts.
         tokio::time::sleep(Duration::from_millis(500)).await;
         // Send a tx that takes 400 ms. This should not trigger batch production since our running total is only 900 ms
         let tx = tx_set_value_and_sleep(&admin.private_key, 2, 5, 400);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        get_next_block(client.clone(), false).await;
+        get_next_block(false).await;
 
         // The fifth transaction should fill the batch and trigger batch production
         let tx = tx_set_value_and_sleep(&admin.private_key, 3, 5, 160);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        get_next_block(client.clone(), true).await;
+        get_next_block(true).await;
     }
 
     test_rollup.shutdown().await.unwrap();
