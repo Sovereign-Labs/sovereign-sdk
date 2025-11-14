@@ -354,6 +354,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 telegraf_address: self.config.telegraf_address,
                 max_datagram_size: None,
                 max_pending_metrics: None,
+                tokio_runtime_metrics_interval_millis: 500,
             },
         }
     }
