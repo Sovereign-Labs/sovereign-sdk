@@ -4,6 +4,7 @@
   * *Advisory*: any custom transaction APIs invoking `Sequencer::accept_tx()` in their handlers previously had to make the call inside a tokio task. This is no longer necessary, and handlers *should* remove any `tokio::spawn()` wrapping the `accept_tx()` call to avoid the unnecessary overhead and reduce tokio runtime contention.
 - #2079 Blocks & logs subscriptions now yield only as soon as the block is confirmed.
 - #2079 Added size field on the block header in RPC requests/subscriptions.
+- #2081 Switched jmt and utoipa dependencies to crates.io.
 
 # 2025-11-12
 - #2071 Optimize WebSocket message delivery by batching writes. Messages are now grouped (up to 128 at a time) and flushed together, reducing system calls and improving throughput for WebSocket subscriptions.

@@ -2896,8 +2896,9 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jmt"
-version = "0.11.0"
-source = "git+https://github.com/penumbra-zone/jmt.git?rev=f60beb0fa54d9231706f62a8b1315e3c57855590#f60beb0fa54d9231706f62a8b1315e3c57855590"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b37ade62ca224945201e0c6d65e7a389ada90217895f7aa281470212ce4dddb0"
 dependencies = [
  "anyhow",
  "borsh",
