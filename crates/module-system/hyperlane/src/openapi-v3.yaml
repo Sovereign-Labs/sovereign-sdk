@@ -1,5 +1,5 @@
 # Specification for custom bank REST API endpoints
-openapi: "3.0.2"
+openapi: 3.1.0
 info:
   title: sov-hyperlane-integration custom endpoints
   version: 0.1.0

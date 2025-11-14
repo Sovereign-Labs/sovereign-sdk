@@ -257,7 +257,7 @@ tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disab
 tracing-test = { version = "0.2.5", features = [
     "no-env-filter",
 ] } # https://docs.rs/tracing-test/latest/tracing_test/#per-crate-filtering
-utoipa = "4.2"
+utoipa = "5"
 utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa.git", rev = "a985d8c1340f80ab69b2b0e5de799df98d567732", features = ["axum", "debug-embed"] }
 unwrap-infallible = "0.1.5"
 bech32 = { version = "0.11" }

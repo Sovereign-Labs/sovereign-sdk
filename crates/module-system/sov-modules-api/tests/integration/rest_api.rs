@@ -13,7 +13,6 @@ use sov_modules_api::{
 };
 use sov_test_utils::TestSpec;
 use utoipa::openapi::path::ParameterIn;
-use utoipa::openapi::PathItemType;
 
 #[derive(Debug, Clone, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct Foo {
@@ -184,7 +183,7 @@ async fn rest_api_routes() {
     println!("spec.paths.paths: {:#?}", spec.paths.paths);
     assert_eq!(expected_paths_count, spec.paths.paths.len());
     for (path, item) in spec.paths.paths {
-        let get_operation = match item.operations.get(&PathItemType::Get) {
+        let get_operation = match item.get {
             None => {
                 continue;
             }
