@@ -1,4 +1,3 @@
-use crate::Arc;
 use crate::Ethereum;
 use crate::EthereumAddress;
 use crate::EthereumAuthenticator;
@@ -15,6 +14,7 @@ use service::LogsService;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::{FilterWithCursor, LogsWithMaybeCursor};
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 mod cursor;
 mod service;
