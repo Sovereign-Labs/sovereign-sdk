@@ -301,6 +301,13 @@
               "$ref": "#/definitions/TelegrafSocketConfig"
             }
           ]
+        },
+        "tokio_runtime_metrics_interval_millis": {
+          "description": "How often to collect tokio runtime metrics. Defaults to 500ms.",
+          "default": 500,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         }
       }
     },
