@@ -392,6 +392,18 @@
               "$ref": "#/definitions/RecoveryStrategy"
             }
           ]
+        },
+        "timing_oracle": {
+          "description": "Configuration for the timing oracle.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TimingOracleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -931,6 +943,41 @@
             {
               "$ref": "#/definitions/Transport"
             }
+          ]
+        }
+      }
+    },
+    "TimingOracleConfig": {
+      "type": "object",
+      "required": [
+        "interval_millis",
+        "max_fee",
+        "priority_fee_percentage"
+      ],
+      "properties": {
+        "interval_millis": {
+          "description": "The interval in milliseconds at which the timestamp oracle update tx is submitted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_fee": {
+          "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
+        },
+        "priority_fee_percentage": {
+          "description": "The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "private_key_hex": {
+          "description": "The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.",
+          "type": [
+            "string",
+            "null"
           ]
         }
       }

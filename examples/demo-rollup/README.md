@@ -122,7 +122,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0xab7ad10df238022895944be3c3fb37609c238b1040c7a050222ef3fb2c076d77/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0xd5eb1de0ea2aa741d6040e8c65d2337dd46c2cdff71b778ada4ec060c25c6895/events | jq
 [
   {
     "type": "event",
@@ -330,7 +330,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x3028840bcc7715ab8c2386629312a40fc2f38bb61d2f03f80b33f5d6b3361d36",
+  "chain_hash": "0x79ae56ddadf66545a5ac3c00c79434a22515fa0a5ae615468046b278cd09a9a8",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",

@@ -36,6 +36,7 @@ mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::da::Time;
+use sov_modules_api::InnerEnumVariant;
 use sov_modules_api::{DaSpec, Gas, KernelStateValue, Module, StateValue, VersionedStateValue};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::codec::BcsCodec;
@@ -126,6 +127,7 @@ impl<S: Spec> SlotInformation<S> {
 
 /// The chain state module definition. Contains the current state of the da layer.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
+#[module_info(sequencer_safety = "is_safe_for_sequencer")]
 pub struct ChainState<S: Spec> {
     /// The ID of the module.
     #[id]
@@ -240,6 +242,24 @@ pub struct ChainState<S: Spec> {
     /// The admin address. This address is allowed to terminate setup mode early.
     #[state]
     admin_address: StateValue<S::Address>,
+
+    /// The current time, as reported by the timing oracle
+    #[state]
+    oracle_time: StateValue<Time>,
+}
+
+/// Reject any SetOracleTime calls from anyone not explicitly whitelisted in the sequencer config.
+fn is_safe_for_sequencer<S: Spec>(
+    _module: &ChainState<S>,
+    call: InnerEnumVariant<'_>,
+    _sequencer_address: &<S::Da as DaSpec>::Address,
+) -> bool {
+    if let Some(CallMessage::SetOracleTime { .. }) = call.inner().downcast_ref::<CallMessage>() {
+        false
+    } else {
+        // Calls to other modules are safe as far as we're concerned
+        true
+    }
 }
 
 impl<S: Spec> ChainState<S> {
@@ -310,6 +330,29 @@ impl<S: Spec> ChainState<S> {
         self.next_visible_slot_number
             .set(&next_visible_slot_number, state)
             .unwrap_infallible();
+    }
+
+    /// Returns the current time, as reported by the timing oracle.
+    /// Returns 0 if the timing oracle is not set.
+    pub fn get_oracle_time<Reader: StateReader<User>>(
+        &self,
+        state: &mut Reader,
+    ) -> Result<Time, <Reader as StateReader<User>>::Error> {
+        Ok(self.oracle_time.get(state)?.unwrap_or(Time::from_millis(0)))
+    }
+
+    /// Returns the current time, as reported by the timing oracle fallback to the DA layer time if the oracle time is not set.
+    pub fn get_oracle_time_with_fallback<
+        Reader: StateReader<User, Error = E> + VersionReader + StateReader<Kernel, Error = E>,
+        E,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Result<Time, E> {
+        if let Some(oracle_time) = self.oracle_time.get(state)? {
+            return Ok(oracle_time);
+        };
+        self.get_time(state)
     }
 
     /// Returns the current time, as reported by the DA layer. This can be called within the execution context of a transaction.
@@ -542,6 +585,11 @@ impl<S: Spec> ChainState<S> {
 pub enum CallMessage {
     /// Terminates setup mode as of the next rollup block.
     TerminateSetupMode,
+    /// Sets the current time.
+    SetOracleTime {
+        /// The new time in milliseconds since the epoch
+        milliseconds_since_epoch: i64,
+    },
 }
 
 #[derive(
@@ -566,6 +614,11 @@ pub enum Event<S: Spec> {
         effective_at_rollup_height: u64,
         /// The address that terminated setup mode.
         by: S::Address,
+    },
+    /// Indicates that the oracle time has been updated.
+    OracleTimeUpdated {
+        /// The new time in milliseconds since the epoch
+        milliseconds_since_epoch: i64,
     },
 }
 
@@ -625,6 +678,18 @@ impl<S: Spec> Module for ChainState<S> {
                 tracing::debug!(
                     "setup mode terminated at height {}",
                     termination_height.get()
+                );
+            }
+            CallMessage::SetOracleTime {
+                milliseconds_since_epoch,
+            } => {
+                let time = Time::from_millis(milliseconds_since_epoch);
+                self.oracle_time.set(&time, state)?;
+                self.emit_event(
+                    state,
+                    Event::OracleTimeUpdated {
+                        milliseconds_since_epoch,
+                    },
                 );
             }
         }

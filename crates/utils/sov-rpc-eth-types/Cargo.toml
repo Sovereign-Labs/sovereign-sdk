@@ -24,6 +24,7 @@ reth-errors = { workspace = true }
 reth-primitives-traits = { workspace = true }
 serde = { workspace = true }
 derive-new = { workspace = true }
+alloy-serde = "1.1.1"
 
 [lints]
 workspace = true

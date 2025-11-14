@@ -246,7 +246,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_service.clone(),
                         state_update_receiver.clone(),
                         &rollup_config.storage.path,
-                        &rollup_config.sequencer.with_seq_config(seq_config.clone()),
+                        rollup_config
+                            .sequencer
+                            .with_seq_config(seq_config.clone())
+                            .clone(),
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
