@@ -13,6 +13,7 @@ use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
+use sov_rollup_interface::da::Time;
 
 /// Signed ethereum transaction
 pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
@@ -62,13 +63,15 @@ impl TxSignedAndRecovered {
 pub struct PendingTransaction {
     pub(crate) transaction: TxSignedAndRecovered,
     pub(crate) receipt: Receipt,
+    pub(crate) time: Time,
 }
 
 impl PendingTransaction {
-    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt) -> Self {
+    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt, time: Time) -> Self {
         Self {
             transaction,
             receipt,
+            time,
         }
     }
 }

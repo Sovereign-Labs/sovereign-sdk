@@ -4,6 +4,7 @@ use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
+use sov_modules_api::da::Time;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
@@ -133,7 +134,7 @@ impl<S: Spec> Evm<S> {
         &self,
         index: u64,
         state: &mut Accessor,
-    ) -> Option<Receipt> {
+    ) -> Option<(Receipt, Time)> {
         self.receipts.get(&index, state).unwrap_infallible()
     }
 

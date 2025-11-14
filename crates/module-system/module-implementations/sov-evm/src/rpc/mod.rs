@@ -1,5 +1,13 @@
 use std::ops::DerefMut;
 
+use crate::db::EvmDb;
+use crate::error::into_rpc_error;
+use crate::evm::executor;
+use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
+use crate::executor::get_cfg_env;
+use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
+pub use crate::primitive_types::MaybeSealedBlock;
+use crate::{verify_contract_creation_allowlist, Evm};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::BlockNumberOrTag;
@@ -10,24 +18,17 @@ use alloy_rpc_types::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
+use maybe_archival_state::MaybeArchivalState;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
-use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
-
-use crate::db::EvmDb;
-use crate::error::into_rpc_error;
-use crate::evm::executor;
-use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
-use crate::executor::get_cfg_env;
-use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
-pub use crate::primitive_types::MaybeSealedBlock;
-use crate::{verify_contract_creation_allowlist, Evm};
-use maybe_archival_state::MaybeArchivalState;
+use sov_rpc_eth_types::RpcInvalidTransactionError;
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 
 pub(crate) mod error;
 pub(crate) mod handlers;
@@ -142,7 +143,7 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<TransactionReceipt> {
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let number = self.tx_index(&hash, state)?;
         self.get_receipt_by_index(number, state)
     }
@@ -151,18 +152,21 @@ where
         &self,
         number: u64,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<TransactionReceipt> {
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let receipt = self.receipt(number, state)?;
-        Some(build_rpc_receipt(block, tx, number, receipt))
+        let (receipt, time) = self.receipt(number, state)?;
+        Some(build_rpc_receipt(block, tx, number, receipt, time))
     }
 
     fn get_receipts(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Result<Option<Vec<TransactionReceipt>>, EthApiError> {
+    ) -> Result<
+        Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>,
+        EthApiError,
+    > {
         let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
             return Ok(None);
         };
@@ -290,7 +294,7 @@ where
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
             number: pending_block_number,
-            timestamp: 0, // Pending block does not have a timestamp yet
+            timestamp: current_block_env.timestamp.to::<u64>(),
             excess_blob_gas: current_block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
@@ -369,7 +373,8 @@ pub(crate) fn build_rpc_receipt(
     tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
-) -> TransactionReceipt {
+    time: Time,
+) -> TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>> {
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
 
@@ -382,20 +387,24 @@ pub(crate) fn build_rpc_receipt(
     let transaction_hash = receipt.transaction_hash;
     let logs_bloom = receipt.receipt.bloom();
 
-    let logs: Vec<Log> = receipt
+    let time = time.as_millis().try_into().unwrap_or_default();
+    let logs: Vec<LogWithExecutionTimestamp> = receipt
         .receipt
         .logs
         .into_iter()
         .enumerate()
-        .map(|(tx_log_idx, log)| Log {
-            inner: log,
-            block_hash,
-            block_number,
-            block_timestamp: Some(block.timestamp()),
-            transaction_hash: Some(transaction_hash),
-            transaction_index: Some(transaction_index),
-            log_index: Some(receipt.log_index_start + tx_log_idx as u64),
-            removed: false,
+        .map(|(tx_log_idx, log)| LogWithExecutionTimestamp {
+            log: Log {
+                inner: log,
+                block_hash,
+                block_number,
+                block_timestamp: Some(block.timestamp()),
+                transaction_hash: Some(transaction_hash),
+                transaction_index: Some(transaction_index),
+                log_index: Some(receipt.log_index_start + tx_log_idx as u64),
+                removed: false,
+            },
+            time_executed_ms: time,
         })
         .collect();
 

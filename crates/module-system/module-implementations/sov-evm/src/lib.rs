@@ -12,6 +12,7 @@ mod hooks;
 mod metrics;
 mod sov_evm;
 mod state_access;
+use sov_rollup_interface::da::Time;
 use std::ops::RangeInclusive;
 
 pub use call::*;
@@ -134,7 +135,7 @@ pub struct Evm<S: Spec> {
 
     /// Used only by the RPC: Receipts.
     #[state]
-    pub receipts: AccessoryStateMap<u64, Receipt, BcsCodec>,
+    pub receipts: AccessoryStateMap<u64, (Receipt, Time), BcsCodec>,
 
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]
