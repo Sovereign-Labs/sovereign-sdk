@@ -581,7 +581,7 @@ impl<S: Spec> ChainState<S> {
     UniversalWallet,
 )]
 /// A message for the chain-state module
-#[schemars(rename = "Event")]
+#[schemars(rename = "CallMessage")]
 pub enum CallMessage {
     /// Terminates setup mode as of the next rollup block.
     TerminateSetupMode,

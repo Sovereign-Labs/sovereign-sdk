@@ -142,7 +142,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self
     }
 
-    /// TODO
+    /// See [`PreferredSequencerConfig::timing_oracle`].
     pub fn with_preferred_seq_oracle_config(
         mut self,
         timing_oracle_config: Option<TimingOracleConfig>,
