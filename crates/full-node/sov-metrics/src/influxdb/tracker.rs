@@ -697,3 +697,70 @@ impl Metric for DroppedMetrics {
         )
     }
 }
+
+// See https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html for an up to date list of available fields and their descriptions.
+impl Metric for tokio_metrics::RuntimeMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_tokio_runtime"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let workers_count = self.workers_count;
+        let total_park_count = self.total_park_count;
+        let total_busy_duration = self.total_busy_duration.as_micros();
+        let global_queue_depth = self.global_queue_depth;
+
+        write!(buffer, "{} workers_count={workers_count},total_park_count={total_park_count},total_busy_duration_us={total_busy_duration},global_queue_depth={global_queue_depth}", self.measurement_name())?;
+
+        #[cfg(tokio_unstable)]
+        {
+            let mean_poll_duration_us = self.mean_poll_duration.as_micros();
+            let mean_poll_duration_worker_max_us = self.mean_poll_duration_worker_max.as_micros();
+            let mean_poll_duration_worker_min_us = self.mean_poll_duration_worker_min.as_micros();
+            let total_noop_count = self.total_noop_count;
+            let max_noop_count = self.max_noop_count;
+            let num_remote_schedules = self.num_remote_schedules;
+            let total_local_schedule_count = self.total_local_schedule_count;
+            let max_local_schedule_count = self.max_local_schedule_count;
+            let total_polls_count = self.total_polls_count;
+            let min_polls_count = self.min_polls_count;
+            let max_polls_count = self.max_polls_count;
+            let total_local_queue_depth = self.total_local_queue_depth;
+            let max_local_queue_depth = self.max_local_queue_depth;
+            let blocking_queue_depth = self.blocking_queue_depth;
+            let blocking_threads_count = self.blocking_threads_count;
+            let idle_blocking_threads_count = self.idle_blocking_threads_count;
+            let live_tasks_count = self.live_tasks_count;
+            let budget_forced_yield_count = self.budget_forced_yield_count;
+            let io_driver_ready_count = self.io_driver_ready_count;
+            write!(buffer, ",mean_poll_duration_us={mean_poll_duration_us},mean_poll_duration_worker_max_us={mean_poll_duration_worker_max_us},mean_poll_duration_worker_min_us={mean_poll_duration_worker_min_us},total_noop_count={total_noop_count},max_noop_count={max_noop_count},num_remote_schedules={num_remote_schedules},total_local_schedule_count={total_local_schedule_count},max_local_schedule_count={max_local_schedule_count},total_polls_count={total_polls_count},min_polls_count={min_polls_count},max_polls_count={max_polls_count},total_local_queue_depth={total_local_queue_depth},max_local_queue_depth={max_local_queue_depth},blocking_queue_depth={blocking_queue_depth},blocking_threads_count={blocking_threads_count},idle_blocking_threads_count={idle_blocking_threads_count},live_tasks_count={live_tasks_count},budget_forced_yield_count={budget_forced_yield_count},io_driver_ready_count={io_driver_ready_count}")?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Spawns a task to monitor tokio runtime metrics and submit them to the metrics tracker.
+pub fn spawn_tokio_runtime_metrics_task(
+    metrics_interval: std::time::Duration,
+    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    let handle = tokio::runtime::Handle::current();
+    // construct the runtime metrics monitor
+    let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+
+    // print runtime metrics every 500ms
+    tokio::spawn(async move {
+        for interval in runtime_monitor.intervals() {
+            crate::track_metrics(|tracker| {
+                tracker.submit(interval);
+            });
+            tokio::select! {
+                _ = tokio::time::sleep(metrics_interval) => {},
+                _ = shutdown_receiver.changed() => {
+                    break;
+                }
+            }
+        }
+    })
+}
