@@ -15484,13 +15484,14 @@ dependencies = [
 
 [[package]]
 name = "utoipa"
-version = "5.0.0-beta.0"
-source = "git+https://github.com/juhaku/utoipa.git?rev=a985d8c1340f80ab69b2b0e5de799df98d567732#a985d8c1340f80ab69b2b0e5de799df98d567732"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fcc29c80c21c31608227e0912b2d7fddba57ad76b606890627ba8ee7964e993"
 dependencies = [
  "indexmap 2.11.1",
  "serde",
  "serde_json",
- "utoipa-gen 5.0.0-beta.0",
+ "utoipa-gen 5.4.0",
 ]
 
 [[package]]
@@ -15507,8 +15508,9 @@ dependencies = [
 
 [[package]]
 name = "utoipa-gen"
-version = "5.0.0-beta.0"
-source = "git+https://github.com/juhaku/utoipa.git?rev=a985d8c1340f80ab69b2b0e5de799df98d567732#a985d8c1340f80ab69b2b0e5de799df98d567732"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d79d08d92ab8af4c5e8a6da20c47ae3f61a0f1dabc1997cdf2d082b757ca08b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -15517,18 +15519,18 @@ dependencies = [
 
 [[package]]
 name = "utoipa-swagger-ui"
-version = "7.1.1-beta.0"
-source = "git+https://github.com/juhaku/utoipa.git?rev=a985d8c1340f80ab69b2b0e5de799df98d567732#a985d8c1340f80ab69b2b0e5de799df98d567732"
+version = "7.1.1-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd1174c37d2bdc9a2ce8d94aa0baf3e3c4862f80b7b1fb592738f374ab9f8803"
 dependencies = [
  "axum 0.7.9",
  "mime_guess",
  "regex",
- "reqwest 0.12.23",
  "rust-embed",
  "serde",
  "serde_json",
  "url",
- "utoipa 5.0.0-beta.0",
+ "utoipa 5.4.0",
  "zip",
 ]
 
