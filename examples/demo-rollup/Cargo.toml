@@ -35,7 +35,7 @@ sov-risc0-adapter = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-sp1-adapter = { workspace = true, features = ["native"] }
 rustls = { workspace = true, features = ["ring"] }
-full-node-configs = { workspace = true }
+sov-full-node-configs = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
 
 demo-stf = { workspace = true, features = ["native"] }

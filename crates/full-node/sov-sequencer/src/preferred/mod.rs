@@ -26,7 +26,6 @@ use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
 use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
-pub use full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use futures::Stream;
 use preferred_blob_sender::PreferredBlobSender;
 use serde_with::serde_as;
@@ -34,6 +33,7 @@ use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
+pub use sov_full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
 };
