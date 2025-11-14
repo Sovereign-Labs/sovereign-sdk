@@ -27,7 +27,7 @@ use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecover
 use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
-use crate::{verify_contract_creation_allowlist, Evm};
+use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use maybe_archival_state::MaybeArchivalState;
 
 pub(crate) mod error;
@@ -114,6 +114,20 @@ where
         Ok(body)
     }
 
+    /// Gets RPC Block Header including the size
+    pub fn get_rpc_header(
+        &self,
+        block: MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<Header, EthApiError> {
+        let block_size = alloy_consensus::Block::rlp_length_for(
+            block.header(),
+            &self.get_block_body(&block, state)?,
+        );
+        let header = Header::from_consensus(block.into(), None, Some(U256::from(block_size)));
+        Ok(header)
+    }
+
     fn get_block(
         &self,
         block_number: Option<String>,
@@ -124,12 +138,8 @@ where
             return Ok(None);
         };
         let transactions = self.get_block_transactions(&block, kind, state)?;
-        let block_size = alloy_consensus::Block::rlp_length_for(
-            block.header(),
-            &self.get_block_body(&block, state)?,
-        );
         Ok(Some(Block {
-            header: Header::from_consensus(block.into(), None, Some(U256::from(block_size))),
+            header: self.get_rpc_header(block, state)?,
             transactions,
             uncles: vec![],
             withdrawals: None,
@@ -288,6 +298,15 @@ where
                 Some(MaybeSealedBlock::Pending(pending_block))
             }
         })
+    }
+
+    /// Retrieves the latest block.
+    pub fn latest_block(&self, state: &mut ApiStateAccessor<S>) -> SealedBlock {
+        let block_numbers = self.block_numbers(state);
+        self.blocks
+            .get(block_numbers.end(), state)
+            .unwrap_infallible()
+            .expect("Block should exist as index is inside block_numbers")
     }
 
     /// Retrieves the pending block.
