@@ -113,7 +113,7 @@ impl FullNodeBlueprint<Native> for MockNomtDemoRollup<Native> {
 
     async fn sequencer_additional_apis<Seq>(
         &self,
-        sequencer: Arc<Seq>,
+        sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>

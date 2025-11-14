@@ -1,3 +1,8 @@
+# 2025-11-14
+- #2077 **Breaking change**: The `Sequencer` implementations have been made cheaply cloneable, and the `accept_tx()` method has been made cancellation-safe. This has two effects:
+  * *Breaking*: any API handler definitions that currently use `Arc<Seq: Sequencer>` need to be modified to use `Seq: Sequencer` directly instead. This is likely to affect rollup definitions, especially ones implementing `sequencer_additional_apis()`.
+  * *Advisory*: any custom transaction APIs invoking `Sequencer::accept_tx()` in their handlers previously had to make the call inside a tokio task. This is no longer necessary, and handlers *should* remove any `tokio::spawn()` wrapping the `accept_tx()` call to avoid the unnecessary overhead and reduce tokio runtime contention.
+
 # 2025-11-12
 - #2071 Optimize WebSocket message delivery by batching writes. Messages are now grouped (up to 128 at a time) and flushed together, reducing system calls and improving throughput for WebSocket subscriptions.
 - #2070 **Breaking change**: The `MeteredSignature::charge_gas()` method signature changes from taking a `msg: &[u8]` parameter to `msg_len: usize`, as signature verification gas cost only depends on the number of bytes. This has no other impact except for direct users of the `MeteredSignature` struct.

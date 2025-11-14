@@ -59,7 +59,29 @@ where
 /// Transactions are included in batches by following a largest-first,
 /// least-recent-first priority. Only transactions that were successfully
 /// dispatched are included.
-pub struct StdSequencer<S, Rt, Da>
+#[derive(derivative::Derivative)]
+#[derivative(Clone(bound = ""))]
+pub struct StdSequencer<S, Rt, Da>(Arc<StdSequencerFields<S, Rt, Da>>)
+where
+    S: Spec,
+    Rt: Runtime<S>,
+    Da: DaService<Spec = S::Da>;
+
+impl<S, Rt, Da> std::ops::Deref for StdSequencer<S, Rt, Da>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+    Da: DaService<Spec = S::Da>,
+{
+    type Target = StdSequencerFields<S, Rt, Da>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// The inner fields of a `StdSequencer`. Should be accessed through the parent struct's Arc.
+pub struct StdSequencerFields<S, Rt, Da>
 where
     S: Spec,
     Rt: Runtime<S>,
@@ -106,7 +128,7 @@ where
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
@@ -162,7 +184,7 @@ where
             )?,
         };
 
-        let seq = Arc::new(StdSequencer {
+        let seq = StdSequencer(Arc::new(StdSequencerFields {
             inner: inner.into(),
             txsm,
             api_state,
@@ -171,7 +193,7 @@ where
             config: config.clone(),
             api_ledger_db,
             da_address,
-        });
+        }));
 
         handles.push(tokio::spawn({
             loop_call_update_state(
@@ -488,6 +510,101 @@ where
 
         Ok(())
     }
+
+    async fn accept_tx_inner(
+        &self,
+        baked_tx: FullyBakedTx,
+    ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
+        tracing::trace!(
+            baked_tx = hex::encode(&baked_tx),
+            "`accept_tx` has been called"
+        );
+
+        if baked_tx.data.len() > self.max_batch_size_bytes().get() {
+            return Err(ErrorObject {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Transaction is too big".to_string(),
+                details: json_obj!({
+                    "max_allowed_size": self.max_batch_size_bytes(),
+                    "submitted_size": baked_tx.data.len(),
+                }),
+            });
+        }
+
+        let mut inner = self.inner.lock().await;
+        let state_checkpoint = inner
+            .checkpoint
+            .take()
+            .expect("Absent checkpoint; this is a bug, please report it");
+
+        // This closure helps us make sure that we always put the
+        // state checkpoint back into `self` at the end of the function.
+        let (new_checkpoint, response) = (|mut checkpoint: StateCheckpoint<S>| {
+            let mut runtime: Rt = Default::default();
+            let gas_price = runtime.chain_state().base_fee_per_gas(&mut checkpoint).expect("Impossible to get the gas price for the current slot. This is a bug. Please report it");
+
+            let (tx_scratchpad, output_res) =
+                tx_auth::<S, Rt, _>(checkpoint.to_tx_scratchpad(), gas_price, &baked_tx.clone());
+
+            let (auth_output, gas_meter) = match output_res {
+                Ok(ok) => ok,
+                Err(error) => {
+                    return (
+                        tx_scratchpad.revert(),
+                        Err(pre_exec_err_to_accept_tx_err(error)),
+                    );
+                }
+            };
+
+            let tx_hash = auth_output.0.raw_tx_hash;
+
+            let gas_info = gas_meter.gas_info();
+            let tx = auth_output.0.authenticated_tx;
+
+            let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, <S::Gas>::MAX);
+
+            let mut working_set =
+                WorkingSet::create_working_set(tx_scratchpad, &tx, working_set_gas_meter);
+
+            if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
+                let (scratchpad, _) = working_set.revert();
+
+                return (
+                    scratchpad.revert(),
+                    Err(ErrorObject {
+                        // Not enough gas, so 403 seems appropriate.
+                        status: StatusCode::FORBIDDEN,
+                        message: "Not enough gas for pre-execution checks".to_string(),
+                        details: json_obj!({
+                            "error": err.to_string()
+                        }),
+                    }),
+                );
+            };
+
+            (working_set.finalize().0.commit(), Ok(tx_hash))
+        })(state_checkpoint);
+
+        let tx_hash = response?;
+        {
+            inner.mempool.add_new_tx(tx_hash, baked_tx.clone());
+            tracing::trace!(
+                %tx_hash,
+                "Transaction has been added to the mempool"
+            );
+        }
+
+        inner.checkpoint = Some(new_checkpoint);
+
+        self.tx_status_manager()
+            .notify(tx_hash, TxStatus::Submitted);
+
+        Ok(AcceptedTx {
+            tx: baked_tx,
+            tx_hash,
+            confirmation: EmptyConfirmation {},
+        })
+    }
 }
 
 #[cfg(feature = "test-utils")]
@@ -585,95 +702,15 @@ where
         &self,
         baked_tx: FullyBakedTx,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
-        tracing::trace!(
-            baked_tx = hex::encode(&baked_tx),
-            "`accept_tx` has been called"
-        );
-
-        if baked_tx.data.len() > self.max_batch_size_bytes().get() {
-            return Err(ErrorObject {
-                status: StatusCode::PAYLOAD_TOO_LARGE,
-                message: "Transaction is too big".to_string(),
-                details: json_obj!({
-                    "max_allowed_size": self.max_batch_size_bytes(),
-                    "submitted_size": baked_tx.data.len(),
-                }),
-            });
-        }
-
-        let mut inner = self.inner.lock().await;
-        let state_checkpoint = inner
-            .checkpoint
-            .take()
-            .expect("Absent checkpoint; this is a bug, please report it");
-
-        // This closure helps us make sure that we always put the
-        // state checkpoint back into `self` at the end of the function.
-        let (new_checkpoint, response) = (|mut checkpoint: StateCheckpoint<S>| {
-            let mut runtime: Rt = Default::default();
-            let gas_price = runtime.chain_state().base_fee_per_gas(&mut checkpoint).expect("Impossible to get the gas price for the current slot. This is a bug. Please report it");
-
-            let (tx_scratchpad, output_res) =
-                tx_auth::<S, Rt, _>(checkpoint.to_tx_scratchpad(), gas_price, &baked_tx.clone());
-
-            let (auth_output, gas_meter) = match output_res {
-                Ok(ok) => ok,
-                Err(error) => {
-                    return (
-                        tx_scratchpad.revert(),
-                        Err(pre_exec_err_to_accept_tx_err(error)),
-                    );
-                }
-            };
-
-            let tx_hash = auth_output.0.raw_tx_hash;
-
-            let gas_info = gas_meter.gas_info();
-            let tx = auth_output.0.authenticated_tx;
-
-            let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, <S::Gas>::MAX);
-
-            let mut working_set =
-                WorkingSet::create_working_set(tx_scratchpad, &tx, working_set_gas_meter);
-
-            if let Err(err) = working_set.charge_gas(gas_info.gas_used) {
-                let (scratchpad, _) = working_set.revert();
-
-                return (
-                    scratchpad.revert(),
-                    Err(ErrorObject {
-                        // Not enough gas, so 403 seems appropriate.
-                        status: StatusCode::FORBIDDEN,
-                        message: "Not enough gas for pre-execution checks".to_string(),
-                        details: json_obj!({
-                            "error": err.to_string()
-                        }),
-                    }),
-                );
-            };
-
-            (working_set.finalize().0.commit(), Ok(tx_hash))
-        })(state_checkpoint);
-
-        let tx_hash = response?;
-        {
-            inner.mempool.add_new_tx(tx_hash, baked_tx.clone());
-            tracing::trace!(
-                %tx_hash,
-                "Transaction has been added to the mempool"
-            );
-        }
-
-        inner.checkpoint = Some(new_checkpoint);
-
-        self.tx_status_manager()
-            .notify(tx_hash, TxStatus::Submitted);
-
-        Ok(AcceptedTx {
-            tx: baked_tx,
-            tx_hash,
-            confirmation: EmptyConfirmation {},
-        })
+        let sequencer = self.clone();
+        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx).await })
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "A panic occurred while accepting a transaction");
+                sov_rest_utils::errors::internal_server_error_500(
+                    "An internal error occurred while processing the transaction",
+                )
+            })?
     }
 
     async fn tx_status(
