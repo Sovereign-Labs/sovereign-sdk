@@ -19,10 +19,7 @@ bincode = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 bytemuck = "1.17.0"
 digest = { workspace = true, features = ["alloc"] }
-# Corresponding release: <https://github.com/risc0/curve25519-dalek/releases/tag/curve25519-4.1.2-risczero.0>
-ed25519-dalek = { git = "https://github.com/risc0/curve25519-dalek", rev = "3dccc5b71b806f500e73829e2a5cbfe288cce2a0", features = [
-    "serde",
-] }
+ed25519-dalek = { workspace = true, features = ["serde", "alloc"] }
 hex = { workspace = true }
 proptest = { workspace = true, features = ["alloc", "std"], optional = true }
 rand = { workspace = true, optional = true }
