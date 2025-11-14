@@ -521,7 +521,7 @@ where
             .advance(visible_increase.get().into());
 
         let maybe_seq_nr = self
-            .do_batch_start(visible_slot_number_after_increase, visible_increase, true)
+            .do_batch_start(visible_slot_number_after_increase, visible_increase)
             .await?;
 
         if let Some(sequence_number) = maybe_seq_nr {
@@ -581,7 +581,6 @@ where
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_increase: NonZero<u8>,
-        is_master: bool,
     ) -> Result<Option<SequenceNumber>, BatchCreationError> {
         if self.executor.has_in_progress_batch() {
             return Ok(None);
@@ -616,7 +615,7 @@ where
             visible_increase,
             node_state_root: node_state_root.clone(),
             minimum_profit_per_tx: min_profit_per_tx,
-            is_responsible_for_gating_admins: is_master,
+            is_responsible_for_gating_admins: !self.is_replica(),
         };
 
         let old_checkpoint = self

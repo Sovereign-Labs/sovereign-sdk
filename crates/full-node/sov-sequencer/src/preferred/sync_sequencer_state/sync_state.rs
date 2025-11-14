@@ -802,7 +802,6 @@ where
             .do_batch_start(
                 batch_from_master.visible_slot_number_after_increase,
                 batch_from_master.visible_slots_to_advance,
-                false,
             )
             .await?;
 
