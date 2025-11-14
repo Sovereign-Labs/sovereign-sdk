@@ -3369,31 +3369,13 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.1.2"
-source = "git+https://github.com/risc0/curve25519-dalek?rev=3dccc5b71b806f500e73829e2a5cbfe288cce2a0#3dccc5b71b806f500e73829e2a5cbfe288cce2a0"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "crypto-bigint",
- "curve25519-dalek-derive 0.1.1 (git+https://github.com/risc0/curve25519-dalek?rev=3dccc5b71b806f500e73829e2a5cbfe288cce2a0)",
- "digest 0.10.7",
- "fiat-crypto",
- "hex",
- "platforms",
- "rustc_version 0.4.1",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
 version = "4.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fb8b7c4503de7d6ae7b42ab72a5a59857b4c937ec27a3d4539dba95b5ab2be"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "curve25519-dalek-derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "curve25519-dalek-derive",
  "digest 0.10.7",
  "fiat-crypto",
  "rustc_version 0.4.1",
@@ -3406,16 +3388,6 @@ name = "curve25519-dalek-derive"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
-name = "curve25519-dalek-derive"
-version = "0.1.1"
-source = "git+https://github.com/risc0/curve25519-dalek?rev=3dccc5b71b806f500e73829e2a5cbfe288cce2a0#3dccc5b71b806f500e73829e2a5cbfe288cce2a0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4073,24 +4045,10 @@ dependencies = [
 [[package]]
 name = "ed25519-dalek"
 version = "2.1.1"
-source = "git+https://github.com/risc0/curve25519-dalek?rev=3dccc5b71b806f500e73829e2a5cbfe288cce2a0#3dccc5b71b806f500e73829e2a5cbfe288cce2a0"
-dependencies = [
- "curve25519-dalek 4.1.2",
- "ed25519",
- "rand_core 0.6.4",
- "serde",
- "sha2 0.10.9",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ed25519-dalek"
-version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
+checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
 dependencies = [
- "curve25519-dalek 4.1.3",
+ "curve25519-dalek",
  "ed25519",
  "rand_core 0.6.4",
  "serde",
@@ -6138,8 +6096,9 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jmt"
-version = "0.11.0"
-source = "git+https://github.com/penumbra-zone/jmt.git?rev=f60beb0fa54d9231706f62a8b1315e3c57855590#f60beb0fa54d9231706f62a8b1315e3c57855590"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b37ade62ca224945201e0c6d65e7a389ada90217895f7aa281470212ce4dddb0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -8226,12 +8185,6 @@ name = "pkg-config"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
-
-[[package]]
-name = "platforms"
-version = "3.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b02ffed1bc8c2234bb6f8e760e34613776c5102a041f25330b869a78153a68c"
 
 [[package]]
 name = "plotters"
@@ -12213,7 +12166,7 @@ dependencies = [
  "bincode",
  "borsh",
  "digest 0.10.7",
- "ed25519-dalek 2.2.0",
+ "ed25519-dalek",
  "hex",
  "rand 0.8.5",
  "schemars 0.8.22",
@@ -12540,7 +12493,7 @@ dependencies = [
  "borsh",
  "bytemuck",
  "digest 0.10.7",
- "ed25519-dalek 2.1.1",
+ "ed25519-dalek",
  "hex",
  "home",
  "jsonschema",
@@ -15483,13 +15436,14 @@ dependencies = [
 
 [[package]]
 name = "utoipa"
-version = "5.0.0-beta.0"
-source = "git+https://github.com/juhaku/utoipa.git?rev=a985d8c1340f80ab69b2b0e5de799df98d567732#a985d8c1340f80ab69b2b0e5de799df98d567732"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fcc29c80c21c31608227e0912b2d7fddba57ad76b606890627ba8ee7964e993"
 dependencies = [
  "indexmap 2.11.1",
  "serde",
  "serde_json",
- "utoipa-gen 5.0.0-beta.0",
+ "utoipa-gen 5.4.0",
 ]
 
 [[package]]
@@ -15506,8 +15460,9 @@ dependencies = [
 
 [[package]]
 name = "utoipa-gen"
-version = "5.0.0-beta.0"
-source = "git+https://github.com/juhaku/utoipa.git?rev=a985d8c1340f80ab69b2b0e5de799df98d567732#a985d8c1340f80ab69b2b0e5de799df98d567732"
+version = "5.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d79d08d92ab8af4c5e8a6da20c47ae3f61a0f1dabc1997cdf2d082b757ca08b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -15516,18 +15471,18 @@ dependencies = [
 
 [[package]]
 name = "utoipa-swagger-ui"
-version = "7.1.1-beta.0"
-source = "git+https://github.com/juhaku/utoipa.git?rev=a985d8c1340f80ab69b2b0e5de799df98d567732#a985d8c1340f80ab69b2b0e5de799df98d567732"
+version = "7.1.1-rc.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd1174c37d2bdc9a2ce8d94aa0baf3e3c4862f80b7b1fb592738f374ab9f8803"
 dependencies = [
  "axum 0.7.9",
  "mime_guess",
  "regex",
- "reqwest 0.12.23",
  "rust-embed",
  "serde",
  "serde_json",
  "url",
- "utoipa 5.0.0-beta.0",
+ "utoipa 5.4.0",
  "zip",
 ]
 
