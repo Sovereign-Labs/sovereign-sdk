@@ -135,10 +135,10 @@ async fn rest_api_routes() {
 
     let storage_manager = sov_test_utils::storage::SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let (_sender, receiver) = tokio::sync::watch::channel(StateCheckpoint::new(
+    let (_sender, receiver) = tokio::sync::watch::channel(Arc::new(StateCheckpoint::new(
         storage,
         &MockKernel::<TestSpec>::default(),
-    ));
+    )));
     let runtime = MyRuntime::<TestSpec>::default();
     let state = ApiState::build(
         Arc::new(()),

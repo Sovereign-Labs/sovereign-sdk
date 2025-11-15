@@ -205,9 +205,8 @@ where
             "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
         );
 
-        let (checkpoint_sender, checkpoint_receiver) = watch::channel(StateCheckpoint::new(
-            latest_state_update.storage.clone(),
-            &runtime.kernel(),
+        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
         ));
         let api_state = ApiState::build(
             Arc::new(()),
