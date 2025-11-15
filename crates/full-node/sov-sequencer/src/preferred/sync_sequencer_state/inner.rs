@@ -615,6 +615,7 @@ where
             visible_increase,
             node_state_root: node_state_root.clone(),
             minimum_profit_per_tx: min_profit_per_tx,
+            is_responsible_for_gating_admins: !self.is_replica(),
         };
 
         let old_checkpoint = self

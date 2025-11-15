@@ -121,6 +121,7 @@ pub struct StartBlockData<S: Spec> {
     // fallible, so it's convenient to front-load the error-checking.
     pub node_state_root: <S::Storage as Storage>::Root,
     pub minimum_profit_per_tx: u128,
+    pub is_responsible_for_gating_admins: bool,
 }
 
 #[derive(Clone)]
@@ -416,6 +417,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             // might want to forcibly close that batch and start a new one, or
             // send the new configuration value over a channel.
             minimum_profit_per_tx: 0,
+            // During replay, we don't need to enforce admin configs - and we don't want to reject any previously accepted transactions if the config changed.
+            is_responsible_for_gating_admins: false,
         };
 
         self.start_rollup_block(start_block_data).await;
@@ -509,6 +512,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             sanity_check_visible_slot_number_after_increase,
             visible_increase,
             minimum_profit_per_tx,
+            is_responsible_for_gating_admins,
             ..
         } = start_block_data;
 
@@ -546,6 +550,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 sequencer_rollup_address: self.seq_config.rollup_address.clone(),
                 sequencer_da_address: self.da_address.clone(),
                 executor_context,
+                is_responsible_for_gating_admins,
             };
 
             move || rollup_block_task_body::<S, Rt>(ctx)
@@ -795,6 +800,9 @@ struct RollupBlockTaskContext<S: Spec> {
     sequencer_rollup_address: S::Address,
     sequencer_da_address: <S::Da as DaSpec>::Address,
     executor_context: ExecutionContext,
+    /// Whether this instance of the executor is responsible for gating admins.
+    /// This is not true for replicas or when replaying txs that have already been accepted
+    is_responsible_for_gating_admins: bool,
 }
 
 fn rollup_block_task_body<S, Rt>(ctx: RollupBlockTaskContext<S>) -> BlockExecutionOutput<S>
@@ -817,6 +825,7 @@ where
         sequencer_rollup_address,
         sequencer_da_address,
         executor_context,
+        is_responsible_for_gating_admins,
     } = ctx;
 
     let _span = match executor_context {
@@ -860,6 +869,7 @@ where
                 minimum_profit_per_tx,
                 admin_addresses,
                 sequencer_rollup_address,
+                is_responsible_for_gating_admins,
             )),
             reserved_gas_tokens: Some(needed_gas_escrow),
             sender: sequencer_da_address.clone(),

@@ -40,6 +40,7 @@ use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, Transacti
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::prelude::*;
+use sov_modules_api::TxState;
 use sov_modules_api::{DispatchCall, Event, Genesis, Hooks, MessageCodec, RawTx, Spec};
 
 #[cfg(feature = "native")]
@@ -164,6 +165,40 @@ where
             ) => 100,
             _ => 0,
         }
+    }
+
+    fn is_unauthorized_system_tx(
+        &self,
+        call: &Self::Decodable,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> bool {
+        match call {
+            Self::Decodable::ChainState(sov_chain_state::CallMessage::SetOracleTime { .. }) => {
+                // Reject tx conservatively if a preferred sequencer is not registered
+                let Ok(Some((_, preferred_sequencer_address))) =
+                    self.sequencer_registry.get_preferred_sequencer(state)
+                else {
+                    return true;
+                };
+                // The tx is unauthorized if it's not from the preferred sequencer
+                context.sequencer() != &preferred_sequencer_address
+            }
+            // All non oracle calls are allowed
+            _ => false,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn maybe_set_oracle_timestamp(
+        &self,
+        millis_since_epoch: i64,
+    ) -> Option<<Self as sov_modules_api::DispatchCall>::Decodable> {
+        Some(Self::Decodable::ChainState(
+            sov_chain_state::CallMessage::SetOracleTime {
+                milliseconds_since_epoch: millis_since_epoch,
+            },
+        ))
     }
 }
 

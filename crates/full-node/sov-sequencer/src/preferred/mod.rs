@@ -11,9 +11,11 @@ mod replica;
 mod side_effects;
 mod state_root_compute;
 mod sync_sequencer_state;
+mod timestamp;
 mod transaction_subscriptions;
 mod tx_nonce_queue;
 mod update_state;
+use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
@@ -33,7 +35,9 @@ use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
-pub use sov_full_node_configs::sequencer::{PreferredSequencerConfig, RecoveryStrategy};
+pub use sov_full_node_configs::sequencer::{
+    PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+};
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
 };
@@ -125,7 +129,7 @@ where
     blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
-    config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
     tx_nonce_queues: Arc<TxNonceQueues<SequencerTxExecutionBackend<S, Rt>, S, Rt>>,
     shutdown_receiver: watch::Receiver<()>,
@@ -156,12 +160,13 @@ where
         da: Da,
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
-        config: &SequencerConfig<S::Address, PreferredSequencerConfig>,
+        config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
+        let mut config = config.clone();
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
         let da_address = da
@@ -174,6 +179,23 @@ where
             %da_address,
             "Instantiating the preferred sequencer"
         );
+
+        let maybe_oracle_config = TimingOracleConfigWithPrivateKey::new(
+            config.sequencer_kind_config.timing_oracle.clone(),
+        )
+        .transpose()?;
+
+        if let Some(oracle_config) = &maybe_oracle_config {
+            let oracle_address = oracle_config.address();
+
+            if !config.admin_addresses.contains(&oracle_address) {
+                tracing::info!(
+                    "Adding oracle address {} to sequencer's admin address list",
+                    oracle_address
+                );
+                config.admin_addresses.push(oracle_address);
+            }
+        }
 
         let mut runtime: Rt = Default::default();
         let tx_status_manager = TxStatusManager::default();
@@ -373,6 +395,19 @@ where
                 .await;
             }
         }));
+
+        if let Some(oracle_config) = maybe_oracle_config {
+            //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master
+            if Rt::default().maybe_set_oracle_timestamp(0).is_some()
+                && !config.sequencer_kind_config.is_replica
+            {
+                handles.push(update_timestamp_task(
+                    seq.clone(),
+                    oracle_config,
+                    shutdown_receiver.clone(),
+                )?);
+            }
+        }
 
         Ok((seq, handles))
     }
