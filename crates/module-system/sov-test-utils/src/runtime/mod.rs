@@ -175,9 +175,9 @@ pub struct TestRunner<
     state_root: <S::Storage as Storage>::Root,
     storage_manager: Sm,
     /// A channel to send the storage over. This should be subscribed to the same channel as [`Self::checkpoint_receiver`].
-    checkpoint_sender: watch::Sender<StateCheckpoint<S>>,
+    checkpoint_sender: watch::Sender<Arc<StateCheckpoint<S>>>,
     /// The corresponding receiving end of the channel.
-    checkpoint_receiver: watch::Receiver<StateCheckpoint<S>>,
+    checkpoint_receiver: watch::Receiver<Arc<StateCheckpoint<S>>>,
     axum_server: axum_server::Handle,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
@@ -456,7 +456,7 @@ where
     fn synchronize_storage_channel(&mut self) {
         let storage = self.storage_manager.create_prover_storage();
         self.checkpoint_sender
-            .send(StateCheckpoint::new(storage, &RT::default().kernel()))
+            .send(Arc::new(StateCheckpoint::new(storage, &RT::default().kernel())))
             .expect("Failed to send storage, the storage channel is closed. This is a bug. Please report it.");
     }
 
@@ -478,10 +478,10 @@ where
 
         let stf_state = storage_manager.create_prover_storage();
 
-        let (sender, receiver) = watch::channel(StateCheckpoint::new(
+        let (sender, receiver) = watch::channel(Arc::new(StateCheckpoint::new(
             stf_state.clone(),
             &RT::default().kernel(),
-        ));
+        )));
 
         let (state_root, change_set) =
             stf.init_chain(&Default::default(), stf_state, genesis_config);

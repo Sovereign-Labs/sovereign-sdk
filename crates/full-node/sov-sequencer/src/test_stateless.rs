@@ -43,7 +43,7 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     blob_sender: Arc<Mutex<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>>,
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
-    state_sender: watch::Sender<StateCheckpoint<S>>,
+    state_sender: watch::Sender<Arc<StateCheckpoint<S>>>,
     api_ledger_db: LedgerDb,
 }
 
@@ -70,7 +70,8 @@ where
             storage: storage.clone(),
             mempool: vec![],
         });
-        let (state_sender, _rec) = watch::channel(StateCheckpoint::new(storage, &runtime.kernel()));
+        let (state_sender, _rec) =
+            watch::channel(Arc::new(StateCheckpoint::new(storage, &runtime.kernel())));
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));

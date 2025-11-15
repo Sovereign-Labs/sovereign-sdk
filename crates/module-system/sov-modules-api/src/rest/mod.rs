@@ -176,7 +176,7 @@ impl<T: ModuleInfo + Default> HasCustomRestApi for &T {
 pub struct ApiState<S: Spec, T = ()> {
     #[deref]
     inner: Arc<T>,
-    checkpoint_receiver: watch::Receiver<StateCheckpoint<S>>,
+    checkpoint_receiver: watch::Receiver<Arc<StateCheckpoint<S>>>,
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
     /// The `height` query parameter extracted from the request, when applicable.
     requested_height: Option<HeightParam>,
@@ -187,7 +187,7 @@ impl<S: Spec, T> ApiState<S, T> {
     /// [`StateCheckpoint`]s.
     pub fn build(
         inner: Arc<T>,
-        checkpoint_receiver: watch::Receiver<StateCheckpoint<S>>,
+        checkpoint_receiver: watch::Receiver<Arc<StateCheckpoint<S>>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         requested_height: Option<HeightParam>,
     ) -> Self {
@@ -232,7 +232,8 @@ impl<S: Spec, T> ApiState<S, T> {
         &self,
         height_param: Option<HeightParam>,
     ) -> Result<ApiStateAccessor<S>, anyhow::Error> {
-        let checkpoint = self.checkpoint_receiver.borrow();
+        // Do a quick/cheap arc clone to avoid blocking the checkpoint receiver
+        let checkpoint: Arc<_> = self.checkpoint_receiver.borrow().clone();
 
         let kernel = self.kernel.clone();
 
@@ -286,7 +287,7 @@ impl<S: Spec, T> ApiState<S, T> {
     }
 
     /// Returns the checkpoint receiver.
-    pub fn checkpoint_receiver(&self) -> watch::Receiver<StateCheckpoint<S>> {
+    pub fn checkpoint_receiver(&self) -> watch::Receiver<Arc<StateCheckpoint<S>>> {
         self.checkpoint_receiver.clone()
     }
 }

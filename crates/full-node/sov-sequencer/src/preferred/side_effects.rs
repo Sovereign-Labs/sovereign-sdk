@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
 
-use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet};
+use sov_modules_api::{Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
+use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{error, warn};
@@ -23,7 +24,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    pub checkpoint_sender: watch::Sender<StateCheckpoint<S>>,
+    pub checkpoint_sender: watch::Sender<std::sync::Arc<StateCheckpoint<S>>>,
     pub blob_sender: PreferredBlobSender<Da>,
     pub db: PreferredSequencerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
@@ -40,17 +41,9 @@ where
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
-        if self.checkpoint_sender.send(checkpoint).is_err() {
+        if self.checkpoint_sender.send(Arc::new(checkpoint)).is_err() {
             tracing::debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
         }
-    }
-
-    /// Applies the changes to the current [`StateCheckpoint`].
-    #[tracing::instrument(skip_all, level = "trace")]
-    fn update_api_state_with_changes(&self, changes: TxChangeSet) {
-        self.checkpoint_sender.send_modify(|checkpoint| {
-            checkpoint.apply_tx_changes(changes);
-        });
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -135,13 +128,24 @@ where
                     )
                     .await?;
 
+                let mut new_checkpoint: StateCheckpoint<_> = (*(*self.checkpoint_sender.borrow()))
+                    .clone_with_empty_witness_dropping_temp_cache();
+                let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
                     self.transaction_cache
                         .insert(contents.accepted_tx.clone())
                         .await;
                     // If the receiver is no longer listening, just don't send the confirmation.
-                    self.update_api_state_with_changes(contents.tx_changes);
-                    let _ = contents.oneshot_sender.send(contents.accepted_tx);
+                    // Apply all updates in a single batch
+                    new_checkpoint.apply_tx_changes(contents.tx_changes);
+                    oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
+                }
+                // Send the checkpoint once whole batch is applied to prevent lock contention
+                self.checkpoint_sender
+                    .send_replace(Arc::new(new_checkpoint));
+                // Send tx confirmations after API state is updated
+                for (oneshot, tx) in oneshot_and_txs {
+                    let _ = oneshot.send(tx);
                 }
             }
             ExecutorEvent::CloseBatch(batch, checkpoint) => {
@@ -285,7 +289,9 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::{ApiTxEffect, FullyBakedTx, Gas, SuccessfulTxContents, TxHash};
+    use sov_modules_api::{
+        ApiTxEffect, FullyBakedTx, Gas, SuccessfulTxContents, TxChangeSet, TxHash,
+    };
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
     use tokio::sync::oneshot;
 
