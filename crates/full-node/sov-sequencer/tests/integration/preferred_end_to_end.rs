@@ -238,7 +238,7 @@ async fn test_transaction_priority() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_archival_state_is_immediately_available() {
+async fn flaky_test_archival_state_is_immediately_available() {
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
