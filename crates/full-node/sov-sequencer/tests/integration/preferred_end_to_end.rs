@@ -1336,87 +1336,141 @@ async fn test_sequencer_event_stream_filtering() {
     );
 }
 
-/// This test checks that the sequencer closes its current batch when the tx execution time exceeds its target.
+/// This test checks that the sequencer closes its current batch when the tx **execution** time exceeds its target.
+/// Scenario. Percentage is from max execution of the batch parameter
+/// | tx# |    sleep time | batch# | exec time | wall clock |
+/// | --- | ------------- | ------ | --------- | ---------- |
+/// |  1  |  > batch_time |      0 |    > 100% |            |
+/// |  2  |          50%  |      1 |      150% |       150% |
+/// |  3  |      50% + bt |      1 |    > 200% |     > 200% |
+/// |  4  |           33% |      2 |      233% |       233% |
+/// | --- |           50% |      2 |      233% |       283% |
+/// |  5  |           33% |      2 |      266% |       313% |
+/// |  6  |       33% +bt |      2 |    > 300% |     > 346% |
+/// This way this test can validate that only **execution time** of tx counts
 #[tokio::test(flavor = "multi_thread")]
 async fn max_batch_execution_time() {
+    // Timeout the batch after 3 seconds of **execution time**.
+    let max_batch_exec_time_millis = 2000;
+    let approx_batch_time_millis = 400;
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
-        1000, // Timeout the batch after 1 second of execution time.
+        max_batch_exec_time_millis,
         TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
+        TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
     )
     .await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
     let client = test_rollup.api_client().clone();
+    let mut slot_subscription = client
+        .subscribe_slots_with_children(IncludeChildren::new(true))
+        .await
+        .unwrap();
 
-    // A helper function to get the next block and assert that it has the expected number of batches.
-    // Because it's async, we pass a clone of the client to avoid borrow checking headaches.
-    let get_next_block = async |should_have_batch: bool| {
-        tokio::time::sleep(Duration::from_millis(500)).await; // Ensure the batch has time to close, if applicable
-        let mut slot_subscription = client
-            .subscribe_slots_with_children(IncludeChildren::new(true))
-            .await
-            .unwrap();
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        let slot = slot_subscription.next().await.unwrap().unwrap();
-        let expected_batches = if should_have_batch { 1 } else { 0 };
-        assert_eq!(
-            slot.batches.len(),
-            expected_batches,
-            "Expected {} batches, but got {} in slot number {}.",
-            expected_batches,
-            slot.batches.len(),
-            slot.number
-        );
-    };
+    let tx_1 = tx_set_value_and_sleep(
+        &admin.private_key,
+        0,
+        1,
+        max_batch_exec_time_millis + approx_batch_time_millis,
+    );
+    let tx_2 = tx_set_value_and_sleep(&admin.private_key, 0, 2, max_batch_exec_time_millis / 2);
+    let tx_3 = tx_set_value_and_sleep(
+        &admin.private_key,
+        1,
+        3,
+        (max_batch_exec_time_millis / 2) + approx_batch_time_millis,
+    );
+    let tx_4 = tx_set_value_and_sleep(&admin.private_key, 1, 4, max_batch_exec_time_millis / 3);
+    let tx_5 = tx_set_value_and_sleep(&admin.private_key, 2, 5, max_batch_exec_time_millis / 3);
+    let tx_6 = tx_set_value_and_sleep(
+        &admin.private_key,
+        3,
+        6,
+        (max_batch_exec_time_millis / 3) + approx_batch_time_millis,
+    );
 
-    {
-        // For now, the first tx should be accepted. Since its execution time exceeds our target of 1000 ms, the batch should be closed now;
-        let tx = tx_set_value_and_sleep(&admin.private_key, 0, 1, 1200);
-        tracing::info!("Submitting first tx");
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+    // txs per slot, where each slot will have only single batch, because we only produce block on submit
+    let expected_tx_placement = vec![1, 2, 3];
 
-        tracing::info!("Tx received, fetching next block");
-        // The fist batch should have been closed
-        get_next_block(true).await;
+    // What is observed:
+    // a - 4 batches with txs. Matches only execution mode:
+    // #0 - 1 txs
+    // #1 - 2 txs
+    // #2 - 3 txs
+    // #3 - 0 txs
+    // b - 5 batches:
+    // #0 - 1 txs (1)
+    // #1 - 2 txs (2, 3)
+    // #2 - 0 txs ?? <- what is this?? Probably it is due to node processing also sleeping and sequencer decided to move slot forward
+    // #3 - 3 txs
+    // #5 - 0 txs
 
-        // The second tx isn't big enough to fill the batch, so it should still be open afterwards
-        tracing::info!("Submitting second tx");
-        let tx = tx_set_value_and_sleep(&admin.private_key, 0, 2, 500);
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        tracing::info!("Tx received, fetching next block");
-        // The second batch wasn't full - it should still be open
-        get_next_block(false).await;
+    let _ = client.send_raw_tx_to_sequencer(&tx_1).await.unwrap();
+    let _ = client.send_raw_tx_to_sequencer(&tx_2).await.unwrap();
+    let _ = client.send_raw_tx_to_sequencer(&tx_3).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(
+        max_batch_exec_time_millis / 2,
+    ))
+    .await;
+    let _ = client.send_raw_tx_to_sequencer(&tx_4).await.unwrap();
+    let _ = client.send_raw_tx_to_sequencer(&tx_5).await.unwrap();
+    let _ = client.send_raw_tx_to_sequencer(&tx_6).await.unwrap();
 
-        // The next tx will put our execution time over 1000ms causing the batch to be closed
-        let tx = tx_set_value_and_sleep(&admin.private_key, 1, 3, 600);
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        // The second batch should be full now.
-        get_next_block(true).await;
+    let wait_slot_timeout = std::time::Duration::from_millis(max_batch_exec_time_millis) * 3;
+    let mut slot_summaries = Vec::new();
 
-        // This next transaction shouldn't trigger batch production
-        let tx = tx_set_value_and_sleep(&admin.private_key, 1, 4, 500);
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        get_next_block(false).await;
-
-        // Sleep for 500 ms. This should *not* trigger batch production since only block execution time counts.
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        // Send a tx that takes 400 ms. This should not trigger batch production since our running total is only 900 ms
-        let tx = tx_set_value_and_sleep(&admin.private_key, 2, 5, 400);
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        get_next_block(false).await;
-
-        // The fifth transaction should fill the batch and trigger batch production
-        let tx = tx_set_value_and_sleep(&admin.private_key, 3, 5, 160);
-        let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
-        get_next_block(true).await;
+    #[derive(Debug, PartialEq)]
+    struct ShortSlotSummary {
+        number: u64,
+        batches: usize,
+        txs: usize,
     }
 
-    test_rollup.shutdown().await.unwrap();
+    let mut total_txs = 0;
+    while let Ok(slot_response) =
+        tokio::time::timeout(wait_slot_timeout, slot_subscription.next()).await
+    {
+        let slot = slot_response.unwrap().unwrap();
+        let txs: usize = slot.batches.iter().map(|b| b.txs.len()).sum();
+        total_txs += txs;
+        let summary = ShortSlotSummary {
+            number: slot.number,
+            batches: slot.batches.len(),
+            txs,
+        };
+        // Rollup can produce empty batch for moving visible slot forward, so we skip batches with no txs.
+        if txs > 0 {
+            slot_summaries.push(summary);
+        }
+    }
+
+    assert_eq!(
+        total_txs, 6,
+        "number of processed txs (left) does not match number of sent (right)"
+    );
+    for (expected_txs, summary) in expected_tx_placement
+        .into_iter()
+        .zip(slot_summaries.into_iter())
+    {
+        assert_eq!(
+            1, summary.batches,
+            "Wrong number of batches in slot {}",
+            summary.number
+        );
+        assert_eq!(
+            expected_txs, summary.txs,
+            "Wrong number of txs in slot {}",
+            summary.number
+        );
+    }
+    tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 /// Test that the sequencer can compute state roots for itself to avoid panics.
