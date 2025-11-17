@@ -17,7 +17,6 @@ use sov_api_spec::types::{
     TxInfoWithConfirmation, TxReceiptResult,
 };
 use sov_api_spec::{types, Error, ResponseValue, WsSubscription};
-use sov_full_node_configs::sequencer::default_ideal_lag_behind_finalized_slot;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
