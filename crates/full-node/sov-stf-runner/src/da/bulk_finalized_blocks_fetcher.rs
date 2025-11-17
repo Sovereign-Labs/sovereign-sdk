@@ -81,7 +81,8 @@ where
         tracing::trace!(height, "getting block");
         // Expects pre-fetched blocks in range [start_height, last_finalized_height) (exclusive)
         if height >= self.last_finalized_height || height < self.start_height {
-            // TODO: Do reorg aware call here
+            // TODO: followup: Do reorg aware call here.
+            // Matches existing behaviour, but duplicates logic between runner and this service
             tracing::trace!(
                 height,
                 start_height = self.start_height,

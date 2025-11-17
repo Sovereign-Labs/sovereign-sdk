@@ -238,7 +238,7 @@ async fn test_transaction_priority() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_archival_state_is_immediately_available() {
+async fn test_archival_state_is_immediately_available() {
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -677,7 +677,6 @@ async fn sequencer_filled_up_block() {
             Some(gas_to_charge),
             Amount::MAX.saturating_div(Amount::new(4)),
         );
-        // Failure pointNo finalized slots available
         client
             .accept_tx(&api_types::AcceptTxBody {
                 body: BASE64_STANDARD.encode(&tx_4),
@@ -882,7 +881,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     tracing::info!("Producing DA blocks while rollup is shut down, to exceed deferred_slots_count");
     // This can be lower than DEFERRED_SLOTS_COUNT because the sequencer takes into account
-    // a)possible node lag
+    // a) possible node lag
     // b) a 90% threshold.
     da_service.produce_n_blocks_now(30).await.unwrap();
 
@@ -1396,19 +1395,6 @@ async fn max_batch_execution_time() {
     // txs per slot, where each slot will have only single batch, because we only produce block on submit
     let expected_tx_placement = vec![1, 2, 3];
 
-    // What is observed:
-    // a - 4 batches with txs. Matches only execution mode:
-    // #0 - 1 txs
-    // #1 - 2 txs
-    // #2 - 3 txs
-    // #3 - 0 txs
-    // b - 5 batches:
-    // #0 - 1 txs (1)
-    // #1 - 2 txs (2, 3)
-    // #2 - 0 txs ?? <- what is this?? Probably it is due to node processing also sleeping and sequencer decided to move slot forward
-    // #3 - 3 txs
-    // #5 - 0 txs
-
     let _ = client.send_raw_tx_to_sequencer(&tx_1).await.unwrap();
     let _ = client.send_raw_tx_to_sequencer(&tx_2).await.unwrap();
     let _ = client.send_raw_tx_to_sequencer(&tx_3).await.unwrap();
@@ -1575,8 +1561,8 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         .await
         .unwrap();
     let actual_value = response.value;
-    // We could've check actual value, but that's not the point of this test.
-    println!("VALUE: {actual_value:?}");
+    // We could've checked the actual value, but that's not the point of this test.
+    println!("actual value in the end: {actual_value:?}");
 
     tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
         .await

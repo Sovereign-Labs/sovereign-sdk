@@ -74,8 +74,7 @@ async fn test_start_at() {
 async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let collector = LogCollector::new(Level::ERROR);
     let subscriber = registry().with(collector.clone());
-    // To make it runnable in standard cargo test.
-    let _guard = subscriber.set_default();
+    subscriber.init();
 
     let stop_at_height = RollupHeight::new(3);
 
