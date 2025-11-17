@@ -285,9 +285,15 @@ async fn test_archival_state_is_immediately_available() {
         test_rollup.force_close_batch().await.unwrap();
         // Produce a some extra slots to ensure that the rollup height and slot number aren't the same.
         // This increases coverage for free.
+        let extra_blocks = 2;
+        let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
         test_rollup.tenderly_produce_blocks(2).await.unwrap();
         test_rollup.wait_for_node_synced().await.unwrap();
         test_rollup.wait_for_sequencer_ready().await.unwrap();
+        // Wait for slot notifications to arrive, this means API state got all updates.
+        for _ in 0..extra_blocks {
+            let _slot = slots.next().await.unwrap().unwrap();
+        }
         for (j, past_height) in (height_at_start..height).enumerate() {
             let expected_value = (j + 1) as u64;
             query_set_value(&test_rollup, Some(past_height), Some(expected_value))
