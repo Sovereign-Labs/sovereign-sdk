@@ -324,11 +324,10 @@ async fn evm_test_get_logs_at_max_response_size() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-
 async fn evm_test_get_logs_at_max_response_size_without_cursor_throws_error() {
     let nb_of_txs = 3;
-    let nb_of_logs_per_tx: u32 = 5000;
-    let rollup_and_client = RollupAndClient::new(20_000, EVM_EXTENSION.response_size_limit).await;
+    let nb_of_logs_per_tx: u32 = 50;
+    let rollup_and_client = RollupAndClient::new(100, EVM_EXTENSION.response_size_limit).await;
 
     rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
