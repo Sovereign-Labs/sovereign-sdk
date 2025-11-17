@@ -1,4 +1,41 @@
-//! Provides finalized headers
+//! Provides caching layer for DA finalized headers to reduce network calls.
+//!
+//! This module implements a caching wrapper around [`DaService`] that significantly
+//! reduces the number of network calls needed when querying finalized headers.
+//!
+//! # Architecture
+//!
+//! The caching is implemented through two main components:
+//!
+//! 1. **Last Finalized Header Cache**: A background task polls the DA service
+//!    at regular intervals and broadcasts updates via a `watch` channel. This allows
+//!    multiple consumers to get the latest finalized header without any network call.
+//!
+//! 2. **Recent Headers Cache**: A bounded LRU-style cache (using `BTreeMap`) stores
+//!    the most recent finalized headers. This handles common queries for recently
+//!    finalized blocks without hitting the network.
+//!
+//! # Performance Benefits
+//!
+//! - Eliminates redundant `get_last_finalized_block_header()` calls during state transitions
+//! - Caches up to 30 recent headers to serve `get_block_header_at()` requests
+//! - Background polling ensures data freshness without blocking the critical path
+//!
+//! # Usage
+//!
+//! ```ignore
+//! let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+//!     da_service,
+//!     shutdown_receiver,
+//!     Duration::from_millis(500), // polling interval
+//! ).await?;
+//!
+//! // Get last finalized header without network call
+//! let header = da_service_with_cache.get_last_finalized_block_header()?;
+//!
+//! // Try to get from cache, fallback to network
+//! let header_at_height = da_service_with_cache.get_block_header_at(100).await?;
+//! ```
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::DaService;
@@ -6,17 +43,36 @@ use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+/// Maximum number of recent headers to cache.
+///
+/// This value balances memory usage against cache hit rate. Headers are evicted
+/// in FIFO order when the cache exceeds this size.
 const MAX_RECENT_HEADERS: usize = 30;
 
-/// Wrapper around [`DaService`] that optimizes interaction with actual DA:
-///  * Providing access to the last finalized header without actual network call
-///  * Storing N recent headers to reduce network calls
+/// Wrapper around [`DaService`] that optimizes interaction with the DA layer.
+///
+/// This wrapper provides two main optimizations:
+/// - **Cached last finalized header**: Accessible without network calls via a background polling task
+/// - **Recent headers cache**: Stores up to [`MAX_RECENT_HEADERS`] recent headers to reduce network calls
+///
+/// The background task continues running until either:
+/// - A shutdown signal is received via the `shutdown_receiver`
+/// - The DA service returns an error (which is logged and stops the task)
+/// - All receivers of the finalized header are dropped
+///
+/// # Thread Safety
+///
+/// This struct is `Clone` and can be shared across threads. All internal state
+/// is protected by appropriate synchronization primitives (`Arc`, `RwLock`, `watch`).
 #[derive(Debug, Clone)]
 pub struct DaServiceWithCachedFinalizedHeaders<Da: DaService> {
     // TODO: Remove Arc, DaService already clone!
     da_service: Arc<Da>,
+    /// Receiver for the last finalized header, updated by background task
     last_finalized: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
+    /// Cache of recently finalized headers, keyed by height
     recent_headers: Arc<tokio::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
+    /// Handle to the background polling task for monitoring its status
     finalized_headers_task: Arc<tokio::task::JoinHandle<()>>,
 }
 
@@ -172,7 +228,184 @@ async fn background_header_fetch_task<Da: DaService>(
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
+    use sov_mock_da::storable::StorableMockDaService;
+    use std::time::Duration;
 
-    // TODO
+    #[tokio::test]
+    async fn test_last_finalized_header_is_cached() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        for _ in 0..5 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(300),
+        )
+        .await?;
+
+        // This should be height 6
+        da_service.send_transaction(&[2; 32]).await.await??;
+        // Immediately after, shouldn't be pulled yet.
+        // If/when background task will switch to subscription, this test is going to break.
+        let cached_header = cache.get_last_finalized_block_header()?;
+        assert_eq!(cached_header.height(), 5);
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let cached_header = cache.get_last_finalized_block_header()?;
+        assert_eq!(cached_header.height(), 6);
+        da_service.send_transaction(&[3; 32]).await.await??;
+
+        sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_recent_headers_are_cached() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        for _ in 0..10 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let header_5 = cache.get_block_header_at(5).await?;
+        assert_eq!(header_5.height(), 5);
+
+        let header_9 = cache.get_block_header_at(9).await?;
+        assert_eq!(header_9.height(), 9);
+
+        sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cache_eviction() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        // Produce more blocks than MAX_RECENT_HEADERS
+        for _ in 0..40 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Cache should have at most MAX_RECENT_HEADERS entries
+        let cache_size = cache.recent_headers.read().await.len();
+        assert!(
+            cache_size <= MAX_RECENT_HEADERS,
+            "Cache size {cache_size} exceeds MAX_RECENT_HEADERS {MAX_RECENT_HEADERS}"
+        );
+
+        sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_stops_background_task() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        da_service.send_transaction(&[1; 32]).await.await??;
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        // Task should be running
+        assert!(!cache.finalized_headers_task.is_finished());
+
+        sender.send(())?;
+
+        // Wait a bit for the task to finish
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        assert!(cache.finalized_headers_task.is_finished());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_header_at_falls_back_to_da_service() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        for _ in 0..5 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        // Request a header that's not in cache - should fallback to DA service
+        let header_0 = cache.get_block_header_at(0).await?;
+        assert_eq!(header_0.height(), 0);
+
+        sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_task_failure_is_detected() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        da_service.send_transaction(&[1; 32]).await.await??;
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        // Abort the background task to simulate failure
+        cache.finalized_headers_task.abort();
+
+        // Wait for it to finish
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Trying to get last finalized header should now fail
+        let result = cache.get_last_finalized_block_header();
+        assert!(
+            result.is_err(),
+            "Expected error when background task is stopped"
+        );
+
+        let _ = sender.send(());
+        Ok(())
+    }
 }
