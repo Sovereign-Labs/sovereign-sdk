@@ -13,8 +13,10 @@ use sov_evm::Evm;
 use sov_evm::MaybeSealedBlock;
 use sov_evm::Receipt;
 use sov_modules_api::capabilities::HasKernel;
+use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -79,13 +81,13 @@ where
                     let pending_block = self.evm.pending_block(&mut state);
 
                     for tx_idx in tx_watermark.advance(..pending_block.transactions.end) {
-                        let receipt = self.get_receipt(tx_idx, &mut state)?;
+                        let (receipt, time) = self.get_receipt(tx_idx, &mut state)?;
 
                         if block.number() != receipt.block_number {
                             block = self.get_block(receipt.block_number, &mut state)?;
                         }
 
-                        self.send_matching_logs(&receipt, &block, &filter).await?;
+                        self.send_matching_logs(&receipt, &block, &filter, time).await?;
                     }
                 }
                 _ = shutdown_receiver.changed() => {
@@ -151,7 +153,11 @@ where
             .inspect_err(|_| tracing::error!(number, "Block does not exist"))
     }
 
-    fn get_receipt(&self, idx: u64, state: &mut ApiStateAccessor<S>) -> Result<Receipt, Error> {
+    fn get_receipt(
+        &self,
+        idx: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<(Receipt, Time), Error> {
         self.evm
             .receipt(idx, state)
             .ok_or(Error::ReceiptDoesNotExist)
@@ -163,20 +169,23 @@ where
         receipt: &Receipt,
         block: &MaybeSealedBlock,
         filter: &Filter,
+        time: Time,
     ) -> Result<(), DisconnectError> {
         for (log_index_in_tx, log) in receipt.receipt.logs.iter().enumerate() {
             if filter.matches(log) {
-                let rpc_log = alloy_rpc_types::Log {
-                    inner: log.clone(),
-                    block_hash: block.hash(),
-                    block_number: Some(block.number()),
-                    block_timestamp: Some(block.timestamp()),
-                    transaction_hash: Some(receipt.transaction_hash),
-                    transaction_index: Some(receipt.transaction_index),
-                    log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
-                    removed: false,
+                let rpc_log = LogWithExecutionTimestamp {
+                    log: alloy_rpc_types::Log {
+                        inner: log.clone(),
+                        block_hash: block.hash(),
+                        block_number: Some(block.number()),
+                        block_timestamp: Some(block.timestamp()),
+                        transaction_hash: Some(receipt.transaction_hash),
+                        transaction_index: Some(receipt.transaction_index),
+                        log_index: Some(receipt.log_index_start + log_index_in_tx as u64),
+                        removed: false,
+                    },
+                    time_executed_ms: time.as_millis().try_into().unwrap_or_default(),
                 };
-
                 self.send(&rpc_log).await?;
             }
         }

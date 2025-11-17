@@ -5,17 +5,16 @@ use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
 use alloy_rpc_types::eth::Filter;
-use alloy_rpc_types::Log;
 pub use cursor::Cursor;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use service::LogsService;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::{FilterWithCursor, LogsWithMaybeCursor};
 use std::marker::PhantomData;
 use std::sync::Arc;
-
 mod cursor;
 mod service;
 
@@ -34,7 +33,7 @@ where
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<Vec<Log>, ErrorObjectOwned> {
+    ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
         let state = ethereum.api_state_accessor();
         let service = LogsService::<S, Seq>::new(
             parameters.one::<Filter>()?,
