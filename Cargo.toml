@@ -236,7 +236,7 @@ reqwest = { version = "0.12", features = [
     "rustls-tls",
 ], default-features = false }
 rustls = { version = "0.23", default-features = false }
-serde = { version = "1.0.208", default-features = false, features = [
+serde = { version = "1.0.228", default-features = false, features = [
     "alloc",
     "derive",
 ] }
