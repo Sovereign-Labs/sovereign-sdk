@@ -1,0 +1,50 @@
+[package]
+name = "hyperlane-register-module"
+version = "0.3.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+publish = false
+rust-version = "1.81"
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json = { workspace = true }
+
+sov-modules-api = { workspace = true }
+sov-hyperlane-integration = { workspace = true }
+sov-accounts = { workspace = true }
+
+[dev-dependencies]
+sov-test-utils = { workspace = true }
+sov-bank = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-state = { workspace = true }
+sov-mock-zkvm = { workspace = true }
+sov-mock-da = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
+strum = { workspace = true, features = ["derive"] }
+bs58 = { workspace = true, default-features = false, features = [
+  "std",
+  "alloc",
+] }
+
+[build-dependencies]
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json = { workspace = true }
+
+[features]
+default = []
+native = [
+  "sov-modules-api/native",
+  "sov-hyperlane-integration/native",
+  "sov-accounts/native",
+  "sov-bank/native",
+  "sov-rollup-interface/native",
+  "sov-state/native",
+  "sov-mock-zkvm/native",
+  "sov-mock-da/native",
+]

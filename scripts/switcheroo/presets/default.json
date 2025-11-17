@@ -47,5 +47,6 @@
     "crates/universal-wallet/macro-helpers",
     "crates/utils/workspace-hack",
     "crates/web3",
-    "python/py_sovereign_web3/rust"
+    "python/py_sovereign_web3/rust",
+    "crates/module-system/module-implementations/extern/hyperlane-solana-register"
 ]
