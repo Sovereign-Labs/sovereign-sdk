@@ -21,7 +21,7 @@ serde = { workspace = true }
 sov-rollup-interface = { workspace = true }
 
 hex = { workspace = true }
-ed25519-dalek = { version = "2", features = ["serde"] }
+ed25519-dalek = { workspace = true, features = ["serde", "alloc"] }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 schemars = { workspace = true }

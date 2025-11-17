@@ -36,7 +36,8 @@ struct Inner<S: Spec> {
 /// Sequencer that accepts any transaction without verification.
 /// Build a batch out of all accepted transactions in the order they were received.
 /// Does not impose any restrictions on transaction validity or batch size.
-#[derive(Clone)]
+#[derive(derivative::Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     inner: Arc<Mutex<Inner<S>>>,
     #[allow(clippy::type_complexity)]
@@ -62,7 +63,7 @@ where
         config: &SequencerConfig<<S as Spec>::Address, ()>,
         ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = R::default();
         let storage = state_update_receiver.borrow().storage.clone();
@@ -74,7 +75,7 @@ where
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        let seq = Arc::new(Self {
+        let seq = Self {
             inner: inner.into(),
             blob_sender: Arc::new(Mutex::new(
                 BlobSender::new(
@@ -95,7 +96,7 @@ where
             _r: Default::default(),
             state_sender,
             api_ledger_db: ledger_db.clone(),
-        });
+        };
 
         let mut handles = vec![];
         handles.push(tokio::spawn({

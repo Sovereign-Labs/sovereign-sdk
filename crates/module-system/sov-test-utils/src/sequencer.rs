@@ -46,7 +46,7 @@ pub struct TestSequencerSetup<Rt: Runtime<TestSpec>> {
     // so it doesn't go out of scope and close the channel immediately.
     _state_update_sender: watch::Sender<StateUpdateInfo<<TestSpec as Spec>::Storage>>,
     /// The sequencer used in the test.
-    pub sequencer: Arc<StdSequencer<TestSpec, Rt, StorableMockDaService>>,
+    pub sequencer: StdSequencer<TestSpec, Rt, StorableMockDaService>,
     /// The admin private key used to create an external user account for transaction handling.
     pub admin_private_key: TestPrivateKey,
     /// The Axum server handle used to start the Axum server.

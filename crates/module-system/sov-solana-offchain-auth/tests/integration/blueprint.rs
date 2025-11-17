@@ -24,7 +24,7 @@ use sov_sequencer::{ProofBlobSender, Sequencer, TxStatus};
 use sov_stf_runner::RollupConfig;
 use sov_test_utils::RtAgnosticBlueprint;
 
-use sov_solana_offchain_auth::capabilities::SolanaOffchainAuthenticatorTrait;
+use sov_solana_offchain_auth::SolanaOffchainAuthenticatorTrait;
 
 /// A test blueprint that extends RtAgnosticBlueprint with Solana offchain auth endpoints
 pub struct SolanaOffchainAuthBlueprint<S: Spec, R: RuntimeTrait<S>> {
@@ -103,7 +103,7 @@ where
 
     async fn sequencer_additional_apis<Seq>(
         &self,
-        sequencer: Arc<Seq>,
+        sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
@@ -166,7 +166,7 @@ where
 
 /// Handler for accepting Solana offchain authenticated transactions
 async fn accept_solana_offchain_tx<Seq>(
-    State(sequencer): State<Arc<Seq>>,
+    State(sequencer): State<Seq>,
     tx: Json<AcceptTx>,
 ) -> ApiResult<TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>>
 where
@@ -178,15 +178,7 @@ where
     let encoded_tx = Seq::Rt::encode_with_solana_offchain_auth(raw_tx);
 
     // Submit to sequencer (similar to axum_accept_tx but with Solana auth)
-    let tx_with_hash = tokio::spawn(async move { sequencer.accept_tx(encoded_tx).await })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "A panic occurred while accepting a Solana offchain transaction");
-            sov_rest_utils::errors::internal_server_error_response_500(
-                "An internal error occurred while processing the transaction",
-            )
-        })?
-    .map_err(|e| {
+    let tx_with_hash = sequencer.accept_tx(encoded_tx).await.map_err(|e| {
         if e.status.is_server_error() {
             tracing::error!(error = ?e, "Error accepting Solana offchain transaction");
         }

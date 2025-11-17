@@ -1,6 +1,20 @@
+# 2025-11-14
+- #2076 Adds `TimingOracle` functionality. The feature is disabled by default, so it does not introduce any breaking changes.
+- #2077 **Breaking change**: The `Sequencer` implementations have been made cheaply cloneable, and the `accept_tx()` method has been made cancellation-safe. This has two effects:
+  * *Breaking*: any API handler definitions that currently use `Arc<Seq: Sequencer>` need to be modified to use `Seq: Sequencer` directly instead. This is likely to affect rollup definitions, especially ones implementing `sequencer_additional_apis()`.
+  * *Advisory*: any custom transaction APIs invoking `Sequencer::accept_tx()` in their handlers previously had to make the call inside a tokio task. This is no longer necessary, and handlers *should* remove any `tokio::spawn()` wrapping the `accept_tx()` call to avoid the unnecessary overhead and reduce tokio runtime contention.
+- #2079 Blocks subscriptions now yield only as soon as the block is confirmed.
+- #2079 Added size field on the block header in RPC requests/subscriptions.
+- #2081 Switched jmt and utoipa dependencies to crates.io.
+
+# 2025-11-12
+- #2071 Optimize WebSocket message delivery by batching writes. Messages are now grouped (up to 128 at a time) and flushed together, reducing system calls and improving throughput for WebSocket subscriptions.
+- #2070 **Breaking change**: The `MeteredSignature::charge_gas()` method signature changes from taking a `msg: &[u8]` parameter to `msg_len: usize`, as signature verification gas cost only depends on the number of bytes. This has no other impact except for direct users of the `MeteredSignature` struct.
+
 # 2025-11-11
 - #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
   - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
+- #2074 Renaming crate `full-node-configs` to `sov-full-node-configs`.
 
 # 2025-11-06
 - #2039 Add WebSocket subscription support to EVM logs soak tests.

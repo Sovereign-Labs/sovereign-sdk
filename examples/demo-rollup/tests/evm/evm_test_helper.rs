@@ -13,6 +13,7 @@ use reqwest::Url;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::SimpleStorageClient;
+use sov_full_node_configs::sequencer::TimingOracleConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
@@ -38,6 +39,7 @@ pub(crate) async fn start_node(
     _rollup_prover_config: RollupProverConfig<Risc0>,
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
+    timing_oracle_config: Option<TimingOracleConfig>,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
@@ -47,6 +49,7 @@ pub(crate) async fn start_node(
         },
         finalization_blocks,
     )
+    .with_preferred_seq_oracle_config(timing_oracle_config)
     .with_zkvm_host_args(mock_da_risc0_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
@@ -169,7 +172,7 @@ pub async fn setup_test_rollup(
 ) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, finalization_blocks, Some(extension)).await
+    start_node(config, finalization_blocks, Some(extension), None).await
 }
 
 pub async fn setup_with_simple_storage(

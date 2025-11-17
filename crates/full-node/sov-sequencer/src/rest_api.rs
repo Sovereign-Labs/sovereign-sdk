@@ -1,7 +1,6 @@
 //! Utilities and definitions for the sequencer's REST APIs.
 
 use std::pin::Pin;
-use std::sync::Arc;
 
 use axum::extract::ws::WebSocket;
 use axum::extract::{ws, State, WebSocketUpgrade};
@@ -51,15 +50,15 @@ pub struct StartFrom {
 #[derive(derivative::Derivative)]
 #[derivative(Clone(bound = ""))]
 pub struct SequencerApis<Seq: Sequencer> {
-    sequencer: Arc<Seq>,
+    sequencer: Seq,
     shutdown_receiver: Receiver<()>,
 }
 
 impl<Seq: Sequencer> SequencerApis<Seq> {
     /// Creates a new Axum router for this sequencer.
-    pub fn rest_api_server(seq: Arc<Seq>, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
+    pub fn rest_api_server(sequencer: Seq, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
         let state = Self {
-            sequencer: seq,
+            sequencer,
             shutdown_receiver,
         };
 
@@ -237,20 +236,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             Seq::Spec,
         >>::encode_with_standard_auth(raw_tx);
 
-        let tx_with_hash = tokio::spawn(async move { state.sequencer.accept_tx(baked_tx).await })
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "A panic occurred while accepting a transaction");
-                sov_rest_utils::errors::internal_server_error_response_500(
-                    "An internal error occurred while processing the transaction",
-                )
-            })?
-            .map_err(|e| {
-                if e.status.is_server_error() {
-                    tracing::error!(error = ?e, "Error accepting transaction");
-                }
-                IntoResponse::into_response(e)
-            })?;
+        let tx_with_hash = state.sequencer.accept_tx(baked_tx).await.map_err(|e| {
+            if e.status.is_server_error() {
+                tracing::error!(error = ?e, "Error accepting transaction");
+            }
+            IntoResponse::into_response(e)
+        })?;
 
         Ok(TxInfoWithConfirmation {
             id: tx_with_hash.tx_hash,
@@ -296,7 +287,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
     async fn subscribe_txs_starting_from(
         start_from: Option<u64>,
-        sequencer: Arc<Seq>,
+        sequencer: Seq,
     ) -> Pin<
         Box<
             dyn futures::Stream<

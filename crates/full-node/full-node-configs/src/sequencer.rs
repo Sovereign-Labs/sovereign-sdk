@@ -15,7 +15,7 @@ pub enum SequencerKindConfig {
 
 impl Default for SequencerKindConfig {
     fn default() -> Self {
-        SequencerKindConfig::Preferred(Default::default())
+        SequencerKindConfig::Preferred(PreferredSequencerConfig::default())
     }
 }
 
@@ -34,10 +34,7 @@ fn default_response_size_limit() -> usize {
 
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
-#[schemars(
-    bound = "Address: JsonSchema, Sc: JsonSchema",
-    rename = "SequencerConfig"
-)]
+#[schemars(rename = "SequencerConfig")]
 pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
@@ -167,6 +164,9 @@ pub struct PreferredSequencerConfig {
     #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
+    /// Configuration for the timing oracle.
+    #[serde(default)]
+    pub timing_oracle: Option<TimingOracleConfig>,
     /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
@@ -197,6 +197,7 @@ impl Default for PreferredSequencerConfig {
             maximum_future_nonce_delta: default_maximum_future_nonce_delta(),
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
+            timing_oracle: None,
         }
     }
 }
@@ -237,4 +238,20 @@ pub struct StdSequencerConfig {
     /// Maximum size of a batch. The sequencer will not build batches larger
     /// than this size.
     pub max_batch_size_bytes: Option<NonZero<usize>>,
+}
+
+// Configuration for the timing oracle.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct TimingOracleConfig {
+    /// The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.
+    pub priority_fee_percentage: u8,
+
+    /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
+    pub max_fee: u128,
+
+    /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
+    pub interval_millis: u64,
+
+    /// The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.
+    pub private_key_hex: Option<String>,
 }

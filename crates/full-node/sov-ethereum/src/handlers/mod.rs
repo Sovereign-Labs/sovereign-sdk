@@ -61,21 +61,12 @@ where
     })?;
 
     let seq = ethereum.sequencer.clone();
-    tokio::spawn(async move { seq.accept_tx(tx).await })
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "A panic occurred while accepting an ethereum transaction");
-            to_jsonrpsee_error_object(
-                "An internal error occurred while processing the transaction",
-                ETH_RPC_ERROR,
-            )
-        })?
-        .map_err(|e| {
-            to_jsonrpsee_error_object(
-                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-                ETH_RPC_ERROR,
-            )
-        })?;
+    seq.accept_tx(tx).await.map_err(|e| {
+        to_jsonrpsee_error_object(
+            format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+            ETH_RPC_ERROR,
+        )
+    })?;
 
     on_success(tx_hash, ethereum)
 }

@@ -14,6 +14,7 @@ use sov_rollup_interface::stf::GenesisParams;
 use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
 use crate::transaction::TransactionCallable;
+use crate::Context;
 #[cfg(feature = "native")]
 use crate::FullyBakedTx;
 use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
@@ -108,6 +109,25 @@ pub trait Runtime<S: Spec>:
     fn get_transaction_priority(&self, _call: &FullyBakedTx) -> u32 {
         0
     }
+
+    /// Returns a call message to set the oracle timestamp if the runtime supports it.
+    fn maybe_set_oracle_timestamp(
+        &self,
+        _millis_since_epoch: i64,
+    ) -> Option<<Self as DispatchCall>::Decodable> {
+        None
+    }
+
+    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
+    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    fn is_unauthorized_system_tx(
+        &self,
+        _call: &Self::Decodable,
+        _context: &Context<S>,
+        _state: &mut impl crate::TxState<S>,
+    ) -> bool {
+        false
+    }
 }
 
 #[cfg(feature = "native")]
@@ -166,6 +186,17 @@ pub trait Runtime<S: Spec>:
     /// This is a low level security mechanism. Your runtime SHOULD only allow
     /// `sov_sequencer_registry::CallMessage::Register` transactions here.
     fn allow_unregistered_tx(call: &Self::Decodable) -> bool;
+
+    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
+    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    fn is_unauthorized_system_tx(
+        &self,
+        _call: &Self::Decodable,
+        _context: &Context<S>,
+        _state: &mut impl crate::TxState<S>,
+    ) -> bool {
+        false
+    }
 }
 
 /// The return type of [`Runtime::endpoints`].

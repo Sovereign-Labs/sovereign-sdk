@@ -428,20 +428,20 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Charge gas for verifying the transaction signature against the given message.
     pub fn charge_gas_for_signature(
         &self,
-        msg: &[u8],
+        msg_len: usize,
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<(), TransactionVerificationError<S::Gas>> {
         match &self {
             Transaction::V0(inner) => {
                 MeteredSignature::new::<S>(inner.signature.clone())
-                    .charge_gas(meter, msg)
+                    .charge_gas(meter, msg_len)
                     .map_err(TransactionVerificationError::from)?;
             }
             Transaction::V1(inner) => {
                 for signature in inner.signatures.iter() {
                     // Charge gas for all the signatures up front before verifying. This way, we can switch to batch verification and the gas price will be the same.
                     MeteredSignature::new::<S>(signature.signature.clone())
-                        .charge_gas(meter, msg)
+                        .charge_gas(meter, msg_len)
                         .map_err(TransactionVerificationError::from)?;
                 }
             }

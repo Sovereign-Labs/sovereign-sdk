@@ -1,7 +1,6 @@
 mod handlers;
 
 use std::convert::Infallible;
-use std::sync::Arc;
 
 use alloy_primitives::{B256, U256};
 use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
@@ -27,7 +26,7 @@ pub struct EthRpcConfig {
     pub shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
 
-pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Arc<Seq>) -> RpcModule<()>
+pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Seq) -> RpcModule<()>
 where
     S: Spec,
     Seq: Sequencer<Spec = S>,
@@ -101,7 +100,7 @@ where
 }
 
 struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
-    sequencer: Arc<Seq>,
+    sequencer: Seq,
     #[cfg(feature = "local")]
     eth_signer: Signers,
     extension: SeqConfigExtension,

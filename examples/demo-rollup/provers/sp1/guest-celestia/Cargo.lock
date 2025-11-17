@@ -3076,8 +3076,9 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jmt"
-version = "0.11.0"
-source = "git+https://github.com/penumbra-zone/jmt.git?rev=f60beb0fa54d9231706f62a8b1315e3c57855590#f60beb0fa54d9231706f62a8b1315e3c57855590"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b37ade62ca224945201e0c6d65e7a389ada90217895f7aa281470212ce4dddb0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3487,8 +3488,9 @@ dependencies = [
 
 [[package]]
 name = "nomt-core"
-version = "1.0.0-preview"
-source = "git+https://github.com/thrumdev/nomt.git?rev=24b8e4132f20c7c8083b83dd51c52098225cf6a9#24b8e4132f20c7c8083b83dd51c52098225cf6a9"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "feeb4e411c8185c33c906539b78330a8478a2d4819de338efb6511b33cc73207"
 dependencies = [
  "arrayvec",
  "bitvec",
@@ -6275,7 +6277,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "alloy-primitives",
  "arrayvec",
@@ -6295,7 +6297,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "bech32",
  "borsh",
@@ -6311,7 +6313,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "proc-macro2",
  "sov-universal-wallet-macro-helpers",
