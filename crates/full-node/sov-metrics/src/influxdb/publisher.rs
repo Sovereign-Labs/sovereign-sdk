@@ -289,6 +289,7 @@ mod tests {
             max_datagram_size: Some(max_udp_size as u32),
             // Does not matter, we set our own channel size.
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         };
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
@@ -380,6 +381,7 @@ mod tests {
             telegraf_address: TelegrafSocketConfig::udp(socket.local_addr()?),
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         };
 
         let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());

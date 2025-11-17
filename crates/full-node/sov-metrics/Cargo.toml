@@ -24,6 +24,7 @@ derivative = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
 derive_more = { workspace = true, features = ["deref_mut", "deref"], optional = true }
 derive-new = { workspace = true }
+tokio-metrics = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 risc0-zkvm = { workspace = true, default-features = false, features = [
@@ -61,7 +62,7 @@ native = [
     "dep:derivative",
     "dep:schemars",
     "dep:derive_more",
-    "dep:derivative",
+    "dep:tokio-metrics",
     "sov-rollup-interface/native",
     "sov-metrics/native"
 ]

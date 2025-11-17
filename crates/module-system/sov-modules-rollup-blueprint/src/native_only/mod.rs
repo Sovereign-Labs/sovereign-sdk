@@ -306,9 +306,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let receiver_for_metrics = secondary_shutdown_receiver.clone();
         let monitoring_config = rollup_config.monitoring.clone();
         if let Some(metrics_handle) =
-            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics.clone())
         {
             background_handles.push(metrics_handle);
+            background_handles.push(sov_metrics::spawn_tokio_runtime_metrics_task(
+                std::time::Duration::from_millis(
+                    monitoring_config.tokio_runtime_metrics_interval_millis,
+                ),
+                receiver_for_metrics,
+            ));
         } else {
             tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
