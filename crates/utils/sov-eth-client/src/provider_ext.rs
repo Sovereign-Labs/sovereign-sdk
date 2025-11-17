@@ -1,8 +1,9 @@
 use alloy::providers::Provider;
-use alloy::rpc::types::{Filter, Log};
+use alloy::rpc::types::Filter;
 use alloy::transports::TransportResult;
 use async_trait::async_trait;
 use serde::Serialize;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,7 +52,10 @@ pub trait LogsWithCursorProvider: Provider {
     ///
     /// # Returns
     /// A vector containing all logs matching the filter
-    async fn get_all_logs_with_cursor(&self, filter: &Filter) -> TransportResult<Vec<Log>>
+    async fn get_all_logs_with_cursor(
+        &self,
+        filter: &Filter,
+    ) -> TransportResult<Vec<LogWithExecutionTimestamp>>
     where
         Self: Sized,
     {
