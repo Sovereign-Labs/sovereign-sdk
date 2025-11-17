@@ -342,7 +342,7 @@ async fn evm_test_get_logs_at_max_response_size_without_cursor_throws_error() {
         .await
         .unwrap_err();
 
-    assert!(err.to_string().contains("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"), "Unexpected error: {}", err);
+    assert!(err.to_string().contains("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"), "Unexpected error: {err}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
