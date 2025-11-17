@@ -1,5 +1,6 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
+assertion_line: 226
 expression: config
 ---
 {
@@ -69,6 +70,7 @@ expression: config
   "monitoring": {
     "telegraf_address": "udp://192.168.4.5:8543",
     "max_datagram_size": 1024,
-    "max_pending_metrics": 2560
+    "max_pending_metrics": 2560,
+    "tokio_runtime_metrics_interval_millis": 500
   }
 }

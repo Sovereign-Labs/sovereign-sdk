@@ -774,10 +774,9 @@ pub fn spawn_tokio_runtime_metrics_task(
     mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) -> tokio::task::JoinHandle<()> {
     let handle = tokio::runtime::Handle::current();
-    // construct the runtime metrics monitor
     let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
 
-    // print runtime metrics every 500ms
+    // print runtime metrics every metrics_interval
     tokio::spawn(async move {
         for interval in runtime_monitor.intervals() {
             crate::track_metrics(|tracker| {
