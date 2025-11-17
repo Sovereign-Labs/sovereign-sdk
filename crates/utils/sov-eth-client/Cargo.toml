@@ -29,3 +29,4 @@ sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true }
 tracing = { workspace = true }
 sov-rpc-eth-types = { workspace = true}
+serde_json = { workspace = true }

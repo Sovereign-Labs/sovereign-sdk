@@ -325,6 +325,28 @@ async fn evm_test_get_logs_at_max_response_size() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+
+async fn evm_test_get_logs_at_max_response_size_without_cursor_throws_error() {
+    let nb_of_txs = 3;
+    let nb_of_logs_per_tx: u32 = 5000;
+    let rollup_and_client = RollupAndClient::new(20_000, EVM_EXTENSION.response_size_limit).await;
+
+    rollup_and_client
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
+        .await;
+
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let err = rollup_and_client
+        .client
+        .get_logs_allow_error()
+        .await
+        .unwrap_err();
+
+    assert!(err.to_string().contains("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"), "Unexpected error: {}", err);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
     let max_log_limit = 1;
     let nb_of_txs = 1;

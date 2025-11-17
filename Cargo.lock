@@ -11832,6 +11832,7 @@ dependencies = [
  "jsonrpsee",
  "reth-primitives",
  "serde",
+ "serde_json",
  "sov-cli",
  "sov-modules-api",
  "sov-rpc-eth-types",

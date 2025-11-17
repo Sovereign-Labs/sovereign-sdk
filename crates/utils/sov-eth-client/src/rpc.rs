@@ -165,6 +165,19 @@ impl RpcClient {
             .unwrap()
     }
 
+    pub async fn get_logs_allow_error(&self) -> Result<Vec<Log>, Box<dyn std::error::Error>> {
+        self.ws
+            .request(
+                "eth_getLogs",
+                rpc_params![serde_json::json!({
+                    "fromBlock": "0x0",
+                    "toBlock": "latest",
+                })],
+            )
+            .await
+            .map_err(|e| e.into())
+    }
+
     pub async fn get_logs_with_cursor(&self, filter: &FilterWithCursor) -> LogsWithMaybeCursor {
         self.ws
             .request("eth_getLogsWithCursor", rpc_params![filter])
