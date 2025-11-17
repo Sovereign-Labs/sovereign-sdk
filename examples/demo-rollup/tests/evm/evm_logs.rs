@@ -166,10 +166,9 @@ async fn evm_test_get_logs_range_limit() {
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let filter = new_filter_for_all_logs();
-    let logs = rollup_and_client.client.get_logs(&filter).await;
-
-    assert_eq!(logs.len(), max_log_limit);
+    let logs = rollup_and_client.client.get_logs_allow_error().await;
+    assert!(logs.is_err());
+    assert!(logs.unwrap_err().to_string().contains("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"));
 }
 
 fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_of_logs: u32) {
