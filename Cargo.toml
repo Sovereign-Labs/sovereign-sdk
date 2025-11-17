@@ -181,7 +181,7 @@ sov-build = { path = "crates/utils/sov-build" }
 workspace-hack = { path = "crates/utils/workspace-hack" }
 nearly-linear = { path = "crates/utils/nearly-linear", version = "0.3" }
 # Dependencies maintained by Sovereign
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "f60beb0fa54d9231706f62a8b1315e3c57855590", default-features = false }
+jmt = { version = "0.12.0", default-features = false }
 reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6209abff72929f5ba41614f5cea3e4a748428c3" }
 rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "2ff46aca3d2cffcb07f958d34329a9cc8c6ebd2c" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
@@ -216,6 +216,8 @@ derive-new = "0.7.0"
 derivative = { version = "2.2", features = ["use_core"] }
 digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
 derive-getters = { version = "0.5.0" }
+# Don't forget to upgrade zkVM patches if changing this one.
+ed25519-dalek = { version = "=2.1.1", default-features = false }
 futures = { version = "0.3", default-features = false }
 hex = { version = "0.4.3" }
 insta = { version = "1.39", features = ["json"] }
@@ -258,7 +260,7 @@ tracing-test = { version = "0.2.5", features = [
     "no-env-filter",
 ] } # https://docs.rs/tracing-test/latest/tracing_test/#per-crate-filtering
 utoipa = "4.2"
-utoipa-swagger-ui = { git = "https://github.com/juhaku/utoipa.git", rev = "a985d8c1340f80ab69b2b0e5de799df98d567732", features = ["axum", "debug-embed"] }
+utoipa-swagger-ui = { version = "7.1.1-rc.0", features = ["axum", "debug-embed"] }
 unwrap-infallible = "0.1.5"
 bech32 = { version = "0.11" }
 derive_more = { version = "1.0", default-features = false, features = ["std"] }

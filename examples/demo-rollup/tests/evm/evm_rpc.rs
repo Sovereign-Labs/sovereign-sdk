@@ -111,3 +111,15 @@ async fn eth_get_block_receipts() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn block_size() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.pause_preferred_batches().await;
+
+    let header = by_number(&client, Latest).await?.unwrap();
+    assert_eq!(header.size.unwrap().to::<u64>(), 503);
+
+    Ok(())
+}
