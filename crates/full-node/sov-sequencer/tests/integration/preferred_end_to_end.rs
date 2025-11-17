@@ -1767,7 +1767,9 @@ async fn sequencer_back_pressure() {
             let result = client.send_raw_tx_to_sequencer(&tx).await;
             match result {
                 Ok(_) => {
-                    generation += 1;
+                    // Doing larger increase to make sure we won't hit Too many transactions for credential_id
+                    // Switching to nonce will fix that, but this is for later
+                    generation += 1000;
                     bytes_submitted += tx.data.len();
                 }
                 Err(err) => {
