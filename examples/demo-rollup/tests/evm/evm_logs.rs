@@ -338,8 +338,8 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
     let cursor = cursor.map(|c| Cursor::unpack(&c).unwrap()).unwrap();
     assert_eq!(logs.len(), 1);
     let log = logs.pop().unwrap();
-    assert_eq!(log.transaction_index, Some(0));
-    assert_eq!(log.log_index, Some(0));
+    assert_eq!(log.log.transaction_index, Some(0));
+    assert_eq!(log.log.log_index, Some(0));
     assert_eq!(cursor.tx_index_absolute, 1);
     assert_eq!(cursor.log_index_in_tx, 1);
 
@@ -347,8 +347,8 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
     assert_eq!(logs.len(), 1);
     let log = logs.pop().unwrap();
-    assert_eq!(log.transaction_index, Some(0));
-    assert_eq!(log.log_index, Some(1));
+    assert_eq!(log.log.transaction_index, Some(0));
+    assert_eq!(log.log.log_index, Some(1));
 }
 
 fn nb_of_logs_according_to_cursor(cursor: Cursor, nb_of_logs_per_tx: u32) -> u32 {
