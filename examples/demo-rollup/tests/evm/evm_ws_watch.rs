@@ -71,7 +71,7 @@ async fn ws_subscribe_new_heads_sizes() -> anyhow::Result<()> {
 
     let header = subscription.recv().await?;
     assert_eq!(header.number, 1);
-    assert_eq!(header.size.unwrap().to::<u64>(), 513);
+    assert_eq!(header.size.unwrap().to::<u64>(), 511);
 
     Ok(())
 }

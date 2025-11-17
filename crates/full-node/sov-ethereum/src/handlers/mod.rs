@@ -3,6 +3,7 @@ mod subscribe;
 #[cfg(feature = "local")]
 use alloy_primitives::TxKind;
 use alloy_primitives::{Bytes, B256};
+use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::types::ErrorObjectOwned;
@@ -18,6 +19,7 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
 pub use subscribe::eth_subscribe;
@@ -223,7 +225,7 @@ pub async fn realtime_send_raw_transaction<S, Seq>(
     parameters: JRpcParams<'static>,
     ethereum: Arc<Ethereum<S, Seq>>,
     _: Extensions,
-) -> Result<Option<TransactionReceipt>, ErrorObjectOwned>
+) -> Result<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>, ErrorObjectOwned>
 where
     S: Spec,
     Seq: Sequencer<Spec = S>,
