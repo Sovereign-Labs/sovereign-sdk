@@ -19,6 +19,7 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClientBuilder;
 use sov_rpc_eth_types::FilterWithCursor;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 
 pub struct RpcClient {
@@ -208,5 +209,13 @@ impl RpcClient {
 
     pub async fn get_logs(&self, filter: &Filter) -> Vec<Log> {
         self.pub_sub.get_logs(filter).await.unwrap()
+    }
+
+    pub async fn get_logs_with_timestamp(&self, filter: &Filter) -> Vec<LogWithExecutionTimestamp> {
+        self.pub_sub
+            .client()
+            .request("eth_getLogs", (filter,))
+            .await
+            .unwrap()
     }
 }

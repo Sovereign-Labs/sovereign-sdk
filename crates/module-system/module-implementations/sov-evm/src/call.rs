@@ -128,6 +128,7 @@ where
         let time = self
             .chain_state_module
             .get_oracle_time_with_fallback(state)?;
+
         let pending_tx = PendingTransaction::new(tx, receipt, time);
         self.pending_transactions.push(&pending_tx, state)?;
         save_elapsed!(set_state_time SINCE set_state);
