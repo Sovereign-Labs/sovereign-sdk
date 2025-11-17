@@ -1,3 +1,5 @@
+# 2025-11-17
+- ##2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
 # 2025-11-14
 - #2076 Adds `TimingOracle` functionality. The feature is disabled by default, so it does not introduce any breaking changes.
 - #2077 **Breaking change**: The `Sequencer` implementations have been made cheaply cloneable, and the `accept_tx()` method has been made cancellation-safe. This has two effects:
