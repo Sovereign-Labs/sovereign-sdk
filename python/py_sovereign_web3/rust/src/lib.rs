@@ -22,9 +22,8 @@ impl PySerializer {
 
     #[classmethod]
     fn from_url(_cls: &Bound<'_, PyType>, url: &str) -> PyResult<Self> {
-        let serializer = Serializer::from_url(url).map_err(|e| {
-            PyValueError::new_err(format!("Failed to fetch schema from URL: {e}"))
-        })?;
+        let serializer = Serializer::from_url(url)
+            .map_err(|e| PyValueError::new_err(format!("Failed to fetch schema from URL: {e}")))?;
         Ok(PySerializer { inner: serializer })
     }
 
@@ -47,9 +46,10 @@ impl PySerializer {
     }
 
     fn serialize_tx(&self, tx: &PyTransaction) -> PyResult<Vec<u8>> {
-        let bytes = self.inner.serialize_tx(&tx.inner).map_err(|e| {
-            PyValueError::new_err(format!("Failed to serialize transaction: {e}"))
-        })?;
+        let bytes = self
+            .inner
+            .serialize_tx(&tx.inner)
+            .map_err(|e| PyValueError::new_err(format!("Failed to serialize transaction: {e}")))?;
         Ok(bytes)
     }
 }
@@ -125,9 +125,7 @@ impl PyUnsignedTransaction {
         uniqueness: Option<&PyUniquenessData>,
     ) -> PyResult<Self> {
         let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
-            PyValueError::new_err(format!(
-                "Failed to convert runtime_call dict to JSON: {e}"
-            ))
+            PyValueError::new_err(format!("Failed to convert runtime_call dict to JSON: {e}"))
         })?;
 
         let uniqueness = match uniqueness {
