@@ -1,4 +1,4 @@
-//! Provides caching layer for DA finalized headers to reduce network calls.
+//! Provides a caching layer for DA finalized headers to reduce network calls.
 //!
 //! This module implements a caching wrapper around [`DaService`] that significantly
 //! reduces the number of network calls needed when querying finalized headers.
@@ -49,6 +49,8 @@ use std::sync::Arc;
 /// in FIFO order when the cache exceeds this size.
 const MAX_RECENT_HEADERS: usize = 30;
 
+const RECENT_HEADERS_POISONED: &str = "Recent headers lock is poisoned";
+
 /// Wrapper around [`DaService`] that optimizes interaction with the DA layer.
 ///
 /// This wrapper provides two main optimizations:
@@ -62,16 +64,16 @@ const MAX_RECENT_HEADERS: usize = 30;
 ///
 /// # Thread Safety
 ///
-/// This struct is `Clone` and can be shared across threads. All internal state
-/// is protected by appropriate synchronization primitives (`Arc`, `RwLock`, `watch`).
+/// This struct is `Clone` and can be shared across threads.
+/// All internal state is protected by appropriate synchronization primitives (`Arc`, `RwLock`, `watch`).
 #[derive(Debug, Clone)]
 pub struct DaServiceWithCachedFinalizedHeaders<Da: DaService> {
-    // TODO: Remove Arc, DaService already clone!
+    // TODO: follow up Remove Arc, DaService already clone
     da_service: Arc<Da>,
     /// Receiver for the last finalized header, updated by background task
     last_finalized: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
     /// Cache of recently finalized headers, keyed by height
-    recent_headers: Arc<tokio::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
+    recent_headers: Arc<std::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
     /// Handle to the background polling task for monitoring its status
     finalized_headers_task: Arc<tokio::task::JoinHandle<()>>,
 }
@@ -91,7 +93,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
         let (finalized_sender, finalized_receiver) =
             tokio::sync::watch::channel(last_finalized_header);
 
-        let recent_headers = Arc::new(tokio::sync::RwLock::new(BTreeMap::new()));
+        let recent_headers = Arc::new(std::sync::RwLock::new(BTreeMap::new()));
 
         let recent_headers_for_writer = recent_headers.clone();
         let da_service_for_finalized_fetcher = da_service.clone();
@@ -141,11 +143,13 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
         &self,
         height: u64,
     ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
-        let cache = self.recent_headers.read().await;
-        if let Some(cached_header) = cache.get(&height).cloned() {
+        let cached_header = {
+            let cache = self.recent_headers.read().expect(RECENT_HEADERS_POISONED);
+            cache.get(&height).cloned()
+        };
+        if let Some(cached_header) = cached_header {
             return Ok(cached_header);
         }
-        drop(cache);
         self.da_service.get_block_header_at(height).await
     }
 
@@ -159,11 +163,9 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
 
 // TODO: Switch to subscription when it is brought back
 async fn background_header_fetch_task<Da: DaService>(
-    da_service: std::sync::Arc<Da>,
+    da_service: Arc<Da>,
     finalized_sender: tokio::sync::watch::Sender<<Da::Spec as DaSpec>::BlockHeader>,
-    recent_headers: std::sync::Arc<
-        tokio::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>,
-    >,
+    recent_headers: Arc<std::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
     polling_interval: std::time::Duration,
     shutdown_rx: tokio::sync::watch::Receiver<()>,
 ) {
@@ -196,10 +198,12 @@ async fn background_header_fetch_task<Da: DaService>(
                         }
                         tracing::trace!(finalized_height = %height, "Updated cached finalized header");
                         {
-                            let recent_header_read = recent_headers.read().await;
+                            let recent_header_read =
+                                recent_headers.read().expect(RECENT_HEADERS_POISONED);
                             if !recent_header_read.contains_key(&height) {
                                 drop(recent_header_read);
-                                let mut recent_header_write = recent_headers.write().await;
+                                let mut recent_header_write =
+                                    recent_headers.write().expect(RECENT_HEADERS_POISONED);
                                 recent_header_write.insert(height, finalized_header);
                                 if recent_header_write.len() > MAX_RECENT_HEADERS {
                                     let evicted = recent_header_write.pop_first();
@@ -314,7 +318,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Cache should have at most MAX_RECENT_HEADERS entries
-        let cache_size = cache.recent_headers.read().await.len();
+        let cache_size = cache
+            .recent_headers
+            .read()
+            .expect(RECENT_HEADERS_POISONED)
+            .len();
         assert!(
             cache_size <= MAX_RECENT_HEADERS,
             "Cache size {cache_size} exceeds MAX_RECENT_HEADERS {MAX_RECENT_HEADERS}"
@@ -369,7 +377,7 @@ mod tests {
         )
         .await?;
 
-        // Request a header that's not in cache - should fallback to DA service
+        // Request a header that's not in cache - should fall back to DA service
         let header_0 = cache.get_block_header_at(0).await?;
         assert_eq!(header_0.height(), 0);
 
@@ -398,7 +406,7 @@ mod tests {
         // Wait for it to finish
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        // Trying to get last finalized header should now fail
+        // Trying to get the last finalized header should now fail
         let result = cache.get_last_finalized_block_header();
         assert!(
             result.is_err(),
