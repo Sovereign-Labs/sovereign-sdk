@@ -108,10 +108,17 @@ impl FlatStateDb {
     pub fn get_rockbound_options(
         columns: Vec<ColumnFamilyDescriptor>,
     ) -> DbOptions<ColumnFamilyDescriptor> {
+        let cacheable_columns = vec![
+            NomtCommittedVersion::<UserNamespace>::COLUMN_FAMILY_NAME.to_string(),
+            NomtCommittedVersion::<KernelNamespace>::COLUMN_FAMILY_NAME.to_string(),
+            NomtStateValues::<UserNamespace>::COLUMN_FAMILY_NAME.to_string(),
+            NomtStateValues::<KernelNamespace>::COLUMN_FAMILY_NAME.to_string(),
+        ];
         DbOptions {
             name: Self::DB_NAME,
             path_suffix: Self::DB_PATH_SUFFIX,
             columns,
+            cacheable_columns,
         }
     }
 
