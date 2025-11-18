@@ -59,7 +59,7 @@ pub enum SerializerError {
     /// Error occurred during HTTP request to fetch schema from URL.
     #[error("HTTP request error: {0}")]
     HttpRequest(#[from] reqwest::Error),
-    #[error("schema object from http response was invalid")]
+    #[error("HTTP schema request returned an invalid response")]
     InvalidSchemaResponse,
 }
 
