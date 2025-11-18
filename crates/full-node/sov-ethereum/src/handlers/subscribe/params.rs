@@ -3,6 +3,7 @@ use crate::handlers::ETH_RPC_ERROR;
 use crate::to_jsonrpsee_error_object;
 use alloy_rpc_types::pubsub::Params;
 use alloy_rpc_types::pubsub::SubscriptionKind;
+use alloy_rpc_types::BlockNumberOrTag;
 use alloy_rpc_types::FilterBlockOption;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
@@ -46,7 +47,14 @@ pub fn validate(kind: SubscriptionKind, params: Params) -> Result<SubscriptionRe
         SubscriptionKind::Logs => {
             let filter = match params {
                 Params::Logs(filter) => {
-                    if filter.block_option == FilterBlockOption::default() {
+                    if filter.block_option == FilterBlockOption::default()
+                        || filter.block_option
+                            == (FilterBlockOption::Range {
+                                from_block: Some(BlockNumberOrTag::Pending),
+
+                                to_block: Some(BlockNumberOrTag::Pending),
+                            })
+                    {
                         filter
                     } else {
                         return Err(Error::BlockOptionParam);
