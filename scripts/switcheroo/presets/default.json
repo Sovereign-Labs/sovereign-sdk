@@ -46,5 +46,6 @@
     "crates/universal-wallet/macros",
     "crates/universal-wallet/macro-helpers",
     "crates/utils/workspace-hack",
-    "crates/web3"
+    "crates/web3",
+    "python/py_sovereign_web3/rust"
 ]
