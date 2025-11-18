@@ -13182,12 +13182,18 @@ dependencies = [
 name = "sovereign-web3"
 version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "borsh",
  "hex",
+ "reqwest 0.12.23",
  "serde",
  "serde_json",
+ "serde_with",
+ "sov-address",
+ "sov-mock-zkvm",
  "sov-modules-api",
  "sov-universal-wallet",
+ "sovereign-web3",
  "thiserror 1.0.69",
 ]
 
