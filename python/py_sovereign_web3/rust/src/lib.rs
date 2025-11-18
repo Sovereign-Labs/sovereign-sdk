@@ -125,7 +125,10 @@ impl PyUnsignedTransaction {
         uniqueness: Option<&PyUniquenessData>,
     ) -> PyResult<Self> {
         let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
-            PyValueError::new_err(format!("Failed to convert runtime_call dict to JSON: {}", e))
+            PyValueError::new_err(format!(
+                "Failed to convert runtime_call dict to JSON: {}",
+                e
+            ))
         })?;
 
         let uniqueness = match uniqueness {
