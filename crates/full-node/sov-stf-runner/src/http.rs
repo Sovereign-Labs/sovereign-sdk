@@ -1,13 +1,12 @@
 use std::net::SocketAddr;
+use std::sync::atomic::Ordering;
 
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::ws::{Message, WebSocket};
 use axum::http::StatusCode;
 use axum::ServiceExt;
-use futures_util::sink::SinkExt;
-use futures_util::stream::StreamExt;
-use jsonrpsee::server::ServerConfig;
+use jsonrpsee::server::{IdProvider, ServerConfig};
+use jsonrpsee::types::SubscriptionId;
 use jsonrpsee::RpcModule;
 use tokio::sync::watch;
 use tower::BoxError;
@@ -59,8 +58,17 @@ pub(crate) async fn start_http_server(
 
         result
     });
-
     Ok((handle, rest_address))
+}
+
+#[derive(Default, Debug)]
+struct HexIdProvider(std::sync::atomic::AtomicU64);
+
+impl IdProvider for HexIdProvider {
+    fn next_id(&self) -> SubscriptionId<'static> {
+        SubscriptionId::Str(format!("0x{:}", hex::encode(&self.0.fetch_add(1, Ordering::Relaxed).to_be_bytes())).into())
+    //    format!("0x{:}", hex::encode(&self.0.fetch_add(1, Ordering::Relaxed).to_be_bytes())).into()
+    }
 }
 
 /// Build [`axum::Router`] from [`jsonrpsee::RpcModule`] with support of websocket.
@@ -72,10 +80,21 @@ pub fn rpc_module_to_router(
 
     // TODO: Into config.toml
     let config = ServerConfig::builder()
+        .set_id_provider(HexIdProvider::default())
         .max_connections(10_000)
         .max_subscriptions_per_connection(100)
         .build();
     let rpc_service = jsonrpsee::server::ServerBuilder::with_config(config)
+        .to_service_builder()
+        .build(methods.clone(), stop_handle.clone());
+
+    let config = ServerConfig::builder()
+        .set_id_provider(HexIdProvider::default())
+        .ws_only()
+        .max_connections(10_000)
+        .max_subscriptions_per_connection(100)
+        .build();
+    let ws_only_service = jsonrpsee::server::ServerBuilder::with_config(config)
         .to_service_builder()
         .build(methods.clone(), stop_handle);
 
@@ -93,6 +112,20 @@ pub fn rpc_module_to_router(
         }))
         .service(rpc_service);
 
+    let ws_only_service = tower::ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|error: BoxError| async move {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                jsonrpsee::types::error::ErrorObject::owned(
+                    jsonrpsee::types::error::ErrorCode::InternalError.code(),
+                    error.to_string(),
+                    None::<String>,
+                )
+                .to_string(),
+            )
+        }))
+        .service(ws_only_service);
+
     let cors_layer = match cors_config {
         CorsConfiguration::Permissive => CorsLayer::permissive(),
         // New does not set any CORS headers
@@ -102,7 +135,7 @@ pub fn rpc_module_to_router(
     (
         axum::Router::new().route(
             "/",
-            axum::routing::get(move |ws_upgrade| ws_rpc_handler(ws_upgrade, methods.clone()))
+            axum::routing::get_service(ws_only_service)
                 .post_service(rpc_service)
                 .layer(cors_layer),
         ),
@@ -139,105 +172,6 @@ async fn measure_time(
     });
 
     response
-}
-
-async fn ws_rpc_handler(
-    ws: axum::extract::ws::WebSocketUpgrade,
-    rpc_methods: RpcModule<()>,
-) -> impl axum::response::IntoResponse {
-    ws.on_upgrade(move |socket| async move {
-        handle_socket(socket, rpc_methods).await;
-    })
-}
-
-// To support duplex communication socket is split into 2 streams,
-// each stream is processed in their own task
-// 1. Reader task receives requests from websocket and pushes appropriate responses into the mpsc channel to the writer task.
-//    In the case of subscriptions, the reader task clones `tokio::sync::mpsc::Sender` and spawns another task,
-//    where subscription responses are piped to the writer task.
-// 2. Writer task listens to [`tokio::sync::mpsc::Receiver`] and writes responses to websocket.
-async fn handle_socket(socket: WebSocket, rpc_methods: RpcModule<()>) {
-    let (sender, receiver) = socket.split();
-
-    let (socket_requests, socket_responses) = tokio::sync::mpsc::channel(10);
-
-    tokio::spawn(handle_socket_write(socket_responses, sender));
-    tokio::spawn(handle_socket_read(receiver, socket_requests, rpc_methods));
-}
-
-async fn handle_socket_read(
-    mut socket_requests: futures_util::stream::SplitStream<WebSocket>,
-    socket_responses: tokio::sync::mpsc::Sender<Message>,
-    rpc_methods: RpcModule<()>,
-) {
-    while let Some(Ok(msg)) = socket_requests.next().await {
-        tracing::trace!(message = ?msg, "Message received from websocket");
-        match msg {
-            Message::Text(text) => {
-                // Buffer size picked up from `jsonrpsee` crate examples
-                match rpc_methods.raw_json_request(&text, 1).await {
-                    Ok((rpc_response, mut receiver)) => {
-                        tracing::trace!("RPC request processed successfully: {}", rpc_response);
-                        if socket_responses
-                            .send(Message::Text(rpc_response.to_string()))
-                            .await
-                            .is_err()
-                        {
-                            tracing::error!("Websocket sender has been closed, aborting websocket");
-                            break;
-                        }
-
-                        if !receiver.is_closed() {
-                            let subscription_responses = socket_responses.clone();
-                            tokio::task::spawn(async move {
-                                tracing::trace!("Spawning subscription responses loop");
-                                while let Some(message) = receiver.recv().await {
-                                    tracing::trace!("Subscription message received: {}", message);
-                                    if let Err(error) = subscription_responses
-                                        .send(Message::Text(message.to_string()))
-                                        .await
-                                    {
-                                        tracing::error!(%error, "Error while sending RPC response");
-                                    }
-                                }
-                                tracing::trace!("Subscription channel closed");
-                            });
-                        }
-                    }
-                    Err(error) => {
-                        tracing::error!(%error, "Error while processing RPC request");
-                    }
-                }
-            }
-            // NOTE: No support for binary formats.
-            Message::Binary(_) => {
-                tracing::warn!("Binary JSON RPC messages are not supported");
-            }
-            Message::Pong(_) => {}
-            Message::Ping(ping) => {
-                if socket_responses.send(Message::Pong(ping)).await.is_err() {
-                    tracing::error!("Websocket sender has been closed, aborting websocket");
-                    break;
-                }
-            }
-            Message::Close(_) => {
-                break;
-            }
-        }
-    }
-    tracing::trace!("WebSocket read handler finished");
-}
-
-async fn handle_socket_write(
-    mut socket_requests: tokio::sync::mpsc::Receiver<Message>,
-    mut socket_responses: futures_util::stream::SplitSink<WebSocket, Message>,
-) {
-    while let Some(response) = socket_requests.recv().await {
-        if let Err(error) = socket_responses.send(response).await {
-            tracing::error!(%error, "Error while sending RPC response");
-        }
-        tracing::trace!("Message sent to websocket");
-    }
 }
 
 #[cfg(test)]
@@ -408,4 +342,20 @@ mod tests {
 
         Ok(())
     }
+}
+
+
+#[test]
+fn test_hex_id_provider() {
+    let provider = HexIdProvider::default();
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000000".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000001".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000002".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000003".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000004".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000005".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000006".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000007".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000008".into()));
+    assert_eq!(provider.next_id(), SubscriptionId::Str("0x0000000000000009".into()));
 }
