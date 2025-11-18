@@ -16,14 +16,14 @@ impl PySerializer {
     #[new]
     fn new(schema_json: &str) -> PyResult<Self> {
         let serializer = Serializer::from_json(schema_json)
-            .map_err(|e| PyValueError::new_err(format!("Failed to create serializer: {}", e)))?;
+            .map_err(|e| PyValueError::new_err(format!("Failed to create serializer: {e}")))?;
         Ok(PySerializer { inner: serializer })
     }
 
     #[classmethod]
     fn from_url(_cls: &Bound<'_, PyType>, url: &str) -> PyResult<Self> {
         let serializer = Serializer::from_url(url).map_err(|e| {
-            PyValueError::new_err(format!("Failed to fetch schema from URL: {}", e))
+            PyValueError::new_err(format!("Failed to fetch schema from URL: {e}"))
         })?;
         Ok(PySerializer { inner: serializer })
     }
@@ -32,7 +32,7 @@ impl PySerializer {
         let hash = self
             .inner
             .chain_hash()
-            .map_err(|e| PyValueError::new_err(format!("Failed to get chain hash: {}", e)))?;
+            .map_err(|e| PyValueError::new_err(format!("Failed to get chain hash: {e}")))?;
         Ok(hash.to_vec())
     }
 
@@ -41,14 +41,14 @@ impl PySerializer {
             .inner
             .serialize_unsigned_tx(&unsigned_tx.inner)
             .map_err(|e| {
-                PyValueError::new_err(format!("Failed to serialize unsigned transaction: {}", e))
+                PyValueError::new_err(format!("Failed to serialize unsigned transaction: {e}"))
             })?;
         Ok(bytes)
     }
 
     fn serialize_tx(&self, tx: &PyTransaction) -> PyResult<Vec<u8>> {
         let bytes = self.inner.serialize_tx(&tx.inner).map_err(|e| {
-            PyValueError::new_err(format!("Failed to serialize transaction: {}", e))
+            PyValueError::new_err(format!("Failed to serialize transaction: {e}"))
         })?;
         Ok(bytes)
     }
@@ -126,15 +126,14 @@ impl PyUnsignedTransaction {
     ) -> PyResult<Self> {
         let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
             PyValueError::new_err(format!(
-                "Failed to convert runtime_call dict to JSON: {}",
-                e
+                "Failed to convert runtime_call dict to JSON: {e}"
             ))
         })?;
 
         let uniqueness = match uniqueness {
             Some(u) => u.inner,
             None => default_uniqueness().map_err(|e| {
-                PyValueError::new_err(format!("Failed to create default uniqueness: {}", e))
+                PyValueError::new_err(format!("Failed to create default uniqueness: {e}"))
             })?,
         };
 
@@ -151,7 +150,7 @@ impl PyUnsignedTransaction {
         let bytes = self
             .inner
             .bytes_for_signing(&serializer.inner)
-            .map_err(|e| PyValueError::new_err(format!("Failed to get signing bytes: {}", e)))?;
+            .map_err(|e| PyValueError::new_err(format!("Failed to get signing bytes: {e}")))?;
         Ok(bytes)
     }
 
@@ -191,7 +190,7 @@ impl PyUniquenessData {
     #[staticmethod]
     fn default() -> PyResult<Self> {
         let uniqueness = default_uniqueness().map_err(|e| {
-            PyValueError::new_err(format!("Failed to create default uniqueness: {}", e))
+            PyValueError::new_err(format!("Failed to create default uniqueness: {e}"))
         })?;
         Ok(PyUniquenessData { inner: uniqueness })
     }
