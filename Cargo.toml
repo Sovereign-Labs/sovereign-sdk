@@ -285,6 +285,7 @@ risc0-zkvm = { version = "2.1", default-features = false }
 risc0-zkvm-platform = "2.0"
 risc0-build = "2.1"
 flume = { version = "0.11.1", features = ["async"] }
+tokio-metrics = { version = "0.4.0" }
 
 # EVM dependencies
 ethereum-types = { version = "0.14.1", default-features = false }
@@ -331,6 +332,7 @@ inherits = "dev"
 debug = false
 strip = true
 codegen-units = 256
+
 
 [profile.dev.package.sov-modules-macros]
 # Set the optimization level to 3 for the sov-modules-macros crate. This

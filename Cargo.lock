@@ -12113,6 +12113,7 @@ dependencies = [
  "sp1-lib",
  "strum 0.26.3",
  "tokio",
+ "tokio-metrics",
  "toml 0.8.23",
  "tracing",
 ]
@@ -14485,6 +14486,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
+]
+
+[[package]]
+name = "tokio-metrics"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a01bbf7db0b3f5eee8930a119fe99bfa1438de1095fe3d26b25e652a5933ef3f"
+dependencies = [
+ "futures-util",
+ "pin-project-lite",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

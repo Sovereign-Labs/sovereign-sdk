@@ -14,10 +14,10 @@ pub use config::{MonitoringConfig, TelegrafSocketConfig};
 #[cfg(feature = "gas-constant-estimation")]
 pub use gas_constant_estimation::{GasConstantTracker, GAS_CONSTANTS};
 pub use tracker::{
-    init_metrics_tracker, timestamp, BatchMetrics, BatchOutcome, HttpMetrics, RpcMetrics,
-    RunnerMetrics, RunnerProcessStfChangesMetrics, SlotProcessingMetrics, TransactionEffect,
-    TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime,
-    ZkVmExecutionChunk,
+    init_metrics_tracker, spawn_tokio_runtime_metrics_task, timestamp, BatchMetrics, BatchOutcome,
+    HttpMetrics, RpcMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics, SlotProcessingMetrics,
+    TransactionEffect, TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit,
+    ZkProvingTime, ZkVmExecutionChunk,
 };
 
 pub(crate) type SerializableMetric = Box<dyn Metric>;
@@ -122,6 +122,7 @@ mod tests {
             // Setting low, so each metric is published immediately
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
@@ -217,6 +218,7 @@ mod tests {
             // Setting low, so each metric is published immediately
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
