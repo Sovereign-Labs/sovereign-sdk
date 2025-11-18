@@ -68,7 +68,7 @@ pub const DEFAULT_MAX_FEE: Amount = Amount(100000000);
 /// Generates default uniqueness data based on current timestamp.
 ///
 /// Creates a `UniquenessData::Generation` variant using the current
-/// Unix timestamp in seconds.
+/// Unix timestamp in milliseconds.
 ///
 /// # Panics
 ///
@@ -78,8 +78,8 @@ pub fn default_uniqueness() -> UniquenessData {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
-        .as_secs();
-    UniquenessData::Generation(now)
+        .as_millis();
+    UniquenessData::Generation(now as u64)
 }
 
 /// A builder for constructing transactions with customizable parameters.

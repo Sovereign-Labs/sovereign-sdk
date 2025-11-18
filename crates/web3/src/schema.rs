@@ -251,7 +251,7 @@ pub const DEFAULT_MAX_FEE: u128 = 100000000;
 /// Generates default uniqueness data based on current timestamp.
 ///
 /// Creates a `UniquenessData::Generation` variant using the current
-/// Unix timestamp in seconds. This provides a simple way to ensure
+/// Unix timestamp in milliseconds. This provides a simple way to ensure
 /// transaction uniqueness without requiring explicit nonce management.
 ///
 /// # Returns
@@ -263,8 +263,8 @@ pub const DEFAULT_MAX_FEE: u128 = 100000000;
 /// Panics if the system clock is set to a time before the Unix epoch.
 pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    Ok(UniquenessData::Generation(now))
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+    Ok(UniquenessData::Generation(now as u64))
 }
 
 /// Errors that can occur when building transactions using the schema-based approach.

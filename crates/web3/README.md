@@ -96,6 +96,7 @@ let unsigned_tx = TransactionBuilder::new(call)
 
 // Serialize for signing
 let bytes_to_sign = unsigned_tx.bytes_for_signing(&serializer)?;
+let signature_bytes = /* sign the bytes using your private key */;
 
 // Create signed transaction
 let signed_tx = unsigned_tx.to_signed(pub_key_bytes, signature_bytes);
