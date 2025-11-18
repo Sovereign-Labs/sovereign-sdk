@@ -1,8 +1,6 @@
 use super::watermark::Watermark;
 use crate::Ethereum;
-use alloy_consensus::Sealed;
 use alloy_rpc_types::Filter;
-use alloy_rpc_types::Header;
 use jsonrpsee::DisconnectError;
 use jsonrpsee::SubscriptionMessage;
 use jsonrpsee::SubscriptionSink;
@@ -16,6 +14,7 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::fmt::Debug;
@@ -28,6 +27,8 @@ pub enum Error {
     BlockDoesNotExist,
     #[error("Receipt does not exist")]
     ReceiptDoesNotExist,
+    #[error(transparent)]
+    EthApi(#[from] EthApiError),
     #[error(transparent)]
     Disconnect(#[from] DisconnectError),
 }
@@ -102,8 +103,8 @@ where
     /// Stream new block headers to the subscriber.
     pub async fn blocks(&self) -> Result<(), Error> {
         let mut state = self.ethereum.api_state_accessor();
-        let pending_block = self.evm.pending_block(&mut state);
-        let mut block_watermark = Watermark::new(..pending_block.header.number);
+        let latest_block = self.evm.latest_block(&mut state);
+        let mut block_watermark = Watermark::new(..latest_block.header.number + 1);
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
         let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
@@ -117,11 +118,12 @@ where
                     }
 
                     let mut state = self.ethereum.api_state_accessor();
-                    let pending_block = self.evm.pending_block(&mut state);
+                    let latest_block = self.evm.latest_block(&mut state);
 
-                    for block_number in block_watermark.advance(..pending_block.header.number) {
+                    for block_number in block_watermark.advance(..latest_block.header.number + 1) {
                         let block = self.get_block(block_number, &mut state)?;
-                        self.send_block_header(&block).await?;
+                        let rpc_header = self.evm.get_rpc_header(block, &mut state)?;
+                        self.send(&rpc_header).await?;
                     }
                 }
                 _ = shutdown_receiver.changed() => {
@@ -190,13 +192,6 @@ where
             }
         }
         Ok(())
-    }
-
-    async fn send_block_header(&self, block: &MaybeSealedBlock) -> Result<(), DisconnectError> {
-        let hash = block.hash().unwrap_or_default();
-        let header = Sealed::new_unchecked(block.header().clone(), hash);
-        let rpc_header = Header::from_consensus(header, None, None);
-        self.send(&rpc_header).await
     }
 
     async fn send<T: Serialize + Debug>(&self, data: &T) -> Result<(), DisconnectError> {

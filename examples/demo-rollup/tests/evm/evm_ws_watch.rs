@@ -64,9 +64,7 @@ async fn ws_subscribe_new_heads() -> anyhow::Result<()> {
     Ok(())
 }
 
-
-
-/// Tests that the newHeads subscription does not include the pending block. 
+/// Tests that the newHeads subscription does not include the pending block.
 /// This test should be deleted if we decide to support pending blocks in the newHeads subscription again.
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_subscribe_new_heads_does_not_include_pending() -> anyhow::Result<()> {
@@ -84,11 +82,28 @@ async fn ws_subscribe_new_heads_does_not_include_pending() -> anyhow::Result<()>
 
     let header_1 = subscription.try_recv().unwrap();
     let header_2 = subscription.try_recv().unwrap();
-    let pending_block = client.get_block_by_number(BlockNumberOrTag::Pending).await?.expect("Pending block should be available");
+    let pending_block = client
+        .get_block_by_number(BlockNumberOrTag::Pending)
+        .await?
+        .expect("Pending block should be available");
     assert_eq!(pending_block.number(), header_2.number + 1);
     assert!(subscription.try_recv().is_err(), "Pending is not supported");
 
     assert_eq!(header_1.number + 1, header_2.number);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ws_subscribe_new_heads_sizes() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_ws_client(rollup.http_addr).await;
+    let mut subscription = client.subscribe_blocks().await?;
+    rollup.wait_for_next_blocks(1).await;
+
+    let header = subscription.recv().await?;
+    assert_eq!(header.number, 1);
+    assert_eq!(header.size.unwrap().to::<u64>(), 511);
 
     Ok(())
 }

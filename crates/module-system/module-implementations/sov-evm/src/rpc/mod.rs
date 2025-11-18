@@ -1,7 +1,7 @@
 use std::ops::DerefMut;
 
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_consensus::{Sealed, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::BlockNumberOrTag;
 use alloy_primitives::{Address, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
@@ -10,13 +10,14 @@ use alloy_rpc_types::{
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
+use reth_primitives::BlockBody;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
+use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
 
@@ -26,7 +27,7 @@ use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecover
 use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
-use crate::Evm;
+use crate::{Evm, SealedBlock};
 use maybe_archival_state::MaybeArchivalState;
 
 pub(crate) mod error;
@@ -42,8 +43,6 @@ pub enum PendingOrBlock {
     Pending,
     /// Block number.
     Number(u64),
-    /// Invalid block number.
-    Invalid(String),
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
@@ -64,36 +63,69 @@ where
         block: &MaybeSealedBlock,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<BlockTransactions<Transaction>> {
+    ) -> Result<BlockTransactions<Transaction>, EthApiError> {
         let tx_range = block.tx_range();
         let txs = match kind {
             BlockTransactionsKind::Full => {
                 let txs = tx_range
-                    .clone()
-                    .map(|idx| {
-                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
-                        Some(from_recovered_with_block_context(
+                    .into_iter()
+                    .enumerate()
+                    .map(|(pos, idx)| {
+                        let tx = self.tx(idx, state)?;
+                        Ok::<_, EthApiError>(from_recovered_with_block_context(
                             tx.into(),
-                            Some(block.hash().unwrap_or_default()),
+                            block.hash(),
                             block.number(),
-                            U256::from(idx - tx_range.start),
+                            pos as u64,
                         ))
                     })
-                    .collect::<Option<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Full(txs)
             }
             BlockTransactionsKind::Hashes => {
                 let hashes = tx_range
                     .into_iter()
                     .map(|idx| {
-                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
-                        Some(*tx.signed_transaction.hash())
+                        let tx = self.tx(idx, state)?;
+                        Ok::<_, EthApiError>(*tx.signed_transaction.hash())
                     })
-                    .collect::<Option<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Hashes(hashes)
             }
         };
-        Some(txs)
+        Ok(txs)
+    }
+
+    fn get_block_body(
+        &self,
+        block: &MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<BlockBody, EthApiError> {
+        let tx_range = block.tx_range();
+        let transactions = tx_range
+            .into_iter()
+            .map(|idx| Ok::<_, EthApiError>(self.tx(idx, state)?.signed_transaction))
+            .collect::<Result<_, _>>()?;
+        let body = BlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: None,
+        };
+        Ok(body)
+    }
+
+    /// Gets RPC Block Header including the size
+    pub fn get_rpc_header(
+        &self,
+        block: MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<Header, EthApiError> {
+        let block_size = alloy_consensus::Block::rlp_length_for(
+            block.header(),
+            &self.get_block_body(&block, state)?,
+        );
+        let header = Header::from_consensus(block.into(), None, Some(U256::from(block_size)));
+        Ok(header)
     }
 
     fn get_block(
@@ -101,20 +133,17 @@ where
         block_number: Option<String>,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<Block> {
-        let block = self.get_sealed_block_by_number(block_number, state)?;
-        let hash = block.hash().unwrap_or_default();
-
+    ) -> Result<Option<Block>, EthApiError> {
+        let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
+            return Ok(None);
+        };
         let transactions = self.get_block_transactions(&block, kind, state)?;
-        let header = Sealed::new_unchecked(block.header().clone(), hash);
-        let header = Header::from_consensus(header, None, None);
-
-        Some(Block {
-            header,
+        Ok(Some(Block {
+            header: self.get_rpc_header(block, state)?,
             transactions,
             uncles: vec![],
             withdrawals: None,
-        })
+        }))
     }
 
     fn get_contract_code(
@@ -137,7 +166,7 @@ where
         let tx_number = self.tx_index(&hash, state)?;
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let index = U256::from(tx_number - block.transactions_start());
+        let index = tx_number - block.transactions_start();
         let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
         Some(tx)
     }
@@ -166,13 +195,21 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>> {
-        let block = self.get_sealed_block_by_number(block_number, state)?;
-        let receipts = block
+    ) -> Result<
+        Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>,
+        EthApiError,
+    > {
+        let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
+            return Ok(None);
+        };
+        let Some(receipts) = block
             .tx_range()
             .map(|index| self.get_receipt_by_index(index, state))
-            .collect::<Option<Vec<_>>>()?;
-        Some(receipts)
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Ok(None);
+        };
+        Ok(Some(receipts))
     }
 
     fn call(
@@ -214,20 +251,19 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> PendingOrBlock {
+    ) -> Result<PendingOrBlock, EthApiError> {
         let block_number_str = block_number.unwrap_or_else(|| "latest".into());
 
-        match block_number_str.as_str() {
+        Ok(match block_number_str.as_str() {
             "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
             // We treat latest and pending the same to avoid foundry issues
             "latest" | "pending" => PendingOrBlock::Pending,
             number => {
-                let Ok(number) = u64::from_str_radix(number.trim_start_matches("0x"), 16) else {
-                    return PendingOrBlock::Invalid(block_number_str.to_string());
-                };
+                let number = u64::from_str_radix(number.trim_start_matches("0x"), 16)
+                    .map_err(|e| EthApiError::InvalidBlockNumber(block_number_str, e))?;
                 PendingOrBlock::Number(number)
             }
-        }
+        })
     }
 
     /// Converts BlockNumberOrTag into number.
@@ -252,26 +288,25 @@ where
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<MaybeSealedBlock> {
-        if let Some(block_number) = &block_number {
-            if block_number == "latest" {
-                tracing::warn!("Overwriting latest block with pending block");
-                return Some(MaybeSealedBlock::Pending(self.pending_block(state)));
-            }
-        }
-        let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+    ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
+        let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
 
-        match pending_or_block_nr {
+        Ok(match pending_or_block_nr {
             PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
             PendingOrBlock::Pending => {
                 let pending_block = self.pending_block(state);
                 Some(MaybeSealedBlock::Pending(pending_block))
             }
-            PendingOrBlock::Invalid(invalid) => {
-                tracing::error!(invalid, "Invalid block number");
-                None
-            }
-        }
+        })
+    }
+
+    /// Retrieves the latest block.
+    pub fn latest_block(&self, state: &mut ApiStateAccessor<S>) -> SealedBlock {
+        let block_numbers = self.block_numbers(state);
+        self.blocks
+            .get(block_numbers.end(), state)
+            .unwrap_infallible()
+            .expect("Block should exist as index is inside block_numbers")
     }
 
     /// Retrieves the pending block.
@@ -332,23 +367,12 @@ where
         block_number: Option<String>,
         state: &'a mut ApiStateAccessor<S>,
     ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
-        let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+        let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                if number == state.rollup_height_to_access().get()
-                    || (number == state.rollup_height_to_access().get() + 1)
-                {
-                    return Ok(MaybeArchivalState::Current(state));
-                }
-                let archival_state = state
-                    .get_archival_state(RollupHeight::new(number))
-                    .map_err(|_| EthApiError::UnknownBlockOrTxIndex)?;
+                let archival_state = state.get_archival_state(RollupHeight::new(number))?;
                 Ok(MaybeArchivalState::Archival(archival_state.into()))
-            }
-            PendingOrBlock::Invalid(invalid) => {
-                tracing::error!(invalid, "Invalid block number");
-                Err(EthApiError::UnknownBlockOrTxIndex)
             }
         }
     }
@@ -359,8 +383,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockEnv, EthApiError> {
         let maybe_blcok = self
-            .get_sealed_block_by_number(block_number, state)
-            .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
+            .get_sealed_block_by_number(block_number, state)?
+            .ok_or(EthApiError::UnknownBlock)?;
 
         Ok(match maybe_blcok {
             MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),

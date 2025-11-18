@@ -4,7 +4,6 @@ use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
-use sov_modules_api::da::Time;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
@@ -14,6 +13,7 @@ use sov_modules_api::{
 };
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::RollupHeight;
+use sov_rollup_interface::da::Time;
 #[cfg(feature = "native")]
 use sov_rpc_eth_types::EthApiError;
 use sov_state::User;
@@ -48,19 +48,14 @@ impl<S: Spec> Evm<S> {
         Ok(block)
     }
 
-    /// Gets tx by hash. Fails if prunned
+    /// Gets tx by idx. Fails if not found
     pub fn tx<Accessor: AccessoryStateReader>(
         &self,
-        hash: B256,
+        idx: u64,
         state: &mut Accessor,
     ) -> Result<TxSignedAndRecovered, EthApiError> {
-        let Some(idx) = self.tx_index(&hash, state) else {
-            return Err(EthApiError::PrunedHistoryUnavailable);
-        };
-        let Some(tx) = self.transaction(idx, state) else {
-            return Err(EthApiError::PrunedHistoryUnavailable);
-        };
-        Ok(tx)
+        self.transaction(idx, state)
+            .ok_or(EthApiError::UnknownTxIndex(idx))
     }
 
     /// Gets archival state before block `number`
