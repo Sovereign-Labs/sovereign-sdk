@@ -87,19 +87,19 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
         state: &ApiState<S, Self>,
         address: &HexHash,
         mut accessor: ApiStateAccessor<S>,
-    ) -> Result<Ism, Response> {
+    ) -> Result<Ism, Box<Response>> {
         let ism = state
             .recipients
             .ism(address, &mut accessor)
             .map_err(errors::internal_server_error_response_500)?
-            .ok_or_else(|| ErrorObject {
+            .ok_or_else(|| Box::new(ErrorObject {
                 status: StatusCode::NOT_FOUND,
                 message: "Failed to retrieve Recipient ISM".to_string(),
                 details: json_obj!({
                     "error": format!("Either the recipient doesn't exist or no ISM is set for the recipient"),
                     "recipient": address.to_string(),
                 })
-            }.into_response())?;
+            }.into_response()))?;
         Ok(ism)
     }
 
@@ -121,7 +121,7 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
         Path(address): Path<HexHash>,
         accessor: ApiStateAccessor<S>,
     ) -> Result<Response, Response> {
-        let ism = Self::get_ism(&state, &address, accessor)?;
+        let ism = Self::get_ism(&state, &address, accessor).map_err(|e| *e)?;
         let ism_kind = ism.ism_kind() as u8;
         Ok(Json(json!({"ism_kind": ism_kind})).into_response())
     }
@@ -131,7 +131,7 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
         Path(address): Path<HexHash>,
         accessor: ApiStateAccessor<S>,
     ) -> ApiResult<ValidatorsAndThreshold> {
-        let ism = Self::get_ism(&state, &address, accessor)?;
+        let ism = Self::get_ism(&state, &address, accessor).map_err(|e| *e)?;
         let Ism::MessageIdMultisig {
             validators,
             threshold,
