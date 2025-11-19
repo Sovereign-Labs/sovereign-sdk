@@ -3,10 +3,11 @@ use axum::routing::get;
 use axum::Json;
 use serde::{Deserialize as _, Serialize};
 use sov_bank::{config_gas_token_id, Amount};
+use sov_modules_api::prelude::axum::http::StatusCode;
 use sov_modules_api::prelude::serde_json::json;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, UnwrapInfallible};
-use sov_modules_api::rest::utils::{errors, ApiResult, Path, Query};
+use sov_modules_api::rest::utils::{errors, json_obj, ApiResult, ErrorObject, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, CredentialId, HexHash, Spec};
 
@@ -82,6 +83,26 @@ impl<S: Spec, R: Recipient<S>> HasCustomRestApi for Mailbox<S, R> {
 }
 
 impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
+    fn get_ism(
+        state: &ApiState<S, Self>,
+        address: &HexHash,
+        mut accessor: ApiStateAccessor<S>,
+    ) -> Result<Ism, Box<Response>> {
+        let ism = state
+            .recipients
+            .ism(address, &mut accessor)
+            .map_err(errors::internal_server_error_response_500)?
+            .ok_or_else(|| Box::new(ErrorObject {
+                status: StatusCode::NOT_FOUND,
+                message: "Failed to retrieve Recipient ISM".to_string(),
+                details: json_obj!({
+                    "error": format!("Either the recipient doesn't exist or no ISM is set for the recipient"),
+                    "recipient": address.to_string(),
+                })
+            }.into_response()))?;
+        Ok(ism)
+    }
+
     async fn get_nonce(
         state: ApiState<S, Self>,
         mut accessor: ApiStateAccessor<S>,
@@ -98,13 +119,9 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
     async fn get_recipient_ism(
         state: ApiState<S, Self>,
         Path(address): Path<HexHash>,
-        mut accessor: ApiStateAccessor<S>,
+        accessor: ApiStateAccessor<S>,
     ) -> Result<Response, Response> {
-        let ism = state
-            .recipients
-            .ism(&address, &mut accessor)
-            .map_err(|_| errors::not_found_404("Mailbox", address))?
-            .ok_or_else(|| errors::not_found_404("Mailbox", address))?;
+        let ism = Self::get_ism(&state, &address, accessor).map_err(|e| *e)?;
         let ism_kind = ism.ism_kind() as u8;
         Ok(Json(json!({"ism_kind": ism_kind})).into_response())
     }
@@ -112,14 +129,9 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
     async fn get_recipient_ism_validators_and_threshold(
         state: ApiState<S, Self>,
         Path(address): Path<HexHash>,
-        mut accessor: ApiStateAccessor<S>,
+        accessor: ApiStateAccessor<S>,
     ) -> ApiResult<ValidatorsAndThreshold> {
-        let ism = state
-            .recipients
-            .ism(&address, &mut accessor)
-            .map_err(|_| errors::not_found_404("Mailbox", address))?
-            .ok_or_else(|| errors::not_found_404("Mailbox", address))?;
-
+        let ism = Self::get_ism(&state, &address, accessor).map_err(|e| *e)?;
         let Ism::MessageIdMultisig {
             validators,
             threshold,

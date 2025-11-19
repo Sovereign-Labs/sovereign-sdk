@@ -31,7 +31,6 @@ futures = { workspace = true }
 hex = { workspace = true }
 indoc = "2"
 reqwest = { workspace = true }
-serde_json = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
 testcontainers = { workspace = true }
@@ -53,6 +52,7 @@ derive_more = { workspace = true }
 schemars = { workspace = true }
 k256 = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 sha3 = { workspace = true }
 ruint = { workspace = true }
@@ -63,25 +63,25 @@ tracing = { workspace = true }
 default = []
 evm = ["sov-address/evm"]
 arbitrary = [
-	"dep:proptest-derive",
-	"dep:arbitrary",
-	"dep:proptest",
-	"sov-address/arbitrary",
-	"sov-bank/arbitrary",
-	"sov-hyperlane-integration/arbitrary",
-	"sov-modules-api/arbitrary",
-	"sov-state/arbitrary",
-	"sov-test-utils/arbitrary",
-	"ruint/arbitrary",
-	"sov-mock-da/arbitrary",
+  "dep:proptest-derive",
+  "dep:arbitrary",
+  "dep:proptest",
+  "sov-address/arbitrary",
+  "sov-bank/arbitrary",
+  "sov-hyperlane-integration/arbitrary",
+  "sov-modules-api/arbitrary",
+  "sov-state/arbitrary",
+  "sov-test-utils/arbitrary",
+  "ruint/arbitrary",
+  "sov-mock-da/arbitrary",
 ]
 test-utils = ["arbitrary"]
 native = [
-	"sov-modules-api/native",
-	"sov-value-setter/native",
-	"sov-state/native",
-	"sov-address/native",
-	"sov-bank/native",
-	"sov-hyperlane-integration/native",
-	"sov-mock-da/native",
+  "sov-modules-api/native",
+  "sov-value-setter/native",
+  "sov-state/native",
+  "sov-address/native",
+  "sov-bank/native",
+  "sov-hyperlane-integration/native",
+  "sov-mock-da/native",
 ]
