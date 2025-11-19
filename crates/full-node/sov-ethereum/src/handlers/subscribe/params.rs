@@ -47,10 +47,13 @@ pub fn validate(kind: SubscriptionKind, params: Params) -> Result<SubscriptionRe
         SubscriptionKind::Logs => {
             let filter = match params {
                 Params::Logs(filter) => {
-                    if filter.block_option == FilterBlockOption::default() || filter.block_option == (FilterBlockOption::Range {
-                        from_block: Some(BlockNumberOrTag::Pending), 
-                        to_block: Some(BlockNumberOrTag::Pending)
-                    }) {
+                    if filter.block_option == FilterBlockOption::default()
+                        || filter.block_option
+                            == (FilterBlockOption::Range {
+                                from_block: Some(BlockNumberOrTag::Pending),
+                                to_block: Some(BlockNumberOrTag::Pending),
+                            })
+                    {
                         filter
                     } else {
                         return Err(Error::BlockOptionParam);
