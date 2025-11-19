@@ -7,7 +7,7 @@ use sov_modules_api::prelude::axum::http::StatusCode;
 use sov_modules_api::prelude::serde_json::json;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, UnwrapInfallible};
-use sov_modules_api::rest::utils::{errors, json_obj, ApiResult, Path, Query, ErrorObject};
+use sov_modules_api::rest::utils::{errors, json_obj, ApiResult, ErrorObject, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, CredentialId, HexHash, Spec};
 
