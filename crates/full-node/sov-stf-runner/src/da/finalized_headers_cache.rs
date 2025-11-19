@@ -41,6 +41,7 @@ use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// Maximum number of recent headers to cache.
@@ -73,7 +74,7 @@ pub struct DaServiceWithCachedFinalizedHeaders<Da: DaService> {
     /// Receiver for the last finalized header, updated by background task
     last_finalized: tokio::sync::watch::Receiver<<Da::Spec as DaSpec>::BlockHeader>,
     /// Cache of recently finalized headers, keyed by height
-    recent_headers: Arc<std::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
+    headers_cache: Arc<FinalizedDaHeadersCacheContainer<Da>>,
     /// Handle to the background polling task for monitoring its status
     finalized_headers_task: Arc<tokio::task::JoinHandle<()>>,
 }
@@ -93,9 +94,9 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
         let (finalized_sender, finalized_receiver) =
             tokio::sync::watch::channel(last_finalized_header);
 
-        let recent_headers = Arc::new(std::sync::RwLock::new(BTreeMap::new()));
+        let headers_cache = Arc::new(FinalizedDaHeadersCacheContainer::new());
 
-        let recent_headers_for_writer = recent_headers.clone();
+        let recent_headers_for_writer = headers_cache.clone();
         let da_service_for_finalized_fetcher = da_service.clone();
 
         let finalized_header_handler = tokio::task::spawn(async move {
@@ -112,7 +113,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
         Ok(Self {
             da_service,
             last_finalized: finalized_receiver,
-            recent_headers,
+            headers_cache,
             finalized_headers_task: Arc::new(finalized_header_handler),
         })
     }
@@ -143,10 +144,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
         &self,
         height: u64,
     ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
-        let cached_header = {
-            let cache = self.recent_headers.read().expect(RECENT_HEADERS_POISONED);
-            cache.get(&height).cloned()
-        };
+        let cached_header = self.headers_cache.get_block_header_at(height);
         if let Some(cached_header) = cached_header {
             return Ok(cached_header);
         }
@@ -161,11 +159,48 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
     }
 }
 
+#[derive(Debug)]
+struct FinalizedDaHeadersCacheContainer<Da: DaService> {
+    recent_headers: std::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>,
+    max_size: AtomicUsize,
+}
+
+impl<Da: DaService> FinalizedDaHeadersCacheContainer<Da> {
+    fn new() -> Self {
+        Self {
+            recent_headers: Default::default(),
+            max_size: AtomicUsize::new(MAX_RECENT_HEADERS),
+        }
+    }
+
+    fn insert_new_header(&self, finalized_header: <Da::Spec as DaSpec>::BlockHeader) {
+        tracing::trace!(?finalized_header, "Inserting finalized header into cache");
+        let recent_header_read = self.recent_headers.read().expect(RECENT_HEADERS_POISONED);
+        let height = finalized_header.height();
+        if !recent_header_read.contains_key(&height) {
+            drop(recent_header_read);
+            let mut recent_header_write =
+                self.recent_headers.write().expect(RECENT_HEADERS_POISONED);
+            recent_header_write.insert(height, finalized_header);
+            if recent_header_write.len() > self.max_size.load(Ordering::Relaxed) {
+                let evicted = recent_header_write.pop_first();
+                tracing::trace!(?evicted, "Evicting older header");
+            }
+            tracing::trace!(finalized_height = %height, "Updated cached recent headers");
+        }
+    }
+
+    fn get_block_header_at(&self, height: u64) -> Option<<Da::Spec as DaSpec>::BlockHeader> {
+        let cache = self.recent_headers.read().expect(RECENT_HEADERS_POISONED);
+        cache.get(&height).cloned()
+    }
+}
+
 // TODO: Switch to subscription when it is brought back
 async fn background_header_fetch_task<Da: DaService>(
     da_service: Arc<Da>,
     finalized_sender: tokio::sync::watch::Sender<<Da::Spec as DaSpec>::BlockHeader>,
-    recent_headers: Arc<std::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>>,
+    recent_headers: Arc<FinalizedDaHeadersCacheContainer<Da>>,
     polling_interval: std::time::Duration,
     shutdown_rx: tokio::sync::watch::Receiver<()>,
 ) {
@@ -189,30 +224,11 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        let height = finalized_header.height();
                         if finalized_sender.send(finalized_header.clone()).is_err() {
-                            tracing::debug!(
-                                "All DA header provider receivers dropped, shutting down"
-                            );
+                            tracing::info!("All DA header receivers dropped, shutting down");
                             break;
                         }
-                        tracing::trace!(finalized_height = %height, "Updated cached finalized header");
-                        {
-                            let recent_header_read =
-                                recent_headers.read().expect(RECENT_HEADERS_POISONED);
-                            if !recent_header_read.contains_key(&height) {
-                                drop(recent_header_read);
-                                let mut recent_header_write =
-                                    recent_headers.write().expect(RECENT_HEADERS_POISONED);
-                                recent_header_write.insert(height, finalized_header);
-                                if recent_header_write.len() > MAX_RECENT_HEADERS {
-                                    let evicted = recent_header_write.pop_first();
-                                    tracing::trace!(?evicted, "Evicting older header");
-                                }
-                                tracing::trace!(finalized_height = %height, "Updated cached recent headers");
-                            }
-                        }
-                        tracing::trace!(finalized_height = %height, "Updated cache of recent headers");
+                        recent_headers.insert_new_header(finalized_header);
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
@@ -319,6 +335,7 @@ mod tests {
 
         // Cache should have at most MAX_RECENT_HEADERS entries
         let cache_size = cache
+            .headers_cache
             .recent_headers
             .read()
             .expect(RECENT_HEADERS_POISONED)
