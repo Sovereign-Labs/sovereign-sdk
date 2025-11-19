@@ -6,6 +6,9 @@ mod tests;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::da::DaServiceWithCachedFinalizedHeaders;
+use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
+use crate::query_state_update_info;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
@@ -21,9 +24,6 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
-
-use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
-use crate::query_state_update_info;
 
 const MAX_REORG_FINDING_ATTEMPTS: u8 = 30;
 
@@ -97,6 +97,7 @@ where
     is_initialized: bool,
     da_sync_state: Arc<DaSyncState>,
     da_total_timeout: std::time::Duration,
+    finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
 }
 
 impl<StateRoot, Witness, Sm, Da> StateManager<StateRoot, Witness, Sm, Da>
@@ -121,6 +122,7 @@ where
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
         da_total_timeout: std::time::Duration,
+        finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             storage_manager,
@@ -134,6 +136,7 @@ where
             is_initialized: false,
             da_sync_state,
             da_total_timeout,
+            finalized_headers_provider,
         })
     }
 
@@ -256,7 +259,6 @@ where
         T: TxReceiptContents,
     >(
         &mut self,
-        da_service: &Da,
         da_height_at_genesis: u64,
         stf_changes: Sm::StfChangeSet,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
@@ -316,7 +318,7 @@ where
         // ----
 
         let processing_finalized_transitions_start = std::time::Instant::now();
-        let finalized_transitions = self.process_finalized_state_transitions(da_service).await?;
+        let finalized_transitions = self.process_finalized_state_transitions().await?;
         let processing_finalized_transitions_time =
             processing_finalized_transitions_start.elapsed();
         tracing::trace!(
@@ -766,7 +768,7 @@ where
                     .expect("end of chain");
                 let (this_candidate, this_head) = tokio::try_join!(
                     // Need fetch re-org aware if the chain rewinds here.
-                    crate::da_utils::fetch_block_reorg_aware(
+                    crate::da::fetch_block_reorg_aware(
                         da_service,
                         self.da_sync_state.as_ref(),
                         next_candidate_height,
@@ -797,11 +799,10 @@ where
     /// and relevant LedgerDb changes.
     async fn process_finalized_state_transitions(
         &mut self,
-        da_service: &Da,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
-        // DaService call # 1
-        let mut da_service_calls = 1;
-        let last_finalized_header = da_service.get_last_finalized_block_header().await?;
+        let last_finalized_header = self
+            .finalized_headers_provider
+            .get_last_finalized_block_header()?;
         let earliest_seen_transition = self
             .get_earliest_seen_height()
             .expect("Should be called after at least single transition added");
@@ -816,9 +817,7 @@ where
 
         let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_transition
         {
-            // DaService call # 2
-            da_service_calls += 1;
-            da_service
+            self.finalized_headers_provider
                 .get_block_header_at(highest_seen_transition)
                 .await?
                 .clone()
@@ -903,8 +902,10 @@ where
         );
         for height in range {
             // DaService call # 3 + n
-            let finalized_at_that_height = da_service.get_block_header_at(height).await?;
-            da_service_calls += 1;
+            let finalized_at_that_height = self
+                .finalized_headers_provider
+                .get_block_header_at(height)
+                .await?;
 
             tracing::trace!(height, "Going to extract finalized transitions from height");
             let blocks_on_height = self
@@ -938,7 +939,6 @@ where
         finalized_transitions.reverse();
         tracing::trace!(
             finalized_transitions = finalized_transitions.len(),
-            ?da_service_calls,
             "Completed check for finalized transitions"
         );
         Ok(finalized_transitions)

@@ -1,5 +1,11 @@
 //! Helper utilities for interacting with the DA layer.
 
+mod bulk_finalized_blocks_fetcher;
+mod finalized_headers_cache;
+
+pub use bulk_finalized_blocks_fetcher::FinalizedBlocksBulkFetcher;
+pub use finalized_headers_cache::DaServiceWithCachedFinalizedHeaders;
+
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 

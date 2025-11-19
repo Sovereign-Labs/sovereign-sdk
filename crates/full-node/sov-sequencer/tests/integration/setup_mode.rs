@@ -180,9 +180,10 @@ where
     )
     .await;
 
+    test_rollup.produce_enough_finalized_slots().await;
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    let da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     // Send a transaction with a non-zero fee. Should fail, because we have no balance.

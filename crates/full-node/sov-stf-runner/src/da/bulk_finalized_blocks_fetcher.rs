@@ -1,18 +1,82 @@
-//! Utilities for parallel fetching of the finalized blocks.
-
-use std::pin::Pin;
-use std::sync::Arc;
-
-use futures::stream::FuturesOrdered;
-use futures::{Stream, StreamExt};
+//! Parallel bulk fetcher for finalized DA blocks to optimize sync performance.
+//!
+//! This module provides [`FinalizedBlocksBulkFetcher`], which pre-fetches finalized blocks
+//! in parallel during node synchronization, significantly improving sync speed.
+//!
+//! # Architecture
+//!
+//! The fetcher consists of two main components:
+//!
+//! 1. **FinalizedBlocksBulkFetcher**: The public interface that serves blocks from a channel.
+//!    It returns pre-fetched blocks for heights in the range `[start_height, last_finalized_height)`,
+//!    and falls back to direct DA service calls for blocks outside this range.
+//!
+//! 2. **BlockFetcher**: A background task that fetches blocks in parallel batches and pushes
+//!    them into a channel for consumption by the main sync loop.
+//!
+//! # Performance Benefits
+//!
+//! - **Parallel Fetching**: Fetches multiple blocks concurrently (configurable via `bulk_size`)
+//! - **Pipelined Processing**: Node can process blocks while the next batch is being fetched
+//! - **Backpressure Handling**: Uses channel reservation to prevent overwhelming the consumer
+//! - **Ordered Delivery**: Maintains block ordering despite parallel fetching via `FuturesOrdered`
+//!
+//! # Usage
+//!
+//! ```ignore
+//! let (mut fetcher, handle) = FinalizedBlocksBulkFetcher::new(
+//!     da_service,
+//!     start_height,      // First height to fetch
+//!     bulk_size,         // Number of concurrent requests
+//!     channel_capacity,  // Size of the pre-fetch buffer
+//!     shutdown_receiver,
+//! ).await?;
+//!
+//! // Get blocks - returns pre-fetched blocks for the configured range
+//! while height < last_finalized_height {
+//!     let block = fetcher.get_block_at(height).await?;
+//!     process_block(block);
+//!     height += 1;
+//! }
+//!
+//! // Clean up background task
+//! handle.await??;
+//! ```
+//!
+//! # Shutdown Behavior
+//!
+//! The background fetcher task respects shutdown signals and will cleanly terminate
+//! when the `shutdown_receiver` is triggered, ensuring no orphaned tasks remain.
+use futures::Stream;
+use futures_util::stream::FuturesOrdered;
+use futures_util::StreamExt;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 use tracing::{info_span, Instrument as _};
 
-/// Service that pre-fetcher blocks from given start height up to last finalized height at the moment of construction.
-/// After that it proxies all requests to underlying [`DaService`].
+/// Pre-fetches finalized blocks in parallel to accelerate node synchronization.
+///
+/// This service fetches blocks in the range `[start_height, last_finalized_height)` in parallel
+/// batches and buffers them in a channel. Requests within this range are served from the buffer,
+/// while requests outside the range fall back to the underlying [`DaService`].
+///
+/// # Lifecycle
+///
+/// 1. **Initialization**: Determines the range of blocks to pre-fetch based on `start_height`
+///    and the current last finalized height.
+/// 2. **Background Fetching**: A background task fetches blocks in parallel batches.
+/// 3. **Serving Blocks**: The `get_block_at` method serves pre-fetched blocks from the channel
+///    or falls back to direct DA calls.
+/// 4. **Completion**: Once all blocks in the range are fetched, the background task terminates.
+///
+/// # Thread Safety
+///
+/// This struct is not `Clone` or `Sync` because it owns the receiving end of the channel.
+/// Only one consumer should exist per fetcher instance.
 pub struct FinalizedBlocksBulkFetcher<Da: DaService> {
     da_service: Arc<Da>,
     blocks: Receiver<Da::FilteredBlock>,
@@ -81,6 +145,8 @@ where
         tracing::trace!(height, "getting block");
         // Expects pre-fetched blocks in range [start_height, last_finalized_height) (exclusive)
         if height >= self.last_finalized_height || height < self.start_height {
+            // TODO: followup: Do reorg aware call here.
+            // Matches existing behaviour, but duplicates logic between runner and this service
             tracing::trace!(
                 height,
                 start_height = self.start_height,
@@ -107,8 +173,8 @@ where
             }
             None
         }
-        .instrument(span)
-        .await;
+            .instrument(span)
+            .await;
 
         if let Some(block) = block_opt {
             tracing::trace!("Return block fetched from channel");
@@ -123,7 +189,7 @@ where
     }
 }
 
-struct BlockFetcher<Da: DaService> {
+pub(crate) struct BlockFetcher<Da: DaService> {
     da_service: Arc<Da>,
     blocks: tokio::sync::mpsc::Sender<Da::FilteredBlock>,
     start_height: u64,
@@ -136,7 +202,7 @@ impl<Da> BlockFetcher<Da>
 where
     Da: DaService,
 {
-    fn new(
+    pub(crate) fn new(
         da_service: Arc<Da>,
         blocks: tokio::sync::mpsc::Sender<Da::FilteredBlock>,
         start_height: u64,
@@ -174,7 +240,7 @@ where
         Box::pin(futures)
     }
 
-    async fn run(
+    pub(crate) async fn run(
         mut self,
         mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<()> {
@@ -289,7 +355,7 @@ where
             last_finalized_at_start = self.last_finalized_height,
             ?first_fetched_height,
             ?last_fetched_height,
-            commpletion_time = ?start_time.elapsed(),
+            completion_time = ?start_time.elapsed(),
             "BlockFetcher synced all finalized headers"
         );
 
@@ -308,7 +374,7 @@ where
     match future_or_shutdown(fut, shutdown_receiver).await {
         FutureOrShutdownOutput::Output(res) => Some(res),
         FutureOrShutdownOutput::Shutdown => {
-            tracing::debug!("Shutting down block fetcher at {}", label);
+            tracing::debug!(%label, "Shutting down block fetcher");
             None
         }
     }

@@ -31,7 +31,6 @@ use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
-use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
@@ -41,6 +40,7 @@ use sov_stf_runner::{
     initialize_state, query_state_update_info, CorsConfiguration, RollupConfig,
     StateTransitionRunner,
 };
+use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
@@ -335,6 +335,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .await;
         let da_service_handle = da_service.take_background_join_handle().await;
         let da_service = Arc::new(da_service);
+
+        let da_polling_interval =
+            std::time::Duration::from_millis(rollup_config.runner.da_polling_interval_ms);
+        let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            secondary_shutdown_receiver.clone(),
+            da_polling_interval,
+        )
+        .await?;
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
         let mut storage_manager = self.create_storage_manager(&rollup_config)?;
@@ -414,7 +423,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             genesis_slot_number,
             stop_at_rollup_height,
             &ledger_db,
-            da_service.as_ref(),
+            &da_service_with_cache,
         )
         .await?;
 
@@ -471,6 +480,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
+            da_service_with_cache,
         )
         .await?;
 

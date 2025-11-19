@@ -14,9 +14,11 @@ async fn test_replica_start_stop() {
         }
     };
 
-    let (_da_service, da_shutdown, addr) = create_da_service_periodic().await;
-    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+    let (da_service, da_shutdown, addr) = create_da_service_periodic().await;
+    // Ideal lag and stuff
+    da_service.wait_for_height(10).await.unwrap();
 
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
     let test_rollup = start_rollup(false, addr, postgres).await;
 

@@ -30,7 +30,6 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::{DefaultStorageSpec, NativeStorage, ProverStorage};
-use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::processes::{
     start_zk_workflow_in_background, ParallelProverService, RollupProverConfigDiscriminants,
 };
@@ -38,8 +37,10 @@ use sov_stf_runner::{
     initialize_state, query_state_update_info, HttpServerConfig, ProofManagerConfig, RollupConfig,
     RunnerConfig, StateTransitionRunner,
 };
+use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::{
     TestSpec, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MOCK_DA_POLLING_INTERVAL,
 };
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::watch;
@@ -159,6 +160,7 @@ pub async fn bootstrap_state_update_info(
     query_state_update_info(&ledger_db, stf_storage, da_sync_state).await
 }
 
+// TODO: extract similarities into helper for rollup blueprint, a lot of duplication
 pub async fn initialize_runner(
     da_service: Arc<MockDaService>,
     path: &std::path::Path,
@@ -176,8 +178,16 @@ pub async fn initialize_runner(
     let mut tasks = JoinSet::new();
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
     shutdown_receiver.mark_unchanged();
-    let receiver_for_metrics = shutdown_receiver.clone();
 
+    let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+        da_service.clone(),
+        shutdown_receiver.clone(),
+        TEST_MOCK_DA_POLLING_INTERVAL,
+    )
+    .await
+    .unwrap();
+
+    let receiver_for_metrics = shutdown_receiver.clone();
     let monitoring_config = rollup_config.monitoring.clone();
     tasks.spawn(async move {
         if let Some(handle) =
@@ -197,7 +207,7 @@ pub async fn initialize_runner(
         .unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
 
-    let da_sync_state = make_da_sync_state(0, None, &ledger_db, da_service.as_ref())
+    let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache)
         .await
         .unwrap();
     let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
@@ -247,6 +257,7 @@ pub async fn initialize_runner(
         None,
         None,
         da_sync_state,
+        da_service_with_cache,
     )
     .await
     .unwrap();
@@ -377,12 +388,11 @@ where
 
 fn get_da_polling_interval_ms(da_config: &MockDaConfig) -> u64 {
     match da_config.block_producing {
-        BlockProducingConfig::Periodic { block_time_ms } =>
-        // 10 times per block, but 10 ms in the worst case
-        {
+        BlockProducingConfig::Periodic { block_time_ms } => {
+            // 10 times per block, but 10 ms in the worst case
             block_time_ms.checked_div(5).unwrap_or(10)
         }
-        _ => 150,
+        _ => TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
     }
 }
 

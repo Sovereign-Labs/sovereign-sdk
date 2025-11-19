@@ -30,12 +30,12 @@ testcontainers = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 num_cpus = { workspace = true }
-
+tokio-stream = { workspace = true }
 
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
 alloy-contract = { workspace = true }
-alloy-sol-types = { workspace = true , features = ["json"] }
+alloy-sol-types = { workspace = true, features = ["json"] }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
 alloy = { workspace = true }

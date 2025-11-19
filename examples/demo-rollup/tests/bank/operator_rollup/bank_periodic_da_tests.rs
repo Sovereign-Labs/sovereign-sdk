@@ -101,12 +101,12 @@ async fn send_test_bank_txs(
 
     let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
     let mut processed_slot = slots_subscription.next().await.unwrap()?;
-    while processed_slot.number < slot_number {
+    while processed_slot.number <= slot_number {
         processed_slot = slots_subscription.next().await.unwrap()?;
     }
 
     // Will cause a batch to be produced.
-    da_service.produce_n_blocks_now(1).await.unwrap();
+    da_service.produce_n_blocks_now(1).await?;
 
     assert_slot_finality(client, slot_number, test_case.expected_head_finality()).await;
     assert_balance(client, initial_balance, token_id, user_address, None).await?;
@@ -116,7 +116,8 @@ async fn send_test_bank_txs(
         let tx = build_transfer_token_tx(&key, token_id, recipient_address, 10, nonce);
 
         let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
-        while processed_slot.number < slot_number {
+        // Wait a litle more to make sure finality is correct
+        while processed_slot.number <= slot_number {
             processed_slot = slots_subscription.next().await.unwrap()?;
         }
 
