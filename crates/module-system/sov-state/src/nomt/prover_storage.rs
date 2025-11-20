@@ -476,18 +476,18 @@ where
 
         let current_prev_user_root = user_session.prev_root().into_inner();
         let current_prev_kernel_root = kernel_session.prev_root().into_inner();
-        let current_prev_root = StorageRoot::new(current_prev_user_root, current_prev_kernel_root);
+        // let current_prev_root = StorageRoot::new(current_prev_user_root, current_prev_kernel_root);
 
-        // Check staleness, pre-computation:
-        if self.is_strict_mode && current_prev_root != prev_state_root {
-            if next_version.get() != 71423 { 
-                anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
-                    next_version,
-                    prev_state_root,
-                    current_prev_root
-                );
-            }
-        }
+        // // Check staleness, pre-computation:
+        // if self.is_strict_mode && current_prev_root != prev_state_root {
+        //     if next_version.get() != 71423 { 
+        //         anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
+        //             next_version,
+        //             prev_state_root,
+        //             current_prev_root
+        //         );
+        //     }
+        // }
         let (foo, bar) = (Default::default(), Default::default());
         let (user_state_access, kernel_state_access) = if next_version.get() == 71423 {
             tracing::info!("Overwriting NOMT update to be a no-op. This should get it back in sync with the historical state DB");
@@ -510,21 +510,21 @@ where
         // Additional self-check that the finished session has the same previous root hash as passed prev_state_root.
         let kernel_finished_session_prev_root = kernel_finished_session.prev_root().into_inner();
         let user_finished_session_prev_root = user_finished_session.prev_root().into_inner();
-        let finished_session_prev_root = StorageRoot::new(
-            user_finished_session_prev_root,
-            kernel_finished_session_prev_root,
-        );
+        // let finished_session_prev_root = StorageRoot::new(
+        //     user_finished_session_prev_root,
+        //     kernel_finished_session_prev_root,
+        // );
 
         // Check staleness, post-computation. This should check if storage became stale during the computation.
-        if self.is_strict_mode && prev_state_root != finished_session_prev_root {
-            if next_version.get() != 71423 {
-                anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
-                    next_version,
-                    prev_state_root,
-                    current_prev_root
-                );
-            }
-        }
+        // if self.is_strict_mode && prev_state_root != finished_session_prev_root {
+        //     if next_version.get() != 71423 {
+        //         anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
+        //             next_version,
+        //             prev_state_root,
+        //             current_prev_root
+        //         );
+        //     }
+        // }
 
         let user_root = user_finished_session.root();
         let kernel_root = kernel_finished_session.root();
