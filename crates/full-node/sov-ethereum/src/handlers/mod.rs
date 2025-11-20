@@ -1,10 +1,16 @@
 mod get_logs;
 mod subscribe;
 #[cfg(feature = "local")]
+use alloy_eips::Encodable2718;
+#[cfg(feature = "local")]
+use alloy_primitives::Address;
+#[cfg(feature = "local")]
 use alloy_primitives::TxKind;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
+#[cfg(feature = "local")]
+use alloy_rpc_types::TransactionRequest;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
@@ -17,9 +23,13 @@ use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
+#[cfg(feature = "local")]
+use sov_modules_api::macros::config_value;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
+#[cfg(feature = "local")]
+use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::marker::PhantomData;
@@ -31,119 +41,6 @@ use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
-
-#[cfg(feature = "local")]
-pub(crate) mod signer {
-    use super::*;
-    use alloy_eips::Encodable2718;
-    use alloy_primitives::Address;
-    use alloy_rpc_types::TransactionRequest;
-    use sov_modules_api::macros::config_value;
-    use sov_rpc_eth_types::EthApiError;
-
-    pub async fn eth_accounts<S, Seq>(
-        _: JRpcParams<'static>,
-        ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
-    ) -> Result<Vec<Address>, ErrorObjectOwned>
-    where
-        S: Spec,
-        Seq: Sequencer<Spec = S>,
-        S::Address: FromVmAddress<EthereumAddress>,
-        Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-    {
-        Ok(ethereum.eth_signer.addresses())
-    }
-
-    pub async fn eth_send_transaction<S, Seq>(
-        parameters: JRpcParams<'static>,
-        ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
-    ) -> Result<B256, ErrorObjectOwned>
-    where
-        S: Spec,
-        Seq: Sequencer<Spec = S>,
-        S::Address: FromVmAddress<EthereumAddress>,
-        Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-    {
-        let mut transaction_request: TransactionRequest = parameters.one()?;
-
-        let evm = Evm::<S>::default();
-
-        // get from, return error if none
-        let from = transaction_request
-            .from
-            .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
-
-        // return error if not in signers
-        if !ethereum.eth_signer.addresses().contains(&from) {
-            return Err(to_jsonrpsee_error_object(
-                "From address not in signers",
-                ETH_RPC_ERROR,
-            ));
-        }
-
-        let raw_evm_tx = {
-            let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
-
-            // set nonce if none
-            transaction_request.nonce.get_or_insert_with(|| {
-                evm.get_transaction_count(from, None, &mut state)
-                    .unwrap_or_default()
-                    .to::<u64>()
-            });
-
-            let chain_id = evm
-                .chain_id(&mut state)
-                .expect("Failed to get chain id")
-                .map(|id| id.to())
-                .unwrap_or(config_value!("CHAIN_ID"));
-            transaction_request.chain_id = Some(chain_id);
-
-            let estimated_gas = evm.eth_estimate_gas(
-                transaction_request.clone(),
-                Some("pending".to_string()),
-                &mut state,
-            )?;
-            transaction_request.gas = Some(estimated_gas.to::<u64>());
-
-            // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
-            // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,
-            // but alloy's `build_typed_tx()` requires `Some(TxKind::Create)`
-            if transaction_request.to.is_none() {
-                transaction_request.to = Some(TxKind::Create);
-            }
-
-            let transaction = transaction_request
-                .build_typed_tx()
-                .map_err(|_| EthApiError::TransactionConversionError)?;
-
-            // sign transaction
-            let signed_tx = ethereum
-                .eth_signer
-                .sign_transaction(transaction, &from)
-                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
-            RlpEvmTransaction {
-                rlp: signed_tx.encoded_2718(),
-            }
-        };
-        let (tx_hash, raw_message) = ethereum
-            .make_raw_tx(raw_evm_tx)
-            .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
-        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-
-        ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
-            to_jsonrpsee_error_object(
-                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-                ETH_RPC_ERROR,
-            )
-        })?;
-
-        Ok(tx_hash)
-    }
-}
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
@@ -226,6 +123,99 @@ where
             to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
         })?;
         Ok(())
+    }
+
+    #[cfg(feature = "local")]
+    pub async fn eth_accounts(
+        _: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<Vec<Address>, ErrorObjectOwned> {
+        Ok(ethereum.eth_signer.addresses())
+    }
+
+    #[cfg(feature = "local")]
+    pub async fn eth_send_transaction(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<B256, ErrorObjectOwned> {
+        let mut transaction_request: TransactionRequest = parameters.one()?;
+
+        let evm = Evm::<S>::default();
+
+        // get from, return error if none
+        let from = transaction_request
+            .from
+            .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
+
+        // return error if not in signers
+        if !ethereum.eth_signer.addresses().contains(&from) {
+            return Err(to_jsonrpsee_error_object(
+                "From address not in signers",
+                ETH_RPC_ERROR,
+            ));
+        }
+
+        let raw_evm_tx = {
+            let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
+
+            // set nonce if none
+            transaction_request.nonce.get_or_insert_with(|| {
+                evm.get_transaction_count(from, None, &mut state)
+                    .unwrap_or_default()
+                    .to::<u64>()
+            });
+
+            let chain_id = evm
+                .chain_id(&mut state)
+                .expect("Failed to get chain id")
+                .map(|id| id.to())
+                .unwrap_or(config_value!("CHAIN_ID"));
+            transaction_request.chain_id = Some(chain_id);
+
+            let estimated_gas = evm.eth_estimate_gas(
+                transaction_request.clone(),
+                Some("pending".to_string()),
+                &mut state,
+            )?;
+            transaction_request.gas = Some(estimated_gas.to::<u64>());
+
+            // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
+            // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,
+            // but alloy's `build_typed_tx()` requires `Some(TxKind::Create)`
+            if transaction_request.to.is_none() {
+                transaction_request.to = Some(TxKind::Create);
+            }
+
+            let transaction = transaction_request
+                .build_typed_tx()
+                .map_err(|_| EthApiError::TransactionConversionError)?;
+
+            // sign transaction
+            let signed_tx = ethereum
+                .eth_signer
+                .sign_transaction(transaction, &from)
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+            RlpEvmTransaction {
+                rlp: signed_tx.encoded_2718(),
+            }
+        };
+        let (tx_hash, raw_message) = ethereum
+            .make_raw_tx(raw_evm_tx)
+            .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+
+        ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
+            to_jsonrpsee_error_object(
+                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                ETH_RPC_ERROR,
+            )
+        })?;
+
+        Ok(tx_hash)
     }
 }
 
