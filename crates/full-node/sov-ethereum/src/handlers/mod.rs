@@ -12,6 +12,7 @@ use alloy_rpc_types::TransactionReceipt;
 #[cfg(feature = "local")]
 use alloy_rpc_types::TransactionRequest;
 pub use get_logs::{Cursor, LogHandlers};
+use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -41,6 +42,8 @@ use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
+
+type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
@@ -72,12 +75,8 @@ where
         ErrorObjectOwned,
     > {
         let start = Instant::now();
-        let get_receipt = |tx_hash, ethereum: Arc<Ethereum<S, Seq>>| {
-            let evm = sov_evm::Evm::<S>::default();
-            let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
-            evm.get_transaction_receipt(tx_hash, state)
-        };
-        let result = Self::process_raw_transaction(parameters.one()?, ethereum, get_receipt).await;
+        let result =
+            Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt).await;
         track_metrics("eth_sendRawTransactionSync", start, &result);
         result
     }
@@ -91,14 +90,17 @@ where
         ErrorObjectOwned,
     > {
         let start = Instant::now();
-        let get_receipt = |tx_hash, ethereum: Arc<Ethereum<S, Seq>>| {
-            let evm = sov_evm::Evm::<S>::default();
-            let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
-            evm.get_transaction_receipt(tx_hash, state)
-        };
-        let result = Self::process_raw_transaction(parameters.one()?, ethereum, get_receipt).await;
+
+        let result =
+            Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt).await;
         track_metrics("realtime_sendRawTransaction", start, &result);
         result
+    }
+
+    fn get_receipt(tx_hash: B256, ethereum: Arc<Ethereum<S, Seq>>) -> RpcResult<Option<Receipt>> {
+        let evm = sov_evm::Evm::<S>::default();
+        let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+        evm.get_transaction_receipt(tx_hash, state)
     }
 
     async fn process_raw_transaction<T, F>(
