@@ -3,7 +3,8 @@ mod handlers;
 use std::convert::Infallible;
 
 use alloy_primitives::{B256, U256};
-use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
+use jsonrpsee::types::error::UNKNOWN_ERROR_CODE;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
@@ -119,9 +120,9 @@ where
 {
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
-        let signed_transaction = convert_to_tx_signed(raw_tx)
-            // TODO: Fix this later
-            .map_err(|_err| ErrorCode::ServerError(500))?;
+        let signed_transaction = convert_to_tx_signed(raw_tx).map_err(|err| {
+            ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, err.to_string(), None::<()>)
+        })?;
 
         let tx_hash = signed_transaction.hash();
 
@@ -137,9 +138,5 @@ where
 }
 
 pub(crate) fn to_jsonrpsee_error_object(err: impl ToString, message: &str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(
-        jsonrpsee::types::error::UNKNOWN_ERROR_CODE,
-        message,
-        Some(err.to_string()),
-    )
+    ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, message, Some(err.to_string()))
 }

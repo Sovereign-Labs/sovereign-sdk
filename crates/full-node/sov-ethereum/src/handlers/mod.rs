@@ -129,9 +129,7 @@ where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
     {
         let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
-        let (tx_hash, raw_message) = ethereum
-            .make_raw_tx(raw_evm_tx)
-            .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+        let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
         Self::authenticate_tx(&tx, &ethereum)?;
 
