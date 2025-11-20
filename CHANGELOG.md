@@ -34,6 +34,7 @@
 # 2025-11-01
 - #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
 - #2006 Add associated Error type to the EVM module.
+- #1953 Performance improvement for processing stf changes, but might delay writing finalized data to disk by 1 block
 - #2008 Treat `Latest` as `Pending` in EVM module to avoid foundry issues.
 
 # 2025-10-31

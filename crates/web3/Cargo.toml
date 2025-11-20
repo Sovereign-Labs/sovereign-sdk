@@ -13,14 +13,29 @@ serde = { workspace = true, default-features = false, features = [
   "alloc",
   "derive",
 ] }
+serde_with = { workspace = true, features = ["hex"] }
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 thiserror = { workspace = true }
-sov-modules-api = { workspace = true, features = ["native"] }
+sov-modules-api = { workspace = true, features = ["native"], optional = true }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
+reqwest = { workspace = true, features = ["json", "blocking"], optional = true }
+
+[dev-dependencies]
+sovereign-web3 = { path = ".", features = ["schema"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-address = { workspace = true, features = ["native", "evm"] }
+hex = { workspace = true }
+base64 = { workspace = true }
+
 
 [lints]
 workspace = true
+
+[features]
+default = ["rust", "schema"]
+rust = ["sov-modules-api"]
+schema = ["reqwest"]

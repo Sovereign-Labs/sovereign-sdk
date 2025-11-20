@@ -11,7 +11,7 @@ use std::sync::Arc;
 use crate::postgres::create_postgres_container;
 use crate::postgres::CreatePostgresError;
 use crate::postgres::PostgresImage;
-use crate::Transaction;
+use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
     TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
@@ -58,6 +58,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
+use tokio_stream::StreamExt;
 
 /// Specifies how to source the genesis data for a rollup.
 #[derive(Derivative)]
@@ -332,7 +333,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         RollupConfig {
             storage: rollup_db_config,
             runner: RunnerConfig {
-                da_polling_interval_ms: 30,
+                da_polling_interval_ms: TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
                 da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
                     &self.config.axum_host,
@@ -686,9 +687,9 @@ where
     pub async fn wait_for_rollup_to_shutdown(self, t: tokio::time::Duration) {
         timeout(t, self.rollup_task)
             .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
+            .expect("Failed to join rollup task before timeout.")
+            .expect("Rollup task panicked.")
+            .expect("Rollup execution returned an error.");
     }
 
     /// Waits for the rollup to shutdown.
@@ -928,6 +929,49 @@ where
         });
         let rollup = builder.start().await?;
         Ok(rollup)
+    }
+
+    pub async fn produce_enough_finalized_slots(&self) {
+        // We do we need slot?
+        let mut slot_subscription = self.api_client().subscribe_slots().await.unwrap();
+        let finalization_blocks = self.rollup_config.da.finalization_blocks;
+        self.da_service
+            .produce_n_blocks_now(finalization_blocks as usize)
+            .await
+            .expect("Failed to produce finalization blocks");
+        self.wait_for_node_synced().await.unwrap();
+        // Extra
+        let ideal_lag = match &self.rollup_config.sequencer.sequencer_kind_config {
+            SequencerKindConfig::Standard(_) => 5,
+            SequencerKindConfig::Preferred(c) => c.ideal_lag_behind_finalized_slot,
+        }
+        .saturating_add(2);
+        self.tenderly_produce_blocks(ideal_lag as usize)
+            .await
+            .unwrap();
+
+        for _ in 0..finalization_blocks {
+            let _slot = tokio::time::timeout(
+                std::time::Duration::from_millis(3000),
+                slot_subscription.next(),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        }
+    }
+
+    /// Produce DA blocks, but wait enough time in between, that finalized header poller sees each of them.
+    pub async fn tenderly_produce_blocks(&self, n: usize) -> anyhow::Result<()> {
+        let da_polling_interval =
+            Duration::from_millis(self.rollup_config.runner.da_polling_interval_ms);
+        let pause_between = da_polling_interval * 2;
+        for _ in 0..n {
+            self.da_service.produce_block_now().await?;
+            tokio::time::sleep(pause_between).await;
+        }
+        Ok(())
     }
 }
 

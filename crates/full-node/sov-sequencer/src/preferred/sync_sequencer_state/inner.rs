@@ -504,10 +504,7 @@ where
         ) {
             Ok(visible_increase) => visible_increase,
             Err(e) => {
-                warn!(
-                    "A batch was requested but the sequencer is not ready to produce one: {:?}",
-                    e
-                );
+                warn!(details = ?e, "A batch was requested but the sequencer is not ready to produce one.");
                 return Err(BatchCreationError::NoFinalizedSlotAvailable);
             }
         };

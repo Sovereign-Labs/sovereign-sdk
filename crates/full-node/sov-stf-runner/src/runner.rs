@@ -28,7 +28,7 @@ use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
-use crate::da_pre_fetcher::FinalizedBlocksBulkFetcher;
+use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
 
@@ -63,6 +63,7 @@ where
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     save_tx_bodies: bool,
+    finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
 }
 
 struct DiscardEvents;
@@ -157,6 +158,7 @@ where
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
+        da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -208,6 +210,7 @@ where
             state_height_tracker,
             sync_state.clone(),
             da_total_timeout,
+            da_service_with_cached_finalized_headers.clone(),
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
@@ -237,6 +240,7 @@ where
             start_at_rollup_height,
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
+            finalized_headers_provider: da_service_with_cached_finalized_headers,
         })
     }
 
@@ -283,7 +287,7 @@ where
         shutdown_receiver: watch::Receiver<()>,
     ) -> tokio::task::JoinHandle<()> {
         let sync_state = self.sync_state.clone();
-        let da_service = self.da_service.clone();
+        let da_service_with_cache = self.finalized_headers_provider.clone();
         let stop_at_rollup_height = self.stop_at_rollup_height;
 
         tokio::task::spawn(async move {
@@ -297,7 +301,7 @@ where
 
             loop {
                 match future_or_shutdown(
-                    get_target_block(da_service.as_ref(), &stop_at_rollup_height),
+                    get_target_block(&da_service_with_cache, &stop_at_rollup_height),
                     &shutdown_receiver,
                 )
                 .await
@@ -429,23 +433,23 @@ where
         shutdown_receiver: &watch::Receiver<()>,
     ) -> anyhow::Result<bool> {
         loop {
-            match future_or_shutdown(
-                self.da_service.get_last_finalized_block_number(),
-                shutdown_receiver,
-            )
-            .await
-            {
-                FutureOrShutdownOutput::Shutdown => return Ok(true),
-                FutureOrShutdownOutput::Output(finalized_block_height) => {
-                    let finalized = finalized_block_height?;
-                    if next_da_height > finalized {
-                        info!("Waiting until {next_da_height} is finalized, current finalized is {finalized}");
-                        tokio::time::sleep(self.da_polling_interval).await;
-                        continue;
-                    } else {
-                        break;
-                    }
+            let finalized_height = self
+                .finalized_headers_provider
+                .get_last_finalized_block_header()?
+                .height();
+            if next_da_height > finalized_height {
+                info!(%finalized_height, %next_da_height, "Waiting until next DA height is finalized");
+                match future_or_shutdown(
+                    tokio::time::sleep(self.da_polling_interval),
+                    shutdown_receiver,
+                )
+                .await
+                {
+                    FutureOrShutdownOutput::Shutdown => return Ok(true),
+                    FutureOrShutdownOutput::Output(()) => continue,
                 }
+            } else {
+                break;
             }
         }
 
@@ -480,7 +484,7 @@ where
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
             // Requests height might re-org
-            crate::da_utils::fetch_block_reorg_aware(
+            crate::da::fetch_block_reorg_aware(
                 self.da_service.as_ref(),
                 self.sync_state.as_ref(),
                 next_da_height,
@@ -612,7 +616,6 @@ where
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
             .process_stf_changes(
-                &self.da_service,
                 genesis_da_height,
                 slot_result.change_set,
                 transition_data,
@@ -759,7 +762,7 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     genesis_da_height: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     ledger_db: &LedgerDb,
-    da_service: &Da,
+    da_service_with_cache: &DaServiceWithCachedFinalizedHeaders<Da>,
 ) -> anyhow::Result<Arc<DaSyncState>> {
     let next_item_numbers = ledger_db.get_next_items_numbers()?;
     let last_slot_processed_before_shutdown = next_item_numbers.slot_number.saturating_sub(1);
@@ -767,7 +770,7 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
     debug!(%last_slot_processed_before_shutdown);
     let da_height_processed = genesis_da_height + last_slot_processed_before_shutdown.get();
 
-    let target_da_height = get_target_block(da_service, &stop_at_rollup_height)
+    let target_da_height = get_target_block(da_service_with_cache, &stop_at_rollup_height)
         .await?
         .height();
 
@@ -797,12 +800,12 @@ pub async fn make_da_sync_state<Da: DaService<Error = anyhow::Error>>(
 }
 
 async fn get_target_block<Da: DaService<Error = anyhow::Error>>(
-    da_service: &Da,
+    da_service: &DaServiceWithCachedFinalizedHeaders<Da>,
     stop_at_rollup_height: &Option<RollupHeight>,
 ) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
     // If we've entered the upgrade procedure, the rollup processes only finalized blocks.
     if stop_at_rollup_height.is_some() {
-        da_service.get_last_finalized_block_header().await
+        da_service.get_last_finalized_block_header()
     } else {
         da_service.get_head_block_header().await
     }
