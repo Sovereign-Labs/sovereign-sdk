@@ -94,7 +94,7 @@ where
         .map_err(|_| {
             ErrorObjectOwned::owned(
                 TIMEOUT_CODE,
-                format!("The transaction was added to the mempool but wasn't processed in {MAX_TIMEOUT}ms."),
+                format!("The transaction was added to the mempool but wasn't processed in {timeout_ms}ms."),
                 None::<()>,
             )
         })?;
