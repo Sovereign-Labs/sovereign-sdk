@@ -13,7 +13,6 @@ use alloy_rpc_types::TransactionReceipt;
 use alloy_rpc_types::TransactionRequest;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -58,7 +57,7 @@ where
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<B256, ErrorObjectOwned> {
+    ) -> RpcResult<B256> {
         let start = Instant::now();
         let noop = |tx_hash, _| Ok(tx_hash);
         let result = Self::process_raw_transaction(parameters.one()?, ethereum, noop).await;
@@ -70,10 +69,7 @@ where
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<
-        Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>,
-        ErrorObjectOwned,
-    > {
+    ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
         let result =
             Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt).await;
@@ -85,10 +81,7 @@ where
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<
-        Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>,
-        ErrorObjectOwned,
-    > {
+    ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
 
         let result =
@@ -107,9 +100,9 @@ where
         data: Bytes,
         ethereum: Arc<Ethereum<S, Seq>>,
         on_success: F,
-    ) -> Result<T, ErrorObjectOwned>
+    ) -> RpcResult<T>
     where
-        F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
+        F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
     {
         let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
         let (tx_hash, raw_message) = ethereum
@@ -135,10 +128,7 @@ where
     // `authenticate()` here pre-calculates and caches the signature check in the async API
     // handler, which is important for performance.
     // This will also be moved into the sequencer, but for now is kept here.
-    fn authenticate_tx(
-        tx: &FullyBakedTx,
-        ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> Result<(), ErrorObjectOwned> {
+    fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
         let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
             to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
@@ -151,7 +141,7 @@ where
         _: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<Vec<Address>, ErrorObjectOwned> {
+    ) -> RpcResult<Vec<Address>> {
         Ok(ethereum.eth_signer.addresses())
     }
 
@@ -160,7 +150,7 @@ where
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<B256, ErrorObjectOwned> {
+    ) -> RpcResult<B256> {
         let mut transaction_request: TransactionRequest = parameters.one()?;
 
         let evm = Evm::<S>::default();
@@ -240,11 +230,7 @@ where
     }
 }
 
-fn track_metrics<T>(
-    request_name: &'static str,
-    start: Instant,
-    result: &Result<T, ErrorObjectOwned>,
-) {
+fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResult<T>) {
     let duration = start.elapsed();
     let status = if let Err(e) = &result { e.code() } else { 0 };
     let metrics = RpcMetrics {
