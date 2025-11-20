@@ -200,10 +200,8 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     let start = Instant::now();
-
-    let data: Bytes = parameters.one()?;
-
-    let result = process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await;
+    let noop = |tx_hash, _| Ok(tx_hash);
+    let result = process_raw_transaction(parameters.one()?, ethereum, noop).await;
     track_metrics("eth_sendRawTransaction", start, &result);
     result
 }
@@ -220,16 +218,12 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     let start = Instant::now();
-    let data: Bytes = parameters.one()?;
-
-    let result = process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
+    let get_receipt = |tx_hash, ethereum: Arc<Ethereum<S, Seq>>| {
         let evm = sov_evm::Evm::<S>::default();
-        evm.get_transaction_receipt(
-            tx_hash,
-            &mut ethereum.sequencer.api_state().default_api_state_accessor(),
-        )
-    })
-    .await;
+        let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+        evm.get_transaction_receipt(tx_hash, state)
+    };
+    let result = process_raw_transaction(parameters.one()?, ethereum, get_receipt).await;
     track_metrics("realtime_sendRawTransaction", start, &result);
     result
 }
