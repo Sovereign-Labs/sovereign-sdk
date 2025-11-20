@@ -204,6 +204,26 @@ mod private {
         );
         assert_eq!(&key.without_prefix()[6..], &[1; REMAINING_BYTES]);
     }
+
+    #[test]
+    fn test_to_vec_and_back() {
+        use std::io::Write;
+        use crate::storage::SlotKeyBuilder;
+        use crate::SlotKey;
+        let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
+        builder.write_all(&[1, 2, 3]).unwrap();
+        let key: SlotKey = SlotKey { key: builder.into() };
+        let vec = key.as_ref().to_vec();
+        let key2 = SlotKey::from_vec_including_prefix(&vec);
+        assert_eq!(key, key2);
+
+        let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
+        builder.write_all(&[1;100]).unwrap();
+        let key: SlotKey = SlotKey { key: builder.into() };
+        let vec = key.as_ref().to_vec();
+        let key2 = SlotKey::from_vec_including_prefix(&vec);
+        assert_eq!(key, key2);
+    }
 }
 
 // Manually implement PartialOrd to satisfy clippy
@@ -255,7 +275,7 @@ impl SlotKey {
     /// # Panics
     /// Panics if the vector length is less than 2 bytes.
     pub fn from_vec_including_prefix(vec: &Vec<u8>) -> Self {
-        use std::io::Write;
+        use std::io::Write;  
         let prefix = Prefix::new(vec[0], vec[1]);
         let mut builder = SlotKeyBuilder::with_prefix(prefix);
         builder.write_all(&vec[2..]).unwrap();
