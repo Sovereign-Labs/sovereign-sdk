@@ -163,6 +163,13 @@ impl<N: Namespace> KeyDecoder<NomtStateValues<N>> for Arc<SchemaKey> {
     }
 }
 
+impl<N: Namespace> KeyDecoder<NomtStateValues<N>> for SchemaKey {
+    fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
+        // SchemaKey is already a borsh-encoded value, so we just copy the bytes
+        Ok(data.to_vec())
+    }
+}
+
 impl<N: Namespace> ValueCodec<NomtStateValues<N>> for Option<SchemaValue> {
     fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
         borsh::to_vec(self).map_err(CodecError::from)

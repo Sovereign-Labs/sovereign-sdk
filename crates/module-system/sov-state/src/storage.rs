@@ -249,6 +249,20 @@ impl SlotKey {
             ),
         }
     }
+
+    /// Creates a new [`SlotKey`] from a vector of bytes including the prefix.
+    /// 
+    /// # Panics
+    /// Panics if the vector length is less than 2 bytes.
+    pub fn from_vec_including_prefix(vec: &Vec<u8>) -> Self {
+        use std::io::Write;
+        let prefix = Prefix::new(vec[0], vec[1]);
+        let mut builder = SlotKeyBuilder::with_prefix(prefix);
+        builder.write_all(&vec[2..]).unwrap();
+        Self {
+            key: builder.into(),
+        }
+    }
 }
 
 impl fmt::Display for SlotKey {
@@ -777,7 +791,7 @@ pub trait NativeStorage: Storage {
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
 
     /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
-    fn maybe_iter_with_prefix<N: ProvableCompileTimeNamespace>(&self, prefix: SlotKey) -> Option<impl Iterator<Item = (SlotKey, SlotValue)>>; 
+    fn maybe_iter_user_values_with_prefix(&self, prefix: SlotKey) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>; 
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

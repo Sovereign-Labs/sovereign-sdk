@@ -692,11 +692,21 @@ where
         self.read_value_unbound::<N>(&key)
     }
 
-    fn maybe_iter_with_prefix<N: ProvableCompileTimeNamespace>(&self, prefix: SlotKey) -> Option<impl Iterator<Item = (SlotKey, SlotValue)>> {
-        match N::PROVABLE_NAMESPACE {
-            ProvableNamespace::User => self.historical_state
-            .iter_user_values_with_prefix(prefix)?
-            ProvableNamespace::Kernel => self.historical_state.iter_kernel_values_with_prefix(prefix)?,
-        }
+    fn maybe_iter_user_values_with_prefix(&self, prefix: SlotKey) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        // TODO: Remove useless clone here.
+        let prefix_vec = prefix.as_ref().to_vec();
+        let iter = self.historical_state
+            .iter_user_values_with_prefix(&prefix_vec)?;
+        let Some(iter) = iter else {
+            return Ok(None);
+        };
+        
+        Ok(Some(iter.filter_map(|(key, value)| 
+            if let Some(value) = value.flatten() {
+                Some((SlotKey::from_vec_including_prefix(&key), value.into()))
+            } else {
+                None
+            }
+        )))
     }
 }

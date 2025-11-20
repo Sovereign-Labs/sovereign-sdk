@@ -150,6 +150,23 @@ impl HistoricalStateReader {
         Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
     }
 
+    /// Iterate over all user values with the given prefix.
+    pub fn iter_user_values_with_prefix<'a>(
+        &'a self,
+        prefix: &SchemaKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (Arc<SchemaKey>, Option<Option<SchemaValue>>)> + 'a>> {
+        Ok(Some(self.user.iter_with_prefix(prefix)?))
+    }
+
+    /// Iterate over all kernel values with the given prefix.
+    pub fn iter_kernel_values_with_prefix<'a>(
+        &'a self,
+        prefix: &SchemaKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (Arc<SchemaKey>, Option<Option<SchemaValue>>)> + 'a>> {
+        
+        Ok(Some(self.kernel.iter_with_prefix(prefix)?))
+    }
+
     /// Get the very latest version of the given key from the database.
     pub fn get_kernel_value_option_by_key_unbound(
         &self,
