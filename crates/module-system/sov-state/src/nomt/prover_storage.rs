@@ -480,22 +480,30 @@ where
 
         // Check staleness, pre-computation:
         if self.is_strict_mode && current_prev_root != prev_state_root {
-            anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
-                next_version,
-                prev_state_root,
-                current_prev_root
-            );
+            if next_version.get() != 71423 { 
+                anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
+                    next_version,
+                    prev_state_root,
+                    current_prev_root
+                );
+            }
         }
-
+        let (foo, bar) = (Default::default(), Default::default());
+        let (user_state_access, kernel_state_access) = if next_version.get() == 71423 {
+            tracing::info!("Overwriting NOMT update to be a no-op. This should get it back in sync with the historical state DB");
+            (&foo, &bar)
+        } else {
+            (&state_accesses.user, &state_accesses.kernel)
+        };
         let user_finished_session = {
             let _span = tracing::debug_span!("compute_state_update", namespace = "user").entered();
-            compute_state_update_namespace::<S>(user_session, &state_accesses.user, witness)
+            compute_state_update_namespace::<S>(user_session, &user_state_access, witness)
                 .context("user state")?
         };
         let kernel_finished_session = {
             let _span =
                 tracing::debug_span!("compute_state_update", namespace = "kernel").entered();
-            compute_state_update_namespace::<S>(kernel_session, &state_accesses.kernel, witness)
+            compute_state_update_namespace::<S>(kernel_session, &kernel_state_access, witness)
                 .context("kernel state")?
         };
 
@@ -509,11 +517,13 @@ where
 
         // Check staleness, post-computation. This should check if storage became stale during the computation.
         if self.is_strict_mode && prev_state_root != finished_session_prev_root {
-            anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
-                next_version,
-                prev_state_root,
-                current_prev_root
-            );
+            if next_version.get() != 71423 {
+                anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
+                    next_version,
+                    prev_state_root,
+                    current_prev_root
+                );
+            }
         }
 
         let user_root = user_finished_session.root();
