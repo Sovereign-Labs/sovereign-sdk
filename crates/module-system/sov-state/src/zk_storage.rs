@@ -263,4 +263,8 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
     fn get_unbound<N: crate::CompileTimeNamespace>(&self, _key: SlotKey) -> Option<SlotValue> {
         unimplemented!("The ZkStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
+
+    fn maybe_iter_with_prefix<N: ProvableCompileTimeNamespace>(&self, prefix: SlotKey) -> Option<impl Iterator<Item = (SlotKey, SlotValue)>> {
+        unimplemented!("The ZkStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.")
+    }
 }

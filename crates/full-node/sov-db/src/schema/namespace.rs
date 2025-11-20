@@ -151,17 +151,15 @@ impl<N: Namespace> ValueCodec<NomtCommittedVersion<N>> for u64 {
 
 impl<N: Namespace> KeyEncoder<NomtStateValues<N>> for SchemaKey {
     fn encode_key(&self) -> Result<Vec<u8>, CodecError> {
-        let mut out = Vec::with_capacity(self.len() + 4);
-        BorshSerialize::serialize(self, &mut out).map_err(CodecError::from)?;
-        Ok(out)
+        // SchemaKey is already a borsh-encoded value, so we just copy the bytes
+        Ok(self.to_vec())
     }
 }
 
 impl<N: Namespace> KeyDecoder<NomtStateValues<N>> for Arc<SchemaKey> {
     fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
-        let mut cursor = Cursor::new(data);
-        let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
-        Ok(Arc::new(key))
+        // SchemaKey is already a borsh-encoded value, so we just copy the bytes
+        Ok(Arc::new(data.to_vec()))
     }
 }
 

@@ -775,6 +775,9 @@ pub trait NativeStorage: Storage {
     }
     /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
+
+    /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
+    fn maybe_iter_with_prefix<N: ProvableCompileTimeNamespace>(&self, prefix: SlotKey) -> Option<impl Iterator<Item = (SlotKey, SlotValue)>>; 
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

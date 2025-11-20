@@ -541,4 +541,9 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 .map(Into::into),
         }
     }
+
+    // JMT doesn't currently support iter_with_prefix, so we return None.
+    fn maybe_iter_with_prefix<N: ProvableCompileTimeNamespace>(&self, _prefix: SlotKey) -> Option<impl Iterator<Item = (SlotKey, SlotValue)>> {
+        Option::<std::iter::Once<(SlotKey, SlotValue)>>::None
+    }
 }

@@ -691,4 +691,12 @@ where
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
         self.read_value_unbound::<N>(&key)
     }
+
+    fn maybe_iter_with_prefix<N: ProvableCompileTimeNamespace>(&self, prefix: SlotKey) -> Option<impl Iterator<Item = (SlotKey, SlotValue)>> {
+        match N::PROVABLE_NAMESPACE {
+            ProvableNamespace::User => self.historical_state
+            .iter_user_values_with_prefix(prefix)?
+            ProvableNamespace::Kernel => self.historical_state.iter_kernel_values_with_prefix(prefix)?,
+        }
+    }
 }

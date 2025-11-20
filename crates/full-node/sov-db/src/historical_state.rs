@@ -39,9 +39,6 @@ pub struct StateChanges {
 }
 
 impl HistoricalStateReader {
-    const DB_PATH_SUFFIX: &'static str = "historical_state";
-    const DB_NAME: &'static str = "historical-state-db";
-
     // Used for testing only.
     #[cfg(test)]
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
@@ -119,20 +116,6 @@ impl HistoricalStateReader {
         let last_root_hash_version = last_root_hash.map(|((version, _key), _)| version);
 
         Ok(last_root_hash_version)
-    }
-
-    /// [`DbOptions`] for [`HistoricalStateReader`].
-    pub fn get_rockbound_options() -> DbOptions {
-        DbOptions {
-            name: Self::DB_NAME,
-            path_suffix: Self::DB_PATH_SUFFIX,
-            columns: UserNamespace::get_jmt_table_names()
-                .into_iter()
-                .chain(KernelNamespace::get_jmt_table_names())
-                .chain(vec![StateRootHashes::table_name()])
-                .collect(),
-            cacheable_columns: vec![],
-        }
     }
 
     /// Get the current value of the `next_version` counter
