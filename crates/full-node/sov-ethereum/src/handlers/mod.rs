@@ -63,6 +63,25 @@ where
         result
     }
 
+    pub async fn eth_send_raw_transaction_sync(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<
+        Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>,
+        ErrorObjectOwned,
+    > {
+        let start = Instant::now();
+        let get_receipt = |tx_hash, ethereum: Arc<Ethereum<S, Seq>>| {
+            let evm = sov_evm::Evm::<S>::default();
+            let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+            evm.get_transaction_receipt(tx_hash, state)
+        };
+        let result = Self::process_raw_transaction(parameters.one()?, ethereum, get_receipt).await;
+        track_metrics("eth_sendRawTransactionSync", start, &result);
+        result
+    }
+
     pub async fn realtime_send_raw_transaction(
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,

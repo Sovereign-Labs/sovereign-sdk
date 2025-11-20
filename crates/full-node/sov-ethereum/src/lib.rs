@@ -73,6 +73,10 @@ where
     })?;
     rpc.register_async_method("eth_sendRawTransaction", Handlers::eth_send_raw_transaction)?;
     rpc.register_async_method(
+        "eth_sendRawTransactionSync",
+        Handlers::eth_send_raw_transaction_sync,
+    )?;
+    rpc.register_async_method(
         "realtime_sendRawTransaction",
         Handlers::realtime_send_raw_transaction,
     )?;
@@ -91,11 +95,8 @@ where
 
     #[cfg(feature = "local")]
     {
-        rpc.register_async_method("eth_accounts", handlers::signer::eth_accounts)?;
-        rpc.register_async_method(
-            "eth_sendTransaction",
-            handlers::signer::eth_send_transaction,
-        )?;
+        rpc.register_async_method("eth_accounts", Handlers::eth_accounts)?;
+        rpc.register_async_method("eth_sendTransaction", Handlers::eth_send_transaction)?;
     }
 
     Ok(())
