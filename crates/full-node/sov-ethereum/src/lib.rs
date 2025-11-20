@@ -17,6 +17,8 @@ use std::future::ready;
 
 pub use handlers::Cursor;
 
+use crate::handlers::Handlers;
+
 #[derive(Clone)]
 pub struct EthRpcConfig {
     #[cfg(feature = "local")]
@@ -69,10 +71,10 @@ where
         // When we receive transactions - we override the gas price with 0 and disable charging the sender account for gas in handler.
         ready(Ok::<_, Infallible>(U256::ZERO))
     })?;
-    rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
+    rpc.register_async_method("eth_sendRawTransaction", Handlers::eth_send_raw_transaction)?;
     rpc.register_async_method(
         "realtime_sendRawTransaction",
-        handlers::realtime_send_raw_transaction,
+        Handlers::realtime_send_raw_transaction,
     )?;
 
     rpc.register_async_method("eth_getLogs", handlers::LogHandlers::<S, Seq>::eth_get_logs)?;

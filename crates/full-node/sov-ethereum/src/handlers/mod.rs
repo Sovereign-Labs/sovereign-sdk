@@ -5,7 +5,6 @@ use alloy_primitives::TxKind;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
-use ethers::core::rand::Error;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
@@ -18,10 +17,12 @@ use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Instant;
 pub use subscribe::eth_subscribe;
@@ -30,50 +31,6 @@ use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
-
-async fn process_raw_transaction<S, Seq, T, F>(
-    data: Bytes,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    on_success: F,
-) -> Result<T, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-    F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
-{
-    let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
-    let (tx_hash, raw_message) = ethereum
-        .make_raw_tx(raw_evm_tx)
-        .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
-    // Authenticate the transaction.
-    // This was used earlier to get the credential and nonce, for retries. This has now been
-    // implemented in the sequencer and is therefore no longer needed. However, calling
-    // `authenticate()` here pre-calculates and caches the signature check in the async API
-    // handler, which is important for performance.
-    // This will also be moved into the sequencer, but for now is kept here.
-    let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-    let mut state = ethereum
-        .sequencer
-        .api_state()
-        .default_api_state_accessor()
-        .to_provable_reader();
-    let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
-        to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
-    })?;
-
-    let seq = ethereum.sequencer.clone();
-    seq.accept_tx(tx).await.map_err(|e| {
-        to_jsonrpsee_error_object(
-            format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-            ETH_RPC_ERROR,
-        )
-    })?;
-
-    on_success(tx_hash, ethereum)
-}
 
 #[cfg(feature = "local")]
 pub(crate) mod signer {
@@ -188,44 +145,88 @@ pub(crate) mod signer {
     }
 }
 
-pub async fn eth_send_raw_transaction<S, Seq>(
-    parameters: JRpcParams<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<B256, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    let start = Instant::now();
-    let noop = |tx_hash, _| Ok(tx_hash);
-    let result = process_raw_transaction(parameters.one()?, ethereum, noop).await;
-    track_metrics("eth_sendRawTransaction", start, &result);
-    result
-}
+pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
-pub async fn realtime_send_raw_transaction<S, Seq>(
-    parameters: JRpcParams<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>, ErrorObjectOwned>
+impl<S, Seq> Handlers<S, Seq>
 where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let start = Instant::now();
-    let get_receipt = |tx_hash, ethereum: Arc<Ethereum<S, Seq>>| {
-        let evm = sov_evm::Evm::<S>::default();
-        let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
-        evm.get_transaction_receipt(tx_hash, state)
-    };
-    let result = process_raw_transaction(parameters.one()?, ethereum, get_receipt).await;
-    track_metrics("realtime_sendRawTransaction", start, &result);
-    result
+    pub async fn eth_send_raw_transaction(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<B256, ErrorObjectOwned> {
+        let start = Instant::now();
+        let noop = |tx_hash, _| Ok(tx_hash);
+        let result = Self::process_raw_transaction(parameters.one()?, ethereum, noop).await;
+        track_metrics("eth_sendRawTransaction", start, &result);
+        result
+    }
+
+    pub async fn realtime_send_raw_transaction(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> Result<
+        Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>,
+        ErrorObjectOwned,
+    > {
+        let start = Instant::now();
+        let get_receipt = |tx_hash, ethereum: Arc<Ethereum<S, Seq>>| {
+            let evm = sov_evm::Evm::<S>::default();
+            let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+            evm.get_transaction_receipt(tx_hash, state)
+        };
+        let result = Self::process_raw_transaction(parameters.one()?, ethereum, get_receipt).await;
+        track_metrics("realtime_sendRawTransaction", start, &result);
+        result
+    }
+
+    async fn process_raw_transaction<T, F>(
+        data: Bytes,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        on_success: F,
+    ) -> Result<T, ErrorObjectOwned>
+    where
+        F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
+    {
+        let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
+        let (tx_hash, raw_message) = ethereum
+            .make_raw_tx(raw_evm_tx)
+            .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+        Self::authenticate_tx(&tx, &ethereum)?;
+
+        let seq = ethereum.sequencer.clone();
+        seq.accept_tx(tx).await.map_err(|e| {
+            to_jsonrpsee_error_object(
+                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                ETH_RPC_ERROR,
+            )
+        })?;
+
+        on_success(tx_hash, ethereum)
+    }
+
+    // Authenticate the transaction.
+    // This was used earlier to get the credential and nonce, for retries. This has now been
+    // implemented in the sequencer and is therefore no longer needed. However, calling
+    // `authenticate()` here pre-calculates and caches the signature check in the async API
+    // handler, which is important for performance.
+    // This will also be moved into the sequencer, but for now is kept here.
+    fn authenticate_tx(
+        tx: &FullyBakedTx,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> Result<(), ErrorObjectOwned> {
+        let mut state = ethereum.api_state_accessor().to_provable_reader();
+        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
+            to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
+        })?;
+        Ok(())
+    }
 }
 
 fn track_metrics<T>(
