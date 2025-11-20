@@ -13,6 +13,7 @@ use alloy_rpc_types::TransactionReceipt;
 use alloy_rpc_types::TransactionRequest;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::core::RpcResult;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -34,15 +35,20 @@ use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::Instant;
 pub use subscribe::eth_subscribe;
+use tokio::time::timeout;
 
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
+const TIMEOUT_CODE: i32 = 4;
 
 type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
+
+const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
@@ -71,8 +77,27 @@ where
         _: Extensions,
     ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
-        let result =
-            Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt).await;
+        let mut params = parameters.sequence();
+        let data: Bytes = params.next()?;
+        let timeout_ms = params.optional_next::<u64>()?.unwrap_or(MAX_TIMEOUT);
+        if timeout_ms > MAX_TIMEOUT {
+            return Err(to_jsonrpsee_error_object(
+                format!("Max allowed timeout is: {MAX_TIMEOUT}"),
+                ETH_RPC_ERROR,
+            ));
+        }
+        let result = timeout(
+            Duration::from_millis(timeout_ms),
+            Self::process_raw_transaction(data, ethereum, Self::get_receipt),
+        )
+        .await
+        .map_err(|_| {
+            ErrorObjectOwned::owned(
+                TIMEOUT_CODE,
+                format!("The transaction was added to the mempool but wasn't processed in {MAX_TIMEOUT}ms."),
+                None::<()>,
+            )
+        })?;
         track_metrics("eth_sendRawTransactionSync", start, &result);
         result
     }
@@ -83,7 +108,6 @@ where
         _: Extensions,
     ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
-
         let result =
             Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt).await;
         track_metrics("realtime_sendRawTransaction", start, &result);
