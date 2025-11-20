@@ -247,7 +247,7 @@ pub struct TimingOracleConfig {
     pub priority_fee_percentage: u8,
 
     /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
-    pub max_fee: u128,
+    pub max_fee: u64,
 
     /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
     pub interval_millis: u64,
