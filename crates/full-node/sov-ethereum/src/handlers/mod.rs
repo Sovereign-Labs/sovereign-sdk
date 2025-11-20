@@ -5,6 +5,7 @@ use alloy_primitives::TxKind;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
+use ethers::core::rand::Error;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
@@ -22,6 +23,7 @@ use sov_modules_api::{RawTx, Spec};
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
+use std::time::Instant;
 pub use subscribe::eth_subscribe;
 
 use crate::to_jsonrpsee_error_object;
@@ -197,27 +199,12 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     let data: Bytes = parameters.one()?;
 
     let result = process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await;
-
-    // Track metrics
-    {
-        let duration = start.elapsed();
-        let status = if let Err(e) = &result { e.code() } else { 0 };
-        let metrics = RpcMetrics {
-            request_name: "eth_sendRawTransaction",
-            handler_processing_time: duration,
-            status,
-        };
-
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(metrics);
-        });
-    }
-
+    track_metrics("eth_sendRawTransaction", start, &result);
     result
 }
 
@@ -232,10 +219,10 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
     let data: Bytes = parameters.one()?;
 
-    let res = process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
+    let result = process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
         let evm = sov_evm::Evm::<S>::default();
         evm.get_transaction_receipt(
             tx_hash,
@@ -243,20 +230,24 @@ where
         )
     })
     .await;
+    track_metrics("realtime_sendRawTransaction", start, &result);
+    result
+}
 
-    // Track metrics
-    {
-        let duration = start.elapsed();
-        let status = if let Err(e) = &res { e.code() } else { 0 };
-        let metrics = RpcMetrics {
-            request_name: "realtime_sendRawTransaction",
-            handler_processing_time: duration,
-            status,
-        };
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(metrics);
-        });
-    }
+fn track_metrics<T>(
+    request_name: &'static str,
+    start: Instant,
+    result: &Result<T, ErrorObjectOwned>,
+) {
+    let duration = start.elapsed();
+    let status = if let Err(e) = &result { e.code() } else { 0 };
+    let metrics = RpcMetrics {
+        request_name,
+        handler_processing_time: duration,
+        status,
+    };
 
-    res
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(metrics);
+    });
 }
