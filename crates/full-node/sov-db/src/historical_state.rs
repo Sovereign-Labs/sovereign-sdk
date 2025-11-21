@@ -131,6 +131,7 @@ impl HistoricalStateReader {
                 .chain(KernelNamespace::get_jmt_table_names())
                 .chain(vec![StateRootHashes::table_name()])
                 .collect(),
+            cacheable_columns: vec![],
         }
     }
 
