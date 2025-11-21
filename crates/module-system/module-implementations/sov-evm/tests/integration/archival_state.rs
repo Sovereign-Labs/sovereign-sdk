@@ -1,5 +1,4 @@
 use sov_evm::Evm;
-use sov_modules_api::ApiStateAccessorError;
 
 use crate::helpers::{create_transfer_tx, setup};
 use crate::runtime::S;
