@@ -184,18 +184,53 @@ where
     /// - `worker_id`: Unique identifier for this worker
     /// - `num_workers`: Total number of parallel workers
     /// - `validity`: Distribution of valid vs invalid messages
+    /// - `restart_after`: Optional duration after which to restart the worker
     pub async fn run(
         self,
         client: sov_api_spec::Client,
         rx: Receiver<bool>,
-        worker_id: u128,
+        mut worker_id: u128,
         num_workers: u32,
         validity: Distribution<MessageValidity>,
         restart_after: Option<std::time::Duration>,
     ) -> anyhow::Result<()> {
-        let x = rx.clone();
-        println!("Will restart after {restart_after:?}");
-        prepare_and_send_txs(self.modules, &client, rx, worker_id, num_workers, validity).await
+        loop {
+            tracing::info!(worker_id, ?restart_after, "Starting worker");
+            let result = if let Some(duration) = restart_after {
+                tokio::select! {
+                    result = prepare_and_send_txs(
+                        self.modules.clone(),
+                        &client,
+                        rx.clone(),
+                        worker_id,
+                        num_workers,
+                        validity.clone()
+                    ) => {
+                        // If prepare_and_send_txs completes (likely an error), return immediately
+                        return result;
+                    }
+                    _ = tokio::time::sleep(duration) => {
+                        // Timer expired, restart with incremented worker_id
+                        tracing::info!("Timer expired for worker {worker_id}, restarting with new worker_id");
+                        worker_id += num_workers as u128;
+                        continue;
+                    }
+                }
+            } else {
+                // No restart timer, just run until completion
+                prepare_and_send_txs(
+                    self.modules.clone(),
+                    &client,
+                    rx.clone(),
+                    worker_id,
+                    num_workers,
+                    validity.clone(),
+                )
+                .await
+            };
+
+            return result;
+        }
     }
 }
 

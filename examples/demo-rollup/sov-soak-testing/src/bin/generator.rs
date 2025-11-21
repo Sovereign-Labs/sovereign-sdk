@@ -53,8 +53,8 @@ struct Args {
     tx_type: TxType,
 
     /// After that many seconds main loop will restart with salt incremented by number of workerAs
-    #[arg(short, long, default_value = "None")]
-    restart_after_seconds: Option<usize>,
+    #[arg(long, default_value = "None")]
+    restart_after_seconds: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
