@@ -33,6 +33,21 @@ pub enum OperatingMode {
     Operator,
 }
 
+/// todod
+pub trait ModuleExecutionConfig {
+    /// todod
+    type Input;
+
+    /// todod
+    fn configure(input: &Self::Input) -> ();
+}
+
+impl ModuleExecutionConfig for () {
+    type Input = ();
+
+    fn configure(_input: &Self::Input) -> () {}
+}
+
 #[cfg(feature = "native")]
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
 ///
@@ -59,6 +74,9 @@ pub trait Runtime<S: Spec>:
 
     /// GenesisInput type.
     type GenesisInput: std::fmt::Debug + Clone + Send + Sync;
+
+    /// TODO
+    type ModuleExecutionConfig: ModuleExecutionConfig;
 
     /// Responsible for authenticating transactions.
     type Auth: TransactionAuthenticator<S>;

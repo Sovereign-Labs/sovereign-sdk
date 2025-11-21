@@ -410,7 +410,7 @@ pub trait ExecutionInit {
     fn init(config: &Self::Config) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-impl <T> ExecutionInit for T
+impl<T> ExecutionInit for T
 where
     T: Module,
 {
