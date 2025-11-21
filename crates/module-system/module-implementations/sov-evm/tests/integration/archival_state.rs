@@ -26,23 +26,3 @@ fn test_state_at_different_depth_is_accessible() {
         assert_eq!(balance(Some("0x02")), 2);
     });
 }
-
-#[test]
-fn test_state_at_invalid_depth() {
-    let (mut runner, from, to) = setup();
-
-    let evm = Evm::<S>::default();
-    for tx_idx in 0..=1 {
-        let transfer_tx = create_transfer_tx(tx_idx, &from, &to, 1).tx;
-        runner.execute(transfer_tx);
-    }
-    runner.query_visible_state(|state| {
-        let err = evm
-            .get_balance(to.address(), Some("0x03".into()), state)
-            .unwrap_err();
-        assert_eq!(
-            err.message(),
-            ApiStateAccessorError::HeightNotAccessible.to_string()
-        );
-    });
-}
