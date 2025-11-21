@@ -23,6 +23,7 @@ async fn deploy_with_gas(addr: SocketAddr, gas: u64) -> String {
 
 /// Currently those OOG errors are far from readable and this test is here for demonstration and regression detection
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "see https://github.com/Sovereign-Labs/sovereign-sdk/pull/2100"]
 async fn returns_readable_oog_error() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;

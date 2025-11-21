@@ -60,7 +60,7 @@ impl<S: Spec> TimingOracleConfigWithPrivateKey<S> {
     }
 
     fn max_fee(&self) -> Amount {
-        Amount::new(self.time_oracle_config.max_fee)
+        Amount::new(self.time_oracle_config.max_fee.into())
     }
 
     fn interval(&self) -> Duration {

@@ -26,7 +26,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
 
@@ -374,6 +374,11 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
+                if number == state.rollup_height_to_access().get()
+                    || (number == state.rollup_height_to_access().get() + 1)
+                {
+                    return Ok(MaybeArchivalState::Current(state));
+                }
                 let archival_state = state.get_archival_state(RollupHeight::new(number))?;
                 Ok(MaybeArchivalState::Archival(archival_state.into()))
             }
