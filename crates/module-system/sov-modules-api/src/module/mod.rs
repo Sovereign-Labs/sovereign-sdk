@@ -32,6 +32,19 @@ pub trait Module: Clone {
     /// Configuration for the genesis method.
     type Config;
 
+    /// Configuration for initializing offchain components.
+    ///
+    /// This type defines the configuration needed to initialize offchain components for the module.
+    /// Unlike [`Module::Config`] which is used during genesis (a one-time, deterministic initialization
+    /// that happens when the rollup is deployed), `ExecutionConfig` is used to configure offchain
+    /// components such as:
+    /// - Metrics collectors and monitoring endpoints
+    /// - External service integrations
+    ///
+    /// This configuration is typically loaded from environment variables or configuration files
+    /// at startup, and can differ between different instances in the same rollup network.
+    type ExecutionConfig;
+
     /// Module defined argument to the call method.
     type CallMessage: CallMessage;
 
@@ -58,6 +71,88 @@ pub trait Module: Clone {
         _config: &Self::Config,
         _state: &mut impl GenesisState<Self::Spec>,
     ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Initializes offchain components for the module.
+    ///
+    /// This method is called at startup (before processing any blocks) to initialize
+    /// offchain components that the module needs. Unlike [`Module::genesis`],
+    /// which is called once during rollup deployment and must be deterministic, `init` can perform
+    /// non-deterministic operations and is called on every startup.
+    ///
+    /// Common use cases include:
+    /// - Initializing metrics collectors
+    /// - Connecting to external services
+    ///
+    /// # Determinism
+    /// Unlike [`Module::genesis`] and [`Module::call`], this method does NOT need to be deterministic.
+    /// Different instances can have different configurations for offchain components as long as they
+    /// produce the same state transitions when processing blocks.
+    ///
+    /// # Errors
+    /// Returns an error if initialization fails. This will typically cause startup to fail.
+    ///
+    /// # Default Implementation
+    /// The default implementation does nothing and returns `Ok(())`. Override this method if your
+    /// module needs to initialize offchain components.
+    ///
+    /// # Example
+    ///
+    /// A common pattern is to store the configuration in a global variable (using [`std::sync::OnceLock`])
+    /// and then access it from hooks like [`BlockHooks`]:
+    ///
+    /// ```rust,ignore
+    /// use std::sync::OnceLock;
+    /// use sov_modules_api::{Module, BlockHooks, StateCheckpoint};
+    ///
+    /// // Define the execution configuration for offchain components
+    /// #[derive(Clone)]
+    /// struct MyModuleExecutionConfig {
+    ///     metrics_endpoint: String,
+    ///     enable_detailed_logging: bool,
+    /// }
+    ///
+    /// // Global storage for the configuration
+    /// static EXECUTION_CONFIG: OnceLock<MyModuleExecutionConfig> = OnceLock::new();
+    ///
+    /// #[derive(Clone)]
+    /// struct MyModule { /* ... */ }
+    ///
+    /// impl Module for MyModule {
+    ///     type ExecutionConfig = MyModuleExecutionConfig;
+    ///     // ... other associated types ...
+    ///
+    ///     // Initialize offchain components at startup
+    ///     fn init(config: &Self::ExecutionConfig) -> Result<(), Box<dyn std::error::Error>> {
+    ///         EXECUTION_CONFIG.set(config.clone())
+    ///             .map_err(|_| "Execution config already initialized")?;
+    ///
+    ///         // Perform any other initialization (e.g., connect to metrics endpoint)
+    ///         println!("Connecting to metrics at: {}", config.metrics_endpoint);
+    ///
+    ///         Ok(())
+    ///     }
+    ///
+    ///     // ... other trait methods ...
+    /// }
+    ///
+    /// // Access the configuration in BlockHooks
+    /// impl BlockHooks for MyModule {
+    ///     type Spec = /* ... */;
+    ///
+    ///     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<Self::Spec>) {
+    ///         // Access the execution configuration
+    ///         if let Some(config) = EXECUTION_CONFIG.get() {
+    ///             if config.enable_detailed_logging {
+    ///                 println!("Block completed - detailed logging enabled");
+    ///             }
+    ///             // Submit metrics to the configured endpoint, etc.
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    fn init(_config: &Self::ExecutionConfig) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     }
 
@@ -279,6 +374,50 @@ where
             config,
             state,
         )?)
+    }
+}
+
+/// Allows a module to initialize offchain components.
+///
+/// This trait provides a standardized interface for initializing offchain components when
+/// starting up. It is automatically implemented for all types that implement [`Module`].
+///
+/// The primary purpose of this trait is to abstract over the [`Module::init`] method, allowing
+/// code to initialize all modules in a uniform way without needing to know the specific
+/// types of each module.
+///
+/// # Relationship to Other Traits
+/// - [`ExecutionInit`] is to [`Module::init`] what [`Genesis`] is to [`Module::genesis`]
+/// - Like [`Genesis`], this trait is blanket-implemented for all [`Module`] types
+/// - Unlike [`Genesis`], initialization here is non-deterministic and happens on every startup
+///
+/// # When to Use
+/// Use this trait when initializing modules at startup.
+/// Module developers typically don't need to interact with this trait directly - they should
+/// implement [`Module::init`] instead.
+pub trait ExecutionInit {
+    /// Configuration type for offchain components.
+    ///
+    /// This is the same as [`Module::ExecutionConfig`].
+    type Config;
+
+    /// Initializes the module's offchain components.
+    ///
+    /// See [`Module::init`] for detailed documentation on this method's purpose and behavior.
+    ///
+    /// # Errors
+    /// Returns an error if initialization fails, which will typically cause startup to fail.
+    fn init(config: &Self::Config) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+impl <T> ExecutionInit for T
+where
+    T: Module,
+{
+    type Config = <Self as Module>::ExecutionConfig;
+
+    fn init(config: &Self::Config) -> Result<(), Box<dyn std::error::Error>> {
+        <Self as Module>::init(config)
     }
 }
 
