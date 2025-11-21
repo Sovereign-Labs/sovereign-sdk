@@ -437,11 +437,14 @@ impl FinalizationManager for LedgerDb {
                     blob.slot_number,
                     BlobSelectorStatus::Discarded(blob.discarded_blob.reason),
                 ),
-                None => return Ok(None),
+                None => { 
+                    tracing::debug!(%blob_hash, "Blob not found using get_batch_by_hash or in discarded blob list. Returning None.");
+                    return Ok(None) } ,
             },
         };
 
         let latest_finalized_slot_number = self.get_latest_finalized_slot_number().await?;
+        tracing::debug!(%blob_hash, %slot_number, %latest_finalized_slot_number, ?status, "Found updated status for blob");
         Ok(Some((slot_number <= latest_finalized_slot_number, status)))
     }
 }
