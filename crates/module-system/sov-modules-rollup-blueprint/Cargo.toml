@@ -24,6 +24,7 @@ sov-cli = { workspace = true, optional = true }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-db = { workspace = true, optional = true }
 sov-sequencer = { workspace = true, optional = true }
+sov-encryption = { workspace = true, optional = true }
 sov-ledger-apis = { workspace = true, optional = true }
 sov-rollup-apis = { workspace = true, optional = true }
 sov-api-spec = { workspace = true, optional = true }
@@ -66,6 +67,7 @@ native = [
 	"sov-rollup-apis",
 	"sov-rollup-interface/native",
 	"sov-sequencer",
+	"sov-encryption",
 	"sov-state/native",
 	"sov-stf-runner",
 	"sov-metrics",

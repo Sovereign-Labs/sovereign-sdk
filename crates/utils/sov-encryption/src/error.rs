@@ -1,4 +1,3 @@
-
 #[derive(thiserror::Error, Debug)]
 pub enum EncryptionError {
     #[error("Failed to connect to key server: {0}")]
@@ -35,10 +34,10 @@ pub enum EncryptionError {
 impl EncryptionError {
     pub fn is_retryable(&self) -> bool {
         matches!(
-            self, 
-            EncryptionError::KeyServerConnection(_) | 
-            EncryptionError::KeyServerResponse(_) | 
-            EncryptionError::KeyRotation(_)
+            self,
+            EncryptionError::KeyServerConnection(_)
+                | EncryptionError::KeyServerResponse(_)
+                | EncryptionError::KeyRotation(_)
         )
     }
 }

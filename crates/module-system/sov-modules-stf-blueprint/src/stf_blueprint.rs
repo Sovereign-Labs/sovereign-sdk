@@ -47,8 +47,12 @@ where
     /// This is a convenience method that creates the STF with encryption when available,
     /// falling back to no encryption if config is None.
     pub async fn new_with_optional_encryption(
-        encryption_config: Option<sov_encryption::EncryptionConfig>
+        encryption_config: Option<sov_encryption::EncryptionConfig>,
     ) -> Result<Self, sov_encryption::EncryptionError> {
+        tracing::info!(
+            "STF creating with encryption config: {:?}",
+            encryption_config
+        );
         match encryption_config {
             Some(config) => Self::with_encryption_config(RT::default(), config).await,
             None => Ok(Self::default()),
@@ -69,7 +73,7 @@ where
     /// falling back to no encryption if config is None.
     pub async fn with_runtime_and_optional_encryption(
         runtime: RT,
-        encryption_config: Option<sov_encryption::EncryptionConfig>
+        encryption_config: Option<sov_encryption::EncryptionConfig>,
     ) -> Result<Self, sov_encryption::EncryptionError> {
         match encryption_config {
             Some(config) => Self::with_encryption_config(runtime, config).await,
@@ -80,7 +84,7 @@ where
     /// [`StfBlueprint`] constructor with encryption enabled via configuration.
     pub async fn with_encryption_config(
         runtime: RT,
-        encryption_config: sov_encryption::EncryptionConfig
+        encryption_config: sov_encryption::EncryptionConfig,
     ) -> Result<Self, sov_encryption::EncryptionError> {
         let encryption_layer = sov_encryption::EncryptionLayer::new(encryption_config).await?;
         Ok(Self {
@@ -93,7 +97,7 @@ where
     /// [`StfBlueprint`] constructor with a custom encryption layer.
     pub fn with_encryption_layer(
         runtime: RT,
-        encryption_layer: sov_encryption::EncryptionLayer
+        encryption_layer: sov_encryption::EncryptionLayer,
     ) -> Self {
         Self {
             runtime,

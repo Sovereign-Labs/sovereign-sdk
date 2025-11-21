@@ -128,6 +128,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        shared_encryption_layer: Option<sov_encryption::EncryptionLayer>,
     ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
@@ -185,7 +186,7 @@ where
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
             config.sequencer_kind_config.is_replica,
-            config.batch_encryption.clone(),
+            shared_encryption_layer,
         )
         .await?;
 
