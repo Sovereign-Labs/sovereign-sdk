@@ -191,8 +191,11 @@ where
         worker_id: u128,
         num_workers: u32,
         validity: Distribution<MessageValidity>,
+        restart_after: Option<std::time::Duration>,
     ) -> anyhow::Result<()> {
-        prepare_and_send_txs(self.modules, client, rx, worker_id, num_workers, validity).await
+        let x = rx.clone();
+        println!("Will restart after {restart_after:?}");
+        prepare_and_send_txs(self.modules, &client, rx, worker_id, num_workers, validity).await
     }
 }
 
@@ -271,7 +274,7 @@ pub fn setup_harness<R: Runtime<S> + Clone, S: Spec>(rng_salt: u128) -> TestGene
 
 async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     modules: Vec<BasicModuleRef<S, R>>,
-    client: sov_api_spec::Client,
+    client: &sov_api_spec::Client,
     rx: Receiver<bool>,
     worker_id: u128,
     num_workers: u32,
