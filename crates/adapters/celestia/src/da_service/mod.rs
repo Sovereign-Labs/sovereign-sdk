@@ -133,16 +133,21 @@ impl CelestiaService {
         let start_submit = std::time::Instant::now();
         let blobs = &[blob];
         let method_name = format!("submit_{ns}_blob");
+        let start = std::time::Instant::now();
         let tx_response = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
             || async {
                 let tx_config = self.get_tx_config();
                 let start = std::time::Instant::now();
                 let result = tokio::time::timeout(
-                    self.request_timeout,
+                    std::tim::Duration::from_secs(120),
                     submit_client.state().submit_pay_for_blob(blobs, tx_config),
                 )
                 .await;
+                // If the outer result is an error, we timed out.
+                if result.is_err() {
+                    tracing::error!(%blob_hash, "Timeout 2 minutes submitting blob to Celestia", result);
+                }
                 let result = flatten_timeout(result);
                 let is_success = result.is_ok();
                 let measurement = SubmitPayForBlob::new(ns, start.elapsed(), is_success);
@@ -152,6 +157,9 @@ impl CelestiaService {
             &method_name,
         )
         .await?;
+
+        let finished_submit = start.elapsed().as_secs();
+        tracing::debug!(duration_secs = %finished_submit, %blob_hash, "Finished submitting blob to Celestia");
         drop(submit_client);
 
         let submit_time = start_submit.elapsed();
