@@ -189,7 +189,7 @@ rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "2ff46a
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
 nomt-core = { git = "https://github.com/thrumdev/nomt.git", rev = "0743ca36995249bf0fdce797ea757ee259ed8e09", default-features = false, features = ["borsh", "serde"] }
-nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "0743ca36995249bf0fdce797ea757ee259ed8e09", default-features = false, features = ["borsh", "serde"] }
+nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "0743ca36995249bf0fdce797ea757ee259ed8e09", default-features = false, features = ["borsh"] }
 
 anyhow = { version = "1.0.95" }
 async-trait = "0.1.81"
