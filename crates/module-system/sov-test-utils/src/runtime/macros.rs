@@ -20,6 +20,7 @@ macro_rules! generate_runtime_without_capabilities {
         // `fn(&Self, &::sov_modules_api::FullyBakedTx) -> u32`
         // If not provided, defaults to 0 priority (via Runtime trait default).
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma for the entire argument block
         $(,)?
     ) => {
@@ -197,6 +198,12 @@ macro_rules! generate_runtime_without_capabilities {
                     ($transaction_priority_wrapper_expr)(call)
                 }
             )?
+
+            $(
+                fn populate_pinned_cache(storage: &S::Storage) -> Option<::sov_state::pinned_cache::PinnedCache> {
+                    ($populate_pinned_cache_fn_expr)(storage)
+                }
+            )?
         }
 
 
@@ -237,6 +244,7 @@ macro_rules! generate_runtime {
         auth_type: $auth:ty,
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
+        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma
         $(,)?
     ) => {
@@ -287,6 +295,7 @@ macro_rules! generate_runtime {
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma
         $(,)?
     ) => {
@@ -301,6 +310,7 @@ macro_rules! generate_runtime {
             auth_call_wrapper: $auth_wrapper
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
+            $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
         }
 
         impl<S> ::sov_modules_api::capabilities::HasCapabilities<S> for $id<S>
@@ -352,9 +362,10 @@ macro_rules! generate_optimistic_runtime_with_kernel {
     (
         $id:ident <=
         kernel_type: $kernel_ty:ty,
-        modules: [$($module_name:ident : $module_ty:path),*],
-        $(transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr,)?
-        $(transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        modules: [$($module_name:ident : $module_ty:path),*]
+        $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
+        $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         $(,)? // Optional trailing comma for the module list or wrapper
     ) => {
         $crate::generate_runtime! {
@@ -368,6 +379,7 @@ macro_rules! generate_optimistic_runtime_with_kernel {
             auth_call_wrapper: |auth_data| auth_data
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
+            $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
         }
     };
 }

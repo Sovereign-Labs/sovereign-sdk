@@ -76,7 +76,7 @@ generate_optimistic_runtime_with_kernel!(
             _ => 0,
         }
 
-    }
+    },
 );
 
 pub(crate) type TestBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
@@ -102,8 +102,8 @@ pub struct DaLayerWithSubscription {
 
 impl DaLayerWithSubscription {
     pub async fn new<
-        R: FullNodeBlueprint<Native, DaService = StorableMockDaService, Spec = TestSpec> + Default,
-    >(
+        R: FullNodeBlueprint<Native, DaService = StorableMockDaService, Spec = S> + Default,
+    S: Spec>(
         test_rollup: &TestRollup<R>,
     ) -> Self {
         assert!(matches!(test_rollup
