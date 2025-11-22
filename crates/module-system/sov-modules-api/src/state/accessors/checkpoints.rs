@@ -263,7 +263,7 @@ impl<S: Spec> StateCheckpoint<S> {
     /// them to compute the `StateUpdate` created by this `StateCheckpoint`.
     #[allow(clippy::type_complexity)]
     pub fn materialize_update(
-        self,
+        mut self,
         prev_state_root: <S::Storage as Storage>::Root,
     ) -> (
         <S::Storage as Storage>::Root,
@@ -272,10 +272,11 @@ impl<S: Spec> StateCheckpoint<S> {
         <S::Storage as Storage>::Witness,
         S::Storage,
     ) {
+        let pinned_cache = self.take_pinned_cache();
         let (cache_log, accessory_delta, witness, storage) = self.delta.freeze();
         let _span = tracing::debug_span!("compute_state_root", scope = "node").entered();
         let (root, update) = storage
-            .compute_state_update(cache_log, &witness, prev_state_root)
+            .compute_state_update(cache_log, &witness, prev_state_root, pinned_cache)
             .expect("state update computation must succeed");
         tracing::trace!(%root, "computed state root");
         (root, update, accessory_delta, witness, storage)

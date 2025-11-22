@@ -35,7 +35,7 @@ pub fn commit_to_storage<S, Sm>(
     let (cache_log, _, witness) = state.freeze();
 
     let (root_hash, state_update) = storage
-        .compute_state_update(cache_log, &witness, pre_state_root)
+        .compute_state_update(cache_log, &witness, pre_state_root, None)
         .expect("Compute state update must succeed");
     storage_manager.commit_state_update(storage, state_update, root_hash);
 

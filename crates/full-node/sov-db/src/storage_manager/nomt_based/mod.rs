@@ -7,6 +7,7 @@ mod tests;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
+use std::any::Any;
 
 pub use crate::flat_db::FlatStateDb;
 use rockbound::cache::delta_reader::DeltaReader;
@@ -51,6 +52,9 @@ pub struct NomtChangeSet {
     pub state: StateFinishedSession,
     pub historical_state: StateChanges,
     pub accessory: SchemaBatch,
+    /// Use type erasure because the `pinned_cache` type is defined in sov-state, which depends on this crate. 
+    /// No type other than `PinnedCache` makes sense here.
+    pub pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
 }
 
 #[cfg(test)]
@@ -74,6 +78,7 @@ impl Default for NomtChangeSet {
             },
             historical_state: Default::default(),
             accessory: Default::default(),
+            pinned_cache: None,
         }
     }
 }
@@ -89,6 +94,7 @@ where
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
         use_strict_mode: bool,
+        pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self;
 }
 
@@ -102,6 +108,7 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
 
     rockbound_snapshots: HashMap<Da::SlotHash, SnapshotGroup>,
     nomt_snapshots: Arc<RwLock<HashMap<Da::SlotHash, StateOverlay>>>,
+    pinned_caches: HashMap<Da::SlotHash, Box<(dyn Any + Send + Sync)>>,
 
     db_group: DbGroup<H, Da::SlotHash>,
 
@@ -140,6 +147,7 @@ where
             blocks_to_parent: Default::default(),
             rockbound_snapshots: Default::default(),
             nomt_snapshots: Arc::new(Default::default()),
+            pinned_caches: Default::default(),
             db_group,
             pruner: None,
             last_pruner_finish_at_height: None,
@@ -155,6 +163,7 @@ where
         &self,
         block_hash: Da::SlotHash,
         use_strict_mode: bool,
+        pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> anyhow::Result<(S, DeltaReader)> {
         tracing::trace!(%block_hash, "Creating storage up to block hash");
         // References are in reversed chronological order,
@@ -184,6 +193,7 @@ where
             rev_references,
             &self.rockbound_snapshots,
             self.nomt_snapshots.clone(),
+            pinned_cache,
             use_strict_mode,
         )
     }
@@ -241,10 +251,12 @@ where
             e.insert(prev_hash);
         }
 
+
         // Storage created "for" a block implies node context,
         // and we expect a change set from this storage to be saved.
         // That's why it is created in a strict mode.
-        let state = self.create_state_up_to(block_header.prev_hash(), true)?;
+        let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
+        let state = self.create_state_up_to(block_header.prev_hash(), true, pinned_cache)?;
 
         Ok(state)
     }
@@ -262,10 +274,11 @@ where
                 Vec::new(),
                 &self.rockbound_snapshots,
                 self.nomt_snapshots.clone(),
+                None,
                 use_strict_mode,
             )
         } else {
-            self.create_state_up_to(block_header.hash(), use_strict_mode)
+            self.create_state_up_to(block_header.hash(), use_strict_mode, None)
         }
     }
 
@@ -296,6 +309,7 @@ where
             state,
             historical_state,
             accessory,
+            pinned_cache,
         } = stf_change_set;
 
         let state_overlay = state.into_state_overlay();
@@ -312,8 +326,12 @@ where
             .write()
             .expect("Failed to lock snapshots");
         nomt_snapshots.insert(block_hash.clone(), state_overlay);
+        if let Some(pinned_cache) = pinned_cache {
+            self.pinned_caches.insert(block_hash.clone(), pinned_cache);
+        }
         self.rockbound_snapshots
             .insert(block_hash, rockbound_snapshot);
+       
 
         Ok(())
     }

@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
@@ -123,6 +124,7 @@ where
         relevant_snapshot_refs: Vec<K>,
         rockbound_snapshots: &HashMap<K, SnapshotGroup>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
+        pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
         use_strict_mode: bool,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
@@ -179,6 +181,7 @@ where
             historical_state_mapper,
             accessory_db,
             use_strict_mode,
+            pinned_cache,
         );
         Ok((storage, ledger_reader))
     }

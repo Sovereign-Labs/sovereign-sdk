@@ -17,6 +17,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use crate::bytes::Prefix;
 use crate::codec::EncodeLike;
 use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};
+use crate::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
 #[cfg(feature = "native")]
@@ -906,6 +907,7 @@ pub trait Storage: Clone + core::fmt::Debug {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
+        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)>;
 
     /// Materializes changes from given [`Self::StateUpdate`] into [`Self::ChangeSet`].
@@ -992,6 +994,16 @@ pub trait NativeStorage: Storage {
 
     /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
     fn maybe_iter_user_values_with_prefix(&self, prefix: SlotKey) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>; 
+
+    /// Takes the pinned cache if one is present in this storage. See [`PinnedCache`] for more details.
+    /// 
+    /// In the full node only, the pinned cache is passed from block to block through the storage manager. 
+    /// On saving the previous block, the storage manager takes its pinned block; then when it creates the storage for the *first* child block,
+    /// that storage is passed along with it. 
+    /// If a block has multiple children (i.e. the chain has a fork at some height), the pinned cache is only passed to the first child block to be created; other children have to rebuild it from db.
+    /// 
+    /// Note that the sequencer passes the pinned cache directly between executors without this hack, so this method is only used in the full node.
+    fn take_pinned_cache(&mut self) -> Option<PinnedCache>;
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

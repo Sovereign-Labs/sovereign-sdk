@@ -1,6 +1,8 @@
 //! Trait that represents life time of the state
 //!
 
+use std::any::Any;
+
 use crate::da::DaSpec;
 
 /// Storage manager, that supports tree-like hierarchy of states.
