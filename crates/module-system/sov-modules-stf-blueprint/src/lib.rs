@@ -286,7 +286,7 @@ where
         // Sanity checks.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
             .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
-        let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel());
+        let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel(), None);
 
         let mut genesis_accessor =
             state_checkpoint.to_genesis_state_accessor::<RT>(&params.runtime);
@@ -435,7 +435,8 @@ where
 
         start_timer!(start_slot);
 
-        let mut state = StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel());
+        // TODO(pinned_cache): load pinned cache from storage here.
+        let mut state = StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel(), None);
         // First, we bootstrap the kernel from the previous state. The
         // `true_slot_number`, will *always* be stale because it's leftover from the
         // previous slot.

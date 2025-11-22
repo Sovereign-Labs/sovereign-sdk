@@ -206,7 +206,7 @@ where
         );
 
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
         ));
         let api_state = ApiState::build(
             Arc::new(()),
@@ -809,7 +809,7 @@ fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
     let mut rt = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
@@ -1162,7 +1162,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
+    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
 
     runtime.kernel().next_sequence_number(&mut state)

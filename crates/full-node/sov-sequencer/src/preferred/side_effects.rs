@@ -129,7 +129,7 @@ where
                     .await?;
 
                 let mut new_checkpoint: StateCheckpoint<_> = (*(*self.checkpoint_sender.borrow()))
-                    .clone_with_empty_witness_dropping_temp_cache();
+                    .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
                     self.transaction_cache

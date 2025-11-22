@@ -26,14 +26,186 @@ use crate::{
 };
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
-/// [`Storage`]. Cheaply-clonable.
+/// [`Storage`]. Cheaply-clonable and cache friendly.
+/// 
+/// Semantically, a slot key is just a byte slice where the first two bytes are the prefix and the rest are the key.
+/// Physically, we store the key as an enum of an inline key and an Arc<Vec<u8>>. Keys up to 70 bytes are stored on the stack
+/// (no allocation, no cache misses to deref), while larger keys are stored on the heap.
 #[derive(
-    Derivative, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize, UniversalWallet,
+    Derivative, UniversalWallet,
 )]
-#[derivative(Clone, PartialEq, Eq, Debug, Hash, Ord)]
-#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[derivative(Clone, Debug)]
 pub struct SlotKey {
     key: KeyContents,
+}
+
+// Because slot key has an optimized memory layout to avoid allocation when possible, we need to manually implement pretty much every trait.
+// We always want to treat the slot key as if it were a byte slice,
+mod slot_key {
+    use std::hash::{Hash, Hasher};
+    use super::SlotKey;
+    use super::Prefix;
+    use super::SlotKeyBuilder;
+
+    impl PartialEq for SlotKey {
+        fn eq(&self, other: &Self) -> bool {
+            self.as_ref() == other.as_ref()
+        }
+    }
+
+    impl Eq for SlotKey {
+    }
+
+    impl Hash for SlotKey {
+        fn hash<H: Hasher>(&self, state: &mut H) {
+            self.as_ref().hash(state);
+        }
+    }
+
+    impl Ord for SlotKey {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.as_ref().cmp(other.as_ref())
+        }
+    }
+
+    impl PartialOrd for SlotKey {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    #[cfg(feature = "arbitrary")]
+    impl arbitrary::Arbitrary<'_> for SlotKey {
+        fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Self> {
+            use std::io::Write;
+            let prefix = Prefix::arbitrary(u)?;
+            let len = u.arbitrary_len::<u8>()?;
+            let bytes = u.bytes(len)?;
+            let mut build = SlotKeyBuilder::with_prefix(prefix);
+            build.write_all(bytes).expect("Failed to write bytes to slot key builder");
+            Ok(Self { key: build.into() })
+        }
+    }
+
+    impl serde::Serialize for SlotKey {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            self.as_ref().serialize(serializer)
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for SlotKey {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            use std::io::Write;
+            let bytes = Vec::<u8>::deserialize(deserializer)?;
+            if bytes.len() < 2 {
+                return Err(serde::de::Error::custom("Slot key must be at least 2 bytes"));
+            }
+            let prefix = Prefix::new(bytes[0], bytes[1]);
+            let mut builder = SlotKeyBuilder::with_prefix(prefix);
+            builder.write_all(&bytes[2..]).expect("Failed to write bytes to slot key builder");
+            Ok(Self { key: builder.into() })
+        }
+    }
+    
+    impl borsh::BorshSerialize for SlotKey {
+        fn serialize<W>(&self, writer: &mut W) -> Result<(), std::io::Error>
+        where
+            W: std::io::Write,
+        {
+            self.as_ref().serialize(writer)
+        }
+    }
+    
+    impl borsh::BorshDeserialize for SlotKey {
+        fn deserialize_reader<R>(reader: &mut R) -> Result<Self, std::io::Error>
+        where
+            R: std::io::Read,
+        {
+            use std::io::Write;
+            let bytes = Vec::<u8>::deserialize_reader(reader)?;
+            if bytes.len() < 2 {
+                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Slot key must be at least 2 bytes"));
+            }
+            let prefix = Prefix::new(bytes[0], bytes[1]);
+            let mut builder = SlotKeyBuilder::with_prefix(prefix);
+            builder.write_all(&bytes[2..])?;
+            Ok(Self { key: builder.into() })
+        }
+        
+    }
+
+    #[test]
+    fn test_borsh_roundtrip() {
+        let prefix = Prefix::new(1, 2);
+        let key = build_key(prefix, b"hello");
+        let serialized = borsh::to_vec(&key).unwrap();
+        let key2: SlotKey = borsh::from_slice(&serialized).unwrap();
+        
+        assert_eq!(key.prefix(), prefix);
+        assert_eq!(key.prefix(), key2.prefix());
+        assert_eq!(key, key2);
+    }
+
+    #[test]
+    fn test_serde_roundtrip() {
+        let prefix = Prefix::new(1, 2);
+        let key = build_key(prefix, b"hello");
+        let json = serde_json::to_string(&key).unwrap();
+        let key2: SlotKey = serde_json::from_str(&json).unwrap();
+        assert_eq!(key.prefix(), prefix);
+        assert_eq!(key.prefix(), key2.prefix());
+        assert_eq!(key, key2);
+    }
+
+    #[cfg(test)]
+    fn build_key(prefix: Prefix, key: &[u8]) -> SlotKey {
+        use std::io::Write;
+        let mut builder = SlotKeyBuilder::with_prefix(prefix);
+        builder.write_all(key).unwrap();
+        SlotKey { key: builder.into() }
+    }
+
+    #[test]
+    fn test_comparison() {
+        let prefix = Prefix::new(1, 2);
+        let key1 = build_key(prefix, b"hello");
+        let key2 = build_key(prefix, b"goodbye");
+        assert!(key1 != key2);
+        assert!(key1 > key2);
+
+        let key3 = build_key(Prefix::new(1, 2), &[0u8; 500]);
+        let key4 = build_key(Prefix::new(1, 2), &[1]);
+
+        assert!(key3 != key4);
+        assert!(key3 < key4);
+        assert!(key3 < key1);
+
+        let key5 = build_key(Prefix::new(1, 2), b"hello");
+        assert!(key5 == key1);
+
+        let lowest_key = build_key(Prefix::new(0, 0), b"xylophone");
+        assert!(lowest_key < key2);
+        assert!(lowest_key < key3);
+
+    }
+
+
+    #[test]
+    fn test_truncate_to() {
+        let key = build_key(Prefix::new(1, 2), b"hello");
+        let long = build_key(Prefix::new(1, 2), b"helloworld");
+        assert_eq!(long.truncate_to(5).unwrap(), key);
+
+        let key  = build_key(Prefix::new(1, 2), &[2u8; 500]);
+        let key2 = build_key(Prefix::new(1, 2), &[2u8; 7]);
+        assert_eq!(key.truncate_to(7).unwrap(), key2);
+    }
 }
 
 /// A logical key consists of [module_tag, item_tag, serialized_key]
@@ -50,11 +222,6 @@ pub struct SlotKey {
     BorshDeserialize,
     UniversalWallet,
     Debug,
-    PartialEq,
-    Eq,
-    Hash,
-    Ord,
-    PartialOrd,
     Clone,
 )]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -122,13 +289,11 @@ mod private {
             self.0[0] as usize
         }
 
-        #[cfg(test)]
-        pub(super) fn module_tag(&self) -> u8 {
+        pub(crate) fn module_tag(&self) -> u8 {
             self.0[MODULE_TAG_OFFSET]
         }
 
-        #[cfg(test)]
-        pub(super) fn item_tag(&self) -> u8 {
+        pub(crate) fn item_tag(&self) -> u8 {
             self.0[ITEM_TAG_OFFSET]
         }
 
@@ -224,14 +389,9 @@ mod private {
         let key2 = SlotKey::from_vec_including_prefix(&vec);
         assert_eq!(key, key2);
     }
+
 }
 
-// Manually implement PartialOrd to satisfy clippy
-impl PartialOrd for SlotKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 impl SlotKey {
     /// Returns a new [`Arc`] reference to the bytes of this key excluding the prefix.
@@ -282,6 +442,26 @@ impl SlotKey {
         Self {
             key: builder.into(),
         }
+    }
+
+    /// Returns the prefix of the key.
+    pub fn prefix(&self) -> Prefix {
+        match &self.key {
+            KeyContents::Inline(key) => Prefix::new(key.module_tag(), key.item_tag()),
+            KeyContents::Reference(key) => Prefix::new(key[0], key[1]),
+        }
+    }
+
+    /// Returns a new key containing the first `length_excluding_prefix` bytes of the original key.
+    /// The truncated key will return the original prefix.
+    pub fn truncate_to(&self, length_excluding_prefix: usize) -> Option<Self> {
+        use std::io::Write;
+        if length_excluding_prefix > self.len().checked_sub(2)? {
+            return None;
+        }
+        let mut output = SlotKeyBuilder::with_prefix(self.prefix());
+        output.write_all(&self.without_prefix()[..length_excluding_prefix]).unwrap();
+        Some(SlotKey { key: output.into() })
     }
 }
 

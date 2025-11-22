@@ -411,7 +411,7 @@ mod tests {
     ) -> Arc<RawStateChanges> {
         let mut rt = Rt::default();
         let mut kernel = rt.kernel();
-        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
         let mut state_with_partially_stale_heights =
             KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
         let height = header.height;
@@ -455,7 +455,7 @@ mod tests {
     ) -> Arc<RawStateChanges> {
         let mut rt = Rt::default();
         let mut kernel = rt.kernel();
-        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
         let mut state_with_partially_stale_heights =
             KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
         let height = header.height;

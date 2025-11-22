@@ -146,8 +146,13 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                     .flush_transactions_cache(info.next_tx_number)
                     .await;
 
+                // Since we're resuming "standard" execuiton, pay upfront to populate the pinned cache. This should speed up tx execution at the cost
+                // of some overhead now.
+                tracing::debug!("Populating pinned cache for replica execution. This may take a few moments. ");
+                let pinned_cache = Rt::populate_pinned_cache(&info.storage);
+                tracing::debug!("Pinned cache populated. Starting replica execution.");
                 let executor = Some(Box::new(
-                    inner.new_executor_with_empty_uncommitted_changes(info),
+                    inner.new_executor_with_empty_uncommitted_changes(info, pinned_cache),
                 ));
 
                 return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
@@ -211,7 +216,7 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
 ) -> PreferredSeqOperation<S, Rt> {
     // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
     // In all other cases, we can just accept the new storage and move on.
-    let executor = if initial_status.should_flush_tx_cache() {
+    let executor = if initial_status.should_flush_tx_cache_and_pinned_cache() {
         debug!(
             ?initial_status,
             "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
@@ -221,13 +226,16 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
             .flush_transactions_cache(info.next_tx_number)
             .await;
 
-        // On `should_flush_tx_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
+        tracing::debug!(inner_status=?initial_status, "Populating pinned cache for replay. This may take a few moments. ");
+        let pinned_cache = Rt::populate_pinned_cache(&info.storage);
+        tracing::debug!("Pinned cache populated. Starting transaction replay.");
+        // On `should_flush_tx_cache_and_pinned_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
         Some(Box::new(
             // Since we're replaying from the node state, don't reuse any uncommitted changes
-            inner.new_executor_with_empty_uncommitted_changes(info),
+            inner.new_executor_with_empty_uncommitted_changes(info, pinned_cache),
         ))
     } else {
-        let rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+        let rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
             .rollup_height_to_access();
         debug!(
             ? initial_status,

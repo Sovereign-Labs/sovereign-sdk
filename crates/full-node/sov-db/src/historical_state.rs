@@ -7,11 +7,10 @@ use rockbound::{SchemaBatch, SchemaKey, SchemaValue};
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::metrics::StateMaterializationMetrics;
-use crate::namespaces::{KernelNamespace, Namespace, UserNamespace};
+use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::StateRootHashes;
 use crate::schema::types::StateRootHashId;
-use crate::DbOptions;
 
 const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
 

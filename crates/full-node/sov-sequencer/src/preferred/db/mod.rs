@@ -584,7 +584,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
+    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
     state.read_from_storage_at_slot_number(latest_state_info.latest_finalized_slot_number);
 

@@ -72,7 +72,7 @@ where
             mempool: vec![],
         });
         let (state_sender, _rec) =
-            watch::channel(Arc::new(StateCheckpoint::new(storage, &runtime.kernel())));
+            watch::channel(Arc::new(StateCheckpoint::new(storage, &runtime.kernel(), None)));
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
@@ -153,7 +153,7 @@ where
     fn get_tx_hash(&self, tx: &FullyBakedTx, storage: S::Storage) -> TxHash {
         let mut runtime = R::default();
 
-        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
         let mut tx_scratchpad = checkpoint.to_working_set_unmetered();
 
         match R::Auth::authenticate(tx, &mut tx_scratchpad) {

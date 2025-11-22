@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 mod bytes;
+pub mod pinned_cache;
 pub(crate) mod cache;
 pub mod codec;
 pub mod config;

@@ -27,7 +27,7 @@ impl<S: Spec, K: HasKernel<S> + Default> ProvableHeightTracker for MaximumProvab
     fn max_provable_slot_number(&self) -> SlotNumber {
         let storage = self.state_update_receiver.borrow().storage.clone();
         let mut kernel = K::default();
-        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel());
+        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel(), None);
         // Substract 1 because the state root at slot height `i` is only available at slot height `i + 1`.
         checkpoint
             .current_visible_slot_number()

@@ -52,7 +52,7 @@ fn increase_value_and_commit<S, Sm>(
     S: Spec,
     Sm: ForklessStorageManager<Storage = S::Storage>,
 {
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), kernel);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), kernel, None);
 
     // Setting value, starting from 0
     let value = match state_value.get(&mut state).unwrap_infallible() {

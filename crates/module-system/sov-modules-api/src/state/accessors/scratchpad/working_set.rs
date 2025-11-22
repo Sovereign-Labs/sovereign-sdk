@@ -166,7 +166,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
         use crate::capabilities::mocks::MockKernel;
 
         let state_checkpoint: StateCheckpoint<S> =
-            StateCheckpoint::new(inner, &MockKernel::<S>::default());
+            StateCheckpoint::new(inner, &MockKernel::<S>::default(), None);
         let tx_scratchpad = TxScratchpad {
             inner: RevertableWriter::new(state_checkpoint),
             phantom: PhantomData,
@@ -187,7 +187,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
 
     /// Creates a new [`WorkingSet`] instance backed by the given [`Spec::Storage`] and a [`Kernel`].
     pub fn new_with_kernel<K: Kernel<S>>(inner: S::Storage, kernel: &K) -> Self {
-        let state_checkpoint: StateCheckpoint<S> = StateCheckpoint::new(inner, kernel);
+        let state_checkpoint: StateCheckpoint<S> = StateCheckpoint::new(inner, kernel, None);
         let tx_scratchpad = TxScratchpad {
             inner: RevertableWriter::new(state_checkpoint),
             phantom: PhantomData,
@@ -344,7 +344,7 @@ mod tests {
         let storage_value = SlotValue::new(&vec![7, 8, 9], &codec);
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
 
-        let mut working_set = StateCheckpoint::<TestSpec>::new(storage.clone(), &kernel);
+        let mut working_set = StateCheckpoint::<TestSpec>::new(storage.clone(), &kernel, None);
         let mut working_set = kernel.accessor(&mut working_set);
 
         StateWriter::<Kernel>::set(&mut working_set, &storage_key, storage_value.clone())

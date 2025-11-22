@@ -127,7 +127,7 @@ fn associated_types() {
     type S = ZkTestSpec;
     type RT = Runtime<S, ActualSpec>;
     let storage = ZkStorage::new();
-    let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default());
+    let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default(), None);
     let runtime = &mut Runtime::<S, ActualSpec>::default();
     let chain_state_config = sov_chain_state::ChainStateConfig::<S> {
         current_time: sov_rollup_interface::da::Time::from_secs(0),

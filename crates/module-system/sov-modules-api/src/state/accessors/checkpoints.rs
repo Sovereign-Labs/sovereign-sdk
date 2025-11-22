@@ -2,6 +2,7 @@ use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 #[cfg(feature = "native")]
 use sov_state::StateGetter;
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{IsValueCached, Namespace, SlotKey, SlotValue, StateAccesses, Storage};
 use tracing::trace;
 
@@ -92,7 +93,7 @@ impl<S: Spec> StateCheckpoint<S> {
     /// such as in the API accessors.
     #[must_use]
     #[cfg(feature = "native")]
-    pub fn clone_with_empty_witness_dropping_temp_cache(&self) -> Self {
+    pub fn clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(&self) -> Self {
         Self {
             delta: self.delta.clone_with_empty_witness(),
             visible_slot_num: self.visible_slot_num,
@@ -102,19 +103,53 @@ impl<S: Spec> StateCheckpoint<S> {
         }
     }
 
+    /// Deep copy the state checkpoint (including its state caches), ignoring
+    /// the witness and the temp cache.
+    ///
+    /// Since this method leaves the witness of the new
+    /// checkpoint in a state that is inconsistent with its caches,
+    /// it should only be used in situations where the witness is not needed,
+    /// such as in the API accessors.
+    #[must_use]
+    #[cfg(feature = "native")]
+    pub fn clone_with_empty_witness_dropping_temp_cache_but_taking_pinned_cache(&mut self) -> Self {
+        let pinned_cache = self.take_pinned_cache();
+        let mut new_checkpoint = Self {
+            delta: self.delta.clone_with_empty_witness(),
+            visible_slot_num: self.visible_slot_num,
+            rollup_height: self.rollup_height,
+            cache: TempCache::new(),
+            metrics: StateMetrics::default(),
+        };
+        new_checkpoint.set_pinned_cache(pinned_cache);
+        new_checkpoint
+    }
+
     /// Creates a new [`StateCheckpoint`] instance with the given intermediate state that will be checked before storage when a value isn't already present in the checkpoint.
     #[cfg(feature = "native")]
     pub fn new_with_uncomitted_changes<K: Kernel<S>>(
         inner: S::Storage,
         kernel: &K,
         uncomitted_changes: Box<dyn StateGetter>,
+        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         Self::with_witness_and_uncomitted_changes(
             inner,
             Default::default(),
             kernel,
             Some(uncomitted_changes),
+            pinned_cache,
         )
+    }
+
+    /// Takes the pinned user-state cache. See  [`PinnedCache`] for more details.
+    pub fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
+        self.delta.user_cache.take_pinned_cache()
+    }
+
+    /// Sets the pinned cache for the state checkpoint. See [`PinnedCache`] for more details.
+    pub fn set_pinned_cache(&mut self, pinned_cache: Option<PinnedCache>) {
+        self.delta.user_cache.set_pinned_cache(pinned_cache);
     }
 
     /// Replace the storage and intermediate state underlying the checkpoint in place. It is up to the caller
@@ -137,14 +172,14 @@ impl<S: Spec> StateCheckpoint<S> {
         &self,
         kernel: &K,
     ) -> RollupHeight {
-        let new_checkpoint = Self::new(self.delta.inner().clone(), kernel);
+        let new_checkpoint = Self::new(self.delta.inner().clone(), kernel, None);
         new_checkpoint.rollup_height
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`].
-    pub fn new<K: Kernel<S>>(inner: S::Storage, kernel: &K) -> Self {
-        Self::with_witness(inner, Default::default(), kernel)
+    pub fn new<K: Kernel<S>>(inner: S::Storage, kernel: &K, pinned_cache: Option<PinnedCache>) -> Self {
+        Self::with_witness(inner, Default::default(), kernel, pinned_cache)
     }
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
@@ -153,6 +188,7 @@ impl<S: Spec> StateCheckpoint<S> {
         inner: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
+        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         Self::with_witness_and_uncomitted_changes(
             inner,
@@ -160,6 +196,7 @@ impl<S: Spec> StateCheckpoint<S> {
             kernel,
             #[cfg(feature = "native")]
             None,
+            pinned_cache,
         )
     }
 
@@ -170,12 +207,14 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
         #[cfg(feature = "native")] uncomitted_changes: Option<Box<dyn StateGetter>>,
+        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
         #[cfg(feature = "native")]
         {
             delta.uncomitted_changes = uncomitted_changes;
         }
+        delta.user_cache.set_pinned_cache(pinned_cache);
         let mut metrics = StateMetrics::default();
         let mut bootstrap_state = BootstrapWorkingSet {
             inner: &mut delta,

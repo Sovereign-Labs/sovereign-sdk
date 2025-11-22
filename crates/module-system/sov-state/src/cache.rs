@@ -8,6 +8,8 @@ use std::mem;
 use crate::digest::typenum;
 use crate::namespaces::ProvableCompileTimeNamespace;
 #[cfg(feature = "native")]
+use crate::pinned_cache::PinnedCache;
+#[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
 use crate::storage::{SlotKey, SlotValue, Storage};
 #[cfg(feature = "native")]
@@ -233,6 +235,10 @@ use internal::CacheLog;
 pub struct ProvableStorageCache<N> {
     // Transaction cache.
     pub(crate) cache: CacheLog,
+    /// Pinned state cache. See [`PinnedCache`] for more details.
+    /// Note that the pinned_cache reflects the same state as the cache log; any writes that are present in the cache log are also reflected in the pinned cache.
+    #[cfg(feature = "native")]
+    pub(crate) pinned_cache: Option<PinnedCache>,
     // Reads that were retrieved from storage for the first time but can still be reverted.
     revertable_ordered_reads: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
     // Ordered reads and writes.
@@ -240,10 +246,13 @@ pub struct ProvableStorageCache<N> {
     phantom: core::marker::PhantomData<N>,
 }
 
-impl<N: ProvableCompileTimeNamespace> Clone for ProvableStorageCache<N> {
-    fn clone(&self) -> Self {
+impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
+    /// Clones the `ProvableStorageCache` without the pinned state.
+    pub fn clone_without_pinned_cache(&self) -> Self {
         Self {
             cache: self.cache.clone(),
+            #[cfg(feature = "native")]
+            pinned_cache: None,
             revertable_ordered_reads: self.revertable_ordered_reads.clone(),
             ordered_db_reads: self.ordered_db_reads.clone(),
             phantom: self.phantom,
@@ -255,6 +264,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     /// Gets a value from the cache, if present
     #[cfg(feature = "native")]
     pub fn get_from_cache(&self, key: &SlotKey) -> MaybePresentValue<SlotValue> {
+        // Note that we don't check the pinned cache here! We only want to check if the value was recently written, not whether it exists at all.
         match self.cache.get(key) {
             Some(Access::Write { modified, .. }) => MaybePresentValue::Present(modified.clone()),
             // We don't want to return the values of old reads; we're only looking for values that were written by the block at the given height.
@@ -391,6 +401,30 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         }
     }
 
+    fn check_pinned_cache_static<'a> (pinned_cache_opt: &'a Option<PinnedCache>, key: &SlotKey) -> MaybePresentValue<&'a SlotValue> {
+        if let Some(pinned_cache) = pinned_cache_opt {
+            if let Some(bucket) = pinned_cache.bucket_for(key) {
+                return MaybePresentValue::Present(bucket.get(key));
+            }
+        }
+        MaybePresentValue::Absent
+    }
+
+    fn check_pinned_cache(&self, key: &SlotKey) -> MaybePresentValue<&SlotValue> {
+       Self::check_pinned_cache_static(&self.pinned_cache, key)
+    }
+
+    /// Takes the pinned cache
+    pub fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
+        self.pinned_cache.take()
+    }
+
+    /// Sets the pinned cache
+    pub fn set_pinned_cache(&mut self, pinned_cache: Option<PinnedCache>) {
+        self.pinned_cache = pinned_cache;
+    }
+        
+
     #[cfg(feature = "native")]
     /// Get the size of the value.
     pub fn get_size_or_fetch<S: Storage>(
@@ -406,10 +440,28 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             Some(Access::Write { modified, .. }) => modified.as_ref().map(SlotValue::size),
             None => {
                 let maybe_leaf = match uncomitted_changes {
-                    Some(uncomitted_changes) => uncomitted_changes
-                        .get_leaf(N::PROVABLE_NAMESPACE, key)
-                        .or_else(|| storage.get_leaf::<N>(key, witness)),
-                    None => storage.get_leaf::<N>(key, witness),
+                    Some(uncomitted_changes) => { 
+                        let maybe_value = uncomitted_changes
+                        .get_leaf(N::PROVABLE_NAMESPACE, key);
+                        if let MaybePresentValue::Present(value) = maybe_value {
+                           value 
+                        } else {
+                            // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice). 
+                            // TODO: Decide if this is the right behavior.
+                            if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
+                                return value.map(SlotValue::size);
+                            }
+                            storage.get_leaf::<N>(key, witness)
+                        }
+                    }
+                    None => { 
+                        // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice). 
+                        // TODO: Decide if this is the right behavior.
+                        if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
+                            return value.map(SlotValue::size);
+                        }
+                        storage.get_leaf::<N>(key, witness) 
+                    }
                 };
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
                 metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
@@ -471,10 +523,25 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 Ok::<_, Infallible>(match uncomitted_changes {
                     // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
                     // If so, check that state first and fall back to storage.
-                    Some(uncomitted_changes) => uncomitted_changes
-                        .get(N::NAMESPACE, key)
-                        .or_else(|| storage.get::<N>(key, witness)),
-                    None => storage.get::<N>(key, witness),
+                    Some(uncomitted_changes) => { 
+                        if let MaybePresentValue::Present(value) = uncomitted_changes
+                        .get(N::NAMESPACE, key) {
+                            value
+                        } else {
+                              // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice). 
+                              // TODO: Decide if this is the right behavior.
+                              if let MaybePresentValue::Present(value) = Self::check_pinned_cache_static(&self.pinned_cache, key) {
+                                return Ok(value.cloned());
+                              }
+                              storage.get::<N>(key, witness)
+                            }
+                        },
+                    None =>  {
+                        if let MaybePresentValue::Present(value) = Self::check_pinned_cache_static(&self.pinned_cache, key) {
+                            return Ok(value.cloned());
+                        }
+                        storage.get::<N>(key, witness)
+                    }
                 })
             },
             (),
@@ -586,11 +653,20 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
     /// Replaces the keyed value on the storage.
     pub fn set(&mut self, key: &SlotKey, value: SlotValue) {
+        if let Some(bucket) = self.pinned_cache.as_mut().and_then(|pinned_cache| pinned_cache.bucket_for_mut(key)) {
+            // Ignore the result of the insert, we don't care if it failed (it will have been logged, and there's nothing we can do about it)
+            let _ = bucket.try_insert(key.clone(), value.clone());
+        }
         self.cache.add_write(key.clone(), Some(value));
+       
     }
 
     /// Deletes a keyed value from the cache.
     pub fn delete(&mut self, key: &SlotKey) {
+        if let Some(bucket) = self.pinned_cache.as_mut().and_then(|pinned_cache| pinned_cache.bucket_for_mut(key)) {
+            // Ignore the result of the insert, we don't care if it failed (it will have been logged, and there's nothing we can do about it)
+            bucket.delete(&key);
+        }
         self.cache.add_write(key.clone(), None);
     }
 

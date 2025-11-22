@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use sov_state::pinned_cache::PinnedCache;
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
@@ -173,6 +174,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
+        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         Self::new_helper(
             info,
@@ -180,6 +182,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_exec_config,
             seq_config,
             uncommitted_changes,
+            pinned_cache,
         )
     }
 
@@ -189,6 +192,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
+        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         Self::new_helper(
             info,
@@ -196,6 +200,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_exec_config,
             seq_config,
             uncommitted_changes,
+            pinned_cache,
         )
     }
 
@@ -205,9 +210,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
+        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut rt = Rt::default();
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), pinned_cache);
 
         let RollupBlockExecutorConfig {
             da_address,
@@ -532,11 +538,12 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let (tx_sender, tx_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
         let (result_sender, result_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
 
+
         let handle = tokio::runtime::Handle::current().spawn_blocking({
             let ctx = RollupBlockTaskContext {
                 checkpoint: self
                     .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache(),
+                    .clone_with_empty_witness_dropping_temp_cache_but_taking_pinned_cache(), // Pass the pinned cache through to the actual executor
                 tx_receiver,
                 setup_sender,
                 old_visible_slot_number,
@@ -707,13 +714,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
-        let (batch_receipts, new_checkpoint) = self
+        let (batch_receipts, mut new_checkpoint) = self
             .rollup_block_task_state
             .take()
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
             .shutdown()
             .await
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
+
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {
@@ -736,6 +744,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             "Sending state root computation request to background task");
         let (response_channel, response_receiver) = oneshot::channel();
         self.state_root_responses.push_back(response_receiver);
+        // TODO: Combine these methods into one
+        let pinned_cache = new_checkpoint.take_pinned_cache();
         let changes = Arc::new(new_checkpoint.to_raw_state_changes());
 
         if self
@@ -760,6 +770,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             self.checkpoint.storage().clone(),
             &Rt::default().kernel(),
             Box::new(self.uncommitted_changes.clone()),
+            pinned_cache,
         );
 
         trace!(%rollup_height, "Successfully ended rollup block");

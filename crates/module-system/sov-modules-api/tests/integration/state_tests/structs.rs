@@ -185,7 +185,7 @@ pub fn test_state_thing<S: Spec<Storage = ProverStorage<StorageSpec>>, St: State
 ) {
     let simple_storage_manager = SimpleStorageManager::new();
     let storage: ProverStorage<StorageSpec> = simple_storage_manager.create_storage();
-    let mut state = StateCheckpoint::<S>::new(storage, &MockKernel::<S>::default());
+    let mut state = StateCheckpoint::<S>::new(storage, &MockKernel::<S>::default(), None);
     let mut thing = St::create(&mut state);
     let mut working_set = state.to_working_set_unmetered();
 
@@ -242,7 +242,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
         mock_kernel.increase_heights();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage.clone(), &mock_kernel);
+            StateCheckpoint::new(storage.clone(), &mock_kernel, None);
         state_value.set(&11, &mut state)?;
         let _ = state_value.get(&mut state);
         state_value.set(&22, &mut state)?;
@@ -256,7 +256,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
     {
         let storage = ZkStorage::<StorageSpec>::new();
         let mut state_checkpoint: StateCheckpoint<Zk> =
-            StateCheckpoint::with_witness(storage.clone(), witness, &MockKernel::<Zk>::default());
+            StateCheckpoint::with_witness(storage.clone(), witness, &MockKernel::<Zk>::default(), None);
         state_value.set(&11, &mut state_checkpoint)?;
         let _ = state_value.get(&mut state_checkpoint);
         state_value.set(&22, &mut state_checkpoint)?;
@@ -275,7 +275,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
 fn test_borrow_and_get_state_value() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
+    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default(), None);
     let mut state_value = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_value.borrow(&mut state).unwrap_infallible();
@@ -299,7 +299,7 @@ fn test_borrow_and_get_state_value() {
 fn test_borrow_and_save_state_value() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
+    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default(), None);
     let mut state_value = StateValue::<i32>::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_value.borrow_mut(&mut state).unwrap_infallible();
@@ -338,7 +338,7 @@ fn test_borrow_and_save_state_value() {
 fn test_borrow_and_get_state_map() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
+    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default(), None);
     let mut state_map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_map.borrow(&0, &mut state).unwrap_infallible();
@@ -368,7 +368,7 @@ fn test_borrow_and_get_state_map() {
 fn test_borrow_and_save_state_map() {
     let storage_manager = SimpleStorageManager::<StorageSpec>::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default());
+    let mut state = StateCheckpoint::<TestSpec>::new(storage, &MockKernel::<TestSpec>::default(), None);
     let mut state_map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
 
     let val = state_map.borrow(&0, &mut state).unwrap_infallible();

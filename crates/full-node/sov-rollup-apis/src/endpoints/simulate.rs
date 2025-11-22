@@ -419,6 +419,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
         let mut accessor = StateCheckpoint::new(
             state.state_receiver.borrow().storage.clone(),
             &runtime.kernel(),
+            None,
         );
         let gas_price = runtime
             .chain_state()
