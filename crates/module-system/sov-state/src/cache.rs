@@ -441,16 +441,17 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             None => {
                 let maybe_leaf = match uncomitted_changes {
                     Some(uncomitted_changes) => { 
+                        // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice). 
+                        // TODO: Decide if this is the right behavior.
+                        if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
+                            return value.map(SlotValue::size);
+                        }
+                        // Assuming the value isn't in pinned cache, check the uncommited changes next.
                         let maybe_value = uncomitted_changes
                         .get_leaf(N::PROVABLE_NAMESPACE, key);
                         if let MaybePresentValue::Present(value) = maybe_value {
                            value 
                         } else {
-                            // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice). 
-                            // TODO: Decide if this is the right behavior.
-                            if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
-                                return value.map(SlotValue::size);
-                            }
                             storage.get_leaf::<N>(key, witness)
                         }
                     }
@@ -519,7 +520,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             key,
             storage,
             witness,
-            |key, witness, _args| {
+            |key, witness, _args, metric| {
                 Ok::<_, Infallible>(match uncomitted_changes {
                     // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
                     // If so, check that state first and fall back to storage.
@@ -533,14 +534,18 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                               if let MaybePresentValue::Present(value) = Self::check_pinned_cache_static(&self.pinned_cache, key) {
                                 return Ok(value.cloned());
                               }
-                              storage.get::<N>(key, witness)
+                              let value = storage.get::<N>(key, witness);
+                              metric.storage_read_size = Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
+                              value
                             }
                         },
                     None =>  {
                         if let MaybePresentValue::Present(value) = Self::check_pinned_cache_static(&self.pinned_cache, key) {
                             return Ok(value.cloned());
                         }
-                        storage.get::<N>(key, witness)
+                        let value = storage.get::<N>(key, witness);
+                        metric.storage_read_size = Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
+                        value
                     }
                 })
             },
@@ -583,7 +588,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         metric: &mut StateAccessMetric,
     ) -> Result<Option<SlotValue>, E>
     where
-        F: Fn(&SlotKey, &S::Witness, Args) -> Result<Option<SlotValue>, E>,
+        F: Fn(&SlotKey, &S::Witness, Args, &mut StateAccessMetric) -> Result<Option<SlotValue>, E>,
     {
         if let Some(access) = cache.get_mut(key) {
             match access {
@@ -591,13 +596,12 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                     original: Some(node),
                 } => match node.value.clone() {
                     ReadType::GetSizeValueNotFetched => {
-                        let slot_value = fetch_fn(key, witness, args)?
+                        let slot_value = fetch_fn(key, witness, args, metric)?
                             // This unwrap is justified because in the `ReadType::GetSizeValueFetched` branch,
                             // we inserted `Some(slot_value)`.
                             .unwrap_or_else(|| {
                                 panic!("Invalid read for {key:?}, provided witness is invalid")
                             });
-                        metric.storage_read_size = Some(slot_value.size());
                         let node_leaf = NodeLeaf::make_leaf::<S::Hasher>(&slot_value);
                         assert_eq!(node.leaf, node_leaf);
 
@@ -616,8 +620,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 Access::Write { modified, .. } => Ok(modified.clone()),
             }
         } else {
-            let storage_value = fetch_fn(key, witness, args)?;
-            metric.storage_read_size = Some(storage_value.as_ref().map(|v| v.size()).unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
+            let storage_value = fetch_fn(key, witness, args, metric)?;
             let read = storage_value.clone().map(|v| NodeLeafAndMaybeValue {
                 leaf: NodeLeaf::make_leaf::<S::Hasher>(&v),
                 value: ReadType::Read(v),
@@ -643,8 +646,11 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             key,
             storage,
             witness,
-            |key, witness, version: Option<sov_rollup_interface::common::SlotNumber>| {
-                storage.get_historical::<N>(key, version, witness)
+            |key, witness, version: Option<sov_rollup_interface::common::SlotNumber>, metric: &mut StateAccessMetric| {
+                let value = storage.get_historical::<N>(key, version, witness)?;
+                metric.storage_read_size = Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
+                Ok(value)
+                
             },
             version,
             metric,

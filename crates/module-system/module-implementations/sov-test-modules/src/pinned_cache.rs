@@ -5,6 +5,7 @@ use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::{
     Context, DaSpec, GenesisState, HexHash, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateMap, TxState
 };
+use sov_state::pinned_cache::BucketId;
 
 /// A message to test and set a value
 #[derive(
@@ -78,6 +79,14 @@ impl std::str::FromStr for StateKey {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (address, index) = s.split_once("/").ok_or(anyhow::anyhow!("Invalid state key"))?;
         Ok(StateKey { address: HexHash::from_str(address)?, index: index.parse()? })
+    }
+}
+
+impl<S: Spec> PinnedCacheTester<S> {
+	/// Get the bucket ID for a given address.
+    pub fn get_bucket_id(&self, address: &HexHash) -> BucketId {
+		let key = StateKey { address: address.clone(), index: 0 };
+        BucketId::from_slot_key(&self.values.slot_key(&key), 32)
     }
 }
 

@@ -113,7 +113,6 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
-    pub num_cache_warmup_workers: usize,
     pub separate_archival_db: bool,
 }
 
@@ -330,6 +329,8 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         if self.config.separate_archival_db {
             rollup_db_config.separate_archival_state = true;
         }
+        
+        
         RollupConfig {
             storage: rollup_db_config,
             runner: RunnerConfig {
@@ -410,7 +411,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_log_limit: 20000,
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
-            num_cache_warmup_workers: TEST_NUM_CACHE_WARMUP_WORKERS,
             separate_archival_db: true,
         }
     }
