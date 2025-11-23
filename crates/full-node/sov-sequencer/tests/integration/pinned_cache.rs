@@ -22,7 +22,6 @@ use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::RtAgnosticBlueprint;
 use sov_modules_api::{DispatchCall, HexHash, HexString};
-use sov_test_utils::TEST_MAX_CONCURRENT_BLOBS;
 use crate::preferred_end_to_end::DaLayerWithSubscription;
 use sov_test_utils::runtime::GenesisParams;
 use crate::utils::tempdir_inside_codebase_dir;
@@ -246,6 +245,91 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
 	}
 
 }
+
+/// Test that pinning still works after the sequencer has exited recovery.
+/// 
+/// This test works by...
+/// - Sending a transaction to test initial setup
+/// - Sending the sequencer into recovery by producing a lot of blocks
+/// - Letting the sequencer exit recovery
+/// - Sending a test transaction to read the pinned cache. Ensure that it didn't touch storage.
+/// - Letting that transaction go through to the full node to ensure that works as well.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_pinning_after_recovery() {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+    let (test_rollup, admin) = create_test_nomt_rollup().await;
+
+    let client = test_rollup.api_client().clone();
+
+    // Finalise some blocks
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(5).await;
+
+    // Sanity check tx that the rollup works, and send the tx all the way through to DA.
+	// Set a value in the pinned cache.
+    let tx = tx_write_pinned_cache(&admin.private_key, 0, PINNED_ADDRESS, Some(ValueRange { indices: 0..1, value: 1})); 
+    client
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&tx),
+        })
+        .await
+        .unwrap();
+	test_rollup.force_close_batch().await.unwrap();
+    da_layer.produce_and_wait_for_n_slots(1).await;
+
+    // Pause sequencer update_state and run some blocks so deferred_slots_count is reached
+    test_rollup.pause_preferred_batches().await;
+    tracing::info!("Preferred sequencer batch production paused.");
+    tracing::info!(
+        "Producing subsequent DA blocks while sequencer is paused, to exceed deferred_slots_count"
+    );
+    // This can be lower than DEFERRED_SLOTS_COUNT because the sequencer takes into account a)
+    // possible node lag and b) a 90% threshold.
+    for _ in 0..40 {
+        let _ = da_layer.produce_block().await; // Don't wait for state updates since we've just paused them
+    }
+    // Make sure the DA has synced everything
+    test_rollup.wait_for_node_synced().await.unwrap();
+
+    tracing::info!("Resuming preferred sequencer batch production.");
+    test_rollup.resume_preferred_batches().await;
+    // Normally on the next state update, the sequencer should always enter recovery.
+    // However for some reason this was flaky.
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    while test_rollup.is_sequencer_ready().await {
+		// For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
+		// This is unrelated to the feature under test, so I've left it for now. Anyone reading this should feel free to change the test.
+        let _ = da_layer.produce_block().await;
+		tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    while !test_rollup.is_sequencer_ready().await {
+		// For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
+		// This is unrelated to the feature under test, so I've left it for now. Anyone reading this should feel free to change the test.
+        let _ = da_layer.produce_block().await;
+		tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+	// Read the value that should be in pinned cache. We should get the correct value (1) and not touch storage.
+    let tx2 = tx_read_pinned_cache(&admin.private_key, 0, PINNED_ADDRESS, Some(ValueRange { indices: 0..1, value: 1}), Some(0));
+	client
+		.accept_tx(&api_types::AcceptTxBody {
+			body: BASE64_STANDARD.encode(&tx2),
+		})
+		.await
+		.unwrap();
+
+	test_rollup.force_close_batch().await.unwrap();
+	// For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
+	// So we just produce blocks and sleep
+	for _ in 0..3 {
+		let _ = da_layer.produce_block().await;
+		tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+	}
+    test_rollup.shutdown().await.unwrap();
+}
+
+
 
 
 
