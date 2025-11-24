@@ -1,3 +1,6 @@
+# 2025-11-22
+- #2102 Adds `ModuleExecutionConfig` associated type to the `Runtime` trait, allowing modules to customize their offchain environment.
+
 # 2025-11-17
 - ##2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
 # 2025-11-14

@@ -121,6 +121,7 @@ macro_rules! generate_runtime_without_capabilities {
 
             type GenesisConfig = <Self as ::sov_modules_api::Genesis>::Config;
             type GenesisInput = ();
+            type ModuleExecutionConfig = ();
             type Auth = $auth;
 
             fn endpoints(api_state: sov_modules_api::rest::ApiState<S>) -> ::sov_modules_api::NodeEndpoints {
