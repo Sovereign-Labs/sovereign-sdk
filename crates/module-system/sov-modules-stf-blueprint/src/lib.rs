@@ -424,8 +424,7 @@ where
     pub fn apply_slot_with_control_flow<CF: InjectedControlFlow<S> + Clone>(
         &self,
         pre_state_root: &<S::Storage as Storage>::Root,
-        #[cfg_attr(not(feature = "native"), allow(unused_mut))]
-        mut pre_state: S::Storage,
+        #[cfg_attr(not(feature = "native"), allow(unused_mut))] mut pre_state: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         slot_header: &<S::Da as DaSpec>::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,

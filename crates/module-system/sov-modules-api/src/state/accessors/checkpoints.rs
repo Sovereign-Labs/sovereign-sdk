@@ -213,8 +213,7 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
         #[cfg(feature = "native")] uncomitted_changes: Option<Box<dyn StateGetter>>,
-        #[cfg_attr(not(feature = "native"), allow(unused))]
-        pinned_cache: Option<PinnedCache>,
+        #[cfg_attr(not(feature = "native"), allow(unused))] pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
         #[cfg(feature = "native")]
@@ -270,8 +269,7 @@ impl<S: Spec> StateCheckpoint<S> {
     /// them to compute the `StateUpdate` created by this `StateCheckpoint`.
     #[allow(clippy::type_complexity)]
     pub fn materialize_update(
-        #[cfg_attr(not(feature = "native"), allow(unused_mut))]
-        mut self,
+        #[cfg_attr(not(feature = "native"), allow(unused_mut))] mut self,
         prev_state_root: <S::Storage as Storage>::Root,
     ) -> (
         <S::Storage as Storage>::Root,
@@ -280,10 +278,10 @@ impl<S: Spec> StateCheckpoint<S> {
         <S::Storage as Storage>::Witness,
         S::Storage,
     ) {
-        let pinned_cache = { 
+        let pinned_cache = {
             #[cfg(feature = "native")]
             {
-            self.take_pinned_cache() 
+                self.take_pinned_cache()
             }
             #[cfg(not(feature = "native"))]
             {
