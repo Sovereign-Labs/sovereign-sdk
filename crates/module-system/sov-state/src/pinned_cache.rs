@@ -58,7 +58,7 @@ impl PinnedCache {
         let prefix = key.prefix();
         let state_item_cache = self.item_caches.get_mut(&prefix)?;
         let key_length = state_item_cache.bucket_key_length;
-        let relevant_key = BucketId(key.truncate_to(key_length as usize)?);
+        let relevant_key = BucketId(key.truncate_to(key_length)?);
         state_item_cache.items.get_mut(&relevant_key)
     }
 
@@ -67,7 +67,7 @@ impl PinnedCache {
         let prefix = key.prefix();
         let state_item_cache = self.item_caches.get(&prefix)?;
         let key_length = state_item_cache.bucket_key_length;
-        let relevant_key = BucketId(key.truncate_to(key_length as usize)?);
+        let relevant_key = BucketId(key.truncate_to(key_length)?);
         state_item_cache.items.get(&relevant_key)
     }
 }
@@ -80,7 +80,7 @@ impl BucketId {
     /// Create a bucket ID from the first `length` bytes of a slot key, excluding the prefix.
     /// For example, if the key is a 32 byte address and an 8 byte index and you wish to bucket by address, the `length` should be 32 bytes.
     pub fn from_slot_key(slot_key: &SlotKey, length: usize) -> Self {
-        Self(slot_key.truncate_to(length).unwrap().into())
+        Self(slot_key.truncate_to(length).unwrap())
     }
 }
 
@@ -110,7 +110,7 @@ impl BucketStorage {
         }
         self.items.insert(key, value);
         self.current_size += size;
-        return true;
+        true
     }
 
     /// Delete a key from the bucket.
@@ -176,7 +176,7 @@ impl PinnedCache {
                 });
 
         for (key, value) in iter {
-            assert!(key.as_ref().starts_with(bucket_id.0.as_ref()), "Key {} does not fall under bucket {:?}. This is a bug in the implementaiton of maybe_iter_user_values_with_prefix; please report it.", key, bucket_id);
+            assert!(key.as_ref().starts_with(bucket_id.0.as_ref()), "Key {key} does not fall under bucket {:?}. This is a bug in the implementaiton of maybe_iter_user_values_with_prefix; please report it.", bucket_id.0);
             if !bucket_storage.try_insert(key, value) {
                 return Ok(LoadBucketOutcome::OverSizeLimit);
             }

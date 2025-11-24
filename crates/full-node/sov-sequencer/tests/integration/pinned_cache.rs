@@ -99,8 +99,10 @@ async fn create_test_nomt_rollup() -> (TestRollup<TestNomtBlueprint>, TestUser<T
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
+        c.max_concurrent_blobs = 64;
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
+            config.batch_execution_time_limit_millis = 6000;
         }
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
@@ -141,7 +143,7 @@ async fn test_nomt_basic_pinning() {
         .await
         .unwrap();
 
-    let mut off_by_one_address = PINNED_ADDRESS.clone();
+    let mut off_by_one_address = PINNED_ADDRESS;
     off_by_one_address.0[31] += 1;
     let tx = tx_read_pinned_cache(
         &user.private_key,
@@ -164,6 +166,8 @@ async fn test_nomt_basic_pinning() {
     test_rollup.shutdown().await.unwrap();
 }
 
+/// A basic test of ram pinning. Write to some slots and not others. Check that no matter what slot we read, we get the correct value
+/// and don't touch storage.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_nomt_basic_pinning_with_writes() {
     sov_test_utils::initialize_logging();
@@ -174,7 +178,7 @@ async fn test_nomt_basic_pinning_with_writes() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
     let client = test_rollup.api_client().clone();
-    let mut off_by_one_address = PINNED_ADDRESS.clone();
+    let mut off_by_one_address = PINNED_ADDRESS;
     off_by_one_address.0[31] += 1;
 
     for i in 0..8 {
@@ -184,9 +188,9 @@ async fn test_nomt_basic_pinning_with_writes() {
             PINNED_ADDRESS,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
-        ); // A read from the pinned bucket should not fall through to storage.
+        );
         client
             .accept_tx(&api_types::AcceptTxBody {
                 body: BASE64_STANDARD.encode(&tx),
@@ -195,7 +199,7 @@ async fn test_nomt_basic_pinning_with_writes() {
             .unwrap();
 
         for j in 0u32..=i {
-            let expected_value = if j <= i { j as u32 } else { 0 };
+            let expected_value = if j <= i { j } else { 0 };
             // Read from the pinned address. We should never touch storage.
             let tx = tx_read_pinned_cache(
                 &user.private_key,
@@ -203,10 +207,10 @@ async fn test_nomt_basic_pinning_with_writes() {
                 PINNED_ADDRESS,
                 Some(ValueRange {
                     indices: j..j + 1,
-                    value: expected_value as u32,
+                    value: expected_value,
                 }),
                 Some(0),
-            ); // A read from the pinned bucket should not fall through to storage.
+            );
             client
                 .accept_tx(&api_types::AcceptTxBody {
                     body: BASE64_STANDARD.encode(&tx),
@@ -222,28 +226,27 @@ async fn test_nomt_basic_pinning_with_writes() {
     test_rollup.shutdown().await.unwrap();
 }
 
+/// Test ram pinning with a non-pinned address
 #[tokio::test(flavor = "multi_thread")]
 async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
-    // sov_test_utils::initialize_logging();
-
     let nb_of_blocks = 5;
     let (test_rollup, user) = create_test_nomt_rollup().await;
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
     let client = test_rollup.api_client().clone();
-    let mut off_by_one_address = PINNED_ADDRESS.clone();
+    let mut off_by_one_address = PINNED_ADDRESS;
     off_by_one_address.0[31] += 1;
 
     for i in 0..8 {
-        println!("Writing to slot {}", i);
+        // On each iteration, write to both the pinned and non-pinned addresses.
         let tx = tx_write_pinned_cache(
             &user.private_key,
             i as u64,
             PINNED_ADDRESS,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
         ); // A read from the pinned bucket should not fall through to storage.
         client
@@ -259,7 +262,7 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
             off_by_one_address,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
         ); // A read from the pinned bucket should not fall through to storage.
         client
@@ -270,11 +273,7 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
             .unwrap();
 
         for j in 0u32..=i {
-            let expected_value = if j <= i { j as u32 } else { 0 };
-            println!(
-                "Reading from slot {}. Expected value: {}",
-                j, expected_value
-            );
+            let expected_value = if j <= i { j } else { 0 };
             // Read from the pinned address. We should never touch storage.
             let tx = tx_read_pinned_cache(
                 &user.private_key,
@@ -282,10 +281,10 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
                 PINNED_ADDRESS,
                 Some(ValueRange {
                     indices: j..j + 1,
-                    value: expected_value as u32,
+                    value: expected_value,
                 }),
                 Some(0),
-            ); // A read from the pinned bucket should not fall through to storage.
+            );
             client
                 .accept_tx(&api_types::AcceptTxBody {
                     body: BASE64_STANDARD.encode(&tx),
@@ -293,7 +292,7 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
                 .await
                 .unwrap();
 
-            // Read from the pinned address. We should never touch storage
+            // Read from the non-pinned address. We should touch storage if needed
             let should_touch_storage = j != i;
             let tx = tx_read_pinned_cache(
                 &user.private_key,
@@ -301,10 +300,10 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
                 off_by_one_address,
                 Some(ValueRange {
                     indices: j..j + 1,
-                    value: expected_value as u32,
+                    value: expected_value,
                 }),
                 Some(should_touch_storage as u64),
-            ); // A read from the pinned bucket should not fall through to storage.
+            );
             client
                 .accept_tx(&api_types::AcceptTxBody {
                     body: BASE64_STANDARD.encode(&tx),
@@ -314,7 +313,7 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
         }
 
         test_rollup.force_close_batch().await.unwrap();
-        // da_layer.produce_and_wait_for_n_slots(1).await;
+        da_layer.produce_and_wait_for_n_slots(1).await;
     }
 }
 
@@ -435,7 +434,7 @@ async fn test_pinned_cache_after_total_resync() {
             PINNED_ADDRESS,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
         );
         client
@@ -492,7 +491,7 @@ async fn test_pinned_cache_after_total_resync() {
             PINNED_ADDRESS,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
             Some(0),
         );
@@ -528,7 +527,7 @@ async fn test_pinned_cache_after_fast_resync() {
             PINNED_ADDRESS,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
         );
         client
@@ -557,7 +556,7 @@ async fn test_pinned_cache_after_fast_resync() {
             PINNED_ADDRESS,
             Some(ValueRange {
                 indices: i..i + 1,
-                value: i as u32,
+                value: i,
             }),
             Some(0),
         );

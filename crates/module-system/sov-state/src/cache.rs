@@ -688,7 +688,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             .and_then(|pinned_cache| pinned_cache.bucket_for_mut(key))
         {
             // Ignore the result of the insert, we don't care if it failed (it will have been logged, and there's nothing we can do about it)
-            bucket.delete(&key);
+            bucket.delete(key);
         }
         self.cache.add_write(key.clone(), None);
     }

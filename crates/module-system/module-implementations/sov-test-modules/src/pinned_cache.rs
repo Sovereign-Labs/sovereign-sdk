@@ -92,7 +92,7 @@ impl<S: Spec> PinnedCacheTester<S> {
     /// Get the bucket ID for a given address.
     pub fn get_bucket_id(&self, address: &HexHash) -> BucketId {
         let key = StateKey {
-            address: address.clone(),
+            address: *address,
             index: 0,
         };
         BucketId::from_slot_key(&self.values.slot_key(&key), 32)
@@ -100,6 +100,8 @@ impl<S: Spec> PinnedCacheTester<S> {
 }
 
 impl<S: Spec> Module for PinnedCacheTester<S> {
+    type Error = anyhow::Error;
+
     type Spec = S;
 
     type Config = ();
@@ -156,8 +158,7 @@ impl<S: Spec> Module for PinnedCacheTester<S> {
                     let num_accesses = state.metrics().total_read_misses - accesses_before;
                     assert_eq!(
                         num_accesses, expected_storage_accesses,
-                        "Unexpected number of storage accesses. Expected: {}, Actual: {}",
-                        expected_storage_accesses, num_accesses
+                        "Unexpected number of storage accesses. Expected: {expected_storage_accesses}, Actual: {num_accesses}",
                     );
                 }
                 Ok(())

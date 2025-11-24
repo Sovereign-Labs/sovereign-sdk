@@ -14,7 +14,7 @@ use crate::postgres::PostgresImage;
 use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS, TEST_NUM_CACHE_WARMUP_WORKERS,
+    TEST_MAX_CONCURRENT_BLOBS,
 };
 use anyhow::Context;
 use derivative::Derivative;

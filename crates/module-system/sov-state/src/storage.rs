@@ -385,7 +385,7 @@ mod private {
             key: builder.into(),
         };
         let vec = key.as_ref().to_vec();
-        let key2 = SlotKey::from_vec_including_prefix(&vec);
+        let key2 = SlotKey::from_slice_including_prefix(&vec);
         assert_eq!(key, key2);
 
         let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
@@ -394,7 +394,7 @@ mod private {
             key: builder.into(),
         };
         let vec = key.as_ref().to_vec();
-        let key2 = SlotKey::from_vec_including_prefix(&vec);
+        let key2 = SlotKey::from_slice_including_prefix(&vec);
         assert_eq!(key, key2);
     }
 }
@@ -440,7 +440,7 @@ impl SlotKey {
     ///
     /// # Panics
     /// Panics if the vector length is less than 2 bytes.
-    pub fn from_vec_including_prefix(vec: &Vec<u8>) -> Self {
+    pub fn from_slice_including_prefix(vec: &[u8]) -> Self {
         use std::io::Write;
         let prefix = Prefix::new(vec[0], vec[1]);
         let mut builder = SlotKeyBuilder::with_prefix(prefix);

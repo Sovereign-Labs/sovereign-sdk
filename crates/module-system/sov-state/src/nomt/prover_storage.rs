@@ -743,11 +743,9 @@ where
         };
 
         Ok(Some(iter.filter_map(|(key, value)| {
-            if let Some(value) = value.flatten() {
-                Some((SlotKey::from_vec_including_prefix(&key), value.into()))
-            } else {
-                None
-            }
+            value
+                .flatten()
+                .map(|v| (SlotKey::from_slice_including_prefix(&key), v.into()))
         })))
     }
 
