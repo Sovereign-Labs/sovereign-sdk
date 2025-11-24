@@ -23,7 +23,7 @@ once_cell = { workspace = true }
 serde_json = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 # EIP712 functionality
-alloy-dyn-abi = { version = "1.3.1", features = ["eip712"], optional = true }
+alloy-dyn-abi = { version = "1.4.0", features = ["eip712"], optional = true }
 alloy-primitives = { workspace = true, optional = true }
 # Re-exporting the macro
 sov-universal-wallet-macros = { workspace = true, optional = true }
