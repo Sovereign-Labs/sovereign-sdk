@@ -234,6 +234,7 @@ async fn new_rollup_with_celestia_da(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -260,6 +261,7 @@ async fn new_rollup_with_celestia_da_and_nomt(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -289,6 +291,7 @@ async fn new_rollup_with_mock_da_and_jmt(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -318,6 +321,7 @@ async fn new_rollup_with_external_mock_da_and_jmt(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -347,6 +351,7 @@ async fn new_rollup_with_mock_da_and_nomt(
             prover_config,
             stop_at_rollup_height,
             start_at_rollup_height,
+            None,
         )
         .await
 }
@@ -376,6 +381,7 @@ async fn new_rollup_with_external_mock_da_and_nomt(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
