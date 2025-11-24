@@ -290,7 +290,7 @@ flume = { version = "0.11.1", features = ["async"] }
 tokio-metrics = { version = "0.4.0" }
 
 # EVM dependencies
-ethereum-types = { version = "0.14.1", default-features = false }
+ethereum-types = { version = "0.16.0", default-features = false }
 ethers = { version = "=2.0.14", default-features = false }
 
 alloy = { version = "1.0.37", default-features = false, features = ["std", "essentials"] }
