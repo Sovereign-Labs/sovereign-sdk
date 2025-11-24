@@ -33,19 +33,33 @@ pub enum OperatingMode {
     Operator,
 }
 
-/// todod
+/// This trait defines an interface to pass runtime configuration values for modules.
+/// This is configuration that is ran off-chain, for example metric gathering configuration.
+/// This is distinct from genesis configuration, which is passed to the runtime at genesis time
+/// and stored on-chain.
+///
+/// This configuration and function does not need to be deterministic, as it is not executed
+/// on-chain.
 pub trait ModuleExecutionConfig {
-    /// todod
-    type Input;
+    /// Input type for configuration.
+    /// This could be a config struct that holds sub configuration for each runtime module
+    /// that requires such configuration.
+    type Input: Clone + Send + Sync;
 
-    /// todod
-    fn configure(input: &Self::Input) -> ();
+    /// Execute configuration for modules.
+    /// This function is called once at runtime startup and will typically pass specific module
+    /// configuration values to each module that requires it.
+    fn configure(_input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
 
+// Allow assigning `()` as the ModuleExecutionConfig when no configuration is needed.
+// Acts as a no-op implementation.
 impl ModuleExecutionConfig for () {
     type Input = ();
 
-    fn configure(_input: &Self::Input) -> () {}
+    fn configure(_input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
 }
 
 #[cfg(feature = "native")]
@@ -75,7 +89,7 @@ pub trait Runtime<S: Spec>:
     /// GenesisInput type.
     type GenesisInput: std::fmt::Debug + Clone + Send + Sync;
 
-    /// TODO
+    /// ModuleExecutionConfiguration type.
     type ModuleExecutionConfig: ModuleExecutionConfig;
 
     /// Responsible for authenticating transactions.

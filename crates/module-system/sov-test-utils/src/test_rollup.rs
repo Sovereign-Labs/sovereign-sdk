@@ -256,6 +256,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.rollup_prover_config.clone(),
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
+                        None,
                     )
                     .await?
             }
@@ -267,6 +268,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.rollup_prover_config.clone(),
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
+                        None,
                     )
                     .await?
             }
