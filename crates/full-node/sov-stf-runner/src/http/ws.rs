@@ -126,7 +126,7 @@ async fn handle_rpc_message(
         Ok(res) => res,
         Err(error) => return error!(%error, "Error while processing RPC request"),
     };
-    trace!("RPC request processed successfully: {}", response);
+    trace!(%response, "RPC request processed successfully",);
     let response_message = to_ws_message(response, use_binary);
 
     if msg_tx.send(response_message).await.is_err() {
@@ -178,7 +178,7 @@ async fn socket_writer_task(
     loop {
         tokio::select! {
             count = (msg_rx.recv_many(&mut pending, MAX_WRITE_BATCH_SIZE)) => {
-                trace!(%name, "{count} messages received");
+                trace!(%name, count, "Received messages");
                 if let Err(error) = write_batch(&mut pending, &mut ws_writer).await {
                     debug!(%error,"WebSocket closed, stopping writer task");
                     break;
@@ -201,6 +201,6 @@ async fn write_batch(
         ws_writer.feed(item).await?;
     }
     ws_writer.flush().await?;
-    trace!("{count} messages sent to websocket");
+    trace!(count, "Sent messages to websocket");
     Ok(())
 }
