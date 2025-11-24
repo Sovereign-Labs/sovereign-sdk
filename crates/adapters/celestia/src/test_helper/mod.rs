@@ -32,6 +32,6 @@ pub(crate) fn blob_from_data(
     data: Vec<u8>,
     signer: &CelestiaAddress,
 ) -> anyhow::Result<celestia_types::Blob> {
-    celestia_types::blob::Blob::new(namespace, data, Some(signer.0.clone()), APP_VERSION)
+    celestia_types::blob::Blob::new(namespace, data, Some(signer.0), APP_VERSION)
         .map_err(Into::into)
 }

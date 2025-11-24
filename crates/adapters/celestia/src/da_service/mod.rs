@@ -110,13 +110,8 @@ impl CelestiaService {
             // TODO: Follow up: Better error when switched to `thiserror`.
             anyhow::bail!("Signer must be set for submitting blobs");
         };
-        let blob = JsonBlob::new(
-            namespace,
-            blob.to_vec(),
-            Some(signer.0.clone()),
-            APP_VERSION,
-        )
-        .expect("Bug in CelestiaAdapter");
+        let blob = JsonBlob::new(namespace, blob.to_vec(), Some(signer.0), APP_VERSION)
+            .expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
         tracing::debug!(
             namespace = ?ns,
@@ -386,7 +381,6 @@ impl CelestiaService {
             .read_client
             .header()
             .subscribe()
-            .await
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
             .boxed())
     }

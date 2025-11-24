@@ -2608,9 +2608,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d72e83ce30b07edbf5c6282f45e4a49e79242508fba516c300a642f957b84eaf"
+checksum = "a531a4ee2468c031980d002ceb86a04fdee189789c661e1c9df7dc749d69ab93"
 dependencies = [
  "async-stream",
  "blockstore",
@@ -2636,9 +2636,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7809cf69c02b02a910bfc21a0e4b501db0d4a39d15925d1929bd7a7a88cd1ee"
+checksum = "3fe2522aa3348c81630427459ebaa92ec8123a916eec5ba4a85a5c0e850405bc"
 dependencies = [
  "bytes",
  "celestia-grpc-macros",
@@ -2674,9 +2674,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc-macros"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ef7fd561015d53344524bf35c15aee37cd12a77b4ed30fcb9d44b527a54040b"
+checksum = "8dcb0bf6df15d3834e3814910df891c8f25e17c0d8f7f058fc0ae36c09db70e4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2685,9 +2685,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1a6bc833fe0048c158f4740cb4b08cbfb6f407f2bf8ff369d3f6ade932d628f"
+checksum = "7d4321d7d37b5bcea648e37b24464586267d2fae2cc0b6be1f874801ba875040"
 dependencies = [
  "bytes",
  "prost",
@@ -2704,16 +2704,21 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dee1c5619076e2f1aa8cbac527138594fe2835827d2eac150610efbdbfc990fc"
+checksum = "652dc7e145490b364fe74a8ace30e2aa7eb0023342182ad700e54bbbd3cbd648"
 dependencies = [
+ "async-stream",
  "base64 0.22.1",
  "celestia-proto",
  "celestia-types",
+ "futures-util",
+ "gloo-net",
  "http 1.3.1",
  "jsonrpsee",
+ "send_wrapper 0.6.0",
  "serde",
+ "serde_json",
  "serde_repr",
  "thiserror 2.0.16",
  "tracing",
@@ -2721,9 +2726,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68d248009d2b38857ad5d0b6d6c754754132b19e836ba205bdda14631065fa98"
+checksum = "d7b60fc62b848cd2085f408ff01d0bc103eb1653f507072f8b1ca586cb7ce1d5"
 dependencies = [
  "base64 0.22.1",
  "bech32 0.11.0",
@@ -6647,9 +6652,9 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lumina-utils"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6be0fedf4b4ddbdd34a2541f36b63daa004064b5465b7b9f52ebdc5fe1c64187"
+checksum = "5a2be824fb56bbc33720cc7bf9920817f8b1fe54aa2f79300a9e0a390c4cf65c"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",
