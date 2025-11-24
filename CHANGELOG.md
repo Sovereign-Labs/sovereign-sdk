@@ -8,6 +8,9 @@
   grpc_url = "http://127.0.0.1:9090"
   signer_private_key = "0000000000000000000000000000000000000000000000000000000000000000"
   ```
+# 2025-11-22
+- #2102 Adds `ModuleExecutionConfig` associated type to the `Runtime` trait, allowing modules to customize their offchain environment.
+
 # 2025-11-17
 - #2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
 # 2025-11-14

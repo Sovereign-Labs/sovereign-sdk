@@ -167,7 +167,7 @@ where
                                     )
                                     .as_bytes(),
                                 ) {
-                                    tracing::error!("Error while writing state root to file for debugging {}: {}", &file_name, e);
+                                    tracing::error!(error = ?e, file_name, "Error while writing state root to file for debugging");
                                     break;
                                 }
                             }
@@ -175,9 +175,8 @@ where
                     }
                     Err(e) => {
                         tracing::error!(
-                            "Failed to create file for state root debugging {}: {}",
-                            &file_name,
-                            e
+                            error = ?e, file_name,
+                            "Failed to create file for state root debugging",
                         );
                     }
                 }
