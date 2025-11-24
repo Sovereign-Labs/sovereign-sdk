@@ -168,6 +168,10 @@ pub trait Runtime<S: Spec>:
     fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
         None
     }
+
+    /// Refreshes the pinned cache, adding any new buckets to pin.
+    #[cfg(feature = "native")]
+    fn refresh_pinned_cache(&self, _storage: &S::Storage, _pinned_cache: &mut PinnedCache) {}
 }
 
 #[cfg(feature = "native")]
