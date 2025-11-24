@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use crate::config::{
     default_factor, default_max_delay_ms, default_max_times, default_min_delay_ms,
-    default_request_timeout_seconds, default_safe_lead_time_ms,
+    default_request_timeout_seconds, default_safe_lead_time_ms, default_tx_priority,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::{CelestiaConfig, CelestiaService};
@@ -281,7 +281,7 @@ impl CelestiaDevNode {
             signer_private_key: Some(key_0),
             request_timeout_secs: default_request_timeout_seconds(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
-            tx_priority: None,
+            tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),
             backoff_max_delay_ms: default_max_delay_ms(),
             backoff_max_times: default_max_times(),
