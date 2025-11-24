@@ -1,13 +1,14 @@
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::{EventContainer, SlotKey, SlotValue, TypeErasedEvent};
+use sov_state::pinned_cache::PinnedCache;
 
 use super::checkpoints::StateCheckpoint;
 use super::temp_cache::{BorshSerializedSize, CacheLookup, TempCache};
 use super::UniversalStateAccessor;
 use crate::capabilities::RollupHeight;
 use crate::state::accessors::StateMetricsProvider;
-use crate::state::traits::PerBlockCache;
+use crate::state::traits::{PerBlockCache, PinnedCacheAccessor};
 use crate::{GasMeter, Genesis, PrivilegedKernelAccessor, Spec, VersionReader};
 
 /// A special state accessor which can only be used at genesis.
@@ -149,5 +150,15 @@ impl<S: Spec> PerBlockCache for GenesisStateAccessor<'_, S> {
     fn update_cache_with(&mut self, other: TempCache) {
         self.cache.update_with(other);
         self.cache.prune(); // Since there's no other cache under the Genesis state, we can prune `None` entries
+    }
+}
+
+impl<S: Spec> PinnedCacheAccessor<S> for GenesisStateAccessor<'_, S> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.checkpoint.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.checkpoint.storage()
     }
 }

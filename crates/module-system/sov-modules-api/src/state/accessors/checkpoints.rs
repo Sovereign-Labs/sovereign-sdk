@@ -6,6 +6,7 @@ use sov_state::StateGetter;
 use sov_state::{IsValueCached, Namespace, SlotKey, SlotValue, StateAccesses, Storage};
 use tracing::trace;
 
+use crate::state::traits::PinnedCacheAccessor;
 use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
@@ -481,5 +482,15 @@ impl<S: Spec> PerBlockCache for StateCheckpoint<S> {
     fn update_cache_with(&mut self, other: TempCache) {
         self.cache.update_with(other);
         self.cache.prune();
+    }
+}
+
+impl<S: Spec> PinnedCacheAccessor<S> for StateCheckpoint<S> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.delta.user_cache.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.delta.inner()
     }
 }

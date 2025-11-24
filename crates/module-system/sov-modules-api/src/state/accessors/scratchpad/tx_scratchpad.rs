@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::stf::ExecutionContext;
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
 
 use super::super::checkpoints::StateCheckpoint;
@@ -14,7 +15,7 @@ use super::super::{
 };
 use super::PreExecWorkingSet;
 use crate::module::Spec;
-use crate::state::traits::{delegate_version_reader, PerBlockCache};
+use crate::state::traits::{delegate_version_reader, PerBlockCache, PinnedCacheAccessor};
 use crate::{BasicGasMeter, GasMeter};
 
 /// Transaction-level state accumulator without gas metering.
@@ -140,6 +141,16 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.inner.cache_writes.update_with(other);
+    }
+}
+
+impl<S: Spec, I: StateProvider<S>> PinnedCacheAccessor<S> for TxScratchpad<S, I> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.inner.inner.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.inner.inner.storage()
     }
 }
 
