@@ -9,3 +9,4 @@ mod uniqueness;
 mod upgradability;
 pub mod utils;
 mod websockets;
+mod pinned_cache;

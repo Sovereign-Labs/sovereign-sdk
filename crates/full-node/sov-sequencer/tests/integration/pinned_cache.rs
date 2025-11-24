@@ -15,6 +15,7 @@ use sov_state::DefaultStorageSpec;
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 use sov_state::pinned_cache::PinnedCache;
 use sov_test_modules::pinned_cache::PinnedCacheTester;
+use tokio_stream::StreamExt;
 use sov_modules_stf_blueprint::Runtime;
 use sov_modules_api::RawTx;
 use sov_test_utils::test_rollup::GenesisSource;
@@ -329,6 +330,121 @@ async fn test_pinning_after_recovery() {
     test_rollup.shutdown().await.unwrap();
 }
 
+/// Ensures that RAM pinning still works after a total resync.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_pinned_cache_after_total_resync() {
+    let (test_rollup, admin) = create_test_nomt_rollup().await;
+	// Finalise some blocks
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(5).await;
+	let client = test_rollup.api_client().clone();
+	
+
+	// Send some initial transactions to write values
+	for i in 0..40 {
+		let tx = tx_write_pinned_cache(&admin.private_key, i as u64, PINNED_ADDRESS, Some(ValueRange { indices: i..i+1, value: i as u32}));
+		client
+			.accept_tx(&api_types::AcceptTxBody {
+				body: BASE64_STANDARD.encode(&tx),
+			})
+			.await
+			.unwrap();
+		test_rollup.force_close_batch().await.unwrap();
+		da_layer.produce_and_wait_for_n_slots(1).await;
+	}
+
+	// Shutdown and wipe the rollup (except the preferred sequencer DB and DA)
+    let builder = test_rollup.shutdown().await.unwrap();
+    let rollup_storage_path = builder.storage_path();
+    // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
+    // doesn't interfere
+    for path in ["user_nomt_db", "state-db", "kernel_nomt_db", "accessory", "ledger", "blob_sender"] {
+        std::fs::remove_dir_all(rollup_storage_path.path().join(path)).unwrap();
+    }
+
+	// Restart the rollup and wait for it to resync
+    let test_rollup = builder.start().await.unwrap();
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+	let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
+	// Wait until we've mostly resynced to ensure there's no flakiness from the sequencer readiness endpoint.
+	loop {
+		let slot = tokio::time::timeout(std::time::Duration::from_secs(10), slot_subscription.next()).await.unwrap().unwrap().unwrap();
+		if slot.batch_range.end == 30 {
+			break;
+		}
+	}
+	test_rollup.wait_for_sequencer_ready().await.unwrap();
+	da_layer.produce_and_wait_for_n_slots(5).await;
+
+
+	// Send transactions to read the pinned cache. We should get the correct values (i) and not touch storage.
+	let client = test_rollup.api_client().clone();
+	for i in 0..40 {
+		let tx = tx_read_pinned_cache(&admin.private_key, (i as u64) + 40, PINNED_ADDRESS, Some(ValueRange { indices: i..i+1, value: i as u32}), Some(0));
+		client
+			.accept_tx(&api_types::AcceptTxBody {
+				body: BASE64_STANDARD.encode(&tx),
+			})
+			.await
+			.unwrap();
+		if i % 5 == 0 {
+			test_rollup.force_close_batch().await.unwrap();
+			da_layer.produce_and_wait_for_n_slots(1).await;
+		}
+	}
+
+	da_layer.produce_and_wait_for_n_slots(5).await;
+    test_rollup.shutdown().await.unwrap();
+}
+
+
+/// Ensures that RAM pinning works again after the node falls out of sync
+#[tokio::test(flavor = "multi_thread")]
+async fn test_pinned_cache_after_fast_resync() {
+    let (test_rollup, admin) = create_test_nomt_rollup().await;
+	// Finalise some blocks
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(5).await;
+	let client = test_rollup.api_client().clone();
+	
+
+	for i in 0..40 {
+		let tx = tx_write_pinned_cache(&admin.private_key, i as u64, PINNED_ADDRESS, Some(ValueRange { indices: i..i+1, value: i as u32}));
+		client
+			.accept_tx(&api_types::AcceptTxBody {
+				body: BASE64_STANDARD.encode(&tx),
+			})
+			.await
+			.unwrap();
+		test_rollup.force_close_batch().await.unwrap();
+		da_layer.produce_and_wait_for_n_slots(1).await;
+	}
+	
+	// Produce blocks in rapid succession to unsync the node 
+	for _ in 0..20 {
+		da_layer.produce_block().await.unwrap();
+	}
+	test_rollup.wait_for_sequencer_not_ready().await.unwrap(); // verify that it becomes unready, then wait for it to come back up.
+	test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+	// Send transactions to read the pinned cache. We should get the correct values (i) and not touch storage.
+	let client = test_rollup.api_client().clone();
+	for i in 0..40 {
+		let tx = tx_read_pinned_cache(&admin.private_key, (i as u64) + 40, PINNED_ADDRESS, Some(ValueRange { indices: i..i+1, value: i as u32}), Some(0));
+		client
+			.accept_tx(&api_types::AcceptTxBody {
+				body: BASE64_STANDARD.encode(&tx),
+			})
+			.await
+			.unwrap();
+		if i % 5 == 0 {
+			test_rollup.force_close_batch().await.unwrap();
+			da_layer.produce_and_wait_for_n_slots(1).await;
+		}
+	}
+
+    test_rollup.shutdown().await.unwrap();
+}
 
 
 

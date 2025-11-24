@@ -159,13 +159,12 @@ impl PinnedCache {
         let state_item_cache = self.item_caches.entry(bucket_id.0.prefix()).or_insert(StateItemCache { bucket_key_length: key_length, items: Default::default()});
 
         for (key, value) in  iter {
-            println!("Loading bucket: key: {:?}, value: {:?}", key, value);
             assert!(key.as_ref().starts_with(bucket_id.0.as_ref()), "Key {} does not fall under bucket {:?}. This is a bug in the implementaiton of maybe_iter_user_values_with_prefix; please report it.", key, bucket_id);
             if !bucket_storage.try_insert(key, value) {
                 return Ok(LoadBucketOutcome::OverSizeLimit);
             }
         }
-        println!("Loaded bucket {} items", bucket_storage.items.len());
+        tracing::debug!("PinnedCache: Loaded bucket {} with {} items. Size: {}", bucket_id.0, bucket_storage.items.len(), bucket_storage.current_size);
         state_item_cache.items.insert(bucket_id, bucket_storage);
 
         Ok(LoadBucketOutcome::Loaded)

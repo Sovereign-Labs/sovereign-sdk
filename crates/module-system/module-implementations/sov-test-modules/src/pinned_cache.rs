@@ -125,7 +125,7 @@ impl<S: Spec> Module for PinnedCacheTester<S> {
 							address
 						};
 						let value = self.values.get(&key, state)?;
-						assert!(value.unwrap_or_default() == read_indexes.value);
+						assert_eq!(value.unwrap_or_default(), read_indexes.value, "Expected value {} for index {}, but got {}", read_indexes.value, index, value.unwrap_or_default());
 					}
 				}
 				if let Some(write_indexes) = write_indexes {
