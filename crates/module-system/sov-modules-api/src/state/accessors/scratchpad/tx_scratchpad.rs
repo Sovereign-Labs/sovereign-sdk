@@ -279,7 +279,7 @@ mod tests {
     }
 
     fn create_srcratchpad<S: Spec>(storage: S::Storage) -> TxScratchpad<S, StateCheckpoint<S>> {
-        let checkpoint = StateCheckpoint::new(storage, &MockKernel::new(4, 1));
+        let checkpoint = StateCheckpoint::new(storage, &MockKernel::new(4, 1), None);
         checkpoint.to_tx_scratchpad()
     }
 

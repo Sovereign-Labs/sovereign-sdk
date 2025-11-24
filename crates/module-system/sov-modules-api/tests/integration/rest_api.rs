@@ -138,6 +138,7 @@ async fn rest_api_routes() {
     let (_sender, receiver) = tokio::sync::watch::channel(Arc::new(StateCheckpoint::new(
         storage,
         &MockKernel::<TestSpec>::default(),
+        None,
     )));
     let runtime = MyRuntime::<TestSpec>::default();
     let state = ApiState::build(

@@ -59,7 +59,7 @@ fn custom_builder_works() {
     let mut module: TestModule<ZkTestSpec> = TestModule::default();
 
     let mut state: StateCheckpoint<ZkTestSpec> =
-        StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
+        StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default(), None);
     module.state_value.set(&0u32, &mut state).unwrap();
 
     assert_eq!(std::env::var("TEST").unwrap(), "42");

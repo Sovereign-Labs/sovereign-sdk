@@ -1,4 +1,5 @@
 # 2025-11-24
+- #2105 **DB Breaking change** changes the serialization of state keys on disk. Updating to this branch requires a wipe or a resync. Also adds support for pinning certain state items in RAM.
 - #2109 Configuration changes in `sov-celestia-adapter`. Default values for `request_timeout_secs` and `tx_priority` has changed.
   **It is recommended to remove those values and use defaults** unless there's a reason.
   Here is minimal functioning celestia config:

@@ -136,6 +136,7 @@ where
         let checkpoint = Arc::new(StateCheckpoint::new(
             latest_state_update.storage.clone(),
             &runtime.kernel(),
+            None,
         ));
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
@@ -148,7 +149,7 @@ where
 
         let txsm = TxStatusManager::default();
         let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
 
         let da_address = da.get_signer().await.context(
             "Standard sequencer require DaService to be configured with submitting support",
@@ -666,7 +667,7 @@ where
             ledger_reader,
             ..
         } = &state_update_info;
-        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
+        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
 
         tracing::debug!(
             %slot_number,
@@ -677,7 +678,8 @@ where
             let mut inner = self.inner.lock().await;
             self.checkpoint_sender
                 .send(Arc::new(
-                    checkpoint.clone_with_empty_witness_dropping_temp_cache(),
+                    checkpoint
+                        .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
                 ))
                 .ok();
             inner.checkpoint = Some(checkpoint);

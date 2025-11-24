@@ -427,6 +427,7 @@ where
         sequencer_state_accesses,
         &<S::Storage as Storage>::Witness::default(),
         sequencer_root_hash,
+        None,
     );
     let (sequencer_root, _) = result.unwrap();
 
@@ -453,7 +454,7 @@ fn materialize_writes<S: Storage>(
     };
 
     let (root, mut state_update) = storage
-        .compute_state_update(state_accesses, &S::Witness::default(), prev_root)
+        .compute_state_update(state_accesses, &S::Witness::default(), prev_root, None)
         .unwrap();
 
     state_update.add_accessory_items(accessory_writes);

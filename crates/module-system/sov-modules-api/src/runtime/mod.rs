@@ -9,6 +9,8 @@ use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
+#[cfg(feature = "native")]
+use sov_state::pinned_cache::PinnedCache;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
@@ -159,6 +161,12 @@ pub trait Runtime<S: Spec>:
         _state: &mut impl crate::TxState<S>,
     ) -> bool {
         false
+    }
+
+    /// Populates the pinned state cache for the given storage if supported
+    #[cfg(feature = "native")]
+    fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
+        None
     }
 }
 

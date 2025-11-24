@@ -1,4 +1,5 @@
 //! Prover side of NOMT-based Storage implementation
+use std::any::Any;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -16,6 +17,7 @@ use sov_db::storage_manager::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
     Accessory, CompileTimeNamespace, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
@@ -26,8 +28,6 @@ use crate::{
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
 
 /// A [`Storage`] implementation to be used by the prover in a native execution based on NOMT.
-#[derive(derivative::Derivative)]
-#[derivative(Clone(bound = "S: MerkleProofSpec"))]
 pub struct NomtProverStorage<S: MerkleProofSpec, K>
 where
     K: Clone,
@@ -38,6 +38,26 @@ where
     /// If set to true, consistency between NOMT and rocksdb will be checked, in some cases.
     /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
     is_strict_mode: bool,
+    pinned_cache: Option<PinnedCache>,
+}
+
+impl<S: MerkleProofSpec, K: Clone> Clone for NomtProverStorage<S, K>
+where
+    S: MerkleProofSpec,
+    K: Clone,
+{
+    fn clone(&self) -> Self {
+        if self.pinned_cache.is_some() {
+            tracing::warn!("Cloning NomtProverStorage which has an active pinned cache. The pinned cache will not be propagated to the clone.");
+        }
+        Self {
+            state_session_builder: self.state_session_builder.clone(),
+            historical_state: self.historical_state.clone(),
+            accessory: self.accessory.clone(),
+            is_strict_mode: self.is_strict_mode,
+            pinned_cache: None,
+        }
+    }
 }
 
 impl<S: MerkleProofSpec, K> core::fmt::Debug for NomtProverStorage<S, K>
@@ -61,12 +81,14 @@ where
         historical_state: HistoricalStateReader,
         accessory: AccessoryDb,
         use_strict_mode: bool,
+        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         Self {
             state_session_builder,
             historical_state,
             accessory,
             is_strict_mode: use_strict_mode,
+            pinned_cache,
         }
     }
     /// Utility method for checking if storage is empty.
@@ -375,8 +397,16 @@ where
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
         use_strict_mode: bool,
+        pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self {
-        Self::create(state_db, historical_state, accessory_db, use_strict_mode)
+        let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
+        Self::create(
+            state_db,
+            historical_state,
+            accessory_db,
+            use_strict_mode,
+            pinned_cache,
+        )
     }
 }
 
@@ -387,6 +417,7 @@ pub struct NomtStateUpdate<S: MerkleProofSpec> {
     accessory: OrderedReadsAndWrites,
     state_accesses: StateAccesses,
     next_root_hash: StorageRoot<S>,
+    pinned_cache: Option<PinnedCache>,
 }
 
 impl<S: MerkleProofSpec> StateUpdate for NomtStateUpdate<S> {
@@ -463,6 +494,7 @@ where
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
+        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
         let next_version = self.historical_state.get_next_version();
@@ -528,6 +560,7 @@ where
             accessory: Default::default(),
             state_accesses,
             next_root_hash: root,
+            pinned_cache,
         };
 
         Ok((root, state_update))
@@ -546,6 +579,7 @@ where
             user,
             kernel,
             next_root_hash,
+            pinned_cache,
         } = state_update;
         let user_to_materialize = user_versioned.ordered_writes.into_iter().map(|(k, v)| {
             // TODO: Clone now, figure out how to optimize later
@@ -577,10 +611,13 @@ where
             next_version,
         )
         .expect("accessory db materialization must succeed");
+        // Erase the type of the pinned cache since the storage manager isn't aware of it.
+        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<(dyn Any + Send + Sync)>);
         NomtChangeSet {
             state: StateFinishedSession::new(user, kernel),
             historical_state: historical_schema_batch,
             accessory: accessory_batch,
+            pinned_cache,
         }
     }
 
@@ -690,5 +727,29 @@ where
 
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
         self.read_value_unbound::<N>(&key)
+    }
+
+    fn maybe_iter_user_values_with_prefix(
+        &self,
+        prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        // TODO: Remove useless clone here.
+        let prefix_vec = prefix.as_ref().to_vec();
+        let iter = self
+            .historical_state
+            .iter_user_values_with_prefix(&prefix_vec)?;
+        let Some(iter) = iter else {
+            return Ok(None);
+        };
+
+        Ok(Some(iter.filter_map(|(key, value)| {
+            value
+                .flatten()
+                .map(|v| (SlotKey::from_slice_including_prefix(&key), v.into()))
+        })))
+    }
+
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
+        self.pinned_cache.take()
     }
 }

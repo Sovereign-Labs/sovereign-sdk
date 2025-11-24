@@ -19,5 +19,11 @@ threads-required = 3
 [[profile.default.overrides]]
 filter = 'not test(heavy_)'
 
+[[profile.default.overrides]]
+filter = 'package(sov-sequencer) & test(/pinned_cache::/)'
+priority = 90                                                        # try to run it first, so it doesn't add up at the end
+threads-required = 3
+
+
 [profile.ci]
 default-filter = 'all()'

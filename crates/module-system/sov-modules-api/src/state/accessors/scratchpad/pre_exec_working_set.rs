@@ -155,7 +155,7 @@ mod tests {
         let storage = storage_manager.create_storage();
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
 
-        let checkpoint = StateCheckpoint::<TestSpec>::new(storage, &kernel);
+        let checkpoint = StateCheckpoint::<TestSpec>::new(storage, &kernel, None);
         let mut scratchpad = checkpoint.to_tx_scratchpad();
 
         // Save some values in the scratchpad.

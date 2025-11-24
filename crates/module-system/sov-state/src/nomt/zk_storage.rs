@@ -8,6 +8,7 @@ use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
     MerkleProofSpec, NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace,
@@ -142,6 +143,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
+        _pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let StateAccesses { user, kernel } = state_accesses;
 
@@ -222,5 +224,19 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
 
     fn get_unbound<N: crate::CompileTimeNamespace>(&self, _key: SlotKey) -> Option<SlotValue> {
         unimplemented!("The NomtVerifierStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
+    fn maybe_iter_user_values_with_prefix(
+        &self,
+        _prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        unimplemented!("The NomtVerifierStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+        // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
+        #[allow(unreachable_code)]
+        Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
+    }
+
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
+        unimplemented!("The NomtVerifierStorage does not support `take_pinned_cache`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 }
