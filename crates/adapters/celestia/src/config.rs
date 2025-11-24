@@ -47,8 +47,9 @@ pub struct CelestiaConfig {
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
 
-    /// Default is medium.
-    pub tx_priority: Option<TxPriority>,
+    /// Default is high.
+    #[serde(default = "default_tx_priority")]
+    pub tx_priority: TxPriority,
     /// Minimal time to wait before reattempting to request to celestia node.
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_min_delay_ms")]
@@ -144,7 +145,7 @@ impl CelestiaConfig {
     }
 }
 
-pub(crate) fn default_safe_lead_time_ms() -> u64 {
+pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
@@ -162,6 +163,10 @@ fn default_grpc_auth_token() -> Option<String> {
 
 fn default_signer_private_key() -> Option<String> {
     std::env::var("SOV_CELESTIA_SIGNER_KEY").ok()
+}
+
+pub(crate) const fn default_tx_priority() -> TxPriority {
+    TxPriority::High
 }
 
 // Exponential backoff defaults:
@@ -199,5 +204,6 @@ pub(crate) fn default_factor() -> f32 {
 }
 
 pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
-    NonZero::new(60).unwrap()
+    // 6 blocks + 1 second for jitter
+    NonZero::new(37).unwrap()
 }
