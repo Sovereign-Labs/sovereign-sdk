@@ -350,6 +350,11 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         })
     }
 
+    /// Returns a mutable reference to the pinned cache backing this cache, if any exists.
+    pub fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.pinned_cache.as_mut()
+    }
+
     /// Converts the `ProvableStorageCache` into `OrderedReadsAndWrites`.
     pub fn to_ordered_writes_and_reads(mut self) -> OrderedReadsAndWrites {
         self.commit_revertable_storage_cache();

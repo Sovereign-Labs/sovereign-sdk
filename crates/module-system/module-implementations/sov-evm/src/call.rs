@@ -102,8 +102,13 @@ where
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
+
+       
         save_elapsed!(execution_time SINCE execution);
         verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg)?;
+        #[cfg(feature = "native")]
+        let new_pinned_contracts = get_pinned_contract_list_updates(&state_changes, &tx.signer);
+
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
         db.try_commit(state_changes)
@@ -151,6 +156,13 @@ where
                 .unwrap_infallible();
             set_accessory_state.elapsed()
         };
+
+        // Now that we've saved the transaction, we can update the pinned contract list.
+        // Worst case scenario, the transaction might still revert in the post-hook; then we'll end up with an extra bucket in the pinned cache,
+        // but that bucket will be empty so the waste isn't big and there's no correctness issue (because pinned buckets are just a mirror of the DB anyway).
+        // We can always clean it up manually later.
+        #[cfg(feature = "native")]
+        self.update_pinned_contract_list(&new_pinned_contracts, state);
 
         save_elapsed!(total_time SINCE total);
         #[cfg(feature = "native")]
@@ -331,6 +343,61 @@ pub(crate) fn verify_contract_creation_allowlist(
         }
     }
     Ok(())
+}
+
+/// Get the list of new contracts to pin from the state changes.
+pub(crate) fn get_pinned_contract_list_updates(state_changes: &HashMap<Address, Account>, signer: &Address) -> Vec<Address> {
+    use crate::execution_config::EVM_EXECUTION_CONFIG;
+    let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
+        return Vec::new();
+    };
+
+    let execution_config = execution_config.read().expect("EVM Execution config RW lock is poisoned.");
+    if !execution_config.privileged_deployer_addresses.contains(signer) {
+        return Vec::new();
+    };
+    
+    let mut new_pinned_contracts = Vec::new();
+    for (address, account) in state_changes.iter() {
+        if let Some(ref code) = account.info.code {
+            if !code.is_empty() {
+                new_pinned_contracts.push(*address);
+            }
+        }
+    }
+    new_pinned_contracts
+}
+
+#[cfg(feature = "native")]
+impl<S: Spec> Evm<S> {
+    pub(crate) fn update_pinned_contract_list(&self, new_pinned_contracts: &Vec<Address>, state: &mut impl TxState<S>) {
+        use crate::execution_config::EVM_EXECUTION_CONFIG;
+        // If there are no new pinned contracts, we can return early.
+        if new_pinned_contracts.is_empty() {
+            return;
+        }
+        // Similarly, if the execution config is not initialized, we can return early.
+        let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
+            return;
+        };
+        
+        // Now for each new contract we need to track, add it to the execution config and load the bucket into the pinned cache.
+        let mut execution_config = execution_config.write().expect("EVM Execution config RW lock is poisoned.");
+        let size_limit = execution_config.default_bucket_size_limit;
+        let storage = state.storage().clone();
+        let mut pinned_cache = state.pinned_cache_mut();
+        for address in new_pinned_contracts {
+            // Refresh the storage for this accessor, if necessary.
+            if let Some(pinned_cache) = pinned_cache.as_mut() {
+                let bucket_id = self.get_bucket_id_for_address(address);
+                if let Err(e) = pinned_cache.try_load_bucket_if_absent(bucket_id, &storage, size_limit) {
+                    tracing::warn!(address = ?address, error = ?e, "EVM Failed to load bucket for address into pinned cache");
+                }
+            }
+            // Update the execution config with the new address to track.
+            execution_config.known_contracts_and_limits.insert(*address, size_limit);
+        }
+    }
 }
 
 fn on_error<S: Spec>(

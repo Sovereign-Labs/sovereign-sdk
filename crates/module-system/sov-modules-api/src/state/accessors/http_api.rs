@@ -5,6 +5,8 @@ use crate::GasMeteringError;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::sequencer_state::MaybePresentValue;
+use crate::state::traits::PinnedCacheAccessor;
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::StateGetter;
 use sov_state::{
     namespaces, CompileTimeNamespace, EventContainer, Namespace, NativeStorage,
@@ -318,6 +320,15 @@ impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.temp_cache.update_with(other);
+    }
+}
+
+impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.user_cache.pinned_cache_mut()
+    }
+    fn storage(&self) -> &S::Storage {
+        &self.storage
     }
 }
 
