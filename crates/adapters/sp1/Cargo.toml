@@ -36,7 +36,7 @@ sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 sp1-sdk = { version = "5.0.8", default-features = false }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-zkvm = { version = "5.0.8" }
+sp1-zkvm = { version = "5.2.3" }
 
 [dev-dependencies]
 reltester = { workspace = true }
