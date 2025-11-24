@@ -401,6 +401,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         }
     }
 
+    #[cfg(feature = "native")]
     fn check_pinned_cache_static<'a>(
         pinned_cache_opt: &'a Option<PinnedCache>,
         key: &SlotKey,
@@ -413,15 +414,18 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         MaybePresentValue::Absent
     }
 
+    #[cfg(feature = "native")]
     fn check_pinned_cache(&self, key: &SlotKey) -> MaybePresentValue<&SlotValue> {
         Self::check_pinned_cache_static(&self.pinned_cache, key)
     }
 
+    #[cfg(feature = "native")]
     /// Takes the pinned cache
     pub fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
         self.pinned_cache.take()
     }
 
+    #[cfg(feature = "native")]
     /// Sets the pinned cache
     pub fn set_pinned_cache(&mut self, pinned_cache: Option<PinnedCache>) {
         self.pinned_cache = pinned_cache;
@@ -568,7 +572,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             key,
             storage,
             witness,
-            |key, witness, _args| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
+            |key, witness, _args, _metric| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
             (),
             metric,
         )
@@ -659,6 +663,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
     /// Replaces the keyed value on the storage.
     pub fn set(&mut self, key: &SlotKey, value: SlotValue) {
+        #[cfg(feature = "native")]
         if let Some(bucket) = self
             .pinned_cache
             .as_mut()
@@ -672,6 +677,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
     /// Deletes a keyed value from the cache.
     pub fn delete(&mut self, key: &SlotKey) {
+        #[cfg(feature = "native")]
         if let Some(bucket) = self
             .pinned_cache
             .as_mut()

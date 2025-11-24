@@ -9,6 +9,7 @@ use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
+#[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
 
 #[cfg(feature = "native")]

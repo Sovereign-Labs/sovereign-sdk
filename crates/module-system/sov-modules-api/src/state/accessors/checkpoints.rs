@@ -142,11 +142,13 @@ impl<S: Spec> StateCheckpoint<S> {
         )
     }
 
+    #[cfg(feature = "native")]
     /// Takes the pinned user-state cache. See  [`PinnedCache`] for more details.
     pub fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
         self.delta.user_cache.take_pinned_cache()
     }
 
+    #[cfg(feature = "native")]
     /// Sets the pinned cache for the state checkpoint. See [`PinnedCache`] for more details.
     pub fn set_pinned_cache(&mut self, pinned_cache: Option<PinnedCache>) {
         self.delta.user_cache.set_pinned_cache(pinned_cache);
@@ -211,14 +213,15 @@ impl<S: Spec> StateCheckpoint<S> {
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
         #[cfg(feature = "native")] uncomitted_changes: Option<Box<dyn StateGetter>>,
+        #[cfg_attr(not(feature = "native"), allow(unused))]
         pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
         #[cfg(feature = "native")]
         {
             delta.uncomitted_changes = uncomitted_changes;
+            delta.user_cache.set_pinned_cache(pinned_cache);
         }
-        delta.user_cache.set_pinned_cache(pinned_cache);
         let mut metrics = StateMetrics::default();
         let mut bootstrap_state = BootstrapWorkingSet {
             inner: &mut delta,
@@ -267,6 +270,7 @@ impl<S: Spec> StateCheckpoint<S> {
     /// them to compute the `StateUpdate` created by this `StateCheckpoint`.
     #[allow(clippy::type_complexity)]
     pub fn materialize_update(
+        #[cfg_attr(not(feature = "native"), allow(unused_mut))]
         mut self,
         prev_state_root: <S::Storage as Storage>::Root,
     ) -> (
@@ -276,7 +280,16 @@ impl<S: Spec> StateCheckpoint<S> {
         <S::Storage as Storage>::Witness,
         S::Storage,
     ) {
-        let pinned_cache = self.take_pinned_cache();
+        let pinned_cache = { 
+            #[cfg(feature = "native")]
+            {
+            self.take_pinned_cache() 
+            }
+            #[cfg(not(feature = "native"))]
+            {
+                None
+            }
+        };
         let (cache_log, accessory_delta, witness, storage) = self.delta.freeze();
         let _span = tracing::debug_span!("compute_state_root", scope = "node").entered();
         let (root, update) = storage

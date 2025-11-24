@@ -424,6 +424,7 @@ where
     pub fn apply_slot_with_control_flow<CF: InjectedControlFlow<S> + Clone>(
         &self,
         pre_state_root: &<S::Storage as Storage>::Root,
+        #[cfg_attr(not(feature = "native"), allow(unused_mut))]
         mut pre_state: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         slot_header: &<S::Da as DaSpec>::BlockHeader,
@@ -442,7 +443,7 @@ where
         let pinned_cache = {
             #[cfg(feature = "native")]
             {
-                let mut pinned_cache = pre_state.take_pinned_cache();
+                let mut pinned_cache = pre_state.try_load_saved_pinned_cache();
                 if pinned_cache.is_none() {
                     tracing::debug!("No pinned cache found in storage. Populating from db if supported - this may take a while...");
                     pinned_cache = RT::populate_pinned_cache(&pre_state);

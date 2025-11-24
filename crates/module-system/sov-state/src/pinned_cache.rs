@@ -22,7 +22,9 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::{NativeStorage, Prefix, SlotKey, SlotValue};
+#[cfg(feature = "native")]
+use crate::NativeStorage;
+use crate::{Prefix, SlotKey, SlotValue};
 
 #[derive(Debug)]
 struct StateItemCache {
@@ -89,6 +91,7 @@ impl BucketId {
 pub struct BucketStorage {
     items: HashMap<SlotKey, SlotValue>,
     current_size: usize,
+    #[cfg_attr(not(feature = "native"), allow(unused))]
     max_size: usize,
 }
 
@@ -99,6 +102,7 @@ impl BucketStorage {
     }
 
     /// Try to insert a key-value pair into the bucket. Returns false if the item could not be inserted (due to exceeding the size limit)
+    #[cfg(feature = "native")]
     pub fn try_insert(&mut self, key: SlotKey, value: SlotValue) -> bool {
         let size: usize = value
             .size()
@@ -111,6 +115,12 @@ impl BucketStorage {
         self.items.insert(key, value);
         self.current_size += size;
         true
+    }
+
+    /// Try to insert a key-value pair into the bucket. Returns false if the item could not be inserted (due to exceeding the size limit)
+    #[cfg(not(feature = "native"))]
+    pub fn try_insert(&mut self, _key: SlotKey, _value: SlotValue) -> bool {
+        false
     }
 
     /// Delete a key from the bucket.
