@@ -553,7 +553,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     }
 
     // JMT doesn't currently support pinned cache, so we return None.
-    fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         None
     }
 }

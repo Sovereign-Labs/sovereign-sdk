@@ -749,7 +749,7 @@ where
         })))
     }
 
-    fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         self.pinned_cache.take()
     }
 }

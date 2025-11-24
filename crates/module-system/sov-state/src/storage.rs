@@ -1013,7 +1013,7 @@ pub trait NativeStorage: Storage {
     /// If a block has multiple children (i.e. the chain has a fork at some height), the pinned cache is only passed to the first child block to be created; other children have to rebuild it from db.
     ///
     /// Note that the sequencer passes the pinned cache directly between executors without this hack, so this method is only used in the full node.
-    fn take_pinned_cache(&mut self) -> Option<PinnedCache>;
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache>;
 }
 
 pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(

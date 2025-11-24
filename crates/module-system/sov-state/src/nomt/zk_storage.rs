@@ -236,7 +236,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
     }
 
-    fn take_pinned_cache(&mut self) -> Option<PinnedCache> {
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         unimplemented!("The NomtVerifierStorage does not support `take_pinned_cache`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 }
