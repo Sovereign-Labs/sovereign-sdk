@@ -329,8 +329,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         if self.config.separate_archival_db {
             rollup_db_config.separate_archival_state = true;
         }
-        
-        
+
         RollupConfig {
             storage: rollup_db_config,
             runner: RunnerConfig {

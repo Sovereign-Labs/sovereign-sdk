@@ -103,7 +103,8 @@ pub struct DaLayerWithSubscription {
 impl DaLayerWithSubscription {
     pub async fn new<
         R: FullNodeBlueprint<Native, DaService = StorableMockDaService, Spec = S> + Default,
-    S: Spec>(
+        S: Spec,
+    >(
         test_rollup: &TestRollup<R>,
     ) -> Self {
         assert!(matches!(test_rollup

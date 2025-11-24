@@ -55,7 +55,7 @@ fn make_user_value_proof(
 ) {
     let kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
-    let storage = storage_manager.create_storage();     
+    let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default(), None);
     let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
     state_val.set(&value, &mut state).unwrap_infallible();

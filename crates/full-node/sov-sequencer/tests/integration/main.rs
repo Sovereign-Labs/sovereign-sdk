@@ -1,3 +1,4 @@
+mod pinned_cache;
 mod preferred_blob_sender;
 mod preferred_end_to_end;
 mod preferred_tx_nonce_queue;
@@ -9,4 +10,3 @@ mod uniqueness;
 mod upgradability;
 pub mod utils;
 mod websockets;
-mod pinned_cache;

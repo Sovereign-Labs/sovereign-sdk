@@ -532,8 +532,9 @@ where
         // Atomically swap in the new storage and prune the old one.
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
-        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
-            .rollup_height_to_access();
+        let new_rollup_height =
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+                .rollup_height_to_access();
 
         inner
             .executor

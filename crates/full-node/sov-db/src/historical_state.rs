@@ -153,7 +153,9 @@ impl HistoricalStateReader {
     pub fn iter_user_values_with_prefix<'a>(
         &'a self,
         prefix: &SchemaKey,
-    ) -> anyhow::Result<Option<impl Iterator<Item = (Arc<SchemaKey>, Option<Option<SchemaValue>>)> + 'a>> {
+    ) -> anyhow::Result<
+        Option<impl Iterator<Item = (Arc<SchemaKey>, Option<Option<SchemaValue>>)> + 'a>,
+    > {
         Ok(Some(self.user.iter_with_prefix(prefix)?))
     }
 
@@ -161,8 +163,9 @@ impl HistoricalStateReader {
     pub fn iter_kernel_values_with_prefix<'a>(
         &'a self,
         prefix: &SchemaKey,
-    ) -> anyhow::Result<Option<impl Iterator<Item = (Arc<SchemaKey>, Option<Option<SchemaValue>>)> + 'a>> {
-        
+    ) -> anyhow::Result<
+        Option<impl Iterator<Item = (Arc<SchemaKey>, Option<Option<SchemaValue>>)> + 'a>,
+    > {
         Ok(Some(self.kernel.iter_with_prefix(prefix)?))
     }
 

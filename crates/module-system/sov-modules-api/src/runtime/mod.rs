@@ -4,12 +4,12 @@ pub mod capabilities;
 #[cfg(feature = "native")]
 use std::io;
 
-use sov_state::pinned_cache::PinnedCache;
 use borsh::{BorshDeserialize, BorshSerialize};
 use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
+use sov_state::pinned_cache::PinnedCache;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;

@@ -1,8 +1,8 @@
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
 use sov_state::StateGetter;
-use sov_state::pinned_cache::PinnedCache;
 use sov_state::{IsValueCached, Namespace, SlotKey, SlotValue, StateAccesses, Storage};
 use tracing::trace;
 
@@ -178,7 +178,11 @@ impl<S: Spec> StateCheckpoint<S> {
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`].
-    pub fn new<K: Kernel<S>>(inner: S::Storage, kernel: &K, pinned_cache: Option<PinnedCache>) -> Self {
+    pub fn new<K: Kernel<S>>(
+        inner: S::Storage,
+        kernel: &K,
+        pinned_cache: Option<PinnedCache>,
+    ) -> Self {
         Self::with_witness(inner, Default::default(), kernel, pinned_cache)
     }
 

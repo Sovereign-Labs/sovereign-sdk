@@ -71,8 +71,11 @@ where
             storage: storage.clone(),
             mempool: vec![],
         });
-        let (state_sender, _rec) =
-            watch::channel(Arc::new(StateCheckpoint::new(storage, &runtime.kernel(), None)));
+        let (state_sender, _rec) = watch::channel(Arc::new(StateCheckpoint::new(
+            storage,
+            &runtime.kernel(),
+            None,
+        )));
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));

@@ -1162,7 +1162,8 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
+    let mut checkpoint =
+        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
 
     runtime.kernel().next_sequence_number(&mut state)

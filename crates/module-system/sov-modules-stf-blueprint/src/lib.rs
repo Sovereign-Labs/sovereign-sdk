@@ -409,7 +409,6 @@ where
     }
 }
 
-
 impl<S, RT> StfBlueprint<S, RT>
 where
     S: Spec,
@@ -440,8 +439,7 @@ where
 
         start_timer!(start_slot);
 
-
-        let pinned_cache = { 
+        let pinned_cache = {
             #[cfg(feature = "native")]
             {
                 let mut pinned_cache = pre_state.take_pinned_cache();
@@ -450,16 +448,16 @@ where
                     pinned_cache = RT::populate_pinned_cache(&pre_state);
                     tracing::debug!("Finished populating pinned cache from db.");
                 }
-                pinned_cache 
+                pinned_cache
             }
             #[cfg(not(feature = "native"))]
             {
                 None
             }
         };
-      
 
-        let mut state = StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel(), pinned_cache);
+        let mut state =
+            StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel(), pinned_cache);
         // First, we bootstrap the kernel from the previous state. The
         // `true_slot_number`, will *always* be stale because it's leftover from the
         // previous slot.

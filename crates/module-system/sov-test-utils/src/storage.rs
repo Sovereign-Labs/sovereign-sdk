@@ -2,7 +2,6 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use sov_state::pinned_cache::PinnedCache;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
@@ -25,6 +24,7 @@ use sov_modules_api::digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{
     MerkleProofSpec, NativeStorage, ProverStorage, StateAccesses, Storage, StorageRoot,
 };

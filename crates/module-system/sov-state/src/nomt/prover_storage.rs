@@ -400,7 +400,13 @@ where
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self {
         let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
-        Self::create(state_db, historical_state, accessory_db, use_strict_mode, pinned_cache)
+        Self::create(
+            state_db,
+            historical_state,
+            accessory_db,
+            use_strict_mode,
+            pinned_cache,
+        )
     }
 }
 
@@ -723,22 +729,26 @@ where
         self.read_value_unbound::<N>(&key)
     }
 
-    fn maybe_iter_user_values_with_prefix(&self, prefix: SlotKey) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+    fn maybe_iter_user_values_with_prefix(
+        &self,
+        prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         // TODO: Remove useless clone here.
         let prefix_vec = prefix.as_ref().to_vec();
-        let iter = self.historical_state
+        let iter = self
+            .historical_state
             .iter_user_values_with_prefix(&prefix_vec)?;
         let Some(iter) = iter else {
             return Ok(None);
         };
-        
-        Ok(Some(iter.filter_map(|(key, value)| 
+
+        Ok(Some(iter.filter_map(|(key, value)| {
             if let Some(value) = value.flatten() {
                 Some((SlotKey::from_vec_including_prefix(&key), value.into()))
             } else {
                 None
             }
-        )))
+        })))
     }
 
     fn take_pinned_cache(&mut self) -> Option<PinnedCache> {

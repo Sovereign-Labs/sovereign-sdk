@@ -4,10 +4,10 @@ mod groups;
 #[cfg(test)]
 mod tests;
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
-use std::any::Any;
 
 pub use crate::flat_db::FlatStateDb;
 use rockbound::cache::delta_reader::DeltaReader;
@@ -52,7 +52,7 @@ pub struct NomtChangeSet {
     pub state: StateFinishedSession,
     pub historical_state: StateChanges,
     pub accessory: SchemaBatch,
-    /// Use type erasure because the `pinned_cache` type is defined in sov-state, which depends on this crate. 
+    /// Use type erasure because the `pinned_cache` type is defined in sov-state, which depends on this crate.
     /// No type other than `PinnedCache` makes sense here.
     pub pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
 }
@@ -251,7 +251,6 @@ where
             e.insert(prev_hash);
         }
 
-
         // Storage created "for" a block implies node context,
         // and we expect a change set from this storage to be saved.
         // That's why it is created in a strict mode.
@@ -331,7 +330,6 @@ where
         }
         self.rockbound_snapshots
             .insert(block_hash, rockbound_snapshot);
-       
 
         Ok(())
     }

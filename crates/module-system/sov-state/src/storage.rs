@@ -28,13 +28,11 @@ use crate::{
 
 /// The key type suitable for use in [`Storage::get`] and other getter methods of
 /// [`Storage`]. Cheaply-clonable and cache friendly.
-/// 
+///
 /// Semantically, a slot key is just a byte slice where the first two bytes are the prefix and the rest are the key.
 /// Physically, we store the key as an enum of an inline key and an Arc<Vec<u8>>. Keys up to 70 bytes are stored on the stack
 /// (no allocation, no cache misses to deref), while larger keys are stored on the heap.
-#[derive(
-    Derivative, UniversalWallet,
-)]
+#[derive(Derivative, UniversalWallet)]
 #[derivative(Clone, Debug)]
 pub struct SlotKey {
     key: KeyContents,
@@ -43,10 +41,10 @@ pub struct SlotKey {
 // Because slot key has an optimized memory layout to avoid allocation when possible, we need to manually implement pretty much every trait.
 // We always want to treat the slot key as if it were a byte slice,
 mod slot_key {
-    use std::hash::{Hash, Hasher};
-    use super::SlotKey;
     use super::Prefix;
+    use super::SlotKey;
     use super::SlotKeyBuilder;
+    use std::hash::{Hash, Hasher};
 
     impl PartialEq for SlotKey {
         fn eq(&self, other: &Self) -> bool {
@@ -54,8 +52,7 @@ mod slot_key {
         }
     }
 
-    impl Eq for SlotKey {
-    }
+    impl Eq for SlotKey {}
 
     impl Hash for SlotKey {
         fn hash<H: Hasher>(&self, state: &mut H) {
@@ -83,7 +80,9 @@ mod slot_key {
             let len = u.arbitrary_len::<u8>()?;
             let bytes = u.bytes(len)?;
             let mut build = SlotKeyBuilder::with_prefix(prefix);
-            build.write_all(bytes).expect("Failed to write bytes to slot key builder");
+            build
+                .write_all(bytes)
+                .expect("Failed to write bytes to slot key builder");
             Ok(Self { key: build.into() })
         }
     }
@@ -105,15 +104,21 @@ mod slot_key {
             use std::io::Write;
             let bytes = Vec::<u8>::deserialize(deserializer)?;
             if bytes.len() < 2 {
-                return Err(serde::de::Error::custom("Slot key must be at least 2 bytes"));
+                return Err(serde::de::Error::custom(
+                    "Slot key must be at least 2 bytes",
+                ));
             }
             let prefix = Prefix::new(bytes[0], bytes[1]);
             let mut builder = SlotKeyBuilder::with_prefix(prefix);
-            builder.write_all(&bytes[2..]).expect("Failed to write bytes to slot key builder");
-            Ok(Self { key: builder.into() })
+            builder
+                .write_all(&bytes[2..])
+                .expect("Failed to write bytes to slot key builder");
+            Ok(Self {
+                key: builder.into(),
+            })
         }
     }
-    
+
     impl borsh::BorshSerialize for SlotKey {
         fn serialize<W>(&self, writer: &mut W) -> Result<(), std::io::Error>
         where
@@ -122,7 +127,7 @@ mod slot_key {
             self.as_ref().serialize(writer)
         }
     }
-    
+
     impl borsh::BorshDeserialize for SlotKey {
         fn deserialize_reader<R>(reader: &mut R) -> Result<Self, std::io::Error>
         where
@@ -131,14 +136,18 @@ mod slot_key {
             use std::io::Write;
             let bytes = Vec::<u8>::deserialize_reader(reader)?;
             if bytes.len() < 2 {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Slot key must be at least 2 bytes"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Slot key must be at least 2 bytes",
+                ));
             }
             let prefix = Prefix::new(bytes[0], bytes[1]);
             let mut builder = SlotKeyBuilder::with_prefix(prefix);
             builder.write_all(&bytes[2..])?;
-            Ok(Self { key: builder.into() })
+            Ok(Self {
+                key: builder.into(),
+            })
         }
-        
     }
 
     #[test]
@@ -147,7 +156,7 @@ mod slot_key {
         let key = build_key(prefix, b"hello");
         let serialized = borsh::to_vec(&key).unwrap();
         let key2: SlotKey = borsh::from_slice(&serialized).unwrap();
-        
+
         assert_eq!(key.prefix(), prefix);
         assert_eq!(key.prefix(), key2.prefix());
         assert_eq!(key, key2);
@@ -169,7 +178,9 @@ mod slot_key {
         use std::io::Write;
         let mut builder = SlotKeyBuilder::with_prefix(prefix);
         builder.write_all(key).unwrap();
-        SlotKey { key: builder.into() }
+        SlotKey {
+            key: builder.into(),
+        }
     }
 
     #[test]
@@ -193,9 +204,7 @@ mod slot_key {
         let lowest_key = build_key(Prefix::new(0, 0), b"xylophone");
         assert!(lowest_key < key2);
         assert!(lowest_key < key3);
-
     }
-
 
     #[test]
     fn test_truncate_to() {
@@ -203,7 +212,7 @@ mod slot_key {
         let long = build_key(Prefix::new(1, 2), b"helloworld");
         assert_eq!(long.truncate_to(5).unwrap(), key);
 
-        let key  = build_key(Prefix::new(1, 2), &[2u8; 500]);
+        let key = build_key(Prefix::new(1, 2), &[2u8; 500]);
         let key2 = build_key(Prefix::new(1, 2), &[2u8; 7]);
         assert_eq!(key.truncate_to(7).unwrap(), key2);
     }
@@ -217,13 +226,7 @@ mod slot_key {
 ///
 /// When we store a slot key on disk, we store the physical representation
 #[derive(
-    Serialize,
-    Deserialize,
-    BorshSerialize,
-    BorshDeserialize,
-    UniversalWallet,
-    Debug,
-    Clone,
+    Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet, Debug, Clone,
 )]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 enum KeyContents {
@@ -373,26 +376,28 @@ mod private {
 
     #[test]
     fn test_to_vec_and_back() {
-        use std::io::Write;
         use crate::storage::SlotKeyBuilder;
         use crate::SlotKey;
+        use std::io::Write;
         let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
         builder.write_all(&[1, 2, 3]).unwrap();
-        let key: SlotKey = SlotKey { key: builder.into() };
+        let key: SlotKey = SlotKey {
+            key: builder.into(),
+        };
         let vec = key.as_ref().to_vec();
         let key2 = SlotKey::from_vec_including_prefix(&vec);
         assert_eq!(key, key2);
 
         let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
-        builder.write_all(&[1;100]).unwrap();
-        let key: SlotKey = SlotKey { key: builder.into() };
+        builder.write_all(&[1; 100]).unwrap();
+        let key: SlotKey = SlotKey {
+            key: builder.into(),
+        };
         let vec = key.as_ref().to_vec();
         let key2 = SlotKey::from_vec_including_prefix(&vec);
         assert_eq!(key, key2);
     }
-
 }
-
 
 impl SlotKey {
     /// Returns a new [`Arc`] reference to the bytes of this key excluding the prefix.
@@ -432,11 +437,11 @@ impl SlotKey {
     }
 
     /// Creates a new [`SlotKey`] from a vector of bytes including the prefix.
-    /// 
+    ///
     /// # Panics
     /// Panics if the vector length is less than 2 bytes.
     pub fn from_vec_including_prefix(vec: &Vec<u8>) -> Self {
-        use std::io::Write;  
+        use std::io::Write;
         let prefix = Prefix::new(vec[0], vec[1]);
         let mut builder = SlotKeyBuilder::with_prefix(prefix);
         builder.write_all(&vec[2..]).unwrap();
@@ -461,7 +466,9 @@ impl SlotKey {
             return None;
         }
         let mut output = SlotKeyBuilder::with_prefix(self.prefix());
-        output.write_all(&self.without_prefix()[..length_excluding_prefix]).unwrap();
+        output
+            .write_all(&self.without_prefix()[..length_excluding_prefix])
+            .unwrap();
         Some(SlotKey { key: output.into() })
     }
 }
@@ -993,15 +1000,18 @@ pub trait NativeStorage: Storage {
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
 
     /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
-    fn maybe_iter_user_values_with_prefix(&self, prefix: SlotKey) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>; 
+    fn maybe_iter_user_values_with_prefix(
+        &self,
+        prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>;
 
     /// Takes the pinned cache if one is present in this storage. See [`PinnedCache`] for more details.
-    /// 
-    /// In the full node only, the pinned cache is passed from block to block through the storage manager. 
+    ///
+    /// In the full node only, the pinned cache is passed from block to block through the storage manager.
     /// On saving the previous block, the storage manager takes its pinned block; then when it creates the storage for the *first* child block,
-    /// that storage is passed along with it. 
+    /// that storage is passed along with it.
     /// If a block has multiple children (i.e. the chain has a fork at some height), the pinned cache is only passed to the first child block to be created; other children have to rebuild it from db.
-    /// 
+    ///
     /// Note that the sequencer passes the pinned cache directly between executors without this hack, so this method is only used in the full node.
     fn take_pinned_cache(&mut self) -> Option<PinnedCache>;
 }

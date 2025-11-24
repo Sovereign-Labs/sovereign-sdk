@@ -678,7 +678,8 @@ where
             let mut inner = self.inner.lock().await;
             self.checkpoint_sender
                 .send(Arc::new(
-                    checkpoint.clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
+                    checkpoint
+                        .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
                 ))
                 .ok();
             inner.checkpoint = Some(checkpoint);

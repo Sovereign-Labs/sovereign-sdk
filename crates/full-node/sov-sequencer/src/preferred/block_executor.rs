@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use sov_state::pinned_cache::PinnedCache;
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
@@ -20,6 +19,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
 use tokio::sync::mpsc::error::TrySendError;
@@ -538,7 +538,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let (tx_sender, tx_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
         let (result_sender, result_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
 
-
         let handle = tokio::runtime::Handle::current().spawn_blocking({
             let ctx = RollupBlockTaskContext {
                 checkpoint: self
@@ -721,7 +720,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .shutdown()
             .await
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
-
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {

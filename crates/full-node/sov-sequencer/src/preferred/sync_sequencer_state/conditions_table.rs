@@ -148,7 +148,9 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
 
                 // Since we're resuming "standard" execuiton, pay upfront to populate the pinned cache. This should speed up tx execution at the cost
                 // of some overhead now.
-                tracing::debug!("Populating pinned cache for replica execution. This may take a few moments. ");
+                tracing::debug!(
+                    "Populating pinned cache for replica execution. This may take a few moments. "
+                );
                 let pinned_cache = Rt::populate_pinned_cache(&info.storage);
                 tracing::debug!("Pinned cache populated. Starting replica execution.");
                 let executor = Some(Box::new(
@@ -235,8 +237,9 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
             inner.new_executor_with_empty_uncommitted_changes(info, pinned_cache),
         ))
     } else {
-        let rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
-            .rollup_height_to_access();
+        let rollup_height =
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+                .rollup_height_to_access();
         debug!(
             ? initial_status,
             % rollup_height,

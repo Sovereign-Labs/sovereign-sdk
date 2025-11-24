@@ -3,13 +3,13 @@
 #![deny(missing_docs)]
 
 mod bytes;
-pub mod pinned_cache;
 pub(crate) mod cache;
 pub mod codec;
 pub mod config;
 mod event;
 pub mod namespaces;
 pub mod nomt;
+pub mod pinned_cache;
 #[cfg(feature = "native")]
 mod prover_storage;
 #[cfg(feature = "native")]
