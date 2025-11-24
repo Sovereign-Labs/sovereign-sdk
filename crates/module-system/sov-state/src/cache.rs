@@ -441,14 +441,14 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             Some(Access::Read { original }) => original.as_ref().map(|node| node.leaf.size),
             Some(Access::Write { modified, .. }) => modified.as_ref().map(SlotValue::size),
             None => {
+                // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice).
+                // TODO: Decide if this is the right behavior.
+                if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
+                    return value.map(SlotValue::size);
+                }
+                // Assuming the value isn't in pinned cache, check the uncommited changes next.
                 let maybe_leaf = match uncomitted_changes {
                     Some(uncomitted_changes) => {
-                        // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice).
-                        // TODO: Decide if this is the right behavior.
-                        if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
-                            return value.map(SlotValue::size);
-                        }
-                        // Assuming the value isn't in pinned cache, check the uncommited changes next.
                         let maybe_value = uncomitted_changes.get_leaf(N::PROVABLE_NAMESPACE, key);
                         if let MaybePresentValue::Present(value) = maybe_value {
                             value
@@ -456,14 +456,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                             storage.get_leaf::<N>(key, witness)
                         }
                     }
-                    None => {
-                        // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice).
-                        // TODO: Decide if this is the right behavior.
-                        if let MaybePresentValue::Present(value) = self.check_pinned_cache(key) {
-                            return value.map(SlotValue::size);
-                        }
-                        storage.get_leaf::<N>(key, witness)
-                    }
+                    None => storage.get_leaf::<N>(key, witness),
                 };
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
                 metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
@@ -522,38 +515,35 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             storage,
             witness,
             |key, witness, _args, metric| {
-                Ok::<_, Infallible>(match uncomitted_changes {
-                    // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
-                    // If so, check that state first and fall back to storage.
-                    Some(uncomitted_changes) => {
-                        if let MaybePresentValue::Present(value) =
-                            uncomitted_changes.get(N::NAMESPACE, key)
-                        {
-                            value
-                        } else {
-                            // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice).
-                            // TODO: Decide if this is the right behavior.
+                Ok::<_, Infallible>({
+                    // Note: we currently skip adding the read to cache if the value is pinned (why cache it twice).
+                    // TODO: Decide if this is the right behavior.
+                    if let MaybePresentValue::Present(value) =
+                        Self::check_pinned_cache_static(&self.pinned_cache, key)
+                    {
+                        return Ok(value.cloned());
+                    }
+                    match uncomitted_changes {
+                        // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
+                        // If so, check that state first and fall back to storage.
+                        Some(uncomitted_changes) => {
                             if let MaybePresentValue::Present(value) =
-                                Self::check_pinned_cache_static(&self.pinned_cache, key)
+                                uncomitted_changes.get(N::NAMESPACE, key)
                             {
-                                return Ok(value.cloned());
+                                value
+                            } else {
+                                let value = storage.get::<N>(key, witness);
+                                metric.storage_read_size =
+                                    Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
+                                value
                             }
+                        }
+                        None => {
                             let value = storage.get::<N>(key, witness);
                             metric.storage_read_size =
                                 Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
                             value
                         }
-                    }
-                    None => {
-                        if let MaybePresentValue::Present(value) =
-                            Self::check_pinned_cache_static(&self.pinned_cache, key)
-                        {
-                            return Ok(value.cloned());
-                        }
-                        let value = storage.get::<N>(key, witness);
-                        metric.storage_read_size =
-                            Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
-                        value
                     }
                 })
             },
