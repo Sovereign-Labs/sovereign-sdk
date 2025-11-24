@@ -52,7 +52,7 @@ struct Args {
     /// The distribution of token transfers vs. synthetic load transactions to generate.
     tx_type: TxType,
 
-    /// After that many seconds main loop will restart with salt incremented by number of workerAs
+    /// After that many seconds main loop will restart with salt incremented by the number of workers.
     #[arg(long, default_value = "None")]
     restart_after_seconds: Option<u64>,
 }
@@ -153,8 +153,7 @@ async fn worker_task(
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), anyhow::Error> {
+async fn run() -> Result<(), anyhow::Error> {
     let args = Args::parse();
     let _guard = sov_modules_rollup_blueprint::logging::initialize_logging();
     let mut worker_set = JoinSet::new();
@@ -195,6 +194,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tx.send(true)?;
     _ = worker_set.join_all();
-
     Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    let run_result = run().await;
+    tracing::info!(result = ?run_result, "Generator has completed the run");
+    run_result
 }
