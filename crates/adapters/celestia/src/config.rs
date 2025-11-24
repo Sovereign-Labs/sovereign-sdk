@@ -199,5 +199,6 @@ pub(crate) fn default_factor() -> f32 {
 }
 
 pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
-    NonZero::new(60).unwrap()
+    // 6 blocks + 1 second for jitter
+    NonZero::new(37).unwrap()
 }
