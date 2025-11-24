@@ -41,8 +41,9 @@ impl<S: Spec> TimingOracleConfigWithPrivateKey<S> {
                 None => {
                     let key = <S::CryptoSpec as CryptoSpec>::PrivateKey::generate();
                     tracing::info!(
-                        "Generated ephemeral oracle key with pubkey hex: 0x{}. Make sure the paymaster is enabled.",
-                        hex::encode(key.pub_key().as_ref())
+                        pub_key = %hex::encode(key.pub_key().as_ref()),
+                        "Generated ephemeral oracle key. Make sure the paymaster is enabled.",
+
                     );
                     Ok(key)
                 }
@@ -92,7 +93,7 @@ where
         loop {
             tokio::select! {
                  _ = ticker.tick() => {}
-                 _ = shutdown_receiver.changed() => { break;}
+                 _ = shutdown_receiver.changed() => { break; }
             }
 
             let now = std::time::SystemTime::now()
@@ -135,15 +136,15 @@ where
 
             let baked_tx = Rt::Auth::encode_with_standard_auth(raw_tx);
 
-            if let Err(e) = seq.accept_tx(baked_tx).await {
+            if let Err(error) = seq.accept_tx(baked_tx).await {
                 // Reduce log spam by only logging 1 of every 100 consecutive failures
                 if consecutive_failures % 100 == 0 {
-                    tracing::error!(error = ?e, "Error submitting timestamp oracle update tx");
+                    tracing::error!(?error, "Error submitting timestamp oracle update tx");
                 }
                 consecutive_failures += 1;
             } else {
                 consecutive_failures = 0;
-                tracing::info!(%timestamp, "Successfully submitted timestamp oracle update tx");
+                tracing::trace!(%timestamp, "Successfully submitted timestamp oracle update tx");
             }
         }
     });
