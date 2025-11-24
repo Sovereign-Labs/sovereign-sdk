@@ -1,5 +1,15 @@
+# 2025-11-24
+- #2109 Configuration changes in `sov-celestia-adapter`. Default values for `request_timeout_secs` and `tx_priority` has changed.
+  **It is recommended to remove those values and use defaults** unless there's a reason.
+  Here is minimal functioning celestia config:
+  ```toml
+  [da]
+  rpc_url = "ws://127.0.0.1:26658"
+  grpc_url = "http://127.0.0.1:9090"
+  signer_private_key = "0000000000000000000000000000000000000000000000000000000000000000"
+  ```
 # 2025-11-17
-- ##2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
+- #2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
 # 2025-11-14
 - #2076 Adds `TimingOracle` functionality. The feature is disabled by default, so it does not introduce any breaking changes.
 - #2077 **Breaking change**: The `Sequencer` implementations have been made cheaply cloneable, and the `accept_tx()` method has been made cancellation-safe. This has two effects:
