@@ -799,7 +799,10 @@ async fn update_state_task<S, Rt, Da>(
             }
 
             // For any other error, trigger a shut down
-            error!("Error in preferred sequencer update state task: {e:?}. Shutting down rollup.");
+            error!(
+                error = ?e,
+                "Error in preferred sequencer update state task. Shutting down rollup."
+            );
             exit_rollup(&seq.shutdown_sender).await;
         }
     }
@@ -1297,12 +1300,12 @@ async fn exit_rollup_inner(
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
     if shutdown_sender.send(()).is_err() {
-        tracing::error!("Failed to send shutdown signal: {location}");
+        tracing::error!(%location, "Failed to send shutdown signal");
     }
-    let msg = format!("Calling std::process::exit(1): {location}");
-    tracing::error!(msg);
-    println!("{msg}");
-    sleep(Duration::from_secs(5)).await;
+    let sleep_time = Duration::from_secs(5);
+    tracing::error!(%location, after = ?sleep_time, "Calling std::process::exit(1)");
+    println!("Calling std::process::exit(1): {location}");
+    sleep(sleep_time).await;
     std::process::exit(1);
 }
 

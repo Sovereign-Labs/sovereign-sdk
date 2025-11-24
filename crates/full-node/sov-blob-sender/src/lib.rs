@@ -311,7 +311,7 @@ where
                 match res {
                     FutureOrShutdownOutput::Output(()) => {}
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("BlobSender: Shutting down task for {blob_id}");
+                        info!(%blob_id, "BlobSender: Shutting down task");
                     }
                 }
                 state.dec_nb_of_concurrent_blob_submissions();

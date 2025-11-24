@@ -1234,9 +1234,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1a6bc833fe0048c158f4740cb4b08cbfb6f407f2bf8ff369d3f6ade932d628f"
+checksum = "7d4321d7d37b5bcea648e37b24464586267d2fae2cc0b6be1f874801ba875040"
 dependencies = [
  "bytes",
  "prost",
@@ -1250,9 +1250,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68d248009d2b38857ad5d0b6d6c754754132b19e836ba205bdda14631065fa98"
+checksum = "d7b60fc62b848cd2085f408ff01d0bc103eb1653f507072f8b1ca586cb7ce1d5"
 dependencies = [
  "base64",
  "bech32",
@@ -3287,9 +3287,9 @@ dependencies = [
 
 [[package]]
 name = "lumina-utils"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6be0fedf4b4ddbdd34a2541f36b63daa004064b5465b7b9f52ebdc5fe1c64187"
+checksum = "5a2be824fb56bbc33720cc7bf9920817f8b1fe54aa2f79300a9e0a390c4cf65c"
 dependencies = [
  "js-sys",
 ]

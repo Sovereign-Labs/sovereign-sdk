@@ -168,7 +168,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
     let (_, log) = records.pop().unwrap();
 
     // The blob task was canceled
-    assert!(log.contains("BlobSender: Shutting down task for"));
+    assert!(log.contains("BlobSender: Shutting down task"));
 
     Ok(())
 }

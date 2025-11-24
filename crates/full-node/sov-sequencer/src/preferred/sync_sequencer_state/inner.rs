@@ -631,7 +631,7 @@ where
         let state_roots = self.executor.state_roots.clone();
 
         if state_roots.len() > 50 {
-            tracing::warn!("Executor: The computed state roots map is large, and cloning it can be costly in terms of time. state_roots len: {}", state_roots.len());
+            tracing::warn!(state_roots = %state_roots.len(), "Executor: The computed state roots map is large, and cloning it can be costly in terms of time.");
         }
 
         let notification = StartBlockNotification {

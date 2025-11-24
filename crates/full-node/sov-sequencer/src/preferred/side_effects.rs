@@ -250,8 +250,8 @@ where
 
             while !event_queue.is_empty() {
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
-                    tracing::error!("Error handling executor event: {:?}", e);
-                    // If we've arleady started shutting down, this might fail - but then we're happy.
+                    tracing::error!(error = ?e, "Error handling executor event");
+                    // If we've already started shutting down, this might fail - but then we're happy.
                     let _ = self.shutdown_sender.send(());
                     break;
                 }
