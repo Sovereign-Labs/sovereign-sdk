@@ -17,7 +17,6 @@ use crate::{
     TEST_MAX_CONCURRENT_BLOBS,
 };
 use anyhow::Context;
-use sov_modules_api::ModuleExecutionConfig;
 use derivative::Derivative;
 use serde::Deserialize;
 use sov_api_spec::types::TxInfoWithConfirmation;
@@ -36,6 +35,7 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::prelude::axum;
 use sov_modules_api::prelude::axum::extract::Request;
 use sov_modules_api::prelude::axum::ServiceExt;
+use sov_modules_api::ModuleExecutionConfig;
 use sov_modules_api::{Spec, Zkvm};
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_stf_blueprint::{GenesisParams, Runtime};
@@ -538,7 +538,7 @@ where
             postgres_container_opt: None,
             config: Self::default_config(finalization_blocks, storage_path, false, None),
             with_secondary_sequencer: None,
-            exec_config
+            exec_config,
         }
     }
 

@@ -6,13 +6,13 @@ use sov_state::StateGetter;
 use sov_state::{IsValueCached, Namespace, SlotKey, SlotValue, StateAccesses, Storage};
 use tracing::trace;
 
-use crate::state::traits::PinnedCacheAccessor;
 use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
 use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::traits::PerBlockCache;
+use crate::state::traits::PinnedCacheAccessor;
 #[cfg(feature = "native")]
 use crate::TxChangeSet;
 use crate::{GasMeter, Spec, VersionReader};

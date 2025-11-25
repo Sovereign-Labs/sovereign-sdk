@@ -26,11 +26,11 @@
 //!    In general, the point of a call is to change the module state, but if the call throws an error,
 //!    no module-specific state is updated (the transaction is reverted).
 #[cfg(feature = "native")]
-use std::sync::Arc;
+use sov_evm::execution_config::EvmExecutionConfig;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
-use sov_evm::execution_config::EvmExecutionConfig;
+use std::sync::Arc;
 
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "native")]
@@ -210,10 +210,13 @@ where
 
     #[cfg(feature = "native")]
     fn populate_pinned_cache(storage: &S::Storage) -> Option<PinnedCache> {
-        let buckets_and_limits = sov_evm::Evm::<S>::default().get_pinned_cache_buckets_and_limits()?;
+        let buckets_and_limits =
+            sov_evm::Evm::<S>::default().get_pinned_cache_buckets_and_limits()?;
         let mut pinned_cache = PinnedCache::default();
         for (bucket_id, limit) in buckets_and_limits {
-            if let Err(e) = pinned_cache.try_load_bucket_if_absent(bucket_id.clone(), storage, limit) {
+            if let Err(e) =
+                pinned_cache.try_load_bucket_if_absent(bucket_id.clone(), storage, limit)
+            {
                 tracing::warn!(bucket_id = ?bucket_id, limit = ?limit, error = ?e, "EVM Failed to load bucket into pinned cache");
             }
         }

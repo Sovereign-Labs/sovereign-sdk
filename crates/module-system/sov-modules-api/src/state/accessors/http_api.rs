@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::state::traits::PinnedCacheAccessor;
 use crate::GasMeteringError;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
-use sov_state::sequencer_state::MaybePresentValue;
-use crate::state::traits::PinnedCacheAccessor;
 use sov_state::pinned_cache::PinnedCache;
+use sov_state::sequencer_state::MaybePresentValue;
 use sov_state::StateGetter;
 use sov_state::{
     namespaces, CompileTimeNamespace, EventContainer, Namespace, NativeStorage,

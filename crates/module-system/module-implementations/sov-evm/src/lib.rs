@@ -220,20 +220,20 @@ where
 #[cfg(feature = "native")]
 /// Provides configuration of native execution; currently, this modules only includes configuration for pinning contract storage to RAM.
 pub mod execution_config {
+    use sov_modules_api::ExecutionInit;
+    use sov_modules_api::ModuleExecutionConfig;
     use sov_state::pinned_cache::BucketId;
+    use std::collections::BTreeMap;
     use std::sync::OnceLock;
     use std::sync::RwLock;
-    use sov_modules_api::ModuleExecutionConfig;
-    use std::collections::BTreeMap;
-    use sov_modules_api::ExecutionInit;
 
     use super::*;
 
     /// Global storage for the EVM execution configuration.
     pub static EVM_EXECUTION_CONFIG: OnceLock<RwLock<EvmExecutionConfig>> = OnceLock::new();
 
-    /// Configuration for EVM ram pinning. 
-    /// 
+    /// Configuration for EVM ram pinning.
+    ///
     /// Any addresses specified in `privileged_deployer_addresses` will automatically have their contracts pinned with a size limit of `default_bucket_size_limit`.
     /// Any addresses specified in `known_contracts_and_limits` will be pinned with the specified size limit.
     #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
@@ -262,7 +262,7 @@ pub mod execution_config {
     pub const fn default_bucket_size_limit() -> usize {
         100 * 1024 * 1024 // 100MB
     }
-    
+
     impl<S: Spec> ExecutionInit for Evm<S> {
         type Config = EvmExecutionConfig;
         // Do nothing; the configure function handles everything we need.
@@ -279,10 +279,20 @@ pub mod execution_config {
 
         /// Returns an iterator over the storage buckets to pin and their size limits.
         pub fn get_pinned_cache_buckets_and_limits(&self) -> Option<Vec<(BucketId, usize)>> {
-            Some(EVM_EXECUTION_CONFIG.get()?.read().expect("EVM Execution config RW lock is poisoned.").contents.known_contracts_and_limits.iter().map(|(address, limit)| {
-                let bucket_id = self.get_bucket_id_for_address(address);
-               (bucket_id, *limit)
-            }).collect())
+            Some(
+                EVM_EXECUTION_CONFIG
+                    .get()?
+                    .read()
+                    .expect("EVM Execution config RW lock is poisoned.")
+                    .contents
+                    .known_contracts_and_limits
+                    .iter()
+                    .map(|(address, limit)| {
+                        let bucket_id = self.get_bucket_id_for_address(address);
+                        (bucket_id, *limit)
+                    })
+                    .collect(),
+            )
         }
     }
 
@@ -291,11 +301,14 @@ pub mod execution_config {
         type Input = std::path::PathBuf;
         fn configure(input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             if !std::fs::exists(input)? {
-                std::fs::write(input, serde_json::to_string_pretty(&EvmExecutionConfigContents {
-                    default_bucket_size_limit: default_bucket_size_limit(),
-                    privileged_deployer_addresses: vec![],
-                    known_contracts_and_limits: BTreeMap::new(),
-                })?)?;
+                std::fs::write(
+                    input,
+                    serde_json::to_string_pretty(&EvmExecutionConfigContents {
+                        default_bucket_size_limit: default_bucket_size_limit(),
+                        privileged_deployer_addresses: vec![],
+                        known_contracts_and_limits: BTreeMap::new(),
+                    })?,
+                )?;
             }
             let file = std::fs::read(input)?;
             let config: EvmExecutionConfigContents = serde_json::from_slice(&file)?;
@@ -303,12 +316,13 @@ pub mod execution_config {
                 contents: config,
                 location: input.clone(),
             };
-            EVM_EXECUTION_CONFIG.set(RwLock::new(config)).map_err(|_| "EVM Execution config already initialized. This is a bug, please report it.")?;
+            EVM_EXECUTION_CONFIG.set(RwLock::new(config)).map_err(|_| {
+                "EVM Execution config already initialized. This is a bug, please report it."
+            })?;
             Ok(())
         }
     }
 }
-
 
 impl<S: Spec> Evm<S> {
     pub(crate) fn base_fee(&self) -> u64 {

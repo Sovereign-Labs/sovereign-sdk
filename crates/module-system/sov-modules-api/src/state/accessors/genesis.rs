@@ -1,7 +1,7 @@
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
-use sov_state::{EventContainer, SlotKey, SlotValue, TypeErasedEvent};
 use sov_state::pinned_cache::PinnedCache;
+use sov_state::{EventContainer, SlotKey, SlotValue, TypeErasedEvent};
 
 use super::checkpoints::StateCheckpoint;
 use super::temp_cache::{BorshSerializedSize, CacheLookup, TempCache};

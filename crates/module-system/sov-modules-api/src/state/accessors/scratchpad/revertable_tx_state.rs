@@ -12,8 +12,8 @@ use sov_state::{
 use super::super::temp_cache::{CacheLookup, TempCache};
 use super::super::{BorshSerializedSize, StateMetricsProvider, UniversalStateAccessor};
 use crate::module::Spec;
-use crate::state::traits::{delegate_version_reader, PinnedCacheAccessor};
 use crate::state::traits::PerBlockCache;
+use crate::state::traits::{delegate_version_reader, PinnedCacheAccessor};
 use crate::{
     AccessoryStateWriter, BasicGasMeter, GasMeter, GasMeteringError, ProvableStateReader,
     ProvableStateWriter, TxState,

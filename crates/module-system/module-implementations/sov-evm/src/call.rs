@@ -105,11 +105,14 @@ where
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
 
-       
         save_elapsed!(execution_time SINCE execution);
         verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg)?;
         #[cfg(feature = "native")]
-        let new_pinned_contracts = match get_pinned_contract_list_updates(&state_changes, &tx.signer, &mut db) {
+        let new_pinned_contracts = match get_pinned_contract_list_updates(
+            &state_changes,
+            &tx.signer,
+            &mut db,
+        ) {
             Ok(new_pinned_contracts) => new_pinned_contracts,
             Err(err) => {
                 tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates");
@@ -354,23 +357,37 @@ pub(crate) fn verify_contract_creation_allowlist(
 }
 
 /// Get the list of new contracts to pin from the state changes.
-pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErrorMarker>(state_changes: &HashMap<Address, Account>, signer: &Address, db: &mut DB) -> Result<Vec<Address>, E> {
+pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErrorMarker>(
+    state_changes: &HashMap<Address, Account>,
+    signer: &Address,
+    db: &mut DB,
+) -> Result<Vec<Address>, E> {
     use crate::execution_config::EVM_EXECUTION_CONFIG;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
         return Ok(Vec::new());
     };
 
-    let execution_config = execution_config.read().expect("EVM Execution config RW lock is poisoned.");
-    if !execution_config.contents.privileged_deployer_addresses.contains(signer) {
+    let execution_config = execution_config
+        .read()
+        .expect("EVM Execution config RW lock is poisoned.");
+    if !execution_config
+        .contents
+        .privileged_deployer_addresses
+        .contains(signer)
+    {
         return Ok(Vec::new());
     };
-    
+
     let mut new_pinned_contracts = Vec::new();
     for (address, account) in state_changes.iter() {
         if let Some(ref code) = account.info.code {
             if !code.is_empty() {
                 // Only pin addresses which didn't exist previously or had their code hash go from empty to non-empty.
-                if db.basic(*address)?.map(|acc| acc.code_hash == KECCAK_EMPTY).unwrap_or(true) {
+                if db
+                    .basic(*address)?
+                    .map(|acc| acc.code_hash == KECCAK_EMPTY)
+                    .unwrap_or(true)
+                {
                     new_pinned_contracts.push(*address);
                 }
             }
@@ -381,7 +398,11 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
 
 #[cfg(feature = "native")]
 impl<S: Spec> Evm<S> {
-    pub(crate) fn update_pinned_contract_list(&self, new_pinned_contracts: &Vec<Address>, state: &mut impl TxState<S>) {
+    pub(crate) fn update_pinned_contract_list(
+        &self,
+        new_pinned_contracts: &Vec<Address>,
+        state: &mut impl TxState<S>,
+    ) {
         use crate::execution_config::EVM_EXECUTION_CONFIG;
         // If there are no new pinned contracts, we can return early.
         if new_pinned_contracts.is_empty() {
@@ -391,9 +412,11 @@ impl<S: Spec> Evm<S> {
         let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
             return;
         };
-        
+
         // Now for each new contract we need to track, add it to the execution config and load the bucket into the pinned cache.
-        let mut execution_config = execution_config.write().expect("EVM Execution config RW lock is poisoned.");
+        let mut execution_config = execution_config
+            .write()
+            .expect("EVM Execution config RW lock is poisoned.");
         let size_limit = execution_config.contents.default_bucket_size_limit;
         let storage = state.storage().clone();
         let mut pinned_cache = state.pinned_cache_mut();
@@ -404,8 +427,8 @@ impl<S: Spec> Evm<S> {
                 use sov_state::pinned_cache::LoadBucketOutcome;
 
                 let bucket_id = self.get_bucket_id_for_address(address);
-                match  pinned_cache.try_load_bucket_if_absent(bucket_id, &storage, size_limit) {
-                   Err(e) => {
+                match pinned_cache.try_load_bucket_if_absent(bucket_id, &storage, size_limit) {
+                    Err(e) => {
                         tracing::warn!(address = ?address, error = ?e, "EVM Failed to load bucket for address into pinned cache");
                     }
                     Ok(LoadBucketOutcome::Loaded) => {
@@ -420,10 +443,15 @@ impl<S: Spec> Evm<S> {
                     Ok(LoadBucketOutcome::NotSupportedByStorage) => {
                         tracing::error!(address = ?address, "EVM Failed to load bucket for address into pinned cache because the storage doesn't support iteration. This means that pinning is configured but the rollup doesnt support it.");
                     }
-                } 
+                }
             }
             // Update the execution config with the new address to track. If the address didn't already exist, mark it as dirty so that we flush to disk after.
-            if execution_config.contents.known_contracts_and_limits.insert(*address, size_limit).is_none() {
+            if execution_config
+                .contents
+                .known_contracts_and_limits
+                .insert(*address, size_limit)
+                .is_none()
+            {
                 updated_execution_config = true;
             }
         }
