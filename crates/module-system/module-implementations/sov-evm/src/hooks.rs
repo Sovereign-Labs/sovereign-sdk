@@ -187,7 +187,20 @@ impl<S: Spec> FinalizeHook for Evm<S> {
         block.header.state_root = user_space_root_hash.into();
 
         let block_number = block.header.number;
-        let sealed_block = block.seal();
+
+        // Fetch transactions for this block to calculate RLP size
+        let transactions: Vec<_> = block
+            .transactions
+            .clone()
+            .map(|tx_idx| {
+                self.transactions
+                    .get(&tx_idx, state)
+                    .unwrap_infallible()
+                    .expect("Transaction should exist in accessory state")
+                    .signed_transaction
+            })
+            .collect();
+        let sealed_block = block.seal_with_size(&transactions);
 
         let block_numbers_range = self.block_numbers(state);
 
