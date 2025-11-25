@@ -151,6 +151,14 @@ mod slot_key {
     }
 
     #[test]
+    fn test_as_ref() {
+        let prefix = Prefix::new(1, 2);
+        let key = build_key(prefix, b"hello");
+        let key_ref = key.as_ref();
+        assert_eq!(key_ref, b"\x01\x02hello");
+    }
+
+    #[test]
     fn test_borsh_roundtrip() {
         let prefix = Prefix::new(1, 2);
         let key = build_key(prefix, b"hello");

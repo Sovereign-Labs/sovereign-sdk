@@ -350,6 +350,18 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         })
     }
 
+    /// Returns a mutable reference to the pinned cache backing this cache, if any exists.
+    pub fn pinned_cache_mut(&mut self) -> Option<&mut crate::pinned_cache::PinnedCache> {
+        #[cfg(feature = "native")]
+        {
+            self.pinned_cache.as_mut()
+        }
+        #[cfg(not(feature = "native"))]
+        {
+            None
+        }
+    }
+
     /// Converts the `ProvableStorageCache` into `OrderedReadsAndWrites`.
     pub fn to_ordered_writes_and_reads(mut self) -> OrderedReadsAndWrites {
         self.commit_revertable_storage_cache();
@@ -669,8 +681,12 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             .as_mut()
             .and_then(|pinned_cache| pinned_cache.bucket_for_mut(key))
         {
-            // Ignore the result of the insert, we don't care if it failed (it will have been logged, and there's nothing we can do about it)
-            let _ = bucket.try_insert(key.clone(), value.clone());
+            // If the insert failed, drop the bucket. It no longer contains all of the relevant keys, so it doesn't let us skip falling to disk anymore
+            if !bucket.try_insert(key.clone(), value.clone()) {
+                if let Some(pinned_cache) = self.pinned_cache.as_mut() {
+                    pinned_cache.drop_bucket_for(key);
+                }
+            }
         }
         self.cache.add_write(key.clone(), Some(value));
     }

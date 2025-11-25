@@ -51,7 +51,6 @@ impl<S: Storage> Delta<S> {
         }
     }
 
-    #[cfg(feature = "native")]
     pub(super) fn inner(&self) -> &S {
         &self.inner
     }

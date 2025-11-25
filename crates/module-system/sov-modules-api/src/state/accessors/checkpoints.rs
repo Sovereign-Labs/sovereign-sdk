@@ -12,6 +12,7 @@ use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
 use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::traits::PerBlockCache;
+use crate::state::traits::PinnedCacheAccessor;
 #[cfg(feature = "native")]
 use crate::TxChangeSet;
 use crate::{GasMeter, Spec, VersionReader};
@@ -481,5 +482,15 @@ impl<S: Spec> PerBlockCache for StateCheckpoint<S> {
     fn update_cache_with(&mut self, other: TempCache) {
         self.cache.update_with(other);
         self.cache.prune();
+    }
+}
+
+impl<S: Spec> PinnedCacheAccessor<S> for StateCheckpoint<S> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.delta.user_cache.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.delta.inner()
     }
 }

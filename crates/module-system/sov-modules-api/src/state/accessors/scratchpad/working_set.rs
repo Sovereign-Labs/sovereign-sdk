@@ -4,6 +4,7 @@
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{EventContainer, Namespace, SlotKey, SlotValue, TypeErasedEvent};
 
 use super::super::checkpoints::StateCheckpoint;
@@ -14,7 +15,7 @@ use super::super::{
 };
 use super::TxScratchpad;
 use crate::module::Spec;
-use crate::state::traits::{delegate_version_reader, PerBlockCache};
+use crate::state::traits::{delegate_version_reader, PerBlockCache, PinnedCacheAccessor};
 use crate::transaction::{
     transaction_consumption_helper, AuthenticatedTransactionData, PriorityFeeBips,
     TransactionConsumption,
@@ -296,6 +297,16 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for WorkingSet<S, I> {
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.delta.cache_writes.update_with(other);
+    }
+}
+
+impl<S: Spec, I: StateProvider<S>> PinnedCacheAccessor<S> for WorkingSet<S, I> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.delta.inner.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.delta.inner.storage()
     }
 }
 

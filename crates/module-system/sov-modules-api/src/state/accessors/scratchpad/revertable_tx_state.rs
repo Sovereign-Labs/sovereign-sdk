@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{
     EventContainer, Kernel as KernelType, Namespace, SlotKey, SlotValue, TypeErasedEvent, User,
 };
@@ -11,8 +12,8 @@ use sov_state::{
 use super::super::temp_cache::{CacheLookup, TempCache};
 use super::super::{BorshSerializedSize, StateMetricsProvider, UniversalStateAccessor};
 use crate::module::Spec;
-use crate::state::traits::delegate_version_reader;
 use crate::state::traits::PerBlockCache;
+use crate::state::traits::{delegate_version_reader, PinnedCacheAccessor};
 use crate::{
     AccessoryStateWriter, BasicGasMeter, GasMeter, GasMeteringError, ProvableStateReader,
     ProvableStateWriter, TxState,
@@ -101,6 +102,16 @@ impl<S: Spec, I: TxState<S>> PerBlockCache for RevertableTxState<'_, S, I> {
 
     fn update_cache_with(&mut self, other: TempCache) {
         self.temp_cache.update_with(other);
+    }
+}
+
+impl<S: Spec, I: TxState<S>> PinnedCacheAccessor<S> for RevertableTxState<'_, S, I> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.inner.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.inner.storage()
     }
 }
 

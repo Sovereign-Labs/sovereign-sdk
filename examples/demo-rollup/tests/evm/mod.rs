@@ -7,6 +7,7 @@ mod evm_logs;
 mod evm_no_gas_limit;
 mod evm_oog_error;
 mod evm_oracle;
+mod evm_ram_pinning;
 mod evm_rpc;
 mod evm_soft_conf;
 mod evm_subscribe;

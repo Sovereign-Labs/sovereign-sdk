@@ -27,11 +27,18 @@ use crate::NativeStorage;
 use crate::{Prefix, SlotKey, SlotValue};
 
 #[derive(Debug)]
+enum MaybeDroppedBucket {
+    Dropped,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    NotDropped(BucketStorage),
+}
+
+#[derive(Debug)]
 struct StateItemCache {
     bucket_key_length: usize,
     // Maps the first `bucket_key_length` bytes of a slot key to a bucket of k/v pairs.
     // Buckets have separate size limits; a common use case would be to have one bucket for each EVM smart contract.
-    items: BTreeMap<BucketId, BucketStorage>,
+    items: BTreeMap<BucketId, MaybeDroppedBucket>,
 }
 
 /// A cache for state items that are pinned in RAM. When querying for pinned state, we know that the item
@@ -61,7 +68,13 @@ impl PinnedCache {
         let state_item_cache = self.item_caches.get_mut(&prefix)?;
         let key_length = state_item_cache.bucket_key_length;
         let relevant_key = BucketId(key.truncate_to(key_length)?);
-        state_item_cache.items.get_mut(&relevant_key)
+        state_item_cache
+            .items
+            .get_mut(&relevant_key)
+            .and_then(|maybe_dropped_bucket| match maybe_dropped_bucket {
+                MaybeDroppedBucket::Dropped => None,
+                MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
+            })
     }
 
     /// Get a reference to the bucket for a given key.
@@ -70,7 +83,35 @@ impl PinnedCache {
         let state_item_cache = self.item_caches.get(&prefix)?;
         let key_length = state_item_cache.bucket_key_length;
         let relevant_key = BucketId(key.truncate_to(key_length)?);
-        state_item_cache.items.get(&relevant_key)
+        state_item_cache
+            .items
+            .get(&relevant_key)
+            .and_then(|maybe_dropped_bucket| match maybe_dropped_bucket {
+                MaybeDroppedBucket::Dropped => None,
+                MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
+            })
+    }
+
+    /// Drop the bucket that would contain the given key.
+    pub fn drop_bucket_for(&mut self, key: &SlotKey) {
+        let prefix = key.prefix();
+        let Some(state_item_cache) = self.item_caches.get_mut(&prefix) else {
+            return;
+        };
+        let key_length = state_item_cache.bucket_key_length;
+        let bucket_key = BucketId::from_slot_key(key, key_length);
+        state_item_cache
+            .items
+            .insert(bucket_key, MaybeDroppedBucket::Dropped);
+    }
+
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
+    fn bucket_exists_or_was_dropped(&self, bucket_id: &BucketId) -> bool {
+        let prefix = bucket_id.0.prefix();
+        let Some(state_item_cache) = self.item_caches.get(&prefix) else {
+            return false;
+        };
+        state_item_cache.items.contains_key(bucket_id)
     }
 }
 
@@ -83,6 +124,12 @@ impl BucketId {
     /// For example, if the key is a 32 byte address and an 8 byte index and you wish to bucket by address, the `length` should be 32 bytes.
     pub fn from_slot_key(slot_key: &SlotKey, length: usize) -> Self {
         Self(slot_key.truncate_to(length).unwrap())
+    }
+}
+
+impl std::fmt::Display for BucketId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -102,7 +149,10 @@ impl BucketStorage {
     }
 
     /// Try to insert a key-value pair into the bucket. Returns false if the item could not be inserted (due to exceeding the size limit)
+    /// If try_insert returns false, it is the caller's responsibility to drop the bucket by calling `drop_bucket_for` or revert the transaction that
+    /// attempted the write.
     #[cfg(feature = "native")]
+    #[must_use]
     pub fn try_insert(&mut self, key: SlotKey, value: SlotValue) -> bool {
         let size: usize = value
             .size()
@@ -157,7 +207,7 @@ impl PinnedCache {
         max_size: usize,
     ) -> anyhow::Result<LoadBucketOutcome> {
         // If we've already loaded the bucket, we can return early.
-        if self.bucket_for(&bucket_id.0).is_some() {
+        if self.bucket_exists_or_was_dropped(&bucket_id) {
             return Ok(LoadBucketOutcome::AlreadyPresent);
         }
 
@@ -197,7 +247,9 @@ impl PinnedCache {
             bucket_storage.items.len(),
             bucket_storage.current_size
         );
-        state_item_cache.items.insert(bucket_id, bucket_storage);
+        state_item_cache
+            .items
+            .insert(bucket_id, MaybeDroppedBucket::NotDropped(bucket_storage));
 
         Ok(LoadBucketOutcome::Loaded)
     }
