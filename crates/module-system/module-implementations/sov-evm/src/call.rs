@@ -3,9 +3,11 @@ use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
-use revm::primitives::{HashMap, KECCAK_EMPTY};
+use revm::primitives::{HashMap};
 use revm::state::Account;
+#[cfg(feature = "native")]
 use revm::Database;
+#[cfg(feature = "native")]
 use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -356,12 +358,14 @@ pub(crate) fn verify_contract_creation_allowlist(
     Ok(())
 }
 
+#[cfg(feature = "native")]
 /// Get the list of new contracts to pin from the state changes.
 pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErrorMarker>(
     state_changes: &HashMap<Address, Account>,
     signer: &Address,
     db: &mut DB,
 ) -> Result<Vec<Address>, E> {
+    use alloy_consensus::constants::KECCAK_EMPTY;
     use crate::execution_config::EVM_EXECUTION_CONFIG;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
         return Ok(Vec::new());

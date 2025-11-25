@@ -350,10 +350,16 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         })
     }
 
-    #[cfg(feature = "native")]
     /// Returns a mutable reference to the pinned cache backing this cache, if any exists.
-    pub fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
-        self.pinned_cache.as_mut()
+    pub fn pinned_cache_mut(&mut self) -> Option<&mut crate::pinned_cache::PinnedCache> {
+        #[cfg(feature = "native")]
+        {
+            self.pinned_cache.as_mut()
+        } 
+        #[cfg(not(feature = "native"))]
+        {
+            None
+        }
     }
 
     /// Converts the `ProvableStorageCache` into `OrderedReadsAndWrites`.
