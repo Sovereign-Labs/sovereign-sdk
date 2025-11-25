@@ -26,9 +26,9 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    pub(crate) channel_size: Arc<AtomicU32>,
-    pub(crate) message_sender: mpsc::Sender<Message<S, Rt>>,
-    pub(crate) shutdown_receiver: watch::Receiver<()>,
+    pub(super) channel_size: Arc<AtomicU32>,
+    pub(super) message_sender: mpsc::Sender<Message<S, Rt>>,
+    pub(super) shutdown_receiver: watch::Receiver<()>,
 }
 
 #[derive(Debug)]

@@ -15,8 +15,10 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
+use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
@@ -28,6 +30,15 @@ use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
+/// Txs with nonce in the future of more than this threshold are rejected immediately. If the nonce is in the future but below the threshold, we'll buffer it
+/// for a little while.
+const FUTURE_NONCE_THRESHOLD: u64 = 100;
+/// How long to wait between retries.
+const SLEEP_DURATION_MS: u64 = 10;
+/// The maximum number of times to fetch the nonce and retry.
+const MAX_RETRIES: u32 = 10;
+/// The maximum amount of time to buffer a tx with a future nonce. Provides an upper bound in case retry attempts are taking too long.
+const MAX_BUFFER_DURATION_MS: u128 = 200;
 
 async fn process_raw_transaction<S, Seq, T, F>(
     data: Bytes,
@@ -46,12 +57,7 @@ where
         .make_raw_tx(raw_evm_tx)
         .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-    // Authenticate the transaction.
-    // This was used earlier to get the credential and nonce, for retries. This has now been
-    // implemented in the sequencer and is therefore no longer needed. However, calling
-    // `authenticate()` here pre-calculates and caches the signature check in the async API
-    // handler, which is important for performance.
-    // This will also be moved into the sequencer, but for now is kept here.
+    // Authenticate the transaction so that we can get the credential ID and nonce.
     let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
     let mut state = ethereum
         .sequencer

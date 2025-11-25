@@ -1,7 +1,6 @@
 mod pinned_cache;
 mod preferred_blob_sender;
 mod preferred_end_to_end;
-mod preferred_tx_nonce_queue;
 mod preferred_with_reorgs;
 mod setup_mode;
 mod standard_sequencer;

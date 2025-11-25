@@ -19,7 +19,6 @@ use crate::common::HexHash;
     Debug,
     PartialEq,
     Eq,
-    Hash,
     PartialOrd,
     Ord,
     Clone,
