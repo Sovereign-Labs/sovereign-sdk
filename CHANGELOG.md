@@ -1,3 +1,6 @@
+# 2025-11-25
+- #2124 Allows configuring EVM contracts to pin their storage in RAM.
+
 # 2025-11-24
 - #2105 **DB Breaking change** changes the serialization of state keys on disk. Updating to this branch requires a wipe or a resync. Also adds support for pinning certain state items in RAM.
 - #2109 Configuration changes in `sov-celestia-adapter`. Default values for `request_timeout_secs` and `tx_priority` has changed.
