@@ -7089,8 +7089,7 @@ dependencies = [
 [[package]]
 name = "nomt"
 version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "705307a2ab047b0ac978479652ba19e995d022794785b6a165a0f7f24739908c"
+source = "git+https://github.com/thrumdev/nomt.git?rev=4189c7dc3dc710fef526591ee73860e462a135de#4189c7dc3dc710fef526591ee73860e462a135de"
 dependencies = [
  "ahash",
  "anyhow",
@@ -7119,8 +7118,7 @@ dependencies = [
 [[package]]
 name = "nomt-core"
 version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "feeb4e411c8185c33c906539b78330a8478a2d4819de338efb6511b33cc73207"
+source = "git+https://github.com/thrumdev/nomt.git?rev=4189c7dc3dc710fef526591ee73860e462a135de#4189c7dc3dc710fef526591ee73860e462a135de"
 dependencies = [
  "arrayvec",
  "bitvec",
