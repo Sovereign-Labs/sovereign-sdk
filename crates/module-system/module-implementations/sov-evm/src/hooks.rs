@@ -200,7 +200,7 @@ impl<S: Spec> FinalizeHook for Evm<S> {
                     .signed_transaction
             })
             .collect();
-        let sealed_block = block.seal_with_size(&transactions);
+        let sealed_block = block.seal_with_size(transactions);
 
         let block_numbers_range = self.block_numbers(state);
 

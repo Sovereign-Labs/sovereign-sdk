@@ -98,7 +98,7 @@ impl Block {
     }
 
     #[cfg(feature = "native")]
-    pub(crate) fn seal_with_size(self, transactions: &[TransactionSigned]) -> SealedBlock {
+    pub(crate) fn seal_with_size(self, transactions: Vec<TransactionSigned>) -> SealedBlock {
         let rlp_size = self.calculate_rlp_size(transactions);
         SealedBlock {
             header: self.header.seal_slow(),
@@ -108,9 +108,9 @@ impl Block {
     }
 
     #[cfg(feature = "native")]
-    fn calculate_rlp_size(&self, transactions: &[TransactionSigned]) -> usize {
+    fn calculate_rlp_size(&self, transactions: Vec<TransactionSigned>) -> usize {
         let body = reth_primitives::BlockBody {
-            transactions: transactions.to_vec(),
+            transactions,
             ommers: vec![],
             withdrawals: None,
         };
