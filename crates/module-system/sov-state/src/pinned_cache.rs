@@ -29,6 +29,7 @@ use crate::{Prefix, SlotKey, SlotValue};
 #[derive(Debug)]
 enum MaybeDroppedBucket {
     Dropped,
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     NotDropped(BucketStorage),
 }
 
@@ -104,6 +105,7 @@ impl PinnedCache {
             .insert(bucket_key, MaybeDroppedBucket::Dropped);
     }
 
+    #[cfg_attr(not(feature = "native"), allow(dead_code))]
     fn bucket_exists_or_was_dropped(&self, bucket_id: &BucketId) -> bool {
         let prefix = bucket_id.0.prefix();
         let Some(state_item_cache) = self.item_caches.get(&prefix) else {
