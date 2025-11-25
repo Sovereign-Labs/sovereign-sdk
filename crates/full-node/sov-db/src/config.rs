@@ -142,7 +142,7 @@ impl RollupDbConfig {
             self.user_hashtable_buckets
                 .expect("`user_hashtable_buckets` must be set"),
         );
-        if let Some(preallocate_ht) = self.kernel_preallocate_ht {
+        if let Some(preallocate_ht) = self.user_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
         }
         if let Some(page_cache_size) = self.user_page_cache_size {
