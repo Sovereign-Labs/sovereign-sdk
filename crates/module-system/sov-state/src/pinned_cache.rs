@@ -85,11 +85,10 @@ impl PinnedCache {
         state_item_cache
             .items
             .get(&relevant_key)
-            .map(|maybe_dropped_bucket| match maybe_dropped_bucket {
+            .and_then(|maybe_dropped_bucket| match maybe_dropped_bucket {
                 MaybeDroppedBucket::Dropped => None,
                 MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
             })
-            .flatten()
     }
 
     /// Drop the bucket that would contain the given key.
