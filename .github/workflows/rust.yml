@@ -236,6 +236,9 @@ jobs:
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
+    strategy:
+      matrix:
+        partition: [1, 2]
     env:
       RISC0_DEV_MODE: "true"
       SP1_PROVER: "mock"
@@ -249,29 +252,31 @@ jobs:
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
-      - run: make test-default-features
+      - run: cargo nextest run --no-fail-fast --status-level skip --partition count:${{ matrix.partition }}/2
 
   nextest_all_features:
     name: nextest_all_features
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
+    strategy:
+      matrix:
+        partition: [1, 2]
     env:
       RISC0_DEV_MODE: "true"
       SP1_PROVER: "mock"
       RUST_BACKTRACE: 1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
       # CI always operates on the entire workspace
+      - run: cargo switcheroo save _backup
       - run: cargo switcheroo disable
-        shell: bash
-      - run: make test-all
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      - run: cargo nextest run --no-fail-fast --status-level skip --all-features --partition count:${{ matrix.partition }}/2
+      - run: cargo switcheroo set _backup
   doctests:
     name: doctests
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
