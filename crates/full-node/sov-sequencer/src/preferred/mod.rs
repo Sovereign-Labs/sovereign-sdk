@@ -1280,7 +1280,7 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
 ) -> Result<tx_nonce_queue::TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
     // Match the error format from sov-uniqueness check_nonce_uniqueness
     let queue_error_msg = match queue_rejection_reason {
-        InvalidNonceReason::Invalid => "The sequencer did not attempt to queue the transaction as it was not within valid queue limits (either in the past, or beyond the max limit).".to_string(),
+        InvalidNonceReason::Invalid => "The sequencer did not attempt to queue the transaction as it was not within valid queue limits (either in the past, or beyond the max limit). Provided nonce: {tx_nonce}, expected nonce: {nonce_when_queued}.".to_string(),
         InvalidNonceReason::Timeout => format!("The sequencer queued the transaction for reordering {} ms ago, when the user's nonce was {nonce_when_queued}. In that time, the sequencer did not receive all the transactions leading up to this tx's nonce, so it has timed out and is being evicted from the queue.", instant_queued.elapsed().as_millis()),
         InvalidNonceReason::EvictedBeforeExecution => format!("The transaction was dropped from the nonce reordering queue (after spending {} ms in it) for an unknown reason. This should normally only happen when the sequencer is shutting down.", instant_queued.elapsed().as_millis()),
     };
