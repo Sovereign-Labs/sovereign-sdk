@@ -110,17 +110,13 @@ where
         save_elapsed!(execution_time SINCE execution);
         verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg)?;
         #[cfg(feature = "native")]
-        let new_pinned_contracts = match get_pinned_contract_list_updates(
+        let new_pinned_contracts = get_pinned_contract_list_updates(
             &state_changes,
             &tx.signer,
             &mut db,
-        ) {
-            Ok(new_pinned_contracts) => new_pinned_contracts,
-            Err(err) => {
-                tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates");
-                anyhow::bail!("EVM transaction error: {:?}", err);
-            }
-        };
+        )
+        .inspect_err(|err| tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates"))
+        .map_err(|err| anyhow::anyhow!("EVM transaction error: {err:?}"))?;
 
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
