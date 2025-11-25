@@ -17,6 +17,7 @@ use crate::{
     TEST_MAX_CONCURRENT_BLOBS,
 };
 use anyhow::Context;
+use sov_modules_api::ModuleExecutionConfig;
 use derivative::Derivative;
 use serde::Deserialize;
 use sov_api_spec::types::TxInfoWithConfirmation;
@@ -125,6 +126,7 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
     config: RollupBuilderConfig<R::Spec>,
     postgres_container_opt: Option<Arc<PostgresData>>,
     with_secondary_sequencer: Option<MockAddress>,
+    exec_config: Option<<<R::Runtime as Runtime<R::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
 }
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
@@ -256,7 +258,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.rollup_prover_config.clone(),
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
-                        None,
+                        self.exec_config.clone(),
                     )
                     .await?
             }
@@ -268,7 +270,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.rollup_prover_config.clone(),
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
-                        None,
+                        self.exec_config.clone(),
                     )
                     .await?
             }
@@ -457,6 +459,7 @@ where
             config: Self::default_config(0, storage_path, is_replica, post_str),
             postgres_container_opt,
             with_secondary_sequencer: None,
+            exec_config: None,
         }
     }
 }
@@ -491,6 +494,26 @@ where
         storage_path: StoragePath,
         in_memory_da: bool,
     ) -> Self {
+        Self::new_with_storage_path_and_exec_config(
+            genesis,
+            block_producing,
+            finalization_blocks,
+            storage_path,
+            in_memory_da,
+            None,
+        )
+    }
+
+    /// Creates a new [`RollupBuilder`] with automatic [`StorableMockDaService`]
+    /// configuration.
+    pub fn new_with_storage_path_and_exec_config(
+        genesis: GenesisSource<R::Spec, R::Runtime>,
+        block_producing: BlockProducingConfig,
+        finalization_blocks: u32,
+        storage_path: StoragePath,
+        in_memory_da: bool,
+        exec_config: Option<<<R::Runtime as Runtime<R::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
+    ) -> Self {
         let da_config = MockDaConfig {
             // This will be set later based on the storage path. In case of a bug,
             // SQLite will simply fail to open the file and we'll immediately get a
@@ -515,6 +538,7 @@ where
             postgres_container_opt: None,
             config: Self::default_config(finalization_blocks, storage_path, false, None),
             with_secondary_sequencer: None,
+            exec_config
         }
     }
 
