@@ -115,6 +115,31 @@ impl From<TxPriority> for celestia_client::tx::TxPriority {
 }
 
 impl CelestiaConfig {
+    /// Absolutely minimal config for client that is capable of reading
+    pub fn minimal(rpc_url: String) -> Self {
+        Self {
+            rpc_url,
+            rpc_auth_token: None,
+            grpc_url: None,
+            grpc_auth_token: None,
+            signer_private_key: None,
+            request_timeout_secs: default_request_timeout_seconds(),
+            safe_lead_time_ms: default_safe_lead_time_ms(),
+            tx_priority: None,
+            backoff_min_delay_ms: default_min_delay_ms(),
+            backoff_max_delay_ms: default_max_delay_ms(),
+            backoff_max_times: default_max_times(),
+            backoff_factor: default_factor(),
+        }
+    }
+
+    /// Add necessary information required for submitting blobs
+    pub fn with_submission(mut self, grpc_url: String, signer_private_key: String) -> Self {
+        self.grpc_url = Some(grpc_url);
+        self.signer_private_key = Some(signer_private_key);
+        self
+    }
+
     pub(crate) fn get_backoff_policy(&self) -> backon::ExponentialBuilder {
         let backoff_policy = backon::ExponentialBuilder::default()
             .with_min_delay(std::time::Duration::from_millis(self.backoff_min_delay_ms))
