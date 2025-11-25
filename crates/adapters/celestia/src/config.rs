@@ -125,7 +125,7 @@ impl CelestiaConfig {
             signer_private_key: None,
             request_timeout_secs: default_request_timeout_seconds(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
-            tx_priority: None,
+            tx_priority: TxPriority::High,
             backoff_min_delay_ms: default_min_delay_ms(),
             backoff_max_delay_ms: default_max_delay_ms(),
             backoff_max_times: default_max_times(),
