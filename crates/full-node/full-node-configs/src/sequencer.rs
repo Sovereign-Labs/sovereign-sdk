@@ -181,6 +181,14 @@ pub struct PreferredSequencerConfig {
     pub future_nonce_transaction_timeout_millis: u64,
 }
 
+pub const fn default_maximum_future_nonce_delta() -> u64 {
+    100
+}
+
+pub const fn default_future_nonce_transaction_timeout_millis() -> u64 {
+    2_000
+}
+
 impl Default for PreferredSequencerConfig {
     fn default() -> Self {
         Self {

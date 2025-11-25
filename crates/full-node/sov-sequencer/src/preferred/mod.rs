@@ -36,7 +36,9 @@ use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
     PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
 };
-use sov_modules_api::capabilities::{BlobSelector, RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{
+    BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
+};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
@@ -617,8 +619,6 @@ where
         let call = Rt::wrap_call(call);
         let delay_ms = runtime.get_transaction_delay_ms(&call);
         // We need to destructure auth_data because it's not `Send`.
-        let uniqueness = auth_data.uniqueness;
-        let credential_id = auth_data.credential_id;
         drop(auth_data);
 
         if delay_ms > 0 {
@@ -629,26 +629,10 @@ where
 
         let tx_len = baked_tx.data.len();
 
-        let (outer_res, is_nonce_based) = match uniqueness {
-            UniquenessData::Generation(_) => (
-                self.synchronized_state_updator
-                    .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
-                    .await,
-                false,
-            ),
-            UniquenessData::Nonce(tx_nonce) => (
-                self.tx_nonce_queues
-                    .handle_new_tx(
-                        baked_tx,
-                        tx_hash,
-                        tx_nonce,
-                        credential_id,
-                        original_tx_queue_id,
-                    )
-                    .await,
-                true,
-            ),
-        };
+        let outer_res = self
+            .synchronized_state_updator
+            .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
+            .await;
 
         let res = match outer_res {
             Ok(inner_res) => inner_res,
@@ -665,10 +649,6 @@ where
         match res {
             Ok(rx) => {
                 let result = rx.await.map_err(database_error_500)?;
-                // After DB persistence completes, notify the nonce queue so it can clean up if needed
-                if is_nonce_based {
-                    self.tx_nonce_queues.mark_completed(&credential_id);
-                }
                 Ok(result)
             }
             Err(e) => match e {
@@ -681,33 +661,29 @@ where
                 AcceptTxError::BatchError {
                     batch_creation_error,
                     nb_of_concurrent_blob_submissions,
-                } => match batch_creation_error {
-                    BatchCreationError::NoFinalizedSlotAvailable => {
-                        return Err(sequencer_overloaded_503("No finalized slots available"));
-                    }
-                    BatchCreationError::BlobSenderBusy => {
-                        return Err(error_not_fully_synced(
+                } => {
+                    return match batch_creation_error {
+                        BatchCreationError::NoFinalizedSlotAvailable => {
+                            Err(sequencer_overloaded_503("No finalized slots available"))
+                        }
+                        BatchCreationError::BlobSenderBusy => Err(error_not_fully_synced(
                             SequencerNotReadyDetails::WaitingOnBlobSender {
                                 max_concurrent_blobs: self.config.max_concurrent_blobs,
                                 nb_of_blobs_in_flight: nb_of_concurrent_blob_submissions,
                             },
-                        ));
-                    }
-                    BatchCreationError::DatabaseError(e) => {
-                        return Err(database_error_500(e));
-                    }
-                    BatchCreationError::PreferredSequencerAtStopHeight {
-                        height_to_stop_at,
-                        current_height,
-                    } => {
-                        return Err(error_not_fully_synced(
+                        )),
+                        BatchCreationError::DatabaseError(e) => Err(database_error_500(e)),
+                        BatchCreationError::PreferredSequencerAtStopHeight {
+                            height_to_stop_at,
+                            current_height,
+                        } => Err(error_not_fully_synced(
                             SequencerNotReadyDetails::PreferredSequencerAtStopHeight {
                                 height_to_stop_at,
                                 current_height,
                             },
-                        ));
+                        )),
                     }
-                },
+                }
                 AcceptTxError::NewTxError(err) => match err {
                     DoNewTxError::TxTooBig {
                         current_batch_size,
