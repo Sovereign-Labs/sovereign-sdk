@@ -14,3 +14,4 @@ mod evm_test_helper;
 mod evm_tracing;
 mod evm_tx;
 mod evm_ws_watch;
+mod evm_ram_pinning;

@@ -90,6 +90,7 @@ sov-sequencer-registry = { workspace = true, features = [
 ] }
 sov-accounts = { workspace = true, features = ["native", "arbitrary"] }
 sov-api-spec = { workspace = true }
+sov-evm = { workspace = true, features = ["native", "arbitrary"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }
 sov-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }

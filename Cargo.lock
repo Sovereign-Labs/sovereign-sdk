@@ -11839,6 +11839,7 @@ dependencies = [
  "sov-db",
  "sov-eth-client",
  "sov-ethereum",
+ "sov-evm",
  "sov-full-node-configs",
  "sov-kernels",
  "sov-metrics",

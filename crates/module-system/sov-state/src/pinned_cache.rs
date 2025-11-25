@@ -86,6 +86,12 @@ impl BucketId {
     }
 }
 
+impl std::fmt::Display for BucketId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// A size-limited storage bucket for key-value pairs.
 #[derive(Debug, Default)]
 pub struct BucketStorage {
