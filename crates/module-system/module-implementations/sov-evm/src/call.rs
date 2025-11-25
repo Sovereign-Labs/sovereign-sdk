@@ -3,7 +3,7 @@ use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
-use revm::primitives::{HashMap};
+use revm::primitives::HashMap;
 use revm::state::Account;
 #[cfg(feature = "native")]
 use revm::Database;
@@ -365,8 +365,8 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
     signer: &Address,
     db: &mut DB,
 ) -> Result<Vec<Address>, E> {
-    use alloy_consensus::constants::KECCAK_EMPTY;
     use crate::execution_config::EVM_EXECUTION_CONFIG;
+    use alloy_consensus::constants::KECCAK_EMPTY;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
         return Ok(Vec::new());
     };

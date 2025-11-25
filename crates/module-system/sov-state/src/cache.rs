@@ -355,7 +355,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         #[cfg(feature = "native")]
         {
             self.pinned_cache.as_mut()
-        } 
+        }
         #[cfg(not(feature = "native"))]
         {
             None
