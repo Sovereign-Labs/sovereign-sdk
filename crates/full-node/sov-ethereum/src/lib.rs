@@ -108,6 +108,7 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     #[cfg(feature = "local")]
     eth_signer: Signers,
     extension: SeqConfigExtension,
+    #[allow(dead_code)]
     buffer_raw_txs: bool,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
