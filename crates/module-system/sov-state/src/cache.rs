@@ -681,9 +681,11 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             .as_mut()
             .and_then(|pinned_cache| pinned_cache.bucket_for_mut(key))
         {
-            // If the insert failed, drop the bucket. It no longer contains all of the relevant keys, so it doesn't let us skip falling to disk anymore 
+            // If the insert failed, drop the bucket. It no longer contains all of the relevant keys, so it doesn't let us skip falling to disk anymore
             if !bucket.try_insert(key.clone(), value.clone()) {
-                self.pinned_cache.as_mut().map(|pinned_cache| pinned_cache.drop_bucket_for(key));
+                self.pinned_cache
+                    .as_mut()
+                    .map(|pinned_cache| pinned_cache.drop_bucket_for(key));
             }
         }
         self.cache.add_write(key.clone(), Some(value));

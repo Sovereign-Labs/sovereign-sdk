@@ -23,6 +23,8 @@ use crate::conversions::{convert_to_tx_signed, create_tx_env};
 use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
+#[cfg(feature = "native")]
+use crate::execution_config::EVM_EXECUTION_CONFIG;
 use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
@@ -361,7 +363,6 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
     signer: &Address,
     db: &mut DB,
 ) -> Result<Vec<Address>, E> {
-    use crate::execution_config::EVM_EXECUTION_CONFIG;
     use alloy_consensus::constants::KECCAK_EMPTY;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
         return Ok(Vec::new());
@@ -380,16 +381,19 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
 
     let mut new_pinned_contracts = Vec::new();
     for (address, account) in state_changes.iter() {
-        if let Some(ref code) = account.info.code {
-            if !code.is_empty() {
-                // Only pin addresses which didn't exist previously or had their code hash go from empty to non-empty.
-                if db
-                    .basic(*address)?
-                    .map(|acc| acc.code_hash == KECCAK_EMPTY)
-                    .unwrap_or(true)
-                {
-                    new_pinned_contracts.push(*address);
-                }
+        let is_contract = account
+            .info
+            .code
+            .as_ref()
+            .is_some_and(|code| !code.is_empty());
+        if is_contract {
+            let was_contract = db
+                .basic(*address)?
+                .map(|acc| acc.code_hash == KECCAK_EMPTY)
+                .unwrap_or(true);
+            // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
+            if !was_contract {
+                new_pinned_contracts.push(*address);
             }
         }
     }
@@ -400,7 +404,7 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
 impl<S: Spec> Evm<S> {
     pub(crate) fn update_pinned_contract_list(
         &self,
-        new_pinned_contracts: &Vec<Address>,
+        new_pinned_contracts: &[Address],
         state: &mut impl TxState<S>,
     ) {
         use crate::execution_config::EVM_EXECUTION_CONFIG;

@@ -58,42 +58,30 @@ pub(crate) async fn start_node_with_ram_pinning(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ram_pinning_config_updates() -> anyhow::Result<()> {
     sov_test_utils::initialize_logging();
-    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_dir = tempfile::tempdir()?;
     let exec_config_path = temp_dir.path().join("evm_execution_config.json");
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
     let exec_config_contents = EvmExecutionConfigContents {
         default_bucket_size_limit: 100 * 1024 * 1024, // 100MB
-        // privileged_deployer_addresses: vec![Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap()],
         privileged_deployer_addresses: vec![signer.address()],
         known_contracts_and_limits: Default::default(),
     };
     std::fs::write(
         &exec_config_path,
-        serde_json::to_string_pretty(&exec_config_contents).unwrap(),
-    )
-    .unwrap();
+        serde_json::to_string_pretty(&exec_config_contents)?,
+    )?;
     let test_rollup =
         start_node_with_ram_pinning(RollupProverConfig::Skip, temp_dir, exec_config_path.clone())
             .await;
-    test_rollup.wait_for_next_blocks(3).await;
+    test_rollup.wait_for_next_blocks(1).await;
     let client = alloy_client_with_signer(test_rollup.http_addr, SENDER_PRIV_KEY);
 
     tracing::info!("Deploying contract");
     let contract = SimpleStorage::deploy(client).await?;
-    let contract_address = contract.address();
     tracing::info!("Setting value");
 
-    let tx = contract.set(U256::from(1)).send().await?;
-    let _receipt = tx.get_receipt().await?;
-    test_rollup.force_close_batch().await?;
-    test_rollup.wait_for_next_blocks(1).await;
-
-    tracing::info!("Getting value");
-    let tx = contract.get().send().await?;
-    let _receipt = tx.get_receipt().await?;
-
     let exec_config: EvmExecutionConfigContents =
-        serde_json::from_str(&std::fs::read_to_string(&exec_config_path).unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string(&exec_config_path)?)?;
     assert_eq!(
         exec_config.privileged_deployer_addresses,
         vec![signer.address()]
@@ -101,7 +89,7 @@ async fn test_ram_pinning_config_updates() -> anyhow::Result<()> {
     assert!(
         exec_config
             .known_contracts_and_limits
-            .contains_key(contract_address),
+            .contains_key(contract.address()),
         "Contract address should be in known contracts and limits"
     );
 

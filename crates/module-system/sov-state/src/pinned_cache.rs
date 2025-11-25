@@ -67,10 +67,13 @@ impl PinnedCache {
         let state_item_cache = self.item_caches.get_mut(&prefix)?;
         let key_length = state_item_cache.bucket_key_length;
         let relevant_key = BucketId(key.truncate_to(key_length)?);
-        state_item_cache.items.get_mut(&relevant_key).and_then(|maybe_dropped_bucket| match maybe_dropped_bucket {
-            MaybeDroppedBucket::Dropped => None,
-            MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
-        })
+        state_item_cache
+            .items
+            .get_mut(&relevant_key)
+            .and_then(|maybe_dropped_bucket| match maybe_dropped_bucket {
+                MaybeDroppedBucket::Dropped => None,
+                MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
+            })
     }
 
     /// Get a reference to the bucket for a given key.
@@ -79,10 +82,14 @@ impl PinnedCache {
         let state_item_cache = self.item_caches.get(&prefix)?;
         let key_length = state_item_cache.bucket_key_length;
         let relevant_key = BucketId(key.truncate_to(key_length)?);
-        state_item_cache.items.get(&relevant_key).map(|maybe_dropped_bucket| match maybe_dropped_bucket {
-            MaybeDroppedBucket::Dropped => None,
-            MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
-        }).flatten()
+        state_item_cache
+            .items
+            .get(&relevant_key)
+            .map(|maybe_dropped_bucket| match maybe_dropped_bucket {
+                MaybeDroppedBucket::Dropped => None,
+                MaybeDroppedBucket::NotDropped(bucket) => Some(bucket),
+            })
+            .flatten()
     }
 
     /// Drop the bucket that would contain the given key.
@@ -93,8 +100,9 @@ impl PinnedCache {
         };
         let key_length = state_item_cache.bucket_key_length;
         let bucket_key = BucketId::from_slot_key(key, key_length);
-        state_item_cache.items.insert(bucket_key, MaybeDroppedBucket::Dropped);
-
+        state_item_cache
+            .items
+            .insert(bucket_key, MaybeDroppedBucket::Dropped);
     }
 
     fn bucket_exists_or_was_dropped(&self, bucket_id: &BucketId) -> bool {
@@ -120,7 +128,7 @@ impl BucketId {
 
 impl std::fmt::Display for BucketId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        self.0.fmt(f)
     }
 }
 
@@ -238,7 +246,9 @@ impl PinnedCache {
             bucket_storage.items.len(),
             bucket_storage.current_size
         );
-        state_item_cache.items.insert(bucket_id, MaybeDroppedBucket::NotDropped(bucket_storage));
+        state_item_cache
+            .items
+            .insert(bucket_id, MaybeDroppedBucket::NotDropped(bucket_storage));
 
         Ok(LoadBucketOutcome::Loaded)
     }

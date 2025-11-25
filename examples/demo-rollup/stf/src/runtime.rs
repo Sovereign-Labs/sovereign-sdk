@@ -214,10 +214,18 @@ where
             sov_evm::Evm::<S>::default().get_pinned_cache_buckets_and_limits()?;
         let mut pinned_cache = PinnedCache::default();
         for (bucket_id, limit) in buckets_and_limits {
-            if let Err(e) =
-                pinned_cache.try_load_bucket_if_absent(bucket_id.clone(), storage, limit)
-            {
-                tracing::warn!(bucket_id = ?bucket_id, limit = ?limit, error = ?e, "EVM Failed to load bucket into pinned cache");
+            use sov_state::pinned_cache::LoadBucketOutcome;
+
+            match pinned_cache.try_load_bucket_if_absent(bucket_id.clone(), storage, limit) {
+                Err(e) => {
+                    tracing::warn!(bucket_id = ?bucket_id, limit = ?limit, error = ?e, "EVM Failed to load bucket into pinned cache");
+                }
+                Ok(LoadBucketOutcome::NotSupportedByStorage) => {
+                    panic!("EVM Failed to load bucket into pinned cache because the storage doesn't support iteration. This means that pinning is configured but the rollup doesnt support it. Adjust your config or switch to NOMT");
+                }
+                Ok(LoadBucketOutcome::AlreadyPresent)
+                | Ok(LoadBucketOutcome::Loaded)
+                | Ok(LoadBucketOutcome::OverSizeLimit) => {} // Explicitly handle each case to force adjustment if other options are added.
             }
         }
         Some(pinned_cache)
