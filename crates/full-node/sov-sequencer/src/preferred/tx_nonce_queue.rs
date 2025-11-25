@@ -542,7 +542,8 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 res
             }
             Action::WaitForQueue(mut queue_rx) => {
-                let user_nonce_when_queued = self.submitter.get_current_nonce_for_user(&credential_id);
+                let user_nonce_when_queued =
+                    self.submitter.get_current_nonce_for_user(&credential_id);
                 let queued_at = Instant::now();
                 loop {
                     tokio::select! {
@@ -591,9 +592,15 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     }
                 }
             }
-            Action::Reject(current_nonce) => {
-                err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, current_nonce, Instant::now(), credential_id, InvalidNonceReason::Invalid)
-            }
+            Action::Reject(current_nonce) => err_invalid_nonce::<S, Rt>(
+                tx_hash,
+                tx_nonce,
+                current_nonce,
+                current_nonce,
+                Instant::now(),
+                credential_id,
+                InvalidNonceReason::Invalid,
+            ),
         }
     }
 
