@@ -1255,17 +1255,39 @@ fn err_cant_fit_tx(current_batch_size: usize, max_batch_size: usize, tx_len: usi
     }
 }
 
+/// Helper enum for error logging when the nonce queue rejects a transaction.
+enum InvalidNonceReason {
+    /// Nonce is in the past or beyond the queue limit. Tx rejected immediately when received.
+    Invalid,
+    /// Tx was queued but the timeout was reached before pre-requisites were all received, so tx
+    /// was evicted from the queue.
+    Timeout,
+    /// Tx was queued but executor oneshot was dropped. This happens on sequencer shutdown OR if
+    /// the queue enters an inconsistent state and internally evicts stale transactions (which
+    /// should almost never happen in practice unless the queue has a bug).
+    EvictedBeforeExecution,
+}
+
 /// Helper function to create an invalid nonce error
 fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
     tx_hash: TxHash,
     tx_nonce: u64,
     expected_nonce: u64,
+    nonce_when_queued: u64,
+    instant_queued: std::time::Instant,
     credential_id: CredentialId,
+    queue_rejection_reason: InvalidNonceReason,
 ) -> Result<tx_nonce_queue::TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
     // Match the error format from sov-uniqueness check_nonce_uniqueness
+    let queue_error_msg = match queue_rejection_reason {
+        InvalidNonceReason::Invalid => "The sequencer did not attempt to queue the transaction as it was not within valid queue limits (either in the past, or beyond the max limit).".to_string(),
+        InvalidNonceReason::Timeout => format!("The sequencer queued the transaction for reordering {} ms ago, when the user's nonce was {nonce_when_queued}. In that time, the sequencer did not receive all the transactions leading up to this tx's nonce, so it has timed out and is being evicted from the queue.", instant_queued.elapsed().as_millis()),
+        InvalidNonceReason::EvictedBeforeExecution => format!("The transaction was dropped from the nonce reordering queue (after spending {} ms in it) for an unknown reason. This should normally only happen when the sequencer is shutting down.", instant_queued.elapsed().as_millis()),
+    };
     let error_msg = format!(
-        "Tx bad nonce for credential id: {credential_id}, expected: {expected_nonce}, but found: {tx_nonce}"
+        "Tx bad nonce for credential id: {credential_id}, expected: {expected_nonce}, but found: {tx_nonce}. {queue_error_msg}"
     );
+    tracing::debug!("Sequencer rejecting nonce transaction with error: {error_msg}");
     let receipt = TransactionReceipt {
         tx_hash,
         body_to_save: None,

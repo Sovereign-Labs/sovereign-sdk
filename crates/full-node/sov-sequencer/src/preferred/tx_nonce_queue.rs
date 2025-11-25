@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{btree_map::OccupiedEntry, BTreeMap};
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::oneshot;
 
 use crate::common::AcceptedTx;
@@ -16,7 +17,7 @@ use crate::common::AcceptedTx;
 use super::sync_sequencer_state::{
     AcceptTxError, SequencerStateUpdator, SequencerStateUpdatorError,
 };
-use super::{err_invalid_nonce, Confirmation};
+use super::{err_invalid_nonce, Confirmation, InvalidNonceReason};
 
 pub(crate) type TransactionReceiverResult<S, Rt> =
     Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>;
@@ -541,6 +542,8 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 res
             }
             Action::WaitForQueue(mut queue_rx) => {
+                let user_nonce_when_queued = self.submitter.get_current_nonce_for_user(&credential_id);
+                let queued_at = Instant::now();
                 loop {
                     tokio::select! {
                         rx = &mut queue_rx => {
@@ -551,12 +554,15 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 // queue it can be evicted (dropping it and the sender).
                                 // Since the transaction was queued and therefore had an incorrect
                                 // nonce to begin with, we conservatively reject with a nonce error.
-                                let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+                                let user_current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
                                 err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
-                                    current_nonce,
+                                    user_current_nonce,
+                                    user_nonce_when_queued,
+                                    queued_at,
                                     credential_id,
+                                    InvalidNonceReason::EvictedBeforeExecution,
                                 )
                             });
                         },
@@ -564,8 +570,8 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 self.future_nonce_transaction_timeout_millis
                         )) => {
                             // Timeout waiting for prerequisite transactions
-                            let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
-                            if self.has_prerequisites_to_nonce(&credential_id, tx_nonce, current_nonce) {
+                            let user_current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+                            if self.has_prerequisites_to_nonce(&credential_id, tx_nonce, user_current_nonce) {
                                 // Still has a valid path to execution, keep waiting
                                 continue;
                             } else {
@@ -574,8 +580,11 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 break err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
-                                    current_nonce,
+                                    user_current_nonce,
+                                    user_nonce_when_queued,
+                                    queued_at,
                                     credential_id,
+                                    InvalidNonceReason::Timeout,
                                 );
                             }
                         }
@@ -583,7 +592,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 }
             }
             Action::Reject(current_nonce) => {
-                err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, credential_id)
+                err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, current_nonce, Instant::now(), credential_id, InvalidNonceReason::Invalid)
             }
         }
     }
