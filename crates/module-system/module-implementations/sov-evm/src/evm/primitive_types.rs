@@ -93,7 +93,28 @@ impl Block {
         SealedBlock {
             header: self.header.seal_slow(),
             transactions: self.transactions,
+            rlp_size: 0, // Will be set in finalize_hook when transactions are available
         }
+    }
+
+    #[cfg(feature = "native")]
+    pub(crate) fn seal_with_size(self, transactions: Vec<TransactionSigned>) -> SealedBlock {
+        let rlp_size = self.calculate_rlp_size(transactions);
+        SealedBlock {
+            header: self.header.seal_slow(),
+            transactions: self.transactions,
+            rlp_size,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn calculate_rlp_size(&self, transactions: Vec<TransactionSigned>) -> usize {
+        let body = reth_primitives::BlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: None,
+        };
+        alloy_consensus::Block::rlp_length_for(&self.header, &body)
     }
 }
 
@@ -107,6 +128,10 @@ pub struct SealedBlock {
 
     /// Transactions in this block.
     pub transactions: Range<u64>,
+
+    /// RLP encoded size of the block (header + body).
+    /// Cached to avoid re-fetching transactions for RPC queries.
+    pub rlp_size: usize,
 }
 
 impl SealedBlock {
@@ -135,11 +160,12 @@ impl serde::Serialize for SealedBlock {
     {
         use serde::ser::SerializeStruct;
 
-        let mut s = serializer.serialize_struct("SealedBlock", 3)?;
+        let mut s = serializer.serialize_struct("SealedBlock", 4)?;
         // serialize inner Header using bincode-compat wrapper
         s.serialize_field("header", &HeaderBincodeCompat::from(self.header.inner()))?;
         s.serialize_field("seal", &self.header.seal())?;
         s.serialize_field("transactions", &self.transactions)?;
+        s.serialize_field("rlp_size", &self.rlp_size)?;
         s.end()
     }
 }
@@ -157,16 +183,20 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
             header: Header,
             seal: B256,
             transactions: Range<u64>,
+            #[serde(default)]
+            rlp_size: usize,
         }
 
         let Raw {
             header,
             seal,
             transactions,
+            rlp_size,
         } = Raw::deserialize(deserializer)?;
         Ok(SealedBlock {
             header: Sealed::new_unchecked(header, seal),
             transactions,
+            rlp_size,
         })
     }
 }
