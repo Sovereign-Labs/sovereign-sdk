@@ -514,6 +514,7 @@ async fn test_pinned_cache_after_total_resync() {
 /// Ensures that RAM pinning works again after the node falls out of sync
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pinned_cache_after_fast_resync() {
+    sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
     // Finalise some blocks
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;

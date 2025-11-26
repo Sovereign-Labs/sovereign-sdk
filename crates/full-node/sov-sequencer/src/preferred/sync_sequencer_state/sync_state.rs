@@ -16,13 +16,13 @@ use crate::preferred::Inner;
 use crate::preferred::InnerGuard;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::preferred::SequencerStateUpdatorError;
+use crate::preferred::StateUpdateNotification;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, DbEvent,
     PreferredBatchToReplay, PreferredSeqOperation, PreferredSequencerFetchBatchesToReplayMetrics,
     PreferredSequencerReadBatch,
 };
-use crate::StateUpdateNotification;
 use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
