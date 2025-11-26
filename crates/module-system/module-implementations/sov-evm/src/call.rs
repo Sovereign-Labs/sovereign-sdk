@@ -1,5 +1,5 @@
-use alloy_primitives::{Address, B256};
 use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_primitives::{Address, B256};
 use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
@@ -339,7 +339,10 @@ where
     }
 }
 
-pub(crate) fn verify_contract_creation_allowlist<DB: Database<Error = E>, E: DBErrorMarker + std::fmt::Display>(
+pub(crate) fn verify_contract_creation_allowlist<
+    DB: Database<Error = E>,
+    E: DBErrorMarker + std::fmt::Display,
+>(
     state_changes: &HashMap<Address, Account>,
     signer: &Address,
     cfg: &EvmRuntimeConfig,
@@ -357,7 +360,11 @@ pub(crate) fn verify_contract_creation_allowlist<DB: Database<Error = E>, E: DBE
         if is_contract {
             let was_not_contract = db
                 .basic(*address)
-                .map_err(|e| anyhow::anyhow!("Error while fetching previous contract data to verify allowlist: {e}"))?
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Error while fetching previous contract data to verify allowlist: {e}"
+                    )
+                })?
                 .map(|acc| acc.code_hash == KECCAK_EMPTY)
                 .unwrap_or(true);
             // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
