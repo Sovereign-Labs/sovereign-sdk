@@ -6,9 +6,7 @@ use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
 use revm::primitives::HashMap;
 use revm::state::Account;
-#[cfg(feature = "native")]
 use revm::Database;
-#[cfg(feature = "native")]
 use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
