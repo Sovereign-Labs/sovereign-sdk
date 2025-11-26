@@ -1699,6 +1699,156 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_failed_immediate_execution_does_not_trigger_drain() {
+        // Test that when a TX with the current nonce fails, the queue is NOT drained.
+        // This is the opposite of test_immediate_execution_triggers_drain.
+        let backend = MockTxExecutionBackend::new()
+            .with_current_nonce(0)
+            .with_failure_at_nonce(0); // TX with nonce 0 will fail
+
+        let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+        let credential_id = CredentialId::from([1u8; 32]);
+
+        // Submit TXs with nonces 1, 2, 3 (should be queued)
+        let mut handles = vec![];
+        for nonce in 1u8..=3 {
+            let queues = queues.clone();
+            let handle = tokio::spawn(async move {
+                queues
+                    .handle_new_tx(
+                        create_test_tx(nonce),
+                        TxHash::from([nonce; 32]),
+                        nonce as u64,
+                        credential_id,
+                        0,
+                    )
+                    .await
+            });
+            handles.push(handle);
+        }
+
+        // Give queued TXs time to settle
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Submit TX with nonce 0 (current nonce) - should fail and NOT trigger drain
+        let result = queues
+            .handle_new_tx(
+                create_test_tx(0),
+                TxHash::from([0; 32]),
+                0,
+                credential_id,
+                0,
+            )
+            .await;
+
+        // TX 0 should return an error (failed execution)
+        assert!(result.is_ok()); // No sequencer error
+        let inner = result.unwrap();
+        assert!(inner.is_err()); // But the TX itself failed
+
+        // Wait a bit to ensure drain would have happened if triggered
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Verify NO TXs were successfully executed (TX 0 failed, drain not triggered)
+        let executed = backend.get_executed_nonces();
+        assert!(
+            executed.is_empty(),
+            "No transactions should have executed successfully"
+        );
+
+        // Verify nonce didn't change (TX 0 failed, so nonce stays at 0)
+        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 0);
+
+        // Drop handles to clean up (they'll be cancelled)
+        drop(handles);
+    }
+
+    #[tokio::test]
+    async fn test_drain_stops_at_failing_transaction() {
+        // Test that when a TX in the queue fails during drain, the drain stops
+        // and subsequent queued TXs are not executed.
+        let backend = MockTxExecutionBackend::new()
+            .with_current_nonce(0)
+            .with_failure_at_nonce(2); // TX with nonce 2 will fail
+
+        let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+        let credential_id = CredentialId::from([1u8; 32]);
+
+        // Submit TXs with nonces 1, 2, 3 (should be queued)
+        let mut handles = vec![];
+        for nonce in 1u8..=3 {
+            let queues = queues.clone();
+            let handle = tokio::spawn(async move {
+                queues
+                    .handle_new_tx(
+                        create_test_tx(nonce),
+                        TxHash::from([nonce; 32]),
+                        nonce as u64,
+                        credential_id,
+                        0,
+                    )
+                    .await
+            });
+            handles.push(handle);
+        }
+
+        // Give queued TXs time to settle
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Submit TX with nonce 0 (current nonce) - should succeed and trigger drain
+        let result = queues
+            .handle_new_tx(
+                create_test_tx(0),
+                TxHash::from([0; 32]),
+                0,
+                credential_id,
+                0,
+            )
+            .await;
+
+        // TX 0 should succeed
+        assert!(result.is_ok());
+        let inner = result.unwrap();
+        assert!(inner.is_ok());
+        let rx = inner.unwrap();
+        assert!(rx.await.is_ok());
+
+        // Wait for drain to proceed (it should execute 1, then fail on 2, then stop)
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Check the results of the queued TXs
+        let mut handles_iter = handles.into_iter();
+
+        // TX 1 should have succeeded
+        let result_1 = handles_iter.next().unwrap().await.unwrap();
+        assert!(result_1.is_ok());
+        let inner_1 = result_1.unwrap();
+        assert!(inner_1.is_ok());
+        let rx_1 = inner_1.unwrap();
+        assert!(rx_1.await.is_ok());
+
+        // TX 2 should have failed
+        let result_2 = handles_iter.next().unwrap().await.unwrap();
+        assert!(result_2.is_ok()); // No sequencer error
+        let inner_2 = result_2.unwrap();
+        assert!(inner_2.is_err()); // But the TX itself failed
+
+        // Verify executed nonces: 0 and 1 only (2 failed, 3 never tried)
+        let executed = backend.get_executed_nonces();
+        assert_eq!(
+            executed,
+            vec![0, 1],
+            "Should execute 0 and 1, but stop at failing nonce 2"
+        );
+
+        // Verify nonce is 2 (0 and 1 succeeded and incremented nonce, 2 failed)
+        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 2);
+
+        // Drop remaining handle to clean up
+        drop(handles_iter);
+    }
+
+    #[tokio::test]
     async fn test_queue_cleanup_respects_last_popped() {
         // This test verifies that cleanup_queue_if_empty() doesn't prune a queue
         // if last_popped is still tracking useful information
