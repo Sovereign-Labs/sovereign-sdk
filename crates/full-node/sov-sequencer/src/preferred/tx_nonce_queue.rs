@@ -314,7 +314,10 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // So last_popped is stale when N < M (i.e., API state has caught up past
                 // last_popped)
                 let current_nonce = self.submitter.get_current_nonce_for_user(credential_id);
-                let should_prune = queue.last_executed.map(|n| n < current_nonce).unwrap_or(true); // Prune if no last_popped
+                let should_prune = queue
+                    .last_executed
+                    .map(|n| n < current_nonce)
+                    .unwrap_or(true); // Prune if no last_popped
 
                 if should_prune {
                     entry.remove();
@@ -521,7 +524,6 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
 
         match action {
             Action::ExecuteNow(baked_tx) => {
-
                 let res = self
                     .submitter
                     .execute_tx(
