@@ -138,8 +138,7 @@ where
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
-    /// The sender for state update notifications. Currently used only for testing.
-    test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
+    test_only_state_update_notification_receiver: broadcast::Receiver<StateUpdateNotification>,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -316,6 +315,9 @@ where
             start_replica_task_notifier,
         );
 
+        let test_only_state_update_notification_receiver = synchronized_state
+            .test_only_state_update_notification_sender
+            .subscribe();
         let synchronized_state_task = synchronized_state.start().await;
         handles.push(synchronized_state_task);
 
@@ -354,7 +356,7 @@ where
             shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,
             stop_at_rollup_height,
-            test_only_state_update_notification_sender: broadcast::channel(100).0,
+            test_only_state_update_notification_receiver,
         }));
 
         // Launch replica sync task only for replicas.
@@ -859,8 +861,6 @@ where
             return Ok(());
         }
     }
-    let finalized_slot_number = info.latest_finalized_slot_number;
-    let slot_number = info.slot_number;
 
     let mut rt = Rt::default();
     let timer_start = std::time::Instant::now();
@@ -918,15 +918,6 @@ where
             }
         }
     }
-
-    // Send a state update notification (for testing. Note that we've already released the lock at this point, so there should be no performance impact)
-    // but updates are not strictly guaranteed to be delivered in order. We discard errors because we don't care if there are no subscribers.
-    let _ = seq
-        .test_only_state_update_notification_sender
-        .send(StateUpdateNotification {
-            slot_number,
-            finalized_slot_number,
-        });
 
     Ok(())
 }
@@ -991,7 +982,10 @@ where
     async fn subscribe_state_updates_unstable(
         &self,
     ) -> Option<broadcast::Receiver<StateUpdateNotification>> {
-        Some(self.test_only_state_update_notification_sender.subscribe())
+        Some(
+            self.test_only_state_update_notification_receiver
+                .resubscribe(),
+        )
     }
 
     fn tx_status_manager(&self) -> &TxStatusManager<<Self::Spec as Spec>::Da> {
