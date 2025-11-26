@@ -2,7 +2,6 @@
 use std::path::PathBuf;
 
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::U256;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_evm::execution_config::EvmExecutionConfigContents;
@@ -80,8 +79,6 @@ async fn test_ram_pinning_config_updates() -> anyhow::Result<()> {
 
     tracing::info!("Deploying contract");
     let contract = SimpleStorage::deploy(client).await?;
-    let _tx = contract.set(U256::from(1)).send().await?;
-
     let exec_config: EvmExecutionConfigContents =
         serde_json::from_str(&std::fs::read_to_string(&exec_config_path)?)?;
     assert_eq!(
