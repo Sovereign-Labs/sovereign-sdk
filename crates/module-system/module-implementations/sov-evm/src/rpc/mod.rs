@@ -201,9 +201,9 @@ where
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
-        let evm_db: EvmDb<_, S> = self.db(state);
-        let result = executor::transact(evm_db, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg)
+        let mut evm_db: EvmDb<_, S> = self.db(state);
+        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
     }
