@@ -971,7 +971,7 @@
         "max_fee": {
           "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
           "type": "integer",
-          "format": "uint128",
+          "format": "uint64",
           "minimum": 0.0
         },
         "priority_fee_percentage": {
