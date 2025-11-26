@@ -119,8 +119,6 @@ where
         )
         .inspect_err(|err| tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates"))
         .map_err(|err| anyhow::anyhow!("EVM transaction error: {err:?}"))?;
-        
-        tracing::warn!("Pinned contract list updates: {:?}", new_pinned_contracts);
 
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
@@ -367,7 +365,6 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
 ) -> Result<Vec<Address>, E> {
     use alloy_consensus::constants::KECCAK_EMPTY;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
-        tracing::error!("No evm execution config");
         return Ok(Vec::new());
     };
 
@@ -379,7 +376,6 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
         .privileged_deployer_addresses
         .contains(signer)
     {
-        tracing::error!("Signer not privileged");
         return Ok(Vec::new());
     };
 
