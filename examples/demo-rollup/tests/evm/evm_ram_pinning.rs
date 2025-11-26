@@ -2,6 +2,7 @@
 use std::path::PathBuf;
 
 use alloy::signers::local::PrivateKeySigner;
+use alloy_primitives::U256;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_evm::execution_config::EvmExecutionConfigContents;
