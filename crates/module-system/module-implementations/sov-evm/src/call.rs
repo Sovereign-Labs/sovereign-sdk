@@ -387,12 +387,12 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
             .as_ref()
             .is_some_and(|code| !code.is_empty());
         if is_contract {
-            let was_contract = db
+            let was_not_contract = db
                 .basic(*address)?
                 .map(|acc| acc.code_hash == KECCAK_EMPTY)
                 .unwrap_or(true);
             // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
-            if !was_contract {
+            if was_not_contract {
                 new_pinned_contracts.push(*address);
             }
         }
