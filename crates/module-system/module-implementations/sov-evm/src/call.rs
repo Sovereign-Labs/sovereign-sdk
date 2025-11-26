@@ -119,6 +119,8 @@ where
         )
         .inspect_err(|err| tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates"))
         .map_err(|err| anyhow::anyhow!("EVM transaction error: {err:?}"))?;
+        
+        tracing::warn!("Pinned contract list updates: {:?}", new_pinned_contracts);
 
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
@@ -365,6 +367,7 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
 ) -> Result<Vec<Address>, E> {
     use alloy_consensus::constants::KECCAK_EMPTY;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
+        tracing::error!("No evm execution config");
         return Ok(Vec::new());
     };
 
@@ -376,6 +379,7 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
         .privileged_deployer_addresses
         .contains(signer)
     {
+        tracing::error!("Signer not privileged");
         return Ok(Vec::new());
     };
 
@@ -387,12 +391,12 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
             .as_ref()
             .is_some_and(|code| !code.is_empty());
         if is_contract {
-            let was_contract = db
+            let was_not_contract = db
                 .basic(*address)?
                 .map(|acc| acc.code_hash == KECCAK_EMPTY)
                 .unwrap_or(true);
             // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
-            if !was_contract {
+            if was_not_contract {
                 new_pinned_contracts.push(*address);
             }
         }

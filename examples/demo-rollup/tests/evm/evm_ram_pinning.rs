@@ -78,8 +78,6 @@ async fn test_ram_pinning_config_updates() -> anyhow::Result<()> {
 
     tracing::info!("Deploying contract");
     let contract = SimpleStorage::deploy(client).await?;
-    let _tx = contract.set(U256::from(1)).send().await?;
-
     let exec_config: EvmExecutionConfigContents =
         serde_json::from_str(&std::fs::read_to_string(&exec_config_path)?)?;
     assert_eq!(
