@@ -89,7 +89,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
             // impact of a bug would be spurious transaction rejections for a user, which is bad UX
             // but probably not worth crashing the sequencer over.
             if current_last_popped + 1 != nonce {
-                tracing::error!("Sequencer inconsistency: tx nonce queue: {current_last_popped} + 1 did not match {nonce}, when incrementing the last popped nonce. This should not happen.")
+                tracing::error!("Sequencer inconsistency: tx nonce queue: {current_last_popped} + 1 did not match {nonce}, when incrementing the last popped nonce. This should not happen.");
             }
         }
         self.last_popped = Some(nonce);
@@ -103,7 +103,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
         if self.last_popped.is_none_or(|p| p != nonce) {
             tracing::error!("Sequencer inconsistency: tx nonce queue: last popped {:?} did not match {nonce}, when decrementing the last popped nonce. This should not happen.", self.last_popped);
         }
-        self.last_popped = self.last_popped.map(|p| p.checked_sub(1)).flatten();
+        self.last_popped = self.last_popped.and_then(|p| p.checked_sub(1));
         // Decrementing nonce 0 will result in resetting to None
     }
 
