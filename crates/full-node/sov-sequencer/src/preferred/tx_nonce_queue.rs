@@ -44,7 +44,7 @@ struct AddressQueue<S: Spec, Rt: Runtime<S>> {
     txs: BTreeMap<u64, QueuedTx<S, Rt>>,
     /// Tracks a nonce that has been removed from the queue for execution but hasn't completed yet,
     /// since it's no longer in the queue but it still satisfies the prerequisite for future nonces
-    last_popped: Option<u64>,
+    last_executed: Option<u64>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> Debug for AddressQueue<S, Rt> {
@@ -53,7 +53,7 @@ impl<S: Spec, Rt: Runtime<S>> Debug for AddressQueue<S, Rt> {
             f,
             "{{ nonces: {:?}, last_popped: {:?} }}",
             self.txs.keys().cloned().collect::<Vec<_>>(),
-            self.last_popped
+            self.last_executed
         )
     }
 }
@@ -62,7 +62,7 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     fn new() -> Self {
         Self {
             txs: BTreeMap::new(),
-            last_popped: None,
+            last_executed: None,
         }
     }
 
@@ -83,8 +83,8 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     /// started up, hence we pass the nonce as an argument. But if there already is one, then
     /// logically this should only ever be called with an incremented nonce (since all transactions
     /// are marked in the queue, and it's not possible for a user to skip nonces).
-    fn set_or_increment_last_popped(&mut self, nonce: u64) {
-        if let Some(current_last_popped) = self.last_popped {
+    fn set_or_increment_last_executed(&mut self, nonce: u64) {
+        if let Some(current_last_popped) = self.last_executed {
             // This should only happen if there's a bug. It could be an assert_eq!, but the actual
             // impact of a bug would be spurious transaction rejections for a user, which is bad UX
             // but probably not worth crashing the sequencer over.
@@ -92,24 +92,12 @@ impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
                 tracing::error!("Sequencer inconsistency: tx nonce queue: {current_last_popped} + 1 did not match {nonce}, when incrementing the last popped nonce. This should not happen.");
             }
         }
-        self.last_popped = Some(nonce);
-    }
-
-    /// The last popped transaction is used to optimistically satisfy pre-requisites. But if we
-    /// know the last popped transaction failed, we should actually decrement it and start evicting
-    /// any following transactions that relied on it.
-    fn fail_last_popped(&mut self, nonce: u64) {
-        // Same as above, it's a bug, but let's not crash over it
-        if self.last_popped.is_none_or(|p| p != nonce) {
-            tracing::error!("Sequencer inconsistency: tx nonce queue: last popped {:?} did not match {nonce}, when decrementing the last popped nonce. This should not happen.", self.last_popped);
-        }
-        self.last_popped = self.last_popped.and_then(|p| p.checked_sub(1));
-        // Decrementing nonce 0 will result in resetting to None
+        self.last_executed = Some(nonce);
     }
 
     /// Returns the next expected nonce based on the last popped transaction (if any).
     fn next_nonce_from_popped(&self) -> u64 {
-        self.last_popped.map(|n| n.saturating_add(1)).unwrap_or(0)
+        self.last_executed.map(|n| n.saturating_add(1)).unwrap_or(0)
     }
 
     /// Check if there's a contiguous sequence of transactions from `current_nonce` to `tx_nonce` (inclusive).
@@ -326,7 +314,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // So last_popped is stale when N < M (i.e., API state has caught up past
                 // last_popped)
                 let current_nonce = self.submitter.get_current_nonce_for_user(credential_id);
-                let should_prune = queue.last_popped.map(|n| n < current_nonce).unwrap_or(true); // Prune if no last_popped
+                let should_prune = queue.last_executed.map(|n| n < current_nonce).unwrap_or(true); // Prune if no last_popped
 
                 if should_prune {
                     entry.remove();
@@ -336,27 +324,17 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     }
 
     /// Mark a nonce as executed (state transition complete, but DB persistence not yet complete).
-    /// This is used to prevent a race condition where a transaction's DB operation hasn't completed
-    /// yet (so API state still shows the old nonce), but a subsequent transaction arrives and should
-    /// execute immediately rather than getting queued.
-    fn mark_popped(&self, credential_id: &CredentialId, nonce: u64) {
+    /// This is because the actual state update is delayed until the transaction is persisted to
+    /// DB, so API state still shows the old nonce. But we want to already start exectuting the
+    /// next transaction (if there is one) - no need to block the user's queue on DB persistence.
+    fn mark_executed(&self, credential_id: &CredentialId, nonce: u64) {
         let mut queue = self
             .queues
             .entry(*credential_id)
             .or_insert_with(AddressQueue::new);
-        queue.set_or_increment_last_popped(nonce);
+        queue.set_or_increment_last_executed(nonce);
     }
 
-    /// If we called `mark_popped()` earlier, but the transaction failed, we should no longer use
-    /// its nonce optimistically.
-    fn unmark_popped(&self, credential_id: &CredentialId, nonce: u64) {
-        let Some(mut queue) = self.queues.get_mut(credential_id) else {
-            return;
-        };
-        queue.fail_last_popped(nonce);
-    }
-
-    /// Check if there's a contiguous sequence of transactions up to target_nonce
     fn has_prerequisites_to_nonce(
         &self,
         credential_id: &CredentialId,
@@ -396,10 +374,8 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     return None;
                 }
                 Ordering::Equal => {
-                    // First transaction is the next expected nonce. Pop it and mark as executing.
-                    let nonce = *head_entry.key();
+                    // First transaction is the next expected nonce. Pop and return it.
                     let tx = head_entry.remove();
-                    queue_lock.set_or_increment_last_popped(nonce);
                     return Some(tx);
                 }
             }
@@ -439,9 +415,9 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             let _ = queued_tx.result_sender.send(result);
 
             if should_continue {
+                self.mark_executed(credential_id, expected_nonce);
                 expected_nonce += 1;
             } else {
-                self.unmark_popped(credential_id, expected_nonce);
                 tracing::debug!("Transaction execution failed, stopping nonce queue drain");
                 return;
             }
@@ -467,7 +443,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         // Get the next nonce based on what we've popped from the queue - this tracks transactions
         // that have been accepted for execution but whose DB persistence may not have completed yet
         let next_nonce_from_queue = match &locked_user_queue {
-            Entry::Occupied(entry) => entry.get().last_popped.unwrap_or(0),
+            Entry::Occupied(entry) => entry.get().last_executed.unwrap_or(0),
             Entry::Vacant(_) => 0,
         };
 
@@ -545,12 +521,6 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
 
         match action {
             Action::ExecuteNow(baked_tx) => {
-                // Conceptually, the TX goes straight to the head of the queue and is immediately
-                // popped.
-                // We obviously don't physically insert and pop it, but we mark it as the last
-                // popped for accounting purposes. E.g. since we have this tx, it can now satisfy
-                // prerequisite checks for any queued txs.
-                self.mark_popped(&credential_id, tx_nonce);
 
                 let res = self
                     .submitter
@@ -565,6 +535,10 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // If the transaction succeeded, the user's nonce will have incremented.
                 // Trigger a drain of the queue for any transactions which are now valid.
                 if res.as_ref().is_ok_and(|r| r.is_ok()) {
+                    // Mark the nonce as successfully executed so the next nonce can be drained.
+                    self.mark_executed(&credential_id, tx_nonce);
+
+                    // Now spawn the drain task
                     let queues = self.clone();
                     let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
@@ -572,8 +546,6 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                             .drain_any_ready_transactions(&credential_id, starting_nonce)
                             .await;
                     });
-                } else {
-                    self.unmark_popped(&credential_id, tx_nonce);
                 }
                 res
             }
@@ -805,7 +777,7 @@ mod tests {
         assert!(!queue.has_contiguous_sequence_to(1, 0));
 
         // Now we mark tx 0 as executing, even though the user's nonce isn't updated yet
-        queue.set_or_increment_last_popped(0);
+        queue.set_or_increment_last_executed(0);
 
         // Should succeed - last_popped fills the first position
         assert!(queue.has_contiguous_sequence_to(4, 0));
@@ -823,7 +795,7 @@ mod tests {
         let mut queue: AddressQueue<TestSpec, TestRuntime> = AddressQueue::new();
 
         // Empty queue, but last_popped = 5
-        queue.set_or_increment_last_popped(5);
+        queue.set_or_increment_last_executed(5);
 
         // Should succeed when target equals last_popped
         assert!(queue.has_contiguous_sequence_to(5, 5));
@@ -843,7 +815,7 @@ mod tests {
         // Queue has [2, 3], last_popped = 0 (stale, before current_nonce)
         queue.insert(2, create_mock_queued_tx(2));
         queue.insert(3, create_mock_queued_tx(3));
-        queue.set_or_increment_last_popped(0);
+        queue.set_or_increment_last_executed(0);
 
         // Should succeed - stale marker doesn't affect check starting at 2
         assert!(queue.has_contiguous_sequence_to(3, 2));
@@ -859,7 +831,7 @@ mod tests {
         // Queue has [5, 6], last_popped = 4
         queue.insert(5, create_mock_queued_tx(2));
         queue.insert(6, create_mock_queued_tx(3));
-        queue.set_or_increment_last_popped(4);
+        queue.set_or_increment_last_executed(4);
 
         // Nonce is stale at 1 but we know 4 is already executing, so should succeed
         assert!(queue.has_contiguous_sequence_to(4, 1));
@@ -884,7 +856,7 @@ mod tests {
 
         // Queue has [2], last_popped = 0 (with gap)
         queue.insert(2, create_mock_queued_tx(2));
-        queue.set_or_increment_last_popped(0);
+        queue.set_or_increment_last_executed(0);
 
         // Since we're currently executing 0, then nonce 1 is valid
         assert!(queue.has_contiguous_sequence_to(1, 0));
