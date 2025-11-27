@@ -309,15 +309,12 @@ mod tests {
             ))
             .await?;
 
-        // Read binary response
+        // jsonrpsee accepts binary frames but responds in text format: https://github.com/paritytech/jsonrpsee/pull/374
         let response = read.next().await.expect("No response")?;
-        match response {
-            TungsteniteMessage::Binary(data) => {
-                let response_text = std::str::from_utf8(&data)?;
-                assert!(response_text.contains("\"result\":\"hi\""));
-            }
-            _ => panic!("Expected binary response, got: {response:?}"),
-        }
+        let TungsteniteMessage::Text(response) = response else {
+            panic!("Expected text response, got: {response:?}");
+        };
+        assert!(response.contains("\"result\":\"hi\""));
 
         shutdown_sender.send(())?;
         Ok(())
