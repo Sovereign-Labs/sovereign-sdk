@@ -346,7 +346,7 @@
         },
         "future_nonce_transaction_timeout_millis": {
           "description": "The timeout after which a transaction with a near-future nonce (bounded by `maximum_future_nonce_delta`) will be dropped and forgotten by the sequencer. Increasing this value increases the leniency with which out-of-order transactions are considered a \"simultaneous batch\" which should be reordered, but can increase memory usage and queue lock contention.",
-          "default": 2000,
+          "default": 20000,
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

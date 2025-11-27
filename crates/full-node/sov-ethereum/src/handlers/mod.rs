@@ -48,7 +48,9 @@ const TIMEOUT_CODE: i32 = 4;
 
 type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 
-const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
+const MAX_TIMEOUT: u64 = 25_000; // 25 seconds. The sequencer can buffer txs for up to 20s in the
+                                 // nonce queue; the max timeout should be longer to ensure it
+                                 // doesn't mask nonce buffering issues.
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
