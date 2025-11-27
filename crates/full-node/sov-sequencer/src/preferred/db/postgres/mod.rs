@@ -6,8 +6,9 @@ use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash};
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::{PgPool, PgPoolOptions, PgQueryResult};
 use sqlx::{PgConnection, Postgres};
+use uuid::Uuid;
 
 use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
 use crate::preferred::db::{BatchToStore, InProgressBatch};
@@ -202,53 +203,33 @@ impl PostgresBackend {
         })
     }
 
-    async fn _insert_leader(&self) {
-        /*
-        // Atomic takeover: only succeed if the current leader's heartbeat is old enough
-        let result = sqlx::query(
-            "INSERT INTO sequencer_leader (node_id, last_updated)
-         VALUES ($1, NOW())
-         ON CONFLICT (singleton) DO UPDATE SET
-             node_id = EXCLUDED.node_id,
-             last_updated = EXCLUDED.last_updated
-         WHERE sequencer_leader.last_updated < NOW() - INTERVAL '1 millisecond' * $2",
-        )
-        .bind(2)
-        .bind(5)
-        .execute(&self.pool)
-        .await;*/
+    async fn _insert_leader(&self) -> Result<(), sqlx::Error> {
+        let node_id = uuid::Uuid::from_u128(33);
 
-        let _result = sqlx::query(
-            "
-            WITH vars AS (
-                SELECT NOW() AS now_ts
-            )
+        let row = sqlx::query(
+            "WITH ts AS (SELECT NOW() as current_time)
             INSERT INTO sequencer_leader (node_id, last_updated)
-            SELECT $1, now_ts FROM vars
-            ON CONFLICT (singleton) DO UPDATE
-            SET
-                node_id = CASE
-                    -- Same node: always allowed
-                    WHEN sequencer_leader.node_id = EXCLUDED.node_id
-                    OR sequencer_leader.last_updated < vars.now_ts - ($2 * INTERVAL '1 millisecond')
-                    THEN EXCLUDED.node_id
-                    ELSE sequencer_leader.node_id
-                END,
-                -- Always bump last_updated when UPDATE runs
-                last_updated = vars.now_ts
-            FROM vars
-            WHERE
-                -- Run UPDATE if:
-                --  - it's the same node (heartbeat), OR
-                --  - existing leader is stale enough
-                sequencer_leader.node_id = EXCLUDED.node_id
-                OR sequencer_leader.last_updated < vars.now_ts - ($2 * INTERVAL '1 millisecond')
-            ",
-        )
-        .bind(2) // $1: UUID of this node
-        .bind(5_i64) // $2: staleness in milliseconds
-        .execute(&self.pool)
-        .await;
+            SELECT $1, ts.current_time FROM ts
+                ON CONFLICT (singleton) DO UPDATE
+                SET
+                    node_id = EXCLUDED.node_id,
+                    last_updated = EXCLUDED.last_updated
+                WHERE
+                    sequencer_leader.node_id = EXCLUDED.node_id
+                    OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                RETURNING node_id, last_updated",)
+        .bind(node_id)
+        .bind(5_i64) 
+        .fetch_optional(&self.pool)
+        .await?;
+
+        println!("XXX  {row:?}");
+
+        Ok(())
+    }
+
+    async fn _xx(&self) -> Result<(), sqlx::Error> {
+        todo!();
     }
 }
 
@@ -451,5 +432,15 @@ mod tests {
         let db = PostgresBackend::connect(&postgres_connection_string)
             .await
             .unwrap();
+
+        db._insert_leader().await.unwrap();
+        db._insert_leader().await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        db._insert_leader().await.unwrap();
+        db._insert_leader().await.unwrap();
+        db._insert_leader().await.unwrap();
+        db._insert_leader().await.unwrap();
+        println!("XXX");
+        //db._insert_leader().await.unwrap();
     }
 }

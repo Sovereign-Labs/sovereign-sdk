@@ -13842,6 +13842,7 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
+ "uuid 1.18.1",
  "webpki-roots 0.26.11",
 ]
 
@@ -13923,6 +13924,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.16",
  "tracing",
+ "uuid 1.18.1",
  "whoami",
 ]
 
@@ -13961,6 +13963,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.16",
  "tracing",
+ "uuid 1.18.1",
  "whoami",
 ]
 
@@ -13987,6 +13990,7 @@ dependencies = [
  "thiserror 2.0.16",
  "tracing",
  "url",
+ "uuid 1.18.1",
 ]
 
 [[package]]
@@ -15643,6 +15647,7 @@ dependencies = [
  "arbitrary",
  "getrandom 0.3.3",
  "js-sys",
+ "serde",
  "wasm-bindgen",
 ]
 
