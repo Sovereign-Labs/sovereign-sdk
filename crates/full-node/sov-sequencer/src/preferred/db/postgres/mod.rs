@@ -201,6 +201,55 @@ impl PostgresBackend {
             in_progress_batch,
         })
     }
+
+    async fn _insert_leader(&self) {
+        /*
+        // Atomic takeover: only succeed if the current leader's heartbeat is old enough
+        let result = sqlx::query(
+            "INSERT INTO sequencer_leader (node_id, last_updated)
+         VALUES ($1, NOW())
+         ON CONFLICT (singleton) DO UPDATE SET
+             node_id = EXCLUDED.node_id,
+             last_updated = EXCLUDED.last_updated
+         WHERE sequencer_leader.last_updated < NOW() - INTERVAL '1 millisecond' * $2",
+        )
+        .bind(2)
+        .bind(5)
+        .execute(&self.pool)
+        .await;*/
+
+        let _result = sqlx::query(
+            "
+            WITH vars AS (
+                SELECT NOW() AS now_ts
+            )
+            INSERT INTO sequencer_leader (node_id, last_updated)
+            SELECT $1, now_ts FROM vars
+            ON CONFLICT (singleton) DO UPDATE
+            SET
+                node_id = CASE
+                    -- Same node: always allowed
+                    WHEN sequencer_leader.node_id = EXCLUDED.node_id
+                    OR sequencer_leader.last_updated < vars.now_ts - ($2 * INTERVAL '1 millisecond')
+                    THEN EXCLUDED.node_id
+                    ELSE sequencer_leader.node_id
+                END,
+                -- Always bump last_updated when UPDATE runs
+                last_updated = vars.now_ts
+            FROM vars
+            WHERE
+                -- Run UPDATE if:
+                --  - it's the same node (heartbeat), OR
+                --  - existing leader is stale enough
+                sequencer_leader.node_id = EXCLUDED.node_id
+                OR sequencer_leader.last_updated < vars.now_ts - ($2 * INTERVAL '1 millisecond')
+            ",
+        )
+        .bind(2) // $1: UUID of this node
+        .bind(5_i64) // $2: staleness in milliseconds
+        .execute(&self.pool)
+        .await;
+    }
 }
 
 #[async_trait]
@@ -373,5 +422,34 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             self.current_data_transaction(),
             "postgres_db_backend_current_data"
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sov_test_utils::postgres::{
+        connection_string_from_postgres_container, create_postgres_container, CreatePostgresError,
+    };
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_foo() {
+        let dir = tempfile::tempdir().unwrap();
+        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let postgres_connection_string = connection_string_from_postgres_container(&postgres)
+            .await
+            .unwrap();
+
+        let db = PostgresBackend::connect(&postgres_connection_string)
+            .await
+            .unwrap();
     }
 }
