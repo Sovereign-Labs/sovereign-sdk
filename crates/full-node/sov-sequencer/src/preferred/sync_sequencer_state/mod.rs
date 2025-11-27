@@ -136,6 +136,7 @@ impl<S: Spec, Rt: Runtime<S>> Message<S, Rt> {
 }
 
 pub(crate) fn create<S, Rt>(
+    is_replica: bool,
     api_ledger_db: LedgerDb,
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
@@ -164,6 +165,7 @@ where
     let is_ready = Err(SequencerNotReadyDetails::Startup);
 
     let inner = Inner {
+        is_replica,
         api_ledger_db,
         executor: RollupBlockExecutor::new(
             &latest_info,
