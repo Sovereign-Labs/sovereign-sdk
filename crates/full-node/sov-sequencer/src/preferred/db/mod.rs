@@ -9,6 +9,7 @@
 //! invariants and we'd rather have an application crash due to broken
 //! invariants than to have bugs that result in subtle state inconsistencies.
 
+use uuid::Uuid;
 pub mod postgres;
 pub mod rocksdb;
 use crate::preferred::PostgresBackend;
@@ -391,24 +392,14 @@ impl PreferredSequencerDb {
             let postgres_backend = PostgresBackend::connect(postgres_connection_string).await?;
 
             match is_replica {
-                Some(true) => {
-                    postgres_backend.try_update_leader(Uuid::nil()).await?;
-                    Ok((
-                        Self {
-                            backend: None,
-                            shutdown_sender: shutdown_sender.clone(),
-                        },
-                        true,
-                    ))
-                }
-                Some(false) => Ok((
+                Some(true) => Ok((
                     Self {
-                        backend: Some(Box::new(postgres_backend)),
+                        backend: None,
                         shutdown_sender: shutdown_sender.clone(),
                     },
-                    false,
+                    true,
                 )),
-                None => {
+                Some(false) | None => {
                     postgres_backend.try_update_leader(Uuid::nil()).await?;
                     Ok((
                         Self {
