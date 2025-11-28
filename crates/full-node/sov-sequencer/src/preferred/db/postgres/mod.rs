@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -203,10 +204,8 @@ impl PostgresBackend {
         })
     }
 
-    async fn _insert_leader(&self) -> Result<(), sqlx::Error> {
-        let node_id = uuid::Uuid::from_u128(33);
-
-        let row = sqlx::query(
+    async fn _insert_leader(&self, node_id: Uuid) -> anyhow::Result<Option<SequencerLeader>> {
+         Ok(sqlx::query_as::<_, SequencerLeader>(
             "WITH ts AS (SELECT NOW() as current_time)
             INSERT INTO sequencer_leader (node_id, last_updated)
             SELECT $1, ts.current_time FROM ts
@@ -221,16 +220,27 @@ impl PostgresBackend {
         .bind(node_id)
         .bind(5_i64) 
         .fetch_optional(&self.pool)
-        .await?;
-
-        println!("XXX  {row:?}");
-
-        Ok(())
+        .await?)
     }
 
-    async fn _xx(&self) -> Result<(), sqlx::Error> {
-        todo!();
-    }
+    async fn get_sequencer_leader(&self) -> Result<Option<SequencerLeader>, sqlx::Error> {
+        sqlx::query_as::<_, SequencerLeader>(
+            "SELECT node_id, last_updated
+                FROM sequencer_leader
+                WHERE singleton = 1",
+    )
+    .fetch_optional(&self.pool)
+    .await
+}
+}
+
+use sqlx::FromRow;
+use time::OffsetDateTime;
+
+#[derive(Debug, FromRow)]
+struct SequencerLeader {
+    node_id: Uuid,
+    last_updated: OffsetDateTime,
 }
 
 #[async_trait]
@@ -433,14 +443,19 @@ mod tests {
             .await
             .unwrap();
 
-        db._insert_leader().await.unwrap();
-        db._insert_leader().await.unwrap();
+        let node_id = uuid::Uuid::from_u128(33);
+
+        db._insert_leader(node_id).await.unwrap();
+        db._insert_leader(node_id).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        db._insert_leader().await.unwrap();
-        db._insert_leader().await.unwrap();
-        db._insert_leader().await.unwrap();
-        db._insert_leader().await.unwrap();
+        db._insert_leader(node_id).await.unwrap();
+        db._insert_leader(node_id).await.unwrap();
+        db._insert_leader(node_id).await.unwrap();
+        db._insert_leader(node_id).await.unwrap();
         println!("XXX");
+        
+        let l = db.get_sequencer_leader().await.unwrap();
+        println!("XXX {:?}", l);
         //db._insert_leader().await.unwrap();
     }
 }
