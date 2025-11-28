@@ -222,22 +222,27 @@ impl PostgresBackend {
             // It is ok to `expect` as time_delta should be much smaller than i64::MAX
             .expect("PostgresBackend error: time_delta is bigger than i64::MAX");
 
-        Ok(sqlx::query_as::<_, SequencerLeader>(
-            "WITH ts AS (SELECT NOW() as current_time)
-            INSERT INTO sequencer_leader (node_id, last_updated)
-            SELECT $1, ts.current_time FROM ts
-                ON CONFLICT (singleton) DO UPDATE
-                SET
-                    node_id = EXCLUDED.node_id,
-                    last_updated = EXCLUDED.last_updated
-                WHERE
-                    sequencer_leader.node_id = EXCLUDED.node_id
-                    OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
-                RETURNING node_id, last_updated",)
+        let res = run_with_retries!(
+            &self.backoff_policy,
+            sqlx::query_as::<_, SequencerLeader>(
+                "WITH ts AS (SELECT NOW() as current_time)
+                INSERT INTO sequencer_leader (node_id, last_updated)
+                SELECT $1, ts.current_time FROM ts
+                    ON CONFLICT (singleton) DO UPDATE
+                        SET
+                            node_id = EXCLUDED.node_id,
+                            last_updated = EXCLUDED.last_updated
+                        WHERE
+                            sequencer_leader.node_id = EXCLUDED.node_id
+                            OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                        RETURNING node_id, last_updated",)
         .bind(node_id)
         .bind(time_delta)
-        .fetch_optional(&self.pool)
-        .await?)
+        .fetch_optional(&self.pool),
+            "postgres_db_backend_try_update_leader"
+        )?;
+
+        Ok(res)
     }
 
     async fn get_sequencer_leader(&self) -> Result<Option<SequencerLeader>, sqlx::Error> {
