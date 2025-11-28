@@ -138,6 +138,7 @@ where
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
+    #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_state_update_notification_receiver: broadcast::Receiver<StateUpdateNotification>,
 }
 
