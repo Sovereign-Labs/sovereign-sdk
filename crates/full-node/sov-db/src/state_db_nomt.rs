@@ -15,11 +15,6 @@ const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
 const BOTH: &str = "user_and_kernel_state";
 
-#[cfg(debug_assertions)]
-const COMMIT_START_DELAY: std::time::Duration = std::time::Duration::from_millis(1);
-#[cfg(debug_assertions)]
-const COMMIT_RETRY_ATTEMPTS: usize = 26;
-
 /// Contains all the most recent rollup data.
 pub struct NomtStateDb<H> {
     user: Nomt<BinaryHasher<H>>,
