@@ -51,7 +51,9 @@ impl StorableMockDaClient {
 
 async fn handle_response<R: DeserializeOwned>(response: reqwest::Response) -> anyhow::Result<R> {
     if !response.status().is_success() {
-        let error: ErrorResponse = response.json().await?;
+        let text = response.text().await?;
+        tracing::error!("Response: {}", text);
+        let error: ErrorResponse = serde_json::from_str(&text)?;
         return Err(anyhow::anyhow!("Server error: {}", error.error));
     }
     let text = response.text().await?;
