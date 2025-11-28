@@ -476,7 +476,7 @@ mod tests {
         let node_id_2 = uuid::Uuid::from_u128(2);
 
         {
-            // Updating the same node id should not change the last updated time in the db.
+            // Updating the same node id should change the last updated time in the db.
             let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
             let updated_leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
 
