@@ -151,7 +151,6 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        // XX TODO
         if seq_config.sequencer_kind_config.is_replica.unwrap_or(true) {
             return (Self { inner: None }, vec![]);
         }

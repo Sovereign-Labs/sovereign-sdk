@@ -381,66 +381,16 @@ pub struct PreferredSequencerDb {
 }
 
 impl PreferredSequencerDb {
-    pub(crate) async fn new(
-        shutdown_sender: watch::Sender<()>,
+    pub async fn connect(
+        connection_string: &str,
         is_replica: Option<bool>,
-        storage_path: &Path,
-        postgres_connection_string: &Option<String>,
     ) -> anyhow::Result<(Self, bool)> {
-        if let Some(postgres_connection_string) = &postgres_connection_string {
-            let postgress_backend = PostgresBackend::connect(postgres_connection_string).await?;
-
-            match is_replica {
-                Some(true) => Ok((
-                    Self {
-                        backend: None,
-                        shutdown_sender: shutdown_sender.clone(),
-                    },
-                    true,
-                )),
-
-                Some(false) => {
-                    /*
-                    let master = postgress_backend.check_master();
-                    assert(master, ..);
-                    */
-
-                    Ok((
-                        Self {
-                            backend: Some(Box::new(postgress_backend)),
-                            shutdown_sender: shutdown_sender.clone(),
-                        },
-                        false,
-                    ))
-                }
-                None => {
-                    // let master = postgress_backend.check_master();
-                    todo!()
-                }
-            }
-        } else {
-            let backend: Option<Box<dyn PreferredSequencerDbBackend>> =
-                Some(Box::new(RocksDbBackend::new(storage_path).await?));
-            Ok((
-                Self {
-                    backend,
-                    shutdown_sender: shutdown_sender.clone(),
-                },
-                false,
-            ))
-        }
-
-        /*
-
-        let is_replica = is_replica.unwrap_or(true);
+        let is_replica = is_replica.unwrap_or(false);
         if is_replica {
-            return Ok((
-                Self {
-                    backend: None,
-                    shutdown_sender: shutdown_sender.clone(),
-                },
-                is_replica,
-            ));
+            return Ok(Self {
+                backend: None,
+                shutdown_sender: shutdown_sender.clone(),
+            });
         }
 
         let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
@@ -458,8 +408,8 @@ impl PreferredSequencerDb {
                 backend,
                 shutdown_sender: shutdown_sender.clone(),
             },
-            is_replica,
-        ))*/
+            false,
+        ))
     }
 
     pub(crate) async fn initial_data(
