@@ -12760,6 +12760,7 @@ dependencies = [
  "tempfile",
  "test-strategy",
  "thiserror 1.0.69",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -13838,10 +13839,12 @@ dependencies = [
  "sha2 0.10.9",
  "smallvec",
  "thiserror 2.0.16",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
  "url",
+ "uuid 1.18.1",
  "webpki-roots 0.26.11",
 ]
 
@@ -13922,7 +13925,9 @@ dependencies = [
  "sqlx-core",
  "stringprep",
  "thiserror 2.0.16",
+ "time",
  "tracing",
+ "uuid 1.18.1",
  "whoami",
 ]
 
@@ -13960,7 +13965,9 @@ dependencies = [
  "sqlx-core",
  "stringprep",
  "thiserror 2.0.16",
+ "time",
  "tracing",
+ "uuid 1.18.1",
  "whoami",
 ]
 
@@ -13985,8 +13992,10 @@ dependencies = [
  "serde_urlencoded",
  "sqlx-core",
  "thiserror 2.0.16",
+ "time",
  "tracing",
  "url",
+ "uuid 1.18.1",
 ]
 
 [[package]]
@@ -15643,6 +15652,7 @@ dependencies = [
  "arbitrary",
  "getrandom 0.3.3",
  "js-sys",
+ "serde",
  "wasm-bindgen",
 ]
 

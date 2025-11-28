@@ -67,6 +67,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    pub(crate) is_replica: bool,
     // This ledgerdb is used specifically for REST API and websocket subscriptions.
     // The sequencer controls when it is updated to solve inconsistency issues,
     // See [`LedgerDb::with_shared_notifications`] for more details.
@@ -458,7 +459,7 @@ where
     }
 
     pub(crate) fn is_replica(&self) -> bool {
-        self.seq_config.sequencer_kind_config.is_replica
+        self.is_replica
     }
 
     pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {

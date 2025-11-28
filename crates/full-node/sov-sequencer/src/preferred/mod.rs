@@ -220,7 +220,7 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let db = PreferredSequencerDb::new(
+        let (db, is_replica_seq) = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
@@ -229,7 +229,6 @@ where
         .await?;
 
         let (next_sequence_number, db_cache) = db.initial_data().await?;
-
         let mut handles = vec![];
 
         let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
@@ -241,7 +240,7 @@ where
             shutdown_sender.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
-            config.sequencer_kind_config.is_replica,
+            is_replica_seq,
         )
         .await?;
 
@@ -299,6 +298,7 @@ where
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
+            is_replica_seq,
             api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
@@ -358,7 +358,7 @@ where
         }));
 
         // Launch replica sync task only for replicas.
-        if config.sequencer_kind_config.is_replica {
+        if is_replica_seq {
             if let Some(postgres_connection_string) =
                 &config.sequencer_kind_config.postgres_connection_string
             {
@@ -397,9 +397,7 @@ where
 
         if let Some(oracle_config) = maybe_oracle_config {
             //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master
-            if Rt::default().maybe_set_oracle_timestamp(0).is_some()
-                && !config.sequencer_kind_config.is_replica
-            {
+            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica_seq {
                 handles.push(update_timestamp_task(
                     seq.clone(),
                     oracle_config,
