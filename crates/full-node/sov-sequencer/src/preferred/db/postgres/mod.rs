@@ -16,7 +16,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 #[derive(Debug, FromRow, PartialEq)]
-struct SequencerLeader {
+pub(crate) struct SequencerLeader {
     node_id: Uuid,
     last_updated: OffsetDateTime,
 }
@@ -220,7 +220,10 @@ impl PostgresBackend {
         })
     }
 
-    async fn try_update_leader(&self, node_id: Uuid) -> anyhow::Result<Option<SequencerLeader>> {
+    pub(crate) async fn try_update_leader(
+        &self,
+        node_id: Uuid,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
         let time_delta: i64 = self
             .time_delta
             .as_millis()
@@ -251,7 +254,9 @@ impl PostgresBackend {
         Ok(res)
     }
 
-    async fn get_sequencer_leader(&self) -> Result<Option<SequencerLeader>, sqlx::Error> {
+    pub(crate) async fn get_sequencer_leader(
+        &self,
+    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
         let res = run_with_retries!(
             &self.backoff_policy,
             sqlx::query_as::<_, SequencerLeader>(

@@ -90,7 +90,7 @@ CREATE TRIGGER leader_changes_trigger
     EXECUTE FUNCTION notify_leader_changes();
 
 
-CREATE FUNCTION is_leader(p_node_id bigint)
+CREATE FUNCTION is_leader(p_node_id UUID)
 RETURNS boolean AS $$
     SELECT EXISTS (
         SELECT 1

@@ -387,34 +387,49 @@ impl PreferredSequencerDb {
         storage_path: &Path,
         postgres_connection_string: &Option<String>,
     ) -> anyhow::Result<(Self, bool)> {
-        let is_replica = is_replica.unwrap_or(false);
-        if is_replica {
-            return Ok((
+        if let Some(postgres_connection_string) = &postgres_connection_string {
+            let postgres_backend = PostgresBackend::connect(postgres_connection_string).await?;
+
+            match is_replica {
+                Some(true) => {
+                    postgres_backend.try_update_leader(Uuid::nil()).await?;
+                    Ok((
+                        Self {
+                            backend: None,
+                            shutdown_sender: shutdown_sender.clone(),
+                        },
+                        true,
+                    ))
+                }
+                Some(false) => Ok((
+                    Self {
+                        backend: Some(Box::new(postgres_backend)),
+                        shutdown_sender: shutdown_sender.clone(),
+                    },
+                    false,
+                )),
+                None => {
+                    postgres_backend.try_update_leader(Uuid::nil()).await?;
+                    Ok((
+                        Self {
+                            backend: None,
+                            shutdown_sender: shutdown_sender.clone(),
+                        },
+                        true,
+                    ))
+                }
+            }
+        } else {
+            let backend: Option<Box<dyn PreferredSequencerDbBackend>> =
+                Some(Box::new(RocksDbBackend::new(storage_path).await?));
+            Ok((
                 Self {
-                    backend: None,
+                    backend,
                     shutdown_sender: shutdown_sender.clone(),
                 },
-                is_replica,
-            ));
+                false,
+            ))
         }
-
-        let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
-            if let Some(postgres_connection_string) = &postgres_connection_string {
-                Some(Box::new(
-                    PostgresBackend::connect(postgres_connection_string).await?,
-                ))
-            } else {
-                Some(Box::new(RocksDbBackend::new(storage_path).await?))
-            }
-        };
-
-        Ok((
-            Self {
-                backend,
-                shutdown_sender: shutdown_sender.clone(),
-            },
-            is_replica,
-        ))
     }
 
     pub(crate) async fn initial_data(
