@@ -2,7 +2,7 @@ use super::types::*;
 use crate::storable::StorableMockDaService;
 use crate::{MockBlock, MockDaSpec};
 use axum::{
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::Json,
     routing::{get, post},
@@ -227,6 +227,7 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
         .route("/send-proof", post(send_proof_handler))
         .route("/proofs/:height", get(get_proofs_at_handler))
         .route("/signer", get(get_signer_handler))
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .with_state(state)
 }
 
