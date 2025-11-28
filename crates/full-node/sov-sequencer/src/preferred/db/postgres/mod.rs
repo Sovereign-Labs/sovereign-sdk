@@ -246,13 +246,19 @@ impl PostgresBackend {
     }
 
     async fn get_sequencer_leader(&self) -> Result<Option<SequencerLeader>, sqlx::Error> {
-        sqlx::query_as::<_, SequencerLeader>(
-            "SELECT node_id, last_updated
+        let res = run_with_retries!(
+                &self.backoff_policy,
+                sqlx::query_as::<_, SequencerLeader>(
+                "SELECT node_id, last_updated
                 FROM sequencer_leader
                 WHERE singleton = 1",
-        )
-        .fetch_optional(&self.pool)
-        .await
+            )
+            .fetch_optional(&self.pool)
+            .await(),
+            "postgres_db_get_sequencer_leader"
+        )?;
+
+        Ok(res)
     }
 }
 
