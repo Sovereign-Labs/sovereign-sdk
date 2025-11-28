@@ -122,6 +122,8 @@ pub(crate) async fn send_transaction_handler(
     let res = send_transaction_handler_inner(State(state), Json(request)).await;
     if !res.is_ok() {
         tracing::error!("Error sending transaction: {:?}", res);
+    } else {
+        tracing::info!("Transaction sent successfully: {:?}", res);
     }
     res
 }
