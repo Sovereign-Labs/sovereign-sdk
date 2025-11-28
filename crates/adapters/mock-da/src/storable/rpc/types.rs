@@ -24,7 +24,7 @@ pub(crate) struct SubmitProofRequest {
     pub(crate) aggregated_proof_data: String, // hex-encoded
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct SubmitBlobResponse {
     pub(crate) receipt: SubmitBlobReceipt<MockHash>,
 }
@@ -52,7 +52,7 @@ pub(crate) struct SignerResponse {
     pub(crate) address: <MockDaSpec as DaSpec>::Address,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ErrorResponse {
     pub(crate) error: String,
 }

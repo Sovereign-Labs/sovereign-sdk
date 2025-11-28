@@ -119,6 +119,17 @@ pub(crate) async fn send_transaction_handler(
     State(state): State<AppState>,
     Json(request): Json<SubmitTransactionRequest>,
 ) -> Result<Json<SubmitBlobResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let res = send_transaction_handler_inner(State(state), Json(request)).await;
+    if !res.is_ok() {
+        tracing::error!("Error sending transaction: {:?}", res);
+    }
+    res
+}
+
+pub(crate) async fn send_transaction_handler_inner(
+    State(state): State<AppState>,
+    Json(request): Json<SubmitTransactionRequest>,
+) -> Result<Json<SubmitBlobResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Decode hex blob
     let blob = hex::decode(&request.blob).map_err(|e| {
         (
