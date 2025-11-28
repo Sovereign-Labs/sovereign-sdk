@@ -439,76 +439,14 @@ where
     }
 }
 
-/// An attempt to commit an overlay to the given `nomt` instance.
-///
-/// This function will retry the commit with an exponential backoff if it fails
-/// due to contention.
-/// This is necessary because another thread might be holding a lock on the NOMT.
-/// The function will attempt to commit a total of [`COMMIT_RETRY_ATTEMPTS`] times before giving up and returning an error.
-#[cfg(debug_assertions)]
-fn try_commit_overlay_with_backoff<H>(
-    nomt: &Nomt<BinaryHasher<H>>,
-    mut overlay: Overlay,
-) -> anyhow::Result<usize>
-where
-    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
-{
-    let mut current_wait = COMMIT_START_DELAY;
-    for attempt in 0..COMMIT_RETRY_ATTEMPTS {
-        match overlay.try_commit_nonblocking(nomt)? {
-            None => {
-                tracing::trace!(attempts = %attempt, "Commit completed");
-                return Ok(attempt.saturating_add(1));
-            }
-            Some(returned) => {
-                match attempt {
-                    n if n > 20 => {
-                        tracing::warn!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
-                    }
-                    n if n > 10 => {
-                        tracing::info!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
-                    }
-                    _ => {
-                        tracing::debug!(%attempt, wait_time = ?current_wait, "Failed to commit overlay, retrying...");
-                    }
-                };
-                overlay = returned;
-                std::thread::sleep(current_wait);
-                // Apply exponential backoff with factor 1.5:
-                // multiply by 3 then divide by 2 to get 1.5x
-                // Use saturating operations to prevent overflow
-                let next_nanos = current_wait.as_nanos().saturating_mul(3).saturating_div(2);
-
-                current_wait = std::time::Duration::from_nanos(
-                    next_nanos
-                        .try_into()
-                        .expect("Nanos overflow for NOMT commit retry"),
-                );
-            }
-        }
-    }
-
-    anyhow::bail!(
-        "Failed to commit overlay after {} attempts",
-        COMMIT_RETRY_ATTEMPTS
-    );
-}
-
 /// Commits an overlay to NOMT, using blocking commit in release mode and
 /// non-blocking with backoff in debug mode.
 fn commit_nomt<H>(nomt: &Nomt<BinaryHasher<H>>, overlay: Overlay) -> anyhow::Result<usize>
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
-    #[cfg(not(debug_assertions))]
-    {
-        overlay.commit(nomt)?;
-        Ok(1)
-    }
-    #[cfg(debug_assertions)]
-    {
-        try_commit_overlay_with_backoff(nomt, overlay)
-    }
+    overlay.commit(nomt)?;
+    Ok(1)
 }
 
 /// Begin a new user and kernel session with only data that has been written to disk
