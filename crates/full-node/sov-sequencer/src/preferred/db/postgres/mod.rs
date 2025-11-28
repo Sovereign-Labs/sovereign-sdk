@@ -2,17 +2,24 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
+use crate::preferred::db::{BatchToStore, InProgressBatch};
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash};
-use sqlx::postgres::{PgPool, PgPoolOptions, PgQueryResult};
+use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
+use time::OffsetDateTime;
 use uuid::Uuid;
 
-use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
-use crate::preferred::db::{BatchToStore, InProgressBatch};
+#[derive(Debug, FromRow, PartialEq)]
+struct SequencerLeader {
+    node_id: Uuid,
+    last_updated: OffsetDateTime,
+}
 
 pub struct PostgresBackend {
     pool: PgPool,
@@ -204,8 +211,18 @@ impl PostgresBackend {
         })
     }
 
-    async fn _insert_leader(&self, node_id: Uuid) -> anyhow::Result<Option<SequencerLeader>> {
-         Ok(sqlx::query_as::<_, SequencerLeader>(
+    async fn try_update_leader(
+        &self,
+        node_id: Uuid,
+        time_delta: Duration,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let time_delta: i64 = time_delta
+            .as_millis()
+            .try_into()
+            // It is ok to `expect` as time_delta should be much smaller than i64::MAX
+            .expect("PostgresBackend error: time_delta is bigger than i64::MAX");
+
+        Ok(sqlx::query_as::<_, SequencerLeader>(
             "WITH ts AS (SELECT NOW() as current_time)
             INSERT INTO sequencer_leader (node_id, last_updated)
             SELECT $1, ts.current_time FROM ts
@@ -218,7 +235,7 @@ impl PostgresBackend {
                     OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
                 RETURNING node_id, last_updated",)
         .bind(node_id)
-        .bind(5_i64) 
+        .bind(time_delta)
         .fetch_optional(&self.pool)
         .await?)
     }
@@ -228,19 +245,10 @@ impl PostgresBackend {
             "SELECT node_id, last_updated
                 FROM sequencer_leader
                 WHERE singleton = 1",
-    )
-    .fetch_optional(&self.pool)
-    .await
-}
-}
-
-use sqlx::FromRow;
-use time::OffsetDateTime;
-
-#[derive(Debug, FromRow)]
-struct SequencerLeader {
-    node_id: Uuid,
-    last_updated: OffsetDateTime,
+        )
+        .fetch_optional(&self.pool)
+        .await
+    }
 }
 
 #[async_trait]
@@ -423,8 +431,18 @@ mod tests {
         connection_string_from_postgres_container, create_postgres_container, CreatePostgresError,
     };
 
+    impl PostgresBackend {
+        async fn maybe_update_leader(
+            &self,
+            node_id: Uuid,
+            time_delta: Duration,
+        ) -> Option<SequencerLeader> {
+            self.try_update_leader(node_id, time_delta).await.unwrap()
+        }
+    }
+
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_foo() {
+    async fn test_sequencer_leader_election() {
         let dir = tempfile::tempdir().unwrap();
         let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
         let postgres = match postgres {
@@ -443,19 +461,43 @@ mod tests {
             .await
             .unwrap();
 
-        let node_id = uuid::Uuid::from_u128(33);
+        let time_delta = Duration::from_millis(1000);
+        let node_id_1 = uuid::Uuid::from_u128(1);
+        let node_id_2 = uuid::Uuid::from_u128(2);
 
-        db._insert_leader(node_id).await.unwrap();
-        db._insert_leader(node_id).await.unwrap();
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        db._insert_leader(node_id).await.unwrap();
-        db._insert_leader(node_id).await.unwrap();
-        db._insert_leader(node_id).await.unwrap();
-        db._insert_leader(node_id).await.unwrap();
-        println!("XXX");
-        
-        let l = db.get_sequencer_leader().await.unwrap();
-        println!("XXX {:?}", l);
-        //db._insert_leader().await.unwrap();
+        {
+            // Updating the same node id should not change the last updated time in the db.
+            let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
+            let updated_leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
+
+            assert_eq!(leader_1.node_id, node_id_1);
+            assert_eq!(leader_1.node_id, updated_leader_1.node_id);
+            assert!(leader_1.last_updated < updated_leader_1.last_updated);
+
+            // Updating a different node id shouldn't change anything as the time delta is too big.
+            let leader_2 = db.maybe_update_leader(node_id_2, time_delta).await;
+            assert!(leader_2.is_none());
+
+            let leader = db.get_sequencer_leader().await.unwrap().unwrap();
+            assert_eq!(updated_leader_1, leader);
+        }
+
+        let time_delta = Duration::from_millis(0);
+        {
+            // Now we should be able to update db as the time delta is zero.
+            let leader_2 = db.maybe_update_leader(node_id_2, time_delta).await.unwrap();
+            assert_eq!(leader_2.node_id, node_id_2);
+        }
+
+        let time_delta = Duration::from_millis(10);
+        {
+            let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await;
+            assert!(leader_1.is_none());
+
+            // Wait for more than 10ms and update the leader.
+            tokio::time::sleep(Duration::from_millis(15)).await;
+            let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
+            assert_eq!(leader_1.node_id, node_id_1);
+        }
     }
 }
