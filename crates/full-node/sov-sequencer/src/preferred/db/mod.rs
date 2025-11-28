@@ -383,7 +383,7 @@ pub struct PreferredSequencerDb {
 impl PreferredSequencerDb {
     pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
-        is_replica: bool,
+        is_replica: Option<bool>,
         storage_path: &Path,
         postgres_connection_string: &Option<String>,
     ) -> anyhow::Result<(Self, bool)> {
