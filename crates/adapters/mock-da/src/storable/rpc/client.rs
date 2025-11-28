@@ -54,8 +54,10 @@ async fn handle_response<R: DeserializeOwned>(response: reqwest::Response) -> an
         let error: ErrorResponse = response.json().await?;
         return Err(anyhow::anyhow!("Server error: {}", error.error));
     }
+    let text = response.text().await?;
+    tracing::info!("Response: {}", text);
 
-    Ok(response.json().await?)
+    Ok(serde_json::from_str(&text)?)
 }
 
 #[async_trait]
