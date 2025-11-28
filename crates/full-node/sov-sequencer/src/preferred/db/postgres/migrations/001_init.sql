@@ -63,8 +63,8 @@ CREATE TRIGGER events_changes_trigger
 CREATE TABLE IF NOT EXISTS sequencer_leader (
     -- Singleton constraint - only one row allowed in this table
     singleton INTEGER GENERATED ALWAYS AS (1) STORED UNIQUE,
-    -- Node ID of the current leader (UUID v7)
-    node_id UUID NOT NULL,
+    -- Node ID of the current leader
+    node_id TEXT NOT NULL,
     -- Timestamp when the leader last sent a heartbeat
     last_updated TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     -- Primary key on the singleton to enforce single row
@@ -90,7 +90,7 @@ CREATE TRIGGER leader_changes_trigger
     EXECUTE FUNCTION notify_leader_changes();
 
 
-CREATE FUNCTION is_leader(p_node_id UUID)
+CREATE FUNCTION is_leader(p_node_id TEXT)
 RETURNS boolean AS $$
     SELECT EXISTS (
         SELECT 1

@@ -13,11 +13,10 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
 use time::OffsetDateTime;
-use uuid::Uuid;
 
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
-    node_id: Uuid,
+    node_id: String,
     last_updated: OffsetDateTime,
 }
 
@@ -222,7 +221,7 @@ impl PostgresBackend {
 
     pub(crate) async fn try_update_leader(
         &self,
-        node_id: Uuid,
+        node_id: &str,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let time_delta: i64 = self
             .time_delta
@@ -453,7 +452,7 @@ mod tests {
     };
 
     impl PostgresBackend {
-        async fn maybe_update_leader(&self, node_id: Uuid) -> Option<SequencerLeader> {
+        async fn maybe_update_leader(&self, node_id: &str) -> Option<SequencerLeader> {
             self.try_update_leader(node_id).await.unwrap()
         }
     }
@@ -480,20 +479,20 @@ mod tests {
                 .await
                 .unwrap();
 
-        let node_id_1 = uuid::Uuid::from_u128(1);
-        let node_id_2 = uuid::Uuid::from_u128(2);
+        let node_id_1 = String::from("node_id_1");
+        let node_id_2 = String::from("node_id_2");
 
         {
             // Updating the same node id should change the last updated time in the db.
-            let leader_1 = db.maybe_update_leader(node_id_1).await.unwrap();
-            let updated_leader_1 = db.maybe_update_leader(node_id_1).await.unwrap();
+            let leader_1 = db.maybe_update_leader(&node_id_1).await.unwrap();
+            let updated_leader_1 = db.maybe_update_leader(&node_id_1).await.unwrap();
 
             assert_eq!(leader_1.node_id, node_id_1);
             assert_eq!(leader_1.node_id, updated_leader_1.node_id);
             assert!(leader_1.last_updated < updated_leader_1.last_updated);
 
             // Updating a different node id shouldn't change anything as the time delta is too big.
-            let leader_2 = db.maybe_update_leader(node_id_2).await;
+            let leader_2 = db.maybe_update_leader(&node_id_2).await;
             assert!(leader_2.is_none());
 
             let leader = db.get_sequencer_leader().await.unwrap().unwrap();
@@ -504,19 +503,19 @@ mod tests {
         db.time_delta = time_delta;
         {
             // Now we should be able to update db as the time delta is zero.
-            let leader_2 = db.maybe_update_leader(node_id_2).await.unwrap();
+            let leader_2 = db.maybe_update_leader(&node_id_2).await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
 
         let time_delta = Duration::from_millis(10);
         db.time_delta = time_delta;
         {
-            let leader_1 = db.maybe_update_leader(node_id_1).await;
+            let leader_1 = db.maybe_update_leader(&node_id_1).await;
             assert!(leader_1.is_none());
 
             // Wait for more than 10ms and update the leader.
             tokio::time::sleep(Duration::from_millis(15)).await;
-            let leader_1 = db.maybe_update_leader(node_id_1).await.unwrap();
+            let leader_1 = db.maybe_update_leader(&node_id_1).await.unwrap();
             assert_eq!(leader_1.node_id, node_id_1);
         }
     }
