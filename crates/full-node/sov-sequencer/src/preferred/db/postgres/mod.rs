@@ -512,16 +512,14 @@ mod tests {
         }
 
         {
-            let time_delta = Duration::from_millis(0);
-            db_2.time_delta = time_delta;
+            db_2.time_delta = Duration::ZERO;
             // Now we should be able to update db as the time delta is zero.
             let leader_2 = db_2.maybe_update_leader().await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
 
         {
-            let time_delta = Duration::from_millis(10);
-            db_1.time_delta = time_delta;
+            db_1.time_delta = Duration::from_millis(10);
 
             let leader_1 = db_1.maybe_update_leader().await;
             assert!(leader_1.is_none());
