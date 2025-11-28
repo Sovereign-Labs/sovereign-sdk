@@ -24,6 +24,7 @@ pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
     time_delta: Duration,
+    node_id: String,
 }
 
 // We need a macro to get around lifetime issues with async functions. Otherwise, Rust complains about FnMut
@@ -55,12 +56,14 @@ macro_rules! run_with_retries {
 
 impl PostgresBackend {
     pub async fn connect(connection_string: &str) -> anyhow::Result<Self> {
-        Self::connect_with_time_delta(connection_string, Duration::ZERO).await
+        Self::connect_with_time_delta(connection_string, Duration::ZERO, "NODE_ID".to_string())
+            .await
     }
 
     async fn connect_with_time_delta(
         connection_string: &str,
         time_delta: Duration,
+        node_id: String,
     ) -> anyhow::Result<Self> {
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
@@ -88,6 +91,7 @@ impl PostgresBackend {
             pool,
             backoff_policy,
             time_delta,
+            node_id,
         })
     }
 
@@ -474,48 +478,60 @@ mod tests {
             .unwrap();
 
         let time_delta = Duration::from_millis(1000);
-        let mut db =
-            PostgresBackend::connect_with_time_delta(&postgres_connection_string, time_delta)
-                .await
-                .unwrap();
 
         let node_id_1 = String::from("node_id_1");
         let node_id_2 = String::from("node_id_2");
+        let mut db_1 = PostgresBackend::connect_with_time_delta(
+            &postgres_connection_string,
+            time_delta,
+            node_id_1.clone(),
+        )
+        .await
+        .unwrap();
+
+        let mut db_2 = PostgresBackend::connect_with_time_delta(
+            &postgres_connection_string,
+            time_delta,
+            node_id_2.clone(),
+        )
+        .await
+        .unwrap();
 
         {
             // Updating the same node id should change the last updated time in the db.
-            let leader_1 = db.maybe_update_leader(&node_id_1).await.unwrap();
-            let updated_leader_1 = db.maybe_update_leader(&node_id_1).await.unwrap();
+            let leader_1 = db_1.maybe_update_leader(&node_id_1).await.unwrap();
+            let updated_leader_1 = db_1.maybe_update_leader(&node_id_1).await.unwrap();
 
             assert_eq!(leader_1.node_id, node_id_1);
             assert_eq!(leader_1.node_id, updated_leader_1.node_id);
             assert!(leader_1.last_updated < updated_leader_1.last_updated);
 
             // Updating a different node id shouldn't change anything as the time delta is too big.
-            let leader_2 = db.maybe_update_leader(&node_id_2).await;
+            let leader_2 = db_2.maybe_update_leader(&node_id_2).await;
             assert!(leader_2.is_none());
 
-            let leader = db.get_sequencer_leader().await.unwrap().unwrap();
+            let leader = db_2.get_sequencer_leader().await.unwrap().unwrap();
             assert_eq!(updated_leader_1, leader);
         }
 
-        let time_delta = Duration::from_millis(0);
-        db.time_delta = time_delta;
         {
+            let time_delta = Duration::from_millis(0);
+            db_2.time_delta = time_delta;
             // Now we should be able to update db as the time delta is zero.
-            let leader_2 = db.maybe_update_leader(&node_id_2).await.unwrap();
+            let leader_2 = db_2.maybe_update_leader(&node_id_2).await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
 
-        let time_delta = Duration::from_millis(10);
-        db.time_delta = time_delta;
         {
-            let leader_1 = db.maybe_update_leader(&node_id_1).await;
+            let time_delta = Duration::from_millis(10);
+            db_1.time_delta = time_delta;
+
+            let leader_1 = db_1.maybe_update_leader(&node_id_1).await;
             assert!(leader_1.is_none());
 
             // Wait for more than 10ms and update the leader.
             tokio::time::sleep(Duration::from_millis(15)).await;
-            let leader_1 = db.maybe_update_leader(&node_id_1).await.unwrap();
+            let leader_1 = db_1.maybe_update_leader(&node_id_1).await.unwrap();
             assert_eq!(leader_1.node_id, node_id_1);
         }
     }
