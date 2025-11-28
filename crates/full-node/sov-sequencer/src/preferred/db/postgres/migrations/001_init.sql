@@ -88,3 +88,13 @@ CREATE TRIGGER leader_changes_trigger
     AFTER INSERT OR UPDATE ON sequencer_leader
     FOR EACH ROW
     EXECUTE FUNCTION notify_leader_changes();
+
+
+CREATE FUNCTION is_leader(p_node_id bigint)
+RETURNS boolean AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM sequencer_leader
+        WHERE singleton = 1 AND node_id = p_node_id
+    );
+$$ LANGUAGE sql STABLE;
