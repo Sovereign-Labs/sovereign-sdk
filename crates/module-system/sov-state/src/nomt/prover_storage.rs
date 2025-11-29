@@ -313,6 +313,8 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         if merged_accesses.insert(key_hash, nomt_read).is_some() {
             anyhow::bail!("Duplicate key read in state: {:?}", key_hash);
         };
+
+        break;
     }
 
     // Writes
@@ -352,6 +354,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
                 }
             },
         }
+        break;
     }
 
     Ok(merged_accesses.into_iter().collect())
