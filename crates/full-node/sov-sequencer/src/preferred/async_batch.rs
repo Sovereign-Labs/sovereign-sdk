@@ -44,6 +44,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
         sequencer_admins: Arc<Vec<S::Address>>,
         address: S::Address,
         is_responsible_for_gating_admins: bool,
+        allow_failed_txs: bool,
     ) -> Self {
         Self::Async {
             txs_receiver,
@@ -53,6 +54,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
                 result_channel,
                 admins: sequencer_admins,
                 tx_profit_threshold,
+                allow_failed_txs,
                 // This will get overwritten by the pre-flight hook.
                 unix_timestamp_micros: AtomicU64::new(0),
                 is_responsible_for_gating_admins,
@@ -163,6 +165,7 @@ pub struct AsyncBatchResponder<S: Spec> {
     result_channel: Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
     admins: Arc<Vec<S::Address>>,
     tx_profit_threshold: u128,
+    allow_failed_txs: bool,
     /// The timestamp of the start of the latest tx in microseconds since the UNIX epoch
     /// We use an atomic u64 to avoid requiring a mutex. Note that this is set during the pre-flight hook.
     /// and read during the post-tx hook. It may not be meaningful before the pre-flight hook is called.
@@ -185,6 +188,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             result_channel: self.result_channel.clone(),
             admins: self.admins.clone(),
             tx_profit_threshold: self.tx_profit_threshold,
+            allow_failed_txs: self.allow_failed_txs,
             unix_timestamp_micros: AtomicU64::new(0),
             is_responsible_for_gating_admins: self.is_responsible_for_gating_admins,
         }
@@ -237,7 +241,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
-        if !receipt.receipt.is_successful() {
+        if !receipt.receipt.is_successful()  && !self.allow_failed_txs {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),

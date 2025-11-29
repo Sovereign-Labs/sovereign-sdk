@@ -179,6 +179,8 @@ pub struct PreferredSequencerConfig {
     /// lock contention.
     #[serde(default = "default_future_nonce_transaction_timeout_millis")]
     pub future_nonce_transaction_timeout_millis: u64,
+    #[serde(default)]
+    pub allow_failed_txs: bool,
 }
 
 impl Default for PreferredSequencerConfig {
@@ -198,6 +200,7 @@ impl Default for PreferredSequencerConfig {
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
             timing_oracle: None,
+            allow_failed_txs: false,
         }
     }
 }
