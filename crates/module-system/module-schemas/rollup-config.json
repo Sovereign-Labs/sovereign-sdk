@@ -312,27 +312,27 @@
       }
     },
     "PostgresConfig": {
-      "description": "TODO",
+      "description": "Postgres DB config.",
       "type": "object",
       "required": [
+        "leader_timeout_ms",
         "node_id",
-        "postgres_connection_string",
-        "time_till_leader_update_allowed_ms"
+        "postgres_connection_string"
       ],
       "properties": {
-        "node_id": {
-          "description": "TODO",
-          "type": "string"
-        },
-        "postgres_connection_string": {
-          "description": "TODO",
-          "type": "string"
-        },
-        "time_till_leader_update_allowed_ms": {
-          "description": "TODO",
+        "leader_timeout_ms": {
+          "description": "The time period during which leader updates are blocked.”",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "node_id": {
+          "description": "Id of the node.",
+          "type": "string"
+        },
+        "postgres_connection_string": {
+          "description": "Connection string.",
+          "type": "string"
         }
       }
     },

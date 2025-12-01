@@ -88,7 +88,7 @@ is_replica = false
 [sequencer.preferred.postgres_config]
 postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
 node_id = "node_1"
-time_till_leader_update_allowed_ms = 1000
+leader_timeout_ms = 1000
 
 # Alternative configuration for non-preferred sequencer. This is mutually exclusive with the preferred sequencer configuration:
 # [sequencer.standard]

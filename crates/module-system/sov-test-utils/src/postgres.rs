@@ -113,12 +113,12 @@ pub async fn connection_string_from_postgres_container(
 pub async fn config_from_postgres_container(
     container: &ContainerAsync<PostgresImage>,
     node_id: String,
-    time_till_leader_update_allowed_ms: time::Duration,
+    leader_timeout: time::Duration,
 ) -> anyhow::Result<PostgresConfig> {
     let postgres_connection_string = connection_string_from_postgres_container(container).await?;
     Ok(PostgresConfig {
         postgres_connection_string,
         node_id,
-        time_till_leader_update_allowed_ms: time_till_leader_update_allowed_ms.as_millis() as u64,
+        leader_timeout_ms: leader_timeout.as_millis() as u64,
     })
 }

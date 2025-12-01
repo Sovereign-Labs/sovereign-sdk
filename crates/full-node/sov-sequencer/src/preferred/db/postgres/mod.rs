@@ -24,7 +24,7 @@ pub(crate) struct SequencerLeader {
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
-    time_till_leader_update_allowed_ms: Duration,
+    leader_timeout: Duration,
     node_id: String,
 }
 
@@ -83,9 +83,7 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
-            time_till_leader_update_allowed_ms: Duration::from_millis(
-                config.time_till_leader_update_allowed_ms,
-            ),
+            leader_timeout: Duration::from_millis(config.leader_timeout_ms),
             node_id: config.node_id.clone(),
         })
     }
@@ -220,7 +218,7 @@ impl PostgresBackend {
 
     pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
         let time_delta: i64 = self
-            .time_till_leader_update_allowed_ms
+            .leader_timeout
             .as_millis()
             .try_into()
             // It is ok to `expect` as time_delta should be much smaller than i64::MAX
@@ -479,13 +477,8 @@ mod tests {
                 .await
                 .unwrap();
 
-        let mut db_1 = PostgresBackend::connect_with_time_delta(&postgres_config_1)
-            .await
-            .unwrap();
-
-        let mut db_2 = PostgresBackend::connect_with_time_delta(&postgres_config_2)
-            .await
-            .unwrap();
+        let mut db_1 = PostgresBackend::connect(&postgres_config_1).await.unwrap();
+        let mut db_2 = PostgresBackend::connect(&postgres_config_2).await.unwrap();
 
         {
             // Updating the same node_id should change the last updated time in the db.
@@ -505,14 +498,14 @@ mod tests {
         }
 
         {
-            db_2.time_delta = Duration::ZERO;
+            db_2.leader_timeout = Duration::ZERO;
             // Now we should be able to update db as the time_delta is zero.
             let leader_2 = db_2.maybe_update_leader().await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
 
         {
-            db_1.time_delta = Duration::from_millis(100);
+            db_1.leader_timeout = Duration::from_millis(100);
             let leader_1 = db_1.maybe_update_leader().await;
             assert!(leader_1.is_none());
 

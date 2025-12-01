@@ -57,9 +57,9 @@ async fn test_replica_receives_txs_from_postgres() {
     let replica = postgres.clone().map(|pg| {
         (
             pg,
-            NodeIdAndTimeDelta {
+            NodeIdAndLeaderTimeout {
                 node_id: "replica".into(),
-                time_delta: Duration::from_secs(100),
+                leader_timeout: Duration::from_secs(100),
             },
         )
     });
@@ -68,9 +68,9 @@ async fn test_replica_receives_txs_from_postgres() {
     let primary = postgres.clone().map(|pg| {
         (
             pg,
-            NodeIdAndTimeDelta {
+            NodeIdAndLeaderTimeout {
                 node_id: "primary".into(),
-                time_delta: Duration::from_secs(100),
+                leader_timeout: Duration::from_secs(100),
             },
         )
     });

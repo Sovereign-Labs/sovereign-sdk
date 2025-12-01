@@ -133,7 +133,7 @@ pub struct PostgresConfig {
     /// Id of the node.
     pub node_id: String,
     /// The time period during which leader updates are blocked.”
-    pub time_till_leader_update_allowed_ms: u64,
+    pub leader_timeout_ms: u64,
 }
 
 /// Configuration for [`PreferredSequencer`].

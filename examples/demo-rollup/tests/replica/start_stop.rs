@@ -23,9 +23,9 @@ async fn test_replica_start_stop() {
     let replica = postgres.clone().map(|pg| {
         (
             pg,
-            NodeIdAndTimeDelta {
+            NodeIdAndLeaderTimeout {
                 node_id: "replica".into(),
-                time_delta: Duration::from_secs(100),
+                leader_timeout: Duration::from_secs(100),
             },
         )
     });
@@ -34,9 +34,9 @@ async fn test_replica_start_stop() {
     let primary = postgres.clone().map(|pg| {
         (
             pg,
-            NodeIdAndTimeDelta {
+            NodeIdAndLeaderTimeout {
                 node_id: "primary".into(),
-                time_delta: Duration::from_secs(100),
+                leader_timeout: Duration::from_secs(100),
             },
         )
     });
@@ -240,9 +240,9 @@ async fn test_replica_start_stop_many_times() {
     let primary = postgres.clone().map(|pg| {
         (
             pg,
-            NodeIdAndTimeDelta {
+            NodeIdAndLeaderTimeout {
                 node_id: "primary".into(),
-                time_delta: Duration::from_secs(100),
+                leader_timeout: Duration::from_secs(100),
             },
         )
     });
@@ -252,9 +252,9 @@ async fn test_replica_start_stop_many_times() {
     let replica = postgres.clone().map(|pg| {
         (
             pg,
-            NodeIdAndTimeDelta {
+            NodeIdAndLeaderTimeout {
                 node_id: "replica".into(),
-                time_delta: Duration::from_secs(100),
+                leader_timeout: Duration::from_secs(100),
             },
         )
     });

@@ -419,9 +419,9 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 }
 
-pub struct NodeIdAndTimeDelta {
+pub struct NodeIdAndLeaderTimeout {
     pub node_id: String,
-    pub time_delta: Duration,
+    pub leader_timeout: Duration,
 }
 
 pub struct PostgresData {
@@ -451,7 +451,7 @@ where
         is_replica: bool,
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
-        postgres: Option<(Arc<PostgresData>, NodeIdAndTimeDelta)>,
+        postgres: Option<(Arc<PostgresData>, NodeIdAndLeaderTimeout)>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
 
@@ -462,7 +462,7 @@ where
         let post_config = postgres.as_ref().map(|p| PostgresConfig {
             postgres_connection_string: p.0.connection_string.clone(),
             node_id: p.1.node_id.clone(),
-            time_till_leader_update_allowed_ms: p.1.time_delta.as_millis() as u64,
+            leader_timeout_ms: p.1.leader_timeout.as_millis() as u64,
         });
 
         Self {
