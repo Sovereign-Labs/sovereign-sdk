@@ -21,7 +21,7 @@ sov-modules-api = { workspace = true, features = ["native"] }
 # more here: <https://github.com/oxidecomputer/progenitor>.
 chrono = { workspace = true, features = ["serde"] }
 futures = { workspace = true }
-progenitor = { version = "0.8" }
+progenitor = { version = "0.11" }
 regress = "0.4.1"
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }

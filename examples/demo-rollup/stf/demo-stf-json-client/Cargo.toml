@@ -22,7 +22,7 @@ serde_json = { workspace = true, features = ["alloc"] }
 [build-dependencies]
 prettyplease = "0.2.22"
 sov-address = { workspace = true, features = ["evm"] }
-progenitor = { version = "0.8" }
+progenitor = { version = "0.11" }
 serde_json = { workspace = true, features = ["alloc"] }
 syn = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
