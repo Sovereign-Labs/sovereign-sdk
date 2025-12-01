@@ -13,17 +13,18 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
 use time::OffsetDateTime;
-use uuid::Uuid;
 
 #[derive(Debug, FromRow, PartialEq)]
-struct SequencerLeader {
-    node_id: Uuid,
+pub(crate) struct SequencerLeader {
+    node_id: String,
     last_updated: OffsetDateTime,
 }
 
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
+    time_delta: Duration,
+    node_id: String,
 }
 
 // We need a macro to get around lifetime issues with async functions. Otherwise, Rust complains about FnMut
@@ -55,6 +56,15 @@ macro_rules! run_with_retries {
 
 impl PostgresBackend {
     pub async fn connect(connection_string: &str) -> anyhow::Result<Self> {
+        Self::connect_with_time_delta(connection_string, Duration::ZERO, "NODE_ID".to_string())
+            .await
+    }
+
+    async fn connect_with_time_delta(
+        connection_string: &str,
+        time_delta: Duration,
+        node_id: String,
+    ) -> anyhow::Result<Self> {
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
         // So total runtime is ~400 ms of sleeping. If we also account for 50ms latency on each roundtrip, we get about 800ms total time
@@ -80,6 +90,8 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
+            time_delta,
+            node_id,
         })
     }
 
@@ -211,12 +223,9 @@ impl PostgresBackend {
         })
     }
 
-    async fn try_update_leader(
-        &self,
-        node_id: Uuid,
-        time_delta: Duration,
-    ) -> anyhow::Result<Option<SequencerLeader>> {
-        let time_delta: i64 = time_delta
+    pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
+        let time_delta: i64 = self
+            .time_delta
             .as_millis()
             .try_into()
             // It is ok to `expect` as time_delta should be much smaller than i64::MAX
@@ -236,7 +245,7 @@ impl PostgresBackend {
                             sequencer_leader.node_id = EXCLUDED.node_id
                             OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
                         RETURNING node_id, last_updated",)
-        .bind(node_id)
+        .bind(&self.node_id)
         .bind(time_delta)
         .fetch_optional(&self.pool),
             "postgres_db_backend_try_update_leader"
@@ -245,7 +254,9 @@ impl PostgresBackend {
         Ok(res)
     }
 
-    async fn get_sequencer_leader(&self) -> Result<Option<SequencerLeader>, sqlx::Error> {
+    pub(crate) async fn get_sequencer_leader(
+        &self,
+    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
         let res = run_with_retries!(
             &self.backoff_policy,
             sqlx::query_as::<_, SequencerLeader>(
@@ -442,12 +453,8 @@ mod tests {
     };
 
     impl PostgresBackend {
-        async fn maybe_update_leader(
-            &self,
-            node_id: Uuid,
-            time_delta: Duration,
-        ) -> Option<SequencerLeader> {
-            self.try_update_leader(node_id, time_delta).await.unwrap()
+        async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
+            self.try_update_leader().await.unwrap()
         }
     }
 
@@ -467,46 +474,59 @@ mod tests {
             .await
             .unwrap();
 
-        let db = PostgresBackend::connect(&postgres_connection_string)
-            .await
-            .unwrap();
-
         let time_delta = Duration::from_millis(1000);
-        let node_id_1 = uuid::Uuid::from_u128(1);
-        let node_id_2 = uuid::Uuid::from_u128(2);
+
+        let node_id_1 = String::from("node_id_1");
+        let node_id_2 = String::from("node_id_2");
+        let mut db_1 = PostgresBackend::connect_with_time_delta(
+            &postgres_connection_string,
+            time_delta,
+            node_id_1.clone(),
+        )
+        .await
+        .unwrap();
+
+        let mut db_2 = PostgresBackend::connect_with_time_delta(
+            &postgres_connection_string,
+            time_delta,
+            node_id_2.clone(),
+        )
+        .await
+        .unwrap();
 
         {
-            // Updating the same node id should change the last updated time in the db.
-            let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
-            let updated_leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
+            // Updating the same node_id should change the last updated time in the db.
+            let leader_1 = db_1.maybe_update_leader().await.unwrap();
+            let updated_leader_1 = db_1.maybe_update_leader().await.unwrap();
 
             assert_eq!(leader_1.node_id, node_id_1);
             assert_eq!(leader_1.node_id, updated_leader_1.node_id);
             assert!(leader_1.last_updated < updated_leader_1.last_updated);
 
             // Updating a different node id shouldn't change anything as the time delta is too big.
-            let leader_2 = db.maybe_update_leader(node_id_2, time_delta).await;
+            let leader_2 = db_2.maybe_update_leader().await;
             assert!(leader_2.is_none());
 
-            let leader = db.get_sequencer_leader().await.unwrap().unwrap();
+            let leader = db_2.get_sequencer_leader().await.unwrap().unwrap();
             assert_eq!(updated_leader_1, leader);
         }
 
-        let time_delta = Duration::from_millis(0);
         {
+            db_2.time_delta = Duration::ZERO;
             // Now we should be able to update db as the time delta is zero.
-            let leader_2 = db.maybe_update_leader(node_id_2, time_delta).await.unwrap();
+            let leader_2 = db_2.maybe_update_leader().await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
 
-        let time_delta = Duration::from_millis(10);
         {
-            let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await;
+            db_1.time_delta = Duration::from_millis(10);
+
+            let leader_1 = db_1.maybe_update_leader().await;
             assert!(leader_1.is_none());
 
             // Wait for more than 10ms and update the leader.
             tokio::time::sleep(Duration::from_millis(15)).await;
-            let leader_1 = db.maybe_update_leader(node_id_1, time_delta).await.unwrap();
+            let leader_1 = db_1.maybe_update_leader().await.unwrap();
             assert_eq!(leader_1.node_id, node_id_1);
         }
     }
