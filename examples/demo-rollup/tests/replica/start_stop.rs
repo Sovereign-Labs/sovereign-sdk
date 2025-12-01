@@ -20,26 +20,10 @@ async fn test_replica_start_stop() {
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
-    let replica = postgres.clone().map(|pg| {
-        (
-            pg,
-            NodeIdAndLeaderTimeout {
-                node_id: "replica".into(),
-                leader_timeout: Duration::from_secs(100),
-            },
-        )
-    });
+    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
     let replica_test_rollup = start_rollup(true, addr, replica).await;
 
-    let primary = postgres.clone().map(|pg| {
-        (
-            pg,
-            NodeIdAndLeaderTimeout {
-                node_id: "primary".into(),
-                leader_timeout: Duration::from_secs(100),
-            },
-        )
-    });
+    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
     let test_rollup = start_rollup(false, addr, primary).await;
 
     replica_test_rollup
@@ -237,27 +221,11 @@ async fn test_replica_start_stop_many_times() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let receiver_addr = random_address();
 
-    let primary = postgres.clone().map(|pg| {
-        (
-            pg,
-            NodeIdAndLeaderTimeout {
-                node_id: "primary".into(),
-                leader_timeout: Duration::from_secs(100),
-            },
-        )
-    });
+    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
     let test_rollup = start_rollup(false, addr, primary).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let replica = postgres.clone().map(|pg| {
-        (
-            pg,
-            NodeIdAndLeaderTimeout {
-                node_id: "replica".into(),
-                leader_timeout: Duration::from_secs(100),
-            },
-        )
-    });
+    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
     let mut replica_test_rollup = start_rollup(true, addr, replica).await;
 
     let nb_of_txs = 300;

@@ -315,17 +315,10 @@
       "description": "Postgres DB config.",
       "type": "object",
       "required": [
-        "leader_timeout_ms",
         "node_id",
         "postgres_connection_string"
       ],
       "properties": {
-        "leader_timeout_ms": {
-          "description": "The time period during which leader updates are blocked.”",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
         "node_id": {
           "description": "Id of the node.",
           "type": "string"

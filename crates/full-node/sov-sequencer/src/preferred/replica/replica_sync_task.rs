@@ -344,10 +344,9 @@ mod tests {
             }
         };
 
-        let postgres_config =
-            config_from_postgres_container(&postgres, "Replica".into(), Duration::from_secs(10))
-                .await
-                .unwrap();
+        let postgres_config = config_from_postgres_container(&postgres, "Replica".into())
+            .await
+            .unwrap();
 
         let db = PostgresBackend::connect(&postgres_config).await.unwrap();
 

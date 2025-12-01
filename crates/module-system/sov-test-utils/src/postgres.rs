@@ -1,4 +1,3 @@
-use core::time;
 use sov_sequencer::preferred::PostgresConfig;
 use std::borrow::Cow;
 use std::path::Path;
@@ -113,12 +112,10 @@ pub async fn connection_string_from_postgres_container(
 pub async fn config_from_postgres_container(
     container: &ContainerAsync<PostgresImage>,
     node_id: String,
-    leader_timeout: time::Duration,
 ) -> anyhow::Result<PostgresConfig> {
     let postgres_connection_string = connection_string_from_postgres_container(container).await?;
     Ok(PostgresConfig {
         postgres_connection_string,
         node_id,
-        leader_timeout_ms: leader_timeout.as_millis() as u64,
     })
 }

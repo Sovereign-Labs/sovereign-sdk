@@ -62,8 +62,7 @@ expression: config
       "events_channel_size": 10000,
       "postgres_config": {
         "postgres_connection_string": "postgresql://postgres:pass@localhost:5432/db",
-        "node_id": "node_1",
-        "time_delta_ms": 1000
+        "node_id": "node_1"
       },
       "disable_state_root_consistency_checks": true,
       "ideal_lag_behind_finalized_slot": 3,

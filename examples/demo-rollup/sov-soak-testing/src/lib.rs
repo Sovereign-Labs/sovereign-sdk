@@ -125,7 +125,6 @@ pub async fn setup_rollup(
     let postgres_config = db_connection_url.map(|url| PostgresConfig {
         postgres_connection_string: url,
         node_id: "Primary".to_string(),
-        leader_timeout_ms: 1000,
     });
 
     let rollup_builder = TestRollupBuilder::new_with_storage_path(

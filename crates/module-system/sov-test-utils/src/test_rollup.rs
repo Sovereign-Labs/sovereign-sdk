@@ -419,11 +419,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 }
 
-pub struct NodeIdAndLeaderTimeout {
-    pub node_id: String,
-    pub leader_timeout: Duration,
-}
-
 pub struct PostgresData {
     storage_path: TempDir,
     postgres: ContainerAsync<PostgresImage>,
@@ -451,7 +446,7 @@ where
         is_replica: bool,
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
-        postgres: Option<(Arc<PostgresData>, NodeIdAndLeaderTimeout)>,
+        postgres: Option<(Arc<PostgresData>, String)>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
 
@@ -461,8 +456,7 @@ where
 
         let post_config = postgres.as_ref().map(|p| PostgresConfig {
             postgres_connection_string: p.0.connection_string.clone(),
-            node_id: p.1.node_id.clone(),
-            leader_timeout_ms: p.1.leader_timeout.as_millis() as u64,
+            node_id: p.1.clone(),
         });
 
         Self {

@@ -132,8 +132,6 @@ pub struct PostgresConfig {
     pub postgres_connection_string: String,
     /// Id of the node.
     pub node_id: String,
-    /// The time period during which leader updates are blocked.”
-    pub leader_timeout_ms: u64,
 }
 
 /// Configuration for [`PreferredSequencer`].

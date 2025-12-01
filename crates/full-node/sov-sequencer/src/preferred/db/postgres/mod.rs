@@ -15,6 +15,9 @@ use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
 use time::OffsetDateTime;
 
+// The leader timeout.
+const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
     node_id: String,
@@ -57,6 +60,13 @@ macro_rules! run_with_retries {
 
 impl PostgresBackend {
     pub async fn connect(config: &PostgresConfig) -> anyhow::Result<Self> {
+        Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await
+    }
+
+    async fn connect_with_leader_timeout(
+        config: &PostgresConfig,
+        leader_timeout: Duration,
+    ) -> anyhow::Result<Self> {
         let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
@@ -83,7 +93,7 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
-            leader_timeout: Duration::from_millis(config.leader_timeout_ms),
+            leader_timeout,
             node_id: config.node_id.clone(),
         })
     }
@@ -466,19 +476,24 @@ mod tests {
         let node_id_1 = String::from("node_id_1");
         let node_id_2 = String::from("node_id_2");
 
-        let time_delta = Duration::from_millis(1000);
-        let postgres_config_1 =
-            config_from_postgres_container(&postgres, node_id_1.clone(), time_delta)
+        let postgres_config_1 = config_from_postgres_container(&postgres, node_id_1.clone())
+            .await
+            .unwrap();
+
+        let postgres_config_2 = config_from_postgres_container(&postgres, node_id_2.clone())
+            .await
+            .unwrap();
+
+        let leader_timeout = Duration::from_millis(1000);
+        let mut db_1 =
+            PostgresBackend::connect_with_leader_timeout(&postgres_config_1, leader_timeout)
                 .await
                 .unwrap();
 
-        let postgres_config_2 =
-            config_from_postgres_container(&postgres, node_id_2.clone(), time_delta)
+        let mut db_2 =
+            PostgresBackend::connect_with_leader_timeout(&postgres_config_2, leader_timeout)
                 .await
                 .unwrap();
-
-        let mut db_1 = PostgresBackend::connect(&postgres_config_1).await.unwrap();
-        let mut db_2 = PostgresBackend::connect(&postgres_config_2).await.unwrap();
 
         {
             // Updating the same node_id should change the last updated time in the db.
