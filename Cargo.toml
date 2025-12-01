@@ -262,7 +262,7 @@ tracing-test = { version = "0.2.5", features = [
     "no-env-filter",
 ] } # https://docs.rs/tracing-test/latest/tracing_test/#per-crate-filtering
 utoipa = "4.2"
-utoipa-swagger-ui = { version = "7.1.1-rc.0", features = ["axum", "debug-embed", "vendored"] }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "debug-embed", "vendored"] }
 unwrap-infallible = "0.1.5"
 bech32 = { version = "0.11" }
 derive_more = { version = "1.0", default-features = false, features = ["std"] }
