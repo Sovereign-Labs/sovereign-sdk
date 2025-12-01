@@ -92,11 +92,13 @@ where
         )
         .await
         .map_err(|_| {
-            ErrorObjectOwned::owned(
+            let err = ErrorObjectOwned::owned(
                 TIMEOUT_CODE,
                 format!("The transaction was added to the mempool but wasn't processed in {timeout_ms}ms."),
                 None::<()>,
-            )
+            );
+            track_metrics("eth_sendRawTransactionSync", start, &Err(err));
+            Err(err)
         })?;
         track_metrics("eth_sendRawTransactionSync", start, &result);
         result
