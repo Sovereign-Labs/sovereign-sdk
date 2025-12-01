@@ -45,7 +45,7 @@ opentelemetry = { version = "0.27.0", default-features = false, features = ["tra
 opentelemetry_sdk = { version = "0.27.0", default-features = false, features = ["trace", "rt-tokio"], optional = true }
 opentelemetry-otlp = { version = "0.27.0", default-features = false, features = ["grpc-tonic", "trace", "logs"], optional = true }
 opentelemetry-appender-tracing = { version = "0.27", optional = true }
-opentelemetry-semantic-conventions = { version = "0.27.0", features = ["semconv_experimental"], optional = true }
+opentelemetry-semantic-conventions = { version = "0.31.0", features = ["semconv_experimental"], optional = true }
 tracing-opentelemetry = { version = "0.28.0", default-features = false, features = ["tracing-log"], optional = true }
 
 [features]
