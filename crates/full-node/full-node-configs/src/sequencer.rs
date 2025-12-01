@@ -125,14 +125,14 @@ pub enum RecoveryStrategy {
     TryToSave,
 }
 
-/// TODO
+/// Postgres DB config.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct PostgresConfig {
-    /// TODO
+    /// Connection string.
     pub postgres_connection_string: String,
-    /// TODO
+    /// Id of the node.
     pub node_id: String,
-    /// TODO
+    /// The time period during which leader updates are blocked.”
     pub time_till_leader_update_allowed_ms: u64,
 }
 

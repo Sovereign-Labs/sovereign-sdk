@@ -24,7 +24,7 @@ pub(crate) struct SequencerLeader {
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
-    time_delta: Duration,
+    time_till_leader_update_allowed_ms: Duration,
     node_id: String,
 }
 
@@ -83,7 +83,9 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
-            time_delta: Duration::from_millis(config.time_till_leader_update_allowed_ms),
+            time_till_leader_update_allowed_ms: Duration::from_millis(
+                config.time_till_leader_update_allowed_ms,
+            ),
             node_id: config.node_id.clone(),
         })
     }
@@ -218,7 +220,7 @@ impl PostgresBackend {
 
     pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
         let time_delta: i64 = self
-            .time_delta
+            .time_till_leader_update_allowed_ms
             .as_millis()
             .try_into()
             // It is ok to `expect` as time_delta should be much smaller than i64::MAX
