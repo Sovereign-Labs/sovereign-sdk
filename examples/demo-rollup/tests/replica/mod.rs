@@ -100,22 +100,24 @@ async fn send_transfers(
             start_nonce + n,
         );
         let mut retry_duration = Duration::from_millis(100);
+        // Send the tx with retries, up to 7 attempts (about 30 seconds)
         for attempt in 1..=7 {
             match test_rollup.send_tx_to_sequencer(&tx).await {
                 Ok(_) => break,
                 Err(e) => {
                     if e.to_string().contains("The node fell out of sync") {
-                        continue;
+                        if attempt == 7 {
+                            panic!("Failed to send tx after 7 attempts (about 30 seconds). This probably means that the test is too heavy.: {e}");
+                        }
+                        tokio::time::sleep(retry_duration).await;
+                        retry_duration *= 2;
+                    } else {
+                        panic!("Unexpected error while sending tx: {e}");
                     }
-                    panic!("Unexpected error while sending tx: {}", e);
                 }
             }
-            tokio::time::sleep(retry_duration).await;
-            retry_duration *= 2;
-            if attempt == 7 {
-                panic!("Failed to send tx after 7 attempts (about 30 seconds). This probably means that the test is too heavy.: {e}");
-            }
         }
+        // Wait between each successful send, to avoid overwhelming the sequencer
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
