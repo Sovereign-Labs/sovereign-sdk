@@ -18,6 +18,7 @@ pub(crate) mod recv_many;
 mod simple_storage;
 mod state_writer;
 mod uniswap;
+mod transfer;
 
 /// Maximum number of concurrent workers supported due to private key derivation constraints.
 const MAX_WORKERS: usize = 255;
@@ -89,6 +90,15 @@ enum TestType {
         /// How many of the writes should overlap from one tx to the next
         #[arg(short, long, default_value = "0")]
         overlapping_writes_per_tx: usize,
+    },
+    Transfer {
+        /// Number of transactions to send
+        #[arg(short, long, default_value = "1000")]
+        tx_count: usize,
+
+        /// Number of parallel workers to spawn
+        #[arg(short, long, default_value = "1")]
+        num_workers: usize,
     },
 }
 
@@ -275,6 +285,68 @@ async fn run_state_writer_test(
     Ok(())
 }
 
+
+/// Runs the StateWriter soak test.
+async fn run_transfer_test(
+    rpc_addr: SocketAddr,
+    private_key: &str,
+    tx_count: usize,
+    num_workers: usize,
+) -> Result<()> {
+    let funding_signer: PrivateKeySigner = "0x0d87c12ea7c12024b3f70a26d735874608f17c8bce2b48e6fe87389310191264".parse()?;
+    let funding_address = funding_signer.address();
+    let funding_client = alloy_client(rpc_addr, funding_signer.clone())?;
+    let funding_client_nonce = funding_client.get_transaction_count(funding_address).await?;
+    transfer::FUNDING_CLIENT_NONCE.store(funding_client_nonce, std::sync::atomic::Ordering::SeqCst);
+
+    let mut handles = Vec::with_capacity(num_workers);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+    for worker_idx in 0..num_workers {
+        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
+        let address = signer.address();
+        tracing::info!("Worker {worker_idx} address: {address}");
+        let client = alloy_client(rpc_addr, signer.clone())?;
+        let tx_sender = tx.clone();
+        let funding_client = funding_client.clone();
+       
+
+        handles.push(tokio::spawn(async move {
+            let res = transfer::run(
+                client,
+                funding_client,
+                tx_count,
+                address,
+            )
+            .await;
+            if let Err(e) = &res {
+                println!("Worker {worker_idx} error during run: {e:?}");
+            }
+            drop(tx_sender);
+            res
+        }));
+    }
+    drop(tx);
+
+    let handle = tokio::spawn(async move {
+        let start = std::time::Instant::now();
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                    let completed_txs = transfer::COMPLETED_TXS.load(std::sync::atomic::Ordering::Relaxed);
+                    println!("Completed {completed_txs} TXs in {}ms. {} TXs/s", start.elapsed().as_millis(), (completed_txs as f64) / start.elapsed().as_secs_f64());
+                }
+                _ = rx.recv() => {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    });
+    handles.push(handle);
+    try_join_all(handles).await?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let filter = EnvFilter::try_from_default_env().unwrap_or("debug".into());
@@ -319,6 +391,9 @@ async fn main() -> Result<()> {
                 overlapping_writes_per_tx,
             )
             .await?;
+        }
+        TestType::Transfer { tx_count, num_workers } => {
+            run_transfer_test(args.rpc_addr, &args.private_key, tx_count, num_workers).await?;
         }
     }
 

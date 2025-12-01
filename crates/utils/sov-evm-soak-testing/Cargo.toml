@@ -13,7 +13,7 @@ sov-eth-client = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 alloy = { workspace = true }
-alloy-primitives = { workspace = true }
+alloy-primitives = { workspace = true, features = ["arbitrary"] }
 alloy-pubsub = { workspace = true }
 sov-test-utils = { workspace = true }
 rand = { workspace = true }
@@ -23,6 +23,7 @@ futures = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde = { workspace = true }
+arbitrary = { workspace = true }
 
 [lints]
 workspace = true
