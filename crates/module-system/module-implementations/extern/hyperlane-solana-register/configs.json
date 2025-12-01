@@ -1,10 +1,14 @@
 {
-  "mainnet": {
-    "chainId": 1399811149,
-    "programId": "4KdqVph6eMnS2omUBLBH2u4G6wwqxG5hzesZpsFcSWod"
-  },
-  "testnet": {
-    "chainId": 1399811150,
-    "programId": "4KdqVph6eMnS2omUBLBH2u4G6wwqxG5hzesZpsFcSWod"
-  }
+    "mainnet": {
+        "chainId": 1399811149,
+        "programId": "4KdqVph6eMnS2omUBLBH2u4G6wwqxG5hzesZpsFcSWod"
+    },
+    "testnet": {
+        "chainId": 1399811150,
+        "programId": "4KdqVph6eMnS2omUBLBH2u4G6wwqxG5hzesZpsFcSWod"
+    },
+    "localnet": {
+        "chainId": 1337,
+        "programId": "HX6EowhA5XwWj29iTFeqhprg1gUxHgv6RNUu4bRtUgob"
+    }
 }

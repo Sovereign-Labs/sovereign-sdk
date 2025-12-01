@@ -17,10 +17,10 @@ fn main() {
         DEFAULT_NETWORK.to_string()
     });
     let network = match network.as_str() {
-        "mainnet" | "testnet" => network,
+        "mainnet" | "testnet" | "localnet" => network,
         _ => {
             println!(
-                "cargo:warning=SOV_HYPERLANE_SOLANA_NETWORK set to invalid value {network}, using '{DEFAULT_NETWORK}' (valid values: 'mainnet', 'testnet')",
+                "cargo:warning=SOV_HYPERLANE_SOLANA_NETWORK set to invalid value {network}, using '{DEFAULT_NETWORK}' (valid values: 'mainnet', 'testnet', 'localnet')",
             );
             DEFAULT_NETWORK.to_string()
         }
