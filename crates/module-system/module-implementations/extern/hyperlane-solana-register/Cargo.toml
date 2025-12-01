@@ -1,11 +1,15 @@
 [package]
-name = "hyperlane-register-module"
-version = "0.3.0"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-authors = ["Sovereign Labs <info@sovereign.xyz>"]
-publish = false
-rust-version = "1.81"
+name = "sov-hyperlane-register-module"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+
+[lints]
+workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
