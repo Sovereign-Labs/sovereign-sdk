@@ -223,7 +223,7 @@ ed25519-dalek = { version = "=2.1.1", default-features = false }
 futures = { version = "0.3", default-features = false }
 hex = { version = "0.4.3" }
 insta = { version = "1.39", features = ["json"] }
-jsonschema = "0.26.1"
+jsonschema = "0.33.0"
 once_cell = "1.19"
 openapiv3 = "2.0.0"
 prometheus = { version = "0.13.4", default-features = false }
