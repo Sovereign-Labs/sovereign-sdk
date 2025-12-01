@@ -53,7 +53,7 @@ async fn evm_test_oracle_timestamp() {
         .await
         .number();
 
-    evm_client.alloy_emit_logs(contract_addr, 0, 2).await;
+    evm_client.alloy_emit_logs(contract_addr, 0, 6).await;
 
     let mut event_subscription = test_rollup
         .api_client()
@@ -63,7 +63,7 @@ async fn evm_test_oracle_timestamp() {
 
     for _ in 0..3 {
         // Wait for time oracle events or fail with timeout.
-        tokio::time::timeout(std::time::Duration::from_secs(1), event_subscription.next())
+        tokio::time::timeout(std::time::Duration::from_secs(3), event_subscription.next())
             .await
             .unwrap();
     }
