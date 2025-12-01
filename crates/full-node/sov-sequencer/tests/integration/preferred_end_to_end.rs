@@ -1419,7 +1419,6 @@ async fn max_batch_execution_time() {
     let _ = client.send_raw_tx_to_sequencer(&tx_5).await.unwrap();
     let _ = client.send_raw_tx_to_sequencer(&tx_6).await.unwrap();
 
-
     let wait_slot_timeout = std::time::Duration::from_millis(max_batch_exec_time_millis) * 4;
     let mut slot_summaries = Vec::new();
 
