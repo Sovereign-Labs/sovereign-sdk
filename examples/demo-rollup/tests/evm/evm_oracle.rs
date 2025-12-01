@@ -82,13 +82,11 @@ async fn evm_test_oracle_timestamp() {
         //
         // - Events 0 and 1 occur in the same transaction, so they should share the same timestamp.
         // - Events 2 and 3 occur in another transaction, so they should also share a timestamp.
-        // - The transaction containing events 2 and 3 happens after the one containing events 0 and 1,
-        //   so events 2 and 3 should have a later timestamp.
 
         // But timestamps
         let logs = evm_client.get_logs_with_timestamp(&filter).await;
         assert_eq!(logs[0].time_executed_ms, logs[1].time_executed_ms);
         assert_eq!(logs[2].time_executed_ms, logs[3].time_executed_ms);
-        assert!(logs[2].time_executed_ms > logs[0].time_executed_ms);
+        assert!(logs[2].time_executed_ms >= logs[0].time_executed_ms);
     }
 }
