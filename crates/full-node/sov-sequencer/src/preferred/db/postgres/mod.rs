@@ -8,6 +8,7 @@ use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::{FullyBakedTx, TxHash};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::FromRow;
@@ -55,16 +56,8 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    pub async fn connect(connection_string: &str) -> anyhow::Result<Self> {
-        Self::connect_with_time_delta(connection_string, Duration::ZERO, "NODE_ID".to_string())
-            .await
-    }
-
-    async fn connect_with_time_delta(
-        connection_string: &str,
-        time_delta: Duration,
-        node_id: String,
-    ) -> anyhow::Result<Self> {
+    pub async fn connect(config: &PostgresConfig) -> anyhow::Result<Self> {
+        let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
         // So total runtime is ~400 ms of sleeping. If we also account for 50ms latency on each roundtrip, we get about 800ms total time
@@ -90,8 +83,8 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
-            time_delta,
-            node_id,
+            time_delta: Duration::from_millis(config.time_till_leader_update_allowed_ms),
+            node_id: config.node_id.clone(),
         })
     }
 
@@ -449,7 +442,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
 mod tests {
     use super::*;
     use sov_test_utils::postgres::{
-        connection_string_from_postgres_container, create_postgres_container, CreatePostgresError,
+        config_from_postgres_container, create_postgres_container, CreatePostgresError,
     };
 
     impl PostgresBackend {
@@ -470,29 +463,27 @@ mod tests {
             }
         };
 
-        let postgres_connection_string = connection_string_from_postgres_container(&postgres)
+        let node_id_1 = String::from("node_id_1");
+        let node_id_2 = String::from("node_id_2");
+
+        let time_delta = Duration::from_millis(1000);
+        let postgres_config_1 =
+            config_from_postgres_container(&postgres, node_id_1.clone(), time_delta)
+                .await
+                .unwrap();
+
+        let postgres_config_2 =
+            config_from_postgres_container(&postgres, node_id_2.clone(), time_delta)
+                .await
+                .unwrap();
+
+        let mut db_1 = PostgresBackend::connect_with_time_delta(&postgres_config_1)
             .await
             .unwrap();
 
-        let time_delta = Duration::from_millis(1000);
-
-        let node_id_1 = String::from("node_id_1");
-        let node_id_2 = String::from("node_id_2");
-        let mut db_1 = PostgresBackend::connect_with_time_delta(
-            &postgres_connection_string,
-            time_delta,
-            node_id_1.clone(),
-        )
-        .await
-        .unwrap();
-
-        let mut db_2 = PostgresBackend::connect_with_time_delta(
-            &postgres_connection_string,
-            time_delta,
-            node_id_2.clone(),
-        )
-        .await
-        .unwrap();
+        let mut db_2 = PostgresBackend::connect_with_time_delta(&postgres_config_2)
+            .await
+            .unwrap();
 
         {
             // Updating the same node_id should change the last updated time in the db.
@@ -513,19 +504,18 @@ mod tests {
 
         {
             db_2.time_delta = Duration::ZERO;
-            // Now we should be able to update db as the time delta is zero.
+            // Now we should be able to update db as the time_delta is zero.
             let leader_2 = db_2.maybe_update_leader().await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
 
         {
-            db_1.time_delta = Duration::from_millis(10);
-
+            db_1.time_delta = Duration::from_millis(100);
             let leader_1 = db_1.maybe_update_leader().await;
             assert!(leader_1.is_none());
 
             // Wait for more than 10ms and update the leader.
-            tokio::time::sleep(Duration::from_millis(15)).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
             let leader_1 = db_1.maybe_update_leader().await.unwrap();
             assert_eq!(leader_1.node_id, node_id_1);
         }

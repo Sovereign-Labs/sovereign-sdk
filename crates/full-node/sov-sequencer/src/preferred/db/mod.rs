@@ -17,6 +17,7 @@ use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxHash,
@@ -385,51 +386,34 @@ impl PreferredSequencerDb {
         shutdown_sender: watch::Sender<()>,
         is_replica: Option<bool>,
         storage_path: &Path,
-        postgres_connection_string: &Option<String>,
+        postgres_config: &Option<PostgresConfig>,
     ) -> anyhow::Result<(Self, bool)> {
-        if let Some(postgres_connection_string) = &postgres_connection_string {
-            let postgres_backend = PostgresBackend::connect(postgres_connection_string).await?;
-
-            match is_replica {
-                Some(true) => {
-                    postgres_backend.try_update_leader(Uuid::nil()).await?;
-                    Ok((
-                        Self {
-                            backend: None,
-                            shutdown_sender: shutdown_sender.clone(),
-                        },
-                        true,
-                    ))
-                }
-                Some(false) => Ok((
-                    Self {
-                        backend: Some(Box::new(postgres_backend)),
-                        shutdown_sender: shutdown_sender.clone(),
-                    },
-                    false,
-                )),
-                None => {
-                    postgres_backend.try_update_leader(Uuid::nil()).await?;
-                    Ok((
-                        Self {
-                            backend: None,
-                            shutdown_sender: shutdown_sender.clone(),
-                        },
-                        true,
-                    ))
-                }
-            }
-        } else {
-            let backend: Option<Box<dyn PreferredSequencerDbBackend>> =
-                Some(Box::new(RocksDbBackend::new(storage_path).await?));
-            Ok((
+        let is_replica = is_replica.unwrap_or(false);
+        if is_replica {
+            return Ok((
                 Self {
-                    backend,
+                    backend: None,
                     shutdown_sender: shutdown_sender.clone(),
                 },
-                false,
-            ))
+                is_replica,
+            ));
         }
+
+        let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
+            if let Some(postgres_config) = &postgres_config {
+                Some(Box::new(PostgresBackend::connect(postgres_config).await?))
+            } else {
+                Some(Box::new(RocksDbBackend::new(storage_path).await?))
+            }
+        };
+
+        Ok((
+            Self {
+                backend,
+                shutdown_sender: shutdown_sender.clone(),
+            },
+            is_replica,
+        ))
     }
 
     pub(crate) async fn initial_data(

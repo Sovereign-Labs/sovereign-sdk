@@ -36,7 +36,7 @@ use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -224,7 +224,7 @@ where
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
-            &config.sequencer_kind_config.postgres_connection_string,
+            &config.sequencer_kind_config.postgres_config,
         )
         .await?;
 
@@ -359,14 +359,9 @@ where
 
         // Launch replica sync task only for replicas.
         if is_replica_seq {
-            if let Some(postgres_connection_string) =
-                &config.sequencer_kind_config.postgres_connection_string
-            {
+            if let Some(postgres_config) = &config.sequencer_kind_config.postgres_config {
                 let replica_task_handle = replica_task
-                    .start(
-                        synchronized_state_updator,
-                        postgres_connection_string.clone(),
-                    )
+                    .start(synchronized_state_updator, postgres_config)
                     .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);

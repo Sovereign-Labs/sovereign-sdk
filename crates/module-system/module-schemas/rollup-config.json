@@ -311,6 +311,31 @@
         }
       }
     },
+    "PostgresConfig": {
+      "description": "TODO",
+      "type": "object",
+      "required": [
+        "node_id",
+        "postgres_connection_string",
+        "time_till_leader_update_allowed_ms"
+      ],
+      "properties": {
+        "node_id": {
+          "description": "TODO",
+          "type": "string"
+        },
+        "postgres_connection_string": {
+          "description": "TODO",
+          "type": "string"
+        },
+        "time_till_leader_update_allowed_ms": {
+          "description": "TODO",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "PreferredSequencerConfig": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
@@ -387,12 +412,16 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "postgres_connection_string": {
+        "postgres_config": {
           "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
           "default": null,
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PostgresConfig"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "recovery_strategy": {
