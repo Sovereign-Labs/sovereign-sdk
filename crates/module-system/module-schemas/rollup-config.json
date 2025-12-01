@@ -311,6 +311,24 @@
         }
       }
     },
+    "PostgresConfig": {
+      "description": "Postgres DB config.",
+      "type": "object",
+      "required": [
+        "node_id",
+        "postgres_connection_string"
+      ],
+      "properties": {
+        "node_id": {
+          "description": "Id of the node.",
+          "type": "string"
+        },
+        "postgres_connection_string": {
+          "description": "Connection string.",
+          "type": "string"
+        }
+      }
+    },
     "PreferredSequencerConfig": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
@@ -387,12 +405,16 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "postgres_connection_string": {
+        "postgres_config": {
           "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
           "default": null,
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PostgresConfig"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "recovery_strategy": {

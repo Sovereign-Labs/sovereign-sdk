@@ -67,7 +67,7 @@ async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<(
 async fn start_rollup(
     is_replica: bool,
     addr: SocketAddr,
-    postgres: Option<Arc<PostgresData>>,
+    postgres: Option<(Arc<PostgresData>, String)>,
 ) -> TestRollup<ExternalMockDemoRollup<Native>> {
     let genesis = test_genesis_source(OperatingMode::Operator);
     RollupBuilder::new_with_external_da(

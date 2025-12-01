@@ -125,6 +125,15 @@ pub enum RecoveryStrategy {
     TryToSave,
 }
 
+/// Postgres DB config.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct PostgresConfig {
+    /// Connection string.
+    pub postgres_connection_string: String,
+    /// Id of the node.
+    pub node_id: String,
+}
+
 /// Configuration for [`PreferredSequencer`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct PreferredSequencerConfig {
@@ -140,7 +149,7 @@ pub struct PreferredSequencerConfig {
     /// Optional. When present, Postgres will be used as a database instead of
     /// RocksDB.
     #[serde(default)]
-    pub postgres_connection_string: Option<String>,
+    pub postgres_config: Option<PostgresConfig>,
     /// When enabled, the sequencer will skip some expensive consistency checks
     /// on the state root. This means that bugs in the implementation are less likely to be detected
     /// but may improve performance and allows the sequencer to continue operating in case of known bugs.
@@ -186,7 +195,7 @@ impl Default for PreferredSequencerConfig {
         Self {
             minimum_profit_per_tx: 0,
             events_channel_size: default_events_channel_size(),
-            postgres_connection_string: None,
+            postgres_config: None,
             disable_state_root_consistency_checks: false,
             ideal_lag_behind_finalized_slot: default_ideal_lag_behind_finalized_slot(),
             recovery_strategy: RecoveryStrategy::None,
