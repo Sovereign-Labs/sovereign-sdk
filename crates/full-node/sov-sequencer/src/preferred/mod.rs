@@ -336,6 +336,7 @@ where
             config
                 .sequencer_kind_config
                 .future_nonce_transaction_timeout_millis,
+            shutdown_receiver.clone(),
         );
         handles.push(nonce_buffer_task);
 
@@ -683,10 +684,11 @@ where
             Ok(rx) => {
                 let result = rx.await.map_err(database_error_500)?;
                 // After DB persistence completes, notify the nonce queue so it can clean up if needed
-                // TODO: set up cleanup for empty queues here
-                // if is_nonce_based {
-                //     self.tx_nonce_queues.mark_completed(&credential_id);
-                // }
+                if is_nonce_based {
+                    self.nonce_buffer_input
+                        .mark_tx_persisted(credential_id)
+                        .await;
+                }
                 Ok(result)
             }
             Err(e) => match e {
