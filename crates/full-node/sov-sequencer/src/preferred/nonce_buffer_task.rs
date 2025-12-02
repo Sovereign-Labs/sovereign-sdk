@@ -665,13 +665,17 @@ mod tests {
 
     // Helper to create a mock QueuedTx for testing
     fn create_mock_queued_tx(nonce: u8) -> QueuedTx<TestSpec, TestRuntime> {
+        create_mock_queued_tx_with_hash(nonce, [nonce; 32])
+    }
+
+    fn create_mock_queued_tx_with_hash(nonce: u8, hash: [u8; 32]) -> QueuedTx<TestSpec, TestRuntime> {
         let (sender, _receiver) = oneshot::channel();
         QueuedTx {
             baked_tx: FullyBakedTx {
                 // Hacky fake data to help track nonces when TXs are sent through the queue
                 data: vec![nonce].into(),
             },
-            tx_hash: TxHash::from([0u8; 32]),
+            tx_hash: TxHash::from(hash),
             nonce_when_queued: 0,
             queued_at: Instant::now(),
             original_tx_queue_id: 0,
@@ -813,9 +817,10 @@ mod tests {
     /// Mock implementation of TxExecutionBackend for testing handle_new_tx
     #[derive(Clone)]
     struct MockTxExecutionBackend {
-        current_nonce: Arc<AtomicU64>,
+        api_nonce: Arc<AtomicU64>,
+        executor_nonce: Arc<AtomicU64>,
         executed_txs: Arc<Mutex<Vec<(TxHash, u64)>>>,
-        should_fail_nonce: Option<u64>,
+        should_fail_nonce: Arc<Mutex<Option<u64>>>,
         execution_delay: Duration,
         db_delay: Duration,
     }
@@ -824,16 +829,18 @@ mod tests {
     impl MockTxExecutionBackend {
         fn new() -> Self {
             Self {
-                current_nonce: Arc::new(AtomicU64::new(0)),
+                api_nonce: Arc::new(AtomicU64::new(0)),
+                executor_nonce: Arc::new(AtomicU64::new(0)),
                 executed_txs: Arc::new(Mutex::new(Vec::new())),
-                should_fail_nonce: None,
+                should_fail_nonce: Arc::new(Mutex::new(None)),
                 execution_delay: Duration::from_millis(0),
                 db_delay: Duration::from_millis(0),
             }
         }
 
         fn with_current_nonce(self, nonce: u64) -> Self {
-            self.current_nonce.store(nonce, Ordering::SeqCst);
+            self.api_nonce.store(nonce, Ordering::SeqCst);
+            self.executor_nonce.store(nonce, Ordering::SeqCst);
             self
         }
 
@@ -847,8 +854,8 @@ mod tests {
             self
         }
 
-        fn with_failure_at_nonce(mut self, nonce: u64) -> Self {
-            self.should_fail_nonce = Some(nonce);
+        fn with_failure_at_nonce(self, nonce: u64) -> Self {
+            *self.should_fail_nonce.lock().unwrap() = Some(nonce);
             self
         }
 
@@ -860,16 +867,12 @@ mod tests {
                 .map(|(_, n)| *n)
                 .collect()
         }
-
-        fn set_nonce(&self, new_nonce: u64) {
-            self.current_nonce.store(new_nonce, Ordering::SeqCst);
-        }
     }
 
     #[async_trait]
     impl TxExecutionBackend<TestSpec, TestRuntime> for MockTxExecutionBackend {
         fn get_current_nonce_for_user(&self, _credential_id: &CredentialId) -> u64 {
-            self.current_nonce.load(Ordering::SeqCst)
+            self.api_nonce.load(Ordering::SeqCst)
         }
 
         async fn execute_tx(
@@ -889,7 +892,9 @@ mod tests {
             let tx_nonce = *baked_tx.data.first().unwrap() as u64;
 
             // Check if we should fail this nonce
-            if self.should_fail_nonce == Some(tx_nonce) {
+            let mut should_fail_nonce = self.should_fail_nonce.lock().unwrap();
+            if *should_fail_nonce == Some(tx_nonce) {
+                *should_fail_nonce = None;
                 let receipt = TransactionReceipt {
                     tx_hash,
                     body_to_save: None,
@@ -904,8 +909,25 @@ mod tests {
                 ))));
             }
 
+            let executor_nonce = self.executor_nonce.load(Ordering::SeqCst);
+            if executor_nonce != tx_nonce {
+                let receipt = TransactionReceipt {
+                    tx_hash,
+                    body_to_save: None,
+                    events: Vec::new(),
+                    receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
+                        gas_used: <TestSpec as Spec>::Gas::from([0, 0]),
+                        error: TxProcessingError::CheckUniquenessFailed(format!("Tx bad nonce for credential id: {}, expected: {executor_nonce}, but found: {tx_nonce}", CredentialId::from_bytes([1u8; 32]))),
+                    }),
+                };
+                return Ok(Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+                    RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+                ))));
+            }
+
             // Track execution
             self.executed_txs.lock().unwrap().push((tx_hash, tx_nonce));
+            self.executor_nonce.store(tx_nonce + 1, Ordering::SeqCst);
 
             // Create oneshot channel for DB persistence simulation
             let (tx, rx) = oneshot::channel();
@@ -921,7 +943,7 @@ mod tests {
                 }
 
                 // Increment nonce (simulates API state update after DB persistence)
-                backend.set_nonce(tx_nonce + 1);
+                backend.api_nonce.store(tx_nonce + 1, Ordering::SeqCst);
 
                 // Send result
                 let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
@@ -971,24 +993,49 @@ mod tests {
         (backend, sender, shutdown_sender)
     }
 
+    /// Spawns a transaction submission as a concurrent task.
+    /// Includes a short sleep to allow the task to enter the buffer, ensuring transactions are
+    /// submitted to the buffer in the order submit_single_transaction is called.
     async fn submit_single_transaction(
         sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         nonce: u8,
-    ) -> TransactionReceiverResult<TestSpec, TestRuntime> {
-        let to_queue = create_mock_queued_tx(nonce);
-        sender
-            .handle_new_tx(
-                to_queue.baked_tx,
-                to_queue.tx_hash,
-                nonce.into(),
-                CredentialId::from_bytes([1u8; 32]),
-                to_queue.original_tx_queue_id,
-            )
-            .await
+    ) -> JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        submit_single_transaction_with_hash(sender, nonce, [nonce; 32]).await
     }
 
-    fn submit_transactions(sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>, nonces: Vec<u8>) -> Vec<impl futures::Future<Output = TransactionReceiverResult<TestSpec, TestRuntime>>> {
-        nonces.into_iter().map(|n| submit_single_transaction(sender.clone(), n)).collect()
+    /// Same as submit_single_transaction but allows overriding the hash, for submitting
+    /// transactions with identical nonces but different hashes.
+    async fn submit_single_transaction_with_hash(
+        sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        nonce: u8,
+        hash: [u8; 32]
+    ) -> JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        let to_queue = create_mock_queued_tx_with_hash(nonce, hash);
+        let handle = tokio::spawn(async move {
+            sender
+                .handle_new_tx(
+                    to_queue.baked_tx,
+                    to_queue.tx_hash,
+                    nonce.into(),
+                    CredentialId::from_bytes([1u8; 32]),
+                    to_queue.original_tx_queue_id,
+                )
+                .await
+        });
+        // Give the spawned task time to send to the buffer
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        handle
+    }
+
+    async fn submit_transactions(
+        sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        nonces: Vec<u8>,
+    ) -> Vec<JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>>> {
+        let mut handles = Vec::with_capacity(nonces.len());
+        for n in nonces {
+            handles.push(submit_single_transaction(sender.clone(), n).await);
+        }
+        handles
     }
 
     fn get_test_nonce(backend: &MockTxExecutionBackend) -> u64 {
@@ -999,7 +1046,8 @@ mod tests {
     enum Outcome {
         Ok,
         Err(InvalidNonceReason),
-        Reject
+        Revert,
+        StfNonceReject(u8, u8),
     }
 
     async fn assert_on_results(results: Vec<TransactionReceiverResult<TestSpec, TestRuntime>>, expected_outcomes: Vec<Outcome>) {
@@ -1050,7 +1098,7 @@ mod tests {
                         other => panic!("Tx {i}: Expected UnsuccessfulTransaction error, got: {other:?}"),
                     }
                 },
-                Outcome::Reject => {
+                Outcome::Revert => {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
                     let err = inner.expect_err(&format!("Expected tx {i} to fail with rejection"));
 
@@ -1071,6 +1119,32 @@ mod tests {
                         ),
                         "Tx {i}: Expected RejectedByPreFlight rejection, got: {err:?}"
                     );
+                },
+                Outcome::StfNonceReject(expected, tx) => {
+                    let inner = result.expect("Expected Ok from TransactionReceiverResult");
+                    let err = inner.expect_err(&format!("Expected tx {i} to fail with rejection"));
+
+                    let expected_msg = format!(
+                        "Tx bad nonce for credential id: {}, expected: {expected}, but found: {tx}",
+                        CredentialId::from_bytes([1u8; 32])
+                    );
+                    assert!(
+                        matches!(
+                            &err,
+                            AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+                                RollupBlockExecutorError::UnsuccessfulTransaction {
+                                    receipt: TransactionReceipt {
+                                        receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
+                                            error: TxProcessingError::CheckUniquenessFailed(msg),
+                                            ..
+                                        }),
+                                        ..
+                                    }
+                                },
+                            )) if msg == &expected_msg
+                        ),
+                        "Tx {i}: Expected STF nonce rejection with expected={expected}, tx={tx}, got: {err:?}"
+                    );
                 }
             }
         };
@@ -1078,13 +1152,24 @@ mod tests {
     }
 
 
+    /// Helper to collect results from JoinHandles
+    async fn collect_results(
+        handles: Vec<JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>>>,
+    ) -> Vec<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        futures::future::join_all(handles)
+            .await
+            .into_iter()
+            .map(|r| r.expect("JoinHandle panicked"))
+            .collect()
+    }
+
     #[tokio::test]
     async fn test_rejects_stale_nonces() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
         let backend = backend.with_current_nonce(5);
 
-        let handles = submit_transactions(sender, vec![3, 4, 5]);
-        let results: Vec<_> = futures::future::join_all(handles).await;
+        let handles = submit_transactions(sender, vec![3, 4, 5]).await;
+        let results = collect_results(handles).await;
 
         assert_eq!(backend.get_executed_nonces(), vec![5]);
         assert_on_results(results, vec![Outcome::Err(InvalidNonceReason::Invalid), Outcome::Err(InvalidNonceReason::Invalid), Outcome::Ok]).await;
@@ -1095,8 +1180,8 @@ mod tests {
     async fn test_rejects_too_far_future_nonce() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
 
-        let handles = submit_transactions(sender, vec![DEFAULT_TEST_MAX_QUEUE_SIZE as u8 + 1, DEFAULT_TEST_MAX_QUEUE_SIZE as u8]);
-        let results: Vec<_> = futures::future::join_all(handles).await;
+        let handles = submit_transactions(sender, vec![DEFAULT_TEST_MAX_QUEUE_SIZE as u8 + 1, DEFAULT_TEST_MAX_QUEUE_SIZE as u8]).await;
+        let results = collect_results(handles).await;
 
         assert!(backend.get_executed_nonces().is_empty());
         // First tx should have been rejected as invalid. Second one should be right at the limit
@@ -1109,8 +1194,8 @@ mod tests {
     async fn test_execution_stops_at_gap_and_times_out() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
 
-        let handles = submit_transactions(sender, vec![0, 1, 3, 4]);
-        let results: Vec<_> = futures::future::join_all(handles).await;
+        let handles = submit_transactions(sender, vec![0, 1, 3, 4]).await;
+        let results = collect_results(handles).await;
 
         // Should have executed exactly 2 transactions (0 and 1), then stopped at gap
         assert_on_results(results, vec![Outcome::Ok, Outcome::Ok, Outcome::Err(InvalidNonceReason::Timeout), Outcome::Err(InvalidNonceReason::Timeout)]).await;
@@ -1123,18 +1208,16 @@ mod tests {
         let backend = MockTxExecutionBackend::new();
         let (sender, _shutdown) = test_buffer_task(&backend, Some(500));
 
-        let handles = submit_transactions(sender.clone(), vec![1, 2, 3]);
-        // Give queued TXs time to settle
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        let mut handles = submit_transactions(sender.clone(), vec![1, 2, 3]).await;
         assert!(backend.get_executed_nonces().is_empty());
         assert_eq!(get_test_nonce(&backend), 0);
 
         // Submit TX with nonce 0 (current nonce) - should execute immediately and trigger drain
-        let result = submit_single_transaction(sender, 0).await;
-        assert!(result.unwrap().unwrap().await.is_ok());
+        let handle_0 = submit_single_transaction(sender, 0).await;
+        handles.insert(0, handle_0);
 
-        let results: Vec<_> = futures::future::join_all(handles).await;
-        assert_on_results(results, vec![Outcome::Ok, Outcome::Ok, Outcome::Ok]).await;
+        let results = collect_results(handles).await;
+        assert_on_results(results, vec![Outcome::Ok; 4]).await;
 
         assert_eq!(backend.get_executed_nonces(), vec![0, 1, 2, 3]);
         assert_eq!(get_test_nonce(&backend), 4);
@@ -1145,18 +1228,17 @@ mod tests {
         // Timeout longer than execution delay but shorter than total time to execute all
         // transactions, to ensure we hit the timeout loop
         let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
-        let (sender, _shutdown) = test_buffer_task(&backend, Some(500)); 
+        let (sender, _shutdown) = test_buffer_task(&backend, Some(500));
 
         // Submit TXs with nonces 1-10 (all will queue)
-        let handles = submit_transactions(sender.clone(), (1..11).collect());
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        let mut handles = submit_transactions(sender.clone(), (1..11).collect()).await;
 
         // Now submit TX with nonce 0 to trigger drain
-        let result_0 = submit_single_transaction(sender.clone(), 0).await;
+        let handle_0 = submit_single_transaction(sender.clone(), 0).await;
+        handles.insert(0, handle_0);
 
         // All transactions should succeed, despite timeouts being scheduled
-        let mut results = vec![result_0];
-        results.extend(futures::future::join_all(handles).await);
+        let results = collect_results(handles).await;
         assert_on_results(results, vec![Outcome::Ok; 11]).await;
 
         assert_eq!(backend.get_executed_nonces(), (0..11).collect::<Vec<_>>());
@@ -1175,11 +1257,10 @@ mod tests {
         let backend = MockTxExecutionBackend::new().with_db_delay(Duration::from_millis(500)); // Slow DB
         let (sender, _shutdown) = test_buffer_task(&backend, Some(200)); // Queue times out faster than DB
 
-        let result_0 = submit_single_transaction(sender.clone(), 0).await;
-        // At this point we've `await`ed the the execution; `result_0` contains a oneshot with the
-        // DB response, which will fire in ~500ms
+        let result_0 = submit_single_transaction(sender.clone(), 0).await.await.expect("JoinHandle panicked");
+        // At this point tx 0 has been sent to the buffer and is executing
         // We submit tx 1 immediately and verify it isn't rejected and doesn't timeout
-        let result_1 = submit_single_transaction(sender, 1).await;
+        let result_1 = submit_single_transaction(sender, 1).await.await.expect("JoinHandle panicked");
         assert_on_results(vec![result_0, result_1], vec![Outcome::Ok, Outcome::Ok]).await;
 
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
@@ -1196,16 +1277,13 @@ mod tests {
         let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(500)); // Slow execution
         let (sender, _shutdown) = test_buffer_task(&backend, Some(200)); // Queue times out faster than execution
 
-        let handle_0 = submit_single_transaction(sender.clone(), 0);
-        // tokio::time::sleep(Duration::from_millis(20)).await;
-        // At this point transaction 0 is executing very slowly
+        let handle_0 = submit_single_transaction(sender.clone(), 0).await;
+        // At this point transaction 0 is executing slowly
         // We submit tx 1 immediately and verify it isn't rejected and doesn't timeout
-        let handle_1 = submit_single_transaction(sender, 1);
-        // After result_1 completes, we can get result_0 since execution will have finished by now.
-        // Both transactions should have succeeded.
-        let result_0 = handle_0.await;
-        let result_1 = handle_1.await;
-        assert_on_results(vec![result_0, result_1], vec![Outcome::Ok, Outcome::Ok]).await;
+        let handle_1 = submit_single_transaction(sender, 1).await;
+        // Both transactions should succeed
+        let results = collect_results(vec![handle_0, handle_1]).await;
+        assert_on_results(results, vec![Outcome::Ok, Outcome::Ok]).await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
     }
@@ -1220,60 +1298,93 @@ mod tests {
         let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(500)).with_failure_at_nonce(0);
         let (sender, _shutdown) = test_buffer_task(&backend, Some(200)); // Queue times out faster than execution
 
-        let handle_0 = submit_single_transaction(sender.clone(), 0);
-        // At this point transaction 0 is executing very slowly
+        let handle_0 = submit_single_transaction(sender.clone(), 0).await;
+        // At this point transaction 0 is executing slowly
         // We submit tx 1 immediately and verify it isn't rejected (as it would be if the queue
         // submitted it to the STF), but rather times out
-        let result_1 = submit_single_transaction(sender, 1).await;
-        let result_0 = handle_0.await;
-        assert_on_results(vec![result_0, result_1], vec![Outcome::Reject, Outcome::Err(InvalidNonceReason::Timeout)]).await;
+        let handle_1 = submit_single_transaction(sender, 1).await;
+        let results = collect_results(vec![handle_0, handle_1]).await;
+        assert_on_results(results, vec![Outcome::Revert, Outcome::Err(InvalidNonceReason::Timeout)]).await;
         assert!(backend.get_executed_nonces().is_empty());
         assert_eq!(get_test_nonce(&backend), 0);
     }
 
-    // #[tokio::test]
-    // async fn test_queue_cleanup_respects_last_popped() {
-    //     // This test verifies that cleanup_queue_if_empty() doesn't prune a queue
-    //     // if last_popped is still tracking useful information
+    #[tokio::test]
+    async fn test_replacement_of_queued_transaction() {
+        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout to avoid timeouts
 
-    //     let backend = MockTxExecutionBackend::new()
-    //         .with_current_nonce(0)
-    //         .with_db_delay(Duration::from_millis(100));
+        let handle_0 = submit_single_transaction(sender.clone(), 0).await;
+        // Tx 0 is now executing slowly
 
-    //     let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
-    //     let credential_id = CredentialId::from([1u8; 32]);
+        // Submit tx 1a (will be queued)
+        let handle_1a = submit_single_transaction(sender.clone(), 1).await;
 
-    //     // Submit TX with nonce 0
-    //     let result = queues
-    //         .handle_new_tx(
-    //             create_test_tx(0),
-    //             TxHash::from([0; 32]),
-    //             0,
-    //             credential_id,
-    //             0,
-    //         )
-    //         .await;
-    //     assert!(result.is_ok());
+        // Submit tx 1b with same nonce but different hash (should replace tx 1a)
+        let handle_1b = submit_single_transaction_with_hash(sender.clone(), 1, [200; 32]).await;
 
-    //     // At this point, last_popped=0 but API state still shows nonce=0 (DB delay)
-    //     // The queue should exist (even though it's empty) because last_popped tracks useful info
-    //     tokio::time::sleep(Duration::from_millis(50)).await;
+        // Wait for all to complete
+        let results = collect_results(vec![handle_0, handle_1a, handle_1b]).await;
 
-    //     // Try to cleanup - should NOT prune because last_popped=0 >= current_nonce=0
-    //     queues.cleanup_queue_if_empty(&credential_id);
-    //     assert!(
-    //         queues.queues.contains_key(&credential_id),
-    //         "Queue should not be pruned while last_popped tracks useful info"
-    //     );
+        assert_on_results(
+            results,
+            vec![Outcome::Ok, Outcome::Err(InvalidNonceReason::Replaced), Outcome::Ok],
+        ).await;
+        assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
+        assert_eq!(get_test_nonce(&backend), 2);
+    }
 
-    //     // Now wait for DB to complete
-    //     tokio::time::sleep(Duration::from_millis(100)).await;
+    #[tokio::test]
+    async fn test_replacement_of_inflight_transaction_success() {
+        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(300));
+        let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout
 
-    //     // Try cleanup again - now should prune because last_popped=0 < current_nonce=1
-    //     queues.mark_completed(&credential_id);
-    //     assert!(
-    //         !queues.queues.contains_key(&credential_id),
-    //         "Queue should be pruned after API state catches up"
-    //     );
-    // }
+        // Submit tx 0a which will execute slowly
+        let handle_0a = submit_single_transaction(sender.clone(), 0).await;
+
+        // Submit tx 0b with same nonce (should be queued since 0a is in-flight)
+        let handle_0b = submit_single_transaction_with_hash(sender.clone(), 0, [200; 32]).await;
+
+        // Submit tx 1 (should be queued)
+        let handle_1 = submit_single_transaction(sender.clone(), 1).await;
+
+        // Wait for all to complete
+        let results = collect_results(vec![handle_0a, handle_0b, handle_1]).await;
+
+        // Tx 0a succeeds, tx 0b is rejected as Invalid (stale nonce), tx 1 succeeds
+        assert_on_results(
+            results,
+            vec![Outcome::Ok, Outcome::StfNonceReject(1, 0), Outcome::Ok],
+        ).await;
+        assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
+        assert_eq!(get_test_nonce(&backend), 2);
+    }
+
+    #[tokio::test]
+    async fn test_replacement_of_inflight_transaction_failure() {
+        let backend = MockTxExecutionBackend::new()
+            .with_execution_delay(Duration::from_millis(300))
+            .with_failure_at_nonce(0);
+        let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout
+
+        // Submit tx 0a which will execute slowly and fail
+        let handle_0a = submit_single_transaction(sender.clone(), 0).await;
+
+        // Submit tx 0b with same nonce (should be queued since 0a is in-flight)
+        let handle_0b = submit_single_transaction_with_hash(sender.clone(), 0, [200; 32]).await;
+
+        // Submit tx 1 (should be queued)
+        let handle_1 = submit_single_transaction(sender.clone(), 1).await;
+
+        // Wait for all to complete
+        let results = collect_results(vec![handle_0a, handle_0b, handle_1]).await;
+
+        // Tx 0a is rejected by backend, tx 0b succeeds (executed after 0a failed), tx 1 succeeds
+        assert_on_results(
+            results,
+            vec![Outcome::Revert, Outcome::Ok, Outcome::Ok],
+        ).await;
+        assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
+        assert_eq!(get_test_nonce(&backend), 2);
+    }
 }
