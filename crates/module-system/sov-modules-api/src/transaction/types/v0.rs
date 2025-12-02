@@ -1,4 +1,5 @@
 use crate::transaction::data::TxDetails;
+use derivative::Derivative;
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use crate::capabilities::UniquenessData;
@@ -8,11 +9,16 @@ use crate::{CryptoSpecExt, Spec};
 #[derive(
     derive_more::Debug,
     Clone,
+    Derivative,
     borsh::BorshDeserialize,
     serde::Serialize,
     serde::Deserialize,
     borsh::BorshSerialize,
     UniversalWallet,
+)]
+#[derivative(
+    PartialEq(bound = "Call: PartialEq + Eq"),
+    Eq(bound = "Call: PartialEq + Eq")
 )]
 #[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// V0 transaction.

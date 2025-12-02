@@ -2,6 +2,7 @@ use crate::capabilities::UniquenessData;
 use crate::transaction::{PubKeyAndSignature, Transaction, TransactionCallable, TxDetails};
 use crate::{CryptoSpecExt, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
+use derivative::Derivative;
 use sov_rollup_interface::common::SafeVec;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
@@ -14,11 +15,16 @@ pub const MAX_SIGNERS: usize = 21;
 #[derive(
     derive_more::Debug,
     Clone,
+    Derivative,
     borsh::BorshDeserialize,
     serde::Serialize,
     serde::Deserialize,
     borsh::BorshSerialize,
     UniversalWallet,
+)]
+#[derivative(
+    PartialEq(bound = "Call: PartialEq + Eq"),
+    Eq(bound = "Call: PartialEq + Eq")
 )]
 #[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// A V1 (multisig) transaction. The number of signers is capped at 10.
