@@ -663,6 +663,7 @@ where
         &mut self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
+        //credential_id: CredentialId,
     ) -> Result<
         (
             oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
