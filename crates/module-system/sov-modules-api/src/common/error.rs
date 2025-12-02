@@ -3,6 +3,7 @@
 use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
+use crate::prelude::serde::de::Error;
 use serde::{ser::Error as _, Deserialize, Serialize};
 
 /// Macro for creating structured error detail objects for the `ErrorDetail` trait.
@@ -271,8 +272,9 @@ impl std::fmt::Display for DeserializedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Deserialized error: {}",
-            serde_json::to_string(&self.data).unwrap()
+            "{}",
+            serde_json::to_string(&self.data)
+                .unwrap_or_else(|e| format!("Error serializing error: {e}"))
         )
     }
 }
@@ -323,10 +325,17 @@ impl Serialize for ModuleError {
     where
         S: serde::Serializer,
     {
-        self.0
-            .error_detail()
-            .map_err(S::Error::custom)?
-            .serialize(serializer)
+        // Handle binary serialization
+        if !serializer.is_human_readable() {
+            let err = self.0.error_detail().map_err(S::Error::custom)?;
+            let json = serde_json::to_string(&err).map_err(S::Error::custom)?;
+            serializer.serialize_str(&json)
+        } else {
+            self.0
+                .error_detail()
+                .map_err(S::Error::custom)?
+                .serialize(serializer)
+        }
     }
 }
 
@@ -335,7 +344,34 @@ impl<'de> Deserialize<'de> for ModuleError {
     where
         D: serde::Deserializer<'de>,
     {
-        let value = serde_json::Map::deserialize(deserializer)?;
-        Ok(Self(Arc::new(DeserializedError { data: value })))
+        if !deserializer.is_human_readable() {
+            let json = String::deserialize(deserializer)?;
+            let value: ErrorContext = serde_json::from_str(&json).map_err(D::Error::custom)?;
+            Ok(Self(Arc::new(DeserializedError { data: value })))
+        } else {
+            let value: ErrorContext = Deserialize::deserialize(deserializer)?;
+            Ok(Self(Arc::new(DeserializedError { data: value })))
+        }
     }
+}
+
+/// Test that the module serializes identically (using JSON, which is what we serve) after a roundtrip through bincode.
+#[test]
+fn test_module_error_serialization_bincode() {
+    let error = ModuleError::from(anyhow::anyhow!("test error"));
+    let serialized = bincode::serialize(&error).unwrap();
+    let deserialized: ModuleError = bincode::deserialize(&serialized).unwrap();
+    assert_eq!(
+        serde_json::to_string(&error).unwrap(),
+        serde_json::to_string(&deserialized).unwrap()
+    );
+}
+
+/// Test that the module serializes identically (using JSON, which is what we serve) after a roundtrip through serde_json.
+#[test]
+fn test_module_error_serialization_json() {
+    let error = ModuleError::from(anyhow::anyhow!("test error"));
+    let json = serde_json::to_string(&error).unwrap();
+    let deserialized: ModuleError = serde_json::from_str(&json).unwrap();
+    assert_eq!(json, serde_json::to_string(&deserialized).unwrap());
 }
