@@ -6,6 +6,7 @@ use std::io;
 use crate::Multisig;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails};
+use derivative::Derivative;
 pub(crate) use rewards::transaction_consumption_helper;
 pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionConsumption};
 #[cfg(feature = "native")]
@@ -73,11 +74,16 @@ impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
 #[derive(
     derive_more::Debug, // derive_more uses the correct bound of TransactionCallable::RuntimeCall
     Clone,
+    Derivative,
     borsh::BorshSerialize,
     borsh::BorshDeserialize,
     serde::Serialize,
     serde::Deserialize,
     UniversalWallet,
+)]
+#[derivative(
+    PartialEq(bound = "R::Call: PartialEq + Eq"),
+    Eq(bound = "R::Call: PartialEq + Eq")
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
@@ -175,34 +181,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> MeteredBorshDeserialize<
             .map_err(MeteredBorshDeserializeError::IOError)
     }
 }
-
-// Unfortunately built-in Rust derives for Eq and PartialEq use a bound of `TransactionCallable:
-// Eq, PartialEq` which is incorrect (TransactionCallable will be the Runtime in most cases).
-// Thus we have to manually derive them, because the real bound is
-// `TransactionCallable::RuntimeCall: Eq` (aka `<Runtime as DispatchCall>::Decodable`) which is already
-// enforced in the trait definition.
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> PartialEq for Transaction<R, S, C> {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self, &other) {
-            (Transaction::V0(self_inner), Transaction::V0(other_inner)) => {
-                self_inner.signature == other_inner.signature
-                    && self_inner.pub_key == other_inner.pub_key
-                    && self_inner.runtime_call == other_inner.runtime_call
-                    && self_inner.uniqueness == other_inner.uniqueness
-                    && self_inner.details == other_inner.details
-            }
-            (Transaction::V1(self_inner), Transaction::V1(other_inner)) => {
-                self_inner.signatures == other_inner.signatures
-                    && self_inner.runtime_call == other_inner.runtime_call
-                    && self_inner.uniqueness == other_inner.uniqueness
-                    && self_inner.details == other_inner.details
-            }
-            _ => false,
-        }
-    }
-}
-
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Eq for Transaction<R, S, C> {}
 
 /// Errors that can be raised by the [`Transaction::verify`] method.
 #[derive(Error, Debug)]
