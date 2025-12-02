@@ -253,7 +253,7 @@ pub(crate) async fn receive_with_timeout(
 mod tests {
     use super::*;
     use crate::influxdb::config::TelegrafSocketConfig;
-    use crate::influxdb::Metric;
+    use crate::influxdb::{Metric, SubmittableMetricKind};
     use tokio::io::AsyncReadExt;
     use tokio::sync::watch;
 
@@ -299,7 +299,9 @@ mod tests {
 
         for _ in 0..first_chunk {
             let x = Box::new(sample_metric.clone());
-            sender.send(x).await?;
+            sender
+                .send(SubmittableMetric::now(SubmittableMetricKind::Boxed(x)))
+                .await?;
         }
 
         assert!(receive_with_timeout(&mut metrics_back_receiver)
@@ -307,7 +309,11 @@ mod tests {
             .is_none());
 
         for _ in 0..second_chunk {
-            sender.send(Box::new(sample_metric.clone())).await?;
+            sender
+                .send(SubmittableMetric::now(SubmittableMetricKind::Boxed(
+                    Box::new(sample_metric.clone()),
+                )))
+                .await?;
         }
 
         let metric_string = std::str::from_utf8(&sample_metric.0[..])?;
@@ -394,7 +400,11 @@ mod tests {
             metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
         });
 
-        sender.send(Box::new(sample_metric)).await?;
+        sender
+            .send(SubmittableMetric::now(SubmittableMetricKind::Boxed(
+                Box::new(sample_metric),
+            )))
+            .await?;
 
         assert!(receive_with_timeout(&mut metrics_back_receiver)
             .await

@@ -25,6 +25,9 @@ pub use tracker::{
 pub(crate) enum SubmittableMetricKind {
     Boxed(Box<dyn Metric>),
     Http(HttpMetrics),
+    Batch(BatchMetrics),
+    Rpc(RpcMetrics),
+    TransactionProcessing(TransactionProcessingMetrics),
 }
 
 impl Metric for SubmittableMetricKind {
@@ -32,6 +35,9 @@ impl Metric for SubmittableMetricKind {
         match self {
             SubmittableMetricKind::Boxed(metric) => metric.measurement_name(),
             SubmittableMetricKind::Http(metric) => metric.measurement_name(),
+            SubmittableMetricKind::Batch(metric) => metric.measurement_name(),
+            SubmittableMetricKind::Rpc(metric) => metric.measurement_name(),
+            SubmittableMetricKind::TransactionProcessing(metric) => metric.measurement_name(),
         }
     }
 
@@ -39,6 +45,11 @@ impl Metric for SubmittableMetricKind {
         match self {
             SubmittableMetricKind::Boxed(metric) => metric.serialize_for_telegraf(buffer),
             SubmittableMetricKind::Http(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::Batch(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::Rpc(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::TransactionProcessing(metric) => {
+                metric.serialize_for_telegraf(buffer)
+            }
         }
     }
 }

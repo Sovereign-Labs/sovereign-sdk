@@ -68,7 +68,7 @@ impl MetricsTracker {
     pub fn submit_known_metric(&self, measurement: impl KnownMetric + 'static) {
         let metric = measurement.to_known_submittable();
 
-        if let Err(_) = self.sender.try_send(metric) {
+        if self.sender.try_send(metric).is_err() {
             DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         };
     }
@@ -80,7 +80,7 @@ impl MetricsTracker {
             timestamp,
         );
 
-        if let Err(_) = self.sender.try_send(metric) {
+        if self.sender.try_send(metric).is_err() {
             DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         };
     }
@@ -435,6 +435,12 @@ impl Metric for TransactionProcessingMetrics {
     }
 }
 
+impl KnownMetric for TransactionProcessingMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::TransactionProcessing(self))
+    }
+}
+
 impl Metric for SlotProcessingMetrics {
     fn measurement_name(&self) -> &'static str {
         "sov_rollup_slot_execution_time_us"
@@ -530,6 +536,12 @@ impl Metric for BatchMetrics {
     }
 }
 
+impl KnownMetric for BatchMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::Batch(self))
+    }
+}
+
 /// Metrics for an WebSocket request with a single response - for example `eth_sendRawTransaction`.
 #[derive(Debug)]
 pub struct RpcMetrics {
@@ -557,6 +569,12 @@ impl Metric for RpcMetrics {
             "{},request_name={request_name},status={status} processing_time_us={processing_time_us}",
             self.measurement_name(),
         )
+    }
+}
+
+impl KnownMetric for RpcMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::Rpc(self))
     }
 }
 
