@@ -13,6 +13,8 @@ mod test_helper;
 pub mod types;
 pub mod verifier;
 
+#[cfg(feature = "native")]
+pub use sov_metrics::{init_metrics_tracker, MonitoringConfig};
 pub use sov_rollup_interface::da::*;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::node::da::*;
