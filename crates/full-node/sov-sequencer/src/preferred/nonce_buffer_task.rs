@@ -797,4 +797,833 @@ mod tests {
         assert_eq!(determine_action(2, 0, 1), Action::Reject);
         assert_eq!(determine_action(1, 0, 0), Action::Reject);
     }
+
+    fn create_default_confirmation() -> Confirmation<TestSpec, TestRuntime> {
+        Confirmation {
+            events: vec![],
+            receipt: sov_modules_api::ApiTxEffect::Skipped {
+                data: SkippedTxContents {
+                    gas_used: <TestSpec as Spec>::Gas::from([0, 0]),
+                    error: TxProcessingError::RejectedByPreFlight,
+                },
+            },
+            tx_number: 0,
+        }
+    }
+
+    /// Mock implementation of TxExecutionBackend for testing handle_new_tx
+    #[derive(Clone)]
+    struct MockTxExecutionBackend {
+        current_nonce: Arc<AtomicU64>,
+        executed_txs: Arc<Mutex<Vec<(TxHash, u64)>>>,
+        should_fail_nonce: Option<u64>,
+        execution_delay: Duration,
+        db_delay: Duration,
+    }
+
+    #[allow(dead_code)]
+    impl MockTxExecutionBackend {
+        fn new() -> Self {
+            Self {
+                current_nonce: Arc::new(AtomicU64::new(0)),
+                executed_txs: Arc::new(Mutex::new(Vec::new())),
+                should_fail_nonce: None,
+                execution_delay: Duration::from_millis(0),
+                db_delay: Duration::from_millis(0),
+            }
+        }
+
+        fn with_current_nonce(self, nonce: u64) -> Self {
+            self.current_nonce.store(nonce, Ordering::SeqCst);
+            self
+        }
+
+        fn with_execution_delay(mut self, delay: Duration) -> Self {
+            self.execution_delay = delay;
+            self
+        }
+
+        fn with_db_delay(mut self, delay: Duration) -> Self {
+            self.db_delay = delay;
+            self
+        }
+
+        fn with_failure_at_nonce(mut self, nonce: u64) -> Self {
+            self.should_fail_nonce = Some(nonce);
+            self
+        }
+
+        fn get_executed_nonces(&self) -> Vec<u64> {
+            self.executed_txs
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(_, n)| *n)
+                .collect()
+        }
+
+        fn set_nonce(&self, new_nonce: u64) {
+            self.current_nonce.store(new_nonce, Ordering::SeqCst);
+        }
+    }
+
+    #[async_trait]
+    impl TxExecutionBackend<TestSpec, TestRuntime> for MockTxExecutionBackend {
+        fn get_current_nonce_for_user(&self, _credential_id: &CredentialId) -> u64 {
+            self.current_nonce.load(Ordering::SeqCst)
+        }
+
+        async fn execute_tx(
+            &self,
+            baked_tx: &FullyBakedTx,
+            tx_hash: TxHash,
+            _original_tx_queue_id: u64,
+            _reason: &'static str,
+        ) -> TransactionReceiverResult<TestSpec, TestRuntime> {
+            // Simulate execution delay (state transition time)
+            if !self.execution_delay.is_zero() {
+                tokio::time::sleep(self.execution_delay).await;
+            }
+
+            // Extract nonce from TX data (our mock TXs use first byte as nonce)
+            let tx_nonce = *baked_tx.data.first().unwrap() as u64;
+
+            // Check if we should fail this nonce
+            if self.should_fail_nonce == Some(tx_nonce) {
+                let receipt = TransactionReceipt {
+                    tx_hash,
+                    body_to_save: None,
+                    events: Vec::new(),
+                    receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
+                        gas_used: <TestSpec as Spec>::Gas::from([0, 0]),
+                        error: TxProcessingError::RejectedByPreFlight,
+                    }),
+                };
+                return Ok(Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+                    RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+                ))));
+            }
+
+            // Track execution
+            self.executed_txs.lock().unwrap().push((tx_hash, tx_nonce));
+
+            // Create oneshot channel for DB persistence simulation
+            let (tx, rx) = oneshot::channel();
+
+            // Spawn task to simulate DB persistence delay
+            // The nonce is only incremented after the DB operation "completes"
+            let backend = self.clone();
+            let baked_tx_clone = baked_tx.clone();
+            tokio::spawn(async move {
+                // Simulate DB persistence delay
+                if !backend.db_delay.is_zero() {
+                    tokio::time::sleep(backend.db_delay).await;
+                }
+
+                // Increment nonce (simulates API state update after DB persistence)
+                backend.set_nonce(tx_nonce + 1);
+
+                // Send result
+                let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
+                    tx: baked_tx_clone,
+                    tx_hash,
+                    confirmation: create_default_confirmation(),
+                });
+            });
+
+            Ok(Ok(rx))
+        }
+    }
+
+    fn create_test_tx(nonce: u8) -> FullyBakedTx {
+        FullyBakedTx {
+            // Use nonce as data to track it
+            data: vec![nonce].into(),
+        }
+    }
+
+    /// Helper to create a default task for tests that don't care about specific config
+    fn default_test_buffer_task() -> (
+        NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        MockTxExecutionBackend,
+    ) {
+        let backend = MockTxExecutionBackend::new();
+        let (_shutdown_sender, shutdown_receiver) = watch::channel(());
+        let (_handle, sender) = NonceBufferTask::spawn(
+            backend.clone(),
+            100,
+            1000, // 100ms timeout should be enough for sync txs to execute without delaying unit tests much
+            shutdown_receiver,
+        );
+        (sender, backend)
+    }
+
+    async fn enqueue_mock_queued_tx(
+        sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        nonce: u8,
+    ) -> TransactionReceiverResult<TestSpec, TestRuntime> {
+        let to_queue = create_mock_queued_tx(nonce);
+        sender
+            .handle_new_tx(
+                to_queue.baked_tx,
+                to_queue.tx_hash,
+                nonce.into(),
+                CredentialId::from_bytes([1u8; 32]),
+                to_queue.original_tx_queue_id,
+            )
+            .await
+    }
+
+    #[tokio::test]
+    async fn test_drain_evicts_stale_and_executes_ready() {
+        let (sender, backend) = default_test_buffer_task();
+        let backend = backend.with_current_nonce(5);
+        let credential_id = CredentialId::from([1u8; 32]);
+
+        // Enqueue transactions with nonces 3, 4, 5
+        let mut handles = vec![];
+        for nonce in [3, 4, 5] {
+            handles.push(enqueue_mock_queued_tx(sender.clone(), nonce));
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Await all handles and collect results
+        let results: Vec<_> = futures::future::join_all(handles).await;
+
+        let executed_nonces = backend.get_executed_nonces();
+        assert_eq!(
+            executed_nonces,
+            vec![5],
+            "Should execute only nonce 5, not stale nonces 3 and 4"
+        );
+
+        let mut results = results.into_iter();
+        assert!(results.next().unwrap().is_err());
+        assert!(results.next().unwrap().is_err());
+        assert!(results.next().unwrap().unwrap().unwrap().await.is_ok());
+
+        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 6);
+    }
+
+    // #[tokio::test]
+    // async fn test_drain_stops_at_gap() {
+    //     let (queues, backend) = default_test_tx_nonce_queues();
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Enqueue transactions: 0, 1, 3, 4 (gap at 2)
+    //     for nonce in [0, 1, 3, 4] {
+    //         let entry = queues.lock_for_address(credential_id);
+    //         enqueue_mock_queued_tx(entry, nonce);
+    //     }
+
+    //     // Drain starting from nonce 0
+    //     queues.drain_any_ready_transactions(&credential_id, 0).await;
+
+    //     // Should have executed exactly 2 transactions (0 and 1), then stopped at gap
+    //     let executed_nonces = backend.get_executed_nonces();
+    //     assert_eq!(
+    //         executed_nonces,
+    //         vec![0, 1],
+    //         "Should execute nonces 0 and 1, then stop at gap (missing nonce 2)"
+    //     );
+
+    //     // Transactions 3 and 4 should still be in queue
+    //     assert!(queues.has_prerequisites_to_nonce(&credential_id, 4, 3));
+    // }
+
+    // #[tokio::test]
+    // async fn test_immediate_execution_triggers_drain() {
+    //     let backend = MockTxExecutionBackend::new().with_current_nonce(0);
+    //     let queues = TxNonceQueues::new(
+    //         backend.clone(),
+    //         10,   // max_future_nonce_delta
+    //         5000, // timeout (long enough to not trigger)
+    //     );
+
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TXs with nonces 1, 2, 3 (should be queued)
+    //     let mut handles = vec![];
+    //     for nonce in 1u8..=3 {
+    //         let queues = queues.clone();
+    //         let handle = tokio::spawn(async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(nonce),
+    //                     TxHash::from([nonce; 32]),
+    //                     nonce as u64,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         });
+    //         handles.push(handle);
+    //     }
+
+    //     // Give queued TXs time to settle
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    //     // Submit TX with nonce 0 (current nonce) - should execute immediately and trigger drain
+    //     let result = queues
+    //         .handle_new_tx(
+    //             create_test_tx(0),
+    //             TxHash::from([0; 32]),
+    //             0,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+
+    //     // TX 0 should execute successfully
+    //     assert!(result.is_ok());
+    //     let inner = result.unwrap();
+    //     assert!(inner.is_ok());
+    //     let rx = inner.unwrap();
+    //     assert!(rx.await.is_ok());
+
+    //     // Wait for all queued TXs to complete
+    //     for handle in handles {
+    //         let result = handle.await.unwrap();
+    //         assert!(result.is_ok());
+    //         let inner = result.unwrap();
+    //         assert!(inner.is_ok());
+    //         let rx = inner.unwrap();
+    //         assert!(rx.await.is_ok());
+    //     }
+
+    //     // Verify all 4 TXs executed in order
+    //     let executed = backend.get_executed_nonces();
+    //     assert_eq!(
+    //         executed,
+    //         vec![0, 1, 2, 3],
+    //         "All transactions should execute in order after filling the gap"
+    //     );
+
+    //     // Verify current nonce advanced
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 4);
+    // }
+
+    // #[tokio::test]
+    // async fn test_reject_past_nonce() {
+    //     let backend = MockTxExecutionBackend::new().with_current_nonce(5);
+    //     let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX with nonce 4 (past nonce, current is 5)
+    //     let result = queues
+    //         .handle_new_tx(
+    //             create_test_tx(4),
+    //             TxHash::from([4; 32]),
+    //             4,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+
+    //     // Should get an error result
+    //     assert!(result.is_ok());
+    //     let inner = result.unwrap();
+    //     assert!(inner.is_err());
+
+    //     match inner.unwrap_err() {
+    //         AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+    //             RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+    //         )) => {
+    //             // Verify it's a nonce error
+    //             match receipt.receipt {
+    //                 sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
+    //                     match contents.error {
+    //                         TxProcessingError::CheckUniquenessFailed(msg) => {
+    //                             assert!(
+    //                                 msg.contains("bad nonce"),
+    //                                 "Error should mention bad nonce: \"{msg}\"",
+    //                             );
+    //                             assert!(
+    //                                 msg.contains("expected: 5"),
+    //                                 "Error should mention expected nonce 5: \"{msg}\"",
+    //                             );
+    //                             assert!(
+    //                                 msg.contains("found: 4"),
+    //                                 "Error should mention found nonce 4: \"{msg}\"",
+    //                             );
+    //                         }
+    //                         _ => panic!("Expected CheckUniquenessFailed error"),
+    //                     }
+    //                 }
+    //                 _ => panic!("Expected Skipped receipt"),
+    //             }
+    //         }
+    //         _ => panic!("Expected UnsuccessfulTransaction error"),
+    //     }
+
+    //     // Verify no TXs were executed
+    //     assert!(backend.get_executed_nonces().is_empty());
+
+    //     // Verify nonce didn't change
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 5);
+    // }
+
+    // #[tokio::test]
+    // async fn test_reject_too_far_future_nonce() {
+    //     let backend = MockTxExecutionBackend::new().with_current_nonce(0);
+    //     let queues = TxNonceQueues::new(
+    //         backend.clone(),
+    //         10, // max_future_nonce_delta = 10, so max valid is 0+10 = 10
+    //         5000,
+    //     );
+
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX with nonce 11 (too far in future, max valid is 10)
+    //     let result = queues
+    //         .handle_new_tx(
+    //             create_test_tx(11),
+    //             TxHash::from([11; 32]),
+    //             11,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+
+    //     // Should get an error result
+    //     assert!(result.is_ok());
+    //     let inner = result.unwrap();
+    //     assert!(inner.is_err());
+
+    //     match inner.unwrap_err() {
+    //         AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+    //             RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+    //         )) => {
+    //             // Verify it's a nonce error
+    //             match receipt.receipt {
+    //                 sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
+    //                     match contents.error {
+    //                         TxProcessingError::CheckUniquenessFailed(msg) => {
+    //                             assert!(
+    //                                 msg.contains("bad nonce"),
+    //                                 "Error should mention bad nonce: \"{msg}\"",
+    //                             );
+    //                         }
+    //                         _ => panic!("Expected CheckUniquenessFailed error"),
+    //                     }
+    //                 }
+    //                 _ => panic!("Expected Skipped receipt"),
+    //             }
+    //         }
+    //         _ => panic!("Expected UnsuccessfulTransaction error"),
+    //     }
+
+    //     // Verify no TXs were executed
+    //     assert!(backend.get_executed_nonces().is_empty());
+
+    //     // Verify nonce didn't change
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 0);
+    // }
+
+    // #[tokio::test]
+    // async fn test_queue_future_nonce_then_fill_gap() {
+    //     let backend = MockTxExecutionBackend::new().with_current_nonce(0);
+    //     let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX with nonce 2 (should queue, current is 0)
+    //     let handle_2 = tokio::spawn({
+    //         let queues = queues.clone();
+    //         async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(2),
+    //                     TxHash::from([2; 32]),
+    //                     2,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         }
+    //     });
+
+    //     // Give it time to queue
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    //     // Submit TX with nonce 0 (should execute immediately, but NOT drain N+2 due to gap at N+1)
+    //     let result_0 = queues
+    //         .handle_new_tx(
+    //             create_test_tx(0),
+    //             TxHash::from([0; 32]),
+    //             0,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+    //     assert!(result_0.is_ok());
+    //     let rx_0 = result_0.unwrap().unwrap();
+    //     assert!(rx_0.await.is_ok());
+
+    //     // Give drain task time to run (it shouldn't drain N+2)
+    //     tokio::time::sleep(Duration::from_millis(100)).await;
+
+    //     // Verify only N=0 executed, N+2 still queued
+    //     assert_eq!(backend.get_executed_nonces(), vec![0]);
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 1);
+
+    //     // Now submit TX with nonce 1 (should execute and trigger drain of N+2)
+    //     let result_1 = queues
+    //         .handle_new_tx(
+    //             create_test_tx(1),
+    //             TxHash::from([1; 32]),
+    //             1,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+    //     assert!(result_1.is_ok());
+    //     let rx_1 = result_1.unwrap().unwrap();
+    //     assert!(rx_1.await.is_ok());
+
+    //     // Wait for N+2 to complete
+    //     let result_2 = handle_2.await.unwrap();
+    //     assert!(result_2.is_ok());
+    //     let rx_2 = result_2.unwrap().unwrap();
+    //     assert!(rx_2.await.is_ok());
+
+    //     // Verify all executed in order
+    //     assert_eq!(backend.get_executed_nonces(), vec![0, 1, 2]);
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 3);
+    // }
+
+    // #[tokio::test]
+    // async fn test_queued_tx_timeout_without_prerequisites() {
+    //     let backend = MockTxExecutionBackend::new().with_current_nonce(0);
+    //     let queues = TxNonceQueues::new(
+    //         backend.clone(),
+    //         10,
+    //         200, // Short timeout (200ms) to make test fast
+    //     );
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX with nonce 1 (will queue and wait)
+    //     let handle = tokio::spawn({
+    //         let queues = queues.clone();
+    //         async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(1),
+    //                     TxHash::from([1; 32]),
+    //                     1,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         }
+    //     });
+
+    //     // Wait for timeout to trigger (200ms timeout + some buffer)
+    //     tokio::time::sleep(Duration::from_millis(300)).await;
+
+    //     // TX should have been evicted with nonce error
+    //     let result = handle.await.unwrap();
+    //     assert!(result.is_ok());
+    //     let inner = result.unwrap();
+    //     assert!(inner.is_err());
+
+    //     // Verify it's a nonce error
+    //     match inner.unwrap_err() {
+    //         AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+    //             RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+    //         )) => match receipt.receipt {
+    //             sov_rollup_interface::stf::TxEffect::Skipped(contents) => match contents.error {
+    //                 TxProcessingError::CheckUniquenessFailed(msg) => {
+    //                     assert!(
+    //                         msg.contains("bad nonce"),
+    //                         "Error should mention bad nonce: \"{msg}\"",
+    //                     );
+    //                     assert!(
+    //                         msg.contains("expected: 0"),
+    //                         "Error should mention expected nonce 0: \"{msg}\"",
+    //                     );
+    //                     assert!(
+    //                         msg.contains("found: 1"),
+    //                         "Error should mention found nonce 1: \"{msg}\"",
+    //                     );
+    //                 }
+    //                 _ => panic!("Expected CheckUniquenessFailed error"),
+    //             },
+    //             _ => panic!("Expected Skipped receipt"),
+    //         },
+    //         _ => panic!("Expected UnsuccessfulTransaction error"),
+    //     }
+
+    //     // Verify no TXs were executed
+    //     assert!(backend.get_executed_nonces().is_empty());
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 0);
+
+    //     // Verify TX was removed from queue
+    //     assert!(!queues.has_prerequisites_to_nonce(&credential_id, 1, 0));
+    // }
+
+    // #[tokio::test]
+    // async fn test_queued_tx_timeout_loops_if_all_prerequisites_present() {
+    //     let backend = MockTxExecutionBackend::new()
+    //         .with_current_nonce(0)
+    //         .with_execution_delay(Duration::from_millis(200)); // Each TX takes 200ms
+
+    //     let queues = TxNonceQueues::new(
+    //         backend.clone(),
+    //         10,
+    //         500, // Timeout is 250ms, longer than execution delay but shorter than total time to
+    //              // execute all queued TXs
+    //     );
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TXs with nonces 1-5 (all will queue)
+    //     let mut handles = vec![];
+    //     for nonce in 1u8..=5 {
+    //         let queues = queues.clone();
+    //         let handle = tokio::spawn(async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(nonce),
+    //                     TxHash::from([nonce; 32]),
+    //                     nonce as u64,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         });
+    //         handles.push(handle);
+    //     }
+
+    //     // Give TXs time to queue
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    //     // Now submit TX with nonce 0 to trigger drain
+    //     let result_0 = queues
+    //         .handle_new_tx(
+    //             create_test_tx(0),
+    //             TxHash::from([0; 32]),
+    //             0,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+    //     assert!(result_0.is_ok());
+    //     let rx_0 = result_0.unwrap().unwrap();
+    //     assert!(rx_0.await.is_ok());
+
+    //     // Wait for all queued TXs to complete
+    //     // Each TX takes 200ms, so 5 TXs = ~1000ms total
+    //     // Multiple timeouts (250ms each) will fire during this time
+    //     // but TXs should NOT be evicted because they have prerequisites
+    //     for handle in handles {
+    //         let result = handle.await.unwrap();
+    //         assert!(result.is_ok(), "TX should not timeout - has prerequisites");
+    //         let rx = result.unwrap().unwrap();
+    //         assert!(rx.await.is_ok());
+    //     }
+
+    //     // Verify all TXs executed in order
+    //     assert_eq!(
+    //         backend.get_executed_nonces(),
+    //         vec![0, 1, 2, 3, 4, 5],
+    //         "All transactions should execute despite timeouts firing during drain"
+    //     );
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 6);
+    // }
+
+    // #[tokio::test]
+    // async fn test_oneshot_sender_dropped_returns_error() {
+    //     let backend = MockTxExecutionBackend::new().with_current_nonce(0);
+    //     let queues = TxNonceQueues::new(backend.clone(), 10, 500);
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX with nonce 1 (will queue)
+    //     let handle = tokio::spawn({
+    //         let queues = queues.clone();
+    //         async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(1),
+    //                     TxHash::from([1; 32]),
+    //                     1,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         }
+    //     });
+
+    //     // Give it time to queue
+    //     tokio::time::sleep(Duration::from_millis(100)).await;
+
+    //     // Manually evict the TX (drops the oneshot sender)
+    //     let evicted = queues.evict(&credential_id, 1);
+    //     assert!(evicted.is_some(), "TX should have been queued");
+
+    //     // Add a timeout to detect if the task hangs
+    //     let result = tokio::time::timeout(Duration::from_secs(2), handle)
+    //         .await
+    //         .expect("Task should complete within 2 seconds (sender was dropped)")
+    //         .unwrap();
+
+    //     // When the sender is dropped, the receiver errors, which gets mapped to a nonce error
+    //     assert!(result.is_ok(), "Should not have sequencer error");
+    //     let inner = result.unwrap();
+
+    //     // The inner result should be an error (AcceptTxError with nonce error)
+    //     assert!(
+    //         inner.is_err(),
+    //         "Should have nonce error when sender dropped"
+    //     );
+
+    //     // Verify it's a nonce error
+    //     match inner.unwrap_err() {
+    //         AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+    //             RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
+    //         )) => match receipt.receipt {
+    //             sov_rollup_interface::stf::TxEffect::Skipped(contents) => match contents.error {
+    //                 TxProcessingError::CheckUniquenessFailed(msg) => {
+    //                     assert!(
+    //                         msg.contains("bad nonce"),
+    //                         "Error should mention bad nonce: \"{msg}\"",
+    //                     );
+    //                 }
+    //                 _ => panic!(
+    //                     "Expected CheckUniquenessFailed error, got: {:?}",
+    //                     contents.error
+    //                 ),
+    //             },
+    //             _ => panic!("Expected Skipped receipt"),
+    //         },
+    //         other => panic!("Expected nonce error, got: {other:?}"),
+    //     }
+
+    //     // Verify no TXs were executed
+    //     assert!(backend.get_executed_nonces().is_empty());
+    // }
+
+    // #[tokio::test]
+    // async fn test_race_condition_with_db_delay() {
+    //     // This test verifies that the race condition is fixed:
+    //     // - TX A (nonce N) executes successfully, but DB persistence is slow
+    //     // - TX B (nonce N+1) arrives before DB completes
+    //     // - Without the fix: B would see current_nonce=N and get queued (deadlock!)
+    //     // - With the fix: B sees last_popped=N, so current_nonce becomes N+1, and executes immediately
+
+    //     let backend = MockTxExecutionBackend::new()
+    //         .with_current_nonce(0)
+    //         .with_db_delay(Duration::from_millis(200)); // Slow DB
+
+    //     let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX A with nonce 0 - should execute immediately
+    //     let handle_a = tokio::spawn({
+    //         let queues = queues.clone();
+    //         async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(0),
+    //                     TxHash::from([0; 32]),
+    //                     0,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         }
+    //     });
+
+    //     // Wait for execution to complete but NOT for DB to complete
+    //     // The execution itself is instant, but DB persistence takes 200ms
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    //     // At this point:
+    //     // - TX A has executed (state transition complete)
+    //     // - last_popped is set to 0
+    //     // - But API state still shows nonce=0 (DB hasn't completed)
+
+    //     // Submit TX B with nonce 1 - should execute immediately because last_popped=0
+    //     let handle_b = tokio::spawn({
+    //         let queues = queues.clone();
+    //         async move {
+    //             queues
+    //                 .handle_new_tx(
+    //                     create_test_tx(1),
+    //                     TxHash::from([1; 32]),
+    //                     1,
+    //                     credential_id,
+    //                     0,
+    //                 )
+    //                 .await
+    //         }
+    //     });
+
+    //     // Both transactions should succeed
+    //     let result_a = handle_a.await.unwrap();
+    //     assert!(result_a.is_ok(), "TX A should not have sequencer error");
+    //     let rx_a = result_a.unwrap().unwrap();
+    //     assert!(rx_a.await.is_ok(), "TX A should succeed");
+
+    //     let result_b = handle_b.await.unwrap();
+    //     assert!(result_b.is_ok(), "TX B should not have sequencer error");
+    //     let rx_b = result_b.unwrap().unwrap();
+    //     assert!(rx_b.await.is_ok(), "TX B should succeed despite DB delay");
+
+    //     // Verify both executed in order
+    //     assert_eq!(
+    //         backend.get_executed_nonces(),
+    //         vec![0, 1],
+    //         "Both transactions should execute in order despite DB delay"
+    //     );
+
+    //     // Verify final nonce (after DB completes)
+    //     assert_eq!(backend.get_current_nonce_for_user(&credential_id), 2);
+    // }
+
+    // #[tokio::test]
+    // async fn test_queue_cleanup_respects_last_popped() {
+    //     // This test verifies that cleanup_queue_if_empty() doesn't prune a queue
+    //     // if last_popped is still tracking useful information
+
+    //     let backend = MockTxExecutionBackend::new()
+    //         .with_current_nonce(0)
+    //         .with_db_delay(Duration::from_millis(100));
+
+    //     let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
+    //     let credential_id = CredentialId::from([1u8; 32]);
+
+    //     // Submit TX with nonce 0
+    //     let result = queues
+    //         .handle_new_tx(
+    //             create_test_tx(0),
+    //             TxHash::from([0; 32]),
+    //             0,
+    //             credential_id,
+    //             0,
+    //         )
+    //         .await;
+    //     assert!(result.is_ok());
+
+    //     // At this point, last_popped=0 but API state still shows nonce=0 (DB delay)
+    //     // The queue should exist (even though it's empty) because last_popped tracks useful info
+    //     tokio::time::sleep(Duration::from_millis(50)).await;
+
+    //     // Try to cleanup - should NOT prune because last_popped=0 >= current_nonce=0
+    //     queues.cleanup_queue_if_empty(&credential_id);
+    //     assert!(
+    //         queues.queues.contains_key(&credential_id),
+    //         "Queue should not be pruned while last_popped tracks useful info"
+    //     );
+
+    //     // Now wait for DB to complete
+    //     tokio::time::sleep(Duration::from_millis(100)).await;
+
+    //     // Try cleanup again - now should prune because last_popped=0 < current_nonce=1
+    //     queues.mark_completed(&credential_id);
+    //     assert!(
+    //         !queues.queues.contains_key(&credential_id),
+    //         "Queue should be pruned after API state catches up"
+    //     );
+    // }
 }
