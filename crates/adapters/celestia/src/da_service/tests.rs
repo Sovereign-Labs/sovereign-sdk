@@ -26,7 +26,13 @@ async fn collect_all_blobs_between(
     da_service: &CelestiaService,
     height_before: u64,
 ) -> anyhow::Result<(Vec<BlobWithSender>, Vec<BlobWithSender>)> {
-    let height_after = da_service.get_head_block_header().await?.height();
+    // Adding one more height to the current head to accommodate for blob inclusion.
+    // Even though by the time submiPayForBlob has returned it should be included, we observed flakyness.
+    let height_after = da_service
+        .get_head_block_header()
+        .await?
+        .height()
+        .saturating_add(1);
     let mut collected_batch_blobs = Vec::new();
     let mut collected_proof_blobs = Vec::new();
 
