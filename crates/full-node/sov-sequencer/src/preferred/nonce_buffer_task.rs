@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-#![allow(dead_code)]
 use async_trait::async_trait;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::ApiState;
@@ -11,7 +9,7 @@ use std::cmp::Ordering;
 use std::collections::btree_map;
 use std::collections::hash_map;
 use std::collections::HashMap;
-use std::collections::{btree_map::OccupiedEntry, BTreeMap};
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -91,7 +89,11 @@ impl NonPersistedTxs {
             .user_nonce()
             .is_some_and(|user_nonce| tx_nonce_check != user_nonce)
         {
-            tracing::error!("Sequencer nonce buffer: non-persisted tracking: attempted to execute nonce that does not match tracked next nonce!");
+            let msg = "Sequencer nonce buffer: non-persisted tracking: attempted to execute nonce that does not match tracked next nonce!";
+            tracing::error!(msg);
+            // Once this code has been battle-tested in production for a bit, the debug_assert can
+            // be upgraded to an assert and the if-statement elided entirely to simplify.
+            debug_assert!(false, "{msg}");
         } else if self.last_successfully_executed.is_none() {
             // If we're marking a transction as in-flight, that means we definitely know the
             // previous one has been executed. Probably from the API state.
@@ -101,19 +103,34 @@ impl NonPersistedTxs {
         // the current valid nonce arrive near-simultaneously, we let the executor sort them out for
         // simplicity. Thus there can be more than one tx in flight - they just all need to have
         // the same nonce.
+        // See the comment on mark_inflight_execution_succeeded for an explanation of how this
+        // could be avoided.
         self.has_in_flight = true;
     }
 
     fn mark_inflight_execution_succeeded(&mut self, tx_nonce_check: u64) {
-        if !self.has_in_flight {
-            tracing::error!("Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!");
-        }
+        // We don't throw an error if has_in_flight is already false, because two transactions with
+        // the same nonce arriving at the same time will both be queued (letting the STF sort them
+        // out) thus their inflight/not-inflight markings will be interleaved.
+        // This is mostly fine though it creates a small window of time where, if the first
+        // transaction is rejected, prerequisite checks will erroneously fail after the first
+        // transaction has completed but before the second one has. This could be fixed by
+        // reworking the same-nonce logic to actually queue transactions that match the currently
+        // in-flight nonce; and then after receivint a TxExecuted event, evicting it on success or
+        // queueing it (with a NewTx) on failure. The latter logic is already mostly in-place; all
+        // that needs to be added is the eviction logic, and then `assert!(self.has_in_flight)` can
+        // be re-added here.
+        //
+        // However since pre-requisite checks have been disabled for now, this hasn't been fully
+        // implemented and tested yet.
         self.has_in_flight = false;
 
         self.last_successfully_executed = self.last_successfully_executed.map(|last| {
             let new = last.checked_add(1).expect("Overflow adding 1 to user nonce");
             if new != tx_nonce_check {
-                tracing::error!("Sequencer nonce buffer: non-persisted tracking: after executing, incremented nonce did not match tx nonce!");
+                let msg = "Sequencer nonce buffer: non-persisted tracking: after executing, incremented nonce did not match tx nonce!";
+                tracing::error!(msg);
+                debug_assert!(false, "{msg}"); // See comment in mark_inflight
             }
             new
         }).or(Some(tx_nonce_check));
@@ -121,16 +138,20 @@ impl NonPersistedTxs {
 
     fn mark_inflight_execution_failed(&mut self, tx_nonce_check: u64) {
         if !self.has_in_flight {
-            tracing::error!("Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!");
+            let msg = "Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!";
+            tracing::error!(msg);
+            debug_assert!(false, "{msg}"); // See comment in mark_inflight
         }
         self.has_in_flight = false;
 
+        // If this condition is false, this was likely a concurrent transaction for the current
+        // nonce which failed. The successful transaction with the same nonce will have set
+        // last_successfully_executed correctly.
         if self.last_successfully_executed.is_some_and(|l| {
-            l.checked_add(1).expect("Overflow adding 1 to user nonce") != tx_nonce_check
+            l.checked_add(1).expect("Overflow adding 1 to user nonce") == tx_nonce_check
         }) {
-            tracing::error!("Sequencer nonce buffer: non-persisted tracking: marked failed to execute, tx whose nonce was non-consecutive with last known one");
+            self.last_successfully_executed = tx_nonce_check.checked_sub(1);
         }
-        self.last_successfully_executed = tx_nonce_check.checked_sub(1);
     }
 }
 
@@ -141,6 +162,7 @@ struct AddressQueue<S: Spec, Rt: Runtime<S>> {
 }
 
 impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
+    #[allow(dead_code)]
     fn has_contiguity_between(&self, starting_nonce: u64, tx_nonce: u64) -> bool {
         println!("Checking contiguity between starting {starting_nonce} and tx {tx_nonce}");
         let mut expected = starting_nonce;
@@ -184,6 +206,7 @@ enum NonceBufferInput<S: Spec, Rt: Runtime<S>> {
     // nonces have been persisted to state, the queue may now be cleaned up.
     TxPersisted {
         credential_id: CredentialId,
+        tx_nonce: u64
     },
     // Tx has been waiting in the queue until the timeout has hit. If the pre-requisite nonces have
     // not been queued yet, it may get evicted now.
@@ -326,7 +349,38 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     match determine_action(tx_nonce, user_nonce, self.maximum_future_nonce_delta) {
                         Action::Enqueue => {
                             println!("Determined action: Enqueue (for nonce {tx_nonce}, current user nonce: {user_nonce})");
-                            let old_tx = queue.txs.insert(
+                            // Replacement handling: if a tx with the same nonce is already in the
+                            // queue...
+                            //  * If it's the same tx (same hash): we reject the new request
+                            //  * If it was a different tx: we replace it with the new one, and
+                            //  send a rejection to the old one
+                            if let btree_map::Entry::Occupied(old_entry) = queue.txs.entry(tx_nonce) {
+                                let old_tx = old_entry.get();
+                                if old_tx.tx_hash == tx_hash {
+                                    let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
+                                            tx_hash,
+                                            tx_nonce,
+                                            user_nonce,
+                                            old_tx.nonce_when_queued,
+                                            old_tx.queued_at,
+                                            credential_id,
+                                            InvalidNonceReason::AlreadyQueued
+                                    ));
+                                    continue;
+                                } else {
+                                    let old_tx = old_entry.remove();
+                                    let _ = old_tx.result_sender.send(err_invalid_nonce::<S, Rt>(
+                                            old_tx.tx_hash,
+                                            tx_nonce,
+                                            user_nonce,
+                                            old_tx.nonce_when_queued,
+                                            old_tx.queued_at,
+                                            credential_id,
+                                            InvalidNonceReason::Replaced,
+                                    ));
+                                }
+                            }
+                            queue.txs.insert(
                                 tx_nonce,
                                 QueuedTx {
                                     baked_tx,
@@ -337,17 +391,6 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     result_sender,
                                 },
                             );
-                            if let Some(old_tx) = old_tx {
-                                let _ = old_tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                    tx_hash,
-                                    tx_nonce,
-                                    user_nonce,
-                                    old_tx.nonce_when_queued,
-                                    old_tx.queued_at,
-                                    credential_id,
-                                    InvalidNonceReason::Replaced,
-                                ));
-                            }
                             self.schedule_timeout(credential_id, tx_nonce, tx_hash);
                         }
                         Action::Execute => {
@@ -409,7 +452,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     let user_nonce = queue
                         .non_persisted
                         .user_nonce()
-                        .unwrap_or(0); // The only way the nonce can be Nonce is if we called
+                        .unwrap_or(0); // The only way the nonce can be None is if we called
                                        // mark_inflight_execution_failed(), it tried to set
                                        // last_executed to tx_nonce.checked_sub(1) but tx_nonce was
                                        // 0.
@@ -423,7 +466,10 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 // Stale transaction in queue - evict and ignore.
                                 // This should not normally happen either, but we handle it to avoid a deadlock
                                 // if it does happen for any reason.
+                                let msg = format!("The nonce buffer task evicted a stale transaction for user {} with nonce {}; the user's current nonce is believed to be {user_nonce}. Stale transactions should not exist in the nonce buffer.", credential_id, head_entry.key());
                                 head_entry.remove();
+                                tracing::error!(msg);
+                                debug_assert!(false, "{msg}");
                                 continue;
                             }
                             Ordering::Greater => {
@@ -451,19 +497,16 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                         }
                     }
                 }
-                NonceBufferInput::TxPersisted { credential_id } => {
+                NonceBufferInput::TxPersisted { credential_id, tx_nonce } => {
                     let hash_map::Entry::Occupied(entry) = self.buffers.entry(credential_id) else {
                         continue;
                     };
                     if entry.get().txs.is_empty() {
-                        let real_nonce = self
-                            .execution_backend
-                            .get_current_nonce_for_user(&credential_id);
                         if entry
                             .get()
                             .non_persisted
                             .user_nonce_to_use_as_prerequisite_start()
-                            .is_none_or(|n| n <= real_nonce)
+                            .is_none_or(|n| n <= tx_nonce)
                         {
                             entry.remove();
                         }
@@ -475,22 +518,29 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     tx_hash,
                 } => {
                     let queue = self.buffers.entry(credential_id).or_default();
-                    let state_nonce = self
-                        .execution_backend
-                        .get_current_nonce_for_user(&credential_id);
                     let user_nonce_for_prerequisites = queue
                         .non_persisted
                         .user_nonce_to_use_as_prerequisite_start()
-                        .unwrap_or(state_nonce);
-                    if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
-                        self.schedule_timeout(credential_id, tx_nonce, tx_hash);
-                    } else {
-                        match queue.txs.entry(tx_nonce) {
-                            // If the hash doesn't match, it means the tx has been replaced. The
-                            // `result_sender` is for the new tx and we shouldn't notify it.
-                            btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
-                                let tx = entry.remove();
-                                let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
+                        .unwrap_or_else(|| {
+                            self
+                                .execution_backend
+                                .get_current_nonce_for_user(&credential_id)
+                        });
+                    // Pre-requisite checks have been disabled to simplify.
+                    // See the comments in the methods on NonPersisted for extra improvements on
+                    // transactions with identical nonces that will make pre-requisite checks work
+                    // reliably; additionally a time bound on execution would be needed (e.g. retry
+                    // limit).
+                    //
+                    // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
+                    //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
+                    // }
+                    match queue.txs.entry(tx_nonce) {
+                        // If the hash doesn't match, it means the tx has been replaced. The
+                        // `result_sender` is for the new tx and we shouldn't notify it.
+                        btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
+                            let tx = entry.remove();
+                            let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
                                     user_nonce_for_prerequisites,
@@ -498,10 +548,9 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     tx.queued_at,
                                     credential_id,
                                     InvalidNonceReason::Timeout,
-                                ));
-                            }
-                            _ => (),
+                            ));
                         }
+                        _ => (),
                     }
                 }
             }
@@ -584,10 +633,10 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         })
     }
 
-    pub async fn mark_tx_persisted(&self, credential_id: CredentialId) {
+    pub async fn mark_tx_persisted(&self, credential_id: CredentialId, tx_nonce: u64) {
         let _ = self
             .buffer_sender_channel
-            .send(NonceBufferInput::TxPersisted { credential_id })
+            .send(NonceBufferInput::TxPersisted { credential_id, tx_nonce })
             .await;
     }
 }
@@ -607,6 +656,8 @@ enum InvalidNonceReason {
     /// The nonce was queued for execution, but a new transaction with the same nonce arrived
     /// before it could be executed.
     Replaced,
+    /// The same transaction (with the same nonce AND hash) is already in the queue.
+    AlreadyQueued,
 }
 
 /// Helper function to create an invalid nonce error
@@ -622,9 +673,10 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
     let was_queued_msg = format!("The sequencer queued the transaction for reordering {} ms ago, when the user's nonce was {nonce_when_queued}.", instant_queued.elapsed().as_millis());
     let queue_error_msg = match queue_rejection_reason {
         InvalidNonceReason::Invalid => "The sequencer did not attempt to queue the transaction as it was not within valid queue limits (either in the past, or beyond the max limit).".to_string(),
-        InvalidNonceReason::Timeout => format!("{was_queued_msg} In that time, the sequencer did not receive all the transactions leading up to this tx's nonce, so it has timed out and is being evicted from the queue."),
+        InvalidNonceReason::Timeout => format!("{was_queued_msg} In that time, the sequencer did not accept all the transactions leading up to this tx's nonce, so it has timed out and is being evicted from the queue."),
         InvalidNonceReason::EvictedBeforeExecution => format!("{was_queued_msg} It was now dropped from the queue for an unknown reason. This should normally only happen when the sequencer is shutting down."),
         InvalidNonceReason::Replaced => format!("{was_queued_msg} But a new transaction with the same nonce has arrived and replaced it in the account's queue."),
+        InvalidNonceReason::AlreadyQueued => format!("An identical transaction with the same hash is already in the nonce queue; its existing status is unchanged from this request. {was_queued_msg}"),
     };
     let error_msg = format!(
         "Tx bad nonce for credential id: {credential_id}, expected: {expected_nonce}, but found: {tx_nonce}. {queue_error_msg}"
@@ -681,10 +733,6 @@ mod tests {
             original_tx_queue_id: 0,
             result_sender: sender,
         }
-    }
-
-    fn nonce_from_queued_tx(tx: &QueuedTx<TestSpec, TestRuntime>) -> u8 {
-        *tx.baked_tx.data.first().unwrap()
     }
 
     #[test]
@@ -1083,6 +1131,7 @@ mod tests {
                                                 InvalidNonceReason::Timeout => "has timed out and is being evicted",
                                                 InvalidNonceReason::EvictedBeforeExecution => "dropped from the queue for an unknown reason",
                                                 InvalidNonceReason::Replaced => "new transaction with the same nonce has arrived and replaced it",
+                                                InvalidNonceReason::AlreadyQueued => "identical transaction with the same hash",
                                             };
                                             assert!(
                                                 msg.contains(expected_substring),
@@ -1223,7 +1272,10 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 4);
     }
 
+    /// Ignored because pre-requisite checks are disabled, so transactions will timeout
+    /// immediately.
     #[tokio::test]
+    #[ignore]
     async fn test_queued_tx_timeout_loops_if_all_prerequisites_present() {
         // Timeout longer than execution delay but shorter than total time to execute all
         // transactions, to ensure we hit the timeout loop
@@ -1267,7 +1319,9 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
+    /// Ignored because pre-requisite checks are disabled, so tx 1 will time out immediately.
     #[tokio::test]
+    #[ignore]
     async fn test_non_persisted_nonce_tracking_slow_execution() {
         // This test verifies that the queue avoids evicting transactions if a current one is
         // executing. Similar to the db timeout test.
@@ -1288,7 +1342,9 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
+    /// Ignored because pre-requisite checks are disabled, so tx 1 will time out immediately.
     #[tokio::test]
+    #[ignore]
     async fn test_non_persisted_nonce_tracking_slow_execution_with_rejection() {
         // This test verifies correct behaviour if a transaction arrives while the previous one is
         // in-flight, and then the previous one rejects.
@@ -1329,6 +1385,31 @@ mod tests {
         assert_on_results(
             results,
             vec![Outcome::Ok, Outcome::Err(InvalidNonceReason::Replaced), Outcome::Ok],
+        ).await;
+        assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
+        assert_eq!(get_test_nonce(&backend), 2);
+    }
+
+    #[tokio::test]
+    async fn test_replacement_with_same_hash() {
+        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout to avoid timeouts
+
+        let handle_0 = submit_single_transaction(sender.clone(), 0).await;
+        // Tx 0 is now executing slowly
+
+        // Submit tx 1a (will be queued)
+        let handle_1a = submit_single_transaction(sender.clone(), 1).await;
+
+        // Submit tx 1b with same nonce and same hash
+        let handle_1b = submit_single_transaction(sender.clone(), 1).await;
+
+        // Wait for all to complete
+        let results = collect_results(vec![handle_0, handle_1a, handle_1b]).await;
+
+        assert_on_results(
+            results,
+            vec![Outcome::Ok, Outcome::Ok, Outcome::Err(InvalidNonceReason::AlreadyQueued)],
         ).await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);

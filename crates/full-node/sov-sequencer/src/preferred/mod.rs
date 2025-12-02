@@ -646,13 +646,12 @@ where
 
         let tx_len = baked_tx.data.len();
 
-        #[allow(unused)]
-        let (outer_res, is_nonce_based) = match uniqueness {
+        let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (
                 self.synchronized_state_updator
                     .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
                     .await,
-                false,
+                None,
             ),
             UniquenessData::Nonce(tx_nonce) => (
                 self.nonce_buffer_input
@@ -664,7 +663,7 @@ where
                         original_tx_queue_id,
                     )
                     .await,
-                true,
+                Some(tx_nonce),
             ),
         };
 
@@ -684,9 +683,9 @@ where
             Ok(rx) => {
                 let result = rx.await.map_err(database_error_500)?;
                 // After DB persistence completes, notify the nonce queue so it can clean up if needed
-                if is_nonce_based {
+                if let Some(tx_nonce) = nonce_to_mark_persisted {
                     self.nonce_buffer_input
-                        .mark_tx_persisted(credential_id)
+                        .mark_tx_persisted(credential_id, tx_nonce)
                         .await;
                 }
                 Ok(result)
