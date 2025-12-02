@@ -1,21 +1,28 @@
-use std::net::SocketAddr;
-
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
+use axum::extract::Request;
 use axum::http::StatusCode;
+use axum::middleware::Next;
+use axum::response::IntoResponse;
 use axum::ServiceExt;
-use jsonrpsee::server::ServerConfig;
+use jsonrpsee::server::{
+    stop_channel, ServerBuilder, ServerConfig, ServerHandle, StopHandle, TowerService,
+};
+use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
+use sov_metrics::{track_metrics, HttpMetrics};
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
-use tower_layer::Layer;
-use ws::ws_rpc_handler;
+use tower_layer::{Identity, Layer};
 
-mod ws;
-
+use crate::http::id_provider::HexIdProvider;
 use crate::CorsConfiguration;
+mod id_provider;
 
 pub(crate) async fn start_http_server(
     listen_address_http: &SocketAddr,
@@ -23,12 +30,11 @@ pub(crate) async fn start_http_server(
     methods: RpcModule<()>,
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
-) -> anyhow::Result<(tokio::task::JoinHandle<anyhow::Result<()>>, SocketAddr)> {
-    let listener = tokio::net::TcpListener::bind(listen_address_http).await?;
+) -> anyhow::Result<(JoinHandle<anyhow::Result<()>>, SocketAddr)> {
+    let listener = TcpListener::bind(listen_address_http).await?;
     let rest_address = listener.local_addr()?;
 
-    let (rpc_router, server_handle) =
-        rpc_module_to_router(methods, cors_configuration, shutdown_receiver.clone());
+    let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
 
     let handle = tokio::spawn(async move {
         tracing::info!(%rest_address, "Starting HTTP server");
@@ -60,7 +66,6 @@ pub(crate) async fn start_http_server(
 
         result
     });
-
     Ok((handle, rest_address))
 }
 
@@ -68,56 +73,61 @@ pub(crate) async fn start_http_server(
 pub fn rpc_module_to_router(
     methods: RpcModule<()>,
     cors_config: CorsConfiguration,
-    shutdown_receiver: watch::Receiver<()>,
-) -> (axum::Router, jsonrpsee::server::ServerHandle) {
-    let (stop_handle, server_handle) = jsonrpsee::server::stop_channel();
-
-    // TODO: Into config.toml
-    let config = ServerConfig::builder()
-        .max_connections(10_000)
-        .max_subscriptions_per_connection(100)
-        .build();
-    let rpc_service = jsonrpsee::server::ServerBuilder::with_config(config)
-        .to_service_builder()
-        .build(methods.clone(), stop_handle);
-
-    let rpc_service = tower::ServiceBuilder::new()
-        .layer(HandleErrorLayer::new(|error: BoxError| async move {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                jsonrpsee::types::error::ErrorObject::owned(
-                    jsonrpsee::types::error::ErrorCode::InternalError.code(),
-                    error.to_string(),
-                    None::<String>,
-                )
-                .to_string(),
-            )
-        }))
-        .service(rpc_service);
-
+) -> (axum::Router, ServerHandle) {
+    let (stop_handle, server_handle) = stop_channel();
     let cors_layer = match cors_config {
         CorsConfiguration::Permissive => CorsLayer::permissive(),
         // New does not set any CORS headers
         CorsConfiguration::Restrictive => CorsLayer::new(),
     };
+    let ws_service = ws_service(methods.clone(), stop_handle.clone());
+    let http_service = http_service(methods, stop_handle);
+    let error_layer = HandleErrorLayer::new(|error: BoxError| async move {
+        let error = ErrorObject::owned(
+            ErrorCode::InternalError.code(),
+            error.to_string(),
+            None::<()>,
+        );
+        (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+    });
 
-    (
-        axum::Router::new().route(
-            "/",
-            axum::routing::get(move |ws_upgrade| {
-                ws_rpc_handler(ws_upgrade, methods.clone(), shutdown_receiver)
-            })
-            .post_service(rpc_service)
-            .layer(cors_layer),
-        ),
-        server_handle,
-    )
+    let http_service = error_layer.layer(http_service);
+    let ws_service = error_layer.layer(ws_service);
+
+    let router = axum::routing::get_service(ws_service)
+        .post_service(http_service)
+        .layer(cors_layer);
+    (axum::Router::new().route("/", router), server_handle)
 }
 
-async fn measure_time(
-    req: axum::extract::Request,
-    next: axum::middleware::Next,
-) -> impl axum::response::IntoResponse {
+fn http_service(
+    methods: RpcModule<()>,
+    stop_handle: StopHandle,
+) -> TowerService<Identity, Identity> {
+    // TODO: Into config.toml
+    let config = ServerConfig::builder()
+        .http_only()
+        .max_connections(10_000)
+        .build();
+    ServerBuilder::with_config(config)
+        .to_service_builder()
+        .build(methods, stop_handle)
+}
+
+fn ws_service(methods: RpcModule<()>, stop_handle: StopHandle) -> TowerService<Identity, Identity> {
+    // TODO: Into config.toml
+    let config = ServerConfig::builder()
+        .set_id_provider(HexIdProvider::default())
+        .ws_only()
+        .max_connections(10_000)
+        .max_subscriptions_per_connection(100)
+        .build();
+    ServerBuilder::with_config(config)
+        .to_service_builder()
+        .build(methods, stop_handle)
+}
+
+async fn measure_time(req: Request, next: Next) -> impl IntoResponse {
     let method = req.method().clone();
     let uri = req.uri().clone();
 
@@ -131,8 +141,8 @@ async fn measure_time(
     let size_hint = body.size_hint();
     let exact_or_lower = size_hint.exact().unwrap_or_else(|| size_hint.lower());
 
-    sov_metrics::track_metrics(|tracker| {
-        let point = sov_metrics::HttpMetrics {
+    track_metrics(|tracker| {
+        let point = HttpMetrics {
             request_method: method,
             request_uri: uri,
             response_status: status,
@@ -299,15 +309,12 @@ mod tests {
             ))
             .await?;
 
-        // Read binary response
+        // jsonrpsee accepts binary frames but responds in text format: https://github.com/paritytech/jsonrpsee/pull/374
         let response = read.next().await.expect("No response")?;
-        match response {
-            TungsteniteMessage::Binary(data) => {
-                let response_text = std::str::from_utf8(&data)?;
-                assert!(response_text.contains("\"result\":\"hi\""));
-            }
-            _ => panic!("Expected binary response, got: {response:?}"),
-        }
+        let TungsteniteMessage::Text(response) = response else {
+            panic!("Expected text response, got: {response:?}");
+        };
+        assert!(response.contains("\"result\":\"hi\""));
 
         shutdown_sender.send(())?;
         Ok(())
