@@ -52,6 +52,10 @@ impl<S: Spec> ResourceUsed<S> {
 
         Ok(())
     }
+
+    fn clear(&mut self) {
+        *self = Self::zero()
+    }
 }
 
 struct Throttler<S: Spec> {
@@ -78,7 +82,7 @@ impl<S: Spec> Throttler<S> {
     ) -> Result<(), ResourceLimitExceededError> {
         if &now.duration_since(self.window_start) >= window {
             self.window_start = now;
-            self.total_resource_used = ResourceUsed::zero();
+            self.total_resource_used.clear();
         }
 
         // Q should we self.total_resource_used.combine(used_resources); before allow
@@ -101,7 +105,7 @@ pub struct RateLimiter<K, S: Spec> {
     max_resources: ResourceUsed<S>,
     window: Duration,
 
-    // If we want to make it work outside sync section use moka-rs
+    // If we want to make it work outside sync section use mini_moka or mini_moka::unsync::Cache
     ttl: Duration,
     queue: BTreeSet<(Instant, K)>,
     // TODO Do we need this?
@@ -182,6 +186,7 @@ impl<K: Ord + Hash + Clone, S: Spec> RateLimiter<K, S> {
     }
 }
 
+// TODO Addr/IP whitelist?
 struct RollupRateLimiter<S: Spec> {
     by_credential: RateLimiter<CredentialId, S>,
     by_ip: RateLimiter<IpAddr, S>,
