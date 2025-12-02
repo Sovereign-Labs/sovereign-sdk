@@ -21,7 +21,7 @@ use crate::{alloy_ws_client, derive_worker_key};
 
 /// Spawns multiple log test workers, runs them, and retrieves all generated logs.
 pub async fn run_logs_test(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     private_key: &str,
     tx_count: usize,
     logs_per_tx: usize,
@@ -31,7 +31,7 @@ pub async fn run_logs_test(
     validate_worker_count(num_workers)?;
     // Set up root account and fund workers
     let root_signer: PrivateKeySigner = private_key.parse()?;
-    let root_client = alloy_ws_client(rpc_addr, root_signer.clone()).await?;
+    let root_client = alloy_ws_client(rpc_addr.clone(), root_signer.clone()).await?;
     fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
 
     let ((logs_count, logs_time), (stream_count, stream_time)) = match mode {
@@ -42,7 +42,7 @@ pub async fn run_logs_test(
                 .await?;
             let expected_count = tx_count * logs_per_tx * num_workers;
             try_join!(
-                produce_logs(rpc_addr, private_key, num_workers, tx_count, logs_per_tx),
+                produce_logs(rpc_addr.clone(), private_key, num_workers, tx_count, logs_per_tx),
                 stream_logs(subscription, expected_count)
             )
         }
@@ -61,7 +61,7 @@ pub async fn run_logs_test(
 }
 
 async fn produce_logs(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     private_key: &str,
     num_workers: usize,
     tx_count: usize,
@@ -71,7 +71,7 @@ async fn produce_logs(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone())?;
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match LogsSoakTest::new(client, worker_idx).await {

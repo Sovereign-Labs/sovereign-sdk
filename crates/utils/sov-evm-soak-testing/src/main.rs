@@ -29,7 +29,7 @@ const MAX_WORKERS: usize = 255;
 struct Args {
     /// RPC address
     #[arg(short, long, default_value = "127.0.0.1:12348")]
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
 
     /// Private key for signing transactions
     #[arg(
@@ -130,8 +130,8 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
 }
 
 /// Creates an Alloy HTTP client connected to the specified RPC server.
-pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Result<DynProvider> {
-    let url = Url::parse(&format!("http://{rpc_addr}/rpc"))?;
+pub(crate) fn alloy_client(rpc_addr: String, signer: PrivateKeySigner) -> Result<DynProvider> {
+    let url = Url::parse(&format!("{rpc_addr}/rpc"))?;
     let client = ProviderBuilder::new()
         .wallet(signer)
         .connect_http(url)
@@ -141,7 +141,7 @@ pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Re
 
 /// Creates an Alloy WS client connected to the specified RPC server.
 pub(crate) async fn alloy_ws_client(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     signer: PrivateKeySigner,
 ) -> Result<DynProvider> {
     let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
@@ -167,7 +167,7 @@ fn validate_worker_count(num_workers: usize) -> Result<()> {
 
 /// Spawns multiple Uniswap test workers and waits for them to complete.
 async fn run_uniswap_test(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     private_key: &str,
     count: usize,
     num_workers: usize,
@@ -177,7 +177,7 @@ async fn run_uniswap_test(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone())?;
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match UniSoakTest::new(client, signer.address()).await {
@@ -226,7 +226,7 @@ async fn fund_worker_accounts(
 }
 
 /// Runs the SimpleStorage soak test.
-async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
+async fn run_simple_storage_test(rpc_addr: String, private_key: &str) -> Result<()> {
     let signer: PrivateKeySigner = private_key.parse()?;
     let client = alloy_client(rpc_addr, signer)?;
     simple_storage::run(client).await
@@ -234,7 +234,7 @@ async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Res
 
 /// Runs the StateWriter soak test.
 async fn run_state_writer_test(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     private_key: &str,
     tx_count: usize,
     writes_per_tx: usize,
@@ -246,7 +246,7 @@ async fn run_state_writer_test(
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
         let address = signer.address();
-        let client = alloy_client(rpc_addr, signer.clone())?;
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
         let tx_sender = tx.clone();
 
         handles.push(tokio::spawn(async move {
@@ -290,14 +290,14 @@ async fn run_state_writer_test(
 
 /// Runs the StateWriter soak test.
 async fn run_transfer_test(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     private_key: &str,
     tx_count: usize,
     num_workers: usize,
 ) -> Result<()> {
     let funding_signer: PrivateKeySigner = "0x0d87c12ea7c12024b3f70a26d735874608f17c8bce2b48e6fe87389310191264".parse()?;
     let funding_address = funding_signer.address();
-    let funding_client = alloy_client(rpc_addr, funding_signer.clone())?;
+    let funding_client = alloy_client(rpc_addr.clone(), funding_signer.clone())?;
     let funding_client_nonce = funding_client.get_transaction_count(funding_address).await?;
     transfer::FUNDING_CLIENT_NONCE.store(funding_client_nonce, std::sync::atomic::Ordering::SeqCst);
 
@@ -307,7 +307,7 @@ async fn run_transfer_test(
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
         let address = signer.address();
         tracing::info!("Worker {worker_idx} address: {address}");
-        let client = alloy_client(rpc_addr, signer.clone())?;
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
         let tx_sender = tx.clone();
         let funding_client = funding_client.clone();
        
