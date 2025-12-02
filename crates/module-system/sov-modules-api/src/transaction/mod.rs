@@ -17,10 +17,7 @@ use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
 use sov_universal_wallet::schema::UniversalWallet;
 use thiserror::Error;
-pub use types::{
-    v0::Version0,
-    v1::{PubKeyAndSignature, Version1},
-};
+pub use types::{v0::Version0, v1::Version1};
 pub use unsigned::UnsignedTransaction;
 
 use crate::capabilities::UniquenessData;
@@ -45,6 +42,33 @@ pub trait TransactionCallable {
 
 impl<D: DispatchCall> TransactionCallable for D {
     type Call = D::Decodable;
+}
+
+#[derive(
+    derive_more::Debug,
+    Clone,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+    UniversalWallet,
+    PartialEq,
+    Eq,
+)]
+#[serde(bound = "C: CryptoSpecExt")]
+/// A signature and public key pair.
+pub struct PubKeyAndSignature<C: CryptoSpecExt> {
+    /// The signature.
+    pub signature: C::Signature,
+    /// The public key
+    pub pub_key: C::PublicKey,
+}
+
+impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
+    /// Returns a reference to the public key.
+    pub fn key(&self) -> &C::PublicKey {
+        &self.pub_key
+    }
 }
 
 #[derive(

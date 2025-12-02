@@ -1,8 +1,7 @@
-use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
-use crate::transaction::{Credentials, Transaction, TransactionCallable, TxDetails};
-use crate::{CryptoSpecExt, GasMeter, GasSpec, Multisig, Spec, TxHash};
+use crate::capabilities::UniquenessData;
+use crate::transaction::{PubKeyAndSignature, Transaction, TransactionCallable, TxDetails};
+use crate::{CryptoSpecExt, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
-use derivative::Derivative;
 use sov_rollup_interface::common::SafeVec;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
@@ -16,42 +15,10 @@ pub const MAX_SIGNERS: usize = 21;
     derive_more::Debug,
     Clone,
     borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    serde::Serialize,
-    serde::Deserialize,
-    UniversalWallet,
-    PartialEq,
-    Eq,
-)]
-#[serde(bound = "C: CryptoSpecExt")]
-/// A signature and public key pair.
-pub struct PubKeyAndSignature<C: CryptoSpecExt> {
-    /// The signature.
-    pub signature: C::Signature,
-    /// The public key
-    pub pub_key: C::PublicKey,
-}
-
-impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
-    /// Returns a reference to the public key.
-    pub fn key(&self) -> &C::PublicKey {
-        &self.pub_key
-    }
-}
-
-#[derive(
-    derive_more::Debug,
-    Clone,
-    Derivative,
-    borsh::BorshDeserialize,
     serde::Serialize,
     serde::Deserialize,
     borsh::BorshSerialize,
     UniversalWallet,
-)]
-#[derivative(
-    PartialEq(bound = "Call: PartialEq + Eq"),
-    Eq(bound = "Call: PartialEq + Eq")
 )]
 #[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// A V1 (multisig) transaction. The number of signers is capped at 10.
@@ -136,37 +103,6 @@ impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
     /// Checks if enough signers have signed the transaction for it to be valid.
     pub fn is_fully_signed(&self) -> bool {
         self.signatures.len() >= self.min_signers as usize
-    }
-
-    /// Extracts authorization data from this transaction.
-    pub fn auth_data<M: GasMeter<Spec = S>>(
-        &self,
-        raw_tx_hash: TxHash,
-        meter: &mut M,
-    ) -> Result<AuthorizationData<S>, AuthenticationError> {
-        // Charge gas; We charge for credential ID calculation based on the number of keys in the multisig
-        let num_signatures = (self.signatures.len() + self.unused_pub_keys.len()) as u32;
-        meter
-            .charge_linear_gas(S::gas_to_charge_for_credential(), num_signatures)
-            .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
-
-        // Calculate credential ID as hash(min_signers || sorted(pub_keys))
-        let pub_keys = self
-            .signatures
-            .iter()
-            .map(|s| s.pub_key.clone())
-            .chain(self.unused_pub_keys.iter().cloned())
-            .collect::<Vec<_>>();
-        let multisig = Multisig::new(self.min_signers, pub_keys);
-        let credential_id = multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
-
-        Ok(AuthorizationData {
-            uniqueness: self.uniqueness,
-            tx_hash: raw_tx_hash,
-            credential_id,
-            credentials: Credentials::new(multisig),
-            default_address: credential_id.into(),
-        })
     }
 }
 
