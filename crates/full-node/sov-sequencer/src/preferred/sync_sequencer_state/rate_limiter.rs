@@ -48,7 +48,7 @@ impl<S: Spec> ResourceUsed<S> {
             todo!()
         }
 
-        //if self.gas_used.dim_is_less_than(other.gas_used) {}
+        //if !self.gas_used.dim_is_less_than(other.gas_used) {}
 
         Ok(())
     }
@@ -101,6 +101,7 @@ pub struct RateLimiter<K, S: Spec> {
     max_resources: ResourceUsed<S>,
     window: Duration,
 
+    // If we want to make it work outside sync section use moka-rs
     ttl: Duration,
     queue: BTreeSet<(Instant, K)>,
     // TODO Do we need this?
@@ -148,6 +149,7 @@ impl<K: Ord + Hash + Clone, S: Spec> RateLimiter<K, S> {
             }
         }
     }
+
     fn allow(
         &mut self,
         key: K,
