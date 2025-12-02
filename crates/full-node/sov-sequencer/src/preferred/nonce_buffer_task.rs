@@ -8,8 +8,8 @@ use sov_rollup_interface::{crypto::CredentialId, TxHash};
 use std::cmp::Ordering;
 use std::collections::btree_map;
 use std::collections::hash_map;
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -71,7 +71,7 @@ impl NonPersistedTxs {
     /// I.e. if the queue contains contiguous transactions following this nonce up to some nonce N,
     /// then transactions up to N should not be evicted on timeout.
     fn user_nonce_to_use_as_prerequisite_start(&self) -> Option<u64> {
-        let res = match self.has_in_flight {
+        match self.has_in_flight {
             true => Some(
                 self.user_nonce()
                     .unwrap_or(0)
@@ -79,9 +79,7 @@ impl NonPersistedTxs {
                     .expect("Overflow adding 1 to user nonce"),
             ),
             false => self.user_nonce(),
-        };
-        println!("NonPersisted: self is {self:?}; got prereq start nonce {res:?}");
-        res
+        }
     }
 
     fn mark_inflight(&mut self, tx_nonce_check: u64) {
@@ -164,7 +162,6 @@ struct AddressQueue<S: Spec, Rt: Runtime<S>> {
 impl<S: Spec, Rt: Runtime<S>> AddressQueue<S, Rt> {
     #[allow(dead_code)]
     fn has_contiguity_between(&self, starting_nonce: u64, tx_nonce: u64) -> bool {
-        println!("Checking contiguity between starting {starting_nonce} and tx {tx_nonce}");
         let mut expected = starting_nonce;
         for &nonce in self.txs.keys() {
             if nonce >= tx_nonce {
@@ -206,7 +203,7 @@ enum NonceBufferInput<S: Spec, Rt: Runtime<S>> {
     // nonces have been persisted to state, the queue may now be cleaned up.
     TxPersisted {
         credential_id: CredentialId,
-        tx_nonce: u64
+        tx_nonce: u64,
     },
     // Tx has been waiting in the queue until the timeout has hit. If the pre-requisite nonces have
     // not been queued yet, it may get evicted now.
@@ -328,7 +325,6 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 
     async fn run(&mut self) {
         while let Some(input) = self.buffer_input.recv().await {
-            println!("Nonce buffer task processing input {input:?}");
             match input {
                 NonceBufferInput::NewTx {
                     credential_id,
@@ -344,39 +340,38 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                         self.execution_backend
                             .get_current_nonce_for_user(&credential_id)
                     });
-                    println!("User nonce during NewTx: {user_nonce}, for tx nonce: {tx_nonce}");
 
                     match determine_action(tx_nonce, user_nonce, self.maximum_future_nonce_delta) {
                         Action::Enqueue => {
-                            println!("Determined action: Enqueue (for nonce {tx_nonce}, current user nonce: {user_nonce})");
                             // Replacement handling: if a tx with the same nonce is already in the
                             // queue...
                             //  * If it's the same tx (same hash): we reject the new request
                             //  * If it was a different tx: we replace it with the new one, and
                             //  send a rejection to the old one
-                            if let btree_map::Entry::Occupied(old_entry) = queue.txs.entry(tx_nonce) {
+                            if let btree_map::Entry::Occupied(old_entry) = queue.txs.entry(tx_nonce)
+                            {
                                 let old_tx = old_entry.get();
                                 if old_tx.tx_hash == tx_hash {
                                     let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
-                                            tx_hash,
-                                            tx_nonce,
-                                            user_nonce,
-                                            old_tx.nonce_when_queued,
-                                            old_tx.queued_at,
-                                            credential_id,
-                                            InvalidNonceReason::AlreadyQueued
+                                        tx_hash,
+                                        tx_nonce,
+                                        user_nonce,
+                                        old_tx.nonce_when_queued,
+                                        old_tx.queued_at,
+                                        credential_id,
+                                        InvalidNonceReason::AlreadyQueued,
                                     ));
                                     continue;
                                 } else {
                                     let old_tx = old_entry.remove();
                                     let _ = old_tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                            old_tx.tx_hash,
-                                            tx_nonce,
-                                            user_nonce,
-                                            old_tx.nonce_when_queued,
-                                            old_tx.queued_at,
-                                            credential_id,
-                                            InvalidNonceReason::Replaced,
+                                        old_tx.tx_hash,
+                                        tx_nonce,
+                                        user_nonce,
+                                        old_tx.nonce_when_queued,
+                                        old_tx.queued_at,
+                                        credential_id,
+                                        InvalidNonceReason::Replaced,
                                     ));
                                 }
                             }
@@ -394,7 +389,6 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                             self.schedule_timeout(credential_id, tx_nonce, tx_hash);
                         }
                         Action::Execute => {
-                            println!("Determined action: Execute (for nonce {tx_nonce}, current user nonce: {user_nonce})");
                             queue.non_persisted.mark_inflight(tx_nonce);
                             let input_sender = self.input_sender.clone();
                             let backend = self.execution_backend.clone();
@@ -419,7 +413,6 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                             });
                         }
                         Action::Reject => {
-                            println!("Determined action: Reject (for nonce {tx_nonce}, current user nonce: {user_nonce})");
                             let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
                                 tx_hash,
                                 tx_nonce,
@@ -449,14 +442,10 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 
                     let _ = result_sender.send(tx_result); // If the receiver was dropped, ignore
 
-                    let user_nonce = queue
-                        .non_persisted
-                        .user_nonce()
-                        .unwrap_or(0); // The only way the nonce can be None is if we called
-                                       // mark_inflight_execution_failed(), it tried to set
-                                       // last_executed to tx_nonce.checked_sub(1) but tx_nonce was
-                                       // 0.
-                    println!("\nAfter execution, next nonce being queued is {user_nonce}");
+                    let user_nonce = queue.non_persisted.user_nonce().unwrap_or(0); // The only way the nonce can be None is if we called
+                                                                                    // mark_inflight_execution_failed(), it tried to set
+                                                                                    // last_executed to tx_nonce.checked_sub(1) but tx_nonce was
+                                                                                    // 0.
                     loop {
                         let Some(head_entry) = queue.txs.first_entry() else {
                             break;
@@ -497,19 +486,21 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                         }
                     }
                 }
-                NonceBufferInput::TxPersisted { credential_id, tx_nonce } => {
+                NonceBufferInput::TxPersisted {
+                    credential_id,
+                    tx_nonce,
+                } => {
                     let hash_map::Entry::Occupied(entry) = self.buffers.entry(credential_id) else {
                         continue;
                     };
-                    if entry.get().txs.is_empty() {
-                        if entry
+                    if entry.get().txs.is_empty()
+                        && entry
                             .get()
                             .non_persisted
                             .user_nonce_to_use_as_prerequisite_start()
                             .is_none_or(|n| n <= tx_nonce)
-                        {
-                            entry.remove();
-                        }
+                    {
+                        entry.remove();
                     }
                 }
                 NonceBufferInput::TxTimedOut {
@@ -522,8 +513,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                         .non_persisted
                         .user_nonce_to_use_as_prerequisite_start()
                         .unwrap_or_else(|| {
-                            self
-                                .execution_backend
+                            self.execution_backend
                                 .get_current_nonce_for_user(&credential_id)
                         });
                     // Pre-requisite checks have been disabled to simplify.
@@ -541,13 +531,13 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                         btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
                             let tx = entry.remove();
                             let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                    tx_hash,
-                                    tx_nonce,
-                                    user_nonce_for_prerequisites,
-                                    tx.nonce_when_queued,
-                                    tx.queued_at,
-                                    credential_id,
-                                    InvalidNonceReason::Timeout,
+                                tx_hash,
+                                tx_nonce,
+                                user_nonce_for_prerequisites,
+                                tx.nonce_when_queued,
+                                tx.queued_at,
+                                credential_id,
+                                InvalidNonceReason::Timeout,
                             ));
                         }
                         _ => (),
@@ -636,7 +626,10 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
     pub async fn mark_tx_persisted(&self, credential_id: CredentialId, tx_nonce: u64) {
         let _ = self
             .buffer_sender_channel
-            .send(NonceBufferInput::TxPersisted { credential_id, tx_nonce })
+            .send(NonceBufferInput::TxPersisted {
+                credential_id,
+                tx_nonce,
+            })
             .await;
     }
 }
@@ -720,7 +713,10 @@ mod tests {
         create_mock_queued_tx_with_hash(nonce, [nonce; 32])
     }
 
-    fn create_mock_queued_tx_with_hash(nonce: u8, hash: [u8; 32]) -> QueuedTx<TestSpec, TestRuntime> {
+    fn create_mock_queued_tx_with_hash(
+        nonce: u8,
+        hash: [u8; 32],
+    ) -> QueuedTx<TestSpec, TestRuntime> {
         let (sender, _receiver) = oneshot::channel();
         QueuedTx {
             baked_tx: FullyBakedTx {
@@ -932,7 +928,6 @@ mod tests {
         ) -> TransactionReceiverResult<TestSpec, TestRuntime> {
             // Simulate execution delay (state transition time)
             if !self.execution_delay.is_zero() {
-                println!("TEST BACKEND sleeping for {}", self.execution_delay.as_millis());
                 tokio::time::sleep(self.execution_delay).await;
             }
 
@@ -1006,7 +1001,7 @@ mod tests {
                             },
                         },
                         tx_number: 0,
-                    }
+                    },
                 });
             });
 
@@ -1017,7 +1012,10 @@ mod tests {
     /// Helper to create a default task for tests that don't care about specific config
     /// Returns (sender, backend, _shutdown_sender) - the shutdown sender must be kept alive
     /// for the duration of the test or the task will exit immediately.
-    fn test_buffer_task(backend: &MockTxExecutionBackend, timeout_override: Option<u64>) -> (
+    fn test_buffer_task(
+        backend: &MockTxExecutionBackend,
+        timeout_override: Option<u64>,
+    ) -> (
         NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         watch::Sender<()>,
     ) {
@@ -1056,7 +1054,7 @@ mod tests {
     async fn submit_single_transaction_with_hash(
         sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         nonce: u8,
-        hash: [u8; 32]
+        hash: [u8; 32],
     ) -> JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>> {
         let to_queue = create_mock_queued_tx_with_hash(nonce, hash);
         let handle = tokio::spawn(async move {
@@ -1098,17 +1096,26 @@ mod tests {
         StfNonceReject(u8, u8),
     }
 
-    async fn assert_on_results(results: Vec<TransactionReceiverResult<TestSpec, TestRuntime>>, expected_outcomes: Vec<Outcome>) {
+    async fn assert_on_results(
+        results: Vec<TransactionReceiverResult<TestSpec, TestRuntime>>,
+        expected_outcomes: Vec<Outcome>,
+    ) {
         let mut results = results.into_iter();
         let expected_outcomes = expected_outcomes.into_iter();
 
         for (i, outcome) in expected_outcomes.enumerate() {
-            let result = results.next().expect("Test passed more expected outcomes than there were tx results");
+            let result = results
+                .next()
+                .expect("Test passed more expected outcomes than there were tx results");
             match outcome {
-                Outcome::Ok => assert!(result.unwrap().unwrap().await.is_ok(), "Expected tx {i} to succeed"),
+                Outcome::Ok => assert!(
+                    result.unwrap().unwrap().await.is_ok(),
+                    "Expected tx {i} to succeed"
+                ),
                 Outcome::Err(reason) => {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
-                    let err = inner.expect_err(&format!("Expected tx {i} to fail with nonce error"));
+                    let err =
+                        inner.expect_err(&format!("Expected tx {i} to fail with nonce error"));
 
                     // Pattern match to extract the error message
                     match err {
@@ -1144,9 +1151,11 @@ mod tests {
                                 other => panic!("Tx {i}: Expected Skipped receipt, got: {other:?}"),
                             }
                         }
-                        other => panic!("Tx {i}: Expected UnsuccessfulTransaction error, got: {other:?}"),
+                        other => {
+                            panic!("Tx {i}: Expected UnsuccessfulTransaction error, got: {other:?}")
+                        }
                     }
-                },
+                }
                 Outcome::Revert => {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
                     let err = inner.expect_err(&format!("Expected tx {i} to fail with rejection"));
@@ -1157,10 +1166,12 @@ mod tests {
                             AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                                 RollupBlockExecutorError::UnsuccessfulTransaction {
                                     receipt: TransactionReceipt {
-                                        receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
-                                            error: TxProcessingError::RejectedByPreFlight,
-                                            ..
-                                        }),
+                                        receipt: sov_rollup_interface::stf::TxEffect::Skipped(
+                                            SkippedTxContents {
+                                                error: TxProcessingError::RejectedByPreFlight,
+                                                ..
+                                            }
+                                        ),
                                         ..
                                     }
                                 },
@@ -1168,7 +1179,7 @@ mod tests {
                         ),
                         "Tx {i}: Expected RejectedByPreFlight rejection, got: {err:?}"
                     );
-                },
+                }
                 Outcome::StfNonceReject(expected, tx) => {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
                     let err = inner.expect_err(&format!("Expected tx {i} to fail with rejection"));
@@ -1196,10 +1207,12 @@ mod tests {
                     );
                 }
             }
-        };
-        assert!(results.next().is_none(), "Test passed more tx results than there were expected outcomes")
+        }
+        assert!(
+            results.next().is_none(),
+            "Test passed more tx results than there were expected outcomes"
+        );
     }
-
 
     /// Helper to collect results from JoinHandles
     async fn collect_results(
@@ -1221,7 +1234,15 @@ mod tests {
         let results = collect_results(handles).await;
 
         assert_eq!(backend.get_executed_nonces(), vec![5]);
-        assert_on_results(results, vec![Outcome::Err(InvalidNonceReason::Invalid), Outcome::Err(InvalidNonceReason::Invalid), Outcome::Ok]).await;
+        assert_on_results(
+            results,
+            vec![
+                Outcome::Err(InvalidNonceReason::Invalid),
+                Outcome::Err(InvalidNonceReason::Invalid),
+                Outcome::Ok,
+            ],
+        )
+        .await;
         assert_eq!(get_test_nonce(&backend), 6);
     }
 
@@ -1229,13 +1250,27 @@ mod tests {
     async fn test_rejects_too_far_future_nonce() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
 
-        let handles = submit_transactions(sender, vec![DEFAULT_TEST_MAX_QUEUE_SIZE as u8 + 1, DEFAULT_TEST_MAX_QUEUE_SIZE as u8]).await;
+        let handles = submit_transactions(
+            sender,
+            vec![
+                DEFAULT_TEST_MAX_QUEUE_SIZE as u8 + 1,
+                DEFAULT_TEST_MAX_QUEUE_SIZE as u8,
+            ],
+        )
+        .await;
         let results = collect_results(handles).await;
 
         assert!(backend.get_executed_nonces().is_empty());
         // First tx should have been rejected as invalid. Second one should be right at the limit
         // and so should have been queued (and timed out)
-        assert_on_results(results, vec![Outcome::Err(InvalidNonceReason::Invalid), Outcome::Err(InvalidNonceReason::Timeout)]).await;
+        assert_on_results(
+            results,
+            vec![
+                Outcome::Err(InvalidNonceReason::Invalid),
+                Outcome::Err(InvalidNonceReason::Timeout),
+            ],
+        )
+        .await;
         assert_eq!(get_test_nonce(&backend), 0);
     }
 
@@ -1247,7 +1282,16 @@ mod tests {
         let results = collect_results(handles).await;
 
         // Should have executed exactly 2 transactions (0 and 1), then stopped at gap
-        assert_on_results(results, vec![Outcome::Ok, Outcome::Ok, Outcome::Err(InvalidNonceReason::Timeout), Outcome::Err(InvalidNonceReason::Timeout)]).await;
+        assert_on_results(
+            results,
+            vec![
+                Outcome::Ok,
+                Outcome::Ok,
+                Outcome::Err(InvalidNonceReason::Timeout),
+                Outcome::Err(InvalidNonceReason::Timeout),
+            ],
+        )
+        .await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
     }
@@ -1279,7 +1323,8 @@ mod tests {
     async fn test_queued_tx_timeout_loops_if_all_prerequisites_present() {
         // Timeout longer than execution delay but shorter than total time to execute all
         // transactions, to ensure we hit the timeout loop
-        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
         let (sender, _shutdown) = test_buffer_task(&backend, Some(500));
 
         // Submit TXs with nonces 1-10 (all will queue)
@@ -1309,10 +1354,16 @@ mod tests {
         let backend = MockTxExecutionBackend::new().with_db_delay(Duration::from_millis(500)); // Slow DB
         let (sender, _shutdown) = test_buffer_task(&backend, Some(200)); // Queue times out faster than DB
 
-        let result_0 = submit_single_transaction(sender.clone(), 0).await.await.expect("JoinHandle panicked");
+        let result_0 = submit_single_transaction(sender.clone(), 0)
+            .await
+            .await
+            .expect("JoinHandle panicked");
         // At this point tx 0 has been sent to the buffer and is executing
         // We submit tx 1 immediately and verify it isn't rejected and doesn't timeout
-        let result_1 = submit_single_transaction(sender, 1).await.await.expect("JoinHandle panicked");
+        let result_1 = submit_single_transaction(sender, 1)
+            .await
+            .await
+            .expect("JoinHandle panicked");
         assert_on_results(vec![result_0, result_1], vec![Outcome::Ok, Outcome::Ok]).await;
 
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
@@ -1328,7 +1379,8 @@ mod tests {
         // - Tx 0 executes slowly
         // - Tx 1 arrives mid-execution. The queue should A) not queue it for execution yet - maybe
         // tx 0 will fail. But also B) not evict it - if tx 0 succeeds then tx 1 can be executed.
-        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(500)); // Slow execution
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(500)); // Slow execution
         let (sender, _shutdown) = test_buffer_task(&backend, Some(200)); // Queue times out faster than execution
 
         let handle_0 = submit_single_transaction(sender.clone(), 0).await;
@@ -1351,7 +1403,9 @@ mod tests {
         // - Tx 0 executes slowly
         // - Tx 1 arrives mid-execution. The queue should not queue it for execution yet - maybe
         // tx 0 will fail. Once tx 0 fails, then tx 1 will time out.
-        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(500)).with_failure_at_nonce(0);
+        let backend = MockTxExecutionBackend::new()
+            .with_execution_delay(Duration::from_millis(500))
+            .with_failure_at_nonce(0);
         let (sender, _shutdown) = test_buffer_task(&backend, Some(200)); // Queue times out faster than execution
 
         let handle_0 = submit_single_transaction(sender.clone(), 0).await;
@@ -1360,14 +1414,19 @@ mod tests {
         // submitted it to the STF), but rather times out
         let handle_1 = submit_single_transaction(sender, 1).await;
         let results = collect_results(vec![handle_0, handle_1]).await;
-        assert_on_results(results, vec![Outcome::Revert, Outcome::Err(InvalidNonceReason::Timeout)]).await;
+        assert_on_results(
+            results,
+            vec![Outcome::Revert, Outcome::Err(InvalidNonceReason::Timeout)],
+        )
+        .await;
         assert!(backend.get_executed_nonces().is_empty());
         assert_eq!(get_test_nonce(&backend), 0);
     }
 
     #[tokio::test]
     async fn test_replacement_of_queued_transaction() {
-        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
         let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout to avoid timeouts
 
         let handle_0 = submit_single_transaction(sender.clone(), 0).await;
@@ -1384,15 +1443,21 @@ mod tests {
 
         assert_on_results(
             results,
-            vec![Outcome::Ok, Outcome::Err(InvalidNonceReason::Replaced), Outcome::Ok],
-        ).await;
+            vec![
+                Outcome::Ok,
+                Outcome::Err(InvalidNonceReason::Replaced),
+                Outcome::Ok,
+            ],
+        )
+        .await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
     #[tokio::test]
     async fn test_replacement_with_same_hash() {
-        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
         let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout to avoid timeouts
 
         let handle_0 = submit_single_transaction(sender.clone(), 0).await;
@@ -1409,15 +1474,21 @@ mod tests {
 
         assert_on_results(
             results,
-            vec![Outcome::Ok, Outcome::Ok, Outcome::Err(InvalidNonceReason::AlreadyQueued)],
-        ).await;
+            vec![
+                Outcome::Ok,
+                Outcome::Ok,
+                Outcome::Err(InvalidNonceReason::AlreadyQueued),
+            ],
+        )
+        .await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
     #[tokio::test]
     async fn test_replacement_of_inflight_transaction_success() {
-        let backend = MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(300));
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(300));
         let (sender, _shutdown) = test_buffer_task(&backend, Some(1000)); // Long timeout
 
         // Submit tx 0a which will execute slowly
@@ -1436,7 +1507,8 @@ mod tests {
         assert_on_results(
             results,
             vec![Outcome::Ok, Outcome::StfNonceReject(1, 0), Outcome::Ok],
-        ).await;
+        )
+        .await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
     }
@@ -1461,10 +1533,7 @@ mod tests {
         let results = collect_results(vec![handle_0a, handle_0b, handle_1]).await;
 
         // Tx 0a is rejected by backend, tx 0b succeeds (executed after 0a failed), tx 1 succeeds
-        assert_on_results(
-            results,
-            vec![Outcome::Revert, Outcome::Ok, Outcome::Ok],
-        ).await;
+        assert_on_results(results, vec![Outcome::Revert, Outcome::Ok, Outcome::Ok]).await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
     }
