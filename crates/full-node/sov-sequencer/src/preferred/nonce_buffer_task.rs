@@ -90,7 +90,6 @@ impl NonPersistedTxs {
             .is_some_and(|user_nonce| tx_nonce_check != user_nonce)
         {
             tracing::error!("Sequencer nonce buffer: non-persisted tracking: attempted to execute nonce that does not match tracked next nonce!");
-            panic!("Sequencer nonce buffer: non-persisted tracking: attempted to execute nonce that does not match tracked next nonce!");
         } else if self.last_successfully_executed.is_none() {
             // If we're marking a transction as in-flight, that means we definitely know the
             // previous one has been executed. Probably from the API state.
@@ -106,7 +105,6 @@ impl NonPersistedTxs {
     fn mark_inflight_execution_succeeded(&mut self, tx_nonce_check: u64) {
         if !self.has_in_flight {
             tracing::error!("Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!");
-            panic!("Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!");
         }
         self.has_in_flight = false;
 
@@ -114,7 +112,6 @@ impl NonPersistedTxs {
             let new = last.checked_add(1).expect("Overflow adding 1 to user nonce");
             if new != tx_nonce_check {
                 tracing::error!("Sequencer nonce buffer: non-persisted tracking: after executing, incremented nonce did not match tx nonce!");
-                panic!("Sequencer nonce buffer: non-persisted tracking: after executing, incremented nonce did not match tx nonce!");
             }
             new
         }).or(Some(tx_nonce_check));
@@ -123,7 +120,6 @@ impl NonPersistedTxs {
     fn mark_inflight_execution_failed(&mut self, tx_nonce_check: u64) {
         if !self.has_in_flight {
             tracing::error!("Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!");
-            panic!("Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!");
         }
         self.has_in_flight = false;
 
@@ -131,7 +127,6 @@ impl NonPersistedTxs {
             l.checked_add(1).expect("Overflow adding 1 to user nonce") != tx_nonce_check
         }) {
             tracing::error!("Sequencer nonce buffer: non-persisted tracking: marked failed to execute, tx whose nonce was non-consecutive with last known one");
-            panic!("Sequencer nonce buffer: non-persisted tracking: marked failed to execute, tx whose nonce was non-consecutive with last known one");
         }
     }
 }
