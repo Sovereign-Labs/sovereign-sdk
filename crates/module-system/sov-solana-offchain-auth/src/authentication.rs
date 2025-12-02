@@ -4,8 +4,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
-    AuthenticationOutput, FatalError, UniquenessData,
+    calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput,
+    FatalError, UniquenessData,
 };
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::transaction::{
@@ -302,7 +302,7 @@ where
 
     // This is useful to be able to reuse some of the standard authenticator's logic
     let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
-    let reconstructed_tx_v0 = transaction::Version0 {
+    let reconstructed_tx_v0 = transaction::Version0::<_, S, S::CryptoSpec> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -340,11 +340,7 @@ where
         state,
     )?;
 
-    let authorization_data = extract_authorization_data::<S, D, S::CryptoSpec>(
-        &reconstructed_tx_v0,
-        raw_tx_hash,
-        state,
-    )?;
+    let authorization_data = reconstructed_tx_v0.auth_data(raw_tx_hash, state)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,
