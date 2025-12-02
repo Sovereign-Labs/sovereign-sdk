@@ -532,8 +532,9 @@ where
         // Atomically swap in the new storage and prune the old one.
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
-        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
-            .rollup_height_to_access();
+        let new_rollup_height =
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+                .rollup_height_to_access();
 
         inner
             .executor
@@ -610,7 +611,7 @@ where
         let checkpoint = inner
             .executor
             .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
+            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
         inner
             .executor_events_sender
             .force_update_api_state(checkpoint)
@@ -646,8 +647,9 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        // Since we're entering recovery, we don't re-use any of the uncommitted changes
-        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
+        // Since we're entering recovery, we don't re-use any of the uncommitted changes.
+        // We don't need to populate the pinned cache because we'll replace the executor when we exit recovery before going back to normal operation.
+        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info, None);
 
         inner
             .force_overwrite_state(info.clone(), recovery_executor)
@@ -679,7 +681,7 @@ where
 
         inner.latest_info = info.clone();
         // We update the API state, so users can query node state as it syncs.
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
         inner
             .executor_events_sender
             .update_state_for_recovery(checkpoint)

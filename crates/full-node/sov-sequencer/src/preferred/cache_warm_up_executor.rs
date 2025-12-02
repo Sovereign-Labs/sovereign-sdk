@@ -60,7 +60,7 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
             data: self.data.clone(),
             checkpoint: self
                 .checkpoint
-                .clone_with_empty_witness_dropping_temp_cache(),
+                .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
             sequence_number: self.sequence_number,
         }
     }
@@ -151,7 +151,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        if seq_config.sequencer_kind_config.is_replica {
+        if seq_config.sequencer_kind_config.is_replica.unwrap_or(true) {
             return (Self { inner: None }, vec![]);
         }
 
@@ -209,6 +209,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 exec_config,
                 seq_config.clone(),
                 Default::default(),
+                None, // TODO: Consider adding a pinned cache to the warmup executors
             );
 
             let mut maybe_executor_sequence_number = None;

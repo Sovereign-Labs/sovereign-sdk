@@ -1,20 +1,34 @@
+#![allow(dead_code)]
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
+use crate::preferred::db::{BatchToStore, InProgressBatch};
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::{FullyBakedTx, TxHash};
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
+use time::OffsetDateTime;
 
-use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
-use crate::preferred::db::{BatchToStore, InProgressBatch};
+// The leader timeout.
+const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+
+#[derive(Debug, FromRow, PartialEq)]
+pub(crate) struct SequencerLeader {
+    node_id: String,
+    last_updated: OffsetDateTime,
+}
 
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
+    leader_timeout: Duration,
+    node_id: String,
 }
 
 // We need a macro to get around lifetime issues with async functions. Otherwise, Rust complains about FnMut
@@ -45,7 +59,15 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    pub async fn connect(connection_string: &str) -> anyhow::Result<Self> {
+    pub async fn connect(config: &PostgresConfig) -> anyhow::Result<Self> {
+        Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await
+    }
+
+    async fn connect_with_leader_timeout(
+        config: &PostgresConfig,
+        leader_timeout: Duration,
+    ) -> anyhow::Result<Self> {
+        let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
         // So total runtime is ~400 ms of sleeping. If we also account for 50ms latency on each roundtrip, we get about 800ms total time
@@ -71,6 +93,8 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
+            leader_timeout,
+            node_id: config.node_id.clone(),
         })
     }
 
@@ -200,6 +224,54 @@ impl PostgresBackend {
             completed_blobs,
             in_progress_batch,
         })
+    }
+
+    pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
+        let time_delta: i64 = self
+            .leader_timeout
+            .as_millis()
+            .try_into()
+            // It is ok to `expect` as time_delta should be much smaller than i64::MAX
+            .expect("PostgresBackend error: time_delta is bigger than i64::MAX");
+
+        let res = run_with_retries!(
+            &self.backoff_policy,
+            sqlx::query_as::<_, SequencerLeader>(
+                "WITH ts AS (SELECT NOW() as current_time)
+                INSERT INTO sequencer_leader (node_id, last_updated)
+                SELECT $1, ts.current_time FROM ts
+                    ON CONFLICT (singleton) DO UPDATE
+                        SET
+                            node_id = EXCLUDED.node_id,
+                            last_updated = EXCLUDED.last_updated
+                        WHERE
+                            sequencer_leader.node_id = EXCLUDED.node_id
+                            OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                        RETURNING node_id, last_updated",)
+        .bind(&self.node_id)
+        .bind(time_delta)
+        .fetch_optional(&self.pool),
+            "postgres_db_backend_try_update_leader"
+        )?;
+
+        Ok(res)
+    }
+
+    pub(crate) async fn get_sequencer_leader(
+        &self,
+    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
+        let res = run_with_retries!(
+            &self.backoff_policy,
+            sqlx::query_as::<_, SequencerLeader>(
+                "SELECT node_id, last_updated
+                FROM sequencer_leader
+                WHERE singleton = 1",
+            )
+            .fetch_optional(&self.pool),
+            "postgres_db_get_sequencer_leader"
+        )?;
+
+        Ok(res)
     }
 }
 
@@ -373,5 +445,89 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             self.current_data_transaction(),
             "postgres_db_backend_current_data"
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sov_test_utils::postgres::{
+        config_from_postgres_container, create_postgres_container, CreatePostgresError,
+    };
+
+    impl PostgresBackend {
+        async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
+            self.try_update_leader().await.unwrap()
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sequencer_leader_election() {
+        let dir = tempfile::tempdir().unwrap();
+        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let node_id_1 = String::from("node_id_1");
+        let node_id_2 = String::from("node_id_2");
+
+        let postgres_config_1 = config_from_postgres_container(&postgres, node_id_1.clone())
+            .await
+            .unwrap();
+
+        let postgres_config_2 = config_from_postgres_container(&postgres, node_id_2.clone())
+            .await
+            .unwrap();
+
+        let leader_timeout = Duration::from_millis(1000);
+        let mut db_1 =
+            PostgresBackend::connect_with_leader_timeout(&postgres_config_1, leader_timeout)
+                .await
+                .unwrap();
+
+        let mut db_2 =
+            PostgresBackend::connect_with_leader_timeout(&postgres_config_2, leader_timeout)
+                .await
+                .unwrap();
+
+        {
+            // Updating the same node_id should change the last updated time in the db.
+            let leader_1 = db_1.maybe_update_leader().await.unwrap();
+            let updated_leader_1 = db_1.maybe_update_leader().await.unwrap();
+
+            assert_eq!(leader_1.node_id, node_id_1);
+            assert_eq!(leader_1.node_id, updated_leader_1.node_id);
+            assert!(leader_1.last_updated < updated_leader_1.last_updated);
+
+            // Updating a different node id shouldn't change anything as the time delta is too big.
+            let leader_2 = db_2.maybe_update_leader().await;
+            assert!(leader_2.is_none());
+
+            let leader = db_2.get_sequencer_leader().await.unwrap().unwrap();
+            assert_eq!(updated_leader_1, leader);
+        }
+
+        {
+            db_2.leader_timeout = Duration::ZERO;
+            // Now we should be able to update db as the time_delta is zero.
+            let leader_2 = db_2.maybe_update_leader().await.unwrap();
+            assert_eq!(leader_2.node_id, node_id_2);
+        }
+
+        {
+            db_1.leader_timeout = Duration::from_millis(100);
+            let leader_1 = db_1.maybe_update_leader().await;
+            assert!(leader_1.is_none());
+
+            // Wait for more than 10ms and update the leader.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let leader_1 = db_1.maybe_update_leader().await.unwrap();
+            assert_eq!(leader_1.node_id, node_id_1);
+        }
     }
 }

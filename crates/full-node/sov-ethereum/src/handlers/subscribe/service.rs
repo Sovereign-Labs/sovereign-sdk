@@ -122,7 +122,7 @@ where
 
                     for block_number in block_watermark.advance(..latest_block.header.number + 1) {
                         let block = self.get_block(block_number, &mut state)?;
-                        let rpc_header = self.evm.get_rpc_header(block, &mut state)?;
+                        let rpc_header = self.evm.get_rpc_header(block)?;
                         self.send(&rpc_header).await?;
                     }
                 }

@@ -9,6 +9,8 @@ use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
+#[cfg(feature = "native")]
+use sov_state::pinned_cache::PinnedCache;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
@@ -31,6 +33,35 @@ pub enum OperatingMode {
     Zk,
     /// The rollup is currently executing in operator mode.
     Operator,
+}
+
+/// This trait defines an interface to pass runtime configuration values for modules.
+/// This is configuration that is ran off-chain, for example metric gathering configuration.
+/// This is distinct from genesis configuration, which is passed to the runtime at genesis time
+/// and stored on-chain.
+///
+/// This configuration and function does not need to be deterministic, as it is not executed
+/// on-chain.
+pub trait ModuleExecutionConfig {
+    /// Input type for configuration.
+    /// This could be a config struct that holds sub configuration for each runtime module
+    /// that requires such configuration.
+    type Input: Clone + Send + Sync;
+
+    /// Execute configuration for modules.
+    /// This function is called once at runtime startup and will typically pass specific module
+    /// configuration values to each module that requires it.
+    fn configure(_input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
+// Allow assigning `()` as the ModuleExecutionConfig when no configuration is needed.
+// Acts as a no-op implementation.
+impl ModuleExecutionConfig for () {
+    type Input = ();
+
+    fn configure(_input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
 }
 
 #[cfg(feature = "native")]
@@ -59,6 +90,9 @@ pub trait Runtime<S: Spec>:
 
     /// GenesisInput type.
     type GenesisInput: std::fmt::Debug + Clone + Send + Sync;
+
+    /// ModuleExecutionConfiguration type.
+    type ModuleExecutionConfig: ModuleExecutionConfig;
 
     /// Responsible for authenticating transactions.
     type Auth: TransactionAuthenticator<S>;
@@ -127,6 +161,12 @@ pub trait Runtime<S: Spec>:
         _state: &mut impl crate::TxState<S>,
     ) -> bool {
         false
+    }
+
+    /// Populates the pinned state cache for the given storage if supported
+    #[cfg(feature = "native")]
+    fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
+        None
     }
 }
 

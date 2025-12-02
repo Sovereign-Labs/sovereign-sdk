@@ -46,7 +46,7 @@ pub struct CelestiaService {
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
     request_timeout: Duration,
-    tx_priority: Option<celestia_client::tx::TxPriority>,
+    tx_priority: celestia_client::tx::TxPriority,
 }
 
 impl CelestiaService {
@@ -58,7 +58,7 @@ impl CelestiaService {
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
         request_timeout: Duration,
-        tx_priority: Option<celestia_client::tx::TxPriority>,
+        tx_priority: celestia_client::tx::TxPriority,
     ) -> Self {
         Self {
             client: Arc::new(client),
@@ -84,9 +84,7 @@ impl CelestiaService {
 
     fn get_tx_config(&self) -> celestia_client::tx::TxConfig {
         let mut tx_config = celestia_client::tx::TxConfig::default();
-        if let Some(priority) = self.tx_priority.as_ref() {
-            tx_config = tx_config.with_priority(*priority);
-        }
+        tx_config = tx_config.with_priority(self.tx_priority);
         tx_config
     }
 
@@ -203,7 +201,7 @@ impl CelestiaService {
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
-            config.tx_priority.map(Into::into),
+            config.tx_priority.into(),
         )
     }
 }

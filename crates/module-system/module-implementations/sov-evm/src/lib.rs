@@ -6,6 +6,8 @@ mod call;
 mod config;
 mod db;
 mod evm;
+#[cfg(feature = "native")]
+pub mod execution_config;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]

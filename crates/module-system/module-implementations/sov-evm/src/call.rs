@@ -1,3 +1,4 @@
+use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256};
 use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
@@ -5,6 +6,8 @@ use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
 use revm::primitives::HashMap;
 use revm::state::Account;
+use revm::Database;
+use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_metrics::{save_elapsed, start_timer};
@@ -19,6 +22,8 @@ use crate::conversions::{convert_to_tx_signed, create_tx_env};
 use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 use crate::evm::RlpEvmTransaction;
+#[cfg(feature = "native")]
+use crate::execution_config::EVM_EXECUTION_CONFIG;
 use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
@@ -102,8 +107,18 @@ where
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
+
         save_elapsed!(execution_time SINCE execution);
-        verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg)?;
+        verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg, &mut db)?;
+        #[cfg(feature = "native")]
+        let new_pinned_contracts = get_pinned_contract_list_updates(
+            &state_changes,
+            &tx.signer,
+            &mut db,
+        )
+        .inspect_err(|err| tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates"))
+        .map_err(|err| anyhow::anyhow!("EVM transaction error: {err:?}"))?;
+
         // We don't use transact_commit as it does not support returning an error
         start_timer!(state_commit);
         db.try_commit(state_changes)
@@ -151,6 +166,13 @@ where
                 .unwrap_infallible();
             set_accessory_state.elapsed()
         };
+
+        // Now that we've saved the transaction, we can update the pinned contract list.
+        // Worst case scenario, the transaction might still revert in the post-hook; then we'll end up with an extra bucket in the pinned cache,
+        // but that bucket will be empty so the waste isn't big and there's no correctness issue (because pinned buckets are just a mirror of the DB anyway).
+        // We can always clean it up manually later.
+        #[cfg(feature = "native")]
+        self.update_pinned_contract_list(&new_pinned_contracts, state);
 
         save_elapsed!(total_time SINCE total);
         #[cfg(feature = "native")]
@@ -315,22 +337,150 @@ where
     }
 }
 
-pub(crate) fn verify_contract_creation_allowlist(
+pub(crate) fn verify_contract_creation_allowlist<
+    DB: Database<Error = E>,
+    E: DBErrorMarker + std::fmt::Display,
+>(
     state_changes: &HashMap<Address, Account>,
     signer: &Address,
     cfg: &EvmRuntimeConfig,
+    db: &mut DB,
 ) -> Result<(), anyhow::Error> {
     if cfg.contract_creation_policy.allows(signer) {
         return Ok(());
     }
-    for account in state_changes.values() {
-        if let Some(ref code) = account.info.code {
-            if !code.is_empty() {
+    for (address, account) in state_changes.iter() {
+        let is_contract = account
+            .info
+            .code
+            .as_ref()
+            .is_some_and(|code| !code.is_empty());
+        if is_contract {
+            let was_not_contract = db
+                .basic(*address)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Error while fetching previous contract data to verify allowlist: {e}"
+                    )
+                })?
+                .map(|acc| acc.code_hash == KECCAK_EMPTY)
+                .unwrap_or(true);
+            // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
+            if was_not_contract {
                 bail!("Contract creation is only allowed from allowed addresses. {signer} is not on the list");
             }
         }
     }
     Ok(())
+}
+
+#[cfg(feature = "native")]
+/// Get the list of new contracts to pin from the state changes.
+pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErrorMarker>(
+    state_changes: &HashMap<Address, Account>,
+    signer: &Address,
+    db: &mut DB,
+) -> Result<Vec<Address>, E> {
+    let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
+        return Ok(Vec::new());
+    };
+
+    let execution_config = execution_config
+        .read()
+        .expect("EVM Execution config RW lock is poisoned.");
+    if !execution_config
+        .contents
+        .privileged_deployer_addresses
+        .contains(signer)
+    {
+        return Ok(Vec::new());
+    };
+
+    let mut new_pinned_contracts = Vec::new();
+    for (address, account) in state_changes.iter() {
+        let is_contract = account
+            .info
+            .code
+            .as_ref()
+            .is_some_and(|code| !code.is_empty());
+        if is_contract {
+            let was_not_contract = db
+                .basic(*address)?
+                .map(|acc| acc.code_hash == KECCAK_EMPTY)
+                .unwrap_or(true);
+            // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
+            if was_not_contract {
+                new_pinned_contracts.push(*address);
+            }
+        }
+    }
+    Ok(new_pinned_contracts)
+}
+
+#[cfg(feature = "native")]
+impl<S: Spec> Evm<S> {
+    pub(crate) fn update_pinned_contract_list(
+        &self,
+        new_pinned_contracts: &[Address],
+        state: &mut impl TxState<S>,
+    ) {
+        use crate::execution_config::EVM_EXECUTION_CONFIG;
+        // If there are no new pinned contracts, we can return early.
+        if new_pinned_contracts.is_empty() {
+            return;
+        }
+        // Similarly, if the execution config is not initialized, we can return early.
+        let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
+            return;
+        };
+
+        // Now for each new contract we need to track, add it to the execution config and load the bucket into the pinned cache.
+        let mut execution_config = execution_config
+            .write()
+            .expect("EVM Execution config RW lock is poisoned.");
+        let size_limit = execution_config.contents.default_bucket_size_limit;
+        let storage = state.storage().clone();
+        let mut pinned_cache = state.pinned_cache_mut();
+        let mut updated_execution_config = false;
+        for address in new_pinned_contracts {
+            // Refresh the storage for this accessor, if necessary.
+            if let Some(pinned_cache) = pinned_cache.as_mut() {
+                use sov_state::pinned_cache::LoadBucketOutcome;
+
+                let bucket_id = self.get_bucket_id_for_address(address);
+                match pinned_cache.try_load_bucket_if_absent(bucket_id, &storage, size_limit) {
+                    Err(e) => {
+                        tracing::warn!(address = ?address, error = ?e, "EVM Failed to load bucket for address into pinned cache");
+                    }
+                    Ok(LoadBucketOutcome::Loaded) => {
+                        tracing::debug!(address = ?address, "EVM Loaded bucket for address into pinned cache");
+                    }
+                    Ok(LoadBucketOutcome::OverSizeLimit) => {
+                        tracing::warn!(address = ?address, "EVM Failed to load bucket for address into pinned cache because it exceeded the size limit");
+                    }
+                    Ok(LoadBucketOutcome::AlreadyPresent) => {
+                        tracing::debug!(address = ?address, "EVM didn't load for address into pinned cache because it is already present in the cache");
+                    }
+                    Ok(LoadBucketOutcome::NotSupportedByStorage) => {
+                        tracing::error!(address = ?address, "EVM Failed to load bucket for address into pinned cache because the storage doesn't support iteration. This means that pinning is configured but the rollup doesnt support it.");
+                    }
+                }
+            }
+            // Update the execution config with the new address to track. If the address didn't already exist, mark it as dirty so that we flush to disk after.
+            if execution_config
+                .contents
+                .known_contracts_and_limits
+                .insert(*address, size_limit)
+                .is_none()
+            {
+                updated_execution_config = true;
+            }
+        }
+        if updated_execution_config {
+            tracing::debug!("EVM Execution config updated, flushing to disk");
+            std::fs::write(&execution_config.location, serde_json::to_string_pretty(&execution_config.contents).expect("Failed to serialize execution config")).unwrap_or_else(|e| panic!("EVM Failed to write execution config to file {}: {}. This usually means that the file permissions changed while the rollup was running.", execution_config.location.display(), e));
+        }
+    }
 }
 
 fn on_error<S: Spec>(

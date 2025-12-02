@@ -10,6 +10,7 @@ use sov_rollup_interface::common::SlotNumber;
 use crate::cache::{OrderedReadsAndWrites, StateAccesses};
 use crate::jmt::KeyHash;
 use crate::namespaces::CompileTimeNamespace;
+use crate::pinned_cache::PinnedCache;
 use crate::storage::{SlotKey, SlotValue, Storage, StorageProof};
 use crate::storage_internals::SparseMerkleProof;
 #[cfg(all(feature = "test-utils", feature = "native"))]
@@ -178,6 +179,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
+        _pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let prev_user_root = prev_state_root.namespace_root(ProvableNamespace::User);
         let prev_kernel_root = prev_state_root.namespace_root(ProvableNamespace::Kernel);
@@ -262,5 +264,19 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
 
     fn get_unbound<N: crate::CompileTimeNamespace>(&self, _key: SlotKey) -> Option<SlotValue> {
         unimplemented!("The ZkStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+    }
+
+    fn maybe_iter_user_values_with_prefix(
+        &self,
+        _prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        unimplemented!("The ZkStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+        // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
+        #[allow(unreachable_code)]
+        Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
+    }
+
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
+        unimplemented!("The ZkStorage does not support `take_pinned_cache`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
 }

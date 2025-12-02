@@ -47,8 +47,9 @@ pub struct CelestiaConfig {
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
 
-    /// Default is medium.
-    pub tx_priority: Option<TxPriority>,
+    /// Default is high.
+    #[serde(default = "default_tx_priority")]
+    pub tx_priority: TxPriority,
     /// Minimal time to wait before reattempting to request to celestia node.
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_min_delay_ms")]
@@ -114,6 +115,31 @@ impl From<TxPriority> for celestia_client::tx::TxPriority {
 }
 
 impl CelestiaConfig {
+    /// Absolutely minimal config for client that is capable of reading
+    pub fn minimal(rpc_url: String) -> Self {
+        Self {
+            rpc_url,
+            rpc_auth_token: None,
+            grpc_url: None,
+            grpc_auth_token: None,
+            signer_private_key: None,
+            request_timeout_secs: default_request_timeout_seconds(),
+            safe_lead_time_ms: default_safe_lead_time_ms(),
+            tx_priority: default_tx_priority(),
+            backoff_min_delay_ms: default_min_delay_ms(),
+            backoff_max_delay_ms: default_max_delay_ms(),
+            backoff_max_times: default_max_times(),
+            backoff_factor: default_factor(),
+        }
+    }
+
+    /// Add necessary information required for submitting blobs
+    pub fn with_submission(mut self, grpc_url: String, signer_private_key: String) -> Self {
+        self.grpc_url = Some(grpc_url);
+        self.signer_private_key = Some(signer_private_key);
+        self
+    }
+
     pub(crate) fn get_backoff_policy(&self) -> backon::ExponentialBuilder {
         let backoff_policy = backon::ExponentialBuilder::default()
             .with_min_delay(std::time::Duration::from_millis(self.backoff_min_delay_ms))
@@ -144,7 +170,7 @@ impl CelestiaConfig {
     }
 }
 
-pub(crate) fn default_safe_lead_time_ms() -> u64 {
+pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
@@ -162,6 +188,10 @@ fn default_grpc_auth_token() -> Option<String> {
 
 fn default_signer_private_key() -> Option<String> {
     std::env::var("SOV_CELESTIA_SIGNER_KEY").ok()
+}
+
+pub(crate) const fn default_tx_priority() -> TxPriority {
+    TxPriority::High
 }
 
 // Exponential backoff defaults:
@@ -199,5 +229,6 @@ pub(crate) fn default_factor() -> f32 {
 }
 
 pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
-    NonZero::new(60).unwrap()
+    // 6 blocks + 1 second for jitter
+    NonZero::new(37).unwrap()
 }

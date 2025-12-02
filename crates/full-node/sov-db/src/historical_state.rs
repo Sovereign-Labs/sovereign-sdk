@@ -7,13 +7,14 @@ use rockbound::{SchemaBatch, SchemaKey, SchemaValue};
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::metrics::StateMaterializationMetrics;
-use crate::namespaces::{KernelNamespace, Namespace, UserNamespace};
+use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::StateRootHashes;
 use crate::schema::types::StateRootHashId;
-use crate::DbOptions;
 
 const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
+
+type ArcKeyAndValueOpt = (Arc<SchemaKey>, Option<Option<SchemaValue>>);
 
 /// A typed wrapper around the [`DeltaReader`] for reading materializing historical rollup state.
 #[derive(Debug, Clone)]
@@ -39,9 +40,6 @@ pub struct StateChanges {
 }
 
 impl HistoricalStateReader {
-    const DB_PATH_SUFFIX: &'static str = "historical_state";
-    const DB_NAME: &'static str = "historical-state-db";
-
     // Used for testing only.
     #[cfg(test)]
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
@@ -121,20 +119,6 @@ impl HistoricalStateReader {
         Ok(last_root_hash_version)
     }
 
-    /// [`DbOptions`] for [`HistoricalStateReader`].
-    pub fn get_rockbound_options() -> DbOptions {
-        DbOptions {
-            name: Self::DB_NAME,
-            path_suffix: Self::DB_PATH_SUFFIX,
-            columns: UserNamespace::get_jmt_table_names()
-                .into_iter()
-                .chain(KernelNamespace::get_jmt_table_names())
-                .chain(vec![StateRootHashes::table_name()])
-                .collect(),
-            cacheable_columns: vec![],
-        }
-    }
-
     /// Get the current value of the `next_version` counter
     pub fn get_next_version(&self) -> SlotNumber {
         self.next_version
@@ -165,6 +149,22 @@ impl HistoricalStateReader {
         key: &SchemaKey,
     ) -> anyhow::Result<Option<SchemaValue>> {
         Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
+    }
+
+    /// Iterate over all user values with the given prefix.
+    pub fn iter_user_values_with_prefix<'a>(
+        &'a self,
+        prefix: &SchemaKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = ArcKeyAndValueOpt> + 'a>> {
+        Ok(Some(self.user.iter_with_prefix(prefix)?))
+    }
+
+    /// Iterate over all kernel values with the given prefix.
+    pub fn iter_kernel_values_with_prefix<'a>(
+        &'a self,
+        prefix: &SchemaKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = ArcKeyAndValueOpt> + 'a>> {
+        Ok(Some(self.kernel.iter_with_prefix(prefix)?))
     }
 
     /// Get the very latest version of the given key from the database.

@@ -36,7 +36,7 @@ use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -206,7 +206,7 @@ where
         );
 
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
         ));
         let api_state = ApiState::build(
             Arc::new(()),
@@ -220,16 +220,15 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let db = PreferredSequencerDb::new(
+        let (db, is_replica_seq) = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
-            &config.sequencer_kind_config.postgres_connection_string,
+            &config.sequencer_kind_config.postgres_config,
         )
         .await?;
 
         let (next_sequence_number, db_cache) = db.initial_data().await?;
-
         let mut handles = vec![];
 
         let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
@@ -241,7 +240,7 @@ where
             shutdown_sender.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
-            config.sequencer_kind_config.is_replica,
+            is_replica_seq,
         )
         .await?;
 
@@ -299,6 +298,7 @@ where
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
+            is_replica_seq,
             api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
@@ -358,15 +358,10 @@ where
         }));
 
         // Launch replica sync task only for replicas.
-        if config.sequencer_kind_config.is_replica {
-            if let Some(postgres_connection_string) =
-                &config.sequencer_kind_config.postgres_connection_string
-            {
+        if is_replica_seq {
+            if let Some(postgres_config) = &config.sequencer_kind_config.postgres_config {
                 let replica_task_handle = replica_task
-                    .start(
-                        synchronized_state_updator,
-                        postgres_connection_string.clone(),
-                    )
+                    .start(synchronized_state_updator, postgres_config)
                     .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);
@@ -397,9 +392,7 @@ where
 
         if let Some(oracle_config) = maybe_oracle_config {
             //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master
-            if Rt::default().maybe_set_oracle_timestamp(0).is_some()
-                && !config.sequencer_kind_config.is_replica
-            {
+            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica_seq {
                 handles.push(update_timestamp_task(
                     seq.clone(),
                     oracle_config,
@@ -812,7 +805,7 @@ fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
     let mut rt = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
@@ -1165,7 +1158,8 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
+    let mut checkpoint =
+        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
 
     runtime.kernel().next_sequence_number(&mut state)

@@ -151,7 +151,7 @@ where
 
         let storage = info.storage.clone();
         let mut kernel = K::default();
-        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel());
+        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel(), None);
 
         let mut state = ApiStateAccessor::<S>::new_with_true_slot_number_dangerous(
             &checkpoint,

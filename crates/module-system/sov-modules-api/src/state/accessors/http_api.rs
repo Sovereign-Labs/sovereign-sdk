@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::state::traits::PinnedCacheAccessor;
 use crate::GasMeteringError;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::MaybePresentValue;
 use sov_state::StateGetter;
 use sov_state::{
@@ -321,6 +323,15 @@ impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
     }
 }
 
+impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.user_cache.pinned_cache_mut()
+    }
+    fn storage(&self) -> &S::Storage {
+        &self.storage
+    }
+}
+
 #[cfg(feature = "native")]
 const _: () = {
     use sov_state::{NativeStorage, ProvableCompileTimeNamespace, StorageProof};
@@ -546,8 +557,8 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             gas_meter,
             events: Vec::new(),
             temp_cache: TempCache::new(),
-            kernel_cache: delta.kernel_cache.clone(),
-            user_cache: delta.user_cache.clone(),
+            kernel_cache: delta.kernel_cache.clone_without_pinned_cache(),
+            user_cache: delta.user_cache.clone_without_pinned_cache(),
             accessory_writes: delta.accessory_writes.clone(),
             kernel: kernel.clone(),
             state_to_access,

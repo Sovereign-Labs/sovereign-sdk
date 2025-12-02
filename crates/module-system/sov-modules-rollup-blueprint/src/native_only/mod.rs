@@ -15,11 +15,11 @@ use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, 
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
-use sov_modules_api::GenesisParamsTrait;
 use sov_modules_api::{
     DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
     SyncStatus, VersionReader, ZkVerifier,
 };
+use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
@@ -160,6 +160,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
+        exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
@@ -172,6 +173,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            exec_config,
         )
         .await
     }
@@ -292,10 +294,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
+        exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
     {
+        if let Some(exec_config) = &exec_config {
+            tracing::debug!("Initializing module execution config");
+            <<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::configure(exec_config).map_err(|e|anyhow::anyhow!(e))?;
+        }
+
         let (main_shutdown_sender, mut main_shutdown_receiver) = tokio::sync::watch::channel(());
         main_shutdown_receiver.mark_unchanged();
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
@@ -434,8 +442,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 .await?;
 
         let mut rt = Self::Runtime::default();
-
-        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
+        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel(), None);
         let current_height = checkpoint.rollup_height_to_access();
 
         validate_heights(

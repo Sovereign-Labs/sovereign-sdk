@@ -31,13 +31,12 @@ grpc_url = "http://127.0.0.1:9090"
 signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
 
 # The maximum time to wait for a response to an RPC query against Celestia node.
-# Default: 60 seconds
-# We set it to allow skipping 5 blocks on mocha testnet
-request_timeout_secs = 30
+# Default: 37 seconds
+#request_timeout_secs = 37
 
 # Options are "Low", "Medium" and "High"
 # Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
-# Default: Medium
+# Default: High for better blob inclusion.
 #tx_priority = "High"
 
 # Exponential backoff configuration for retrying failed requests to Celestia node
@@ -127,6 +126,8 @@ batch_execution_time_limit_millis = 12000 # Do no more than 12 seconds worth of 
 # The sequencer optimistically pre-executes transactions across multiple worker threads.
 # This warms up caches so the main transaction executor can run with ready-to-use data.
 # This variable determines the number of worker threads.
+
+is_replica = false
 num_cache_warmup_workers = 0
 [sequencer.extension]
 max_log_limit = 20000

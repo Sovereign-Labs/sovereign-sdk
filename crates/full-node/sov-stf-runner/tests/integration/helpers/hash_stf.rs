@@ -53,7 +53,7 @@ impl HashStf {
         };
 
         let (jmt_root_hash, state_update) = storage
-            .compute_state_update(state_accesses, witness, root)
+            .compute_state_update(state_accesses, witness, root, None)
             .unwrap();
 
         let change_set = storage.materialize_changes(state_update);

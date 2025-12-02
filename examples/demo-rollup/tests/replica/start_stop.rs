@@ -19,8 +19,12 @@ async fn test_replica_start_stop() {
     da_service.wait_for_height(10).await.unwrap();
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
-    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
-    let test_rollup = start_rollup(false, addr, postgres).await;
+
+    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
+    let replica_test_rollup = start_rollup(true, addr, replica).await;
+
+    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
+    let test_rollup = start_rollup(false, addr, primary).await;
 
     replica_test_rollup
         .wait_for_sequencer_ready()
@@ -217,12 +221,14 @@ async fn test_replica_start_stop_many_times() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let receiver_addr = random_address();
 
-    let test_rollup = start_rollup(false, addr, postgres.clone()).await;
+    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
+    let test_rollup = start_rollup(false, addr, primary).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let nb_of_txs = 300;
+    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
+    let mut replica_test_rollup = start_rollup(true, addr, replica).await;
 
-    let mut replica_test_rollup = start_rollup(true, addr, postgres).await;
+    let nb_of_txs = 300;
     for i in 0..3 {
         let builder = replica_test_rollup.shutdown().await.unwrap();
 

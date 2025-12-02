@@ -19,7 +19,6 @@ use alloy_rpc_types::{
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
 use maybe_archival_state::MaybeArchivalState;
-use reth_primitives::BlockBody;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -96,34 +95,13 @@ where
         Ok(txs)
     }
 
-    fn get_block_body(
-        &self,
-        block: &MaybeSealedBlock,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<BlockBody, EthApiError> {
-        let tx_range = block.tx_range();
-        let transactions = tx_range
-            .into_iter()
-            .map(|idx| Ok::<_, EthApiError>(self.tx(idx, state)?.signed_transaction))
-            .collect::<Result<_, _>>()?;
-        let body = BlockBody {
-            transactions,
-            ommers: vec![],
-            withdrawals: None,
-        };
-        Ok(body)
-    }
-
     /// Gets RPC Block Header including the size
-    pub fn get_rpc_header(
-        &self,
-        block: MaybeSealedBlock,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<Header, EthApiError> {
-        let block_size = alloy_consensus::Block::rlp_length_for(
-            block.header(),
-            &self.get_block_body(&block, state)?,
-        );
+    pub fn get_rpc_header(&self, block: MaybeSealedBlock) -> Result<Header, EthApiError> {
+        let block_size = match &block {
+            MaybeSealedBlock::Sealed(sealed) => sealed.rlp_size,
+            // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
+            MaybeSealedBlock::Pending(_) => 0,
+        };
         let header = Header::from_consensus(block.into(), None, Some(U256::from(block_size)));
         Ok(header)
     }
@@ -139,7 +117,7 @@ where
         };
         let transactions = self.get_block_transactions(&block, kind, state)?;
         Ok(Some(Block {
-            header: self.get_rpc_header(block, state)?,
+            header: self.get_rpc_header(block)?,
             transactions,
             uncles: vec![],
             withdrawals: None,
@@ -223,9 +201,9 @@ where
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
-        let evm_db: EvmDb<_, S> = self.db(state);
-        let result = executor::transact(evm_db, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg)
+        let mut evm_db: EvmDb<_, S> = self.db(state);
+        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
     }

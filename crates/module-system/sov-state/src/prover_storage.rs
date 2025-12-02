@@ -14,6 +14,7 @@ use crate::cache::{OrderedReadsAndWrites, StateAccesses};
 use crate::namespaces::{
     Accessory, CompileTimeNamespace, Namespace, ProvableCompileTimeNamespace, ProvableNamespace,
 };
+use crate::pinned_cache::PinnedCache;
 use crate::storage::{NativeStorage, SlotKey, SlotValue, StateUpdate, Storage, StorageProof};
 use crate::storage_internals::{SparseMerkleProof, StorageRoot};
 use crate::{
@@ -379,6 +380,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
+        _pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let prev_user_root = prev_state_root.namespace_root(ProvableNamespace::User);
         let prev_kernel_root = prev_state_root.namespace_root(ProvableNamespace::Kernel);
@@ -540,5 +542,18 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
+    }
+
+    // JMT doesn't currently support iter_with_prefix, so we return None.
+    fn maybe_iter_user_values_with_prefix(
+        &self,
+        _prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
+    }
+
+    // JMT doesn't currently support pinned cache, so we return None.
+    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
+        None
     }
 }

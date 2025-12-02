@@ -24,6 +24,7 @@ use sov_modules_api::digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{
     MerkleProofSpec, NativeStorage, ProverStorage, StateAccesses, Storage, StorageRoot,
 };
@@ -84,6 +85,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
                 state_accesses_genesis,
                 &witness,
                 <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
+                None,
             )
             .expect("state update computation must succeed");
 
@@ -155,6 +157,7 @@ pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
     accessory: Arc<rockbound::DB>,
     root: StorageRoot<S>,
     is_strict_mode: bool,
+    pinned_cache: Mutex<Option<PinnedCache>>,
 }
 
 impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
@@ -176,6 +179,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             accessory: Arc::new(accessory_rocksdb),
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
+            pinned_cache: Mutex::new(None),
         }
     }
 
@@ -215,6 +219,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             historical_state_reader,
             accessory_db,
             self.is_strict_mode,
+            self.pinned_cache.lock().unwrap().take(),
         )
     }
 
@@ -225,6 +230,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             state,
             historical_state,
             accessory,
+            pinned_cache,
         } = stf_change_set;
 
         self.state.commit_change_set(state).unwrap();
@@ -232,6 +238,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         self.accessory.write_schemas(accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");
         self.historical_state.commit(historical_state).unwrap();
+        *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
         tracing::trace!("Committed historical state changes to disk");
         tracing::trace!("Committed all changes to disk");
     }

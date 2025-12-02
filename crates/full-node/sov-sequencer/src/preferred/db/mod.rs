@@ -17,6 +17,7 @@ use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxHash,
@@ -383,31 +384,36 @@ pub struct PreferredSequencerDb {
 impl PreferredSequencerDb {
     pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
-        is_replica: bool,
+        is_replica: Option<bool>,
         storage_path: &Path,
-        postgres_connection_string: &Option<String>,
-    ) -> anyhow::Result<Self> {
+        postgres_config: &Option<PostgresConfig>,
+    ) -> anyhow::Result<(Self, bool)> {
+        let is_replica = is_replica.unwrap_or(false);
         if is_replica {
-            return Ok(Self {
-                backend: None,
-                shutdown_sender: shutdown_sender.clone(),
-            });
+            return Ok((
+                Self {
+                    backend: None,
+                    shutdown_sender: shutdown_sender.clone(),
+                },
+                is_replica,
+            ));
         }
 
         let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
-            if let Some(postgres_connection_string) = &postgres_connection_string {
-                Some(Box::new(
-                    PostgresBackend::connect(postgres_connection_string).await?,
-                ))
+            if let Some(postgres_config) = &postgres_config {
+                Some(Box::new(PostgresBackend::connect(postgres_config).await?))
             } else {
                 Some(Box::new(RocksDbBackend::new(storage_path).await?))
             }
         };
 
-        Ok(Self {
-            backend,
-            shutdown_sender: shutdown_sender.clone(),
-        })
+        Ok((
+            Self {
+                backend,
+                shutdown_sender: shutdown_sender.clone(),
+            },
+            is_replica,
+        ))
     }
 
     pub(crate) async fn initial_data(
@@ -584,7 +590,8 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
+    let mut checkpoint =
+        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
     state.read_from_storage_at_slot_number(latest_state_info.latest_finalized_slot_number);
 

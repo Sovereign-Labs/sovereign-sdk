@@ -10228,7 +10228,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=6289a56f9ab2a74d8136ae0752963b1dddd41d4d#6289a56f9ab2a74d8136ae0752963b1dddd41d4d"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=bb21a29cee84d4491850acd553b150ec6cc1ca71#bb21a29cee84d4491850acd553b150ec6cc1ca71"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -11839,6 +11839,7 @@ dependencies = [
  "sov-db",
  "sov-eth-client",
  "sov-ethereum",
+ "sov-evm",
  "sov-full-node-configs",
  "sov-kernels",
  "sov-metrics",
@@ -12759,6 +12760,7 @@ dependencies = [
  "tempfile",
  "test-strategy",
  "thiserror 1.0.69",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -12939,6 +12941,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "serde",
  "serde-big-array",
+ "serde_json",
  "serde_with",
  "sha2 0.10.9",
  "sov-db",
@@ -13836,6 +13839,7 @@ dependencies = [
  "sha2 0.10.9",
  "smallvec",
  "thiserror 2.0.16",
+ "time",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -13920,6 +13924,7 @@ dependencies = [
  "sqlx-core",
  "stringprep",
  "thiserror 2.0.16",
+ "time",
  "tracing",
  "whoami",
 ]
@@ -13958,6 +13963,7 @@ dependencies = [
  "sqlx-core",
  "stringprep",
  "thiserror 2.0.16",
+ "time",
  "tracing",
  "whoami",
 ]
@@ -13983,6 +13989,7 @@ dependencies = [
  "serde_urlencoded",
  "sqlx-core",
  "thiserror 2.0.16",
+ "time",
  "tracing",
  "url",
 ]
@@ -15612,8 +15619,15 @@ dependencies = [
  "serde_json",
  "url",
  "utoipa 5.4.0",
+ "utoipa-swagger-ui-vendored",
  "zip",
 ]
+
+[[package]]
+name = "utoipa-swagger-ui-vendored"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2eebbbfe4093922c2b6734d7c679ebfebd704a0d7e56dfcb0d05818ce28977d"
 
 [[package]]
 name = "uuid"
@@ -15634,6 +15648,7 @@ dependencies = [
  "arbitrary",
  "getrandom 0.3.3",
  "js-sys",
+ "serde",
  "wasm-bindgen",
 ]
 

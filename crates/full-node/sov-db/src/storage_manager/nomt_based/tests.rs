@@ -91,6 +91,7 @@ impl TestableStorage for TestNomtStorage {
             },
             historical_state: historical_change_set,
             accessory: accessory_change_set,
+            pinned_cache: None,
         }
     }
 
@@ -336,6 +337,7 @@ async fn test_root_hashes_match_after_crash() {
             },
             historical_state: historical_change_set,
             accessory: SchemaBatch::default(),
+            pinned_cache: None,
         };
         // Does not matter in this test
         let ledger_changes = SchemaBatch::default();
