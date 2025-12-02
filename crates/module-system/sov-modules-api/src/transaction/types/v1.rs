@@ -1,5 +1,5 @@
 use crate::capabilities::UniquenessData;
-use crate::transaction::{PubKeyAndSignature, Transaction, TransactionCallable, TxDetails};
+use crate::transaction::{Transaction, TransactionCallable, TxDetails};
 use crate::{CryptoSpecExt, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -11,6 +11,33 @@ use sov_rollup_interface::zk::CryptoSpec;
 
 /// The maximum number of signers allowed in a multisig.
 pub const MAX_SIGNERS: usize = 21;
+
+#[derive(
+    derive_more::Debug,
+    Clone,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+    UniversalWallet,
+    PartialEq,
+    Eq,
+)]
+#[serde(bound = "C: CryptoSpecExt")]
+/// A signature and public key pair.
+pub struct PubKeyAndSignature<C: CryptoSpecExt> {
+    /// The signature.
+    pub signature: C::Signature,
+    /// The public key
+    pub pub_key: C::PublicKey,
+}
+
+impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
+    /// Returns a reference to the public key.
+    pub fn key(&self) -> &C::PublicKey {
+        &self.pub_key
+    }
+}
 
 #[derive(
     derive_more::Debug,
