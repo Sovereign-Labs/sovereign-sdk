@@ -8,6 +8,7 @@ use crate::preferred::block_executor::{
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
+use crate::preferred::sync_sequencer_state::rate_limiter::ResourceUsed;
 use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
@@ -670,6 +671,8 @@ where
         ),
         DoNewTxError<S>,
     > {
+        let cache_entry = self.rate_limiter.take(credential_id, ip)?;
+
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(DoNewTxError::Shutdown);
@@ -718,10 +721,21 @@ where
                 res
             }
             Err(err) => {
+                // TODO ResourceUsed
                 tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
                 return Err(DoNewTxError::ExecutorError(err));
             }
         };
+
+        let gas_used = accepted_tx.confirmation.gas_used();
+        let resource_used = ResourceUsed {
+            req_counter: 1,
+            space_in_bytes: tx_len,
+            execution_time_micros,
+            gas_used,
+        };
+
+        self.rate_limiter.update(cache_entry, resource_used);
 
         batch_size_tracker.add_tx(tx_len, execution_time_micros);
         let rx = executor_events_sender

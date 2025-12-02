@@ -1150,6 +1150,20 @@ where
     tx_number: u64,
 }
 
+impl<S, Rt> Confirmation<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
+    pub fn gas_used(&self) -> <S as Spec>::Gas {
+        match &self.receipt {
+            ApiTxEffect::Skipped { data } => data.gas_used,
+            ApiTxEffect::Reverted { data } => data.gas_used,
+            ApiTxEffect::Successful { data } => data.gas_used,
+        }
+    }
+}
+
 fn get_next_sequence_number_according_to_node<S, Rt>(
     latest_state_info: &StateUpdateInfo<S::Storage>,
     runtime: &mut Rt,
