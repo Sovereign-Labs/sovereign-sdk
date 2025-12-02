@@ -123,7 +123,9 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
         .try_into()
         .map_err(|_| anyhow!("Invalid private key length"))?;
 
-    key_bytes[0] = key_bytes[0].wrapping_add(worker_idx as u8);
+    let offset = (worker_idx as u16).to_le_bytes();
+    key_bytes[0] = key_bytes[0].wrapping_add(offset[0]);
+    key_bytes[1] = key_bytes[1].wrapping_add(offset[1]);
     Ok(hex::encode(key_bytes))
 }
 
