@@ -48,7 +48,9 @@ pub(crate) async fn start_http_server(
         // TODO: Is there a way to have max_connections and other params for axum::serve?
         let result = axum::serve(
             listener,
-            ServiceExt::<axum::extract::Request>::into_make_service(router),
+            ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(
+                router,
+            ),
         )
         .with_graceful_shutdown(async move {
             shutdown_receiver.changed().await.ok();
