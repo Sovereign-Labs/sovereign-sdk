@@ -1,3 +1,6 @@
+# 2025-12-02
+- #2169 **Breaking change**: Add V2 transaction type for sequencer data. The `Transaction` enum now has three variants: `V0` (single-sig), `V1` (multisig), and `V2` (sequencer data). Code that pattern matches on `Transaction` will need to add a `V2` match arm. Also refactors transaction module structure by splitting version types into separate files (`v0.rs`, `v1.rs`, `v2.rs`, `unsigned.rs`) and eliminates authentication code duplication.
+
 # 2025-11-25
 - #2124 Allows configuring EVM contracts to pin their storage in RAM.
 
