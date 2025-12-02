@@ -6,13 +6,14 @@ use std::sync::OnceLock;
 
 use sov_rollup_interface::common::VisibleSlotNumber;
 
-use crate::influxdb::{publisher, safe_telegraf_string, Metric, DROPPED_METRICS_COUNT};
+use crate::influxdb::KnownMetric;
+use crate::influxdb::{
+    publisher, safe_telegraf_string, Metric, SubmittableMetric, SubmittableMetricKind,
+    DROPPED_METRICS_COUNT,
+};
 use crate::{MetricsTracker, MonitoringConfig};
 
 pub(crate) static METRICS_TRACKER: OnceLock<MetricsTracker> = OnceLock::new();
-
-/// Alias for number of nano-seconds since unix epoch.
-pub(crate) type Timestamp = u128;
 
 /// Spawns task that published metrics in the background.
 pub fn init_metrics_tracker(
@@ -36,25 +37,6 @@ pub fn init_metrics_tracker(
         }
     } else {
         None
-    }
-}
-
-#[derive(Debug)]
-struct MetricWithTimestamp(Box<dyn Metric>, Timestamp);
-
-impl Metric for MetricWithTimestamp {
-    fn measurement_name(&self) -> &'static str {
-        self.0.measurement_name()
-    }
-
-    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        self.0.serialize_for_telegraf(buffer)?;
-        write!(buffer, " {}", self.1)
-    }
-
-    #[cfg(feature = "gas-constant-estimation")]
-    fn write_to_csv(&self, writers: &mut super::csv_helper::CsvWriters) -> std::io::Result<()> {
-        self.0.write_to_csv(writers)
     }
 }
 
@@ -83,12 +65,22 @@ impl MetricsTracker {
     }
 
     /// Submits a metric with a timestamp.
-    pub fn submit_with_time(&self, timestamp: u128, measurement: impl Metric + 'static) {
-        tracing::trace!(?measurement, "Submitting a measurement");
-        let metric = MetricWithTimestamp(Box::new(measurement), timestamp);
+    pub fn submit_known_metric(&self, measurement: impl KnownMetric + 'static) {
+        let metric = measurement.to_known_submittable();
 
-        if let Err(e) = self.sender.try_send(Box::new(metric)) {
-            tracing::trace!(error = ?e, "Dropped measurement");
+        if let Err(_) = self.sender.try_send(metric) {
+            DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        };
+    }
+
+    /// Submits a metric with a timestamp.
+    pub fn submit_with_time(&self, timestamp: u128, measurement: impl Metric + 'static) {
+        let metric = SubmittableMetric::new(
+            super::SubmittableMetricKind::Boxed(Box::new(measurement)),
+            timestamp,
+        );
+
+        if let Err(_) = self.sender.try_send(metric) {
             DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         };
     }
@@ -603,6 +595,12 @@ impl Metric for HttpMetrics {
             self.handler_processing_time.as_micros(),
             self.response_body_size,
         )
+    }
+}
+
+impl KnownMetric for HttpMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::Http(self))
     }
 }
 

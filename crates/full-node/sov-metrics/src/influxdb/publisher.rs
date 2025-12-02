@@ -7,7 +7,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
 use crate::influxdb::tracker::DroppedMetrics;
-use crate::influxdb::SerializableMetric;
+use crate::influxdb::SubmittableMetric;
 use crate::{Metric, TelegrafSocketConfig};
 
 const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
@@ -81,7 +81,7 @@ impl MetricsPublisher {
 }
 
 pub(crate) async fn metrics_publisher_task(
-    mut metrics_receiver: tokio::sync::mpsc::Receiver<SerializableMetric>,
+    mut metrics_receiver: tokio::sync::mpsc::Receiver<SubmittableMetric>,
     config: &MonitoringConfig,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) {
