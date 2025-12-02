@@ -14,6 +14,12 @@ pub mod types;
 pub mod verifier;
 
 #[cfg(feature = "native")]
+pub use sov_metrics::{init_metrics_tracker, MonitoringConfig};
+pub use sov_rollup_interface::da::*;
+#[cfg(feature = "native")]
+pub use sov_rollup_interface::node::da::*;
+
+#[cfg(feature = "native")]
 pub use da_service::{CelestiaConfig, CelestiaService};
 
 pub use crate::celestia::*;
