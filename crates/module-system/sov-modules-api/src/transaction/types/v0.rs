@@ -3,7 +3,7 @@ use derivative::Derivative;
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
-use crate::transaction::{hex_field_format, Transaction, TransactionCallable, Credentials};
+use crate::transaction::{hex_field_format, Credentials, Transaction, TransactionCallable};
 use crate::{metered_credential, CryptoSpecExt, GasMeter, Spec, TxHash};
 
 #[derive(

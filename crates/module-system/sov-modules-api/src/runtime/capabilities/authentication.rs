@@ -15,6 +15,8 @@ use crate::capabilities::AuthorizationData;
 use crate::transaction::{
     AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError, TxDetails,
 };
+#[cfg(feature = "native")]
+use crate::CryptoSpecExt;
 use crate::GetGasPrice;
 use crate::{
     capabilities, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, GasMeteringError,
