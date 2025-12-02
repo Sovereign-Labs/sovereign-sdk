@@ -176,16 +176,12 @@ impl<S: Spec> AuthenticatedTransactionData<S> {
         gas_price: <S::Gas as Gas>::Price,
         slot_gas_limit: S::Gas,
     ) -> BasicGasMeter<S> {
-        match self.0.gas_limit {
-            Some(gas_limit) => {
-                // `GasArray::calculate_min` creates a new gas instance by selecting the minimum value along each dimension of the gas array.
-                let new_gas_limit = <S::Gas as GasArray>::calculate_min(gas_limit, slot_gas_limit);
-                BasicGasMeter::new_with_funds_and_gas(self.0.max_fee, new_gas_limit, gas_price)
-            }
-            None => {
-                BasicGasMeter::new_with_funds_and_gas(self.0.max_fee, slot_gas_limit, gas_price)
-            }
-        }
+        let gas_limit = self
+            .0
+            .gas_limit
+            .map(|gas_limit| <S::Gas as GasArray>::calculate_min(gas_limit, slot_gas_limit))
+            .unwrap_or(slot_gas_limit);
+        BasicGasMeter::new_with_funds_and_gas(self.0.max_fee, gas_limit, gas_price)
     }
 }
 

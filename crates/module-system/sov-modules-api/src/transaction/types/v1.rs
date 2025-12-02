@@ -1,6 +1,6 @@
-use crate::capabilities::UniquenessData;
-use crate::transaction::{Transaction, TransactionCallable, TxDetails};
-use crate::{CryptoSpecExt, Spec};
+use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
+use crate::transaction::{Credentials, Transaction, TransactionCallable, TxDetails};
+use crate::{CryptoSpecExt, GasMeter, GasSpec, Multisig, Spec, TxHash};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use sov_rollup_interface::common::SafeVec;
@@ -136,6 +136,37 @@ impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
     /// Checks if enough signers have signed the transaction for it to be valid.
     pub fn is_fully_signed(&self) -> bool {
         self.signatures.len() >= self.min_signers as usize
+    }
+
+    /// Extracts authorization data from this transaction.
+    pub fn auth_data<M: GasMeter<Spec = S>>(
+        &self,
+        raw_tx_hash: TxHash,
+        meter: &mut M,
+    ) -> Result<AuthorizationData<S>, AuthenticationError> {
+        // Charge gas; We charge for credential ID calculation based on the number of keys in the multisig
+        let num_signatures = (self.signatures.len() + self.unused_pub_keys.len()) as u32;
+        meter
+            .charge_linear_gas(S::gas_to_charge_for_credential(), num_signatures)
+            .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+
+        // Calculate credential ID as hash(min_signers || sorted(pub_keys))
+        let pub_keys = self
+            .signatures
+            .iter()
+            .map(|s| s.pub_key.clone())
+            .chain(self.unused_pub_keys.iter().cloned())
+            .collect::<Vec<_>>();
+        let multisig = Multisig::new(self.min_signers, pub_keys);
+        let credential_id = multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
+
+        Ok(AuthorizationData {
+            uniqueness: self.uniqueness,
+            tx_hash: raw_tx_hash,
+            credential_id,
+            credentials: Credentials::new(multisig),
+            default_address: credential_id.into(),
+        })
     }
 }
 

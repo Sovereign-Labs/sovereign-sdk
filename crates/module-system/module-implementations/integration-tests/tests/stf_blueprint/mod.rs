@@ -266,6 +266,9 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         Transaction::V1(_inner) => {
             todo!("Bad signature generation for multisig transactions is not yet supported");
         }
+        Transaction::V2(_inner) => {
+            todo!("Bad signature generation for sequencer data transactions is not yet supported");
+        }
     }
 }
 

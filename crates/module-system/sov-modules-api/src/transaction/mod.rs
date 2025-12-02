@@ -20,6 +20,7 @@ use thiserror::Error;
 pub use types::{
     v0::Version0,
     v1::{PubKeyAndSignature, Version1},
+    v2::Version2,
 };
 pub use unsigned::UnsignedTransaction;
 
@@ -79,6 +80,14 @@ pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as S
             deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
         ))]
         Version1<R::Call, S, C>,
+    ),
+    /// A V2 (sequencer data) transaction.
+    V2(
+        #[borsh(bound(
+            serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
+            deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
+        ))]
+        Version2<R::Call, S, C>,
     ),
 }
 
@@ -191,6 +200,16 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         match &self {
             Transaction::V0(inner) => &inner.runtime_call,
             Transaction::V1(inner) => &inner.runtime_call,
+            Transaction::V2(inner) => &inner.runtime_call,
+        }
+    }
+
+    /// Extract the runtime call from the transaction
+    pub fn into_runtime_call(self) -> R::Call {
+        match self {
+            Transaction::V0(inner) => inner.runtime_call,
+            Transaction::V1(inner) => inner.runtime_call,
+            Transaction::V2(inner) => inner.runtime_call,
         }
     }
 
@@ -199,6 +218,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         match &self {
             Transaction::V0(inner) => inner.details.chain_id,
             Transaction::V1(inner) => inner.details.chain_id,
+            Transaction::V2(inner) => inner.details.chain_id,
         }
     }
 
@@ -217,14 +237,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
             uniqueness,
             details,
         })
-    }
-
-    /// Extract the runtime call from the transaction
-    pub fn call(self) -> R::Call {
-        match self {
-            Transaction::V0(inner) => inner.runtime_call,
-            Transaction::V1(inner) => inner.runtime_call,
-        }
     }
 
     /// Serialize the transaction, appending the runtime's chain_hash.
@@ -248,17 +260,17 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     ) -> Result<(), TransactionVerificationError<S::Gas>> {
         match &self {
             Transaction::V0(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .charge_gas(meter, msg_len)
-                    .map_err(TransactionVerificationError::from)?;
+                MeteredSignature::new::<S>(inner.signature.clone()).charge_gas(meter, msg_len)?;
             }
             Transaction::V1(inner) => {
                 for signature in inner.signatures.iter() {
                     // Charge gas for all the signatures up front before verifying. This way, we can switch to batch verification and the gas price will be the same.
                     MeteredSignature::new::<S>(signature.signature.clone())
-                        .charge_gas(meter, msg_len)
-                        .map_err(TransactionVerificationError::from)?;
+                        .charge_gas(meter, msg_len)?;
                 }
+            }
+            Transaction::V2(inner) => {
+                MeteredSignature::new::<S>(inner.signature.clone()).charge_gas(meter, msg_len)?;
             }
         }
         Ok(())
@@ -290,6 +302,12 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
                     .verify_signature(msg, &inner.signatures)
                     .map_err(TransactionVerificationError::BadSignature)?;
             }
+            Transaction::V2(inner) => {
+                inner
+                    .signature
+                    .verify(&inner.pub_key, msg)
+                    .map_err(TransactionVerificationError::BadSignature)?;
+            }
         }
         Ok(())
     }
@@ -303,6 +321,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
                 inner.details.clone(),
             ),
             Transaction::V1(inner) => UnsignedTransaction::new_with_details(
+                inner.runtime_call.clone(),
+                inner.uniqueness,
+                inner.details.clone(),
+            ),
+            Transaction::V2(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
                 inner.uniqueness,
                 inner.details.clone(),

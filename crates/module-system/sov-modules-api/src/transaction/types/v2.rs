@@ -21,8 +21,8 @@ use crate::{metered_credential, CryptoSpecExt, GasMeter, Spec, TxHash};
     Eq(bound = "Call: PartialEq + Eq")
 )]
 #[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
-/// V0 transaction.
-pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
+/// V2 transaction.
+pub struct Version2<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// The signature of the transaction.
     #[serde(with = "hex_field_format")]
     #[sov_wallet(display = "hex")]
@@ -40,9 +40,11 @@ pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
+    /// Sequencer metadata. Can contain things like high-precision timestamps
+    pub sequencing_data: Vec<u8>,
 }
 
-impl<Call, S: Spec, C: CryptoSpecExt> Version0<Call, S, C> {
+impl<Call, S: Spec, C: CryptoSpecExt> Version2<Call, S, C> {
     /// Extracts authorization data from this transaction.
     pub fn auth_data<M: GasMeter<Spec = S>>(
         &self,
@@ -63,8 +65,8 @@ impl<Call, S: Spec, C: CryptoSpecExt> Version0<Call, S, C> {
     }
 }
 
-impl<R: TransactionCallable, S: Spec> From<Version0<R::Call, S>> for Transaction<R, S> {
-    fn from(value: Version0<R::Call, S>) -> Self {
-        Transaction::V0(value)
+impl<R: TransactionCallable, S: Spec> From<Version2<R::Call, S>> for Transaction<R, S> {
+    fn from(value: Version2<R::Call, S>) -> Self {
+        Transaction::V2(value)
     }
 }

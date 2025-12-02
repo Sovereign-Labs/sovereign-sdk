@@ -209,6 +209,9 @@ fn transaction_signed_properly_from_file() {
         Transaction::V1(_inner) => {
             panic!("V1 (multisig) transactions are not yet supported by the CLI tests");
         }
+        Transaction::V2(_inner) => {
+            panic!("V2 (sequencer data) transactions are not yet supported by the CLI tests");
+        }
     };
 
     assert_eq!(&runtime_call, signed_tx.runtime_call());
@@ -331,6 +334,9 @@ fn transaction_signed_by_account_nickname() {
         }
         Transaction::V1(_inner) => {
             panic!("V1 (multisig) transactions are not yet supported by the CLI tests");
+        }
+        Transaction::V2(_inner) => {
+            panic!("V2 (sequencer data) transactions are not yet supported by the CLI tests");
         }
     }
 }
