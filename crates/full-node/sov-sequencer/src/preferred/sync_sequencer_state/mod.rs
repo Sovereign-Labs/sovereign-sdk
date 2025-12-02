@@ -28,6 +28,7 @@ pub(crate) use sync_state::*;
 use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) use updator::*;
 mod conditions_table;
+mod rate_limiter;
 
 mod inner;
 mod sync_state;
