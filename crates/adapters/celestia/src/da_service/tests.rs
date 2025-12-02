@@ -27,7 +27,7 @@ async fn collect_all_blobs_between(
     height_before: u64,
 ) -> anyhow::Result<(Vec<BlobWithSender>, Vec<BlobWithSender>)> {
     // Adding one more height to the current head to accommodate for blob inclusion.
-    // Even by the time submiPayForBlob has returned it should be included, we observed flakyness.
+    // Even though by the time submiPayForBlob has returned it should be included, we observed flakyness.
     let height_after = da_service
         .get_head_block_header()
         .await?
