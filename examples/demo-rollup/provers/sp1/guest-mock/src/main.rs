@@ -22,7 +22,7 @@ pub fn main() {
     let stf: StfBlueprint<
         ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvm, Zk>,
         Runtime<_>,
-    > = StfBlueprint::new();
+    > = StfBlueprint::new(None);
 
     let stf_verifier = StfVerifier::<_, _, _, _, _>::new(stf, MockDaVerifier {});
 

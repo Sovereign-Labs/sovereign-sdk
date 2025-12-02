@@ -370,11 +370,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             };
 
         // Create STF with shared encryption layer
-        let native_stf = if let Some(ref encryption_layer) = shared_encryption_layer {
-            StfBlueprint::with_encryption_layer(Self::Runtime::default(), encryption_layer.clone())
-        } else {
-            StfBlueprint::new()
-        };
+        let native_stf = StfBlueprint::new(shared_encryption_layer.clone());
         let genesis_slot_number = genesis_params.genesis_slot_number();
         let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
             // Missing prev_root means need for initialization

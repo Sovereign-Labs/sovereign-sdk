@@ -24,11 +24,7 @@ where
     RT: Runtime<S>,
 {
     fn default() -> Self {
-        Self {
-            runtime: RT::default(),
-            encryption_layer: None,
-            phantom_context: PhantomData,
-        }
+        Self::new(None)
     }
 }
 
@@ -37,74 +33,27 @@ where
     S: Spec,
     RT: Runtime<S>,
 {
-    /// [`StfBlueprint`] constructor with the default [`Runtime`] value. Same as
-    /// [`Default::default`].
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// [`StfBlueprint`] constructor that automatically enables encryption if config is provided.
-    /// This is a convenience method that creates the STF with encryption when available,
-    /// falling back to no encryption if config is None.
-    pub async fn new_with_optional_encryption(
-        encryption_config: Option<sov_encryption::EncryptionConfig>,
-    ) -> Result<Self, sov_encryption::EncryptionError> {
-        tracing::info!(
-            "STF creating with encryption config: {:?}",
-            encryption_config
-        );
-        match encryption_config {
-            Some(config) => Self::with_encryption_config(RT::default(), config).await,
-            None => Ok(Self::default()),
+    /// [`StfBlueprint`] constructor with the default [`Runtime`] value and optional encryption layer.
+    pub fn new(encryption_layer: Option<sov_encryption::EncryptionLayer>) -> Self {
+        Self {
+            runtime: RT::default(),
+            encryption_layer,
+            phantom_context: PhantomData,
         }
     }
 
-    /// [`StfBlueprint`] constructor with a custom [`Runtime`] value.
-    pub fn with_runtime(runtime: RT) -> Self {
+
+    /// [`StfBlueprint`] constructor with a custom [`Runtime`] value and optional encryption layer.
+    pub fn with_runtime(runtime: RT, encryption_layer: Option<sov_encryption::EncryptionLayer>) -> Self {
         Self {
             runtime,
-            encryption_layer: None,
+            encryption_layer,
             phantom_context: PhantomData,
         }
     }
 
-    /// [`StfBlueprint`] constructor with a custom [`Runtime`] value and optional encryption.
-    /// This is a convenience method that creates the STF with encryption when available,
-    /// falling back to no encryption if config is None.
-    pub async fn with_runtime_and_optional_encryption(
-        runtime: RT,
-        encryption_config: Option<sov_encryption::EncryptionConfig>,
-    ) -> Result<Self, sov_encryption::EncryptionError> {
-        match encryption_config {
-            Some(config) => Self::with_encryption_config(runtime, config).await,
-            None => Ok(Self::with_runtime(runtime)),
-        }
-    }
 
-    /// [`StfBlueprint`] constructor with encryption enabled via configuration.
-    pub async fn with_encryption_config(
-        runtime: RT,
-        encryption_config: sov_encryption::EncryptionConfig,
-    ) -> Result<Self, sov_encryption::EncryptionError> {
-        let encryption_layer = sov_encryption::EncryptionLayer::new(encryption_config).await?;
-        Ok(Self {
-            runtime,
-            encryption_layer: Some(encryption_layer),
-            phantom_context: PhantomData,
-        })
-    }
 
-    /// [`StfBlueprint`] constructor with a custom encryption layer.
-    pub fn with_encryption_layer(
-        runtime: RT,
-        encryption_layer: sov_encryption::EncryptionLayer,
-    ) -> Self {
-        Self {
-            runtime,
-            encryption_layer: Some(encryption_layer),
-            phantom_context: PhantomData,
-        }
-    }
 
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]

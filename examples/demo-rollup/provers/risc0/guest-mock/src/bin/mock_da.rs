@@ -21,7 +21,7 @@ fn cycles_per_block() {
     let stf: StfBlueprint<
         ConfigurableSpec<MockDaSpec, Risc0, MockZkvm, MultiAddressEvm, Zk>,
         Runtime<_>,
-    > = StfBlueprint::new();
+    > = StfBlueprint::new(None);
 
     let stf_verifier = StfVerifier::<_, _, _, _, _>::new(stf, MockDaVerifier {});
 

@@ -816,7 +816,7 @@ where
     }
     .entered();
 
-    let stf = StfBlueprint::<S, Rt>::new();
+    let stf = StfBlueprint::<S, Rt>::new(None);
     let mut rt = Rt::default();
     let mut kernel = rt.kernel();
     let mut accessor: KernelStateAccessor<'_, S> =

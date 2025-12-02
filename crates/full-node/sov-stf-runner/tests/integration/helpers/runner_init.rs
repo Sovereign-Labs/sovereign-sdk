@@ -38,6 +38,7 @@ use sov_stf_runner::{
     initialize_state, query_state_update_info, HttpServerConfig, ProofManagerConfig, RollupConfig,
     RunnerConfig, StateTransitionRunner,
 };
+use full_node_configs::runner::StfConfig;
 use sov_test_utils::{
     TestSpec, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
 };
@@ -413,6 +414,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
             max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
         },
+        stf: StfConfig::default(),
         sequencer: SequencerConfig {
             automatic_batch_production: true,
             max_allowed_node_distance_behind: 10,
@@ -428,6 +430,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
             extension: None,
+            batch_encryption: None,
         },
         monitoring: MonitoringConfig::standard(),
     }
