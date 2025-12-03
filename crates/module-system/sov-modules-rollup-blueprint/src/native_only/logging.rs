@@ -3,6 +3,7 @@
 use std::env;
 use std::str::FromStr;
 
+use crate::native_only::telemetry::should_init_tokio_console_subscriber;
 pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
 use crate::GIT_COMMIT_HASH;
 use sov_modules_api::ExecutionContext;
@@ -48,7 +49,7 @@ pub fn initialize_logging() -> Option<OtelGuard> {
         .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP))
         .boxed();
 
-    if cfg!(tokio_unstable) {
+    if cfg!(tokio_unstable) && should_init_tokio_console_subscriber() {
         layers = layers
             .and_then(
                 // See <https://github.com/tokio-rs/console?tab=readme-ov-file#using-it>.
@@ -114,7 +115,7 @@ fn log_info_about_logging(current_env_filter: &str) {
     );
 
     let tokio_console_info_url = "https://github.com/tokio-rs/console";
-    if cfg!(tokio_unstable) {
+    if cfg!(tokio_unstable) && should_init_tokio_console_subscriber() {
         info!(
             tokio_console_info_url,
             "The Tokio debugging console is available",

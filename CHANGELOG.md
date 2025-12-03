@@ -1,3 +1,6 @@
+# 2025-12-03
+ - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
+
 # 2025-11-25
 - #2124 Allows configuring EVM contracts to pin their storage in RAM.
 
