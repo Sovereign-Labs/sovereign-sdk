@@ -93,7 +93,7 @@ where
         state_db: NomtSessionBuilder<H, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        use_strict_mode: bool,
+        strict_with_witness: bool,
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self;
 }
@@ -162,7 +162,7 @@ where
     fn create_state_up_to(
         &self,
         block_hash: Da::SlotHash,
-        use_strict_mode: bool,
+        with_witness: bool,
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> anyhow::Result<(S, DeltaReader)> {
         tracing::trace!(%block_hash, "Creating storage up to block hash");
@@ -194,7 +194,7 @@ where
             &self.rockbound_snapshots,
             self.nomt_snapshots.clone(),
             pinned_cache,
-            use_strict_mode,
+            with_witness,
         )
     }
 
@@ -265,8 +265,8 @@ where
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<(Self::StfState, Self::LedgerState)> {
         // Storage created "after" a block is usually used outside of the node context,
-        // So strict mode is not needed.
-        let use_strict_mode = false;
+        // So witness is not needed.
+        let with_witness = false;
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
             tracing::debug!(block_header = %block_header.display(), "Creating new storage from finalized data as block header is not in the saved chain");
             self.db_group.create_storage(
@@ -274,10 +274,10 @@ where
                 &self.rockbound_snapshots,
                 self.nomt_snapshots.clone(),
                 None,
-                use_strict_mode,
+                with_witness,
             )
         } else {
-            self.create_state_up_to(block_header.hash(), use_strict_mode, None)
+            self.create_state_up_to(block_header.hash(), with_witness, None)
         }
     }
 

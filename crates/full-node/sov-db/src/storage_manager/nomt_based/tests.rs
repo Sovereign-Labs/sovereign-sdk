@@ -48,8 +48,12 @@ impl TestableStorage for TestNomtStorage {
             accessory_db: _,
         } = self;
 
-        let user_session = state_session_builder.begin_user_session().unwrap();
-        let kernel_session = state_session_builder.begin_kernel_session().unwrap();
+        let user_session = state_session_builder
+            .begin_user_session_without_witness()
+            .unwrap();
+        let kernel_session = state_session_builder
+            .begin_kernel_session_without_witness()
+            .unwrap();
 
         let mut state_writes = Vec::with_capacity(items.len());
         let mut accessory_writes = Vec::with_capacity(items.len());
@@ -99,11 +103,17 @@ impl TestableStorage for TestNomtStorage {
         let schema_key = key.to_vec();
         let key_path = KeyPath::from(sha2::Sha256::digest(key));
         let kernel_value = {
-            let kernel_session = self.state_session_builder.begin_kernel_session().unwrap();
+            let kernel_session = self
+                .state_session_builder
+                .begin_kernel_session_without_witness()
+                .unwrap();
             kernel_session.read(key_path).unwrap()
         };
         let user_value = {
-            let user_session = self.state_session_builder.begin_user_session().unwrap();
+            let user_session = self
+                .state_session_builder
+                .begin_user_session_without_witness()
+                .unwrap();
             user_session.read(key_path).unwrap()
         };
         assert_eq!(kernel_value, user_value);
@@ -374,8 +384,12 @@ async fn test_root_hashes_match_after_crash() {
         let the_last_block = MockBlockHeader::from_height(blocks);
 
         let session_builder = get_session_builder_from_committed::<H, MockHash>(nomt.clone());
-        let user_session = session_builder.begin_user_session().unwrap();
-        let kernel_session = session_builder.begin_kernel_session().unwrap();
+        let user_session = session_builder
+            .begin_user_session_without_witness()
+            .unwrap();
+        let kernel_session = session_builder
+            .begin_kernel_session_without_witness()
+            .unwrap();
 
         let nomt_key = KeyPath::from(the_last_block.hash.0);
         let nomt_value = Some(the_last_block.hash.0.to_vec());

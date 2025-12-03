@@ -57,8 +57,14 @@ impl TestNomtStorage {
         nomt::Session<nomt::hasher::BinaryHasher<H>>,
         nomt::Session<nomt::hasher::BinaryHasher<H>>,
     ) {
-        let user_session = self.state_session_builder.begin_user_session().unwrap();
-        let kernel_session = self.state_session_builder.begin_kernel_session().unwrap();
+        let user_session = self
+            .state_session_builder
+            .begin_user_session_without_witness()
+            .unwrap();
+        let kernel_session = self
+            .state_session_builder
+            .begin_kernel_session_without_witness()
+            .unwrap();
 
         (user_session, kernel_session)
     }
@@ -70,7 +76,7 @@ impl crate::storage_manager::InitializableNativeNomtStorage<H, SlotHash> for Tes
         state_session_builder: crate::state_db_nomt::NomtSessionBuilder<H, SlotHash>,
         historical_state: crate::historical_state::HistoricalStateReader,
         accessory_db: AccessoryDb,
-        _use_strict_mode: bool,
+        _with_witness: bool,
         _pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self {
         TestNomtStorage {
