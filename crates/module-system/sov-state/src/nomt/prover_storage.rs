@@ -472,7 +472,9 @@ where
     ) -> Option<SlotValue> {
         match self.read_value::<N>(key, None) {
             Ok(val) => {
-                witness.add_hint(&val);
+                if self.is_strict_mode {
+                    witness.add_hint(&val);
+                }
                 val
             }
             Err(e) => {
