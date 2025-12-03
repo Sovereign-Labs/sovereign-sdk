@@ -177,11 +177,24 @@ pub struct AsyncBatchResponder<S: Spec> {
 }
 
 impl<S: Spec> AsyncBatchResponder<S> {
-    fn send_item(&self, item: AsyncBatchResult<S>) {
+    fn send_async_btach_result(&self, item: AsyncBatchResult<S>) {
         // Try a simple non-blocking send first, then fall back to blocking the runtime if that fails
         if let Err(TrySendError::Full(item)) = self.result_channel.try_send(item) {
             let _ = Handle::current().block_on(async move { self.result_channel.send(item).await });
         }
+    }
+
+    fn send(
+        &self,
+        gas_used: <S as Spec>::Gas,
+        execution_time_micros: u64,
+        inner_result: Result<ExecutedTxResponse<S>, RejectReason>,
+    ) {
+        self.send_async_btach_result(AsyncBatchResult {
+            gas_used,
+            execution_time_micros,
+            inner_result,
+        });
     }
 
     /// Create a new responder for a single tx that shares the same config as the old value. Note that the timestamp is a fresh atomic initialized to zero
@@ -224,11 +237,11 @@ impl<S: Spec> AsyncBatchResponder<S> {
         } else {
             let execution_time_micros =
                 time_now_to_u64() - self.unix_timestamp_micros.load(Ordering::SeqCst);
-            self.send_item(AsyncBatchResult {
-                gas_used: S::Gas::zero(),
+            self.send(
+                S::Gas::zero(),
                 execution_time_micros,
-                inner_result: Err(RejectReason::SenderMustBeAdmin),
-            });
+                Err(RejectReason::SenderMustBeAdmin),
+            );
             TxControlFlow::IgnoreTx
         }
     }
@@ -249,11 +262,11 @@ impl<S: Spec> AsyncBatchResponder<S> {
             execution_status,
         } = provisional_outcome;
         let MaybeExecuted::Executed(receipt) = execution_status else {
-            self.send_item(AsyncBatchResult {
+            self.send(
                 gas_used,
                 execution_time_micros,
-                inner_result: Err(RejectReason::SequencerOutOfGas),
-            });
+                Err(RejectReason::SequencerOutOfGas),
+            );
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
@@ -264,23 +277,19 @@ impl<S: Spec> AsyncBatchResponder<S> {
                 remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
             };
 
-            self.send_item(AsyncBatchResult {
-                gas_used,
-                execution_time_micros,
-                inner_result: Ok(response),
-            });
+            self.send(gas_used, execution_time_micros, Ok(response));
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 
         if penalty > reward || reward.saturating_sub(penalty) < self.tx_profit_threshold {
-            self.send_item(AsyncBatchResult {
+            self.send(
                 gas_used,
                 execution_time_micros,
-                inner_result: Err(RejectReason::InsufficientReward {
+                Err(RejectReason::InsufficientReward {
                     expected: self.tx_profit_threshold,
                     found: reward.saturating_sub(penalty).0,
                 }),
-            });
+            );
 
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
@@ -296,11 +305,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             remaining_slot_gas,
         };
 
-        self.send_item(AsyncBatchResult {
-            gas_used,
-            execution_time_micros,
-            inner_result: Ok(response),
-        });
+        self.send(gas_used, execution_time_micros, Ok(response));
         (
             dirty_scratchpad.commit(),
             TxControlFlow::ContinueProcessing(receipt),
