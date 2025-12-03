@@ -91,4 +91,7 @@ pub struct AuthorizationData<S: Spec> {
 
     /// The default address.
     pub default_address: S::Address,
+
+    /// Sequencing data provided by the sequencer (V2 transactions only).
+    pub sequencing_data: Option<Vec<u8>>,
 }

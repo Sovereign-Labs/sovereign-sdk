@@ -187,6 +187,11 @@ impl<S: Spec> Context<S> {
         &self.sequencing_data
     }
 
+    /// Updates the sequencing data
+    pub fn set_sequencing_data(&mut self, data: Vec<u8>) {
+        self.sequencing_data = Some(data);
+    }
+
     /// Returns the rollup address which will receive any gas refund from the transaction.
     pub fn gas_refund_recipient(&self) -> &S::Address {
         &self.gas_refund_recipient
@@ -227,6 +232,7 @@ impl<S: Spec> Context<S> {
             sequencer,
             sequencer_da_address,
             gas_refund_recipient: payer,
+            sequencing_data: None,
         }
     }
 
