@@ -34,6 +34,7 @@ use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -50,6 +51,8 @@ type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 
 const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
+const SOCKET_ADDRESS_ERROR: &str = "Unable to retrieve the peer socket address";
+
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
 impl<S, Seq> Handlers<S, Seq>
@@ -62,11 +65,13 @@ where
     pub async fn eth_send_raw_transaction(
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
+        extensions: Extensions,
     ) -> RpcResult<B256> {
         let start = Instant::now();
+        let addr = get_socket_addr(extensions)?;
+
         let noop = |tx_hash, _| Ok(tx_hash);
-        let result = Self::process_raw_transaction(parameters.one()?, ethereum, noop).await;
+        let result = Self::process_raw_transaction(parameters.one()?, ethereum, noop, addr).await;
         track_metrics("eth_sendRawTransaction", start, &result);
         result
     }
@@ -74,7 +79,7 @@ where
     pub async fn eth_send_raw_transaction_sync(
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
+        extensions: Extensions,
     ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
         let mut params = parameters.sequence();
@@ -86,9 +91,11 @@ where
                 ETH_RPC_ERROR,
             ));
         }
+        let addr = get_socket_addr(extensions)?;
+
         let result = timeout(
             Duration::from_millis(timeout_ms),
-            Self::process_raw_transaction(data, ethereum, Self::get_receipt),
+            Self::process_raw_transaction(data, ethereum, Self::get_receipt, addr),
         )
         .await
         .map_err(|_| {
@@ -107,11 +114,14 @@ where
     pub async fn realtime_send_raw_transaction(
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
+        extensions: Extensions,
     ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
+        let addr = get_socket_addr(extensions)?;
+
         let result =
-            Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt).await;
+            Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt, addr)
+                .await;
         track_metrics("realtime_sendRawTransaction", start, &result);
         result
     }
@@ -126,6 +136,7 @@ where
         data: Bytes,
         ethereum: Arc<Ethereum<S, Seq>>,
         on_success: F,
+        addr: SocketAddr,
     ) -> RpcResult<T>
     where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
@@ -136,7 +147,7 @@ where
         Self::authenticate_tx(&tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
-        seq.accept_tx(tx).await.map_err(|e| {
+        seq.accept_tx(tx, addr).await.map_err(|e| {
             to_jsonrpsee_error_object(
                 format!("{} - '{}' ({:?})", e.status, e.message, e.details),
                 ETH_RPC_ERROR,
@@ -173,9 +184,10 @@ where
     pub async fn eth_send_transaction(
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
+        extensions: Extensions,
     ) -> RpcResult<B256> {
         let mut transaction_request: TransactionRequest = parameters.one()?;
+        let addr = get_socket_addr(extensions)?;
 
         let evm = Evm::<S>::default();
 
@@ -243,7 +255,7 @@ where
 
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
-        ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
+        ethereum.sequencer.accept_tx(tx, addr).await.map_err(|e| {
             to_jsonrpsee_error_object(
                 format!("{} - '{}' ({:?})", e.status, e.message, e.details),
                 ETH_RPC_ERROR,
@@ -266,4 +278,13 @@ fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResu
     sov_metrics::track_metrics(|tracker| {
         tracker.submit(metrics);
     });
+}
+
+// Gets the SocketAddr needed for rete-limiting.
+fn get_socket_addr(extensions: Extensions) -> Result<SocketAddr, ErrorObjectOwned> {
+    // The `SocketAddr`` was injected into the request extensions by specific middleware in `axum::serve`.
+    extensions
+        .get::<SocketAddr>()
+        .copied()
+        .ok_or_else(|| to_jsonrpsee_error_object(SOCKET_ADDRESS_ERROR, ETH_RPC_ERROR))
 }

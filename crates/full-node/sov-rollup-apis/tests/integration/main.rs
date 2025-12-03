@@ -98,7 +98,7 @@ impl TestData {
             tokio::spawn(async move {
                 axum_server::Server::bind(SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0)))
                     .handle(handle1)
-                    .serve(axum_router.into_make_service())
+                    .serve(axum_router.into_make_service_with_connect_info::<SocketAddr>())
                     .await
                     .unwrap();
             });

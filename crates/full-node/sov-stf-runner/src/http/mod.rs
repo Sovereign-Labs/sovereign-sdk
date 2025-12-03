@@ -1,6 +1,6 @@
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::Request;
+use axum::extract::{ConnectInfo, Request};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
@@ -23,6 +23,50 @@ use tower_layer::{Identity, Layer};
 use crate::http::id_provider::HexIdProvider;
 use crate::CorsConfiguration;
 mod id_provider;
+
+// Middleware to inject SocketAddr from axum's ConnectInfo into the request extensions
+// so that jsonrpsee RPC handlers can access it via the Extensions parameter
+#[derive(Clone)]
+struct InjectSocketAddrLayer;
+
+impl<S> Layer<S> for InjectSocketAddrLayer {
+    type Service = InjectSocketAddrService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        InjectSocketAddrService { inner }
+    }
+}
+
+#[derive(Clone)]
+struct InjectSocketAddrService<S> {
+    inner: S,
+}
+
+impl<S, B> tower::Service<axum::http::Request<B>> for InjectSocketAddrService<S>
+where
+    S: tower::Service<axum::http::Request<B>>,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: axum::http::Request<B>) -> Self::Future {
+        // Extract SocketAddr from axum's ConnectInfo and insert it directly
+        // into extensions so jsonrpsee can access it
+        if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned()
+        {
+            req.extensions_mut().insert(addr);
+        }
+        self.inner.call(req)
+    }
+}
 
 pub(crate) async fn start_http_server(
     listen_address_http: &SocketAddr,
@@ -48,7 +92,9 @@ pub(crate) async fn start_http_server(
         // TODO: Is there a way to have max_connections and other params for axum::serve?
         let result = axum::serve(
             listener,
-            ServiceExt::<axum::extract::Request>::into_make_service(router),
+            ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(
+                router,
+            ),
         )
         .with_graceful_shutdown(async move {
             shutdown_receiver.changed().await.ok();
@@ -94,6 +140,11 @@ pub fn rpc_module_to_router(
     let http_service = error_layer.layer(http_service);
     let ws_service = error_layer.layer(ws_service);
 
+    // Wrap services with the SocketAddr injection layer
+    let inject_addr_layer = InjectSocketAddrLayer;
+    let http_service = inject_addr_layer.layer(http_service);
+    let ws_service = inject_addr_layer.layer(ws_service);
+
     let router = axum::routing::get_service(ws_service)
         .post_service(http_service)
         .layer(cors_layer);
@@ -109,6 +160,7 @@ fn http_service(
         .http_only()
         .max_connections(10_000)
         .build();
+
     ServerBuilder::with_config(config)
         .to_service_builder()
         .build(methods, stop_handle)
