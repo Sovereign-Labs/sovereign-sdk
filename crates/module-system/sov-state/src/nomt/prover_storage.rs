@@ -35,9 +35,10 @@ where
     state_session_builder: NomtSessionBuilder<S::Hasher, K>,
     historical_state: HistoricalStateReader,
     accessory: AccessoryDb,
-    /// If set to true, consistency between NOMT and rocksdb will be checked, in some cases.
+    /// If set to true, witness will be populated in all necessary places.
+    /// Also, will do consistency check between NOMT and rocksdb in some cases.
     /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
-    is_strict_mode: bool,
+    with_witness: bool,
     pinned_cache: Option<PinnedCache>,
 }
 
@@ -54,7 +55,7 @@ where
             state_session_builder: self.state_session_builder.clone(),
             historical_state: self.historical_state.clone(),
             accessory: self.accessory.clone(),
-            is_strict_mode: self.is_strict_mode,
+            with_witness: self.with_witness,
             pinned_cache: None,
         }
     }
@@ -80,14 +81,14 @@ where
         state_session_builder: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory: AccessoryDb,
-        use_strict_mode: bool,
+        with_witness: bool,
         pinned_cache: Option<PinnedCache>,
     ) -> Self {
         Self {
             state_session_builder,
             historical_state,
             accessory,
-            is_strict_mode: use_strict_mode,
+            with_witness,
             pinned_cache,
         }
     }
@@ -100,7 +101,7 @@ where
     /// Allows changing strict mode for the existing storage.
     #[cfg(feature = "test-utils")]
     pub fn change_strict_mode(&mut self, use_strict_mode: bool) {
-        self.is_strict_mode = use_strict_mode;
+        self.with_witness = use_strict_mode;
     }
 
     /// Returns a double option: The outer option is `None` if there is no reasonable version to use,
@@ -135,7 +136,7 @@ where
     /// not the latest known to this storage.
     fn should_check_dbs_sync(&self, version_to_use: SlotNumber) -> bool {
         cfg!(debug_assertions) &&
-            self.is_strict_mode
+            self.with_witness
             // latest version can be equal to genesis in 2 cases: pre-genesis and at genesis.
             // Since genesis is a special case and not covered by normal stf transition,
             // we exclude this case for simpler testing.
@@ -399,7 +400,7 @@ where
         state_db: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        use_strict_mode: bool,
+        with_witness: bool,
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self {
         let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
@@ -407,7 +408,7 @@ where
             state_db,
             historical_state,
             accessory_db,
-            use_strict_mode,
+            with_witness,
             pinned_cache,
         )
     }
@@ -472,7 +473,7 @@ where
     ) -> Option<SlotValue> {
         match self.read_value::<N>(key, None) {
             Ok(val) => {
-                if self.is_strict_mode {
+                if self.with_witness {
                     witness.add_hint(&val);
                 }
                 val
@@ -509,7 +510,7 @@ where
             kernel: kernel_session,
         } = self
             .state_session_builder
-            .begin_both_sessions(self.is_strict_mode)?;
+            .begin_both_sessions(self.with_witness)?;
         let starting_session_time = start.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
@@ -518,7 +519,7 @@ where
         let current_prev_root = StorageRoot::new(current_prev_user_root, current_prev_kernel_root);
 
         // Check staleness, pre-computation:
-        if self.is_strict_mode && current_prev_root != prev_state_root {
+        if self.with_witness && current_prev_root != prev_state_root {
             anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
                 next_version,
                 prev_state_root,
@@ -532,7 +533,7 @@ where
                 user_session,
                 &state_accesses.user,
                 witness,
-                self.is_strict_mode,
+                self.with_witness,
             )
             .context("user state")?
         };
@@ -543,7 +544,7 @@ where
                 kernel_session,
                 &state_accesses.kernel,
                 witness,
-                self.is_strict_mode,
+                self.with_witness,
             )
             .context("kernel state")?
         };
@@ -557,7 +558,7 @@ where
         );
 
         // Check staleness, post-computation. This should check if storage became stale during the computation.
-        if self.is_strict_mode && prev_state_root != finished_session_prev_root {
+        if self.with_witness && prev_state_root != finished_session_prev_root {
             anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
                 next_version,
                 prev_state_root,
