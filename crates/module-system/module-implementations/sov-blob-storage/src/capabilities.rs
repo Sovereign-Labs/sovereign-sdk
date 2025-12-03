@@ -1176,11 +1176,6 @@ impl<S: Spec> BlobStorage<S> {
         })
     }
 
-    /// Deserialize an unencrypted batch blob.
-    /// Removed deserialize_unencrypted_batch - now handled directly in deserialize_and_decrypt_batch
-
-    /// This method has been removed - decryption now handled by EncryptionLayer::decrypt_for_slot
-
     /// Deserialize transaction data from decrypted bytes.
     fn deserialize_transaction_data(
         &self,
