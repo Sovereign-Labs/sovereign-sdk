@@ -513,7 +513,7 @@ where
             provisional_outcome,
             dirty_scratchpad,
             slot_gas_meter,
-            &gas_used,
+            gas_used,
             execution_context,
         );
         match outcome {
