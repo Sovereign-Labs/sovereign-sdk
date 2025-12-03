@@ -1092,9 +1092,8 @@ impl<S: Spec> BlobStorage<S> {
         }
     }
 
-    /// Deserialize a batch blob into PreferredBatchData, handling both encrypted and unencrypted variants.
-    /// If encryption_layer exists, tries encrypted deserialization. Otherwise, tries unencrypted.
-    /// Always returns PreferredBatchData regardless of whether the source was encrypted.
+    /// Deserialize a batch blob into PreferredBatchData with uniform encryption handling.
+    /// Based on rollup configuration, all batches are either encrypted or unencrypted.
     fn deserialize_and_decrypt_batch(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
@@ -1102,89 +1101,136 @@ impl<S: Spec> BlobStorage<S> {
         state: &mut KernelStateAccessor<'_, S>,
         encryption_layer: Option<&sov_encryption::EncryptionLayer>,
     ) -> Option<PreferredBatchData> {
-        if let Some(encryption_layer) = encryption_layer {
-            // Encryption layer exists - try encrypted deserialization path
-            if let Some(encrypted_batch) = self
-                .deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
-                    blob,
-                    charge_for_deserialization.map(|(seq, price)| (seq, *price)),
-                    true,
-                    state,
-                )
-            {
-                // Use the slot number from the encrypted batch for decryption to ensure
-                // we use the same key that was used for encryption
-                let encryption_slot = encrypted_batch.encryption_slot;
-                tracing::info!(
-                    "🔓 STF: Setting encryption slot to {} for decryption (batch sequence #{})",
-                    encryption_slot,
-                    encrypted_batch.sequence_number
-                );
-
-                // Get the key that was used for encryption at this specific slot
-                if let Some(key_for_slot) = encryption_layer.get_key_for_slot(encryption_slot) {
-                    tracing::info!(
-                        "🔓 STF: Using key '{}' for slot {} decryption",
-                        key_for_slot.id,
-                        encryption_slot
-                    );
-
-                    // Use the specific key to decrypt
-                    match encryption_layer.decrypt_with_key(
-                        &key_for_slot.material,
-                        &encrypted_batch.encrypted_txs_data,
-                    ) {
-                        Ok(decrypted_txs_bytes) => {
-                            match borsh::from_slice::<
-                                std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>,
-                            >(&decrypted_txs_bytes)
-                            {
-                                Ok(txs) => {
-                                    tracing::info!("✅ STF: Successfully decrypted batch #{} with {} transactions using key '{}' for slot {}", 
-                                                   encrypted_batch.sequence_number, txs.len(), key_for_slot.id, encryption_slot);
-                                    return Some(PreferredBatchData {
-                                        sequence_number: encrypted_batch.sequence_number,
-                                        data: txs,
-                                        visible_slots_to_advance: encrypted_batch
-                                            .visible_slots_to_advance,
-                                    });
-                                }
-                                Err(e) => {
-                                    tracing::error!("❌ STF: Failed to deserialize decrypted transactions for slot {}: {}", encryption_slot, e);
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "❌ STF: Failed to decrypt batch #{} with key '{}' for slot {}: {}",
-                                encrypted_batch.sequence_number,
-                                key_for_slot.id,
-                                encryption_slot,
-                                e
-                            );
-                        }
-                    }
-                } else {
-                    tracing::error!(
-                        "❌ STF: No key available for encryption slot {} (batch sequence #{})",
-                        encryption_slot,
-                        encrypted_batch.sequence_number
-                    );
-                }
+        match encryption_layer {
+            Some(encryption) => {
+                // Rollup is configured for encryption - all batches must be encrypted
+                self.deserialize_encrypted_batch(blob, charge_for_deserialization, state, encryption)
             }
-        } else {
-            // No encryption layer - try unencrypted deserialization path
-            if let Some(batch) = self.deserialize_or_try_slash_sender::<PreferredBatchData>(
-                blob,
-                charge_for_deserialization.map(|(seq, price)| (seq, *price)),
-                false,
-                state,
-            ) {
-                return Some(batch);
+            None => {
+                // Rollup is configured for no encryption - all batches must be unencrypted
+                self.deserialize_unencrypted_batch(blob, charge_for_deserialization, state)
             }
         }
+    }
 
-        None
+    /// Deserialize and decrypt an encrypted batch blob.
+    fn deserialize_encrypted_batch(
+        &mut self,
+        blob: &mut <S::Da as DaSpec>::BlobTransaction,
+        charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
+        state: &mut KernelStateAccessor<'_, S>,
+        encryption_layer: &sov_encryption::EncryptionLayer,
+    ) -> Option<PreferredBatchData> {
+        // Deserialize the encrypted batch metadata
+        let encrypted_batch = self.deserialize_or_try_slash_sender::<EncryptedPreferredBatchData>(
+            blob,
+            charge_for_deserialization.map(|(seq, price)| (seq, *price)),
+            true,
+            state,
+        )?;
+
+        tracing::info!(
+            "🔓 STF: Deserializing encrypted batch #{} for slot {}",
+            encrypted_batch.sequence_number,
+            encrypted_batch.encryption_slot
+        );
+
+        // Get the decryption key for this specific slot
+        let key_for_slot = encryption_layer.get_key_for_slot(encrypted_batch.encryption_slot)?;
+
+        tracing::debug!(
+            "🔓 STF: Using key '{}' to decrypt batch #{} for slot {}",
+            key_for_slot.id,
+            encrypted_batch.sequence_number,
+            encrypted_batch.encryption_slot
+        );
+
+        // Decrypt the transaction data
+        let decrypted_txs_bytes = self.decrypt_transaction_data(
+            &encrypted_batch,
+            encryption_layer,
+            &key_for_slot,
+        )?;
+
+        // Deserialize the decrypted transactions
+        let txs = self.deserialize_transaction_data(&decrypted_txs_bytes, &encrypted_batch)?;
+
+        tracing::info!(
+            "✅ STF: Successfully decrypted batch #{} with {} transactions for slot {}",
+            encrypted_batch.sequence_number,
+            txs.len(),
+            encrypted_batch.encryption_slot
+        );
+
+        Some(PreferredBatchData {
+            sequence_number: encrypted_batch.sequence_number,
+            data: txs,
+            visible_slots_to_advance: encrypted_batch.visible_slots_to_advance,
+        })
+    }
+
+    /// Deserialize an unencrypted batch blob.
+    fn deserialize_unencrypted_batch(
+        &mut self,
+        blob: &mut <S::Da as DaSpec>::BlobTransaction,
+        charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
+        state: &mut KernelStateAccessor<'_, S>,
+    ) -> Option<PreferredBatchData> {
+        tracing::debug!("STF: Deserializing unencrypted batch from blob {}", blob.hash());
+        
+        self.deserialize_or_try_slash_sender::<PreferredBatchData>(
+            blob,
+            charge_for_deserialization.map(|(seq, price)| (seq, *price)),
+            false,
+            state,
+        )
+    }
+
+    /// Decrypt the encrypted transaction data using the provided key.
+    fn decrypt_transaction_data(
+        &self,
+        encrypted_batch: &EncryptedPreferredBatchData,
+        encryption_layer: &sov_encryption::EncryptionLayer,
+        key_for_slot: &sov_encryption::InternalKey,
+    ) -> Option<Vec<u8>> {
+        match encryption_layer.decrypt_with_key(
+            &key_for_slot.material,
+            &encrypted_batch.encrypted_txs_data,
+        ) {
+            Ok(decrypted_bytes) => Some(decrypted_bytes),
+            Err(e) => {
+                tracing::error!(
+                    "❌ STF: Failed to decrypt batch #{} with key '{}' for slot {}: {}",
+                    encrypted_batch.sequence_number,
+                    key_for_slot.id,
+                    encrypted_batch.encryption_slot,
+                    e
+                );
+                None
+            }
+        }
+    }
+
+    /// Deserialize transaction data from decrypted bytes.
+    fn deserialize_transaction_data(
+        &self,
+        decrypted_txs_bytes: &[u8],
+        encrypted_batch: &EncryptedPreferredBatchData,
+    ) -> Option<std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>> {
+        match borsh::from_slice::<std::sync::Arc<Vec<sov_modules_api::FullyBakedTx>>>(
+            decrypted_txs_bytes,
+        ) {
+            Ok(txs) => Some(txs),
+            Err(e) => {
+                tracing::error!(
+                    "❌ STF: Failed to deserialize decrypted transactions for batch #{} slot {}: {}",
+                    encrypted_batch.sequence_number,
+                    encrypted_batch.encryption_slot,
+                    e
+                );
+                None
+            }
+        }
     }
 }
 
