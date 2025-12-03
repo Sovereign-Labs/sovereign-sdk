@@ -16,6 +16,7 @@ use crate::preferred::Inner;
 use crate::preferred::InnerGuard;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::preferred::SequencerStateUpdatorError;
+use crate::preferred::StateUpdateNotification;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, DbEvent,
@@ -35,6 +36,8 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -75,6 +78,8 @@ where
     // A heap of message, ordered from low to high priority.
     pub(super) heap: BTreeMap<Priority, Message<S, Rt>>,
     pub(super) runtime: Rt,
+    pub(crate) test_only_state_update_notification_sender:
+        broadcast::Sender<StateUpdateNotification>,
 }
 
 impl<S, Rt> SynchronizedSequencerState<S, Rt>
@@ -264,6 +269,8 @@ where
                 data,
                 reason,
             } => {
+                let slot_number = info.slot_number;
+                let finalized_slot_number = info.latest_finalized_slot_number;
                 let ret = self
                     .process_final_catchup(
                         info,
@@ -276,6 +283,14 @@ where
                     .await;
 
                 self.send_response(resp, ret, "final_catchup").await;
+                // Send a state update notification (for testing. Note that we've already released the lock at this point, so there should be no performance impact)
+                // but updates are not strictly guaranteed to be delivered in order. We discard errors because we don't care if there are no subscribers.
+                let _ =
+                    self.test_only_state_update_notification_sender
+                        .send(StateUpdateNotification {
+                            slot_number,
+                            finalized_slot_number,
+                        });
             }
             Message::PruneSequencerDb { reason } => {
                 self.process_prune_sequencer_db(reason).await;
@@ -306,7 +321,18 @@ where
                     .await;
             }
             Message::SimpleStateUpdate { info } => {
+                let slot_number = info.slot_number;
+                let finalized_slot_number = info.latest_finalized_slot_number;
+
                 self.process_new_storage(info).await;
+                // Send a state update notification (for testing. Note that we've already released the lock at this point, so there should be no performance impact)
+                // but updates are not strictly guaranteed to be delivered in order. We discard errors because we don't care if there are no subscribers.
+                let _ =
+                    self.test_only_state_update_notification_sender
+                        .send(StateUpdateNotification {
+                            slot_number,
+                            finalized_slot_number,
+                        });
             }
             Message::ReplicaBatchStartMsg {
                 resp,

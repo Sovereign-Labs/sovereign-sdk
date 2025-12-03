@@ -27,6 +27,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
 pub(crate) use sync_state::*;
+use tokio::sync::broadcast;
 use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) use updator::*;
 mod conditions_table;
@@ -206,6 +207,7 @@ where
             message_receiver,
             heap: BTreeMap::new(),
             runtime: Default::default(),
+            test_only_state_update_notification_sender: broadcast::channel(100).0,
         },
         SequencerStateUpdator {
             message_sender,
