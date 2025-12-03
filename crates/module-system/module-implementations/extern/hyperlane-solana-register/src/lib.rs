@@ -1,8 +1,9 @@
 use std::str::FromStr as _;
 
+use sov_modules_api::macros::serialize;
 use sov_modules_api::{
     err_detail, Base58Address, Context, CoreModuleError, CredentialId, ErrorContext, ErrorDetail,
-    HexHash, HexString, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, TxState,
+    HexHash, HexString, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, TxState, EventEmitter,
 };
 
 use sov_hyperlane_integration::{HyperlaneAddress, Ism, Recipient, Warp};
@@ -55,6 +56,12 @@ impl ErrorDetail for SolanaRegistrationError {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]
+#[serialize(Borsh, Serde)]
+pub enum Event {
+    UserRegistered { user_pubkey: [u8; 32], embedded_pubkey: [u8; 32] },
+}
+
 impl<S: Spec> Module for SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
@@ -67,7 +74,7 @@ where
 
     type CallMessage = ();
 
-    type Event = ();
+    type Event = Event;
 
     fn call(
         &mut self,
@@ -152,6 +159,10 @@ where
                 registered_address: resolved_address.to_string(),
             })
         } else {
+            self.emit_event(state, Event::UserRegistered {
+                user_pubkey,
+                embedded_pubkey,
+            });
             Ok(())
         }
     }

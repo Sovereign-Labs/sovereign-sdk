@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use hyperlane_register_module::{config, SolanaRegistration};
+use sov_hyperlane_register_module::{config, SolanaRegistration};
 use sov_bank::Amount;
 use sov_hyperlane_integration::warp::{Admin, TokenKind};
 use sov_hyperlane_integration::{
