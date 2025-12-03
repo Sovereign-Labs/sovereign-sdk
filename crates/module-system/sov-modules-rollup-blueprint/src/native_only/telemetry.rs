@@ -142,17 +142,31 @@ pub fn should_init_open_telemetry_exporter() -> bool {
         "None of standard OTEL_ prefixed environment variables are set, checking.. {SOV_OTEL_ENV}"
     );
 
-    match std::env::var(SOV_OTEL_ENV).as_deref() {
+    check_and_log_truthiness(SOV_OTEL_ENV, "Open Telemetry exporter")
+}
+
+/// Helper function to ensure if open telemetry exporter should be enabled.
+pub fn should_init_tokio_console_subscriber() -> bool {
+    // logging in this function won't be printed originally, but on the second it will
+    let var_name: &'static str = "TOKIO_CONSOLE";
+
+    check_and_log_truthiness(var_name, "Tokio console subscriber")
+}
+
+fn check_and_log_truthiness(value: &str, item_to_enable: &str) -> bool {
+    match std::env::var(value).as_deref() {
         Ok("1") | Ok("true") => {
-            tracing::debug!("`{SOV_OTEL_ENV}` environment variable is set, Open Telemetry exporter will be enabled with default values");
+            tracing::debug!("`{value}` environment variable is set, {item_to_enable} will be enabled with default values");
             true
         }
         Ok(value) => {
-            tracing::info!(%value, "Value of environment variable `{SOV_OTEL_ENV}` suggests not enabling Open Telemetry exporter");
+            tracing::info!(%value, "Value of environment variable `{value}` suggests not enabling {item_to_enable}");
             false
         }
         Err(_) => {
-            tracing::trace!("Environment variable `{SOV_OTEL_ENV}` is not set, Open Telemetry exporter won't be enabled");
+            tracing::trace!(
+                "Environment variable `{value}` is not set, {item_to_enable} won't be enabled"
+            );
             false
         }
     }
