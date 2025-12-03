@@ -604,6 +604,19 @@ where
             .await
     }
 
+    /// Populates sequencing_data for V2 transactions with a high-precision timestamp.
+    /// Returns the modified transaction bytes, or the original if not V2 or on error.
+    fn populate_sequencing_data_for_v2(baked_tx: &FullyBakedTx) -> FullyBakedTx {
+        // TODO: Implement V2 transaction sequencing_data population
+        // For now, pass through as-is
+        //
+        // Future implementation:
+        // 1. Deserialize to check if V2
+        // 2. Add timestamp: SystemTime::now().duration_since(UNIX_EPOCH).as_nanos()
+        // 3. Re-serialize and return
+        baked_tx.clone()
+    }
+
     #[tracing::instrument(skip_all, level = "trace")]
     async fn accept_tx_inner(
         &self,
@@ -615,6 +628,9 @@ where
         }
 
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
+
+        // Populate sequencing_data for V2 transactions before computing hash
+        let baked_tx = Self::populate_sequencing_data_for_v2(&baked_tx);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
         tracing::debug!(%tx_hash, "Executing accept_tx");
