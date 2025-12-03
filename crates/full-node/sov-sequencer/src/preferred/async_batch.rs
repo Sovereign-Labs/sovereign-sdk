@@ -18,6 +18,17 @@ use tokio::sync::oneshot;
 use super::{RejectReason, Spec, StateCheckpoint};
 use crate::common::sender_is_allowed;
 
+/// Returns true if a transaction with the given receipt would be included on-chain
+/// (incrementing the user's nonce), based on the `allow_failed_txs` configuration.
+///
+/// - Successful transactions are always included.
+/// - Reverted transactions are only included if `allow_failed_txs` is true.
+/// - Skipped transactions are never included (they represent pre-execution failures
+///   like invalid signature, invalid nonce, etc.).
+pub fn is_tx_included<S: Spec>(receipt: &TransactionReceipt<S>, allow_failed_txs: bool) -> bool {
+    receipt.receipt.is_successful() || (receipt.receipt.is_reverted() && allow_failed_txs)
+}
+
 /// A batch that might be received async from some producer
 #[derive(Debug)]
 pub enum MaybeAsyncBatch<S: Spec> {
@@ -241,9 +252,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
-        if receipt.receipt.is_skipped()
-            || (receipt.receipt.is_reverted() && !self.allow_failed_txs)
-        {
+        if !is_tx_included(&receipt, self.allow_failed_txs) {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),

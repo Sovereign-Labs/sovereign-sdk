@@ -33,7 +33,7 @@ use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
 use crate::common::AcceptedTx;
-use crate::preferred::async_batch::{ExecutedTxResponse, MaybeAsyncBatch};
+use crate::preferred::async_batch::{is_tx_included, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::SequencerConfig;
@@ -328,10 +328,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             call: call_message_repr::<Rt>(&call),
         })?;
 
-        if receipt.receipt.is_skipped()
-            || (receipt.receipt.is_reverted()
-                && !self.seq_config.sequencer_kind_config.allow_failed_txs)
-        {
+        if !is_tx_included(&receipt, self.seq_config.sequencer_kind_config.allow_failed_txs) {
             return Err(RollupBlockExecutorError::UnsuccessfulTransaction { receipt });
         }
 
