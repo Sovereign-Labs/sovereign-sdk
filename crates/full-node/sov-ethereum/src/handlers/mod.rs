@@ -280,6 +280,7 @@ fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResu
 
 // Gets the SocketAddr needed for rete-limiting.
 fn get_socket_addr(extensions: Extensions) -> Result<SocketAddr, ErrorObjectOwned> {
+    // The `SocketAddr`` was injected into the request extensions by specific middleware in `axum::serve`.
     extensions
         .get::<SocketAddr>()
         .copied()
