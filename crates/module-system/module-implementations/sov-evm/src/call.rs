@@ -1,3 +1,4 @@
+use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256};
 use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
@@ -5,9 +6,7 @@ use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
 use revm::primitives::HashMap;
 use revm::state::Account;
-#[cfg(feature = "native")]
 use revm::Database;
-#[cfg(feature = "native")]
 use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -110,7 +109,7 @@ where
         };
 
         save_elapsed!(execution_time SINCE execution);
-        verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg)?;
+        verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg, &mut db)?;
         #[cfg(feature = "native")]
         let new_pinned_contracts = get_pinned_contract_list_updates(
             &state_changes,
@@ -338,17 +337,36 @@ where
     }
 }
 
-pub(crate) fn verify_contract_creation_allowlist(
+pub(crate) fn verify_contract_creation_allowlist<
+    DB: Database<Error = E>,
+    E: DBErrorMarker + std::fmt::Display,
+>(
     state_changes: &HashMap<Address, Account>,
     signer: &Address,
     cfg: &EvmRuntimeConfig,
+    db: &mut DB,
 ) -> Result<(), anyhow::Error> {
     if cfg.contract_creation_policy.allows(signer) {
         return Ok(());
     }
-    for account in state_changes.values() {
-        if let Some(ref code) = account.info.code {
-            if !code.is_empty() {
+    for (address, account) in state_changes.iter() {
+        let is_contract = account
+            .info
+            .code
+            .as_ref()
+            .is_some_and(|code| !code.is_empty());
+        if is_contract {
+            let was_not_contract = db
+                .basic(*address)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Error while fetching previous contract data to verify allowlist: {e}"
+                    )
+                })?
+                .map(|acc| acc.code_hash == KECCAK_EMPTY)
+                .unwrap_or(true);
+            // If it wasn't a contract before, and it is now, it was just deployed. Pin it if necessary.
+            if was_not_contract {
                 bail!("Contract creation is only allowed from allowed addresses. {signer} is not on the list");
             }
         }
@@ -363,7 +381,6 @@ pub(crate) fn get_pinned_contract_list_updates<DB: Database<Error = E>, E: DBErr
     signer: &Address,
     db: &mut DB,
 ) -> Result<Vec<Address>, E> {
-    use alloy_consensus::constants::KECCAK_EMPTY;
     let Some(execution_config) = EVM_EXECUTION_CONFIG.get() else {
         return Ok(Vec::new());
     };

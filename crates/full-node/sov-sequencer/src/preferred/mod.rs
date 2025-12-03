@@ -36,7 +36,7 @@ use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -59,6 +59,7 @@ use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
 use std::boxed::Box;
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::path::Path;
@@ -140,6 +141,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_state_update_notification_receiver: broadcast::Receiver<StateUpdateNotification>,
+    runtime: Rt,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -220,16 +222,15 @@ where
         let (blobs_sender_channel, _) =
             broadcast::channel(config.sequencer_kind_config.events_channel_size);
 
-        let db = PreferredSequencerDb::new(
+        let (db, is_replica_seq) = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             config.sequencer_kind_config.is_replica,
             storage_path,
-            &config.sequencer_kind_config.postgres_connection_string,
+            &config.sequencer_kind_config.postgres_config,
         )
         .await?;
 
         let (next_sequence_number, db_cache) = db.initial_data().await?;
-
         let mut handles = vec![];
 
         let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
@@ -241,7 +242,7 @@ where
             shutdown_sender.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
-            config.sequencer_kind_config.is_replica,
+            is_replica_seq,
         )
         .await?;
 
@@ -299,6 +300,7 @@ where
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
+            is_replica_seq,
             api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
@@ -358,18 +360,14 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_receiver,
+            runtime: Rt::default(),
         }));
 
         // Launch replica sync task only for replicas.
-        if config.sequencer_kind_config.is_replica {
-            if let Some(postgres_connection_string) =
-                &config.sequencer_kind_config.postgres_connection_string
-            {
+        if is_replica_seq {
+            if let Some(postgres_config) = &config.sequencer_kind_config.postgres_config {
                 let replica_task_handle = replica_task
-                    .start(
-                        synchronized_state_updator,
-                        postgres_connection_string.clone(),
-                    )
+                    .start(synchronized_state_updator, postgres_config)
                     .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);
@@ -400,9 +398,7 @@ where
 
         if let Some(oracle_config) = maybe_oracle_config {
             //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master
-            if Rt::default().maybe_set_oracle_timestamp(0).is_some()
-                && !config.sequencer_kind_config.is_replica
-            {
+            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica_seq {
                 handles.push(update_timestamp_task(
                     seq.clone(),
                     oracle_config,
@@ -618,6 +614,7 @@ where
     async fn accept_tx_inner(
         &self,
         baked_tx: FullyBakedTx,
+        socket_addr: SocketAddr,
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
@@ -630,7 +627,6 @@ where
         tracing::debug!(%tx_hash, "Executing accept_tx");
 
         // Check if this transaction has a configured delay
-        let runtime = Rt::default();
         let mut state = self
             .api_state()
             .default_api_state_accessor()
@@ -638,7 +634,7 @@ where
         let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
             .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
         let call = Rt::wrap_call(call);
-        let delay_ms = runtime.get_transaction_delay_ms(&call);
+        let delay_ms = self.runtime.get_transaction_delay_ms(&call);
         // We need to destructure auth_data because it's not `Send`.
         let uniqueness = auth_data.uniqueness;
         let credential_id = auth_data.credential_id;
@@ -655,7 +651,14 @@ where
         let (outer_res, is_nonce_based) = match uniqueness {
             UniquenessData::Generation(_) => (
                 self.synchronized_state_updator
-                    .accept_tx_msg(&baked_tx, tx_hash, original_tx_queue_id, "accept_tx")
+                    .accept_tx_msg(
+                        &baked_tx,
+                        tx_hash,
+                        original_tx_queue_id,
+                        credential_id,
+                        socket_addr,
+                        "accept_tx",
+                    )
                     .await,
                 false,
             ),
@@ -666,6 +669,7 @@ where
                         tx_hash,
                         tx_nonce,
                         credential_id,
+                        socket_addr,
                         original_tx_queue_id,
                     )
                     .await,
@@ -814,8 +818,8 @@ async fn update_state_task<S, Rt, Da>(
 fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
-    let mut rt = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
+    let mut runtime = Rt::default();
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel(), None);
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
@@ -1060,9 +1064,10 @@ where
     async fn accept_tx(
         &self,
         baked_tx: FullyBakedTx,
+        socket_addr: SocketAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         let sequencer = self.clone();
-        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx).await })
+        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, socket_addr).await })
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, "A panic occurred while accepting a transaction");

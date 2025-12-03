@@ -1,3 +1,6 @@
+use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+
 use crate::common::Sequencer;
 use crate::preferred::PreferredSequencer;
 use crate::preferred::Runtime;
@@ -89,6 +92,7 @@ where
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut consecutive_failures = 0;
 
+    let socket_addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
     let handle = tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -136,7 +140,7 @@ where
 
             let baked_tx = Rt::Auth::encode_with_standard_auth(raw_tx);
 
-            if let Err(error) = seq.accept_tx(baked_tx).await {
+            if let Err(error) = seq.accept_tx(baked_tx, socket_addr).await {
                 // Reduce log spam by only logging 1 of every 100 consecutive failures
                 if consecutive_failures % 100 == 0 {
                     tracing::error!(?error, "Error submitting timestamp oracle update tx");

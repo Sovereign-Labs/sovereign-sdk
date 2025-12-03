@@ -35,9 +35,10 @@ where
     state_session_builder: NomtSessionBuilder<S::Hasher, K>,
     historical_state: HistoricalStateReader,
     accessory: AccessoryDb,
-    /// If set to true, consistency between NOMT and rocksdb will be checked, in some cases.
+    /// If set to true, witness will be populated in all necessary places.
+    /// Also, will do consistency check between NOMT and rocksdb in some cases.
     /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
-    is_strict_mode: bool,
+    strict_with_witness: bool,
     pinned_cache: Option<PinnedCache>,
 }
 
@@ -54,7 +55,7 @@ where
             state_session_builder: self.state_session_builder.clone(),
             historical_state: self.historical_state.clone(),
             accessory: self.accessory.clone(),
-            is_strict_mode: self.is_strict_mode,
+            strict_with_witness: self.strict_with_witness,
             pinned_cache: None,
         }
     }
@@ -74,20 +75,21 @@ where
     K: Clone,
 {
     /// Create the new instance of [`NomtProverStorage`] with the given sessions.
-    /// If `strict_mode` is set to true, consistency between NOMT and rocksdb will be checked, in some cases.
+    /// If `strict_with_witness` is set to true,
+    /// Witness will be recorded and consistency between NOMT and rocksdb will be checked in some cases.
     // Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
     pub fn create(
         state_session_builder: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory: AccessoryDb,
-        use_strict_mode: bool,
+        strict_with_witness: bool,
         pinned_cache: Option<PinnedCache>,
     ) -> Self {
         Self {
             state_session_builder,
             historical_state,
             accessory,
-            is_strict_mode: use_strict_mode,
+            strict_with_witness,
             pinned_cache,
         }
     }
@@ -100,7 +102,7 @@ where
     /// Allows changing strict mode for the existing storage.
     #[cfg(feature = "test-utils")]
     pub fn change_strict_mode(&mut self, use_strict_mode: bool) {
-        self.is_strict_mode = use_strict_mode;
+        self.strict_with_witness = use_strict_mode;
     }
 
     /// Returns a double option: The outer option is `None` if there is no reasonable version to use,
@@ -135,7 +137,7 @@ where
     /// not the latest known to this storage.
     fn should_check_dbs_sync(&self, version_to_use: SlotNumber) -> bool {
         cfg!(debug_assertions) &&
-            self.is_strict_mode
+            self.strict_with_witness
             // latest version can be equal to genesis in 2 cases: pre-genesis and at genesis.
             // Since genesis is a special case and not covered by normal stf transition,
             // we exclude this case for simpler testing.
@@ -197,7 +199,7 @@ where
                     );
                     let nomt_session = self
                         .state_session_builder
-                        .begin_user_session()
+                        .begin_user_session_without_witness()
                         .expect("Failed to build user session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
@@ -227,7 +229,7 @@ where
                     );
                     let nomt_session = self
                         .state_session_builder
-                        .begin_kernel_session()
+                        .begin_kernel_session_without_witness()
                         .expect("Failed to build kernel session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
@@ -361,6 +363,7 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
     session: NomtSession<S::Hasher>,
     accesses: &OrderedReadsAndWrites,
     witness: &S::Witness,
+    write_witness: bool,
 ) -> anyhow::Result<FinishedSession> {
     tracing::trace!(
         reads = accesses.ordered_reads.len(),
@@ -369,22 +372,24 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
     );
     let nomt_accesses = to_nomt_accesses::<S>(&session, accesses)?;
     let mut finished = session.finish(nomt_accesses)?;
-    let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
-    let nomt::Witness {
-        path_proofs,
-        operations: nomt::WitnessedOperations { .. },
-    } = nomt_witness;
-    // Note, we discard `p.path`, but maybe there's a way to use to have more efficient verification?
-    let mut path_proofs_inner = path_proofs.into_iter().map(|p| p.inner).collect::<Vec<_>>();
+    if write_witness {
+        let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
+        let nomt::Witness {
+            path_proofs,
+            operations: nomt::WitnessedOperations { .. },
+        } = nomt_witness;
+        // Note, we discard `p.path`, but maybe there's a way to use to have more efficient verification?
+        let mut path_proofs_inner = path_proofs.into_iter().map(|p| p.inner).collect::<Vec<_>>();
 
-    // Sort them as required by
-    // Note that the path proofs produced within a crate::witness::Witness are not guaranteed to be ordered,
-    // so the input should be sorted lexicographically by the terminal path prior to calling this function.
-    // https://github.com/thrumdev/nomt/issues/904
-    path_proofs_inner.sort_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
+        // Sort them as required by
+        // Note that the path proofs produced within a crate::witness::Witness are not guaranteed to be ordered,
+        // so the input should be sorted lexicographically by the terminal path prior to calling this function.
+        // https://github.com/thrumdev/nomt/issues/904
+        path_proofs_inner.sort_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
 
-    let multi_proof = MultiProof::from_path_proofs(path_proofs_inner);
-    witness.add_hint(&multi_proof);
+        let multi_proof = MultiProof::from_path_proofs(path_proofs_inner);
+        witness.add_hint(&multi_proof);
+    }
     Ok(finished)
 }
 
@@ -396,7 +401,7 @@ where
         state_db: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        use_strict_mode: bool,
+        strict_with_witness: bool,
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self {
         let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
@@ -404,7 +409,7 @@ where
             state_db,
             historical_state,
             accessory_db,
-            use_strict_mode,
+            strict_with_witness,
             pinned_cache,
         )
     }
@@ -469,7 +474,9 @@ where
     ) -> Option<SlotValue> {
         match self.read_value::<N>(key, None) {
             Ok(val) => {
-                witness.add_hint(&val);
+                if self.strict_with_witness {
+                    witness.add_hint(&val);
+                }
                 val
             }
             Err(e) => {
@@ -502,7 +509,9 @@ where
         let SessionsContainer {
             user: user_session,
             kernel: kernel_session,
-        } = self.state_session_builder.begin_both_sessions()?;
+        } = self
+            .state_session_builder
+            .begin_both_sessions(self.strict_with_witness)?;
         let starting_session_time = start.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
@@ -511,7 +520,7 @@ where
         let current_prev_root = StorageRoot::new(current_prev_user_root, current_prev_kernel_root);
 
         // Check staleness, pre-computation:
-        if self.is_strict_mode && current_prev_root != prev_state_root {
+        if self.strict_with_witness && current_prev_root != prev_state_root {
             anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
                 next_version,
                 prev_state_root,
@@ -521,14 +530,24 @@ where
 
         let user_finished_session = {
             let _span = tracing::debug_span!("compute_state_update", namespace = "user").entered();
-            compute_state_update_namespace::<S>(user_session, &state_accesses.user, witness)
-                .context("user state")?
+            compute_state_update_namespace::<S>(
+                user_session,
+                &state_accesses.user,
+                witness,
+                self.strict_with_witness,
+            )
+            .context("user state")?
         };
         let kernel_finished_session = {
             let _span =
                 tracing::debug_span!("compute_state_update", namespace = "kernel").entered();
-            compute_state_update_namespace::<S>(kernel_session, &state_accesses.kernel, witness)
-                .context("kernel state")?
+            compute_state_update_namespace::<S>(
+                kernel_session,
+                &state_accesses.kernel,
+                witness,
+                self.strict_with_witness,
+            )
+            .context("kernel state")?
         };
 
         // Additional self-check that the finished session has the same previous root hash as passed prev_state_root.
@@ -540,7 +559,7 @@ where
         );
 
         // Check staleness, post-computation. This should check if storage became stale during the computation.
-        if self.is_strict_mode && prev_state_root != finished_session_prev_root {
+        if self.strict_with_witness && prev_state_root != finished_session_prev_root {
             anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
                 next_version,
                 prev_state_root,
@@ -700,7 +719,7 @@ where
         .unwrap_or(self.latest_version());
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
         if self.should_check_dbs_sync(version_to_use) {
-            let session_container = self.state_session_builder.begin_both_sessions()?;
+            let session_container = self.state_session_builder.begin_both_sessions(false)?;
             let user_root = session_container.user.prev_root();
             let kernel_root = session_container.kernel.prev_root();
             drop(session_container);

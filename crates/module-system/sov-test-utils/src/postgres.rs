@@ -1,3 +1,4 @@
+use sov_sequencer::preferred::PostgresConfig;
 use std::borrow::Cow;
 use std::path::Path;
 use testcontainers::core::Mount;
@@ -105,4 +106,16 @@ pub async fn connection_string_from_postgres_container(
     );
 
     Ok(postgres_connection_string)
+}
+
+/// Returns the connection string for the PostgreSQL.
+pub async fn config_from_postgres_container(
+    container: &ContainerAsync<PostgresImage>,
+    node_id: String,
+) -> anyhow::Result<PostgresConfig> {
+    let postgres_connection_string = connection_string_from_postgres_container(container).await?;
+    Ok(PostgresConfig {
+        postgres_connection_string,
+        node_id,
+    })
 }

@@ -311,6 +311,24 @@
         }
       }
     },
+    "PostgresConfig": {
+      "description": "Postgres DB config.",
+      "type": "object",
+      "required": [
+        "node_id",
+        "postgres_connection_string"
+      ],
+      "properties": {
+        "node_id": {
+          "description": "Id of the node.",
+          "type": "string"
+        },
+        "postgres_connection_string": {
+          "description": "Connection string.",
+          "type": "string"
+        }
+      }
+    },
     "PreferredSequencerConfig": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
@@ -360,8 +378,11 @@
         },
         "is_replica": {
           "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
-          "default": false,
-          "type": "boolean"
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "maximum_future_nonce_delta": {
           "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly impacts the maximum \"batch\" of transactions that can be simultaneously sent to the sequencer out of order.",
@@ -384,12 +405,16 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "postgres_connection_string": {
+        "postgres_config": {
           "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
           "default": null,
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PostgresConfig"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "recovery_strategy": {

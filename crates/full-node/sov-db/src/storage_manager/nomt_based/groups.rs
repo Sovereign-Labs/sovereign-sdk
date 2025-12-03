@@ -125,7 +125,7 @@ where
         rockbound_snapshots: &HashMap<K, SnapshotGroup>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
-        use_strict_mode: bool,
+        with_witness: bool,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
@@ -180,7 +180,7 @@ where
             state_session_builder,
             historical_state_mapper,
             accessory_db,
-            use_strict_mode,
+            with_witness,
             pinned_cache,
         );
         Ok((storage, ledger_reader))

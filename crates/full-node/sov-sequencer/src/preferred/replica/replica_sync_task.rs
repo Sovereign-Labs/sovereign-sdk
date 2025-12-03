@@ -2,6 +2,7 @@ use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use async_trait::async_trait;
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_rollup_interface::node::future_or_shutdown;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::sync::watch;
@@ -59,10 +60,10 @@ impl ReplicaSyncTask {
     pub(crate) async fn start<R: ReplicaEventHandler>(
         &mut self,
         handler: R,
-        postgres_connection_string: String,
+        postgres_config: &PostgresConfig,
     ) -> ReplicaTaskHandles {
         let (event_receiver, db_data_receiver) = EventReceiver::new(
-            postgres_connection_string.clone(),
+            postgres_config.postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
             self.page_size,
             self.start_replica_task_receiver.clone(),
@@ -148,9 +149,8 @@ mod tests {
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
-    use sov_test_utils::postgres::{
-        connection_string_from_postgres_container, create_postgres_container, CreatePostgresError,
-    };
+    use sov_test_utils::postgres::config_from_postgres_container;
+    use sov_test_utils::postgres::{create_postgres_container, CreatePostgresError};
     use std::sync::atomic::Ordering;
     use tokio::sync::mpsc::error::TryRecvError;
 
@@ -344,13 +344,11 @@ mod tests {
             }
         };
 
-        let postgres_connection_string = connection_string_from_postgres_container(&postgres)
+        let postgres_config = config_from_postgres_container(&postgres, "Replica".into())
             .await
             .unwrap();
 
-        let db = PostgresBackend::connect(&postgres_connection_string)
-            .await
-            .unwrap();
+        let db = PostgresBackend::connect(&postgres_config).await.unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
         let (mut sync_task, start_replica_task_notifier) =
@@ -361,9 +359,7 @@ mod tests {
         start_replica_task_notifier.notify();
 
         let (test_handler, mut recv) = TestHandler::new(exec_seq_nr);
-        sync_task
-            .start(test_handler, postgres_connection_string)
-            .await;
+        sync_task.start(test_handler, &postgres_config).await;
 
         // Wait for sync_task.start to spawn the sync task
         tokio::time::sleep(Duration::from_millis(100)).await;

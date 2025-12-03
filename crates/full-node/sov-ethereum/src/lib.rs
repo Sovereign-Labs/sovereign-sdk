@@ -3,7 +3,8 @@ mod handlers;
 use std::convert::Infallible;
 
 use alloy_primitives::{B256, U256};
-use jsonrpsee::types::{ErrorCode, ErrorObjectOwned};
+use jsonrpsee::types::error::UNKNOWN_ERROR_CODE;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
@@ -16,6 +17,8 @@ use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
 pub use handlers::Cursor;
+
+use crate::handlers::Handlers;
 
 #[derive(Clone)]
 pub struct EthRpcConfig {
@@ -69,10 +72,14 @@ where
         // When we receive transactions - we override the gas price with 0 and disable charging the sender account for gas in handler.
         ready(Ok::<_, Infallible>(U256::ZERO))
     })?;
-    rpc.register_async_method("eth_sendRawTransaction", handlers::eth_send_raw_transaction)?;
+    rpc.register_async_method("eth_sendRawTransaction", Handlers::eth_send_raw_transaction)?;
+    rpc.register_async_method(
+        "eth_sendRawTransactionSync",
+        Handlers::eth_send_raw_transaction_sync,
+    )?;
     rpc.register_async_method(
         "realtime_sendRawTransaction",
-        handlers::realtime_send_raw_transaction,
+        Handlers::realtime_send_raw_transaction,
     )?;
 
     rpc.register_async_method("eth_getLogs", handlers::LogHandlers::<S, Seq>::eth_get_logs)?;
@@ -89,11 +96,8 @@ where
 
     #[cfg(feature = "local")]
     {
-        rpc.register_async_method("eth_accounts", handlers::signer::eth_accounts)?;
-        rpc.register_async_method(
-            "eth_sendTransaction",
-            handlers::signer::eth_send_transaction,
-        )?;
+        rpc.register_async_method("eth_accounts", Handlers::eth_accounts)?;
+        rpc.register_async_method("eth_sendTransaction", Handlers::eth_send_transaction)?;
     }
 
     Ok(())
@@ -116,9 +120,9 @@ where
 {
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
-        let signed_transaction = convert_to_tx_signed(raw_tx)
-            // TODO: Fix this later
-            .map_err(|_err| ErrorCode::ServerError(500))?;
+        let signed_transaction = convert_to_tx_signed(raw_tx).map_err(|err| {
+            ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, err.to_string(), None::<()>)
+        })?;
 
         let tx_hash = signed_transaction.hash();
 
@@ -134,9 +138,5 @@ where
 }
 
 pub(crate) fn to_jsonrpsee_error_object(err: impl ToString, message: &str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(
-        jsonrpsee::types::error::UNKNOWN_ERROR_CODE,
-        message,
-        Some(err.to_string()),
-    )
+    ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, message, Some(err.to_string()))
 }

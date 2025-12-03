@@ -1,7 +1,11 @@
+# 2025-12-03
+ - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
+
 # 2025-11-25
 - #2124 Allows configuring EVM contracts to pin their storage in RAM.
 
 # 2025-11-24
+- #2135 Add hex-formatted subscription IDs for Ethereum compatibility (e.g., `0x0000000000000001`).
 - #2105 **DB Breaking change** changes the serialization of state keys on disk. Updating to this branch requires a wipe or a resync. Also adds support for pinning certain state items in RAM.
 - #2109 Configuration changes in `sov-celestia-adapter`. Default values for `request_timeout_secs` and `tx_priority` has changed.
   **It is recommended to remove those values and use defaults** unless there's a reason.

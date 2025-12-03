@@ -45,7 +45,7 @@ use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_interface::StateUpdateInfo;
-use sov_sequencer::preferred::{PreferredSequencerConfig, TimingOracleConfig};
+use sov_sequencer::preferred::{PostgresConfig, PreferredSequencerConfig, TimingOracleConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{SequencerApis, SequencerConfig, SequencerKindConfig, StateUpdateNotification};
@@ -385,7 +385,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         finalization_blocks: u32,
         storage_path: StoragePath,
         is_replica: bool,
-        postgres_connection_string: Option<String>,
+        postgres_config: Option<PostgresConfig>,
     ) -> RollupBuilderConfig<R::Spec> {
         RollupBuilderConfig {
             max_allowed_node_distance_behind: 10,
@@ -395,8 +395,8 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,
             sequencer_config: SequencerKindConfig::Preferred(PreferredSequencerConfig {
-                is_replica,
-                postgres_connection_string,
+                is_replica: Some(is_replica),
+                postgres_config,
                 ..PreferredSequencerConfig::default()
             }),
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
@@ -446,17 +446,23 @@ where
         is_replica: bool,
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
-        postgres_container_opt: Option<Arc<PostgresData>>,
+        postgres: Option<(Arc<PostgresData>, String)>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
-        let post_str = postgres_container_opt
+
+        let postgres_container_opt: Option<Arc<PostgresData>> = postgres
             .as_ref()
-            .map(|p| p.connection_string.clone());
+            .map(|(postgres_container, _)| postgres_container.clone());
+
+        let post_config = postgres.as_ref().map(|p| PostgresConfig {
+            postgres_connection_string: p.0.connection_string.clone(),
+            node_id: p.1.clone(),
+        });
 
         Self {
             genesis,
             da_config,
-            config: Self::default_config(0, storage_path, is_replica, post_str),
+            config: Self::default_config(0, storage_path, is_replica, post_config),
             postgres_container_opt,
             with_secondary_sequencer: None,
             exec_config: None,
@@ -637,11 +643,14 @@ where
         let actual_port = actual_address.port();
 
         tokio::spawn(async move {
-            axum::serve(listener, ServiceExt::<Request>::into_make_service(router))
-                .with_graceful_shutdown(async move {
-                    shutdown_receiver.changed().await.ok();
-                })
-                .await
+            axum::serve(
+                listener,
+                ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(router),
+            )
+            .with_graceful_shutdown(async move {
+                shutdown_receiver.changed().await.ok();
+            })
+            .await
         });
 
         let client = sov_api_spec::client::Client::new(&format!("http://127.0.0.1:{actual_port}"));

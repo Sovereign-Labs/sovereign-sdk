@@ -1,11 +1,18 @@
 mod get_logs;
 mod subscribe;
 #[cfg(feature = "local")]
+use alloy_eips::Encodable2718;
+#[cfg(feature = "local")]
+use alloy_primitives::Address;
+#[cfg(feature = "local")]
 use alloy_primitives::TxKind;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
+#[cfg(feature = "local")]
+use alloy_rpc_types::TransactionRequest;
 pub use get_logs::{Cursor, LogHandlers};
+use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -17,34 +24,138 @@ use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
+#[cfg(feature = "local")]
+use sov_modules_api::macros::config_value;
+use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
+#[cfg(feature = "local")]
+use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
+use std::marker::PhantomData;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
+use std::time::Instant;
 pub use subscribe::eth_subscribe;
+use tokio::time::timeout;
 
 use crate::to_jsonrpsee_error_object;
 use crate::Ethereum;
 
 const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
+const TIMEOUT_CODE: i32 = 4;
 
-async fn process_raw_transaction<S, Seq, T, F>(
-    data: Bytes,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    on_success: F,
-) -> Result<T, ErrorObjectOwned>
+type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
+
+const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
+
+const SOCKET_ADDRESS_ERROR: &str = "Unable to retrieve the peer socket address";
+
+pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
+
+impl<S, Seq> Handlers<S, Seq>
 where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-    F: Fn(B256, Arc<Ethereum<S, Seq>>) -> Result<T, ErrorObjectOwned>,
 {
-    let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
-    let (tx_hash, raw_message) = ethereum
-        .make_raw_tx(raw_evm_tx)
-        .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+    pub async fn eth_send_raw_transaction(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        extensions: Extensions,
+    ) -> RpcResult<B256> {
+        let start = Instant::now();
+        let addr = get_socket_addr(extensions)?;
+
+        let noop = |tx_hash, _| Ok(tx_hash);
+        let result = Self::process_raw_transaction(parameters.one()?, ethereum, noop, addr).await;
+        track_metrics("eth_sendRawTransaction", start, &result);
+        result
+    }
+
+    pub async fn eth_send_raw_transaction_sync(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        extensions: Extensions,
+    ) -> RpcResult<Option<Receipt>> {
+        let start = Instant::now();
+        let mut params = parameters.sequence();
+        let data: Bytes = params.next()?;
+        let timeout_ms = params.optional_next::<u64>()?.unwrap_or(MAX_TIMEOUT);
+        if timeout_ms > MAX_TIMEOUT {
+            return Err(to_jsonrpsee_error_object(
+                format!("Max allowed timeout is: {MAX_TIMEOUT}"),
+                ETH_RPC_ERROR,
+            ));
+        }
+        let addr = get_socket_addr(extensions)?;
+
+        let result = timeout(
+            Duration::from_millis(timeout_ms),
+            Self::process_raw_transaction(data, ethereum, Self::get_receipt, addr),
+        )
+        .await
+        .map_err(|_| {
+            let err = ErrorObjectOwned::owned(
+                TIMEOUT_CODE,
+                format!("The transaction was added to the mempool but wasn't processed in {timeout_ms}ms."),
+                None::<()>,
+            );
+            track_metrics("eth_sendRawTransactionSync", start, &RpcResult::<Option<Receipt>>::Err(err.clone()));
+            err
+        })?;
+        track_metrics("eth_sendRawTransactionSync", start, &result);
+        result
+    }
+
+    pub async fn realtime_send_raw_transaction(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        extensions: Extensions,
+    ) -> RpcResult<Option<Receipt>> {
+        let start = Instant::now();
+        let addr = get_socket_addr(extensions)?;
+
+        let result =
+            Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt, addr)
+                .await;
+        track_metrics("realtime_sendRawTransaction", start, &result);
+        result
+    }
+
+    fn get_receipt(tx_hash: B256, ethereum: Arc<Ethereum<S, Seq>>) -> RpcResult<Option<Receipt>> {
+        let evm = sov_evm::Evm::<S>::default();
+        let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
+        evm.get_transaction_receipt(tx_hash, state)
+    }
+
+    async fn process_raw_transaction<T, F>(
+        data: Bytes,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        on_success: F,
+        addr: SocketAddr,
+    ) -> RpcResult<T>
+    where
+        F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
+    {
+        let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
+        let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
+        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+        Self::authenticate_tx(&tx, &ethereum)?;
+
+        let seq = ethereum.sequencer.clone();
+        seq.accept_tx(tx, addr).await.map_err(|e| {
+            to_jsonrpsee_error_object(
+                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                ETH_RPC_ERROR,
+            )
+        })?;
+
+        on_success(tx_hash, ethereum)
+    }
 
     // Authenticate the transaction.
     // This was used earlier to get the credential and nonce, for retries. This has now been
@@ -52,62 +163,31 @@ where
     // `authenticate()` here pre-calculates and caches the signature check in the async API
     // handler, which is important for performance.
     // This will also be moved into the sequencer, but for now is kept here.
-    let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-    let mut state = ethereum
-        .sequencer
-        .api_state()
-        .default_api_state_accessor()
-        .to_provable_reader();
-    let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(&tx, &mut state).map_err(|e| {
-        to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
-    })?;
+    fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
+        let mut state = ethereum.api_state_accessor().to_provable_reader();
+        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
+            to_jsonrpsee_error_object(format!("Authentication failed: {e}"), ETH_RPC_ERROR)
+        })?;
+        Ok(())
+    }
 
-    let seq = ethereum.sequencer.clone();
-    seq.accept_tx(tx).await.map_err(|e| {
-        to_jsonrpsee_error_object(
-            format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-            ETH_RPC_ERROR,
-        )
-    })?;
-
-    on_success(tx_hash, ethereum)
-}
-
-#[cfg(feature = "local")]
-pub(crate) mod signer {
-    use super::*;
-    use alloy_eips::Encodable2718;
-    use alloy_primitives::Address;
-    use alloy_rpc_types::TransactionRequest;
-    use sov_modules_api::macros::config_value;
-    use sov_rpc_eth_types::EthApiError;
-
-    pub async fn eth_accounts<S, Seq>(
+    #[cfg(feature = "local")]
+    pub async fn eth_accounts(
         _: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<Vec<Address>, ErrorObjectOwned>
-    where
-        S: Spec,
-        Seq: Sequencer<Spec = S>,
-        S::Address: FromVmAddress<EthereumAddress>,
-        Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-    {
+    ) -> RpcResult<Vec<Address>> {
         Ok(ethereum.eth_signer.addresses())
     }
 
-    pub async fn eth_send_transaction<S, Seq>(
+    #[cfg(feature = "local")]
+    pub async fn eth_send_transaction(
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
-    ) -> Result<B256, ErrorObjectOwned>
-    where
-        S: Spec,
-        Seq: Sequencer<Spec = S>,
-        S::Address: FromVmAddress<EthereumAddress>,
-        Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-    {
+        extensions: Extensions,
+    ) -> RpcResult<B256> {
         let mut transaction_request: TransactionRequest = parameters.one()?;
+        let addr = get_socket_addr(extensions)?;
 
         let evm = Evm::<S>::default();
 
@@ -175,7 +255,7 @@ pub(crate) mod signer {
 
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
-        ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
+        ethereum.sequencer.accept_tx(tx, addr).await.map_err(|e| {
             to_jsonrpsee_error_object(
                 format!("{} - '{}' ({:?})", e.status, e.message, e.details),
                 ETH_RPC_ERROR,
@@ -186,77 +266,25 @@ pub(crate) mod signer {
     }
 }
 
-pub async fn eth_send_raw_transaction<S, Seq>(
-    parameters: JRpcParams<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<B256, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    let start = std::time::Instant::now();
+fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResult<T>) {
+    let duration = start.elapsed();
+    let status = if let Err(e) = &result { e.code() } else { 0 };
+    let metrics = RpcMetrics {
+        request_name,
+        handler_processing_time: duration,
+        status,
+    };
 
-    let data: Bytes = parameters.one()?;
-
-    let result = process_raw_transaction(data, ethereum, |tx_hash, _| Ok(tx_hash)).await;
-
-    // Track metrics
-    {
-        let duration = start.elapsed();
-        let status = if let Err(e) = &result { e.code() } else { 0 };
-        let metrics = RpcMetrics {
-            request_name: "eth_sendRawTransaction",
-            handler_processing_time: duration,
-            status,
-        };
-
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(metrics);
-        });
-    }
-
-    result
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(metrics);
+    });
 }
 
-pub async fn realtime_send_raw_transaction<S, Seq>(
-    parameters: JRpcParams<'static>,
-    ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
-) -> Result<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>, ErrorObjectOwned>
-where
-    S: Spec,
-    Seq: Sequencer<Spec = S>,
-    S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
-{
-    let start = std::time::Instant::now();
-    let data: Bytes = parameters.one()?;
-
-    let res = process_raw_transaction(data, ethereum, |tx_hash, ethereum| {
-        let evm = sov_evm::Evm::<S>::default();
-        evm.get_transaction_receipt(
-            tx_hash,
-            &mut ethereum.sequencer.api_state().default_api_state_accessor(),
-        )
-    })
-    .await;
-
-    // Track metrics
-    {
-        let duration = start.elapsed();
-        let status = if let Err(e) = &res { e.code() } else { 0 };
-        let metrics = RpcMetrics {
-            request_name: "realtime_sendRawTransaction",
-            handler_processing_time: duration,
-            status,
-        };
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(metrics);
-        });
-    }
-
-    res
+// Gets the SocketAddr needed for rete-limiting.
+fn get_socket_addr(extensions: Extensions) -> Result<SocketAddr, ErrorObjectOwned> {
+    // The `SocketAddr`` was injected into the request extensions by specific middleware in `axum::serve`.
+    extensions
+        .get::<SocketAddr>()
+        .copied()
+        .ok_or_else(|| to_jsonrpsee_error_object(SOCKET_ADDRESS_ERROR, ETH_RPC_ERROR))
 }

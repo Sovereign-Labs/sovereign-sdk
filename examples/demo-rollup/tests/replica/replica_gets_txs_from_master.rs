@@ -54,8 +54,11 @@ async fn test_replica_receives_txs_from_postgres() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let (da_service, addr) = create_da_service_manual().await;
 
-    let replica_test_rollup = start_rollup(true, addr, postgres.clone()).await;
-    let test_rollup = start_rollup(false, addr, postgres).await;
+    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
+    let replica_test_rollup = start_rollup(true, addr, replica).await;
+
+    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
+    let test_rollup = start_rollup(false, addr, primary).await;
 
     for _ in 0..20 {
         da_service.produce_block_now().await.unwrap();
