@@ -210,43 +210,25 @@ fn batch_bytes(
             slot_number
         );
 
-        // Get the key specifically for this slot instead of using shared current key
-        // This prevents race conditions where STF activates keys in shared cache
-        let slot_key = encryptor.get_key_for_slot(slot_number).ok_or_else(|| {
-            anyhow::anyhow!("No encryption key available for slot {}", slot_number)
-        })?;
-
-        tracing::info!(
-            "🔐 SEQUENCER: Using key '{}' for slot {} encryption",
-            slot_key.id,
-            slot_number
-        );
-
         // Serialize the entire transaction vector
         let txs_serialized = borsh::to_vec(&*batch.txs)?;
 
-        // Encrypt using the slot-specific key directly
-        tracing::info!(
-            "🔐 SEQUENCER: Encrypting {} bytes at slot {} with key '{}'",
-            txs_serialized.len(),
-            slot_number,
-            slot_key.id
-        );
-
-        let encrypted_txs_data = encryptor.encrypt_with_key(&slot_key.material, &txs_serialized)?;
+        // Encrypt using the encryption layer's built-in fallback logic
+        let (encrypted_txs_data, encryption_slot) = encryptor.encrypt_for_slot(slot_number, &txs_serialized)?;
 
         // Create batch with serialized encrypted blob + metadata including tx hashes
+        // Use the encryption_slot that matches the key we actually used
         tracing::info!(
             "📦 SEQUENCER: Creating encrypted batch #{} with encryption_slot={}",
             batch.sequence_number,
-            slot_number
+            encryption_slot
         );
         borsh::to_vec(&EncryptedPreferredBatchData {
             sequence_number: batch.sequence_number,
             visible_slots_to_advance: batch.visible_slots_to_advance,
             encrypted_txs_data,
             tx_hashes: batch.tx_hashes,
-            encryption_slot: slot_number,
+            encryption_slot,
         })
         .map_err(Into::into)
     } else {

@@ -489,6 +489,57 @@ impl EncryptionLayer {
 
         key
     }
+
+    /// Get the most recent available key from the cache
+    fn get_most_recent_key(&self) -> Option<(u64, InternalKey)> {
+        // First try the current key cache
+        if let Some((slot, key)) = self.key_cache.current_key_cache.read().unwrap().as_ref() {
+            return Some((*slot, key.clone()));
+        }
+
+        // Fall back to the most recent key in the map
+        let map = self.key_cache.slot_key_map.read().unwrap();
+        if let Some((slot, key)) = map.iter().next_back() {
+            Some((*slot, key.clone()))
+        } else {
+            None
+        }
+    }
+
+    #[cfg(feature = "aes-encryption")]
+    /// Encrypt data for a specific slot with automatic fallback to most recent key
+    /// Returns (encrypted_data, actual_slot_used)
+    pub fn encrypt_for_slot(&self, slot_number: u64, plaintext: &[u8]) -> Result<(Vec<u8>, u64), EncryptionError> {
+        // Try to get the key for the specific slot first
+        if let Some(key) = self.get_key_for_slot(slot_number) {
+            tracing::info!(
+                "🔐 ENCRYPT: Using key '{}' for slot {} ({} bytes)",
+                key.id,
+                slot_number,
+                plaintext.len()
+            );
+            let encrypted = self.encrypt_with_key(&key.material, plaintext)?;
+            return Ok((encrypted, slot_number));
+        }
+
+        // Fallback: use the most recent available key
+        if let Some((fallback_slot, fallback_key)) = self.get_most_recent_key() {
+            tracing::warn!(
+                "🔐 ENCRYPT FALLBACK: No key for slot {}, using most recent key '{}' from slot {}",
+                slot_number,
+                fallback_key.id,
+                fallback_slot
+            );
+            let encrypted = self.encrypt_with_key(&fallback_key.material, plaintext)?;
+            return Ok((encrypted, fallback_slot));
+        }
+
+        // No keys available at all
+        Err(EncryptionError::InvalidKeyFormat(format!(
+            "No encryption key available for slot {} or any fallback key",
+            slot_number
+        )))
+    }
 }
 
 impl EncryptionLayerTrait for EncryptionLayer {
