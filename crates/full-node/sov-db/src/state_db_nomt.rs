@@ -299,7 +299,7 @@ where
     /// Should be called only when really needed.
     /// Will hold the read lock to all snapshots.
     /// **Commiting storage will be blocked until all built sessions are deallocated.**
-    /// Produces session does not collect witness!
+    /// Returned session does not collect witness!
     /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
     pub fn begin_user_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
@@ -341,7 +341,7 @@ where
     /// Should be called only when really needed.
     /// Will hold the read lock to all snapshots.
     /// **Commiting storage will be blocked until all built sessions are deallocated.**
-    /// Produces session does not collect witness!
+    /// Returned session does not collect witness!
     /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
     pub fn begin_kernel_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {

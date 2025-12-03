@@ -265,7 +265,7 @@ where
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<(Self::StfState, Self::LedgerState)> {
         // Storage created "after" a block is usually used outside of the node context,
-        // So strict mode is not needed.
+        // So witness is not needed.
         let with_witness = false;
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
             tracing::debug!(block_header = %block_header.display(), "Creating new storage from finalized data as block header is not in the saved chain");
