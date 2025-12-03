@@ -110,7 +110,6 @@ impl CelestiaService {
             namespace = ?ns,
             commitment = %blob_hash,
             bytes,
-            data_bytes = blob.data.len(),
             "Submitting a blob"
         );
 
