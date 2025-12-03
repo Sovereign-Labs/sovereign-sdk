@@ -94,9 +94,11 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let flag_prepare = flag_prepare_start.elapsed();
 
         let start_kernel = std::time::Instant::now();
-        let write_attempts_kernel = {
+        {
             let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
-            commit_nomt(&self.kernel, kernel).context("kernel namespace commit")?
+            kernel
+                .commit(&self.kernel)
+                .context("kernel namespace commit")?;
         };
         let write_kernel = start_kernel.elapsed();
 
@@ -138,9 +140,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let flag_mid = flag_mid_start.elapsed();
 
         let start_user = std::time::Instant::now();
-        let write_attempts_user = {
+        {
             let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
-            commit_nomt(&self.user, user).context("user namespace commit")?
+            user.commit(&self.user).context("user namespace commit")?;
         };
         let write_user = start_user.elapsed();
 
@@ -156,10 +158,10 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let total = start.elapsed();
         Ok(MerklizedCommitMetric {
             flag_prepare,
-            write_attempts_kernel,
+            write_attempts_kernel: 1,
             write_kernel,
             flag_mid,
-            write_attempts_user,
+            write_attempts_user: 1,
             write_user,
             flag_finish,
             total,
@@ -300,8 +302,9 @@ where
     #[tracing::instrument(skip(self))]
     pub fn begin_user_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
-        let params = {
-            let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays_count = 0;
+        let session = {
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
@@ -311,8 +314,9 @@ where
                     continue;
                 };
                 overlays.push(&state_overlay.user);
+                overlays_count += 1;
             }
-            SessionParams::default()
+            let params = SessionParams::default()
                 .overlay(overlays)
                 .map_err(|e| {
                     anyhow::anyhow!(
@@ -320,15 +324,14 @@ where
                         e
                     )
                 })?
-                .witness_mode(WitnessMode::read_write())
+                .witness_mode(WitnessMode::read_write());
+            self.state_db.user.begin_session(params)
         };
-        let session = self.state_db.user.begin_session(params);
         let init_time = start.elapsed();
-        let overlays = self.relevant_snapshot_refs.len();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtBeginSessionMetric {
                 db: USER,
-                overlays,
+                overlays: overlays_count,
                 init_time,
             });
         });
@@ -342,8 +345,9 @@ where
     #[tracing::instrument(skip(self))]
     pub fn begin_kernel_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
-        let params = {
-            let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays_count = 0;
+        let session = {
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
@@ -353,8 +357,9 @@ where
                     continue;
                 };
                 overlays.push(&state_overlay.kernel);
+                overlays_count += 1;
             }
-            SessionParams::default()
+            let params = SessionParams::default()
                 .overlay(overlays)
                 .map_err(|e| {
                     anyhow::anyhow!(
@@ -362,15 +367,14 @@ where
                         e
                     )
                 })?
-                .witness_mode(WitnessMode::read_write())
+                .witness_mode(WitnessMode::read_write());
+            self.state_db.kernel.begin_session(params)
         };
-        let session = self.state_db.kernel.begin_session(params);
         let init_time = start.elapsed();
-        let overlays = self.relevant_snapshot_refs.len();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtBeginSessionMetric {
                 db: KERNEL,
-                overlays,
+                overlays: overlays_count,
                 init_time,
             });
         });
@@ -381,9 +385,10 @@ where
     /// Should be used if both sessions are needed in same context. Prevents dead lock.
     pub fn begin_both_sessions(&self) -> anyhow::Result<SessionsContainer<H>> {
         let start = std::time::Instant::now();
-        let (kernel_params, user_params) = {
-            let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
-            let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays_count = 0;
+        let (kernel_session, user_session) = {
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
@@ -394,6 +399,7 @@ where
                 };
                 kernel_overlays.push(&state_overlay.kernel);
                 user_overlays.push(&state_overlay.user);
+                overlays_count += 1;
             }
             let kernel_params = SessionParams::default()
                 .overlay(kernel_overlays)
@@ -413,16 +419,15 @@ where
                     )
                 })?
                 .witness_mode(WitnessMode::read_write());
-            (kernel_params, user_params)
+            let kernel_session = self.state_db.kernel.begin_session(kernel_params);
+            let user_session = self.state_db.user.begin_session(user_params);
+            (kernel_session, user_session)
         };
-        let kernel_session = self.state_db.kernel.begin_session(kernel_params);
-        let user_session = self.state_db.user.begin_session(user_params);
         let init_time = start.elapsed();
-        let overlays = self.relevant_snapshot_refs.len();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtBeginSessionMetric {
                 db: BOTH,
-                overlays,
+                overlays: overlays_count,
                 init_time,
             });
         });
@@ -432,16 +437,6 @@ where
             kernel: kernel_session,
         })
     }
-}
-
-/// Commits an overlay to NOMT, using blocking commit in release mode and
-/// non-blocking with backoff in debug mode.
-fn commit_nomt<H>(nomt: &Nomt<BinaryHasher<H>>, overlay: Overlay) -> anyhow::Result<usize>
-where
-    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
-{
-    overlay.commit(nomt)?;
-    Ok(1)
 }
 
 /// Begin a new user and kernel session with only data that has been written to disk
