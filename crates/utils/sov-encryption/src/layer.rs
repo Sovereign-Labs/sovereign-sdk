@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::fmt;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -134,19 +133,9 @@ impl Default for KeyCache {
     }
 }
 
-pub trait EncryptionLayerTrait: Send + Sync {
-    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError>;
-    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError>;
-    fn encryption_type(&self) -> &'static str;
-}
+// Remove the confusing trait - EncryptionLayer is now the primary interface
 
-impl fmt::Debug for dyn EncryptionLayerTrait {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EncryptionLayer({})", self.encryption_type())
-    }
-}
-
-// Convenience type alias and struct for easier usage
+/// Primary encryption interface with slot-based key management
 pub struct EncryptionLayer {
     key_cache: Arc<KeyCache>,
     _key_listener_handle: Option<JoinHandle<()>>,
@@ -234,7 +223,7 @@ impl EncryptionLayer {
     }
 
     #[cfg(feature = "aes-encryption")]
-    pub fn encrypt_with_key(
+    fn encrypt_with_key(
         &self,
         key: &[u8],
         plaintext: &[u8],
@@ -274,7 +263,7 @@ impl EncryptionLayer {
     }
 
     #[cfg(feature = "aes-encryption")]
-    pub fn decrypt_with_key(
+    fn decrypt_with_key(
         &self,
         key: &[u8],
         ciphertext_with_nonce: &[u8],
@@ -439,9 +428,7 @@ impl EncryptionLayer {
         debug!("Unix socket key connection handler exiting");
         Ok(())
     }
-}
 
-impl EncryptionLayer {
     /// Debug method to show key status
     pub fn debug_key_status(&self) {
         let map = self.key_cache.slot_key_map.read().unwrap();
@@ -476,15 +463,15 @@ impl EncryptionLayer {
         }
     }
 
-    /// Get the appropriate key for a specific slot number
-    /// This ensures sequencer and STF use the same key for the same slot
+    /// Get the key that would be used for a specific slot (for inspection/debugging)
+    /// For actual encryption/decryption, use encrypt_for_slot() or decrypt_for_slot()
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
         let key = self.key_cache.get_key_for_slot(slot_number);
 
         if let Some(ref k) = key {
-            debug!("🔑 SLOT KEY: Using key '{}' for slot {}", k.id, slot_number);
+            debug!("🔑 INSPECT: Key '{}' available for slot {}", k.id, slot_number);
         } else {
-            warn!("🔑 SLOT KEY: No key available for slot {}", slot_number);
+            debug!("🔑 INSPECT: No key available for slot {}", slot_number);
         }
 
         key
@@ -506,9 +493,9 @@ impl EncryptionLayer {
         }
     }
 
-    #[cfg(feature = "aes-encryption")]
     /// Encrypt data for a specific slot with automatic fallback to most recent key
     /// Returns (encrypted_data, actual_slot_used)
+    #[cfg(feature = "aes-encryption")]
     pub fn encrypt_for_slot(&self, slot_number: u64, plaintext: &[u8]) -> Result<(Vec<u8>, u64), EncryptionError> {
         // Try to get the key for the specific slot first
         if let Some(key) = self.get_key_for_slot(slot_number) {
@@ -540,46 +527,44 @@ impl EncryptionLayer {
             slot_number
         )))
     }
-}
 
-impl EncryptionLayerTrait for EncryptionLayer {
-    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-        // For trait methods, we need a slot number. We'll use slot 0 as default
-        // In practice, callers should use get_key_for_slot() + encrypt_with_key() directly
-        let key = self
-            .get_key_for_slot(0)
-            .ok_or(EncryptionError::InvalidKeyFormat(
-                "No encryption key available for slot 0".to_string(),
-            ))?;
+    /// Decrypt data for a specific slot with automatic fallback to other available keys
+    #[cfg(feature = "aes-encryption")]
+    pub fn decrypt_for_slot(&self, slot_number: u64, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
+        // Try to get the key for the specific slot first
+        if let Some(key) = self.get_key_for_slot(slot_number) {
+            tracing::debug!(
+                "🔓 DECRYPT: Using key '{}' for slot {} ({} bytes)",
+                key.id,
+                slot_number,
+                ciphertext.len()
+            );
+            return self.decrypt_with_key(&key.material, ciphertext);
+        }
 
-        warn!(
-            "🔐 ENCRYPT: Using key '{}' for {} bytes (trait method - consider using get_key_for_slot + encrypt_with_key)",
-            key.id,
-            plaintext.len()
+        // Fallback: try all available keys (the ciphertext might have been encrypted with a different key)
+        tracing::warn!(
+            "🔓 DECRYPT FALLBACK: No key for slot {}, trying all available keys",
+            slot_number
         );
+        
+        let map = self.key_cache.slot_key_map.read().unwrap();
+        for (try_slot, key) in map.iter().rev() { // Try most recent keys first
+            if let Ok(plaintext) = self.decrypt_with_key(&key.material, ciphertext) {
+                tracing::info!(
+                    "🔓 DECRYPT SUCCESS: Key '{}' from slot {} successfully decrypted data for slot {}",
+                    key.id,
+                    try_slot,
+                    slot_number
+                );
+                return Ok(plaintext);
+            }
+        }
 
-        self.encrypt_with_key(&key.material, plaintext)
-    }
-
-    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-        // For trait methods, we need a slot number. We'll use slot 0 as default
-        // In practice, callers should use get_key_for_slot() + decrypt_with_key() directly
-        let key = self
-            .get_key_for_slot(0)
-            .ok_or(EncryptionError::InvalidKeyFormat(
-                "No key available for decryption at slot 0".to_string(),
-            ))?;
-
-        warn!(
-            "🔓 DECRYPT: Using key '{}' for {} bytes (trait method - consider using get_key_for_slot + decrypt_with_key)",
-            key.id,
-            ciphertext.len()
-        );
-
-        self.decrypt_with_key(&key.material, ciphertext)
-    }
-
-    fn encryption_type(&self) -> &'static str {
-        "AES-256-GCM"
+        // No key could decrypt the data
+        Err(EncryptionError::DecryptionFailed(format!(
+            "No available key could decrypt the data for slot {}",
+            slot_number
+        )))
     }
 }

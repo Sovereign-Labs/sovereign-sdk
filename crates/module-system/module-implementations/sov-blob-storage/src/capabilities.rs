@@ -1135,22 +1135,22 @@ impl<S: Spec> BlobStorage<S> {
             encrypted_batch.encryption_slot
         );
 
-        // Get the decryption key for this specific slot
-        let key_for_slot = encryption_layer.get_key_for_slot(encrypted_batch.encryption_slot)?;
-
-        tracing::debug!(
-            "🔓 STF: Using key '{}' to decrypt batch #{} for slot {}",
-            key_for_slot.id,
-            encrypted_batch.sequence_number,
-            encrypted_batch.encryption_slot
-        );
-
-        // Decrypt the transaction data
-        let decrypted_txs_bytes = self.decrypt_transaction_data(
-            &encrypted_batch,
-            encryption_layer,
-            &key_for_slot,
-        )?;
+        // Decrypt the transaction data using the encryption layer's built-in fallback logic
+        let decrypted_txs_bytes = encryption_layer
+            .decrypt_for_slot(
+                encrypted_batch.encryption_slot,
+                &encrypted_batch.encrypted_txs_data,
+            )
+            .map_err(|e| {
+                tracing::error!(
+                    "❌ STF: Failed to decrypt batch #{} for slot {}: {}",
+                    encrypted_batch.sequence_number,
+                    encrypted_batch.encryption_slot,
+                    e
+                );
+                e
+            })
+            .ok()?;
 
         // Deserialize the decrypted transactions
         let txs = self.deserialize_transaction_data(&decrypted_txs_bytes, &encrypted_batch)?;
@@ -1186,30 +1186,7 @@ impl<S: Spec> BlobStorage<S> {
         )
     }
 
-    /// Decrypt the encrypted transaction data using the provided key.
-    fn decrypt_transaction_data(
-        &self,
-        encrypted_batch: &EncryptedPreferredBatchData,
-        encryption_layer: &sov_encryption::EncryptionLayer,
-        key_for_slot: &sov_encryption::InternalKey,
-    ) -> Option<Vec<u8>> {
-        match encryption_layer.decrypt_with_key(
-            &key_for_slot.material,
-            &encrypted_batch.encrypted_txs_data,
-        ) {
-            Ok(decrypted_bytes) => Some(decrypted_bytes),
-            Err(e) => {
-                tracing::error!(
-                    "❌ STF: Failed to decrypt batch #{} with key '{}' for slot {}: {}",
-                    encrypted_batch.sequence_number,
-                    key_for_slot.id,
-                    encrypted_batch.encryption_slot,
-                    e
-                );
-                None
-            }
-        }
-    }
+    /// This method has been removed - decryption now handled by EncryptionLayer::decrypt_for_slot
 
     /// Deserialize transaction data from decrypted bytes.
     fn deserialize_transaction_data(
