@@ -222,6 +222,14 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
+    /// Returns the sequencing data.
+    pub fn sequencing_data(&self) -> Option<&[u8]> {
+        match self {
+            Transaction::V1(_) | Transaction::V0(_) => None,
+            Transaction::V2(inner) => Some(&inner.sequencing_data),
+        }
+    }
+
     /// Creates a new transaction with the provided metadata.
     pub fn new_with_details_v0(
         pub_key: C::PublicKey,
