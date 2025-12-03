@@ -328,7 +328,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             call: call_message_repr::<Rt>(&call),
         })?;
 
-        if !is_tx_included(&receipt, self.seq_config.sequencer_kind_config.allow_failed_txs) {
+        if !is_tx_included(
+            &receipt,
+            self.seq_config.sequencer_kind_config.allow_failed_txs,
+        ) {
             return Err(RollupBlockExecutorError::UnsuccessfulTransaction { receipt });
         }
 
