@@ -33,7 +33,7 @@ use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
 use crate::common::AcceptedTx;
-use crate::preferred::async_batch::{ExecutedTxResponse, MaybeAsyncBatch};
+use crate::preferred::async_batch::{should_be_included, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::SequencerConfig;
@@ -328,7 +328,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             call: call_message_repr::<Rt>(&call),
         })?;
 
-        if !receipt.receipt.is_successful() {
+        if !should_be_included(
+            &receipt,
+            self.seq_config.sequencer_kind_config.allow_failed_txs,
+        ) {
             return Err(RollupBlockExecutorError::UnsuccessfulTransaction { receipt });
         }
 
@@ -551,6 +554,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 sequencer_da_address: self.da_address.clone(),
                 executor_context,
                 is_responsible_for_gating_admins,
+                allow_failed_txs: self.seq_config.sequencer_kind_config.allow_failed_txs,
             };
 
             move || rollup_block_task_body::<S, Rt>(ctx)
@@ -803,6 +807,7 @@ struct RollupBlockTaskContext<S: Spec> {
     /// Whether this instance of the executor is responsible for gating admins.
     /// This is not true for replicas or when replaying txs that have already been accepted
     is_responsible_for_gating_admins: bool,
+    allow_failed_txs: bool,
 }
 
 fn rollup_block_task_body<S, Rt>(ctx: RollupBlockTaskContext<S>) -> BlockExecutionOutput<S>
@@ -826,6 +831,7 @@ where
         sequencer_da_address,
         executor_context,
         is_responsible_for_gating_admins,
+        allow_failed_txs,
     } = ctx;
 
     let _span = match executor_context {
@@ -870,6 +876,7 @@ where
                 admin_addresses,
                 sequencer_rollup_address,
                 is_responsible_for_gating_admins,
+                allow_failed_txs,
             )),
             reserved_gas_tokens: Some(needed_gas_escrow),
             sender: sequencer_da_address.clone(),
