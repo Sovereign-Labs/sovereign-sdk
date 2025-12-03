@@ -383,7 +383,7 @@ where
 
     /// Begins both sessions at the same time.
     /// Should be used if both sessions are needed in same context. Prevents dead lock.
-    pub fn begin_both_sessions(&self) -> anyhow::Result<SessionsContainer<H>> {
+    pub fn begin_both_sessions(&self, with_witness: bool) -> anyhow::Result<SessionsContainer<H>> {
         let start = std::time::Instant::now();
         let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
         let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
@@ -401,24 +401,30 @@ where
                 user_overlays.push(&state_overlay.user);
                 overlays_count += 1;
             }
-            let kernel_params = SessionParams::default()
-                .overlay(kernel_overlays)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to construct session params for kernel session: {:?}",
-                        e
-                    )
-                })?
-                .witness_mode(WitnessMode::read_write());
-            let user_params = SessionParams::default()
+            let mut kernel_params =
+                SessionParams::default()
+                    .overlay(kernel_overlays)
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to construct session params for kernel session: {:?}",
+                            e
+                        )
+                    })?;
+            if with_witness {
+                kernel_params = kernel_params.witness_mode(WitnessMode::read_write());
+            }
+            let mut user_params = SessionParams::default()
                 .overlay(user_overlays)
                 .map_err(|e| {
                     anyhow::anyhow!(
                         "Failed to construct session params for user session: {:?}",
                         e
                     )
-                })?
-                .witness_mode(WitnessMode::read_write());
+                })?;
+            if with_witness {
+                user_params = user_params.witness_mode(WitnessMode::read_write());
+            }
+
             let kernel_session = self.state_db.kernel.begin_session(kernel_params);
             let user_session = self.state_db.user.begin_session(user_params);
             (kernel_session, user_session)
