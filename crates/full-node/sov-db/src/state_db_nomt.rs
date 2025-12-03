@@ -299,6 +299,8 @@ where
     /// Should be called only when really needed.
     /// Will hold the read lock to all snapshots.
     /// **Commiting storage will be blocked until all built sessions are deallocated.**
+    /// Produces session does not collect witness!
+    /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
     pub fn begin_user_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
@@ -316,15 +318,12 @@ where
                 overlays.push(&state_overlay.user);
                 overlays_count += 1;
             }
-            let params = SessionParams::default()
-                .overlay(overlays)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to construct session params for user session: {:?}",
-                        e
-                    )
-                })?
-                .witness_mode(WitnessMode::read_write());
+            let params = SessionParams::default().overlay(overlays).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to construct session params for user session: {:?}",
+                    e
+                )
+            })?;
             self.state_db.user.begin_session(params)
         };
         let init_time = start.elapsed();
@@ -342,6 +341,8 @@ where
     /// Should be called only when really needed.
     /// Will hold the read lock to all snapshots.
     /// **Commiting storage will be blocked until all built sessions are deallocated.**
+    /// Produces session does not collect witness!
+    /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
     pub fn begin_kernel_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
@@ -359,15 +360,12 @@ where
                 overlays.push(&state_overlay.kernel);
                 overlays_count += 1;
             }
-            let params = SessionParams::default()
-                .overlay(overlays)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to construct session params for kernel session: {:?}",
-                        e
-                    )
-                })?
-                .witness_mode(WitnessMode::read_write());
+            let params = SessionParams::default().overlay(overlays).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to construct session params for kernel session: {:?}",
+                    e
+                )
+            })?;
             self.state_db.kernel.begin_session(params)
         };
         let init_time = start.elapsed();
