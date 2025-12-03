@@ -90,12 +90,13 @@ impl<S: Spec> Recipient<S> for SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
 {
-    fn ism(&self, recipient: &HexHash, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
-        self.warp.ism(recipient, state)
+    fn ism(&self, _recipient: &HexHash, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
+        self.default_ism(state)
     }
 
-    fn default_ism(&self, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
-        self.warp.default_ism(state)
+    fn default_ism(&self, _state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
+        // TODO:
+        Ok(Some(Ism::AlwaysTrust))
     }
 
     fn handle(
