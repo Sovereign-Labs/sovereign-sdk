@@ -227,7 +227,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     async fn axum_accept_tx(
-        ConnectInfo(addr): ConnectInfo<SocketAddr>,
+        connect_info: ConnectInfo<SocketAddr>,
         state: State<Self>,
         tx: Json<AcceptTx>,
     ) -> ApiResult<
@@ -240,7 +240,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
         let tx_with_hash = state
             .sequencer
-            .accept_tx(baked_tx, addr)
+            .accept_tx(baked_tx, connect_info.0)
             .await
             .map_err(|e| {
                 if e.status.is_server_error() {
