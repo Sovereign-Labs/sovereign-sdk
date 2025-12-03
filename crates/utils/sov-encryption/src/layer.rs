@@ -15,7 +15,7 @@ use aes_gcm::{
 #[cfg(feature = "aes-encryption")]
 use rand::{rngs::OsRng, RngCore};
 
-use crate::{config::EncryptionConfig, error::EncryptionError};
+use crate::{config::KeyClientConfig, error::EncryptionError};
 
 #[cfg(feature = "aes-encryption")]
 const AES_256_KEY_SIZE: usize = 32;
@@ -151,14 +151,15 @@ impl Clone for EncryptionLayer {
 }
 
 impl EncryptionLayer {
-    pub async fn new(config: EncryptionConfig) -> Result<Self, EncryptionError> {
-        info!("Creating encryption layer with config: {:?}", config);
+    /// Create a new encryption layer from a key client config (preferred)
+    pub async fn new(key_client_config: KeyClientConfig) -> Result<Self, EncryptionError> {
+        info!("Creating encryption layer with config: {:?}", key_client_config);
         let key_cache = Arc::new(KeyCache::new());
 
         // Handle different key client configurations
-        let key_listener_handle = match &config.key_client {
+        let key_listener_handle = match &key_client_config {
             #[cfg(feature = "unix-client")]
-            crate::config::KeyClientConfig::UnixSocket {
+            KeyClientConfig::UnixSocket {
                 socket_path,
                 initial_key,
                 ..
@@ -200,7 +201,7 @@ impl EncryptionLayer {
 
                 Some(handle)
             }
-            crate::config::KeyClientConfig::Static { encryption_key, .. } => {
+            KeyClientConfig::Static { encryption_key, .. } => {
                 // For static keys, populate the cache immediately
                 let key_bytes = hex::decode(encryption_key).map_err(|e| {
                     EncryptionError::InvalidKeyFormat(format!("Invalid hex key: {e}"))
@@ -221,6 +222,8 @@ impl EncryptionLayer {
             _key_listener_handle: key_listener_handle,
         })
     }
+
+    // Removed legacy from_config method - use new() directly with KeyClientConfig
 
     #[cfg(feature = "aes-encryption")]
     fn encrypt_with_key(

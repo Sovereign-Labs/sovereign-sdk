@@ -128,7 +128,7 @@ pub struct ProofManagerConfig<Address> {
 pub struct StfConfig {
     /// Optional encryption configuration for decrypting batch data from the DA layer
     #[serde(default)]
-    pub encryption: Option<sov_encryption::EncryptionConfig>,
+    pub encryption: Option<sov_encryption::KeyClientConfig>,
 }
 
 /// Rollup Configuration

@@ -7,19 +7,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct EncryptionConfig {
-    /// Key client configuration
-    pub key_client: KeyClientConfig,
-
-    /// Encryption cipher type to use
-    #[serde(default)]
-    pub cipher_type: CipherType,
-
-    /// Key rotation interval (in seconds). If None, keys don't rotate
-    pub key_rotation_interval: Option<u64>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum KeyClientConfig {
     /// Static key configuration (no external fetching)
@@ -49,13 +36,6 @@ pub enum KeyClientConfig {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
-pub enum CipherType {
-    #[default]
-    #[serde(rename = "aes256-gcm")]
-    Aes256Gcm,
-}
-
 #[cfg(feature = "unix-client")]
 fn default_key_server_timeout() -> u64 {
     30 // 30 seconds
@@ -69,12 +49,6 @@ fn default_max_retries() -> u32 {
 #[cfg(feature = "unix-client")]
 fn default_retry_delay_ms() -> u64 {
     1000 // 1 second
-}
-
-impl EncryptionConfig {
-    pub fn key_rotation_interval_duration(&self) -> Option<Duration> {
-        self.key_rotation_interval.map(Duration::from_secs)
-    }
 }
 
 impl KeyClientConfig {
@@ -103,41 +77,4 @@ impl KeyClientConfig {
             KeyClientConfig::UnixSocket { max_retries, .. } => *max_retries,
         }
     }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KeyRequest {
-    /// The type of key being requested
-    pub key_type: KeyType,
-    /// Optional key identifier for specific key requests
-    pub key_id: Option<String>,
-    /// Request timestamp
-    pub timestamp: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KeyResponse {
-    /// The encryption key (hex-encoded)
-    pub key: String,
-    /// Key identifier
-    pub key_id: String,
-    /// Key expiration timestamp (Unix timestamp)
-    /// TODO: make this not a timestamp?
-    /// Need something more uniform for recovery, maybe a block height or block hash or something from a block header
-    /// Make sure all the nodes can stay in sync when the key rotates and how it can be clear when to rotate
-    /// For many nodes, how do they all stay in sync with regards to when to fetch keys. If you give every node an interval, they will be out of sync
-    /// DA layer time?
-    /// investigate: When a key is generated, it broadcast a transaction to Nebula that says "expire this key and use the new key"
-    /// Keys Should be a push from key-retrieval
-    /// New keys being broadcast as a Nebula transaction also helps recovery nodes know where to fetch historical keys without reading somewhere else
-    /// Can a transaction trigger something to happen in the DaService? (in our case a key rotation / deletion)
-    pub expires_at: Option<u64>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum KeyType {
-    #[serde(rename = "encryption")]
-    Encryption,
-    #[serde(rename = "decryption")]
-    Decryption,
 }

@@ -162,12 +162,6 @@
         }
       ]
     },
-    "CipherType": {
-      "type": "string",
-      "enum": [
-        "aes256-gcm"
-      ]
-    },
     "CorsConfiguration": {
       "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
       "oneOf": [
@@ -186,40 +180,6 @@
           ]
         }
       ]
-    },
-    "EncryptionConfig": {
-      "type": "object",
-      "required": [
-        "key_client"
-      ],
-      "properties": {
-        "cipher_type": {
-          "description": "Encryption cipher type to use",
-          "default": "aes256-gcm",
-          "allOf": [
-            {
-              "$ref": "#/definitions/CipherType"
-            }
-          ]
-        },
-        "key_client": {
-          "description": "Key client configuration",
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeyClientConfig"
-            }
-          ]
-        },
-        "key_rotation_interval": {
-          "description": "Key rotation interval (in seconds). If None, keys don't rotate",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0.0
-        }
-      }
     },
     "HexHash": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
@@ -941,7 +901,7 @@
           "default": null,
           "anyOf": [
             {
-              "$ref": "#/definitions/EncryptionConfig"
+              "$ref": "#/definitions/KeyClientConfig"
             },
             {
               "type": "null"
@@ -1033,7 +993,7 @@
           "default": null,
           "anyOf": [
             {
-              "$ref": "#/definitions/EncryptionConfig"
+              "$ref": "#/definitions/KeyClientConfig"
             },
             {
               "type": "null"

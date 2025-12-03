@@ -69,7 +69,7 @@ pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
     /// Optional batch encryption configuration. When provided, serialized
     /// transaction batches will be encrypted before being submitted to the DA layer.
     #[serde(default)]
-    pub batch_encryption: Option<sov_encryption::EncryptionConfig>,
+    pub batch_encryption: Option<sov_encryption::KeyClientConfig>,
 }
 
 fn default_automatic_batch_production() -> bool {
