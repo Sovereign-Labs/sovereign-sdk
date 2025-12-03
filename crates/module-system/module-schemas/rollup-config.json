@@ -319,6 +319,10 @@
         "recovery_strategy"
       ],
       "properties": {
+        "allow_failed_txs": {
+          "default": false,
+          "type": "boolean"
+        },
         "batch_execution_time_limit_millis": {
           "description": "Target time in milliseconds to spend executing all the txs in a single batch. Batches will be closed when they exceed this value.",
           "type": "integer",

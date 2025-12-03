@@ -328,7 +328,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             call: call_message_repr::<Rt>(&call),
         })?;
 
-        if !receipt.receipt.is_successful() && !self.seq_config.sequencer_kind_config.allow_failed_txs {
+        if receipt.receipt.is_skipped()
+            || (receipt.receipt.is_reverted()
+                && !self.seq_config.sequencer_kind_config.allow_failed_txs)
+        {
             return Err(RollupBlockExecutorError::UnsuccessfulTransaction { receipt });
         }
 

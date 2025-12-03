@@ -241,7 +241,9 @@ impl<S: Spec> AsyncBatchResponder<S> {
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
-        if !receipt.receipt.is_successful()  && !self.allow_failed_txs {
+        if receipt.receipt.is_skipped()
+            || (receipt.receipt.is_reverted() && !self.allow_failed_txs)
+        {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),
