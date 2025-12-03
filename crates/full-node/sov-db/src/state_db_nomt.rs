@@ -302,7 +302,9 @@ where
     /// Returned session does not collect witness!
     /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
-    pub fn begin_user_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
+    pub fn begin_user_session_without_witness(
+        &self,
+    ) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
         let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
         let mut overlays_count = 0;
@@ -344,7 +346,9 @@ where
     /// Returned session does not collect witness!
     /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
-    pub fn begin_kernel_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
+    pub fn begin_kernel_session_without_witness(
+        &self,
+    ) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
         let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
         let mut overlays_count = 0;
@@ -493,10 +497,10 @@ mod tests {
             let (key_path, data) = from_key(this_ref);
             let writes = vec![(key_path, nomt::KeyReadWrite::Write(data))];
 
-            let user_session = builder.begin_user_session().unwrap();
+            let user_session = builder.begin_user_session_without_witness().unwrap();
             let finished_user_session = user_session.finish(writes.clone()).unwrap();
 
-            let kernel_session = builder.begin_kernel_session().unwrap();
+            let kernel_session = builder.begin_kernel_session_without_witness().unwrap();
 
             let finished_kernel_session = kernel_session.finish(writes.clone()).unwrap();
             let overlay = StateFinishedSession::new(finished_user_session, finished_kernel_session)
@@ -509,8 +513,10 @@ mod tests {
         let check_builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), overlay_refs, all_overlays.clone());
         for commiting_ref in 0..rounds {
-            let user_session = check_builder.begin_user_session().unwrap();
-            let kernel_session = check_builder.begin_kernel_session().unwrap();
+            let user_session = check_builder.begin_user_session_without_witness().unwrap();
+            let kernel_session = check_builder
+                .begin_kernel_session_without_witness()
+                .unwrap();
             for this_ref in 0..rounds {
                 let (key_path, expected_value) = from_key(this_ref);
                 let user_value = user_session.read(key_path).unwrap();
@@ -591,8 +597,8 @@ mod tests {
                 all_overlays.clone(),
             );
 
-            let user_session = builder.begin_user_session().unwrap();
-            let kernel_session = builder.begin_kernel_session().unwrap();
+            let user_session = builder.begin_user_session_without_witness().unwrap();
+            let kernel_session = builder.begin_kernel_session_without_witness().unwrap();
 
             let finished_user_session = user_session.finish(initial_user_writes).unwrap();
             let finished_kernel_session = kernel_session.finish(initial_kernel_writes).unwrap();
@@ -605,8 +611,8 @@ mod tests {
         let base_builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), Vec::new(), all_overlays.clone());
 
-        let user_session = base_builder.begin_user_session().unwrap();
-        let kernel_session = base_builder.begin_kernel_session().unwrap();
+        let user_session = base_builder.begin_user_session_without_witness().unwrap();
+        let kernel_session = base_builder.begin_kernel_session_without_witness().unwrap();
         drop(base_builder);
 
         let finished_user_session = user_session.finish(base_user_writes).unwrap();
@@ -623,8 +629,8 @@ mod tests {
         let test_builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), vec![0], all_overlays.clone());
 
-        let user_session = test_builder.begin_user_session().unwrap();
-        let kernel_session = test_builder.begin_kernel_session().unwrap();
+        let user_session = test_builder.begin_user_session_without_witness().unwrap();
+        let kernel_session = test_builder.begin_kernel_session_without_witness().unwrap();
         drop(test_builder);
 
         let finished_user_session = user_session.finish(test_user_writes).unwrap();
@@ -658,8 +664,8 @@ mod tests {
         let builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), Vec::new(), all_overlays.clone());
 
-        let user_session = builder.begin_user_session().unwrap();
-        let kernel_session = builder.begin_kernel_session().unwrap();
+        let user_session = builder.begin_user_session_without_witness().unwrap();
+        let kernel_session = builder.begin_kernel_session_without_witness().unwrap();
 
         let user_value = user_session.read(user_key_path).unwrap();
         let kernel_value = kernel_session.read(kernel_key_path).unwrap();

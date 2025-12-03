@@ -198,7 +198,7 @@ where
                     );
                     let nomt_session = self
                         .state_session_builder
-                        .begin_user_session()
+                        .begin_user_session_without_witness()
                         .expect("Failed to build user session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
@@ -228,7 +228,7 @@ where
                     );
                     let nomt_session = self
                         .state_session_builder
-                        .begin_kernel_session()
+                        .begin_kernel_session_without_witness()
                         .expect("Failed to build kernel session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
