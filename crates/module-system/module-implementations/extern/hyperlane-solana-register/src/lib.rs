@@ -3,7 +3,7 @@ use std::str::FromStr as _;
 use sov_modules_api::macros::serialize;
 use sov_modules_api::{
     err_detail, Base58Address, Context, CoreModuleError, CredentialId, ErrorContext, ErrorDetail,
-    HexHash, HexString, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, TxState, EventEmitter,
+    EventEmitter, HexHash, HexString, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, TxState,
 };
 
 use sov_hyperlane_integration::{HyperlaneAddress, Ism, Recipient, Warp};
@@ -59,7 +59,10 @@ impl ErrorDetail for SolanaRegistrationError {
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]
 #[serialize(Borsh, Serde)]
 pub enum Event {
-    UserRegistered { user_pubkey: [u8; 32], embedded_pubkey: [u8; 32] },
+    UserRegistered {
+        user_pubkey: [u8; 32],
+        embedded_pubkey: [u8; 32],
+    },
 }
 
 impl<S: Spec> Module for SolanaRegistration<S>
@@ -90,7 +93,11 @@ impl<S: Spec> Recipient<S> for SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
 {
-    fn ism(&self, _recipient: &HexHash, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
+    fn ism(
+        &self,
+        _recipient: &HexHash,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<Option<Ism>> {
         self.default_ism(state)
     }
 
@@ -160,10 +167,13 @@ where
                 registered_address: resolved_address.to_string(),
             })
         } else {
-            self.emit_event(state, Event::UserRegistered {
-                user_pubkey,
-                embedded_pubkey,
-            });
+            self.emit_event(
+                state,
+                Event::UserRegistered {
+                    user_pubkey,
+                    embedded_pubkey,
+                },
+            );
             Ok(())
         }
     }

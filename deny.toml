@@ -34,6 +34,11 @@ name = "halo2"
 expression = "LicenseRef-Proprietary"
 license-files = [{ path = "COPYING", hash = 0x106164e0 }]
 
+[[licenses.clarify]]
+name = "sov-hyperlane-register-module"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
 # Sovereign SDK packages use a custom community license
 [[licenses.clarify]]
 name = "py_sovereign_web3"

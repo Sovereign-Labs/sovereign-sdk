@@ -1,13 +1,13 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use sov_hyperlane_register_module::{config, SolanaRegistration};
 use sov_bank::Amount;
 use sov_hyperlane_integration::warp::{Admin, TokenKind};
 use sov_hyperlane_integration::{
     HyperlaneAddress, InterchainGasPaymaster, Ism, Mailbox as RawMailbox, MerkleTreeHook, Message,
     Warp, WarpCallMessage, WarpEvent,
 };
+use sov_hyperlane_register_module::{config, SolanaRegistration};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
