@@ -136,11 +136,9 @@ impl NonPersistedTxs {
     }
 
     fn mark_inflight_execution_failed(&mut self) {
-        if !self.has_in_flight {
-            let msg = "Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!";
-            tracing::error!(msg);
-            debug_assert!(false, "{msg}"); // See comment in mark_inflight
-        }
+        // See the comment in mark_inflight_execution_succeeded: if the queueing behaviour for
+        // multiple TXs with the currently valid nonce is improved, we could assert that
+        // has_in_flight == true here. But right now this invariant doesn't hold.
         self.has_in_flight = false;
     }
 }
@@ -330,8 +328,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         self.buffers = Default::default();
         let mut keep_messages = Vec::new();
         while let Ok(m) = self.buffer_input.try_recv() {
-            if matches!(m, NonceBufferInput::TxExecuted { .. }) {
-                keep_messages.push(m);
+            match m {
+                exec @ NonceBufferInput::TxExecuted { .. } => keep_messages.push(exec),
+                NonceBufferInput::NewTx { .. }
+                | NonceBufferInput::TxPersisted { .. }
+                | NonceBufferInput::TxTimedOut { .. } => (),
             }
         }
         for m in keep_messages {
@@ -465,8 +466,8 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     // correctness, but pre-downtime transactions are invalidated by the
                     // sequencer anyway so we wipe everything.
                     if is_notready_error(&tx_result) {
-                        self.wipe().await;
                         let _ = result_sender.send(tx_result);
+                        self.wipe().await;
                         continue;
                     }
 
@@ -709,7 +710,17 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
 }
 
 fn is_notready_error<S: Spec, Rt: Runtime<S>>(result: &TransactionReceiverResult<S, Rt>) -> bool {
-    matches!(result, Ok(Err(AcceptTxError::NotFullySynced(_))))
+    match result {
+        Err(_) => false,
+        Ok(receiver_result) => match receiver_result {
+            Ok(_) => false,
+            Err(AcceptTxError::NotFullySynced(_)) => true,
+            Err(AcceptTxError::ReplicaMode)
+            | Err(AcceptTxError::SequencerOverloaded503)
+            | Err(AcceptTxError::BatchError { .. })
+            | Err(AcceptTxError::NewTxError(_)) => false,
+        },
+    }
 }
 
 #[cfg(test)]
