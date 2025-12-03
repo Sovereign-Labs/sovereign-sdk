@@ -341,6 +341,8 @@ impl EncryptionLayer {
         &self,
         socket_path: P,
     ) -> Result<JoinHandle<()>, EncryptionError> {
+        use std::os::unix::fs::PermissionsExt;
+
         // Remove existing socket file if it exists
         let _ = std::fs::remove_file(&socket_path);
 
@@ -353,6 +355,19 @@ impl EncryptionLayer {
                 }
                 EncryptionError::EncryptionFailed(format!("Socket bind failed: {e}"))
             })?;
+
+        // Set restrictive permissions: only owner can read/write (0600)
+        // This ensures only processes running as the same UID can connect
+        std::fs::set_permissions(
+            socket_path.as_ref(),
+            std::fs::Permissions::from_mode(0o600),
+        )
+        .map_err(|e| {
+            error!("❌ SOCKET PERMISSIONS FAILED: Cannot set permissions on {:?}: {}", socket_path.as_ref(), e);
+            EncryptionError::EncryptionFailed(format!("Socket permissions failed: {e}"))
+        })?;
+        info!("🔒 Socket permissions set to 0600 (owner only)");
+
         let cache = self.key_cache.clone();
 
         let handle = tokio::spawn(async move {
@@ -365,25 +380,24 @@ impl EncryptionLayer {
             let mut consecutive_failures: u32 = 0;
             let mut backoff_duration = INITIAL_BACKOFF;
 
-            info!("🚀 Key listener started on {:?}", socket_path.as_ref());
+            info!("🚀 Key listener started on {:?} (single connection mode)", socket_path.as_ref());
 
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
-                        info!("🔌 New connection accepted on unix socket");
+                        info!("🔌 Connection accepted on unix socket (blocking until closed)");
 
                         // Reset backoff on successful accept
                         consecutive_failures = 0;
                         backoff_duration = INITIAL_BACKOFF;
 
-                        let cache = cache.clone();
+                        // Handle this ONE connection - blocks accepting new ones until it closes
+                        // This ensures only one key service can be connected at a time
+                        if let Err(e) = Self::handle_key_connection(stream, cache.clone()).await {
+                            error!("❌ Error handling key connection: {}", e);
+                        }
 
-                        // Handle each connection in a separate task
-                        tokio::spawn(async move {
-                            if let Err(e) = Self::handle_key_connection(stream, cache).await {
-                                error!("❌ Error handling key connection: {}", e);
-                            }
-                        });
+                        info!("🔌 Connection closed, ready to accept next connection");
                     }
                     Err(e) => {
                         consecutive_failures += 1;
