@@ -4,8 +4,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput,
-    FatalError, UniquenessData,
+    calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput, FatalError,
+    UniquenessData,
 };
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::transaction::{
