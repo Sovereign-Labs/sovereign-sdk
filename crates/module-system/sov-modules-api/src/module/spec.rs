@@ -160,6 +160,8 @@ pub struct Context<S: Spec> {
     sequencer: S::Address,
     /// The DA layer address of the sequencer who included the transaction.
     sequencer_da_address: <S::Da as DaSpec>::Address,
+    /// Sequencing data provided by the sequencer (V2 transactions only).
+    sequencing_data: Option<Vec<u8>>,
     /// The rollup address that pays the gas fees for the transaction.
     gas_refund_recipient: S::Address,
 }
@@ -178,6 +180,11 @@ impl<S: Spec> Context<S> {
     /// Returns the DA layer address of the sequencer which included the transaction.
     pub fn sequencer_da_address(&self) -> &<S::Da as DaSpec>::Address {
         &self.sequencer_da_address
+    }
+
+    /// Returns the DA layer address of the sequencer which included the transaction.
+    pub fn sequencing_data(&self) -> &Option<Vec<u8>> {
+        &self.sequencing_data
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
