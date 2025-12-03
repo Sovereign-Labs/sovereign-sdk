@@ -127,7 +127,7 @@ where
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
     pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-    nonce_buffer_input: NonceBufferInputSender<S, Rt>,
+    nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     shutdown_sender: watch::Sender<()>,
