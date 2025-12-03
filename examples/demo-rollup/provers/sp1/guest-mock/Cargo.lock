@@ -6385,6 +6385,7 @@ dependencies = [
  "bincode",
  "bytes",
  "chrono",
+ "futures",
  "hex",
  "rand 0.8.5",
  "schemars 0.8.22",
@@ -6392,6 +6393,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 

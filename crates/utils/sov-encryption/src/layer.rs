@@ -2,9 +2,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::task::JoinHandle;
+use tokio_util::codec::{FramedRead, LengthDelimitedCodec};
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "aes-encryption")]
@@ -223,7 +225,6 @@ impl EncryptionLayer {
         })
     }
 
-    // Removed legacy from_config method - use new() directly with KeyClientConfig
 
     #[cfg(feature = "aes-encryption")]
     fn encrypt_with_key(
@@ -324,12 +325,26 @@ impl EncryptionLayer {
         let cache = self.key_cache.clone();
 
         let handle = tokio::spawn(async move {
+            use std::time::Duration;
+
+            const INITIAL_BACKOFF: Duration = Duration::from_millis(100);
+            const MAX_BACKOFF: Duration = Duration::from_secs(30);
+            const MAX_CONSECUTIVE_FAILURES: u32 = 10;
+
+            let mut consecutive_failures: u32 = 0;
+            let mut backoff_duration = INITIAL_BACKOFF;
+
             info!("🚀 Key listener started on {:?}", socket_path.as_ref());
 
             loop {
                 match listener.accept().await {
                     Ok((stream, _)) => {
                         info!("🔌 New connection accepted on unix socket");
+
+                        // Reset backoff on successful accept
+                        consecutive_failures = 0;
+                        backoff_duration = INITIAL_BACKOFF;
+
                         let cache = cache.clone();
 
                         // Handle each connection in a separate task
@@ -340,8 +355,28 @@ impl EncryptionLayer {
                         });
                     }
                     Err(e) => {
-                        error!("❌ Failed to accept connection on unix socket: {}", e);
-                        break;
+                        consecutive_failures += 1;
+                        error!(
+                            "❌ Failed to accept connection on unix socket (attempt {}/{}): {}",
+                            consecutive_failures, MAX_CONSECUTIVE_FAILURES, e
+                        );
+
+                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                            error!(
+                                "❌ Too many consecutive accept failures ({}), giving up",
+                                consecutive_failures
+                            );
+                            break;
+                        }
+
+                        // Exponential backoff before retrying
+                        warn!(
+                            "⏳ Retrying accept in {:?}...",
+                            backoff_duration
+                        );
+                        tokio::time::sleep(backoff_duration).await;
+                        backoff_duration = (backoff_duration * 2).min(MAX_BACKOFF);
+                        continue;
                     }
                 }
             }
@@ -364,70 +399,76 @@ impl EncryptionLayer {
     }
 
     async fn handle_key_connection(
-        mut stream: UnixStream,
+        stream: UnixStream,
         cache: Arc<KeyCache>,
     ) -> Result<(), EncryptionError> {
-        use tokio::io::AsyncReadExt;
-
         debug!("New unix socket connection established for key updates");
-        let mut buffer = vec![0u8; 4096];
 
-        while let Ok(n) = stream.read(&mut buffer).await {
-            if n == 0 {
-                info!("Unix socket connection closed by client");
-                break;
-            }
+        // Use length-delimited framing for reliable message boundaries
+        let mut framed = FramedRead::new(stream, LengthDelimitedCodec::new());
 
-            debug!("Received {} bytes on unix socket", n);
-            debug!("Raw data: {:?}", &buffer[..n]);
+        while let Some(result) = framed.next().await {
+            match result {
+                Ok(bytes) => {
+                    debug!("Received {} bytes on unix socket (framed)", bytes.len());
+                    debug!("Raw data: {:?}", &bytes[..]);
 
-            // Try to deserialize the key service bincode format
-            let key_update_result = Self::deserialize_key_service_message(&buffer[..n]);
+                    // Try to deserialize the key service bincode format
+                    match Self::deserialize_key_service_message(&bytes) {
+                        Ok(key_update) => {
+                            debug!("Successfully deserialized KeyUpdate message");
+                            match key_update {
+                                KeyUpdate::NewKey(key) => {
+                                    info!(
+                                        "📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes) for slot {}",
+                                        key.id,
+                                        key.key_data.len(),
+                                        key.slot_number
+                                    );
 
-            match key_update_result {
-                Ok(key_update) => {
-                    debug!("Successfully deserialized KeyUpdate message");
-                    match key_update {
-                        KeyUpdate::NewKey(key) => {
-                            info!(
-                                "📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes) for slot {}",
-                                key.id,
-                                key.key_data.len(),
-                                key.slot_number
+                                    let target_slot = key.slot_number;
+
+                                    // Convert to internal format and store directly
+                                    let internal_key = InternalKey {
+                                        id: key.id.clone(),
+                                        material: key.key_data.clone(),
+                                    };
+
+                                    cache.set_key_for_slot(target_slot, internal_key);
+                                    info!(
+                                        "✅ KEY STORED: Key '{}' stored for slot {}",
+                                        key.id, target_slot
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            // Log error but continue processing
+                            error!(
+                                "❌ Failed to deserialize KeyUpdate message from {} bytes: {}",
+                                bytes.len(),
+                                e
                             );
-
-                            let target_slot = key.slot_number;
-
-                            // Convert to internal format and store directly
-                            let internal_key = InternalKey {
-                                id: key.id.clone(),
-                                material: key.key_data.clone(),
-                            };
-
-                            cache.set_key_for_slot(target_slot, internal_key);
-                            info!(
-                                "✅ KEY STORED: Key '{}' stored for slot {}",
-                                key.id, target_slot
-                            );
+                            debug!("Raw data hex: {}", hex::encode(&bytes[..]));
+                            if let Ok(json_str) = std::str::from_utf8(&bytes[..]) {
+                                debug!("Raw data as string: {}", json_str);
+                            }
+                            // Continue to next message instead of returning error
+                            continue;
                         }
                     }
                 }
                 Err(e) => {
-                    error!(
-                        "❌ Failed to deserialize KeyUpdate message from {} bytes: {}",
-                        n, e
-                    );
-                    debug!("Raw data hex: {}", hex::encode(&buffer[..n]));
-                    if let Ok(json_str) = std::str::from_utf8(&buffer[..n]) {
-                        debug!("Raw data as string: {}", json_str);
-                    }
+                    // Transport-level error - break the connection
+                    error!("❌ Frame read error on unix socket: {}", e);
                     return Err(EncryptionError::EncryptionFailed(format!(
-                        "Key update deserialization failed: {e}"
+                        "Frame read error: {e}"
                     )));
                 }
             }
         }
 
+        info!("Unix socket connection closed by client");
         debug!("Unix socket key connection handler exiting");
         Ok(())
     }

@@ -12438,6 +12438,7 @@ dependencies = [
  "bincode",
  "bytes",
  "chrono",
+ "futures",
  "hex",
  "rand 0.8.5",
  "schemars 0.8.22",
@@ -12447,6 +12448,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
+ "tokio-util",
  "tracing",
 ]
 
