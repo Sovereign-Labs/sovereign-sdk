@@ -25,7 +25,7 @@ use crate::common::sender_is_allowed;
 /// - Reverted transactions are only included if `allow_failed_txs` is true.
 /// - Skipped transactions are never included (they represent pre-execution failures
 ///   like invalid signature, invalid nonce, etc.).
-pub fn is_tx_included<S: Spec>(receipt: &TransactionReceipt<S>, allow_failed_txs: bool) -> bool {
+pub fn should_be_included<S: Spec>(receipt: &TransactionReceipt<S>, allow_failed_txs: bool) -> bool {
     receipt.receipt.is_successful() || (receipt.receipt.is_reverted() && allow_failed_txs)
 }
 
@@ -252,7 +252,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
-        if !is_tx_included(&receipt, self.allow_failed_txs) {
+        if !should_be_included(&receipt, self.allow_failed_txs) {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),
