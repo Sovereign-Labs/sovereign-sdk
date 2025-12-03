@@ -127,7 +127,7 @@ where
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
     pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig>,
-    nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
+    nonce_buffer_input: NonceBufferInputSender<S, Rt>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     shutdown_sender: watch::Sender<()>,
@@ -330,6 +330,7 @@ where
         let (nonce_buffer_task, nonce_buffer_input) = NonceBufferTask::spawn(
             SequencerTxExecutionBackend {
                 api_state: api_state.clone(),
+                executor_queue_id: tx_queue_id.clone(),
                 state_updator: synchronized_state_updator.clone(),
             },
             config.sequencer_kind_config.maximum_future_nonce_delta,
