@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
@@ -47,8 +47,8 @@ pub enum KeyUpdate {
 
 #[derive(Clone)]
 pub struct KeyCache {
-    // Map of slot number to encryption key (sorted for efficient range queries)
-    slot_key_map: Arc<RwLock<BTreeMap<u64, InternalKey>>>,
+    // Queue of keys ordered by slot (oldest first, newest last)
+    key_queue: Arc<RwLock<VecDeque<(u64, InternalKey)>>>,
     // Cache of the most recent key for O(1) access in common case
     current_key_cache: Arc<RwLock<Option<(u64, InternalKey)>>>,
 }
@@ -56,7 +56,7 @@ pub struct KeyCache {
 impl KeyCache {
     pub fn new() -> Self {
         Self {
-            slot_key_map: Arc::new(RwLock::new(BTreeMap::new())),
+            key_queue: Arc::new(RwLock::new(VecDeque::new())),
             current_key_cache: Arc::new(RwLock::new(None)),
         }
     }
@@ -73,28 +73,36 @@ impl KeyCache {
             }
         }
 
-        // Slow path: historical lookup in BTreeMap (O(log n))
-        let map = self.slot_key_map.read().unwrap();
-        if let Some((_, key)) = map.range(..=slot_number).next_back() {
+        // Search in queue for the right key
+        let queue = self.key_queue.read().unwrap();
+        
+        // Find the key for the highest slot <= slot_number
+        let mut best_key = None;
+        for (slot, key) in queue.iter().rev() { // Search newest to oldest
+            if *slot <= slot_number {
+                best_key = Some(key.clone());
+                break;
+            }
+        }
+        
+        if let Some(ref key) = best_key {
             debug!(
-                "🔑 SLOW PATH: Historical lookup for slot {} found key '{}'",
-                slot_number, key.id
+                "🔑 QUEUE SEARCH: Found key '{}' for slot {}",
+                key.id, slot_number
             );
-            Some(key.clone())
         } else {
             debug!("🔑 NO KEY: No key available for slot {}", slot_number);
-            None
         }
+        
+        best_key
     }
 
     pub fn set_key_for_slot(&self, slot_number: u64, key: InternalKey) {
         info!("🔑 KEY SET: '{}' for slot {}", key.id, slot_number);
 
-        // Store in the main map
-        self.slot_key_map
-            .write()
-            .unwrap()
-            .insert(slot_number, key.clone());
+        // Push to the back of the queue (newest keys at the back)
+        let mut queue = self.key_queue.write().unwrap();
+        queue.push_back((slot_number, key.clone()));
 
         // Update current key cache if this is the newest key
         let mut current_cache = self.current_key_cache.write().unwrap();
@@ -112,20 +120,43 @@ impl KeyCache {
         }
     }
 
-    pub fn revoke_key(&self, key_id: String) {
-        let mut map = self.slot_key_map.write().unwrap();
-        map.retain(|_, key| key.id != key_id);
-
-        // Clear current cache if it contains the revoked key
-        let mut current_cache = self.current_key_cache.write().unwrap();
-        if let Some((_, cached_key)) = current_cache.as_ref() {
-            if cached_key.id == key_id {
-                *current_cache = None;
-                warn!("Current key cache cleared due to key revocation");
+    /// Remove all keys older than the given slot from the front of the queue.
+    /// After calling this, the key for `slot_number` becomes the oldest key in the queue.
+    pub fn prune_keys_before(&self, slot_number: u64) {
+        let mut queue = self.key_queue.write().unwrap();
+        let initial_len = queue.len();
+        
+        // Remove keys from the front while they're older than the target slot
+        while let Some((front_slot, _)) = queue.front() {
+            if *front_slot < slot_number {
+                let (removed_slot, removed_key) = queue.pop_front().unwrap();
+                debug!(
+                    "🗑️ PRUNED: Removed old key '{}' for slot {} (processing slot {})",
+                    removed_key.id, removed_slot, slot_number
+                );
+            } else {
+                break;
             }
         }
 
-        warn!("Key '{}' revoked from all slots", key_id);
+        let pruned_count = initial_len - queue.len();
+        if pruned_count > 0 {
+            info!(
+                "🗑️ PRUNE COMPLETE: Removed {} old key(s), {} key(s) remaining",
+                pruned_count,
+                queue.len()
+            );
+        }
+    }
+
+    /// Get the number of keys currently in the queue
+    pub fn len(&self) -> usize {
+        self.key_queue.read().unwrap().len()
+    }
+
+    /// Check if the queue is empty
+    pub fn is_empty(&self) -> bool {
+        self.key_queue.read().unwrap().is_empty()
     }
 }
 
@@ -475,13 +506,13 @@ impl EncryptionLayer {
 
     /// Debug method to show key status
     pub fn debug_key_status(&self) {
-        let map = self.key_cache.slot_key_map.read().unwrap();
+        let queue = self.key_cache.key_queue.read().unwrap();
         let current_cache = self.key_cache.current_key_cache.read().unwrap();
 
-        if map.is_empty() {
+        if queue.is_empty() {
             warn!("🔍 KEY STATUS: No keys available");
         } else {
-            info!("🔍 KEY STATUS: {} keys stored:", map.len());
+            info!("🔍 KEY STATUS: {} keys in queue:", queue.len());
 
             // Show current cache status
             match current_cache.as_ref() {
@@ -493,16 +524,15 @@ impl EncryptionLayer {
                 }
             }
 
-            // Show recent keys (last 5)
-            let slots: Vec<_> = map.keys().rev().take(5).cloned().collect();
-            for slot in slots {
-                if let Some(key) = map.get(&slot) {
-                    info!("🔍   - Slot {}: Key '{}'", slot, key.id);
-                }
+            // Show keys in queue (newest last)
+            let display_count = queue.len().min(5);
+            info!("🔍 Queue (oldest first):");
+            for (slot, key) in queue.iter().take(display_count) {
+                info!("🔍   - Slot {}: Key '{}'", slot, key.id);
             }
 
-            if map.len() > 5 {
-                info!("🔍   ... and {} more historical keys", map.len() - 5);
+            if queue.len() > 5 {
+                info!("🔍   ... and {} more keys", queue.len() - 5);
             }
         }
     }
@@ -528,9 +558,9 @@ impl EncryptionLayer {
             return Some((*slot, key.clone()));
         }
 
-        // Fall back to the most recent key in the map
-        let map = self.key_cache.slot_key_map.read().unwrap();
-        if let Some((slot, key)) = map.iter().next_back() {
+        // Fall back to the most recent key in the queue (back of queue is newest)
+        let queue = self.key_cache.key_queue.read().unwrap();
+        if let Some((slot, key)) = queue.back() {
             Some((*slot, key.clone()))
         } else {
             None
@@ -572,7 +602,8 @@ impl EncryptionLayer {
         )))
     }
 
-    /// Decrypt data for a specific slot with automatic fallback to other available keys
+    /// Decrypt data for a specific slot and prune old keys.
+    /// After successful decryption, removes all keys older than the one used.
     #[cfg(feature = "aes-encryption")]
     pub fn decrypt_for_slot(&self, slot_number: u64, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
         // Try to get the key for the specific slot first
@@ -583,7 +614,12 @@ impl EncryptionLayer {
                 slot_number,
                 ciphertext.len()
             );
-            return self.decrypt_with_key(&key.material, ciphertext);
+            let plaintext = self.decrypt_with_key(&key.material, ciphertext)?;
+            
+            // Prune keys older than the one we just used
+            self.key_cache.prune_keys_before(slot_number);
+            
+            return Ok(plaintext);
         }
 
         // Fallback: try all available keys (the ciphertext might have been encrypted with a different key)
@@ -592,18 +628,29 @@ impl EncryptionLayer {
             slot_number
         );
         
-        let map = self.key_cache.slot_key_map.read().unwrap();
-        for (try_slot, key) in map.iter().rev() { // Try most recent keys first
+        // Search the queue for a key that works
+        let queue = self.key_cache.key_queue.read().unwrap();
+        for (try_slot, key) in queue.iter().rev() { // Try most recent keys first
             if let Ok(plaintext) = self.decrypt_with_key(&key.material, ciphertext) {
+                // Clone data we need before releasing the lock
+                let used_slot = *try_slot;
+                let key_id = key.id.clone();
+                drop(queue); // Release read lock before pruning
+                
                 tracing::info!(
                     "🔓 DECRYPT SUCCESS: Key '{}' from slot {} successfully decrypted data for slot {}",
-                    key.id,
-                    try_slot,
+                    key_id,
+                    used_slot,
                     slot_number
                 );
+                
+                // Prune keys older than the one we just used
+                self.key_cache.prune_keys_before(used_slot);
+                
                 return Ok(plaintext);
             }
         }
+        drop(queue); // Release read lock
 
         // No key could decrypt the data
         Err(EncryptionError::DecryptionFailed(format!(
