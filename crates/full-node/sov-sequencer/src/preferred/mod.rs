@@ -141,6 +141,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     /// The sender for state update notifications. Currently used only for testing.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
+    runtime: Rt,
 }
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -356,6 +357,7 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_sender: broadcast::channel(100).0,
+            runtime: Rt::default(),
         }));
 
         // Launch replica sync task only for replicas.
@@ -622,7 +624,6 @@ where
         tracing::debug!(%tx_hash, "Executing accept_tx");
 
         // Check if this transaction has a configured delay
-        let runtime = Rt::default();
         let mut state = self
             .api_state()
             .default_api_state_accessor()
@@ -630,7 +631,7 @@ where
         let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
             .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
         let call = Rt::wrap_call(call);
-        let delay_ms = runtime.get_transaction_delay_ms(&call);
+        let delay_ms = self.runtime.get_transaction_delay_ms(&call);
         // We need to destructure auth_data because it's not `Send`.
         let uniqueness = auth_data.uniqueness;
         let credential_id = auth_data.credential_id;
@@ -814,8 +815,8 @@ async fn update_state_task<S, Rt, Da>(
 fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
-    let mut rt = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
+    let mut runtime = Rt::default();
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel(), None);
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
