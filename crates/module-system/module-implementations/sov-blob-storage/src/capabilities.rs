@@ -1108,7 +1108,14 @@ impl<S: Spec> BlobStorage<S> {
             }
             None => {
                 // Rollup is configured for no encryption - all batches must be unencrypted
-                self.deserialize_unencrypted_batch(blob, charge_for_deserialization, state)
+                tracing::debug!("STF: Deserializing unencrypted batch from blob {}", blob.hash());
+                
+                self.deserialize_or_try_slash_sender::<PreferredBatchData>(
+                    blob,
+                    charge_for_deserialization.map(|(seq, price)| (seq, *price)),
+                    false,
+                    state,
+                )
             }
         }
     }
@@ -1170,21 +1177,7 @@ impl<S: Spec> BlobStorage<S> {
     }
 
     /// Deserialize an unencrypted batch blob.
-    fn deserialize_unencrypted_batch(
-        &mut self,
-        blob: &mut <S::Da as DaSpec>::BlobTransaction,
-        charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
-        state: &mut KernelStateAccessor<'_, S>,
-    ) -> Option<PreferredBatchData> {
-        tracing::debug!("STF: Deserializing unencrypted batch from blob {}", blob.hash());
-        
-        self.deserialize_or_try_slash_sender::<PreferredBatchData>(
-            blob,
-            charge_for_deserialization.map(|(seq, price)| (seq, *price)),
-            false,
-            state,
-        )
-    }
+    /// Removed deserialize_unencrypted_batch - now handled directly in deserialize_and_decrypt_batch
 
     /// This method has been removed - decryption now handled by EncryptionLayer::decrypt_for_slot
 
