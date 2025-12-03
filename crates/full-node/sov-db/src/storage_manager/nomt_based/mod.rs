@@ -93,7 +93,7 @@ where
         state_db: NomtSessionBuilder<H, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        with_witness: bool,
+        strict_with_witness: bool,
         pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
     ) -> Self;
 }
