@@ -256,10 +256,6 @@ where
     }
 }
 
-pub mod config {
-    include!(concat!(env!("OUT_DIR"), "/config.rs"));
-}
-
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
