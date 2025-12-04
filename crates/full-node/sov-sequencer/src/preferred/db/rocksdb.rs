@@ -65,11 +65,12 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         tx_idx_within_batch: u64,
         tx: FullyBakedTx,
         hash: TxHash,
+        sequencing_data: Option<Vec<u8>>,
     ) -> anyhow::Result<()> {
         self.db
             .put_async::<tables::BatchContents>(
                 &(sequence_number, tx_idx_within_batch),
-                &(hash, tx),
+                &(hash, tx, sequencing_data),
             )
             .await?;
 
@@ -227,6 +228,7 @@ impl RocksDbBackend {
             } => {
                 let mut txs = vec![];
                 let mut tx_hashes = vec![];
+                let mut sequencing_data_list = vec![];
 
                 // Iteration might be slow, but getters are only called during
                 // sequencer initialization so it's okay.
@@ -238,9 +240,10 @@ impl RocksDbBackend {
                     if item.key.0 != sequence_number {
                         break;
                     }
-                    let (tx_hash, tx) = item.value;
+                    let (tx_hash, tx, seq_data) = item.value;
                     txs.push(tx);
                     tx_hashes.push(tx_hash);
+                    sequencing_data_list.push(seq_data);
                 }
 
                 PreferredSequencerReadBlob::Batch(
@@ -250,6 +253,7 @@ impl RocksDbBackend {
                         visible_slots_to_advance,
                         txs,
                         tx_hashes,
+                        sequencing_data_list,
                         blob_id,
                     }
                     .into(),
@@ -282,7 +286,7 @@ mod tables {
     );
 
     define_table_with_seek_key_codec!(
-        (BatchContents) (SequenceNumber, u64) => (TxHash, FullyBakedTx)
+        (BatchContents) (SequenceNumber, u64) => (TxHash, FullyBakedTx, Option<Vec<u8>>)
     );
 }
 

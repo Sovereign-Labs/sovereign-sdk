@@ -318,6 +318,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             credential_id,
             default_address: credential_id.into(),
             credentials: Credentials::new(credential_id),
+            sequencing_data: None,
         }
     }
 

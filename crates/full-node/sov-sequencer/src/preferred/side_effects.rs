@@ -120,6 +120,7 @@ where
                                 (
                                     contents.accepted_tx.tx.clone(),
                                     contents.accepted_tx.tx_hash,
+                                    None, // sequencing_data will be populated separately
                                 )
                             })
                             .collect(),

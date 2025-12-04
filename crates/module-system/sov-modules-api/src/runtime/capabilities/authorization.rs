@@ -86,9 +86,14 @@ pub struct AuthorizationData<S: Spec> {
     pub credential_id: CredentialId,
 
     /// Holds the original credentials to authenticate the transaction and
-    /// provides information about which `Authenticator` was used to authenticate the transaction.
+    /// provides information which `Authenticator` was used to authenticate the transaction.
     pub credentials: Credentials,
 
     /// The default address.
     pub default_address: S::Address,
+
+    /// Sequencer-provided metadata (e.g., timestamp) added at transaction acceptance.
+    /// This data is NOT signed by the user but is included for modules to access via Context.
+    /// Only populated for transactions from registered sequencers.
+    pub sequencing_data: Option<Vec<u8>>,
 }

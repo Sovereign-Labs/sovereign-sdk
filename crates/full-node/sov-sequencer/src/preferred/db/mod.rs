@@ -48,20 +48,22 @@ pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
         tx_idx_within_batch: u64,
         tx: FullyBakedTx,
         hash: TxHash,
+        sequencing_data: Option<Vec<u8>>,
     ) -> anyhow::Result<()>;
 
     async fn batch_add_txs(
         &mut self,
         sequence_number_of_in_progress_batch: SequenceNumber,
         mut tx_idx_within_batch: u64,
-        txs: &[(FullyBakedTx, TxHash)],
+        txs: &[(FullyBakedTx, TxHash, Option<Vec<u8>>)],
     ) -> anyhow::Result<()> {
-        for (tx, hash) in txs {
+        for (tx, hash, sequencing_data) in txs {
             self.add_tx(
                 sequence_number_of_in_progress_batch,
                 tx_idx_within_batch,
                 tx.clone(),
                 *hash,
+                sequencing_data.clone(),
             )
             .await?;
             tx_idx_within_batch += 1;
@@ -103,16 +105,22 @@ pub struct DbSnapshotData {
 
 /// See [`PreferredSequencerReadBlob::Batch`].
 #[derive(Debug, Clone)]
-pub struct PreferredSequencerReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = Arc<Vec<TxHash>>> {
+pub struct PreferredSequencerReadBatch<
+    Txs = Arc<Vec<FullyBakedTx>>,
+    TxHashes = Arc<Vec<TxHash>>,
+    SequencingDataList = Arc<Vec<Option<Vec<u8>>>>,
+> {
     pub sequence_number: SequenceNumber,
     pub visible_slot_number_after_increase: VisibleSlotNumber,
     pub visible_slots_to_advance: NonZero<u8>,
     pub blob_id: BlobInternalId,
     pub txs: Txs,
     pub tx_hashes: TxHashes,
+    pub sequencing_data_list: SequencingDataList,
 }
 
-pub type InProgressBatch = PreferredSequencerReadBatch<Vec<FullyBakedTx>, Vec<TxHash>>;
+pub type InProgressBatch =
+    PreferredSequencerReadBatch<Vec<FullyBakedTx>, Vec<TxHash>, Vec<Option<Vec<u8>>>>;
 
 impl From<InProgressBatch> for PreferredSequencerReadBatch {
     fn from(batch: InProgressBatch) -> Self {
@@ -123,6 +131,7 @@ impl From<InProgressBatch> for PreferredSequencerReadBatch {
             blob_id: batch.blob_id,
             txs: Arc::new(batch.txs),
             tx_hashes: batch.tx_hashes.into(),
+            sequencing_data_list: Arc::new(batch.sequencing_data_list),
         }
     }
 }
@@ -279,6 +288,7 @@ impl PreferredSequencerCache {
             blob_id,
             txs: vec![],
             tx_hashes: vec![],
+            sequencing_data_list: vec![],
         });
 
         self.send_event_if_necessary(DbEvent::BatchStarted {
@@ -459,7 +469,7 @@ impl PreferredSequencerDb {
     #[tracing::instrument(skip_all, level = "info")]
     pub(crate) async fn bulk_insert_txs(
         &mut self,
-        txs: Vec<(FullyBakedTx, TxHash)>,
+        txs: Vec<(FullyBakedTx, TxHash, Option<Vec<u8>>)>,
         sequence_number: SequenceNumber,
         tx_idx_within_batch: u64,
     ) -> anyhow::Result<()> {

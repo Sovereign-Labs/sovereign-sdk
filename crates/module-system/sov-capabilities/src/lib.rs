@@ -272,12 +272,17 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             &auth_data.credential_id,
             state,
         )?;
-        Ok(Context::new(
+        let mut ctx = Context::new(
             sender,
             auth_data.credentials.clone(),
             sequencer_rollup_address,
             sequencer.clone(),
-        ))
+        );
+        // Populate sequencing_data from auth_data if present
+        if let Some(ref sequencing_data) = auth_data.sequencing_data {
+            ctx.set_sequencing_data(sequencing_data.clone());
+        }
+        Ok(ctx)
     }
 
     fn resolve_unregistered_context(
