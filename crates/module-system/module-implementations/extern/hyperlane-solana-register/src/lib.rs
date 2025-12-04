@@ -1,12 +1,24 @@
-use std::str::FromStr as _;
-
 use sov_modules_api::macros::serialize;
 use sov_modules_api::{
-    err_detail, Base58Address, Context, CoreModuleError, CredentialId, ErrorContext, ErrorDetail,
-    EventEmitter, HexHash, HexString, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, TxState,
+    err_detail, Base58Address, Context, CoreModuleError, CredentialId, DaSpec, ErrorContext,
+    ErrorDetail, EventEmitter, GenesisState, HexHash, HexString, Module, ModuleId, ModuleInfo,
+    ModuleRestApi, Spec, StateValue, TxState,
 };
 
 use sov_hyperlane_integration::{HyperlaneAddress, Ism, Recipient, Warp};
+
+#[derive(Debug, PartialEq, Clone)]
+#[serialize(Borsh, Serde)]
+pub struct SolanaDeployment {
+    /// The Solana hyperlane domain id.
+    pub domain_id: u32,
+    /// The program id of the hyperlane-solana-register program deployed on Solana.
+    /// https://github.com/Sovereign-Labs/hyperlane-solana-register/tree/master/solana/program
+    ///
+    /// This is a TRUSTED program, the owner of this program can arbitrarily register users on the rollup
+    /// which could lead to account takeovers if misused.
+    pub program_id: Base58Address,
+}
 
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
 pub struct SolanaRegistration<S: Spec>
@@ -24,6 +36,15 @@ where
 
     #[module]
     accounts: sov_accounts::Accounts<S>,
+
+    #[state]
+    admin: StateValue<S::Address>,
+
+    #[state]
+    deployment: StateValue<SolanaDeployment>,
+
+    #[state]
+    ism: StateValue<Ism>,
 }
 
 #[derive(thiserror::Error, Debug, serde::Serialize)]
@@ -31,8 +52,6 @@ where
 pub enum SolanaRegistrationError {
     #[error("Core module error: {0}")]
     CoreModuleError(#[from] CoreModuleError),
-    #[error("Module doesn't support calls")]
-    UnsupportedModuleCall,
     #[error("Embedded pubkey already registered to different address. Attempted: {attempted_address}, Registered: {registered_address}")]
     AlreadyRegistered {
         attempted_address: String,
@@ -42,6 +61,10 @@ pub enum SolanaRegistrationError {
     InvalidBodyLength { expected: usize, found: usize },
     #[error("Failed to extract public key from body")]
     ExtractPubKey,
+    #[error("Admin not set for module")]
+    AdminNotFound,
+    #[error("Module can only be called by the admin")]
+    Forbidden { admin: String, caller: String },
 }
 
 impl ErrorDetail for SolanaRegistrationError {
@@ -67,6 +90,14 @@ pub enum Event<S: Spec> {
     },
 }
 
+#[derive(Debug, Clone)]
+#[serialize(Borsh, Serde)]
+pub struct GenesisConfig<S: Spec> {
+    pub deployment: Option<SolanaDeployment>,
+    pub ism: Option<Ism>,
+    pub admin: S::Address,
+}
+
 impl<S: Spec> Module for SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
@@ -75,19 +106,47 @@ where
 
     type Error = SolanaRegistrationError;
 
-    type Config = ();
+    type Config = GenesisConfig<S>;
 
+    // update admin/deploy/ism
     type CallMessage = ();
 
     type Event = Event<S>;
 
+    fn genesis(
+        &mut self,
+        _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
+        config: &Self::Config,
+        state: &mut impl GenesisState<S>,
+    ) -> Result<(), anyhow::Error> {
+        if let Some(deployment) = &config.deployment {
+            self.deployment.set(deployment, state)?;
+        }
+
+        if let Some(ism) = &config.ism {
+            self.ism.set(ism, state)?;
+        }
+
+        self.admin.set(&config.admin, state)?;
+
+        Ok(())
+    }
+
     fn call(
         &mut self,
         _message: Self::CallMessage,
-        _context: &Context<Self::Spec>,
-        _state: &mut impl TxState<Self::Spec>,
+        context: &Context<Self::Spec>,
+        state: &mut impl TxState<Self::Spec>,
     ) -> Result<(), Self::Error> {
-        Err(SolanaRegistrationError::UnsupportedModuleCall)
+        let admin = self
+            .admin
+            .get(state)
+            .map_err(CoreModuleError::state_read)?
+            .ok_or(SolanaRegistrationError::AdminNotFound)?;
+        let sender = context.sender();
+        self.assert_admin(sender, &admin)?;
+
+        Ok(())
     }
 }
 
@@ -103,9 +162,8 @@ where
         self.default_ism(state)
     }
 
-    fn default_ism(&self, _state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
-        // TODO:
-        Ok(Some(Ism::AlwaysTrust))
+    fn default_ism(&self, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
+        Ok(self.ism.get(state)?)
     }
 
     fn handle(
@@ -116,7 +174,10 @@ where
         body: HexString,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        if self.should_handle(origin, sender) {
+        let deploy = self.deployment.get(state)?.ok_or_else(|| {
+            anyhow::anyhow!("SolanaDeployment not configured in SolanaRegistration module")
+        })?;
+        if self.should_handle(origin, sender, &deploy) {
             Ok(self.register(body, state)?)
         } else {
             self.warp.handle(origin, sender, recipient, body, state)
@@ -128,9 +189,23 @@ impl<S: Spec> SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
 {
-    fn should_handle(&self, origin: u32, sender: HexHash) -> bool {
-        let program_id = Base58Address::from_str(config::SOLANA_PROGRAM_ID).unwrap();
-        origin == config::HYPERLANE_SOLANA_CHAIN_ID && sender == HexString(program_id.0)
+    fn assert_admin(
+        &self,
+        caller: &S::Address,
+        admin: &S::Address,
+    ) -> Result<(), SolanaRegistrationError> {
+        if caller != admin {
+            Err(SolanaRegistrationError::Forbidden {
+                admin: admin.to_string(),
+                caller: caller.to_string(),
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn should_handle(&self, origin: u32, sender: HexHash, deploy: &SolanaDeployment) -> bool {
+        origin == deploy.domain_id && sender == HexString(deploy.program_id.0)
     }
 
     fn unpack_body(&self, body: &[u8]) -> Result<([u8; 32], [u8; 32]), SolanaRegistrationError> {
@@ -189,7 +264,7 @@ pub mod config {
 mod test {
     use std::str::FromStr;
 
-    use crate::config;
+    use crate::SolanaDeployment;
     use crate::SolanaRegistration;
     use borsh::BorshDeserialize;
     use sov_modules_api::Base58Address;
@@ -201,31 +276,34 @@ mod test {
         HexHash::try_from_slice(&b58.0).unwrap()
     }
 
-    fn valid_program_id() -> HexHash {
-        b58_as_hex(config::SOLANA_PROGRAM_ID)
-    }
-
-    fn valid_domain() -> u32 {
-        config::HYPERLANE_SOLANA_CHAIN_ID
+    #[test]
+    fn test_assert_admin() {
+        // todo
     }
 
     #[test]
     fn test_should_handle() {
+        let valid_program_id = "692KZJaoe2KRcD6uhCQDLLXnLNA5ZLnfvdqjE4aX9iu1";
+        let deploy = SolanaDeployment {
+            domain_id: 1337,
+            program_id: Base58Address::from_str(valid_program_id).unwrap(),
+        };
         let m = SolanaRegistration::<S>::default();
 
         assert!(
-            !m.should_handle(5, valid_program_id()),
+            !m.should_handle(5, b58_as_hex(valid_program_id), &deploy),
             "invalid domain should not be handled"
         );
         assert!(
             !m.should_handle(
-                valid_domain(),
-                b58_as_hex("692KZJaoe2KRcD6uhCQDLLXnLNA5ZLnfvdqjE4aX9iu1")
+                1337,
+                b58_as_hex("692KZJaoe2KRcD6uhCQDLLXnLNA5ZLnfvdqjE4aX9i22"),
+                &deploy,
             ),
             "invalid program id should not be handled"
         );
         assert!(
-            m.should_handle(valid_domain(), valid_program_id()),
+            m.should_handle(1337, b58_as_hex(valid_program_id), &deploy),
             "should handle correct domain & program"
         );
     }
