@@ -127,7 +127,6 @@ where
         credential_id,
         credentials,
         default_address: S::Address::from_vm_address(ethereum_address),
-        sequencing_data: None,
     }
 }
 

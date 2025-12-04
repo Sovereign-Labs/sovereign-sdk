@@ -22,6 +22,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
+        sequencing_data: Option<Vec<u8>>,
     ) -> anyhow::Result<Context<S>>;
 
     /// Resolves the context for an unregistered transaction.
@@ -91,9 +92,4 @@ pub struct AuthorizationData<S: Spec> {
 
     /// The default address.
     pub default_address: S::Address,
-
-    /// Sequencer-provided metadata (e.g., timestamp) added at transaction acceptance.
-    /// This data is NOT signed by the user but is included for modules to access via Context.
-    /// Only populated for transactions from registered sequencers.
-    pub sequencing_data: Option<Vec<u8>>,
 }

@@ -298,6 +298,10 @@ pub struct PreferredBatchData {
     pub data: Arc<Vec<FullyBakedTx>>,
     /// The number of visible slots to advance after processing the batch. Minimum 1.
     pub visible_slots_to_advance: NonZero<u8>,
+    /// Sequencer-provided metadata for each transaction (e.g., timestamps).
+    /// This data is NOT signed by users but is added by the sequencer.
+    /// Length must match `data.len()`.
+    pub sequencing_data: Arc<Vec<Option<Vec<u8>>>>,
 }
 
 /// A trait implemented by blobs sent through the preferred sequencer.

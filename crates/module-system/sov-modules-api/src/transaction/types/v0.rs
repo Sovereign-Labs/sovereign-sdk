@@ -59,7 +59,6 @@ impl<Call, S: Spec, C: CryptoSpecExt> Version0<Call, S, C> {
             credential_id,
             credentials: Credentials::new(pub_key),
             default_address: credential_id.into(),
-            sequencing_data: None,
         })
     }
 }

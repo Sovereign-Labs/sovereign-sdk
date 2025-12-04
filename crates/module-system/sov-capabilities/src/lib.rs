@@ -265,6 +265,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
+        sequencing_data: Option<Vec<u8>>,
     ) -> anyhow::Result<Context<S>> {
         // This should be resolved by the sequencer registry during blob selection
         let sender = self.accounts.resolve_sender_address(
@@ -278,9 +279,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             sequencer_rollup_address,
             sequencer.clone(),
         );
-        // Populate sequencing_data from auth_data if present
-        if let Some(ref sequencing_data) = auth_data.sequencing_data {
-            ctx.set_sequencing_data(sequencing_data.clone());
+        // Populate sequencing_data if present
+        if let Some(data) = sequencing_data {
+            ctx.set_sequencing_data(data);
         }
         Ok(ctx)
     }

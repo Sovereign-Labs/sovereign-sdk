@@ -144,6 +144,7 @@ impl PreferredSequencerReadBatch {
                 sequence_number: self.sequence_number,
                 visible_slots_to_advance: self.visible_slots_to_advance,
                 data: self.txs,
+                sequencing_data: self.sequencing_data_list,
             },
         }
     }
