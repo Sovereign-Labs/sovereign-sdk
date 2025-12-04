@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{BatchWithId, DaSpec, Spec};
 use tracing::{error, warn};
@@ -172,6 +174,7 @@ mod tests {
                 vec![FullyBakedTx::new(vec![0; size])].into(),
                 [0; 32],
                 [0; 28].into(),
+                Arc::new(vec![None]),
             )),
             [0; 32].into(),
             Escrow::None,
@@ -192,11 +195,13 @@ mod tests {
             let mut expected_addresses = Vec::new();
             for (i, b) in txs.into_iter().enumerate() {
                 let addr = [i as u8; 32].into();
+                let b_vec: Arc<Vec<_>> = b.into();
                 let b = ValidatedBlob::new(
                     BlobDataWithId::Batch(BatchWithId::new(
-                        b.into(),
+                        b_vec.clone(),
                         [0; 32],
                         [i as u8; 28].into(),
+                        Arc::new(vec![None; b_vec.len()]),
                     )),
                     addr,
                     Escrow::None,

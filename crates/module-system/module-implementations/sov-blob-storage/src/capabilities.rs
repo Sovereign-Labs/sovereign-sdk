@@ -1265,6 +1265,7 @@ fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
 #[cfg(test)]
 mod tests {
     use std::num::NonZeroU8;
+    use std::sync::Arc;
 
     use sov_mock_da::MOCK_SEQUENCER_DA_ADDRESS;
     use sov_test_utils::TestSpec;

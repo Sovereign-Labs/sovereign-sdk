@@ -202,11 +202,13 @@ pub trait MessageGenerator {
             BlobBuildingCtx::Preferred {
                 curr_sequence_number,
             } => {
+                let txs_vec: Arc<Vec<_>> = txs.into();
                 let batch = PreferredBatchData {
-                    data: txs.into(),
                     sequence_number: curr_sequence_number
                         .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
                     visible_slots_to_advance: NonZero::new(1).unwrap(),
+                    data: txs_vec.clone(),
+                    sequencing_data: Arc::new(vec![None; txs_vec.len()]),
                 };
 
                 borsh::to_vec(&batch).unwrap()

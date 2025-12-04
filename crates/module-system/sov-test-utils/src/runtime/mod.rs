@@ -587,12 +587,16 @@ where
                         SequencerInfo::Preferred {
                             slots_to_advance,
                             sequence_number,
-                        } => borsh::to_vec(&PreferredBatchData {
-                            sequence_number,
-                            data: raw_txns.into(),
-                            visible_slots_to_advance: NonZero::new(slots_to_advance).unwrap(),
-                        })
-                        .unwrap(),
+                        } => {
+                            let txns_vec: Arc<Vec<_>> = raw_txns.into();
+                            borsh::to_vec(&PreferredBatchData {
+                                sequence_number,
+                                data: txns_vec.clone(),
+                                visible_slots_to_advance: NonZero::new(slots_to_advance).unwrap(),
+                                sequencing_data: Arc::new(vec![None; txns_vec.len()]),
+                            })
+                            .unwrap()
+                        }
                         SequencerInfo::Regular => borsh::to_vec(&raw_txns).unwrap(),
                     };
 
