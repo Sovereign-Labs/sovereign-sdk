@@ -231,14 +231,6 @@ impl HooksMacro {
             .iter()
             .map(|ArgWithType { ty, arg }| quote::quote! { #arg: #ty });
 
-        let idents = fields.iter().enumerate().map(|(i, field)| {
-            let ident = &field.ident;
-
-            quote::quote! {
-                (&mut self.#ident, #i)
-            }
-        });
-
         let method_generics = if method_generics.is_empty() {
             None
         } else {
@@ -251,18 +243,14 @@ impl HooksMacro {
             quote::quote! {()}
         };
 
-        let matches = fields.iter().enumerate().map(|(i, field)| {
+        let module_calls = fields.iter().map(|field| {
             let ident = &field.ident;
             let args_loop = args_names.clone();
 
-            let module_call = if is_faillible {
-                quote::quote! {(&mut self.#ident).#method(#(#args_loop),*)?}
+            if is_faillible {
+                quote::quote! {(&mut self.#ident).#method(#(#args_loop),*)?;}
             } else {
-                quote::quote! {(&mut self.#ident).#method(#(#args_loop),*)}
-            };
-
-            quote::quote! {
-                #i => #module_call,
+                quote::quote! {(&mut self.#ident).#method(#(#args_loop),*);}
             }
         });
 
@@ -274,16 +262,7 @@ impl HooksMacro {
 
         quote::quote! {
             fn #method #method_generics (&mut self, #(#args_with_types),*) -> #method_output_ty {
-                let modules: ::std::vec::Vec<(&dyn ::sov_modules_api::ModuleInfo<Spec = Self::Spec>, usize)> = ::std::vec![#(#idents),*];
-
-                let sorted_modules = ::sov_modules_api::sort_values_by_modules_dependencies(modules).expect("Sorting of modules failed");
-
-                for module in sorted_modules {
-                     match module {
-                         #(#matches)*
-                         _ => panic!("Module not found: {:?}", module),
-                     }
-                };
+                #(#module_calls)*
 
                 #output
             }
