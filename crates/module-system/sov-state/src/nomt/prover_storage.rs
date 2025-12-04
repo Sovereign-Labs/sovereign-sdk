@@ -192,11 +192,7 @@ where
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
                     let key_path = S::Hasher::digest(&key_vec).into();
-                    tracing::trace!(
-                        %key,
-                        key_path = hex::encode(key_path),
-                        "Reading from user namespace",
-                    );
+
                     let nomt_session = self
                         .state_session_builder
                         .begin_user_session_without_witness()
@@ -222,11 +218,6 @@ where
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
                     let key_path = S::Hasher::digest(&key_vec).into();
-                    tracing::trace!(
-                        %key,
-                        key_path = hex::encode(key_path),
-                        "Reading from kernel namespace",
-                    );
                     let nomt_session = self
                         .state_session_builder
                         .begin_kernel_session_without_witness()
@@ -325,16 +316,6 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         let authenticated_write = original_write
             .as_ref()
             .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
-
-        tracing::trace!(
-            %key,
-            key_path = hex::encode(key_hash),
-            original_write = ?original_write
-                .as_ref()
-                .map(|v| String::from_utf8_lossy(v.value())),
-            authenticated_write = ?authenticated_write.as_ref().map(hex::encode),
-            "state update write",
-        );
 
         match merged_accesses.entry(key_hash) {
             Entry::Vacant(vacant) => {
