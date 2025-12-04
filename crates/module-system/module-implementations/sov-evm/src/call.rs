@@ -110,9 +110,9 @@ where
             .map_err(|e| anyhow::anyhow!("{e}"))?;
         save_elapsed!(state_commit_time SINCE state_commit);
 
-        if !result.is_success() {
-            return on_revert(*tx.signed_transaction.hash(), result);
-        }
+        // if !result.is_success() {
+        //     return on_revert(*tx.signed_transaction.hash(), result);
+        // }
         #[cfg(feature = "native")]
         let db_metrics = db.metrics();
 
@@ -345,15 +345,15 @@ fn on_error<S: Spec>(
     anyhow::bail!("EVM transaction error: {:?}", err);
 }
 
-fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
-    tracing::debug!(
-        hash = hex::encode(hash),
-        gas_used = result.gas_used(),
-        ?result,
-        "EVM execution error"
-    );
-    anyhow::bail!("EVM execution error: {:?}", &result);
-}
+// fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
+//     tracing::debug!(
+//         hash = hex::encode(hash),
+//         gas_used = result.gas_used(),
+//         ?result,
+//         "EVM execution error"
+//     );
+//     anyhow::bail!("EVM execution error: {:?}", &result);
+// }
 
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
