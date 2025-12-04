@@ -177,7 +177,7 @@ pub struct AsyncBatchResponder<S: Spec> {
 }
 
 impl<S: Spec> AsyncBatchResponder<S> {
-    fn send_async_btach_result(&self, item: AsyncBatchResult<S>) {
+    fn send_async_batch_result(&self, item: AsyncBatchResult<S>) {
         // Try a simple non-blocking send first, then fall back to blocking the runtime if that fails
         if let Err(TrySendError::Full(item)) = self.result_channel.try_send(item) {
             let _ = Handle::current().block_on(async move { self.result_channel.send(item).await });
@@ -190,7 +190,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         execution_time_micros: u64,
         inner_result: Result<ExecutedTxResponse<S>, RejectReason>,
     ) {
-        self.send_async_btach_result(AsyncBatchResult {
+        self.send_async_batch_result(AsyncBatchResult {
             gas_used,
             execution_time_micros,
             inner_result,
