@@ -902,7 +902,7 @@ where
             tokio::spawn(async move {
                 axum_server::Server::bind(axum_addr)
                     .handle(handle_cloned)
-                    .serve(router.into_make_service_with_connect_info::<SocketAddr>())
+                    .serve(router.into_make_service())
                     .await
                     .unwrap();
             });

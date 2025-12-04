@@ -13,7 +13,6 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::{StateUpdateInfo, TxHash};
 use std::marker::PhantomData;
-use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -240,7 +239,6 @@ where
     async fn accept_tx(
         &self,
         tx: FullyBakedTx,
-        _addr: SocketAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         Ok(self.accept_encoded_tx(tx).await)
     }

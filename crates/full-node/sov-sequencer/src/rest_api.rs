@@ -1,10 +1,9 @@
 //! Utilities and definitions for the sequencer's REST APIs.
 
-use std::net::SocketAddr;
 use std::pin::Pin;
 
 use axum::extract::ws::WebSocket;
-use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
+use axum::extract::{ws, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::Json;
 use futures::StreamExt;
@@ -227,7 +226,6 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     async fn axum_accept_tx(
-        connect_info: ConnectInfo<SocketAddr>,
         state: State<Self>,
         tx: Json<AcceptTx>,
     ) -> ApiResult<
@@ -238,16 +236,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             Seq::Spec,
         >>::encode_with_standard_auth(raw_tx);
 
-        let tx_with_hash = state
-            .sequencer
-            .accept_tx(baked_tx, connect_info.0)
-            .await
-            .map_err(|e| {
-                if e.status.is_server_error() {
-                    tracing::error!(error = ?e, "Error accepting transaction");
-                }
-                IntoResponse::into_response(e)
-            })?;
+        let tx_with_hash = state.sequencer.accept_tx(baked_tx).await.map_err(|e| {
+            if e.status.is_server_error() {
+                tracing::error!(error = ?e, "Error accepting transaction");
+            }
+            IntoResponse::into_response(e)
+        })?;
 
         Ok(TxInfoWithConfirmation {
             id: tx_with_hash.tx_hash,

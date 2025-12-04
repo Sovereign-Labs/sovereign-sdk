@@ -19,11 +19,9 @@ use sov_blob_storage::SequenceNumber;
 use sov_db::ledger_db::LedgerDb;
 use sov_full_node_configs::sequencer::{PreferredSequencerConfig, SequencerConfig};
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::CredentialId;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
 pub(crate) use sync_state::*;
@@ -66,8 +64,6 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        socket_addr: SocketAddr,
         reason: &'static str,
     },
 

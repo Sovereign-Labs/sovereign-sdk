@@ -28,11 +28,10 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{
-    CredentialId, FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -235,19 +234,10 @@ where
                 baked_tx,
                 tx_hash,
                 original_tx_queue_id,
-                credential_id,
-                socket_addr,
                 reason,
             } => {
                 let ret = self
-                    .process_accept_tx(
-                        baked_tx,
-                        tx_hash,
-                        original_tx_queue_id,
-                        credential_id,
-                        socket_addr,
-                        reason,
-                    )
+                    .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
                     .await;
                 if let Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                     RollupBlockExecutorError::UnexpectedFailure,
@@ -762,8 +752,6 @@ where
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        _credential_id: CredentialId,
-        _socket_addr: SocketAddr,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;

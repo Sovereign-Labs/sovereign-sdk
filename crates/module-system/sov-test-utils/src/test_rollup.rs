@@ -643,14 +643,11 @@ where
         let actual_port = actual_address.port();
 
         tokio::spawn(async move {
-            axum::serve(
-                listener,
-                ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(router),
-            )
-            .with_graceful_shutdown(async move {
-                shutdown_receiver.changed().await.ok();
-            })
-            .await
+            axum::serve(listener, ServiceExt::<Request>::into_make_service(router))
+                .with_graceful_shutdown(async move {
+                    shutdown_receiver.changed().await.ok();
+                })
+                .await
         });
 
         let client = sov_api_spec::client::Client::new(&format!("http://127.0.0.1:{actual_port}"));

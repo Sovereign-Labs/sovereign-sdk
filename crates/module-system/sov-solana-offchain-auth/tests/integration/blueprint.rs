@@ -1,8 +1,7 @@
 use std::marker::PhantomData;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, State};
+use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::Json;
@@ -167,8 +166,7 @@ where
 
 /// Handler for accepting Solana offchain authenticated transactions
 async fn accept_solana_offchain_tx<Seq>(
-    connect_info: ConnectInfo<SocketAddr>,
-    sequencer: State<Seq>,
+    State(sequencer): State<Seq>,
     tx: Json<AcceptTx>,
 ) -> ApiResult<TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>>
 where
@@ -180,16 +178,12 @@ where
     let encoded_tx = Seq::Rt::encode_with_solana_offchain_auth(raw_tx);
 
     // Submit to sequencer (similar to axum_accept_tx but with Solana auth)
-    let tx_with_hash = sequencer
-        .0
-        .accept_tx(encoded_tx, connect_info.0)
-        .await
-        .map_err(|e| {
-            if e.status.is_server_error() {
-                tracing::error!(error = ?e, "Error accepting Solana offchain transaction");
-            }
-            IntoResponse::into_response(e)
-        })?;
+    let tx_with_hash = sequencer.accept_tx(encoded_tx).await.map_err(|e| {
+        if e.status.is_server_error() {
+            tracing::error!(error = ?e, "Error accepting Solana offchain transaction");
+        }
+        IntoResponse::into_response(e)
+    })?;
 
     Ok(TxInfoWithConfirmation {
         id: tx_with_hash.tx_hash,
