@@ -2,7 +2,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::SafeVec;
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
-#[cfg(feature = "native")]
 use sov_rollup_interface::zk::CryptoSpec;
 
 use crate::{

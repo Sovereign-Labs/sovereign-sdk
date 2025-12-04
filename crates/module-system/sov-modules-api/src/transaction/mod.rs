@@ -194,6 +194,14 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
+    /// Extract the runtime call from the transaction
+    pub fn into_runtime_call(self) -> R::Call {
+        match self {
+            Transaction::V0(inner) => inner.runtime_call,
+            Transaction::V1(inner) => inner.runtime_call,
+        }
+    }
+
     /// Returns the chain id.
     pub fn chain_id(&self) -> u64 {
         match &self {
@@ -219,14 +227,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         })
     }
 
-    /// Extract the runtime call from the transaction
-    pub fn call(self) -> R::Call {
-        match self {
-            Transaction::V0(inner) => inner.runtime_call,
-            Transaction::V1(inner) => inner.runtime_call,
-        }
-    }
-
     /// Serialize the transaction, appending the runtime's chain_hash.
     /// This is the standard serialization for Sovereign signature signing.
     pub fn serialized_with_chain_hash(
@@ -248,16 +248,13 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     ) -> Result<(), TransactionVerificationError<S::Gas>> {
         match &self {
             Transaction::V0(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .charge_gas(meter, msg_len)
-                    .map_err(TransactionVerificationError::from)?;
+                MeteredSignature::new::<S>(inner.signature.clone()).charge_gas(meter, msg_len)?;
             }
             Transaction::V1(inner) => {
                 for signature in inner.signatures.iter() {
                     // Charge gas for all the signatures up front before verifying. This way, we can switch to batch verification and the gas price will be the same.
                     MeteredSignature::new::<S>(signature.signature.clone())
-                        .charge_gas(meter, msg_len)
-                        .map_err(TransactionVerificationError::from)?;
+                        .charge_gas(meter, msg_len)?;
                 }
             }
         }

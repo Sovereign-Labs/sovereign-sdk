@@ -3,9 +3,9 @@ use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::capabilities::{
-    self, calculate_hash_metered, extract_authorization_data, extract_authorization_data_v1,
-    verify_chain_id, AuthenticationError, AuthenticationOutput, BatchFromUnregisteredSequencer,
-    FatalError, TransactionAuthenticator, UnregisteredAuthenticationError,
+    self, calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput,
+    BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
+    UnregisteredAuthenticationError,
 };
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::transaction::{
@@ -220,42 +220,26 @@ fn verify_and_decode_tx<
     tx: Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    match &tx {
+    let (auth_data, details, runtime_call) = match &tx {
         Transaction::V0(tx_v0) => {
-            verify_chain_id(&tx_v0.details, raw_tx_hash)?;
-            verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
-            let authorization_data = extract_authorization_data::<
-                S,
-                D,
-                <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec,
-            >(tx_v0, raw_tx_hash, meter)?;
-
-            let runtime_call = tx_v0.runtime_call.clone();
-            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-                raw_tx_hash,
-                authenticated_tx: tx_v0.details.clone().into(),
-            };
-
-            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+            let auth_data = tx_v0.auth_data(raw_tx_hash, meter)?;
+            (auth_data, &tx_v0.details, &tx_v0.runtime_call)
         }
         Transaction::V1(tx_v1) => {
-            verify_chain_id(&tx_v1.details, raw_tx_hash)?;
-            verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
-            let authorization_data = extract_authorization_data_v1::<
-                S,
-                D,
-                <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec,
-            >(tx_v1, raw_tx_hash, meter)?;
-
-            let runtime_call = tx_v1.runtime_call.clone();
-            let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-                raw_tx_hash,
-                authenticated_tx: tx_v1.details.clone().into(),
-            };
-
-            Ok((tx_and_raw_hash, authorization_data, runtime_call))
+            let auth_data = tx_v1.auth_data(raw_tx_hash, meter)?;
+            (auth_data, &tx_v1.details, &tx_v1.runtime_call)
         }
-    }
+    };
+
+    verify_chain_id(details, raw_tx_hash)?;
+    verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
+
+    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+        raw_tx_hash,
+        authenticated_tx: details.clone().into(),
+    };
+
+    Ok((tx_and_raw_hash, auth_data, runtime_call.clone()))
 }
 
 fn get_eip712_hash<
