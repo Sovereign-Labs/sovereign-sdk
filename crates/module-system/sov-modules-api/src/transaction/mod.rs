@@ -20,7 +20,6 @@ use thiserror::Error;
 pub use types::{
     v0::Version0,
     v1::{PubKeyAndSignature, Version1},
-    v2::Version2,
 };
 pub use unsigned::UnsignedTransaction;
 
@@ -80,14 +79,6 @@ pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as S
             deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
         ))]
         Version1<R::Call, S, C>,
-    ),
-    /// A V2 (sequencer data) transaction.
-    V2(
-        #[borsh(bound(
-            serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
-            deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
-        ))]
-        Version2<R::Call, S, C>,
     ),
 }
 
@@ -200,7 +191,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         match &self {
             Transaction::V0(inner) => &inner.runtime_call,
             Transaction::V1(inner) => &inner.runtime_call,
-            Transaction::V2(inner) => &inner.runtime_call,
         }
     }
 
@@ -209,7 +199,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         match self {
             Transaction::V0(inner) => inner.runtime_call,
             Transaction::V1(inner) => inner.runtime_call,
-            Transaction::V2(inner) => inner.runtime_call,
         }
     }
 
@@ -218,15 +207,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         match &self {
             Transaction::V0(inner) => inner.details.chain_id,
             Transaction::V1(inner) => inner.details.chain_id,
-            Transaction::V2(inner) => inner.details.chain_id,
-        }
-    }
-
-    /// Returns the sequencing data.
-    pub fn sequencing_data(&self) -> Option<&[u8]> {
-        match self {
-            Transaction::V1(_) | Transaction::V0(_) => None,
-            Transaction::V2(inner) => Some(&inner.sequencing_data),
         }
     }
 
@@ -277,9 +257,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
                         .charge_gas(meter, msg_len)?;
                 }
             }
-            Transaction::V2(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone()).charge_gas(meter, msg_len)?;
-            }
         }
         Ok(())
     }
@@ -310,12 +287,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
                     .verify_signature(msg, &inner.signatures)
                     .map_err(TransactionVerificationError::BadSignature)?;
             }
-            Transaction::V2(inner) => {
-                inner
-                    .signature
-                    .verify(&inner.pub_key, msg)
-                    .map_err(TransactionVerificationError::BadSignature)?;
-            }
         }
         Ok(())
     }
@@ -329,11 +300,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
                 inner.details.clone(),
             ),
             Transaction::V1(inner) => UnsignedTransaction::new_with_details(
-                inner.runtime_call.clone(),
-                inner.uniqueness,
-                inner.details.clone(),
-            ),
-            Transaction::V2(inner) => UnsignedTransaction::new_with_details(
                 inner.runtime_call.clone(),
                 inner.uniqueness,
                 inner.details.clone(),

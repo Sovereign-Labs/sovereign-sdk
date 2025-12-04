@@ -166,7 +166,6 @@ impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
             credential_id,
             credentials: Credentials::new(multisig),
             default_address: credential_id.into(),
-            sequencing_data: None,
         })
     }
 }

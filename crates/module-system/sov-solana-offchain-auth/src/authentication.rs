@@ -308,6 +308,7 @@ where
         details: unsigned_tx.details,
         signature: unpacked_message.signature,
         pub_key: unpacked_message.pub_key,
+        sequencing_data: None,
     };
 
     if unpacked_message.chain_hash != *runtime_chain_hash {

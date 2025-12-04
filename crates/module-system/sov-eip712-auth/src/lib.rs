@@ -229,10 +229,6 @@ fn verify_and_decode_tx<
             let auth_data = tx_v1.auth_data(raw_tx_hash, meter)?;
             (auth_data, &tx_v1.details, &tx_v1.runtime_call)
         }
-        Transaction::V2(tx_v2) => {
-            let auth_data = tx_v2.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v2.details, &tx_v2.runtime_call)
-        }
     };
 
     verify_chain_id(details, raw_tx_hash)?;

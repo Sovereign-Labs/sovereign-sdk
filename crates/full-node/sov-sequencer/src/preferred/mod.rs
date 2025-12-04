@@ -604,83 +604,6 @@ where
             .await
     }
 
-    /// Populates sequencing_data for V2 transactions with a high-precision timestamp.
-    /// Returns the modified transaction bytes, or the original if not V2 or on error.
-    fn populate_sequencing_data_for_v2(baked_tx: &FullyBakedTx) -> FullyBakedTx {
-        use sov_modules_api::capabilities::AuthenticatorInput;
-        use sov_modules_api::transaction::Transaction;
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        // Deserialize the transaction from FullyBakedTx
-        let auth_input: AuthenticatorInput = match borsh::from_slice(&baked_tx.data) {
-            Ok(input) => input,
-            Err(e) => {
-                tracing::debug!("Failed to deserialize transaction for sequencing_data population: {}", e);
-                return baked_tx.clone();
-            }
-        };
-
-        let AuthenticatorInput::Standard(tx_data) = auth_input;
-
-        // Deserialize into Transaction
-        let mut tx: Transaction<Rt, S> = match borsh::from_slice(&tx_data.data) {
-            Ok(tx) => tx,
-            Err(e) => {
-                tracing::debug!("Failed to deserialize inner transaction: {}", e);
-                return baked_tx.clone();
-            }
-        };
-
-        // Check if it's a V2 transaction and populate sequencing_data
-        let modified = match &mut tx {
-            Transaction::V2(v2) => {
-                // Get current timestamp in nanoseconds
-                let timestamp_nanos = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("System time before UNIX_EPOCH")
-                    .as_nanos();
-
-                // Encode timestamp as little-endian bytes
-                v2.sequencing_data = timestamp_nanos.to_le_bytes().to_vec();
-
-                tracing::trace!(
-                    timestamp_nanos,
-                    "Populated V2 transaction with sequencing_data timestamp"
-                );
-                true
-            }
-            // V0 and V1 pass through unchanged
-            _ => false,
-        };
-
-        if !modified {
-            return baked_tx.clone();
-        }
-
-        // Re-serialize the transaction
-        let tx_data_bytes = match borsh::to_vec(&tx) {
-            Ok(data) => data,
-            Err(e) => {
-                tracing::warn!("Failed to serialize modified V2 transaction: {}", e);
-                return baked_tx.clone();
-            }
-        };
-
-        // Wrap in AuthenticatorInput
-        let modified_input = AuthenticatorInput::Standard(sov_modules_api::RawTx {
-            data: tx_data_bytes,
-        });
-
-        // Serialize the full input
-        match borsh::to_vec(&modified_input) {
-            Ok(data) => FullyBakedTx { data: data.into() },
-            Err(e) => {
-                tracing::warn!("Failed to serialize AuthenticatorInput: {}", e);
-                baked_tx.clone()
-            }
-        }
-    }
-
     #[tracing::instrument(skip_all, level = "trace")]
     async fn accept_tx_inner(
         &self,
@@ -692,9 +615,6 @@ where
         }
 
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
-
-        // Populate sequencing_data for V2 transactions before computing hash
-        let baked_tx = Self::populate_sequencing_data_for_v2(&baked_tx);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
         tracing::debug!(%tx_hash, "Executing accept_tx");
