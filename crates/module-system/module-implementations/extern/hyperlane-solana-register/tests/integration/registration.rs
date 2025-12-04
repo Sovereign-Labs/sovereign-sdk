@@ -1,9 +1,10 @@
 use sov_hyperlane_integration::CallMessage;
-use sov_modules_api::{CredentialId, HexString, SafeVec};
+use sov_modules_api::{CredentialId, HexString, SafeVec, Spec};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
 use crate::setup::{
-    make_invalid_message, make_valid_message, register_basic_warp_route, setup, Mailbox, RT, S,
+    make_invalid_message, make_valid_message, register_basic_warp_route, setup, Mailbox,
+    TestRuntimeEvent, RT, S,
 };
 
 #[test]
@@ -33,6 +34,16 @@ fn test_user_is_registered_correctly() {
             assert!(
                 result.tx_receipt.is_successful(),
                 "Recipient was not registered successfully"
+            );
+
+            assert_eq!(
+                result.events.last().unwrap(),
+                &TestRuntimeEvent::SolanaRegister(
+                    sov_hyperlane_register_module::Event::UserRegistered {
+                        address: <S as Spec>::Address::from(payer),
+                        credential_id: CredentialId::from(embedded),
+                    }
+                )
             );
         }),
     });

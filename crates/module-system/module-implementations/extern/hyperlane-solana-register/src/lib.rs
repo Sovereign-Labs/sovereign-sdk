@@ -1,4 +1,5 @@
-use sov_modules_api::macros::serialize;
+use schemars::JsonSchema;
+use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
     err_detail, Base58Address, Context, CoreModuleError, CredentialId, DaSpec, ErrorContext,
     ErrorDetail, EventEmitter, GenesisState, HexHash, HexString, Module, ModuleId, ModuleInfo,
@@ -7,7 +8,7 @@ use sov_modules_api::{
 
 use sov_hyperlane_integration::{HyperlaneAddress, Ism, Recipient, Warp};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, UniversalWallet, JsonSchema)]
 #[serialize(Borsh, Serde)]
 pub struct SolanaDeployment {
     /// The Solana hyperlane domain id.
@@ -88,6 +89,11 @@ pub enum Event<S: Spec> {
         address: S::Address,
         credential_id: CredentialId,
     },
+    Updated {
+        admin: Option<S::Address>,
+        deployment: Option<SolanaDeployment>,
+        ism: Option<Ism>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +102,18 @@ pub struct GenesisConfig<S: Spec> {
     pub deployment: Option<SolanaDeployment>,
     pub ism: Option<Ism>,
     pub admin: S::Address,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
+#[serialize(Borsh, Serde)]
+#[schemars(bound = "S::Gas: ::schemars::JsonSchema", rename = "CallMessage")]
+#[serde(rename_all = "snake_case")]
+pub enum CallMessage<S: Spec> {
+    Update {
+        admin: Option<S::Address>,
+        deployment: Option<SolanaDeployment>,
+        ism: Option<Ism>,
+    },
 }
 
 impl<S: Spec> Module for SolanaRegistration<S>
@@ -108,8 +126,7 @@ where
 
     type Config = GenesisConfig<S>;
 
-    // update admin/deploy/ism
-    type CallMessage = ();
+    type CallMessage = CallMessage<S>;
 
     type Event = Event<S>;
 
@@ -134,7 +151,7 @@ where
 
     fn call(
         &mut self,
-        _message: Self::CallMessage,
+        message: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<Self::Spec>,
     ) -> Result<(), Self::Error> {
@@ -145,6 +162,16 @@ where
             .ok_or(SolanaRegistrationError::AdminNotFound)?;
         let sender = context.sender();
         self.assert_admin(sender, &admin)?;
+
+        match message {
+            CallMessage::Update {
+                admin,
+                deployment,
+                ism,
+            } => {
+                self.update(admin, deployment, ism, state)?;
+            }
+        };
 
         Ok(())
     }
@@ -189,6 +216,43 @@ impl<S: Spec> SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
 {
+    fn update(
+        &mut self,
+        admin: Option<S::Address>,
+        deployment: Option<SolanaDeployment>,
+        ism: Option<Ism>,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), SolanaRegistrationError> {
+        if let Some(new_admin) = &admin {
+            self.admin
+                .set(new_admin, state)
+                .map_err(CoreModuleError::state_write)?;
+        }
+
+        if let Some(new_deployment) = &deployment {
+            self.deployment
+                .set(new_deployment, state)
+                .map_err(CoreModuleError::state_write)?;
+        }
+
+        if let Some(new_ism) = &ism {
+            self.ism
+                .set(new_ism, state)
+                .map_err(CoreModuleError::state_write)?;
+        }
+
+        self.emit_event(
+            state,
+            Event::Updated {
+                admin,
+                deployment,
+                ism,
+            },
+        );
+
+        Ok(())
+    }
+
     fn assert_admin(
         &self,
         caller: &S::Address,
