@@ -12143,6 +12143,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-hyperlane-register-module"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "bs58",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-hyperlane-integration",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-test-utils",
+ "strum 0.26.3",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "sov-kernels"
 version = "0.3.0"
 dependencies = [
