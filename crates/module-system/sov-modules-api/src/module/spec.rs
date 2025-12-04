@@ -160,6 +160,8 @@ pub struct Context<S: Spec> {
     sequencer: S::Address,
     /// The DA layer address of the sequencer who included the transaction.
     sequencer_da_address: <S::Da as DaSpec>::Address,
+    /// Sequencing data provided by the sequencer
+    sequencing_data: Option<Vec<u8>>,
     /// The rollup address that pays the gas fees for the transaction.
     gas_refund_recipient: S::Address,
 }
@@ -178,6 +180,16 @@ impl<S: Spec> Context<S> {
     /// Returns the DA layer address of the sequencer which included the transaction.
     pub fn sequencer_da_address(&self) -> &<S::Da as DaSpec>::Address {
         &self.sequencer_da_address
+    }
+
+    /// Returns the sequencing data
+    pub fn sequencing_data(&self) -> &Option<Vec<u8>> {
+        &self.sequencing_data
+    }
+
+    /// Updates the sequencing data
+    pub fn set_sequencing_data(&mut self, data: Vec<u8>) {
+        self.sequencing_data = Some(data);
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
@@ -220,6 +232,7 @@ impl<S: Spec> Context<S> {
             sequencer,
             sequencer_da_address,
             gas_refund_recipient: payer,
+            sequencing_data: None,
         }
     }
 
