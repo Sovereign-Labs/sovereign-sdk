@@ -318,6 +318,23 @@ where
             Ok(())
         }
     }
+
+    pub fn admin(
+        &self,
+        state: &mut impl TxState<S>,
+    ) -> Result<Option<S::Address>, SolanaRegistrationError> {
+        Ok(self.admin.get(state).map_err(CoreModuleError::state_read)?)
+    }
+
+    pub fn deployment(
+        &self,
+        state: &mut impl TxState<S>,
+    ) -> Result<Option<SolanaDeployment>, SolanaRegistrationError> {
+        Ok(self
+            .deployment
+            .get(state)
+            .map_err(CoreModuleError::state_read)?)
+    }
 }
 
 #[cfg(test)]

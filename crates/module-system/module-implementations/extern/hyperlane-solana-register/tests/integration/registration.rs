@@ -1,15 +1,25 @@
-use sov_hyperlane_integration::CallMessage;
-use sov_modules_api::{CredentialId, HexString, SafeVec, Spec};
+use std::str::FromStr as _;
+
+use sov_hyperlane_integration::{CallMessage, Ism, Recipient};
+use sov_hyperlane_register_module::{
+    CallMessage as RegistrationCallMessage, SolanaDeployment, SolanaRegistration,
+};
+use sov_modules_api::{Base58Address, CredentialId, HexString, SafeVec, Spec};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
 use crate::setup::{
     make_invalid_message, make_valid_message, register_basic_warp_route, setup, Mailbox,
-    TestRuntimeEvent, RT, S,
+    SetupParams, TestRuntimeEvent, RT, S, SOLANA_PROGRAM_ID,
 };
 
 #[test]
 fn test_user_is_registered_correctly() {
-    let (mut runner, admin, user, _relayer) = setup();
+    let SetupParams {
+        mut runner,
+        admin,
+        user,
+        ..
+    } = setup();
     let route_id = register_basic_warp_route(&mut runner, &admin);
 
     let payer = [1u8; 32];
@@ -59,7 +69,12 @@ fn test_user_is_registered_correctly() {
 
 #[test]
 fn test_errors_if_user_already_registered() {
-    let (mut runner, admin, user, _relayer) = setup();
+    let SetupParams {
+        mut runner,
+        admin,
+        user,
+        ..
+    } = setup();
     let route_id = register_basic_warp_route(&mut runner, &admin);
 
     let payer = [1u8; 32];
@@ -107,7 +122,12 @@ fn test_errors_if_user_already_registered() {
 
 #[test]
 fn test_handler_passes_through_if_not_register_message() {
-    let (mut runner, admin, user, _relayer) = setup();
+    let SetupParams {
+        mut runner,
+        admin,
+        user,
+        ..
+    } = setup();
     let route_id = register_basic_warp_route(&mut runner, &admin);
 
     let payer = [1u8; 32];
@@ -136,5 +156,82 @@ fn test_handler_passes_through_if_not_register_message() {
                 result.tx_receipt
             ),
         }),
+    });
+}
+
+#[test]
+fn test_call_errors_if_sender_is_not_admin() {
+    let SetupParams {
+        mut runner, user, ..
+    } = setup();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, SolanaRegistration<S>>(
+            RegistrationCallMessage::Update {
+                admin: None,
+                deployment: None,
+                ism: None,
+            },
+        ),
+        assert: Box::new(move |result, _| match result.tx_receipt {
+            sov_rollup_interface::stf::TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    &contents.reason.to_string(),
+                    "Module can only be called by the admin"
+                );
+            }
+            _ => panic!("Update call should have reverted: {:?}", result.tx_receipt),
+        }),
+    });
+}
+
+#[test]
+fn test_update_call() {
+    let SetupParams {
+        mut runner,
+        user,
+        module_admin,
+        ..
+    } = setup();
+
+    let deployment = SolanaDeployment {
+        program_id: Base58Address::from_str(SOLANA_PROGRAM_ID).unwrap(),
+        domain_id: 1337,
+    };
+    let updated_admin = user.address();
+    runner.execute_transaction(TransactionTestCase {
+        input: module_admin.create_plain_message::<RT, SolanaRegistration<S>>(
+            RegistrationCallMessage::Update {
+                admin: Some(updated_admin),
+                deployment: Some(deployment.clone()),
+                ism: Some(Ism::AlwaysTrust),
+            },
+        ),
+        assert: Box::new(move |result, _| {
+            assert_eq!(
+                result.events.first().unwrap(),
+                &TestRuntimeEvent::SolanaRegister(sov_hyperlane_register_module::Event::Updated {
+                    admin: Some(updated_admin),
+                    deployment: Some(deployment),
+                    ism: Some(Ism::AlwaysTrust)
+                })
+            );
+        }),
+    });
+
+    runner.query_state(|state| {
+        let module = sov_hyperlane_register_module::SolanaRegistration::default();
+        assert_eq!(module.admin(state).unwrap(), Some(updated_admin));
+        assert_eq!(
+            module.deployment(state).unwrap(),
+            Some(SolanaDeployment {
+                program_id: Base58Address::from_str(SOLANA_PROGRAM_ID).unwrap(),
+                domain_id: 1337,
+            })
+        );
+        assert_eq!(
+            module.ism(&[0; 32].into(), state).unwrap(),
+            Some(Ism::AlwaysTrust)
+        );
     });
 }
