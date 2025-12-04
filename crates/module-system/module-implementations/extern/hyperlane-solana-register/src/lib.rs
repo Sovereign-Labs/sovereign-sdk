@@ -58,10 +58,12 @@ impl ErrorDetail for SolanaRegistrationError {
 
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]
 #[serialize(Borsh, Serde)]
-pub enum Event {
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S: Spec", rename = "Event")]
+pub enum Event<S: Spec> {
     UserRegistered {
-        user_pubkey: [u8; 32],
-        embedded_pubkey: [u8; 32],
+        address: S::Address,
+        credential_id: CredentialId,
     },
 }
 
@@ -77,7 +79,7 @@ where
 
     type CallMessage = ();
 
-    type Event = Event;
+    type Event = Event<S>;
 
     fn call(
         &mut self,
@@ -170,8 +172,8 @@ where
             self.emit_event(
                 state,
                 Event::UserRegistered {
-                    user_pubkey,
-                    embedded_pubkey,
+                    address,
+                    credential_id,
                 },
             );
             Ok(())
