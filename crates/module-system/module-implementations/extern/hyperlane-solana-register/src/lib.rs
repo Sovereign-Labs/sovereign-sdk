@@ -174,10 +174,10 @@ where
         body: HexString,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        let deploy = self.deployment.get(state)?.ok_or_else(|| {
+        let deployment = self.deployment.get(state)?.ok_or_else(|| {
             anyhow::anyhow!("SolanaDeployment not configured in SolanaRegistration module")
         })?;
-        if self.should_handle(origin, sender, &deploy) {
+        if self.should_handle(origin, sender, &deployment) {
             Ok(self.register(body, state)?)
         } else {
             self.warp.handle(origin, sender, recipient, body, state)
@@ -274,11 +274,6 @@ mod test {
     fn b58_as_hex(s: &str) -> HexHash {
         let b58 = Base58Address::from_str(s).unwrap();
         HexHash::try_from_slice(&b58.0).unwrap()
-    }
-
-    #[test]
-    fn test_assert_admin() {
-        // todo
     }
 
     #[test]
