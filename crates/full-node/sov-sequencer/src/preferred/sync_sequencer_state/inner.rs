@@ -1,10 +1,10 @@
 use crate::metrics::{
     track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
 };
-use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
+use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
@@ -717,7 +717,7 @@ where
                 );
                 res
             }
-            Err(err) => {
+            Err(RollupBlockExecutorErrorWithBudget { inner_err: err, .. }) => {
                 tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
                 return Err(DoNewTxError::ExecutorError(err));
             }
