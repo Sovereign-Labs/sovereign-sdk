@@ -191,6 +191,7 @@ fn batch_bytes(batch: PreferredSequencerReadBatch) -> anyhow::Result<Arc<[u8]>> 
         sequence_number: batch.sequence_number,
         visible_slots_to_advance: batch.visible_slots_to_advance,
         data: batch.txs,
+        sequencing_data: batch.sequencing_data_list,
     })?
     .into())
 }

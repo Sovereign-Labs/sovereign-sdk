@@ -135,15 +135,24 @@ pub struct BatchWithId<S: Spec> {
     pub id: [u8; ID_SIZE],
     /// The address of the sequencer that submitted the batch.
     pub sequencer_address: S::Address,
+    /// Sequencer-provided metadata for each transaction (e.g., timestamps).
+    /// Length matches `batch.len()`. Access by transaction index.
+    pub sequencing_data_list: Arc<Vec<Option<Vec<u8>>>>,
 }
 
 impl<S: Spec> BatchWithId<S> {
     /// Construct a new batch with the given ID.
-    pub fn new(batch: Arc<Vec<FullyBakedTx>>, id: [u8; 32], sequencer_address: S::Address) -> Self {
+    pub fn new(
+        batch: Arc<Vec<FullyBakedTx>>,
+        id: [u8; 32],
+        sequencer_address: S::Address,
+        sequencing_data_list: Arc<Vec<Option<Vec<u8>>>>,
+    ) -> Self {
         Self {
             batch,
             id,
             sequencer_address,
+            sequencing_data_list,
         }
     }
 
@@ -159,7 +168,11 @@ impl<S: Spec> BatchWithId<S> {
 #[serde(rename_all = "snake_case")]
 pub enum BlobData<S: Spec> {
     /// Batch of transactions.
-    Batch((Arc<Vec<FullyBakedTx>>, S::Address)),
+    Batch((
+        Arc<Vec<FullyBakedTx>>,
+        S::Address,
+        Arc<Vec<Option<Vec<u8>>>>,
+    )),
     /// Emergency Registration
     EmergencyRegistration(FullyBakedTx),
     /// Aggregated proof posted on the DA.
@@ -170,11 +183,14 @@ impl<S: Spec> BlobData<S> {
     /// Tag the blob with the given ID.
     pub fn with_id(self, id: [u8; 32]) -> BlobDataWithId<S, BatchWithId<S>> {
         match self {
-            Self::Batch((batch, seq_addr)) => BlobDataWithId::Batch(BatchWithId {
-                batch,
-                id,
-                sequencer_address: seq_addr,
-            }),
+            Self::Batch((batch, seq_addr, sequencing_data_list)) => {
+                BlobDataWithId::Batch(BatchWithId {
+                    batch,
+                    id,
+                    sequencer_address: seq_addr,
+                    sequencing_data_list,
+                })
+            }
             Self::Proof((proof, seq_addr)) => BlobDataWithId::Proof {
                 proof,
                 id,
@@ -355,9 +371,7 @@ pub trait InjectedControlFlow<S: Spec> {
 }
 
 /// A batch that can be processed incrementally
-pub trait IncrementalBatch<S: Spec>:
-    Iterator<Item = (FullyBakedTx, Self::ControlFlow, Option<Vec<u8>>)>
-{
+pub trait IncrementalBatch<S: Spec>: Iterator<Item = (FullyBakedTx, Self::ControlFlow)> {
     /// The post tx hook type used by this funciton
     type ControlFlow: InjectedControlFlow<S>;
     /// Returns an accurate lower bound on the remaining elements, if known.
@@ -371,6 +385,13 @@ pub trait IncrementalBatch<S: Spec>:
 
     /// The address of the sequencer that submitted the batch.
     fn sequencer_address(&self) -> S::Address;
+
+    /// Get the sequencing data for a transaction at the given index.
+    /// Returns None if sequencing data is not available or index is out of bounds.
+    fn get_sequencing_data(&self, index: usize) -> Option<Vec<u8>> {
+        let _ = index;
+        None
+    }
 }
 
 impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
@@ -422,6 +443,9 @@ pub struct IterableBatchWithId<S: Spec, CF: InjectedControlFlow<S>> {
     pub sequencer_address: S::Address,
     /// Control flow.
     pub cf: CF,
+    /// Sequencer-provided metadata for each transaction (e.g., timestamps).
+    /// Length matches `batch.len()`. Access by transaction index.
+    pub sequencing_data_list: Arc<Vec<Option<Vec<u8>>>>,
 }
 
 impl<S: Spec, CF: InjectedControlFlow<S>> IterableBatchWithId<S, CF> {
@@ -440,7 +464,13 @@ impl<S: Spec, CF: InjectedControlFlow<S>> IterableBatchWithId<S, CF> {
             id: batch_with_id.id,
             sequencer_address: batch_with_id.sequencer_address,
             cf,
+            sequencing_data_list: batch_with_id.sequencing_data_list,
         }
+    }
+
+    /// Get the sequencing data for a transaction at the given index.
+    pub fn get_sequencing_data(&self, index: usize) -> Option<Vec<u8>> {
+        self.sequencing_data_list.get(index)?.clone()
     }
 }
 
@@ -479,6 +509,10 @@ impl<S: Spec, CF: InjectedControlFlow<S> + Clone> IncrementalBatch<S>
     fn sequencer_address(&self) -> S::Address {
         self.sequencer_address.clone()
     }
+
+    fn get_sequencing_data(&self, index: usize) -> Option<Vec<u8>> {
+        self.sequencing_data_list.get(index)?.clone()
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -499,8 +533,12 @@ pub enum RejectReason {
 
 impl<S: Spec> BlobData<S> {
     /// Batch variant constructor.
-    pub fn new_batch(txs: Arc<Vec<FullyBakedTx>>, sequencer_address: S::Address) -> Self {
-        BlobData::Batch((txs, sequencer_address))
+    pub fn new_batch(
+        txs: Arc<Vec<FullyBakedTx>>,
+        sequencer_address: S::Address,
+        sequencing_data_list: Arc<Vec<Option<Vec<u8>>>>,
+    ) -> Self {
+        BlobData::Batch((txs, sequencer_address, sequencing_data_list))
     }
 
     /// Emergency Registration variant constructor.
@@ -615,7 +653,8 @@ mod tests {
 
         let manually_calulated_batch_size = 3 + 1 + 32 + 28;
 
-        let batch_with_id = BatchWithId::<TestSpec>::new(batch, id, sequencer_address);
+        let batch_with_id =
+            BatchWithId::<TestSpec>::new(batch, id, sequencer_address, Arc::new(vec![]));
 
         assert_eq!(
             manually_calulated_batch_size,
@@ -626,7 +665,8 @@ mod tests {
     #[test]
     fn test_iterable_batch_with_id_remaining() {
         let batch = Arc::new(vec![FullyBakedTx::new(vec![]), FullyBakedTx::new(vec![])]);
-        let batch_with_id = BatchWithId::<TestSpec>::new(batch, [0; 32], [0; 28].into());
+        let batch_with_id =
+            BatchWithId::<TestSpec>::new(batch, [0; 32], [0; 28].into(), Arc::new(vec![]));
         let mut batch_with_id = IterableBatchWithId::new(batch_with_id, NoOpControlFlow);
         assert_eq!(batch_with_id.remaining(), 2);
         batch_with_id.next();

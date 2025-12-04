@@ -117,10 +117,17 @@ where
                         txs_to_insert
                             .iter()
                             .map(|contents| {
+                                // Create timestamp as sequencing_data (nanoseconds since UNIX epoch as u128 little-endian)
+                                let timestamp_nanos = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .expect("System time before UNIX epoch")
+                                    .as_nanos();
+                                let sequencing_data = timestamp_nanos.to_le_bytes().to_vec();
+
                                 (
                                     contents.accepted_tx.tx.clone(),
                                     contents.accepted_tx.tx_hash,
-                                    None, // sequencing_data will be populated separately
+                                    Some(sequencing_data),
                                 )
                             })
                             .collect(),

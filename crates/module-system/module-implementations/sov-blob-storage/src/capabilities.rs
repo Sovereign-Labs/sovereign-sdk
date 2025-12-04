@@ -824,9 +824,11 @@ impl<S: Spec> BlobStorage<S> {
         for blob in selected_preferred_blobs {
             let blob_id = blob.id;
             let data = match blob.inner {
-                PreferredBlobData::Batch(batch) => {
-                    BlobData::Batch((batch.data, preferred_sequencer.clone()))
-                }
+                PreferredBlobData::Batch(batch) => BlobData::Batch((
+                    batch.data,
+                    preferred_sequencer.clone(),
+                    batch.sequencing_data,
+                )),
                 PreferredBlobData::Proof(proof) => {
                     BlobData::Proof((proof.data, preferred_sequencer.clone()))
                 }
@@ -949,9 +951,15 @@ impl<S: Spec> BlobStorage<S> {
             .get_sender_balance(&blob.sender(), state)
             .unwrap_or(Amount::ZERO);
 
+        let batch_len = batch.len();
         self.validate_blob(
             idx,
-            BlobData::Batch((Arc::new(batch), sequencer.address)).with_id(blob.hash().into()),
+            BlobData::Batch((
+                Arc::new(batch),
+                sequencer.address,
+                Arc::new(vec![None; batch_len]),
+            ))
+            .with_id(blob.hash().into()),
             blob.sender(),
             available_balance,
             *gas_price_for_new_block,
@@ -1360,6 +1368,7 @@ mod tests {
                 sequence_number,
                 data: vec![].into(),
                 visible_slots_to_advance: NonZeroU8::new(1).unwrap(),
+                sequencing_data: Arc::new(vec![]),
             }),
             BlobType::Proof => PreferredBlobData::Proof(PreferredProofData {
                 sequence_number,
