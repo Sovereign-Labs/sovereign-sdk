@@ -1355,7 +1355,7 @@ async fn test_sequencer_event_stream_filtering() {
 /// |  6  |       33% +bt |      2 |    > 300% |     > 346% |
 /// This way this test can validate that only **execution time** of tx counts
 #[tokio::test(flavor = "multi_thread")]
-async fn max_batch_execution_time() {
+async fn flaky_max_batch_execution_time() {
     // Timeout the batch after 2 seconds of **execution time**.
     let max_batch_exec_time_millis = 2000;
     let approx_batch_time_millis = 400;
