@@ -3,6 +3,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
+use secrecy::zeroize::Zeroize;
+use secrecy::{ExposeSecret, SecretBox};
 
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -35,11 +37,31 @@ pub struct EncryptionKey {
     pub slot_number: u64,
 }
 
-/// Internal key format used by the encryption layer
-#[derive(Debug, Clone)]
+/// Internal key format used by the encryption layer.
+/// Key material is wrapped in SecretBox for:
+/// - Zeroize on drop (securely wiped from memory)
+/// - No accidental logging (Debug shows [REDACTED])
 pub struct InternalKey {
     pub id: String,
-    pub material: Vec<u8>,
+    pub material: SecretBox<Vec<u8>>,
+}
+
+impl Clone for InternalKey {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            material: SecretBox::new(Box::new(self.material.expose_secret().clone())),
+        }
+    }
+}
+
+impl std::fmt::Debug for InternalKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InternalKey")
+            .field("id", &self.id)
+            .field("material", &"[REDACTED]")
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,8 +171,6 @@ impl Default for KeyCache {
     }
 }
 
-// Remove the confusing trait - EncryptionLayer is now the primary interface
-
 /// Primary encryption interface with slot-based key management
 pub struct EncryptionLayer {
     key_cache: Arc<KeyCache>,
@@ -193,7 +213,7 @@ impl EncryptionLayer {
                     }
                     let initial_encryption_key = InternalKey {
                         id: "genesis-key".to_string(),
-                        material: key_bytes,
+                        material: SecretBox::new(Box::new(key_bytes)),
                     };
                     key_cache.add_key(0, initial_encryption_key);
                     info!("Initialized unix socket encryption layer with genesis key");
@@ -224,7 +244,7 @@ impl EncryptionLayer {
                 })?;
                 let static_key = InternalKey {
                     id: "static-key".to_string(),
-                    material: key_bytes,
+                    material: SecretBox::new(Box::new(key_bytes)),
                 };
                 key_cache.add_key(0, static_key);
                 info!("Initialized with static encryption key");
@@ -446,7 +466,7 @@ impl EncryptionLayer {
                         Ok(key_update) => {
                             debug!("Successfully deserialized KeyUpdate message");
                             match key_update {
-                                KeyUpdate::NewKey(key) => {
+                                KeyUpdate::NewKey(mut key) => {
                                     info!(
                                         "📨 KEY RECEIVED: NEW encryption key '{}' ({} bytes) for slot {}",
                                         key.id,
@@ -456,11 +476,15 @@ impl EncryptionLayer {
 
                                     let target_slot = key.slot_number;
 
-                                    // Convert to internal format and store directly
+                                    // Convert to internal format - take ownership to avoid copy
+                                    let key_data = std::mem::take(&mut key.key_data);
                                     let internal_key = InternalKey {
-                                        id: key.id.clone(),
-                                        material: key.key_data.clone(),
+                                        id: std::mem::take(&mut key.id),
+                                        material: SecretBox::new(Box::new(key_data)),
                                     };
+
+                                    // Zeroize any remaining data in the original struct
+                                    key.key_data.zeroize();
 
                                     cache.add_key(target_slot, internal_key);
                                     info!(
@@ -562,7 +586,7 @@ impl EncryptionLayer {
             plaintext.len()
         );
 
-        let encrypted = self.encrypt_with_key(&key.material, plaintext)?;
+        let encrypted = self.encrypt_with_key(key.material.expose_secret(), plaintext)?;
         Ok((encrypted, key.id))
     }
 
@@ -579,7 +603,7 @@ impl EncryptionLayer {
     ) -> Result<Vec<u8>, EncryptionError> {
         // Primary: try the exact key by ID
         if let Some(key) = self.key_cache.get_key_by_id(key_id) {
-            match self.decrypt_with_key(&key.material, ciphertext) {
+            match self.decrypt_with_key(key.material.expose_secret(), ciphertext) {
                 Ok(plaintext) => {
                     tracing::debug!(
                         "🔓 DECRYPT: Successfully decrypted with key '{}' ({} bytes)",
@@ -609,7 +633,7 @@ impl EncryptionLayer {
 
         let queue = self.key_cache.key_queue.read();
         for (_, key) in queue.iter().rev() {
-            if let Ok(plaintext) = self.decrypt_with_key(&key.material, ciphertext) {
+            if let Ok(plaintext) = self.decrypt_with_key(key.material.expose_secret(), ciphertext) {
                 let used_key_id = key.id.clone();
                 drop(queue); // Release read lock before pruning
 

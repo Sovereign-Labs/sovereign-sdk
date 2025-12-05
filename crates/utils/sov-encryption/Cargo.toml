@@ -51,6 +51,9 @@ tracing = { workspace = true }
 # Synchronization
 parking_lot = "0.12"
 
+# Secret handling (zeroize on drop, no accidental logging)
+secrecy = { version = "0.10", features = ["serde"] }
+
 # Time handling
 chrono = { workspace = true, features = ["serde"] }
 
