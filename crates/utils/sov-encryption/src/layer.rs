@@ -47,9 +47,14 @@ pub enum KeyUpdate {
     NewKey(EncryptionKey),
 }
 
+/// Number of old keys to keep as a buffer when pruning after decryption.
+/// Example: with buffer_size=2 and keys [A, B, C, D], decrypting with D removes A → [B, C, D]
+const KEY_PRUNE_BUFFER_SIZE: usize = 2;
+
 #[derive(Clone)]
 pub struct KeyCache {
-    // Queue of keys ordered by slot (oldest first, newest last)
+    // Queue of keys in arrival order (oldest first, newest last)
+    // Each entry is (slot, key) where slot is the slot number the key is valid from
     key_queue: Arc<RwLock<VecDeque<(u64, InternalKey)>>>,
 }
 
@@ -60,67 +65,79 @@ impl KeyCache {
         }
     }
 
+    /// For ENCRYPTION: Find key by slot logic with fallback to most recent.
+    /// Returns the newest key where key_slot <= batch_slot, or the most recent key as fallback.
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
         let queue = self.key_queue.read();
 
-        // Search newest to oldest - first key with slot <= slot_number is correct
+        // Primary: find newest key where slot <= batch_slot
         for (slot, key) in queue.iter().rev() {
             if *slot <= slot_number {
                 debug!(
-                    "🔑 Found key '{}' (slot {}) for slot {}",
+                    "🔑 Found key '{}' (slot {}) for batch slot {}",
                     key.id, slot, slot_number
                 );
                 return Some(key.clone());
             }
         }
 
-        debug!("🔑 NO KEY: No key available for slot {}", slot_number);
+        // Fallback: use the most recent key (all keys have slots > batch_slot)
+        if let Some((slot, key)) = queue.back() {
+            debug!(
+                "🔑 FALLBACK: No key with slot <= {}, using most recent '{}' (slot {})",
+                slot_number, key.id, slot
+            );
+            return Some(key.clone());
+        }
+
+        debug!("🔑 NO KEY: No keys available");
         None
     }
 
-    pub fn set_key_for_slot(&self, slot_number: u64, key: InternalKey) {
-        info!("🔑 KEY SET: '{}' for slot {}", key.id, slot_number);
+    /// For DECRYPTION: Get exact key by ID.
+    pub fn get_key_by_id(&self, key_id: &str) -> Option<InternalKey> {
+        self.key_queue
+            .read()
+            .iter()
+            .find(|(_, key)| key.id == key_id)
+            .map(|(_, key)| key.clone())
+    }
 
-        // Push to the back of the queue (newest keys at the back)
+    /// Add a new key to the cache.
+    pub fn add_key(&self, slot_number: u64, key: InternalKey) {
+        info!("🔑 KEY ADDED: '{}' for slot {}", key.id, slot_number);
         let mut queue = self.key_queue.write();
         queue.push_back((slot_number, key));
     }
 
-    /// Remove all keys older than the given slot from the front of the queue.
-    /// After calling this, the key for `slot_number` becomes the oldest key in the queue.
-    pub fn prune_keys_before(&self, slot_number: u64) {
+    /// Prune old keys, keeping a buffer of N keys before the specified key.
+    /// Example: with buffer_size=2 and keys [A, B, C, D], pruning at D removes A → [B, C, D]
+    pub fn prune_keys_before_id(&self, key_id: &str, buffer_size: usize) {
         let mut queue = self.key_queue.write();
-        let initial_len = queue.len();
-        
-        // Remove keys from the front while they're older than the target slot
-        while let Some((front_slot, _)) = queue.front() {
-            if *front_slot < slot_number {
-                let (removed_slot, removed_key) = queue.pop_front().unwrap();
-                debug!(
-                    "🗑️ PRUNED: Removed old key '{}' for slot {} (processing slot {})",
-                    removed_key.id, removed_slot, slot_number
-                );
-            } else {
-                break;
-            }
-        }
 
-        let pruned_count = initial_len - queue.len();
-        if pruned_count > 0 {
+        // Find the position of the key we just used
+        let Some(pos) = queue.iter().position(|(_, k)| k.id == key_id) else {
+            return;
+        };
+
+        // Keep buffer_size keys before the used key, remove older ones
+        let remove_count = pos.saturating_sub(buffer_size);
+        if remove_count > 0 {
+            queue.drain(0..remove_count);
             info!(
-                "🗑️ PRUNE COMPLETE: Removed {} old key(s), {} key(s) remaining",
-                pruned_count,
+                "🗑️ PRUNED: Removed {} old key(s), {} remaining",
+                remove_count,
                 queue.len()
             );
         }
     }
 
-    /// Get the number of keys currently in the queue
+    /// Get the number of keys currently in the cache
     pub fn len(&self) -> usize {
         self.key_queue.read().len()
     }
 
-    /// Check if the queue is empty
+    /// Check if the cache is empty
     pub fn is_empty(&self) -> bool {
         self.key_queue.read().is_empty()
     }
@@ -178,7 +195,7 @@ impl EncryptionLayer {
                         id: "genesis-key".to_string(),
                         material: key_bytes,
                     };
-                    key_cache.set_key_for_slot(0, initial_encryption_key);
+                    key_cache.add_key(0, initial_encryption_key);
                     info!("Initialized unix socket encryption layer with genesis key");
                 }
 
@@ -209,7 +226,7 @@ impl EncryptionLayer {
                     id: "static-key".to_string(),
                     material: key_bytes,
                 };
-                key_cache.set_key_for_slot(0, static_key);
+                key_cache.add_key(0, static_key);
                 info!("Initialized with static encryption key");
 
                 None
@@ -445,7 +462,7 @@ impl EncryptionLayer {
                                         material: key.key_data.clone(),
                                     };
 
-                                    cache.set_key_for_slot(target_slot, internal_key);
+                                    cache.add_key(target_slot, internal_key);
                                     info!(
                                         "✅ KEY STORED: Key '{}' stored for slot {}",
                                         key.id, target_slot
@@ -512,7 +529,7 @@ impl EncryptionLayer {
     }
 
     /// Get the key that would be used for a specific slot (for inspection/debugging)
-    /// For actual encryption/decryption, use encrypt_for_slot() or decrypt_for_slot()
+    /// For actual encryption/decryption, use encrypt_for_slot() or decrypt_with_key_id()
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
         let key = self.key_cache.get_key_for_slot(slot_number);
 
@@ -525,101 +542,97 @@ impl EncryptionLayer {
         key
     }
 
-    /// Get the most recent available key from the cache
-    fn get_most_recent_key(&self) -> Option<(u64, InternalKey)> {
-        let queue = self.key_cache.key_queue.read();
-        queue.back().map(|(slot, key)| (*slot, key.clone()))
-    }
-
-    /// Encrypt data for a specific slot with automatic fallback to most recent key
-    /// Returns (encrypted_data, actual_slot_used)
+    /// Encrypt data for a specific slot.
+    /// Returns (encrypted_data, key_id) where key_id identifies which key was used.
+    /// 
+    /// Key selection logic:
+    /// 1. Find newest key where key_slot <= batch_slot
+    /// 2. Fallback: use the most recent key if all keys have slots > batch_slot
     #[cfg(feature = "aes-encryption")]
-    pub fn encrypt_for_slot(&self, slot_number: u64, plaintext: &[u8]) -> Result<(Vec<u8>, u64), EncryptionError> {
-        // Try to get the key for the specific slot first
-        if let Some(key) = self.get_key_for_slot(slot_number) {
-            tracing::info!(
-                "🔐 ENCRYPT: Using key '{}' for slot {} ({} bytes)",
-                key.id,
-                slot_number,
-                plaintext.len()
-            );
-            let encrypted = self.encrypt_with_key(&key.material, plaintext)?;
-            return Ok((encrypted, slot_number));
-        }
+    pub fn encrypt_for_slot(&self, slot_number: u64, plaintext: &[u8]) -> Result<(Vec<u8>, String), EncryptionError> {
+        let key = self.key_cache.get_key_for_slot(slot_number)
+            .ok_or_else(|| EncryptionError::InvalidKeyFormat(
+                "No encryption key available".into()
+            ))?;
 
-        // Fallback: use the most recent available key
-        if let Some((fallback_slot, fallback_key)) = self.get_most_recent_key() {
-            tracing::warn!(
-                "🔐 ENCRYPT FALLBACK: No key for slot {}, using most recent key '{}' from slot {}",
-                slot_number,
-                fallback_key.id,
-                fallback_slot
-            );
-            let encrypted = self.encrypt_with_key(&fallback_key.material, plaintext)?;
-            return Ok((encrypted, fallback_slot));
-        }
-
-        // No keys available at all
-        Err(EncryptionError::InvalidKeyFormat(format!(
-            "No encryption key available for slot {} or any fallback key",
-            slot_number
-        )))
-    }
-
-    /// Decrypt data for a specific slot and prune old keys.
-    /// After successful decryption, removes all keys older than the one used.
-    #[cfg(feature = "aes-encryption")]
-    pub fn decrypt_for_slot(&self, slot_number: u64, ciphertext: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-        // Try to get the key for the specific slot first
-        if let Some(key) = self.get_key_for_slot(slot_number) {
-            tracing::debug!(
-                "🔓 DECRYPT: Using key '{}' for slot {} ({} bytes)",
-                key.id,
-                slot_number,
-                ciphertext.len()
-            );
-            let plaintext = self.decrypt_with_key(&key.material, ciphertext)?;
-            
-            // Prune keys older than the one we just used
-            self.key_cache.prune_keys_before(slot_number);
-            
-            return Ok(plaintext);
-        }
-
-        // Fallback: try all available keys (the ciphertext might have been encrypted with a different key)
-        tracing::warn!(
-            "🔓 DECRYPT FALLBACK: No key for slot {}, trying all available keys",
-            slot_number
+        tracing::info!(
+            "🔐 ENCRYPT: Using key '{}' for batch slot {} ({} bytes)",
+            key.id,
+            slot_number,
+            plaintext.len()
         );
-        
-        // Search the queue for a key that works
+
+        let encrypted = self.encrypt_with_key(&key.material, plaintext)?;
+        Ok((encrypted, key.id))
+    }
+
+    /// Decrypt data using the specific key ID that was used for encryption.
+    /// Falls back to trying all keys if the specified key is not found or fails.
+    /// 
+    /// Automatically prunes old keys after successful decryption, keeping KEY_PRUNE_BUFFER_SIZE
+    /// keys as a buffer before the used key.
+    #[cfg(feature = "aes-encryption")]
+    pub fn decrypt_with_key_id(
+        &self,
+        key_id: &str,
+        ciphertext: &[u8],
+    ) -> Result<Vec<u8>, EncryptionError> {
+        // Primary: try the exact key by ID
+        if let Some(key) = self.key_cache.get_key_by_id(key_id) {
+            match self.decrypt_with_key(&key.material, ciphertext) {
+                Ok(plaintext) => {
+                    tracing::debug!(
+                        "🔓 DECRYPT: Successfully decrypted with key '{}' ({} bytes)",
+                        key_id,
+                        ciphertext.len()
+                    );
+
+                    // Prune old keys, keeping buffer
+                    self.key_cache.prune_keys_before_id(key_id, KEY_PRUNE_BUFFER_SIZE);
+
+                    return Ok(plaintext);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "🔓 Key '{}' found but decryption failed: {}, trying fallback",
+                        key_id,
+                        e
+                    );
+                }
+            }
+        } else {
+            tracing::warn!("🔓 Key '{}' not found, trying fallback", key_id);
+        }
+
+        // Fallback: brute force try all keys, newest first
+        tracing::warn!("🔓 DECRYPT FALLBACK: Trying all available keys");
+
         let queue = self.key_cache.key_queue.read();
-        for (try_slot, key) in queue.iter().rev() { // Try most recent keys first
+        for (_, key) in queue.iter().rev() {
             if let Ok(plaintext) = self.decrypt_with_key(&key.material, ciphertext) {
-                // Clone data we need before releasing the lock
-                let used_slot = *try_slot;
-                let key_id = key.id.clone();
+                let used_key_id = key.id.clone();
                 drop(queue); // Release read lock before pruning
-                
+
                 tracing::info!(
-                    "🔓 DECRYPT SUCCESS: Key '{}' from slot {} successfully decrypted data for slot {}",
-                    key_id,
-                    used_slot,
-                    slot_number
+                    "🔓 FALLBACK SUCCESS: Decrypted with key '{}'",
+                    used_key_id
                 );
-                
-                // Prune keys older than the one we just used
-                self.key_cache.prune_keys_before(used_slot);
-                
+
+                // Prune old keys, keeping buffer
+                self.key_cache.prune_keys_before_id(&used_key_id, KEY_PRUNE_BUFFER_SIZE);
+
                 return Ok(plaintext);
             }
         }
-        drop(queue); // Release read lock
+        drop(queue);
 
-        // No key could decrypt the data
-        Err(EncryptionError::DecryptionFailed(format!(
-            "No available key could decrypt the data for slot {}",
-            slot_number
-        )))
+        Err(EncryptionError::DecryptionFailed(
+            "No available key could decrypt the data".into()
+        ))
+    }
+
+    /// Get a key by its ID (for inspection/debugging)
+    pub fn get_key_by_id(&self, key_id: &str) -> Option<InternalKey> {
+        self.key_cache.get_key_by_id(key_id)
     }
 }

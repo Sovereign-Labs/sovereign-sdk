@@ -214,21 +214,20 @@ fn batch_bytes(
         let txs_serialized = borsh::to_vec(&*batch.txs)?;
 
         // Encrypt using the encryption layer's built-in fallback logic
-        let (encrypted_txs_data, encryption_slot) = encryptor.encrypt_for_slot(slot_number, &txs_serialized)?;
+        let (encrypted_txs_data, encryption_key_id) = encryptor.encrypt_for_slot(slot_number, &txs_serialized)?;
 
-        // Create batch with serialized encrypted blob + metadata including tx hashes
-        // Use the encryption_slot that matches the key we actually used
+        // Create batch with serialized encrypted blob + metadata including key ID
         tracing::info!(
-            "📦 SEQUENCER: Creating encrypted batch #{} with encryption_slot={}",
+            "📦 SEQUENCER: Creating encrypted batch #{} with encryption_key_id='{}'",
             batch.sequence_number,
-            encryption_slot
+            encryption_key_id
         );
         borsh::to_vec(&EncryptedPreferredBatchData {
             sequence_number: batch.sequence_number,
             visible_slots_to_advance: batch.visible_slots_to_advance,
             encrypted_txs_data,
             tx_hashes: batch.tx_hashes,
-            encryption_slot,
+            encryption_key_id,
         })
         .map_err(Into::into)
     } else {

@@ -329,9 +329,9 @@ pub struct EncryptedPreferredBatchData {
     /// Transaction hashes corresponding to the transactions in encrypted_txs_data.
     /// Included to allow STF runners to access tx hashes without decrypting.
     pub tx_hashes: Arc<Vec<sov_modules_api::TxHash>>,
-    /// The slot number used for encryption. This ensures STF uses the same key
-    /// regardless of timing differences between sequencer and STF processing.
-    pub encryption_slot: u64,
+    /// The ID of the encryption key used. This ensures STF uses the exact same key
+    /// that was used for encryption, regardless of timing differences.
+    pub encryption_key_id: String,
 }
 
 /// A trait implemented by blobs sent through the preferred sequencer.

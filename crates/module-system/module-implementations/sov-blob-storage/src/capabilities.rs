@@ -1137,22 +1137,23 @@ impl<S: Spec> BlobStorage<S> {
         )?;
 
         tracing::info!(
-            "🔓 STF: Deserializing encrypted batch #{} for slot {}",
+            "🔓 STF: Deserializing encrypted batch #{} with key '{}'",
             encrypted_batch.sequence_number,
-            encrypted_batch.encryption_slot
+            encrypted_batch.encryption_key_id
         );
 
-        // Decrypt the transaction data using the encryption layer's built-in fallback logic
+        // Decrypt the transaction data using the specific key ID
+        // Old keys are automatically pruned after decryption
         let decrypted_txs_bytes = encryption_layer
-            .decrypt_for_slot(
-                encrypted_batch.encryption_slot,
+            .decrypt_with_key_id(
+                &encrypted_batch.encryption_key_id,
                 &encrypted_batch.encrypted_txs_data,
             )
             .map_err(|e| {
                 tracing::error!(
-                    "❌ STF: Failed to decrypt batch #{} for slot {}: {}",
+                    "❌ STF: Failed to decrypt batch #{} with key '{}': {}",
                     encrypted_batch.sequence_number,
-                    encrypted_batch.encryption_slot,
+                    encrypted_batch.encryption_key_id,
                     e
                 );
                 e
@@ -1163,10 +1164,10 @@ impl<S: Spec> BlobStorage<S> {
         let txs = self.deserialize_transaction_data(&decrypted_txs_bytes, &encrypted_batch)?;
 
         tracing::info!(
-            "✅ STF: Successfully decrypted batch #{} with {} transactions for slot {}",
+            "✅ STF: Successfully decrypted batch #{} with {} transactions using key '{}'",
             encrypted_batch.sequence_number,
             txs.len(),
-            encrypted_batch.encryption_slot
+            encrypted_batch.encryption_key_id
         );
 
         Some(PreferredBatchData {
@@ -1188,9 +1189,9 @@ impl<S: Spec> BlobStorage<S> {
             Ok(txs) => Some(txs),
             Err(e) => {
                 tracing::error!(
-                    "❌ STF: Failed to deserialize decrypted transactions for batch #{} slot {}: {}",
+                    "❌ STF: Failed to deserialize decrypted transactions for batch #{} key '{}': {}",
                     encrypted_batch.sequence_number,
-                    encrypted_batch.encryption_slot,
+                    encrypted_batch.encryption_key_id,
                     e
                 );
                 None
