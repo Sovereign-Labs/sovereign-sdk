@@ -217,7 +217,7 @@ fn batch_bytes(
         let (encrypted_txs_data, encryption_key_id) = encryptor.encrypt_for_slot(slot_number, &txs_serialized)?;
 
         // Create batch with serialized encrypted blob + metadata including key ID
-        tracing::info!(
+        tracing::debug!(
             "📦 SEQUENCER: Creating encrypted batch #{} with encryption_key_id='{}'",
             batch.sequence_number,
             encryption_key_id
