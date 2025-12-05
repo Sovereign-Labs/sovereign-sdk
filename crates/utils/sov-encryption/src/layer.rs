@@ -51,52 +51,31 @@ pub enum KeyUpdate {
 pub struct KeyCache {
     // Queue of keys ordered by slot (oldest first, newest last)
     key_queue: Arc<RwLock<VecDeque<(u64, InternalKey)>>>,
-    // Cache of the most recent key for O(1) access in common case
-    current_key_cache: Arc<RwLock<Option<(u64, InternalKey)>>>,
 }
 
 impl KeyCache {
     pub fn new() -> Self {
         Self {
             key_queue: Arc::new(RwLock::new(VecDeque::new())),
-            current_key_cache: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
-        // Fast path: check if current key cache works (O(1))
-        if let Some((cached_slot, cached_key)) = self.current_key_cache.read().as_ref() {
-            if slot_number >= *cached_slot {
+        let queue = self.key_queue.read();
+
+        // Search newest to oldest - first key with slot <= slot_number is correct
+        for (slot, key) in queue.iter().rev() {
+            if *slot <= slot_number {
                 debug!(
-                    "🔑 FAST PATH: Using cached key '{}' (slot {}) for slot {}",
-                    cached_key.id, cached_slot, slot_number
+                    "🔑 Found key '{}' (slot {}) for slot {}",
+                    key.id, slot, slot_number
                 );
-                return Some(cached_key.clone());
+                return Some(key.clone());
             }
         }
 
-        // Search in queue for the right key
-        let queue = self.key_queue.read();
-        
-        // Find the key for the highest slot <= slot_number
-        let mut best_key = None;
-        for (slot, key) in queue.iter().rev() { // Search newest to oldest
-            if *slot <= slot_number {
-                best_key = Some(key.clone());
-                break;
-            }
-        }
-        
-        if let Some(ref key) = best_key {
-            debug!(
-                "🔑 QUEUE SEARCH: Found key '{}' for slot {}",
-                key.id, slot_number
-            );
-        } else {
-            debug!("🔑 NO KEY: No key available for slot {}", slot_number);
-        }
-        
-        best_key
+        debug!("🔑 NO KEY: No key available for slot {}", slot_number);
+        None
     }
 
     pub fn set_key_for_slot(&self, slot_number: u64, key: InternalKey) {
@@ -104,22 +83,7 @@ impl KeyCache {
 
         // Push to the back of the queue (newest keys at the back)
         let mut queue = self.key_queue.write();
-        queue.push_back((slot_number, key.clone()));
-
-        // Update current key cache if this is the newest key
-        let mut current_cache = self.current_key_cache.write();
-        let should_update = match current_cache.as_ref() {
-            Some((cached_slot, _)) => slot_number >= *cached_slot,
-            None => true,
-        };
-
-        if should_update {
-            *current_cache = Some((slot_number, key));
-            debug!(
-                "💾 CACHE UPDATE: Updated current key cache for slot {}",
-                slot_number
-            );
-        }
+        queue.push_back((slot_number, key));
     }
 
     /// Remove all keys older than the given slot from the front of the queue.
@@ -523,24 +487,18 @@ impl EncryptionLayer {
     /// Debug method to show key status
     pub fn debug_key_status(&self) {
         let queue = self.key_cache.key_queue.read();
-        let current_cache = self.key_cache.current_key_cache.read();
 
         if queue.is_empty() {
             warn!("🔍 KEY STATUS: No keys available");
         } else {
             info!("🔍 KEY STATUS: {} keys in queue:", queue.len());
 
-            // Show current cache status
-            match current_cache.as_ref() {
-                Some((slot, key)) => {
-                    info!("💾 CURRENT CACHE: Slot {} -> Key '{}'", slot, key.id);
-                }
-                None => {
-                    info!("💾 CURRENT CACHE: Empty");
-                }
+            // Show current (newest) key
+            if let Some((slot, key)) = queue.back() {
+                info!("💾 CURRENT KEY: Slot {} -> Key '{}'", slot, key.id);
             }
 
-            // Show keys in queue (newest last)
+            // Show keys in queue (oldest first)
             let display_count = queue.len().min(5);
             info!("🔍 Queue (oldest first):");
             for (slot, key) in queue.iter().take(display_count) {
@@ -569,18 +527,8 @@ impl EncryptionLayer {
 
     /// Get the most recent available key from the cache
     fn get_most_recent_key(&self) -> Option<(u64, InternalKey)> {
-        // First try the current key cache
-        if let Some((slot, key)) = self.key_cache.current_key_cache.read().as_ref() {
-            return Some((*slot, key.clone()));
-        }
-
-        // Fall back to the most recent key in the queue (back of queue is newest)
         let queue = self.key_cache.key_queue.read();
-        if let Some((slot, key)) = queue.back() {
-            Some((*slot, key.clone()))
-        } else {
-            None
-        }
+        queue.back().map(|(slot, key)| (*slot, key.clone()))
     }
 
     /// Encrypt data for a specific slot with automatic fallback to most recent key
