@@ -259,7 +259,7 @@ pub async fn run_maybe_retryable_async_fn_with_retries<F, Fut, T, E>(
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, MaybeRetryable<E>>>,
-    E: std::fmt::Display,
+    E: std::fmt::Display + std::fmt::Debug,
 {
     fxn.retry(backoff_policy)
         .notify(|err: &MaybeRetryable<E>, dur: Duration| {
