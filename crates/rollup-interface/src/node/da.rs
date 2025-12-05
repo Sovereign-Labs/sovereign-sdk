@@ -264,7 +264,7 @@ where
     fxn.retry(backoff_policy)
         .notify(|err: &MaybeRetryable<E>, dur: Duration| {
             tracing::warn!(
-                method_name = da_method_name, error = %err, duration = ?dur,
+                method_name = da_method_name, error = ?err, duration = ?dur,
                 "Error in DA Service, will retry in specified duration."
             );
         })
