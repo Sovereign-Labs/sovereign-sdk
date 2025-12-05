@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::preferred::block_executor::RollupBlockExecutorErrorWithBudget;
 use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
@@ -262,7 +263,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                                     // This can happen if the transaction on the main executor has already finished.
                                     let _ = tx_with_sender.sender.send(tx_change_set);
                                 },
-                                Err(err) => {
+                                Err(RollupBlockExecutorErrorWithBudget{inner_err:err, ..}) => {
                                     tracing::trace!(%err, "WarmUp worker task failed to execute transaction.");
                                     continue;
                                 }

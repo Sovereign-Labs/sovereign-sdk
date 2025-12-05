@@ -7,7 +7,7 @@ use sov_hyperlane_integration::{
     HyperlaneAddress, InterchainGasPaymaster, Ism, Mailbox as RawMailbox, MerkleTreeHook, Message,
     Warp, WarpCallMessage, WarpEvent,
 };
-use sov_hyperlane_register_module::{config, SolanaRegistration};
+use sov_hyperlane_register_module::{SolanaDeployment, SolanaRegistration};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -23,6 +23,9 @@ pub type Mailbox<S> = RawMailbox<S, SolanaRegistration<S>>;
 pub type S = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, Base58Address, Native>;
 pub type RT = TestRuntime<S>;
 type WarpRouteId = HexHash;
+
+pub const SOLANA_PROGRAM_ID: &str = "692KZJaoe2KRcD6uhCQDLLXnLNA5ZLnfvdqjE4aX9iu1";
+pub const SOLANA_HYPERLANE_DOMAIN_ID: u32 = 1337;
 
 generate_runtime! {
     name: TestRuntime,
@@ -43,28 +46,43 @@ pub fn generate_with_additional_accounts(num_accounts: usize) -> HighLevelZkGene
     )
 }
 
-#[allow(clippy::type_complexity)]
-pub fn setup() -> (
-    TestRunner<TestRuntime<S>, S>,
-    TestUser<S>,
-    TestUser<S>,
-    TestUser<S>,
-) {
-    let genesis_config = generate_with_additional_accounts(3);
+pub struct SetupParams {
+    pub runner: TestRunner<RT, S>,
+    pub admin: TestUser<S>,
+    pub user: TestUser<S>,
+    pub module_admin: TestUser<S>,
+}
+
+pub fn setup() -> SetupParams {
+    let genesis_config = generate_with_additional_accounts(4);
 
     let admin_account = genesis_config.additional_accounts()[0].clone();
     let extra_account = genesis_config.additional_accounts()[1].clone();
-    let relayer_account = genesis_config.additional_accounts()[1].clone();
+    let module_admin = genesis_config.additional_accounts()[2].clone();
+    let registration_conf = sov_hyperlane_register_module::GenesisConfig {
+        admin: module_admin.address(),
+        deployment: Some(SolanaDeployment {
+            domain_id: SOLANA_HYPERLANE_DOMAIN_ID,
+            program_id: Base58Address::from_str(SOLANA_PROGRAM_ID).unwrap(),
+        }),
+        ism: Some(Ism::AlwaysTrust),
+    };
 
-    let genesis =
-        GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), (), ());
+    let genesis = GenesisConfig::from_minimal_config(
+        genesis_config.clone().into(),
+        (),
+        (),
+        (),
+        (),
+        registration_conf,
+    );
 
-    (
-        TestRunner::new_with_genesis(genesis.into_genesis_params(), Default::default()),
-        admin_account,
-        extra_account,
-        relayer_account,
-    )
+    SetupParams {
+        runner: TestRunner::new_with_genesis(genesis.into_genesis_params(), Default::default()),
+        admin: admin_account,
+        user: extra_account,
+        module_admin,
+    }
 }
 
 pub fn register_basic_warp_route(
@@ -132,7 +150,7 @@ pub fn make_message(
 }
 
 pub fn make_invalid_message(nonce: u32, recipient: HexHash, body: HexString) -> Message {
-    let program_b58 = Base58Address::from_str(config::SOLANA_PROGRAM_ID).unwrap();
+    let program_b58 = Base58Address::from_str(SOLANA_PROGRAM_ID).unwrap();
     let program_id = HexHash::new(program_b58.0);
 
     make_message(
@@ -146,12 +164,12 @@ pub fn make_invalid_message(nonce: u32, recipient: HexHash, body: HexString) -> 
 }
 
 pub fn make_valid_message(nonce: u32, recipient: HexHash, body: HexString) -> Message {
-    let program_b58 = Base58Address::from_str(config::SOLANA_PROGRAM_ID).unwrap();
+    let program_b58 = Base58Address::from_str(SOLANA_PROGRAM_ID).unwrap();
     let program_id = HexHash::new(program_b58.0);
 
     make_message(
         nonce,
-        config::HYPERLANE_SOLANA_CHAIN_ID,
+        SOLANA_HYPERLANE_DOMAIN_ID,
         program_id,
         config_value!("HYPERLANE_BRIDGE_DOMAIN"),
         recipient,
