@@ -1,11 +1,15 @@
 ![](./docs/assets/banner.jpg)
 
 <div align="center">
-  <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
-      <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/nightly/graph/badge.svg"/> 
+
+  <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk">
+    <img alt="Coverage" src="https://img.shields.io/codecov/c/github/Sovereign-Labs/sovereign-sdk/nightly?logo=codecov&label=coverage" />
   </a>
-  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/prerelease_checks.yml" >
-   <img alt="GitHub Workflow Status (with event)" src="https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/prerelease_checks.yml/badge.svg">
+  
+  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/prerelease_checks.yml">
+    <img alt="pre-release checks" src="https://github.com/Sovereign-Labs/sovereign-sdk/actions/workflows/prerelease_checks.yml/badge.svg" />
+  </a>
+
 </div>
 
 ## What is the Sovereign SDK?
