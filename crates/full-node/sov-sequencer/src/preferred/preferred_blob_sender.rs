@@ -203,7 +203,7 @@ fn batch_bytes(
     if let Some(encryptor) = encryption_layer {
         // Use the visible slot number from the batch for encryption context
         let slot_number = batch.visible_slot_number_after_increase.as_true().get();
-        tracing::info!(
+        tracing::debug!(
             "📦 SEQUENCER: Encrypting batch #{} with {} transactions at slot {}",
             batch.sequence_number,
             batch.txs.len(),
