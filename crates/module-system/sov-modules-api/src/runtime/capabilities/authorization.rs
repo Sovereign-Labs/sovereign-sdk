@@ -22,6 +22,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
+        sequencing_data: Option<Vec<u8>>,
     ) -> anyhow::Result<Context<S>>;
 
     /// Resolves the context for an unregistered transaction.

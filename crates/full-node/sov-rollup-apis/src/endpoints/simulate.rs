@@ -438,6 +438,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
                 &sequencer.da_address,
                 sequencer.rollup_address,
                 &mut scratchpad,
+                None, // Simulation doesn't have sequencing_data
             )
             .map_err(SimulateError::ContextResolution)?;
 
