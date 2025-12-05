@@ -1,6 +1,8 @@
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -63,7 +65,7 @@ impl KeyCache {
 
     pub fn get_key_for_slot(&self, slot_number: u64) -> Option<InternalKey> {
         // Fast path: check if current key cache works (O(1))
-        if let Some((cached_slot, cached_key)) = self.current_key_cache.read().unwrap().as_ref() {
+        if let Some((cached_slot, cached_key)) = self.current_key_cache.read().as_ref() {
             if slot_number >= *cached_slot {
                 debug!(
                     "🔑 FAST PATH: Using cached key '{}' (slot {}) for slot {}",
@@ -74,7 +76,7 @@ impl KeyCache {
         }
 
         // Search in queue for the right key
-        let queue = self.key_queue.read().unwrap();
+        let queue = self.key_queue.read();
         
         // Find the key for the highest slot <= slot_number
         let mut best_key = None;
@@ -101,11 +103,11 @@ impl KeyCache {
         info!("🔑 KEY SET: '{}' for slot {}", key.id, slot_number);
 
         // Push to the back of the queue (newest keys at the back)
-        let mut queue = self.key_queue.write().unwrap();
+        let mut queue = self.key_queue.write();
         queue.push_back((slot_number, key.clone()));
 
         // Update current key cache if this is the newest key
-        let mut current_cache = self.current_key_cache.write().unwrap();
+        let mut current_cache = self.current_key_cache.write();
         let should_update = match current_cache.as_ref() {
             Some((cached_slot, _)) => slot_number >= *cached_slot,
             None => true,
@@ -123,7 +125,7 @@ impl KeyCache {
     /// Remove all keys older than the given slot from the front of the queue.
     /// After calling this, the key for `slot_number` becomes the oldest key in the queue.
     pub fn prune_keys_before(&self, slot_number: u64) {
-        let mut queue = self.key_queue.write().unwrap();
+        let mut queue = self.key_queue.write();
         let initial_len = queue.len();
         
         // Remove keys from the front while they're older than the target slot
@@ -151,12 +153,12 @@ impl KeyCache {
 
     /// Get the number of keys currently in the queue
     pub fn len(&self) -> usize {
-        self.key_queue.read().unwrap().len()
+        self.key_queue.read().len()
     }
 
     /// Check if the queue is empty
     pub fn is_empty(&self) -> bool {
-        self.key_queue.read().unwrap().is_empty()
+        self.key_queue.read().is_empty()
     }
 }
 
@@ -520,8 +522,8 @@ impl EncryptionLayer {
 
     /// Debug method to show key status
     pub fn debug_key_status(&self) {
-        let queue = self.key_cache.key_queue.read().unwrap();
-        let current_cache = self.key_cache.current_key_cache.read().unwrap();
+        let queue = self.key_cache.key_queue.read();
+        let current_cache = self.key_cache.current_key_cache.read();
 
         if queue.is_empty() {
             warn!("🔍 KEY STATUS: No keys available");
@@ -568,12 +570,12 @@ impl EncryptionLayer {
     /// Get the most recent available key from the cache
     fn get_most_recent_key(&self) -> Option<(u64, InternalKey)> {
         // First try the current key cache
-        if let Some((slot, key)) = self.key_cache.current_key_cache.read().unwrap().as_ref() {
+        if let Some((slot, key)) = self.key_cache.current_key_cache.read().as_ref() {
             return Some((*slot, key.clone()));
         }
 
         // Fall back to the most recent key in the queue (back of queue is newest)
-        let queue = self.key_cache.key_queue.read().unwrap();
+        let queue = self.key_cache.key_queue.read();
         if let Some((slot, key)) = queue.back() {
             Some((*slot, key.clone()))
         } else {
@@ -643,7 +645,7 @@ impl EncryptionLayer {
         );
         
         // Search the queue for a key that works
-        let queue = self.key_cache.key_queue.read().unwrap();
+        let queue = self.key_cache.key_queue.read();
         for (try_slot, key) in queue.iter().rev() { // Try most recent keys first
             if let Ok(plaintext) = self.decrypt_with_key(&key.material, ciphertext) {
                 // Clone data we need before releasing the lock

@@ -48,6 +48,9 @@ schemars = { workspace = true, features = ["derive"] }
 # Logging
 tracing = { workspace = true }
 
+# Synchronization
+parking_lot = "0.12"
+
 # Time handling
 chrono = { workspace = true, features = ["serde"] }
 
