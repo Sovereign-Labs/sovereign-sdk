@@ -1144,21 +1144,21 @@ impl<S: Spec> BlobStorage<S> {
 
         // Decrypt the transaction data using the specific key ID
         // Old keys are automatically pruned after decryption
+        // Panic if decryption fails - this indicates a critical operational issue
         let decrypted_txs_bytes = encryption_layer
             .decrypt_with_key_id(
                 &encrypted_batch.encryption_key_id,
                 &encrypted_batch.encrypted_txs_data,
             )
-            .map_err(|e| {
-                tracing::error!(
-                    "❌ STF: Failed to decrypt batch #{} with key '{}': {}",
+            .unwrap_or_else(|e| {
+                panic!(
+                    "❌ STF: Failed to decrypt batch #{} with key '{}': {}. \
+                    This indicates the encryption key is not available or data is corrupted.",
                     encrypted_batch.sequence_number,
                     encrypted_batch.encryption_key_id,
                     e
                 );
-                e
-            })
-            .ok()?;
+            });
 
         // Deserialize the decrypted transactions
         let txs = self.deserialize_transaction_data(&decrypted_txs_bytes, &encrypted_batch)?;
