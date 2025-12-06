@@ -77,16 +77,16 @@ impl<G: Gas> Resource<G> {
     }
 
     #[must_use]
-    pub(crate) fn saturating_mul_by_scalar(&self, since_last_drain: u64) -> Self {
+    pub(crate) fn saturating_mul_by_scalar(&self, scalar: u64) -> Self {
         let gas_used = self
             .gas_used
-            .checked_scalar_product(since_last_drain)
+            .checked_scalar_product(scalar)
             .unwrap_or(G::max());
 
         Self {
-            req_counter: self.req_counter.saturating_mul(since_last_drain),
-            space_in_bytes: self.space_in_bytes.saturating_mul(since_last_drain),
-            execution_time_micros: self.execution_time_micros.saturating_mul(since_last_drain),
+            req_counter: self.req_counter.saturating_mul(scalar),
+            space_in_bytes: self.space_in_bytes.saturating_mul(scalar),
+            execution_time_micros: self.execution_time_micros.saturating_mul(scalar),
             gas_used,
         }
     }

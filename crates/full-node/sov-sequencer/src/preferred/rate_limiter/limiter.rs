@@ -30,9 +30,9 @@ pub(crate) struct RefillRatePerMillis<G: Gas> {
 
 impl<G: Gas> RefillRatePerMillis<G> {
     /// The total amount refilled is calculated as token_resource_per_ms multiplied by the time elapsed since the last refill.
-    fn mul_by_millis(&self, since_last_drain: u64) -> Resource<G> {
+    fn mul_by_millis(&self, since_last_refill: u64) -> Resource<G> {
         self.token_resource_per_ms
-            .saturating_mul_by_scalar(since_last_drain)
+            .saturating_mul_by_scalar(since_last_refill)
     }
 }
 
@@ -301,7 +301,7 @@ mod tests {
                 .unwrap();
         }
 
-        // After three runs and some time passed, the rate limiter charged 3 * resource_used_per_run-time - drain_rate * time.
+        // After three runs and some time passed, the rate limiter charged 3 * resource_used_per_run-time - refill_rate * time.
         {
             let time_passed_ms = 15;
             let now = now
