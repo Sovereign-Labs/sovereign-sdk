@@ -175,9 +175,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .build()?;
     let client = sov_api_spec::Client::new_with_client(&args.api_url, reqwest_client);
 
-    let restart_after = args
-        .restart_after_seconds
-        .map(std::time::Duration::from_secs);
+    let restart_after = Some(std::time::Duration::from_secs(1000000));
 
     // Create stats channels for each worker
     let mut stats_receivers = Vec::new();
