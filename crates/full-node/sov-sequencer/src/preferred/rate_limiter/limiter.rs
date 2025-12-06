@@ -12,38 +12,30 @@ use std::time::Instant;
 pub(crate) struct RateLimiterConfig<S: Spec> {
     pub(crate) ttl_in_milis: u64,
     pub(crate) max_allowed_resources: TotalResources<S::Gas>,
-    pub(crate) drain_rate: DrainRatePerMillis<S::Gas>,
+    pub(crate) refill_rate: RefillRatePerMillis<S::Gas>,
 }
 
-/// The amount of resources used by a process that needs to be rate-limited.
+/// The amount of resources used by a request that needs to be rate-limited.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ResourceUsed<G: Gas> {
     pub(crate) inner: Resource<G>,
 }
 
-/// Defines the [`DrainRatePerMillis`] parameter for the token bucket algorithm. The [`RateLimiter`]
-/// tracks the total amount of resources consumed by each key (such as an IP address) and determines
-/// whether the resource usage exceeds a predefined threshold.
-///
-/// Meanwhile, the resources used by a given key are also continuously reduced at the rate specified by
-/// [`DrainRatePerMillis`] every millisecond.
+/// [`RefillRatePerMillis`] determines how quickly used resources are refilled.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct DrainRatePerMillis<G: Gas> {
-    pub(crate) resource_per_ms: Resource<G>,
+pub(crate) struct RefillRatePerMillis<G: Gas> {
+    pub(crate) token_resource_per_ms: Resource<G>,
 }
 
-impl<G: Gas> DrainRatePerMillis<G> {
-    /// We decrease the resource usage for each [`RateLimiter`] entry every millisecond.
-    fn mul_by_millis(&self, since_last_refil: u64) -> TotalResources<G> {
-        TotalResources {
-            inner: self
-                .resource_per_ms
-                .saturating_mul_by_scalar(since_last_refil),
-        }
+impl<G: Gas> RefillRatePerMillis<G> {
+    /// The total amount refilled is calculated as token_resource_per_ms multiplied by the time elapsed since the last refill.
+    fn mul_by_millis(&self, since_last_drain: u64) -> Resource<G> {
+        self.token_resource_per_ms
+            .saturating_mul_by_scalar(since_last_drain)
     }
 }
 
-/// The total resource usage for a given key.
+/// The total resource usage for a given key (see [`Throttler`] bellow]).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TotalResources<G: Gas> {
     pub(crate) inner: Resource<G>,
@@ -56,56 +48,81 @@ impl<G: Gas> TotalResources<G> {
         }
     }
 
-    fn combine(&mut self, used: &ResourceUsed<G>) {
-        self.inner = self.inner.checked_add(&used.inner).unwrap();
+    #[must_use]
+    fn combine(&self, used: &ResourceUsed<G>) -> Option<Self> {
+        Some(Self {
+            inner: self.inner.checked_add(&used.inner)?,
+        })
     }
 
-    fn drain(&mut self, other: &Self) {
-        self.inner = self.inner.saturating_sub(&other.inner)
+    #[must_use]
+    fn refill_tokens(&self, how_much_to_refill: &Resource<G>) -> Self {
+        // In [`Throttler`] we track the resources used by a given key.
+        // Therefore, refilling means decreasing the amount of resources used.
+        Self {
+            inner: self.inner.saturating_sub(how_much_to_refill),
+        }
     }
 
+    #[must_use]
     fn allow(&self, max: &Self) -> Result<(), LimitExceeded<G>> {
         self.inner.err_if_exceeding(&max.inner)
     }
 }
 
+/// Tracks the resources consumed for a given key (for example, an IP address),
+/// as well as the last time `total_resource_used` was refilled.
+///
+/// The Throttler grants permission for requests as long as `total_resource_used`
+/// remains below `max_allowed_resources`. Once it exceeds that threshold,
+/// the Throttler stops granting permissions until `total_resource_used` drops
+/// back below `max_allowed_resources`.
+///
+/// This decrease happens due to a constant stream of resource tokens that
+/// continuously reduce `total_resource_used`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Throttler<G: Gas> {
     total_resource_used: TotalResources<G>,
-    last_drain: Instant,
+    last_refill: Instant,
 }
 
 impl<G: Gas> Throttler<G> {
     /// Checks whether a new request can be processed and frees resources for the throttler
     /// proportional to the amount of time that has passed since the last drain.
-    fn allow_request_and_drain_resource_used(
-        &mut self,
+    fn allow_request_and_refill_resource_used(
+        &self,
         now: Instant,
-        max_allowed: &TotalResources<G>,
-        drain_rate: &DrainRatePerMillis<G>,
-    ) -> Result<(), LimitExceeded<G>> {
-        self.drain_total_resource_used(now, drain_rate);
-        self.total_resource_used.allow(max_allowed)
-    }
-
-    /// Increase the resource used by a given trottler/
-    fn throttle(&mut self, resource_used: ResourceUsed<G>) {
-        self.total_resource_used.combine(&resource_used);
-    }
-
-    fn drain_total_resource_used(&mut self, now: Instant, drain_rate: &DrainRatePerMillis<G>) {
-        let how_much_to_drain = {
+        max_allowed_resources: &TotalResources<G>,
+        refill_rate: &RefillRatePerMillis<G>,
+    ) -> Result<Self, LimitExceeded<G>> {
+        let how_much_to_fill = {
             let since_last_refil = now
-                .duration_since(self.last_drain)
+                .duration_since(self.last_refill)
                 .as_millis()
                 .try_into()
                 .expect("The throttler has not been evicted from the RateLimiter for more than u64::MAX milliseconds. This is a bug");
 
-            self.last_drain = now;
-            drain_rate.mul_by_millis(since_last_refil)
+            refill_rate.mul_by_millis(since_last_refil)
         };
 
-        self.total_resource_used.drain(&how_much_to_drain);
+        let total_resource_used_after_refill =
+            self.total_resource_used.refill_tokens(&how_much_to_fill);
+
+        total_resource_used_after_refill.allow(max_allowed_resources)?;
+
+        Ok(Throttler {
+            total_resource_used: total_resource_used_after_refill,
+            last_refill: now,
+        })
+    }
+
+    /// Increase the resource used by a given trottler.
+    #[must_use]
+    fn throttle(&self, resource_used: ResourceUsed<G>) -> Option<Self> {
+        Some(Self {
+            total_resource_used: self.total_resource_used.combine(&resource_used)?,
+            last_refill: self.last_refill,
+        })
     }
 }
 
@@ -113,21 +130,65 @@ impl<G: Gas> Throttler<G> {
 ///
 /// 1. The resource being tracked is multidimensional, not just a simple request counter.
 ///    (This is abstracted behind the [`Resource`] struct.)
-/// 2. We do not know how many resources a request will consume until after the request
-///    has been executed.
+/// 2. A request’s resource usage is unknown until execution finishes.
 ///
 /// Therefore, we provide two methods:
 /// a) `allow` — checks at the beginning of a request whether the key has not yet exceeded
 ///    its allowed resource budget.
 /// b) `update` — updates the resource usage after the request has completed.
 ///
-/// Because of this separation, it is possible that after `update` a given key will exceed its
-/// resource limit. When this happens, subsequent calls to `allow` will reject new requests
-/// for that key until enough time has passed for resources to drain below the threshold.
+/// Due to this separation, it is possible for a key to exceed its resource limit *after*
+/// `update` is called. When this happens, subsequent calls to `allow` will reject new
+/// requests for that key until enough time has passed for resources to drain below
+/// the allowed threshold.
+///
+/// EXAMPLE: (All requests are for the same key (IP address)):
+///
+/// Suppose we are only interested in `execution_time_micros`.
+///
+/// MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS = 10 micros  
+/// REFILL_RATE = 2micros/ms
+///
+/// Request1 consumes  8 micros  
+/// Request2 consumes 15 micros  
+/// Request3 consumes  3 micros
+///
+/// After Request 1:
+///   total_resource_used = 8 micros
+///
+/// TIME_PASSED = 1 ms  
+/// Request2 arrives
+///
+/// allow:
+///   total_resource_used = 8 micros - REFILL_RATE * TIME_PASSED | 6 micros  
+///   6 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS → Request2 is allowed
+///
+/// After Request2:
+/// update:
+///   total_resource_used = 6 micros + 15 micros = 21 mmicros
+///
+/// TIME_PASSED_SINCE_REQ2 = 1 ms  
+/// Request3 arrives
+///
+/// allow:
+///   total_resource_used = 21 ms - REFILL_RATE * TIME_PASSED | 19 micros  
+///   19 micros > MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS → Request3 is *not* allowed
+///
+/// TIME_PASSED_SINCE_REQ2 = 20 ms  
+/// Request 3 arrives again
+///
+/// allow:
+///   total_resource_used = 19 micros - REFILL_RATE * TIME_PASSED | 0 micros  // using saturating_sub  
+///   0 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS → Request 3 is allowed
+///
+/// After Request 3:
+/// update:
+///   total_resource_used = 3 micros
+
 pub(crate) struct RateLimiter<K, S: Spec> {
     data: Cache<K, Throttler<S::Gas>>,
     max_allowed_resources: TotalResources<S::Gas>,
-    drain_rate: DrainRatePerMillis<S::Gas>,
+    refill_rate: RefillRatePerMillis<S::Gas>,
 }
 
 impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
@@ -139,7 +200,7 @@ impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
         Self {
             data,
             max_allowed_resources: config.max_allowed_resources,
-            drain_rate: config.drain_rate,
+            refill_rate: config.refill_rate,
         }
     }
 
@@ -149,17 +210,14 @@ impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
         key: &K,
     ) -> Result<Throttler<S::Gas>, LimitExceeded<S::Gas>> {
         match self.data.get(key).copied() {
-            Some(mut throttler) => {
-                throttler.allow_request_and_drain_resource_used(
-                    now,
-                    &self.max_allowed_resources,
-                    &self.drain_rate,
-                )?;
-                Ok(throttler)
-            }
+            Some(throttler) => Ok(throttler.allow_request_and_refill_resource_used(
+                now,
+                &self.max_allowed_resources,
+                &self.refill_rate,
+            )?),
             None => Ok(Throttler {
                 total_resource_used: TotalResources::zero(),
-                last_drain: now,
+                last_refill: now,
             }),
         }
     }
@@ -167,11 +225,12 @@ impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
     pub(crate) fn update(
         &mut self,
         key: K,
-        mut throttler: Throttler<S::Gas>,
+        throttler: Throttler<S::Gas>,
         resource_used: ResourceUsed<S::Gas>,
-    ) {
-        throttler.throttle(resource_used);
+    ) -> Throttler<S::Gas> {
+        let throttler = throttler.throttle(resource_used).unwrap();
         self.data.insert(key, throttler);
+        throttler
     }
 }
 
@@ -186,18 +245,18 @@ mod tests {
 
     const MAX_REQ_COUNT: u64 = 10_000;
     const MAX_SPACE_IN_BYTES: u64 = 100_0000;
-    const MAX_EXECUTION_TIME_MICROS: u64 = 1000_000;
+    const MAX_EXECUTION_TIME_MICROS: u64 = 1_000_000;
 
     #[test]
     fn test_rate_limiter_happy_path() {
         let resource_used_per_run = small_resource_used_per_run();
         let max_allowed_resources = max_allowed_resources();
-        let drain_rate = drain_rate();
+        let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
             ttl_in_milis: 1_000_000,
             max_allowed_resources,
-            drain_rate,
+            refill_rate,
         };
 
         let mut rollup_simulator = Simulator::new(config, resource_used_per_run);
@@ -230,7 +289,7 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(3)
-                .sub(&rollup_simulator.drained(time_passed_ms));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
 
             rollup_simulator
                 .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
@@ -251,12 +310,12 @@ mod tests {
     fn test_rate_limiter_resources_exhausted() {
         let resource_used_per_run = big_resource_used_per_run();
         let max_allowed_resources = max_allowed_resources();
-        let drain_rate = drain_rate();
+        let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
             ttl_in_milis: 1_000_000,
             max_allowed_resources,
-            drain_rate,
+            refill_rate,
         };
 
         let mut rollup_simulator = Simulator::new(config, resource_used_per_run);
@@ -295,7 +354,7 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(run_number)
-                .sub(&rollup_simulator.drained(time_passed_ms));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
 
             let err = rollup_simulator
                 .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
@@ -314,11 +373,14 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(run_number)
-                .sub(&rollup_simulator.drained(time_passed_ms));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
 
+            println!("XXXXX {:?}", expected_rate_limiter_usage);
             let res =
                 rollup_simulator.run_and_assert_limits(now, &addr, expected_rate_limiter_usage);
 
+            println!("");
+            println!("RES {:?}", res);
             assert!(res.is_ok());
         }
     }
@@ -327,12 +389,12 @@ mod tests {
     fn test_rate_limiter_ttl() {
         let resource_used_per_run = big_resource_used_per_run();
         let max_allowed_resources = max_allowed_resources();
-        let drain_rate = drain_rate();
+        let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
             ttl_in_milis: 2,
             max_allowed_resources,
-            drain_rate,
+            refill_rate,
         };
 
         let mut rollup_simulator = Simulator::new(config, resource_used_per_run);
@@ -375,12 +437,11 @@ mod tests {
             addr: &<TestSpec as Spec>::Address,
             resource_used_so_far: ResourceUsed<Gas>,
         ) -> Result<(), LimitExceeded<Gas>> {
-            let throttler = self.rate_limiter.allow(now, &addr)?;
+            let throttler = self.rate_limiter.allow(now, addr)?;
 
-            self.rate_limiter
-                .update(addr.clone(), throttler, self.resource_used_per_run);
-
-            let throttler = self.rate_limiter.get_throtler(&addr).unwrap();
+            let throttler = self
+                .rate_limiter
+                .update(*addr, throttler, self.resource_used_per_run);
 
             assert_eq!(
                 throttler.total_resource_used.inner,
@@ -390,10 +451,10 @@ mod tests {
             Ok(())
         }
 
-        fn drained(&self, time_passed_ms: u64) -> Resource<Gas> {
+        fn resource_tokens_to_refill(&self, time_passed_ms: u64) -> Resource<Gas> {
             self.rate_limiter
-                .drain_rate
-                .resource_per_ms
+                .refill_rate
+                .token_resource_per_ms
                 .saturating_mul_by_scalar(time_passed_ms)
         }
     }
@@ -411,9 +472,9 @@ mod tests {
             }
         }
 
-        fn sub(&self, resource: &Resource<Gas>) -> Self {
+        fn refill(&self, resource: &Resource<Gas>) -> Self {
             Self {
-                inner: self.inner.saturating_sub(&resource),
+                inner: self.inner.saturating_sub(resource),
             }
         }
     }
@@ -451,9 +512,9 @@ mod tests {
         }
     }
 
-    fn drain_rate() -> DrainRatePerMillis<Gas> {
-        DrainRatePerMillis {
-            resource_per_ms: Resource {
+    fn refill_rate() -> RefillRatePerMillis<Gas> {
+        RefillRatePerMillis {
+            token_resource_per_ms: Resource {
                 req_counter: 2,
                 space_in_bytes: 30,
                 execution_time_micros: 400,

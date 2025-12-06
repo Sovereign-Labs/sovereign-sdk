@@ -40,14 +40,14 @@ impl<G: Gas> Resource<G> {
         }
     }
 
-    pub(crate) fn saturating_sub(&self, other: &Self) -> Self {
+    pub(crate) fn saturating_sub(&self, tokens: &Self) -> Self {
         Self {
-            req_counter: self.req_counter.saturating_sub(other.req_counter),
-            space_in_bytes: self.space_in_bytes.saturating_sub(other.space_in_bytes),
+            req_counter: self.req_counter.saturating_sub(tokens.req_counter),
+            space_in_bytes: self.space_in_bytes.saturating_sub(tokens.space_in_bytes),
             execution_time_micros: self
                 .execution_time_micros
-                .saturating_sub(other.execution_time_micros),
-            gas_used: match self.gas_used.checked_sub(other.gas_used) {
+                .saturating_sub(tokens.execution_time_micros),
+            gas_used: match self.gas_used.checked_sub(tokens.gas_used) {
                 Some(gas) => gas,
                 None => Gas::zero(),
             },
@@ -67,16 +67,16 @@ impl<G: Gas> Resource<G> {
     }
 
     #[must_use]
-    pub(crate) fn saturating_mul_by_scalar(&self, since_last_refil: u64) -> Self {
+    pub(crate) fn saturating_mul_by_scalar(&self, since_last_drain: u64) -> Self {
         let gas_used = self
             .gas_used
-            .checked_scalar_product(since_last_refil)
+            .checked_scalar_product(since_last_drain)
             .unwrap_or(G::max());
 
         Self {
-            req_counter: self.req_counter.saturating_mul(since_last_refil),
-            space_in_bytes: self.space_in_bytes.saturating_mul(since_last_refil),
-            execution_time_micros: self.execution_time_micros.saturating_mul(since_last_refil),
+            req_counter: self.req_counter.saturating_mul(since_last_drain),
+            space_in_bytes: self.space_in_bytes.saturating_mul(since_last_drain),
+            execution_time_micros: self.execution_time_micros.saturating_mul(since_last_drain),
             gas_used,
         }
     }
@@ -146,13 +146,13 @@ mod tests {
     }
 
     #[test]
-    fn test_resouce_substraction() {
+    fn test_resouce_saturating_sub() {
         {
             let zero: Resource<_> = Resource::<Gas>::zero();
             let r1 = Resource::from(1);
             let r2 = Resource::from(2);
 
-            assert_eq!(r1.saturating_sub(&r2), zero)
+            assert_eq!(r1.saturating_sub(&r2), zero);
         }
 
         {
@@ -173,7 +173,7 @@ mod tests {
 
         {
             let max = Resource::from(u64::MAX);
-            assert_eq!(r1.checked_add(&max), None)
+            assert_eq!(r1.checked_add(&max), None);
         }
     }
 

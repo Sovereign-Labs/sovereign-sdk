@@ -100,7 +100,7 @@ impl<S: Spec> SovRateLimiter<S> {
 
     pub(crate) fn update(&mut self, token: Option<Token<S>>, resource_used: ResourceUsed<S::Gas>) {
         if let Some(token) = token {
-            let inner = self.inner.as_mut().expect("TODO");
+            let inner = self.inner.as_mut().expect("The impossible happened: SovRateLimiter is unavailable even though a Some(Token) was provided.");
             inner.update(token, resource_used);
         }
     }
@@ -131,12 +131,13 @@ mod tests {
                 req_counter: 100000,
                 space_in_bytes: 5000,
                 execution_time_micros: 100000,
+
                 gas_used: Gas::from([0, 0]),
             },
         };
 
-        let drain_rate = DrainRatePerMillis {
-            resource_per_ms: Resource {
+        let refill_rate = RefillRatePerMillis {
+            token_resource_per_ms: Resource {
                 req_counter: 1,
                 space_in_bytes: 1,
                 execution_time_micros: 1,
@@ -147,7 +148,7 @@ mod tests {
         let config = RateLimiterConfig::<TestSpec> {
             ttl_in_milis: 1_000_000,
             max_allowed_resources,
-            drain_rate,
+            refill_rate,
         };
 
         let addr1 = <TestSpec as Spec>::Address::from([1; 28]);
