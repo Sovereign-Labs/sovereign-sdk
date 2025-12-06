@@ -3,6 +3,7 @@ use crate::preferred::rate_limiter::resource::Resource;
 use mini_moka::unsync::Cache;
 use sov_modules_api::Gas;
 use sov_modules_api::Spec;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::time::Duration;
 use std::time::Instant;
@@ -87,7 +88,7 @@ pub(crate) struct Throttler<G: Gas> {
 
 impl<G: Gas> Throttler<G> {
     /// Checks whether a new request can be processed and frees resources for the throttler
-    /// proportional to the amount of time that has passed since the last drain.
+    /// proportional to the amount of time that has passed since the last refill.
     fn allow_request_and_refill_resource_used(
         &self,
         now: Instant,
@@ -117,11 +118,27 @@ impl<G: Gas> Throttler<G> {
 
     /// Increase the resource used by a given trottler.
     #[must_use]
-    fn throttle(&self, resource_used: ResourceUsed<G>) -> Option<Self> {
-        Some(Self {
-            total_resource_used: self.total_resource_used.combine(&resource_used)?,
+    fn throttle<K: Debug>(&self, resource_used: ResourceUsed<G>, key: &K) -> Self {
+        let used = match self.total_resource_used.combine(&resource_used) {
+            Some(used) => used,
+            None => {
+                // On overflow we issue an error but we won't panic.
+                tracing::error!(
+                    "Throttler for {:?} overflowed: Initial total resource used {:?}, resource increase {:?}",
+                    key,
+                    self.total_resource_used,
+                    resource_used
+                );
+                TotalResources {
+                    inner: Resource::max(),
+                }
+            }
+        };
+
+        Self {
+            total_resource_used: used,
             last_refill: self.last_refill,
-        })
+        }
     }
 }
 
@@ -142,7 +159,7 @@ impl<G: Gas> Throttler<G> {
 /// the allowed threshold.
 ///
 /// More details about `allow`:
-///  - Determines how much time has passed since the last refil.
+///  - Determines how much time has passed since the last refill.
 ///  - Calculates  `tokens_to_refill = refill_rate * time_since_last_refill``.
 ///  - Each token decreases `total_resource_used`.
 ///  - If `total_resource_used` is below `max_allowed_total_resource_used`, the request is allowed.
@@ -196,7 +213,7 @@ pub(crate) struct RateLimiter<K, S: Spec> {
     refill_rate: RefillRatePerMillis<S::Gas>,
 }
 
-impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
+impl<K: Hash + Eq + Debug, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(config: RateLimiterConfig<S>) -> Self {
         let data = Cache::builder()
             .time_to_live(Duration::from_millis(config.ttl_in_milis))
@@ -233,7 +250,7 @@ impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
         throttler: Throttler<S::Gas>,
         resource_used: ResourceUsed<S::Gas>,
     ) -> Throttler<S::Gas> {
-        let throttler = throttler.throttle(resource_used).unwrap();
+        let throttler = throttler.throttle(resource_used, &key);
         self.data.insert(key, throttler);
         throttler
     }
@@ -380,12 +397,9 @@ mod tests {
                 .mul(run_number)
                 .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
 
-            println!("XXXXX {:?}", expected_rate_limiter_usage);
             let res =
                 rollup_simulator.run_and_assert_limits(now, &addr, expected_rate_limiter_usage);
 
-            println!("");
-            println!("RES {:?}", res);
             assert!(res.is_ok());
         }
     }

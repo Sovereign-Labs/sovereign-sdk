@@ -40,6 +40,16 @@ impl<G: Gas> Resource<G> {
         }
     }
 
+    pub(crate) fn max() -> Self {
+        Self {
+            req_counter: u64::MAX,
+            space_in_bytes: u64::MAX,
+            execution_time_micros: u64::MAX,
+            gas_used: Gas::max(),
+        }
+    }
+
+    #[must_use]
     pub(crate) fn saturating_sub(&self, tokens: &Self) -> Self {
         Self {
             req_counter: self.req_counter.saturating_sub(tokens.req_counter),
