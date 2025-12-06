@@ -116,7 +116,7 @@ impl<G: Gas> Throttler<G> {
         })
     }
 
-    /// Increase the resource used by a given trottler.
+    /// Increase the resource used by a given throttler.
     #[must_use]
     fn throttle<K: Debug>(&self, resource_used: ResourceUsed<G>, key: &K) -> Self {
         let used = match self.total_resource_used.combine(&resource_used) {
@@ -193,14 +193,14 @@ impl<G: Gas> Throttler<G> {
 /// Request3 arrives
 ///
 /// allow:
-///   total_resource_used = 21 ms - REFILL_RATE * TIME_PASSED | 19 micros  
+///   total_resource_used = 21 ms - REFILL_RATE * TIME_PASSED_SINCE_REQ2 | 19 micros  
 ///   19 micros > MAX_TOTAL_ALLOWED_EXECUTION_TIME_MICROS → Request3 is *not* allowed
 ///
 /// TIME_PASSED_SINCE_REQ2 = 20 ms  
 /// Request 3 arrives again
 ///
 /// allow:
-///   total_resource_used = 19 micros - REFILL_RATE * TIME_PASSED | 0 micros  // using saturating_sub  
+///   total_resource_used = 19 micros - REFILL_RATE * TIME_PASSED_SINCE_REQ2 | 0 micros  // using saturating_sub  
 ///   0 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MICROS → Request 3 is allowed
 ///
 /// After Request 3:
