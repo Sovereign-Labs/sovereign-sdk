@@ -64,7 +64,6 @@ impl<G: Gas> TotalResources<G> {
         }
     }
 
-    #[must_use]
     fn allow(&self, max: &Self) -> Result<(), LimitExceeded<G>> {
         self.inner.err_if_exceeding(&max.inner)
     }
