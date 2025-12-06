@@ -142,11 +142,17 @@ impl<G: Gas> Throttler<G> {
 /// requests for that key until enough time has passed for resources to drain below
 /// the allowed threshold.
 ///
+/// More details about `allow`:
+///  - Determines how much time has passed since the last refil.
+///  - Calculates  `tokens_to_refill = refill_rate * time_since_last_refill``.
+///  - Each token decreases `total_resource_used`.
+///  - If `total_resource_used` is below `max_allowed_total_resource_used`, the request is allowed.
+///  
 /// EXAMPLE: (All requests are for the same key (IP address)):
 ///
 /// Suppose we are only interested in `execution_time_micros`.
 ///
-/// MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS = 10 micros  
+/// MAX_TOTAL_ALLOWED_EXECUTION_TIME_MICROS = 10 micros  
 /// REFILL_RATE = 2micros/ms
 ///
 /// Request1 consumes  8 micros  
@@ -161,7 +167,7 @@ impl<G: Gas> Throttler<G> {
 ///
 /// allow:
 ///   total_resource_used = 8 micros - REFILL_RATE * TIME_PASSED | 6 micros  
-///   6 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS → Request2 is allowed
+///   6 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MICROS → Request2 is allowed
 ///
 /// After Request2:
 /// update:
@@ -172,14 +178,14 @@ impl<G: Gas> Throttler<G> {
 ///
 /// allow:
 ///   total_resource_used = 21 ms - REFILL_RATE * TIME_PASSED | 19 micros  
-///   19 micros > MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS → Request3 is *not* allowed
+///   19 micros > MAX_TOTAL_ALLOWED_EXECUTION_TIME_MICROS → Request3 is *not* allowed
 ///
 /// TIME_PASSED_SINCE_REQ2 = 20 ms  
 /// Request 3 arrives again
 ///
 /// allow:
 ///   total_resource_used = 19 micros - REFILL_RATE * TIME_PASSED | 0 micros  // using saturating_sub  
-///   0 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MS → Request 3 is allowed
+///   0 micros <= MAX_TOTAL_ALLOWED_EXECUTION_TIME_MICROS → Request 3 is allowed
 ///
 /// After Request 3:
 /// update:
