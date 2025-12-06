@@ -206,7 +206,6 @@ impl<G: Gas> Throttler<G> {
 /// After Request 3:
 /// update:
 ///   total_resource_used = 3 micros
-
 pub(crate) struct RateLimiter<K, S: Spec> {
     data: Cache<K, Throttler<S::Gas>>,
     max_allowed_resources: TotalResources<S::Gas>,
