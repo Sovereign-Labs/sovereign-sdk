@@ -401,6 +401,7 @@ impl PreferredSequencerDb {
 
         let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
             if let Some(postgres_config) = &postgres_config {
+                tracing::info!("Connecting to Postgres database: {:?}", postgres_config.postgres_connection_string);
                 Some(Box::new(PostgresBackend::connect(postgres_config).await?))
             } else {
                 Some(Box::new(RocksDbBackend::new(storage_path).await?))
