@@ -16,7 +16,9 @@ use tracing_subscriber::EnvFilter;
 mod logs;
 pub(crate) mod recv_many;
 mod simple_storage;
+mod state_writer;
 mod uniswap;
+mod transfer;
 
 /// Maximum number of concurrent workers supported due to private key derivation constraints.
 const MAX_WORKERS: usize = 255;
@@ -26,8 +28,8 @@ const MAX_WORKERS: usize = 255;
 #[command(about = "EVM soak testing tool", long_about = None)]
 struct Args {
     /// RPC address
-    #[arg(short, long, default_value = "127.0.0.1:12346")]
-    rpc_addr: SocketAddr,
+    #[arg(short, long, default_value = "127.0.0.1:12348")]
+    rpc_addr: String,
 
     /// Private key for signing transactions
     #[arg(
@@ -72,6 +74,32 @@ enum TestType {
         #[command(subcommand)]
         mode: LogsRetrievalMode,
     },
+    StateWriter {
+        /// Number of transactions to send
+        #[arg(short, long, default_value = "1000")]
+        tx_count: usize,
+
+        /// Number of logs to emit per transaction
+        #[arg(short, long, default_value = "100")]
+        writes_per_tx: usize,
+
+        /// Number of parallel workers to spawn
+        #[arg(short, long, default_value = "1")]
+        num_workers: usize,
+
+        /// How many of the writes should overlap from one tx to the next
+        #[arg(short, long, default_value = "0")]
+        overlapping_writes_per_tx: usize,
+    },
+    Transfer {
+        /// Number of transactions to send
+        #[arg(short, long, default_value = "1000")]
+        tx_count: usize,
+
+        /// Number of parallel workers to spawn
+        #[arg(short, long, default_value = "1")]
+        num_workers: usize,
+    },
 }
 
 #[derive(Subcommand, Clone, Debug)]
@@ -95,13 +123,15 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
         .try_into()
         .map_err(|_| anyhow!("Invalid private key length"))?;
 
-    key_bytes[0] = key_bytes[0].wrapping_add(worker_idx as u8);
+    let offset = (worker_idx as u16).to_le_bytes();
+    key_bytes[0] = key_bytes[0].wrapping_add(offset[0]);
+    key_bytes[1] = key_bytes[1].wrapping_add(offset[1]);
     Ok(hex::encode(key_bytes))
 }
 
 /// Creates an Alloy HTTP client connected to the specified RPC server.
-pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Result<DynProvider> {
-    let url = Url::parse(&format!("http://{rpc_addr}/rpc"))?;
+pub(crate) fn alloy_client(rpc_addr: String, signer: PrivateKeySigner) -> Result<DynProvider> {
+    let url = Url::parse(&format!("{rpc_addr}/rpc"))?;
     let client = ProviderBuilder::new()
         .wallet(signer)
         .connect_http(url)
@@ -111,7 +141,7 @@ pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Re
 
 /// Creates an Alloy WS client connected to the specified RPC server.
 pub(crate) async fn alloy_ws_client(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     signer: PrivateKeySigner,
 ) -> Result<DynProvider> {
     let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
@@ -137,7 +167,7 @@ fn validate_worker_count(num_workers: usize) -> Result<()> {
 
 /// Spawns multiple Uniswap test workers and waits for them to complete.
 async fn run_uniswap_test(
-    rpc_addr: SocketAddr,
+    rpc_addr: String,
     private_key: &str,
     count: usize,
     num_workers: usize,
@@ -147,7 +177,7 @@ async fn run_uniswap_test(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone())?;
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match UniSoakTest::new(client, signer.address()).await {
@@ -196,10 +226,127 @@ async fn fund_worker_accounts(
 }
 
 /// Runs the SimpleStorage soak test.
-async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
+async fn run_simple_storage_test(rpc_addr: String, private_key: &str) -> Result<()> {
     let signer: PrivateKeySigner = private_key.parse()?;
     let client = alloy_client(rpc_addr, signer)?;
     simple_storage::run(client).await
+}
+
+/// Runs the StateWriter soak test.
+async fn run_state_writer_test(
+    rpc_addr: String,
+    private_key: &str,
+    tx_count: usize,
+    writes_per_tx: usize,
+    num_workers: usize,
+    overlapping_writes_per_tx: usize,
+) -> Result<()> {
+    let mut handles = Vec::with_capacity(num_workers);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+    for worker_idx in 0..num_workers {
+        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
+        let address = signer.address();
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
+        let tx_sender = tx.clone();
+
+        handles.push(tokio::spawn(async move {
+            let res = state_writer::run(
+                client,
+                tx_count,
+                writes_per_tx,
+                overlapping_writes_per_tx,
+                address,
+            )
+            .await;
+            if let Err(e) = &res {
+                println!("Worker {worker_idx} error during run: {e:?}");
+            }
+            drop(tx_sender);
+            res
+        }));
+    }
+    drop(tx);
+
+    let handle = tokio::spawn(async move {
+        let start = std::time::Instant::now();
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                    let completed_txs = state_writer::COMPLETED_TXS.load(std::sync::atomic::Ordering::Relaxed);
+                    println!("Completed {completed_txs} ({} writes) TXs in {}ms. {} Writes/s", writes_per_tx * completed_txs, start.elapsed().as_millis(), ((completed_txs * writes_per_tx) as f64) / start.elapsed().as_secs_f64());
+                }
+                _ = rx.recv() => {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    });
+    handles.push(handle);
+    try_join_all(handles).await?;
+    Ok(())
+}
+
+
+/// Runs the StateWriter soak test.
+async fn run_transfer_test(
+    rpc_addr: String,
+    private_key: &str,
+    tx_count: usize,
+    num_workers: usize,
+) -> Result<()> {
+    let funding_signer: PrivateKeySigner = "0x0d87c12ea7c12024b3f70a26d735874608f17c8bce2b48e6fe87389310191264".parse()?;
+    let funding_address = funding_signer.address();
+    let funding_client = alloy_client(rpc_addr.clone(), funding_signer.clone())?;
+    let funding_client_nonce = funding_client.get_transaction_count(funding_address).await?;
+    transfer::FUNDING_CLIENT_NONCE.store(funding_client_nonce, std::sync::atomic::Ordering::SeqCst);
+
+    let mut handles = Vec::with_capacity(num_workers);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+    for worker_idx in 0..num_workers {
+        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
+        let address = signer.address();
+        tracing::info!("Worker {worker_idx} address: {address}");
+        let client = alloy_client(rpc_addr.clone(), signer.clone())?;
+        let tx_sender = tx.clone();
+        let funding_client = funding_client.clone();
+       
+
+        handles.push(tokio::spawn(async move {
+            let res = transfer::run(
+                client,
+                funding_client,
+                tx_count,
+                address,
+            )
+            .await;
+            if let Err(e) = &res {
+                println!("Worker {worker_idx} error during run: {e:?}");
+            }
+            drop(tx_sender);
+            res
+        }));
+    }
+    drop(tx);
+
+    let handle = tokio::spawn(async move {
+        let start = std::time::Instant::now();
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                    let completed_txs = transfer::COMPLETED_TXS.load(std::sync::atomic::Ordering::Relaxed);
+                    println!("Completed {completed_txs} TXs in {}ms. {} TXs/s", start.elapsed().as_millis(), (completed_txs as f64) / start.elapsed().as_secs_f64());
+                }
+                _ = rx.recv() => {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    });
+    handles.push(handle);
+    try_join_all(handles).await?;
+    Ok(())
 }
 
 #[tokio::main]
@@ -230,6 +377,25 @@ async fn main() -> Result<()> {
                 mode,
             )
             .await?;
+        }
+        TestType::StateWriter {
+            tx_count,
+            writes_per_tx,
+            num_workers,
+            overlapping_writes_per_tx,
+        } => {
+            run_state_writer_test(
+                args.rpc_addr,
+                &args.private_key,
+                tx_count,
+                writes_per_tx,
+                num_workers,
+                overlapping_writes_per_tx,
+            )
+            .await?;
+        }
+        TestType::Transfer { tx_count, num_workers } => {
+            run_transfer_test(args.rpc_addr, &args.private_key, tx_count, num_workers).await?;
         }
     }
 

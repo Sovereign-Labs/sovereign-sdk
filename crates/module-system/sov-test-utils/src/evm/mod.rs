@@ -8,9 +8,11 @@ use ethers::core::abi::Abi;
 mod block_hash;
 mod fake_uni;
 mod simple_storage;
+mod state_writer;
 pub use block_hash::BlockHash;
 pub use fake_uni::{Erc20, Router};
 pub use simple_storage::{LegacySimpleStorage, SimpleStorage};
+pub use state_writer::StateWriter;
 
 /// Helper trait to submit contract calls without needing to handle the response
 #[async_trait::async_trait]
