@@ -121,42 +121,6 @@ impl FlatStateDb {
         }
     }
 
-    // /// Coalesce all the changes into a single schema batch.
-    // /// Assumption: only a single thread is committing at a time. Calling prepare_commit multiple times
-    // /// will result in a version mismatch.
-    // fn prepare_commit(&self, state: StateChanges) -> anyhow::Result<FlatDbCommitData> {
-    //     let StateChanges {
-    //         user,
-    //         kernel,
-    //         other,
-    //     } = state;
-
-    //     let mut other_changes = Arc::try_unwrap(other).unwrap_or_else(|arc| (*arc).clone());
-    //     let version = self
-    //         .kernel
-    //         .get_committed_version()?
-    //         .and_then(|v| v.checked_add(1))
-    //         .unwrap_or(0);
-    //     if cfg!(debug_assertions) {
-    //         let user_version = self
-    //             .user
-    //             .get_committed_version()?
-    //             .and_then(|v| v.checked_add(1))
-    //             .unwrap_or(0);
-    //         assert_eq!(user_version, version);
-    //     }
-    //     let mut archival_data = SchemaBatch::default();
-    //     self.user
-    //         .materialize(&user, &mut other_changes, &mut archival_data, version)?;
-    //     self.kernel
-    //         .materialize(&kernel, &mut other_changes, &mut archival_data, version)?;
-
-    //     Ok(FlatDbCommitData {
-    //         archival: archival_data,
-    //         flat: other_changes,
-    //     })
-    // }
-
     /// Coalesce all the changes into a single schema batch and write it atomically.
     pub fn commit(&self, state: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
@@ -178,11 +142,6 @@ impl FlatStateDb {
         }
         self.kernel.commit(&state.kernel, version)?;
         self.user.commit(&state.user, version)?;
-        // self.archival.write_schemas(commit.archival)?;
-        #[cfg(feature = "test-utils")]
-        if cfg!(debug_assertions) && std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
-            panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
-        }
         self.other.write_schemas(&state.other)?;
         let write = start_write.elapsed();
         Ok(FlatStateCommitMetric { prepare, write })
