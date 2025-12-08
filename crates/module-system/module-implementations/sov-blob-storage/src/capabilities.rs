@@ -475,8 +475,8 @@ impl<S: Spec> BlobStorage<S> {
                         id: proof_blob.hash().into(),
                     }),
                 BlobOrigin::Batch(batch_blob) => {
-                    // Deserialize and decrypt batch (handles both encrypted and unencrypted)
-                    self.deserialize_and_decrypt_batch(batch_blob, None, state, encryption_layer)
+                    // Process batch from blob (handles both encrypted and unencrypted)
+                    self.process_batch_from_blob(batch_blob, None, state, encryption_layer)
                         .map(|batch| PreferredBlobDataWithId {
                             inner: PreferredBlobData::Batch(batch),
                             id: batch_blob.hash().into(),
@@ -827,7 +827,7 @@ impl<S: Spec> BlobStorage<S> {
                     BlobData::Batch((batch.data, preferred_sequencer.clone()))
                 }
                 PreferredBlobData::EncryptedBatch(_) => {
-                    // This should never happen since deserialize_and_decrypt_batch always returns Batch
+                    // This should never happen since process_batch_from_blob always returns Batch
                     unreachable!("EncryptedBatch should not reach add_preferred_blobs_to_selection")
                 }
                 PreferredBlobData::Proof(proof) => {
@@ -1092,9 +1092,9 @@ impl<S: Spec> BlobStorage<S> {
         }
     }
 
-    /// Deserialize a batch blob into PreferredBatchData with uniform encryption handling.
-    /// Based on rollup configuration, all batches are either encrypted or unencrypted.
-    fn deserialize_and_decrypt_batch(
+    /// Process a batch blob into PreferredBatchData.
+    /// Routes to decryption or direct deserialization based on rollup configuration.
+    fn process_batch_from_blob(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
         charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
@@ -1103,8 +1103,8 @@ impl<S: Spec> BlobStorage<S> {
     ) -> Option<PreferredBatchData> {
         match encryption_layer {
             Some(encryption) => {
-                // Rollup is configured for encryption - all batches must be encrypted
-                self.deserialize_encrypted_batch(blob, charge_for_deserialization, state, encryption)
+                // Rollup is configured for encryption - decrypt then deserialize
+                self.decrypt_and_deserialize_batch(blob, charge_for_deserialization, state, encryption)
             }
             None => {
                 // Rollup is configured for no encryption - all batches must be unencrypted
@@ -1120,8 +1120,8 @@ impl<S: Spec> BlobStorage<S> {
         }
     }
 
-    /// Deserialize and decrypt an encrypted batch blob.
-    fn deserialize_encrypted_batch(
+    /// Decrypt and deserialize an encrypted batch blob.
+    fn decrypt_and_deserialize_batch(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
         charge_for_deserialization: Option<(&AllowedSequencer<S>, &<S::Gas as Gas>::Price)>,
