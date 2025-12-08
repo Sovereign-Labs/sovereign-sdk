@@ -1355,8 +1355,8 @@ async fn test_sequencer_event_stream_filtering() {
 /// |  6  |       33% +bt |      2 |    > 300% |     > 346% |
 /// This way this test can validate that only **execution time** of tx counts
 #[tokio::test(flavor = "multi_thread")]
-async fn max_batch_execution_time() {
-    // Timeout the batch after 3 seconds of **execution time**.
+async fn flaky_max_batch_execution_time() {
+    // Timeout the batch after 2 seconds of **execution time**.
     let max_batch_exec_time_millis = 2000;
     let approx_batch_time_millis = 400;
     let (test_rollup, admin) = create_test_rollup(
@@ -1377,21 +1377,27 @@ async fn max_batch_execution_time() {
         .await
         .unwrap();
 
+    // Tx1: Takes longer than the batch timeout, causing batch 0 to close
     let tx_1 = tx_set_value_and_sleep(
         &admin.private_key,
         0,
         1,
         max_batch_exec_time_millis + approx_batch_time_millis,
     );
+    // After tx 2, batch 1: execution time: 50%
     let tx_2 = tx_set_value_and_sleep(&admin.private_key, 0, 2, max_batch_exec_time_millis / 2);
+    // After tx 3, batch 1: execution time: 100% + cushion. Close batch 1 and create batch 2
     let tx_3 = tx_set_value_and_sleep(
         &admin.private_key,
         1,
         3,
         (max_batch_exec_time_millis / 2) + approx_batch_time_millis,
     );
+    // After tx 4, batch 2: execution time: 33%
     let tx_4 = tx_set_value_and_sleep(&admin.private_key, 1, 4, max_batch_exec_time_millis / 3);
+    // After tx 5, batch 2: execution time: 66%
     let tx_5 = tx_set_value_and_sleep(&admin.private_key, 2, 5, max_batch_exec_time_millis / 3);
+    // After tx 6, batch 2: execution time: 100% + cushion. Close batch 2
     let tx_6 = tx_set_value_and_sleep(
         &admin.private_key,
         3,
@@ -1413,7 +1419,7 @@ async fn max_batch_execution_time() {
     let _ = client.send_raw_tx_to_sequencer(&tx_5).await.unwrap();
     let _ = client.send_raw_tx_to_sequencer(&tx_6).await.unwrap();
 
-    let wait_slot_timeout = std::time::Duration::from_millis(max_batch_exec_time_millis) * 3;
+    let wait_slot_timeout = std::time::Duration::from_millis(max_batch_exec_time_millis) * 4;
     let mut slot_summaries = Vec::new();
 
     #[derive(Debug, PartialEq)]

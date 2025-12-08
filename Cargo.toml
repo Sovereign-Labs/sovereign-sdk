@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["crates/module-system/module-implementations/extern/hyperlane-solana-register/solana"]
 members = [
     "crates/rollup-interface",
     "crates/adapters/mock-da",
@@ -60,6 +61,7 @@ members = [
     "crates/module-system/module-implementations/integration-tests",
     "crates/module-system/sov-capabilities",
     "crates/module-system/module-implementations/sov-uniqueness",
+    "crates/module-system/module-implementations/extern/hyperlane-solana-register",
     "crates/utils/transaction-generator",
     "crates/utils/sov-node-client",
     "crates/universal-wallet/schema",
@@ -89,7 +91,7 @@ members = [
     "crates/web3",
     "python/py_sovereign_web3/rust"
 ]
-default-members = ["crates/rollup-interface", "crates/adapters/mock-da", "crates/adapters/mock-zkvm", "crates/full-node/sov-blob-sender", "crates/full-node/sov-db", "crates/full-node/sov-sequencer", "crates/full-node/sov-ledger-apis", "crates/full-node/sov-rollup-apis", "crates/full-node/sov-stf-runner", "crates/full-node/sov-metrics", "crates/full-node/sov-api-spec", "crates/full-node/full-node-configs", "crates/utils/sov-rest-utils", "crates/utils/nearly-linear", "crates/utils/sov-zkvm-utils", "crates/utils/sov-build", "crates/module-system/hyperlane", "crates/module-system/sov-cli", "crates/module-system/sov-modules-stf-blueprint", "crates/module-system/sov-modules-rollup-blueprint", "crates/module-system/sov-modules-macros", "crates/module-system/sov-kernels", "crates/module-system/sov-state", "crates/module-system/sov-modules-api", "crates/module-system/sov-address", "crates/module-system/sov-test-utils", "crates/module-system/module-implementations/sov-accounts", "crates/module-system/module-implementations/sov-bank", "crates/module-system/module-implementations/sov-chain-state", "crates/module-system/module-implementations/sov-blob-storage", "crates/module-system/module-implementations/sov-evm", "crates/module-system/module-implementations/sov-paymaster", "crates/module-system/module-implementations/sov-prover-incentives", "crates/module-system/module-implementations/sov-attester-incentives", "crates/module-system/module-implementations/sov-sequencer-registry", "crates/module-system/module-implementations/sov-value-setter", "crates/module-system/module-implementations/sov-revenue-share", "crates/module-system/module-implementations/sov-synthetic-load", "crates/module-system/module-implementations/module-template", "crates/module-system/module-implementations/integration-tests", "crates/module-system/sov-capabilities", "crates/module-system/module-implementations/sov-uniqueness", "crates/utils/sov-node-client", "crates/universal-wallet/schema", "crates/universal-wallet/macros", "crates/universal-wallet/macro-helpers", "crates/utils/workspace-hack", "crates/web3", "python/py_sovereign_web3/rust"]
+default-members = ["crates/rollup-interface", "crates/adapters/mock-da", "crates/adapters/mock-zkvm", "crates/full-node/sov-blob-sender", "crates/full-node/sov-db", "crates/full-node/sov-sequencer", "crates/full-node/sov-ledger-apis", "crates/full-node/sov-rollup-apis", "crates/full-node/sov-stf-runner", "crates/full-node/sov-metrics", "crates/full-node/sov-api-spec", "crates/full-node/full-node-configs", "crates/utils/sov-rest-utils", "crates/utils/nearly-linear", "crates/utils/sov-zkvm-utils", "crates/utils/sov-build", "crates/module-system/hyperlane", "crates/module-system/sov-cli", "crates/module-system/sov-modules-stf-blueprint", "crates/module-system/sov-modules-rollup-blueprint", "crates/module-system/sov-modules-macros", "crates/module-system/sov-kernels", "crates/module-system/sov-state", "crates/module-system/sov-modules-api", "crates/module-system/sov-address", "crates/module-system/sov-test-utils", "crates/module-system/module-implementations/sov-accounts", "crates/module-system/module-implementations/sov-bank", "crates/module-system/module-implementations/sov-chain-state", "crates/module-system/module-implementations/sov-blob-storage", "crates/module-system/module-implementations/sov-evm", "crates/module-system/module-implementations/sov-paymaster", "crates/module-system/module-implementations/sov-prover-incentives", "crates/module-system/module-implementations/sov-attester-incentives", "crates/module-system/module-implementations/sov-sequencer-registry", "crates/module-system/module-implementations/sov-value-setter", "crates/module-system/module-implementations/sov-revenue-share", "crates/module-system/module-implementations/sov-synthetic-load", "crates/module-system/module-implementations/module-template", "crates/module-system/module-implementations/integration-tests", "crates/module-system/sov-capabilities", "crates/module-system/module-implementations/sov-uniqueness", "crates/utils/sov-node-client", "crates/universal-wallet/schema", "crates/universal-wallet/macros", "crates/universal-wallet/macro-helpers", "crates/utils/workspace-hack", "crates/web3", "python/py_sovereign_web3/rust", "crates/module-system/module-implementations/extern/hyperlane-solana-register"]
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
@@ -159,6 +161,7 @@ sov-rollup-interface = { path = "crates/rollup-interface", default-features = fa
 sov-stf-runner = { path = "crates/full-node/sov-stf-runner", default-features = false, version = "0.3" }
 sov-attester-incentives = { path = "crates/module-system/module-implementations/sov-attester-incentives", default-features = false, version = "0.3" }
 sov-revenue-share = { path = "crates/module-system/module-implementations/sov-revenue-share", default-features = false, version = "0.3" }
+sov-hyperlane-integration = { path = "crates/module-system/hyperlane", default-features = false, version = "0.3" }
 sov-capabilities = { path = "crates/module-system/sov-capabilities", default-features = false, version = "0.3" }
 sov-kernels = { path = "crates/module-system/sov-kernels", default-features = false, version = "0.3" }
 sov-state = { path = "crates/module-system/sov-state", default-features = false, version = "0.3" }
@@ -188,8 +191,8 @@ reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6
 rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "bb21a29cee84d4491850acd553b150ec6cc1ca71" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
-nomt-core = { git = "https://github.com/thrumdev/nomt.git", rev = "4189c7dc3dc710fef526591ee73860e462a135de", default-features = false, features = ["borsh", "serde"] }
-nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "4189c7dc3dc710fef526591ee73860e462a135de", default-features = false, features = ["borsh", "serde"] }
+nomt-core = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
+nomt = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
 
 anyhow = { version = "1.0.95" }
 async-trait = "0.1.81"

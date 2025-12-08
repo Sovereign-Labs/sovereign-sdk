@@ -7093,8 +7093,9 @@ dependencies = [
 
 [[package]]
 name = "nomt"
-version = "1.0.2"
-source = "git+https://github.com/thrumdev/nomt.git?rev=4189c7dc3dc710fef526591ee73860e462a135de#4189c7dc3dc710fef526591ee73860e462a135de"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cebfa5217b0c23f8088cdd2e9b8033db6ba49a968cfbf0a35433043b76b8f93"
 dependencies = [
  "ahash",
  "anyhow",
@@ -7122,8 +7123,9 @@ dependencies = [
 
 [[package]]
 name = "nomt-core"
-version = "1.0.2"
-source = "git+https://github.com/thrumdev/nomt.git?rev=4189c7dc3dc710fef526591ee73860e462a135de#4189c7dc3dc710fef526591ee73860e462a135de"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e86909b9e6666306bb3878401e8fc8afe4bcd99771acf30d94ad0bab1c1173f9"
 dependencies = [
  "arrayvec",
  "bitvec",
@@ -12141,6 +12143,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-hyperlane-register-module"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "bs58",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-hyperlane-integration",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-test-utils",
+ "strum 0.26.3",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "sov-kernels"
 version = "0.3.0"
 dependencies = [
@@ -13842,7 +13867,6 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "uuid 1.18.1",
  "webpki-roots 0.26.11",
 ]
 
@@ -13925,7 +13949,6 @@ dependencies = [
  "thiserror 2.0.16",
  "time",
  "tracing",
- "uuid 1.18.1",
  "whoami",
 ]
 
@@ -13965,7 +13988,6 @@ dependencies = [
  "thiserror 2.0.16",
  "time",
  "tracing",
- "uuid 1.18.1",
  "whoami",
 ]
 
@@ -13993,7 +14015,6 @@ dependencies = [
  "time",
  "tracing",
  "url",
- "uuid 1.18.1",
 ]
 
 [[package]]

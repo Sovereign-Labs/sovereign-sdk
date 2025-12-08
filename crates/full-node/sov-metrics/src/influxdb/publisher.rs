@@ -139,7 +139,6 @@ pub(crate) async fn metrics_publisher_task(
                         if let Err(err) = measurement.write_to_csv(csv_writers) {
                             tracing::warn!(?err, "Failed to write metrics to CSV file");
                         }
-                        tracing::trace!(?measurement, "Received measurement");
                         process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
                             .await;
                     }
@@ -221,10 +220,8 @@ async fn process_measurement(
             ?measurement,
             "Failed to format measurement, skipping"
         );
-    } else {
-        // We know that telegraf format is string-based, so for debugging we can print strings:
-        tracing::trace!(buffer = ?String::from_utf8_lossy(buffer), "Serialized measurement into buffer");
     };
+
     // Exceed max size, need to submit the packet first.
     if buffer.len() > max_buffer_size {
         if let Err(error) = publisher.publish(buffer).await {

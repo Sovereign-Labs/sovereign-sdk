@@ -902,7 +902,7 @@ where
             tokio::spawn(async move {
                 axum_server::Server::bind(axum_addr)
                     .handle(handle_cloned)
-                    .serve(router.into_make_service())
+                    .serve(router.into_make_service_with_connect_info::<SocketAddr>())
                     .await
                     .unwrap();
             });
@@ -1022,7 +1022,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         provisional_outcome: ProvisionalSequencerOutcome<S>,
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
-        _gas_used: &<S as Spec>::Gas,
+        _gas_used: <S as Spec>::Gas,
         execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let ProvisionalSequencerOutcome {

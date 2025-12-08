@@ -22,7 +22,7 @@ const SOV_OTEL_ENV: &str = "SOV_OTEL_ENABLED";
 
 /// Controls shutdown of providers
 pub struct OtelGuard {
-    pub(crate) tracer_provider: TracerProvider,
+    pub(crate) tracer_provider: Option<TracerProvider>,
     pub(crate) logger_provider: LoggerProvider,
 }
 
@@ -44,19 +44,23 @@ impl OtelGuard {
     }
 
     /// Export **traces, aka spans** into OpenTelemetry provider.
-    pub fn otel_tracing_layer<S>(&self) -> OpenTelemetryLayer<S, Tracer>
+    pub fn otel_tracing_layer<S>(&self) -> Option<OpenTelemetryLayer<S, Tracer>>
     where
         S: Subscriber + for<'span> LookupSpan<'span>,
     {
-        let tracer = self.tracer_provider.tracer("tracing-otel-subscriber");
-        OpenTelemetryLayer::new(tracer)
+        self.tracer_provider.as_ref().map(|tracer_provider| {
+            let tracer = tracer_provider.tracer("tracing-otel-subscriber");
+            OpenTelemetryLayer::new(tracer)
+        })
     }
 }
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        if let Err(err) = self.tracer_provider.shutdown() {
-            eprintln!("{err:?}");
+        if let Some(tracer_provider) = self.tracer_provider.as_mut() {
+            if let Err(err) = tracer_provider.shutdown() {
+                eprintln!("{err:?}");
+            }
         }
         if let Err(err) = self.logger_provider.shutdown() {
             eprintln!("{err:?}");
@@ -94,21 +98,43 @@ fn init_logger_provider() -> anyhow::Result<LoggerProvider> {
 }
 
 // Construct TracerProvider for OpenTelemetryLayer
-fn init_tracer_provider() -> anyhow::Result<TracerProvider> {
+fn init_tracer_provider() -> anyhow::Result<Option<TracerProvider>> {
+    if !should_init_traces() {
+        return Ok(None);
+    }
     let exporter_builder = opentelemetry_otlp::SpanExporter::builder().with_tonic();
 
     let trace_exporter = exporter_builder.build()?;
 
-    Ok(TracerProvider::builder()
-        // Customize sampling strategy
-        .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
-            1.0,
-        ))))
-        // If export trace to AWS X-Ray, you can use XrayIdGenerator
-        .with_id_generator(RandomIdGenerator::default())
-        .with_resource(resource())
-        .with_batch_exporter(trace_exporter, runtime::Tokio)
-        .build())
+    Ok(Some(
+        TracerProvider::builder()
+            // Customize sampling strategy
+            .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
+                1.0,
+            ))))
+            // If export trace to AWS X-Ray, you can use XrayIdGenerator
+            .with_id_generator(RandomIdGenerator::default())
+            .with_resource(resource())
+            .with_batch_exporter(trace_exporter, runtime::Tokio)
+            .build(),
+    ))
+}
+
+fn should_init_traces() -> bool {
+    let env_vars = [
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+    ];
+
+    if env_vars
+        .iter()
+        .find_map(|&var| std::env::var(var).ok())
+        .is_some()
+    {
+        return true;
+    }
+
+    check_and_log_truthiness(SOV_OTEL_ENV, "Open Telemetry exporter")
 }
 
 /// Helper function to ensure if open telemetry exporter should be enabled.
@@ -142,17 +168,31 @@ pub fn should_init_open_telemetry_exporter() -> bool {
         "None of standard OTEL_ prefixed environment variables are set, checking.. {SOV_OTEL_ENV}"
     );
 
-    match std::env::var(SOV_OTEL_ENV).as_deref() {
+    check_and_log_truthiness(SOV_OTEL_ENV, "Open Telemetry exporter")
+}
+
+/// Helper function to ensure if open telemetry exporter should be enabled.
+pub fn should_init_tokio_console_subscriber() -> bool {
+    // logging in this function won't be printed originally, but on the second it will
+    let var_name: &'static str = "TOKIO_CONSOLE";
+
+    check_and_log_truthiness(var_name, "Tokio console subscriber")
+}
+
+fn check_and_log_truthiness(value: &str, item_to_enable: &str) -> bool {
+    match std::env::var(value).as_deref() {
         Ok("1") | Ok("true") => {
-            tracing::debug!("`{SOV_OTEL_ENV}` environment variable is set, Open Telemetry exporter will be enabled with default values");
+            tracing::debug!("`{value}` environment variable is set, {item_to_enable} will be enabled with default values");
             true
         }
         Ok(value) => {
-            tracing::info!(%value, "Value of environment variable `{SOV_OTEL_ENV}` suggests not enabling Open Telemetry exporter");
+            tracing::info!(%value, "Value of environment variable `{value}` suggests not enabling {item_to_enable}");
             false
         }
         Err(_) => {
-            tracing::trace!("Environment variable `{SOV_OTEL_ENV}` is not set, Open Telemetry exporter won't be enabled");
+            tracing::trace!(
+                "Environment variable `{value}` is not set, {item_to_enable} won't be enabled"
+            );
             false
         }
     }
