@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::{VersionedDeltaReader, VersionedSchemaBatch};
-use rockbound::{SchemaBatch, SchemaKey, SchemaValue};
+use rockbound::{SchemaBatch, SchemaValue};
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::metrics::StateMaterializationMetrics;

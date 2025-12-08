@@ -2,14 +2,13 @@
 
 use core::fmt::Debug;
 use std::io::Cursor;
-use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::storage::{NibblePath, Node, NodeKey};
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
 use rockbound::versioned_db::{
-     SchemaWithVersion, VersionedTableMetadataKey,
+     SchemaWithVersion, 
 };
 use rockbound::{CodecError, Schema, SchemaKey, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;

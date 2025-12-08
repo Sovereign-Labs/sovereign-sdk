@@ -1,6 +1,5 @@
 use std::io::Write;
 
-use rockbound::{SchemaKey, SchemaValue};
 use sov_metrics::Metric;
 
 use crate::schema::types::slot_key::{SlotKey, SlotValue};

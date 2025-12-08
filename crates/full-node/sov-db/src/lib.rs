@@ -10,7 +10,6 @@
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
-use crate::schema::types::slot_key::SlotKey;
 
 pub(crate) mod flat_db;
 /// Simpler version of `StateDb`, that stores key-values with versions for historical queries.
