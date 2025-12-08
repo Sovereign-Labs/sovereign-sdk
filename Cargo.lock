@@ -10228,7 +10228,6 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=bb21a29cee84d4491850acd553b150ec6cc1ca71#bb21a29cee84d4491850acd553b150ec6cc1ca71"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -11766,6 +11765,8 @@ dependencies = [
  "borsh",
  "byteorder",
  "criterion",
+ "derivative",
+ "digest 0.10.7",
  "futures",
  "hex",
  "jmt",
@@ -11777,6 +11778,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "serde_with",
  "sha2 0.10.9",
  "sov-db",
  "sov-metrics",
