@@ -9,7 +9,6 @@ use secrecy::{ExposeSecret, SecretBox};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::task::JoinHandle;
 use tokio_util::codec::{FramedRead, LengthDelimitedCodec};
 use tracing::{debug, error, info, warn};
 
@@ -172,18 +171,12 @@ impl Default for KeyCache {
 }
 
 /// Primary encryption interface with slot-based key management
+///
+/// The listener task (if started) is detached and runs independently.
+/// The `KeyCache` is shared via `Arc`, so all clones share the same cache.
+#[derive(Clone)]
 pub struct EncryptionLayer {
     key_cache: Arc<KeyCache>,
-    _key_listener_handle: Option<JoinHandle<()>>,
-}
-
-impl Clone for EncryptionLayer {
-    fn clone(&self) -> Self {
-        Self {
-            key_cache: self.key_cache.clone(),
-            _key_listener_handle: None, // Don't clone the handle - only one listener should exist
-        }
-    }
 }
 
 impl EncryptionLayer {
@@ -193,7 +186,7 @@ impl EncryptionLayer {
         let key_cache = Arc::new(KeyCache::new());
 
         // Handle different key client configurations
-        let key_listener_handle = match &key_client_config {
+        match &key_client_config {
             #[cfg(feature = "unix-client")]
             KeyClientConfig::UnixSocket {
                 socket_path,
@@ -219,20 +212,12 @@ impl EncryptionLayer {
                     info!("Initialized unix socket encryption layer with genesis key");
                 }
 
-                // Create temporary instance to start listener
-                let temp_layer = Self {
-                    key_cache: key_cache.clone(),
-                    _key_listener_handle: None,
-                };
-
-                // Start unix socket listener for key pushes (spawns background task)
-                let handle = temp_layer.start_key_listener(socket_path.clone());
+                // Start unix socket listener for key pushes (spawns detached background task)
+                Self::spawn_key_listener(key_cache.clone(), socket_path.clone());
                 info!(
                     "Started key listener for unix socket key client at {:?}",
                     socket_path
                 );
-
-                Some(handle)
             }
             KeyClientConfig::Static { encryption_key, .. } => {
                 // For static keys, populate the cache immediately
@@ -245,15 +230,10 @@ impl EncryptionLayer {
                 };
                 key_cache.add_key(0, static_key);
                 info!("Initialized with static encryption key");
-
-                None
             }
-        };
+        }
 
-        Ok(Self {
-            key_cache,
-            _key_listener_handle: key_listener_handle,
-        })
+        Ok(Self { key_cache })
     }
 
 
@@ -345,12 +325,10 @@ impl EncryptionLayer {
     /// 
     /// Errors are surfaced through logging, not return values. The task is designed
     /// to be resilient and recover from transient failures.
-    pub fn start_key_listener<P: AsRef<Path> + Send + 'static>(
-        &self,
-        socket_path: P,
-    ) -> JoinHandle<()> {
-        let cache = self.key_cache.clone();
-
+    ///
+    /// This is a static method that spawns a detached background task. The task
+    /// runs independently and is not tied to any particular `EncryptionLayer` instance.
+    fn spawn_key_listener<P: AsRef<Path> + Send + 'static>(cache: Arc<KeyCache>, socket_path: P) {
         tokio::spawn(async move {
             use std::os::unix::fs::PermissionsExt;
             use std::time::Duration;
@@ -415,7 +393,7 @@ impl EncryptionLayer {
                     }
                 }
             }
-        })
+        });
     }
 
     /// Deserialize the key service message format
@@ -563,12 +541,12 @@ impl EncryptionLayer {
                 "No encryption key available".into()
             ))?;
 
-        tracing::info!(
+            tracing::info!(
             "🔐 ENCRYPT: Using key '{}' for batch slot {} ({} bytes)",
-            key.id,
-            slot_number,
-            plaintext.len()
-        );
+                key.id,
+                slot_number,
+                plaintext.len()
+            );
 
         let encrypted = self.encrypt_with_key(key.material.expose_secret(), plaintext)?;
         Ok((encrypted, key.id))
@@ -589,19 +567,19 @@ impl EncryptionLayer {
         if let Some(key) = self.key_cache.get_key_by_id(key_id) {
             match self.decrypt_with_key(key.material.expose_secret(), ciphertext) {
                 Ok(plaintext) => {
-                    tracing::debug!(
+            tracing::debug!(
                         "🔓 DECRYPT: Successfully decrypted with key '{}' ({} bytes)",
                         key_id,
-                        ciphertext.len()
-                    );
-
+                ciphertext.len()
+            );
+            
                     // Prune old keys, keeping buffer
                     self.key_cache.prune_keys_before_id(key_id, KEY_PRUNE_BUFFER_SIZE);
-
-                    return Ok(plaintext);
-                }
+            
+            return Ok(plaintext);
+        }
                 Err(e) => {
-                    tracing::warn!(
+        tracing::warn!(
                         "🔓 Key '{}' found but decryption failed: {}, trying fallback",
                         key_id,
                         e
@@ -620,7 +598,7 @@ impl EncryptionLayer {
             if let Ok(plaintext) = self.decrypt_with_key(key.material.expose_secret(), ciphertext) {
                 let used_key_id = key.id.clone();
                 drop(queue); // Release read lock before pruning
-
+                
                 tracing::info!(
                     "🔓 FALLBACK SUCCESS: Decrypted with key '{}'",
                     used_key_id
@@ -628,7 +606,7 @@ impl EncryptionLayer {
 
                 // Prune old keys, keeping buffer
                 self.key_cache.prune_keys_before_id(&used_key_id, KEY_PRUNE_BUFFER_SIZE);
-
+                
                 return Ok(plaintext);
             }
         }
