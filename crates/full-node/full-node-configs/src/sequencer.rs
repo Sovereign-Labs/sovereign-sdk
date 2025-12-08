@@ -274,7 +274,8 @@ pub struct SovRateLimiterConfig {
     /// Determines how quickly tokens are refilled in the token-bucket algorithm.
     /// Each user can consume, on average, only a certain percentage of the batch resources.
     /// Over time, users send requests that draw from their available resources, while a
-    /// constant stream of tokens refilling those resources. The higher the value of `refill_rate`,
-    /// the faster the user’s resources are refilled.
+    /// constant stream of tokens refilling those resources.
+    /// At refill_rate = 1, tokens regenerate at 0.0005% × BatchCapacity per millisecond.
+    /// Values between 1 and 20 are recommended starting points.
     pub refill_rate: u64,
 }
