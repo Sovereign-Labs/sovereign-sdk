@@ -225,11 +225,8 @@ impl EncryptionLayer {
                     _key_listener_handle: None,
                 };
 
-                // Clone the socket path to satisfy lifetime requirements
-                let socket_path_cloned = socket_path.clone();
-
-                // Start unix socket listener for key pushes
-                let handle = temp_layer.start_key_listener(socket_path_cloned).await?;
+                // Start unix socket listener for key pushes (spawns background task)
+                let handle = temp_layer.start_key_listener(socket_path.clone());
                 info!(
                     "Started key listener for unix socket key client at {:?}",
                     socket_path
@@ -339,99 +336,86 @@ impl EncryptionLayer {
         Ok(plaintext)
     }
 
-    // Start unix socket listener for pushed keys
-    pub async fn start_key_listener<P: AsRef<Path> + Send + 'static>(
+    /// Start a unix socket listener for pushed keys from the key service.
+    /// 
+    /// This spawns a background task that:
+    /// - Binds to the socket with exponential backoff retry (never gives up)
+    /// - Accepts connections and processes key updates
+    /// - On errors, logs and retries (never exits)
+    /// 
+    /// Errors are surfaced through logging, not return values. The task is designed
+    /// to be resilient and recover from transient failures.
+    pub fn start_key_listener<P: AsRef<Path> + Send + 'static>(
         &self,
         socket_path: P,
-    ) -> Result<JoinHandle<()>, EncryptionError> {
-        use std::os::unix::fs::PermissionsExt;
-
-        // Remove existing socket file if it exists
-        let _ = std::fs::remove_file(&socket_path);
-
-        let listener = UnixListener::bind(&socket_path)
-            .map_err(|e| {
-                error!("❌ SOCKET BIND FAILED: Cannot bind to {:?}: {}", socket_path.as_ref(), e);
-                if e.kind() == std::io::ErrorKind::AddrInUse {
-                    error!("❌ ADDRESS IN USE: Another process is already using this socket path!");
-                    error!("❌ SOLUTION: Use different socket paths for sequencer and STF, or share the encryption layer");
-                }
-                EncryptionError::EncryptionFailed(format!("Socket bind failed: {e}"))
-            })?;
-
-        // Set restrictive permissions: only owner can read/write (0600)
-        // This ensures only processes running as the same UID can connect
-        std::fs::set_permissions(
-            socket_path.as_ref(),
-            std::fs::Permissions::from_mode(0o600),
-        )
-        .map_err(|e| {
-            error!("❌ SOCKET PERMISSIONS FAILED: Cannot set permissions on {:?}: {}", socket_path.as_ref(), e);
-            EncryptionError::EncryptionFailed(format!("Socket permissions failed: {e}"))
-        })?;
-        info!("🔒 Socket permissions set to 0600 (owner only)");
-
+    ) -> JoinHandle<()> {
         let cache = self.key_cache.clone();
 
-        let handle = tokio::spawn(async move {
+        tokio::spawn(async move {
+            use std::os::unix::fs::PermissionsExt;
             use std::time::Duration;
 
-            const INITIAL_BACKOFF: Duration = Duration::from_millis(100);
-            const MAX_BACKOFF: Duration = Duration::from_secs(30);
-            const MAX_CONSECUTIVE_FAILURES: u32 = 10;
+            const INITIAL_BIND_BACKOFF: Duration = Duration::from_secs(1);
+            const MAX_BIND_BACKOFF: Duration = Duration::from_secs(60);
 
-            let mut consecutive_failures: u32 = 0;
-            let mut backoff_duration = INITIAL_BACKOFF;
+            let mut bind_backoff = INITIAL_BIND_BACKOFF;
 
-            info!("🚀 Key listener started on {:?} (single connection mode)", socket_path.as_ref());
-
+            // Outer loop: bind with exponential backoff
             loop {
-                match listener.accept().await {
-                    Ok((stream, _)) => {
-                        info!("🔌 Connection accepted on unix socket (blocking until closed)");
+                // Remove existing socket file if it exists
+                let _ = std::fs::remove_file(&socket_path);
 
-                        // Reset backoff on successful accept
-                        consecutive_failures = 0;
-                        backoff_duration = INITIAL_BACKOFF;
-
-                        // Handle this ONE connection - blocks accepting new ones until it closes
-                        // This ensures only one key service can be connected at a time
-                        if let Err(e) = Self::handle_key_connection(stream, cache.clone()).await {
-                            error!("❌ Error handling key connection: {}", e);
+                let listener = match UnixListener::bind(&socket_path) {
+                    Ok(listener) => {
+                        // Set restrictive permissions: only owner can read/write (0600)
+                        if let Err(e) = std::fs::set_permissions(
+                            socket_path.as_ref(),
+                            std::fs::Permissions::from_mode(0o600),
+                        ) {
+                            error!("❌ Failed to set socket permissions: {}", e);
                         }
 
-                        info!("🔌 Connection closed, ready to accept next connection");
+                        info!(
+                            "🔑 Key listener bound to {:?} (permissions: 0600)",
+                            socket_path.as_ref()
+                        );
+                        bind_backoff = INITIAL_BIND_BACKOFF; // Reset on success
+                        listener
                     }
                     Err(e) => {
-                        consecutive_failures += 1;
                         error!(
-                            "❌ Failed to accept connection on unix socket (attempt {}/{}): {}",
-                            consecutive_failures, MAX_CONSECUTIVE_FAILURES, e
+                            "❌ Failed to bind key socket {:?}: {}",
+                            socket_path.as_ref(),
+                            e
                         );
-
-                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-                            error!(
-                                "❌ Too many consecutive accept failures ({}), giving up",
-                                consecutive_failures
-                            );
-                            break;
-                        }
-
-                        // Exponential backoff before retrying
-                        warn!(
-                            "⏳ Retrying accept in {:?}...",
-                            backoff_duration
-                        );
-                        tokio::time::sleep(backoff_duration).await;
-                        backoff_duration = (backoff_duration * 2).min(MAX_BACKOFF);
+                        warn!("⏳ Retrying bind in {:?}...", bind_backoff);
+                        tokio::time::sleep(bind_backoff).await;
+                        bind_backoff = (bind_backoff * 2).min(MAX_BIND_BACKOFF);
                         continue;
+                    }
+                };
+
+                // Inner loop: accept connections
+                loop {
+                    match listener.accept().await {
+                        Ok((stream, _)) => {
+                            info!("🔌 Key service connected");
+
+                            if let Err(e) = Self::handle_key_connection(stream, cache.clone()).await {
+                                warn!("⚠️ Key connection ended: {}", e);
+                            }
+
+                            info!("🔌 Key service disconnected, waiting for reconnection...");
+                        }
+                        Err(e) => {
+                            error!("❌ Accept error: {}", e);
+                            warn!("⏳ Rebinding socket...");
+                            break; // Break inner loop to rebind
+                        }
                     }
                 }
             }
-            warn!("🛑 Key listener exiting");
-        });
-
-        Ok(handle)
+        })
     }
 
     /// Deserialize the key service message format
