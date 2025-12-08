@@ -10,11 +10,12 @@ use crate::metrics::StateMaterializationMetrics;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::StateRootHashes;
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
 use crate::schema::types::StateRootHashId;
 
 const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
 
-type ArcKeyAndValueOpt = (Arc<SchemaKey>, Option<Option<SchemaValue>>);
+type KvPair = (SlotKey, Option<SlotValue>);
 
 /// A typed wrapper around the [`DeltaReader`] for reading materializing historical rollup state.
 #[derive(Debug, Clone)]
@@ -38,6 +39,7 @@ pub struct StateChanges {
     pub(crate) kernel: Arc<VersionedSchemaBatch<NomtStateValues<KernelNamespace>>>,
     pub(crate) other: Arc<SchemaBatch>,
 }
+
 
 impl HistoricalStateReader {
     // Used for testing only.
@@ -138,73 +140,73 @@ impl HistoricalStateReader {
     /// Get an optional value from the database, given a version and a key hash.
     pub fn get_user_value_option_by_key(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.user.get_latest_borrowed(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.user.get_latest_borrowed(key)?)
     }
 
     /// Get the very latest version of the given key from the database.
     pub fn get_user_value_option_by_key_unbound(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.user.get_latest_borrowed_unbound(key)?)
     }
 
     /// Iterate over all user values with the given prefix.
     pub fn iter_user_values_with_prefix<'a>(
         &'a self,
-        prefix: &SchemaKey,
-    ) -> anyhow::Result<Option<impl Iterator<Item = ArcKeyAndValueOpt> + 'a>> {
-        Ok(Some(self.user.iter_with_prefix(prefix)?))
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(self.user.iter_with_prefix(prefix.clone())?))
     }
 
     /// Iterate over all kernel values with the given prefix.
     pub fn iter_kernel_values_with_prefix<'a>(
         &'a self,
-        prefix: &SchemaKey,
-    ) -> anyhow::Result<Option<impl Iterator<Item = ArcKeyAndValueOpt> + 'a>> {
-        Ok(Some(self.kernel.iter_with_prefix(prefix)?))
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(self.kernel.iter_with_prefix(prefix.clone())?))
     }
 
     /// Get the very latest version of the given key from the database.
     pub fn get_kernel_value_option_by_key_unbound(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.kernel.get_latest_borrowed_unbound(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.kernel.get_latest_borrowed_unbound(key)?)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_user_value_option_by_key_historical(
         &self,
-        key: &SchemaKey,
+        key: &SlotKey,
         version: SlotNumber,
-    ) -> anyhow::Result<Option<SchemaValue>> {
+    ) -> anyhow::Result<Option<SlotValue>> {
         Ok(self
             .user
             .get_historical_borrowed(key, version.get())?
-            .flatten())
+            )
     }
 
     /// Get an optional value from the database, given a version and a key hash.
     pub fn get_kernel_value_option_by_key(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.kernel.get_latest_borrowed(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.kernel.get_latest_borrowed(key)?)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_kernel_value_option_by_key_historical(
         &self,
-        key: &SchemaKey,
+        key: &SlotKey,
         version: SlotNumber,
-    ) -> anyhow::Result<Option<SchemaValue>> {
+    ) -> anyhow::Result<Option<SlotValue>> {
         Ok(self
             .kernel
             .get_historical_borrowed(key, version.get())?
-            .flatten())
+            )
     }
 
     /// Get the serialized root hash for a given version.
@@ -227,8 +229,8 @@ impl HistoricalStateReader {
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
     pub fn materialize_values(
-        user_changes: impl IntoIterator<Item = (SchemaKey, Option<SchemaValue>)>,
-        kernel_changes: impl IntoIterator<Item = (SchemaKey, Option<SchemaValue>)>,
+        user_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+        kernel_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
         root_hash: SchemaValue,
         version: SlotNumber,
     ) -> anyhow::Result<StateChanges> {
@@ -243,13 +245,21 @@ impl HistoricalStateReader {
         for (key, value) in kernel_changes {
             metric.inc_kernel_items();
             metric.track_key_value_size(&key, &value);
-            kernel_batch.put_versioned(Arc::new(key), value);
+            if let Some(value) = value {
+                kernel_batch.put_versioned(key, value);
+            } else {
+                kernel_batch.delete_versioned(key);
+            }
             has_kernel_been_updated = true;
         }
         for (key, value) in user_changes {
             metric.inc_user_items();
             metric.track_key_value_size(&key, &value);
-            user_batch.put_versioned(Arc::new(key), value);
+            if let Some(value) = value {
+                user_batch.put_versioned(key, value);
+            } else {
+                user_batch.delete_versioned(key);
+            }
             has_user_been_updated = true;
         }
         if has_user_been_updated && !has_kernel_been_updated {

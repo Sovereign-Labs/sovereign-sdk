@@ -146,20 +146,18 @@ where
     }
 
     fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
-        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-        let key = key.as_ref().to_vec();
         match N::NAMESPACE {
             Namespace::User => self
                 .historical_state
-                .get_user_value_option_by_key_unbound(key.as_ref())
+                .get_user_value_option_by_key_unbound(key)
                 .expect("Unable to read from UserDb"),
             Namespace::Kernel => self
                 .historical_state
-                .get_kernel_value_option_by_key_unbound(key.as_ref())
+                .get_kernel_value_option_by_key_unbound(key)
                 .expect("Unable to read from KernelDb"),
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(key.as_ref(), SlotNumber::MAX)
+                .get_value_option(key, SlotNumber::MAX)
                 .expect("Unable to read from AccessoryDb"),
         }
         .map(Into::into)

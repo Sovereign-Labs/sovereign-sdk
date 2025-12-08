@@ -9,10 +9,12 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::storage::{NibblePath, Node, NodeKey};
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
 use rockbound::versioned_db::{
-    PrunableKey, SchemaWithVersion, VersionedKey, VersionedTableMetadataKey,
+     SchemaWithVersion, VersionedTableMetadataKey,
 };
 use rockbound::{CodecError, Schema, SchemaKey, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
+
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
 
 /// Mapping table from key Hash to jmt key
 #[derive(Debug, Default)]
@@ -25,18 +27,8 @@ pub(crate) struct StateValues<N: Namespace>(std::marker::PhantomData<N>);
 #[derive(Debug, Default)]
 pub(crate) struct JmtNodes<N: Namespace>(std::marker::PhantomData<N>);
 /// Nomt state values for current state.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NomtStateValues<N: Namespace>(std::marker::PhantomData<N>);
-/// Nomt state values for historical data.
-#[derive(Clone, Debug, Default)]
-pub struct NomtHistoricalState<N: Namespace>(std::marker::PhantomData<N>);
-/// Nomt state values for pruning.
-#[derive(Clone, Debug, Default)]
-pub struct NomtPruningState<N: Namespace>(std::marker::PhantomData<N>);
-/// Nomt singleton for committed version.
-#[derive(Clone, Debug, Default)]
-pub struct NomtCommittedVersion<N: Namespace>(std::marker::PhantomData<N>);
-
 /// The generic Namespace trait used across the rollup to select a given state partition.
 /// We need to define the constants by hand because currently, fully generic expression resolution
 /// in constants is unstable: `<https://github.com/rust-lang/rust/issues/76560>`
@@ -74,109 +66,45 @@ pub trait Namespace: Sync + Send + Debug + Clone + Copy + 'static + Default {
 
 impl<N: Namespace> Schema for NomtStateValues<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::STATE_VALUES_TABLE_NAME;
-    const SHOULD_CACHE: bool = true;
 
-    type Key = Arc<SchemaKey>;
-    type Value = Option<SchemaValue>;
+    type Key = SlotKey;
+    type Value = SlotValue;
 }
+
 
 impl<N: Namespace> SchemaWithVersion for NomtStateValues<N> {
-    type HistoricalColumnFamily = NomtHistoricalState<N>;
-    type PruningColumnFamily = NomtPruningState<N>;
-    type VersionMetadatacolumn = NomtCommittedVersion<N>;
+    const HISTORICAL_COLUMN_FAMILY_NAME: ColumnFamilyName = N::HISTORICAL_COLUMN_FAMILY;
+    const PRUNING_COLUMN_FAMILY_NAME: ColumnFamilyName = N::PRUNING_COLUMN_FAMILY;
+    const VERSION_METADATA_COLUMN_FAMILY_NAME: ColumnFamilyName = N::VERSION_METADATA_COLUMN;
 }
 
-impl<N: Namespace> Schema for NomtHistoricalState<N> {
-    const COLUMN_FAMILY_NAME: ColumnFamilyName = N::HISTORICAL_COLUMN_FAMILY;
-    const SHOULD_CACHE: bool = false;
 
-    type Key = VersionedKey<NomtStateValues<N>, Arc<SchemaKey>>;
-    type Value = Option<SchemaValue>;
-}
-
-impl<N: Namespace> ValueCodec<NomtHistoricalState<N>> for Option<SchemaValue> {
-    fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
-        borsh::to_vec(self).map_err(CodecError::from)
-    }
-    fn decode_value(data: &[u8]) -> Result<Self, CodecError> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
-    }
-}
-
-impl<N: Namespace> Schema for NomtPruningState<N> {
-    const COLUMN_FAMILY_NAME: ColumnFamilyName = N::PRUNING_COLUMN_FAMILY;
-    const SHOULD_CACHE: bool = false;
-
-    type Key = PrunableKey<NomtStateValues<N>, Arc<SchemaKey>>;
-    type Value = ();
-}
-
-impl<N: Namespace> ValueCodec<NomtPruningState<N>> for () {
-    fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
-        Ok(Vec::new())
-    }
-    fn decode_value(_data: &[u8]) -> Result<Self, CodecError> {
-        Ok(())
-    }
-}
-
-impl<N: Namespace> Schema for NomtCommittedVersion<N> {
-    const COLUMN_FAMILY_NAME: ColumnFamilyName = N::VERSION_METADATA_COLUMN;
-    const SHOULD_CACHE: bool = true;
-
-    type Key = VersionedTableMetadataKey;
-    type Value = u64;
-}
-
-impl<N: Namespace> KeyEncoder<NomtCommittedVersion<N>> for VersionedTableMetadataKey {
-    fn encode_key(&self) -> Result<Vec<u8>, CodecError> {
-        self.encode()
-    }
-}
-
-impl<N: Namespace> KeyDecoder<NomtCommittedVersion<N>> for VersionedTableMetadataKey {
-    fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
-        Self::decode(data)
-    }
-}
-
-impl<N: Namespace> ValueCodec<NomtCommittedVersion<N>> for u64 {
-    fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
-        borsh::to_vec(self).map_err(CodecError::from)
-    }
-    fn decode_value(data: &[u8]) -> Result<Self, CodecError> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
-    }
-}
-
-impl<N: Namespace> KeyEncoder<NomtStateValues<N>> for SchemaKey {
+impl<N: Namespace> KeyEncoder<NomtStateValues<N>> for SlotKey {
     fn encode_key(&self) -> Result<Vec<u8>, CodecError> {
         // SchemaKey is already a borsh-encoded value, so we just copy the bytes
-        Ok(self.to_vec())
+        Ok(self.as_ref().to_vec())
     }
 }
 
-impl<N: Namespace> KeyDecoder<NomtStateValues<N>> for Arc<SchemaKey> {
+impl<N: Namespace> KeyDecoder<NomtStateValues<N>> for SlotKey {
     fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
-        // SchemaKey is already a borsh-encoded value, so we just copy the bytes
-        Ok(Arc::new(data.to_vec()))
+        if data.len() < 2 {
+            return Err(CodecError::InvalidKeyLength {
+                expected: 2,
+                got: data.len(),
+            });
+        }
+        Ok(SlotKey::from_slice_including_prefix(data))
     }
 }
 
-impl<N: Namespace> KeyDecoder<NomtStateValues<N>> for SchemaKey {
-    fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
-        // SchemaKey is already a borsh-encoded value, so we just copy the bytes
-        Ok(data.to_vec())
-    }
-}
-
-impl<N: Namespace> ValueCodec<NomtStateValues<N>> for Option<SchemaValue> {
+impl<N: Namespace> ValueCodec<NomtStateValues<N>> for SlotValue {
     fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
-        borsh::to_vec(self).map_err(CodecError::from)
+        Ok(self.as_ref().to_vec())
     }
 
     fn decode_value(data: &[u8]) -> Result<Self, CodecError> {
-        Ok(Self::deserialize_reader(&mut &data[..])?)
+        Ok(SlotValue::from(data.to_vec()))
     }
 }
 
@@ -184,7 +112,6 @@ impl<N: Namespace> ValueCodec<NomtStateValues<N>> for Option<SchemaValue> {
 
 impl<N: Namespace> Schema for KeyHashToKey<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::KEY_HASH_TO_KEY_TABLE_NAME;
-    const SHOULD_CACHE: bool = false;
 
     type Key = [u8; 32];
     type Value = SchemaKey;
@@ -192,7 +119,6 @@ impl<N: Namespace> Schema for KeyHashToKey<N> {
 
 impl<N: Namespace> Schema for StateValues<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::STATE_VALUES_TABLE_NAME;
-    const SHOULD_CACHE: bool = false;
 
     type Key = (SchemaKey, SlotNumber);
     type Value = Option<SchemaValue>;
@@ -200,7 +126,6 @@ impl<N: Namespace> Schema for StateValues<N> {
 
 impl<N: Namespace> Schema for JmtNodes<N> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = N::JMT_NODES_TABLE_NAME;
-    const SHOULD_CACHE: bool = false;
 
     type Key = NodeKey;
     type Value = Node;

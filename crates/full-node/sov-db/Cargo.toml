@@ -39,6 +39,9 @@ tracing = { workspace = true }
 rand = { workspace = true, optional = true }
 schemars = { workspace = true }
 uuid = { workspace = true, features = ["std", "v7"] }
+serde_with = { workspace = true }
+derivative = { workspace = true }
+digest = { workspace = true }
 
 [dev-dependencies]
 test-strategy = { workspace = true }

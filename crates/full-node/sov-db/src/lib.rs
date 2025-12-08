@@ -10,6 +10,8 @@
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
+use crate::schema::types::slot_key::SlotKey;
+
 pub(crate) mod flat_db;
 /// Simpler version of `StateDb`, that stores key-values with versions for historical queries.
 pub mod historical_state;
@@ -55,7 +57,6 @@ pub struct DbOptions<Columns = rockbound::schema::ColumnFamilyName> {
     pub(crate) path_suffix: &'static str,
     /// A set of colums that this db is going to use.
     pub(crate) columns: Vec<Columns>,
-    pub(crate) cacheable_columns: Vec<String>,
 }
 
 impl<T> DbOptions<T> {
@@ -65,7 +66,6 @@ impl<T> DbOptions<T> {
             name: self.name,
             path_suffix: self.path_suffix,
             columns: self.columns.into_iter().map(f).collect(),
-            cacheable_columns: self.cacheable_columns,
         }
     }
 }
@@ -87,7 +87,6 @@ impl DbOptions<ColumnFamilyDescriptor> {
     pub fn setup_db_in_path_with_column_descriptors(
         self,
         path: impl AsRef<std::path::Path>,
-        cache_size: usize,
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
@@ -96,17 +95,15 @@ impl DbOptions<ColumnFamilyDescriptor> {
             db_path,
             self.name,
             self.columns,
-            self.cacheable_columns,
-            cache_size,
         )
     }
 }
 
 pub(crate) fn ensure_version_is_correct(
-    key: &SchemaKey,
+    key: &SlotKey,
     version: sov_rollup_interface::common::SlotNumber,
     found: Option<(
-        (SchemaKey, sov_rollup_interface::common::SlotNumber),
+        (SlotKey, sov_rollup_interface::common::SlotNumber),
         Option<SchemaValue>,
     )>,
 ) -> anyhow::Result<Option<SchemaValue>> {

@@ -19,7 +19,7 @@ use crate::metrics::nomt::{CommitDetailedMetric, PrunerMetric};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::{
-    NomtCommittedVersion, NomtHistoricalState, NomtPruningState, NomtStateValues,
+    NomtStateValues,
 };
 use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
@@ -82,13 +82,13 @@ where
         let flat_metrics = self.flat_state.commit(historical_state)?;
         let accessory_start = std::time::Instant::now();
         self.accessory
-            .write_schemas(Arc::unwrap_or_clone(accessory))?;
+            .write_schemas(&accessory)?;
         let accessory_commit = accessory_start.elapsed();
 
         let ledger_start = std::time::Instant::now();
         // Ledger goes after last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
+        self.ledger.write_schemas(&ledger)?;
         let ledger_commit = ledger_start.elapsed();
 
         let commit_detailed_metrics = CommitDetailedMetric {
@@ -112,9 +112,9 @@ where
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.flat_state
             .archival
-            .write_schemas(group.historical_state.pruning_batch)?;
+            .write_schemas(&group.historical_state.pruning_batch)?;
         self.accessory
-            .write_schemas(group.accessory.pruning_batch)?;
+            .write_schemas(&group.accessory.pruning_batch)?;
         Ok(())
     }
 
@@ -208,78 +208,78 @@ where
                 let mut keys_inspected = 0;
                 let mut hit_size_limit = false;
 
-                if let Some(user_version) =
-                    current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
-                {
-                    let prunable_keys = user.iter_pruning_keys_up_to_version(user_version)?;
-                    for key in prunable_keys {
-                        // Prune the pruning table.
-                        let key = key?;
-                        batch.delete::<NomtPruningState<UserNamespace>>(&key)?;
-                        keys_to_prune += 1;
-                        keys_inspected += 1;
-                        // Prune the historical state table. This is the main table that we want to prune.
-                        // We want to make sure that the the newest version of the key is accessible. The pruning table
-                        // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
-                        // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
-                        let mut key = key.into_versioned_key();
-                        let Some(previous_version) = key.1.checked_sub(1) else {
-                            continue;
-                        };
-                        let prev_written_version =
-                            user.get_version_for_key(&key.0, previous_version)?;
+                // if let Some(user_version) =
+                //     current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
+                // {
+                //     let prunable_keys = user.iter_pruning_keys_up_to_version(user_version)?;
+                //     for key in prunable_keys {
+                //         // Prune the pruning table.
+                //         let key = key?;
+                //         batch.delete::<NomtPruningState<UserNamespace>>(&key)?;
+                //         keys_to_prune += 1;
+                //         keys_inspected += 1;
+                //         // Prune the historical state table. This is the main table that we want to prune.
+                //         // We want to make sure that the the newest version of the key is accessible. The pruning table
+                //         // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
+                //         // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
+                //         let mut key = key.into_versioned_key();
+                //         let Some(previous_version) = key.1.checked_sub(1) else {
+                //             continue;
+                //         };
+                //         let prev_written_version =
+                //             user.get_version_for_key(&key.0, previous_version)?;
 
-                        keys_inspected += 1;
-                        if let Some(previous_version) = prev_written_version {
-                            key.1 = previous_version;
-                            batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
-                            keys_to_prune += 1;
-                        }
-                        if keys_to_prune >= max_batch_size {
-                            hit_size_limit = true;
-                            break;
-                        }
-                    }
-                    batch.put::<NomtCommittedVersion<UserNamespace>>(
-                        &VersionedTableMetadataKey::PrunedVersion,
-                        &user_version,
-                    )?;
-                }
-                if let Some(kernel_version) =
-                    current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
-                {
-                    let prunable_keys = kernel
-                        .iter_pruning_keys_up_to_version(kernel_version)?
-                        .take(max_batch_size);
-                    for key in prunable_keys {
-                        // Prune the pruning table.
-                        let key = key?;
-                        batch.delete::<NomtPruningState<KernelNamespace>>(&key)?;
-                        keys_to_prune += 1;
-                        keys_inspected += 1;
-                        // Prune the historical state table.
-                        let mut key = key.into_versioned_key();
-                        let Some(previous_version) = key.1.checked_sub(1) else {
-                            continue;
-                        };
-                        let prev_written_version =
-                            kernel.get_version_for_key(&key.0, previous_version)?;
-                        keys_inspected += 1;
-                        if let Some(previous_version) = prev_written_version {
-                            key.1 = previous_version;
-                            batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
-                            keys_to_prune += 1;
-                        }
-                        if keys_to_prune >= max_batch_size {
-                            hit_size_limit = true;
-                            break;
-                        }
-                    }
-                    batch.put::<NomtCommittedVersion<KernelNamespace>>(
-                        &VersionedTableMetadataKey::PrunedVersion,
-                        &kernel_version,
-                    )?;
-                }
+                //         keys_inspected += 1;
+                //         if let Some(previous_version) = prev_written_version {
+                //             key.1 = previous_version;
+                //             batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
+                //             keys_to_prune += 1;
+                //         }
+                //         if keys_to_prune >= max_batch_size {
+                //             hit_size_limit = true;
+                //             break;
+                //         }
+                //     }
+                //     batch.put::<NomtCommittedVersion<UserNamespace>>(
+                //         &VersionedTableMetadataKey::PrunedVersion,
+                //         &user_version,
+                //     )?;
+                // }
+                // if let Some(kernel_version) =
+                //     current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
+                // {
+                //     let prunable_keys = kernel
+                //         .iter_pruning_keys_up_to_version(kernel_version)?
+                //         .take(max_batch_size);
+                //     for key in prunable_keys {
+                //         // Prune the pruning table.
+                //         let key = key?;
+                //         batch.delete::<NomtPruningState<KernelNamespace>>(&key)?;
+                //         keys_to_prune += 1;
+                //         keys_inspected += 1;
+                //         // Prune the historical state table.
+                //         let mut key = key.into_versioned_key();
+                //         let Some(previous_version) = key.1.checked_sub(1) else {
+                //             continue;
+                //         };
+                //         let prev_written_version =
+                //             kernel.get_version_for_key(&key.0, previous_version)?;
+                //         keys_inspected += 1;
+                //         if let Some(previous_version) = prev_written_version {
+                //             key.1 = previous_version;
+                //             batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
+                //             keys_to_prune += 1;
+                //         }
+                //         if keys_to_prune >= max_batch_size {
+                //             hit_size_limit = true;
+                //             break;
+                //         }
+                //     }
+                //     batch.put::<NomtCommittedVersion<KernelNamespace>>(
+                //         &VersionedTableMetadataKey::PrunedVersion,
+                //         &kernel_version,
+                //     )?;
+                // }
 
                 let pruning_time = pruning_time.elapsed();
                 sov_metrics::track_metrics(|tracker| {
