@@ -81,8 +81,12 @@ impl TestableStorage for TestNomtStorage {
         ]
         .concat();
         let historical_change_set = HistoricalStateReader::materialize_values(
-            accessory_writes.iter().map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
-            accessory_writes.iter().map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
+            accessory_writes
+                .iter()
+                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
+            accessory_writes
+                .iter()
+                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
             // Not used at the moment,
             root_hash,
             SlotNumber::new(version),
@@ -129,14 +133,16 @@ impl TestableStorage for TestNomtStorage {
             .historical_state
             .get_user_value_option_by_key(&schema_key)
             .unwrap()
-            .as_ref().map(|v| v.as_ref().to_vec());
+            .as_ref()
+            .map(|v| v.as_ref().to_vec());
         assert_eq!(historical_value_user, kernel_value);
 
         let historical_value_kernel = self
             .historical_state
             .get_kernel_value_option_by_key(&schema_key)
             .unwrap()
-            .as_ref().map(|v| v.as_ref().to_vec());
+            .as_ref()
+            .map(|v| v.as_ref().to_vec());
         assert_eq!(historical_value_kernel, kernel_value);
 
         kernel_value
@@ -148,13 +154,15 @@ impl TestableStorage for TestNomtStorage {
             .historical_state
             .get_user_value_option_by_key(&schema_key)
             .unwrap()
-            .as_ref().map(|v| v.as_ref().to_vec());
+            .as_ref()
+            .map(|v| v.as_ref().to_vec());
 
         let historical_value_kernel = self
             .historical_state
             .get_kernel_value_option_by_key(&schema_key)
             .unwrap()
-            .as_ref().map(|v| v.as_ref().to_vec());
+            .as_ref()
+            .map(|v| v.as_ref().to_vec());
         assert_eq!(historical_value_user, historical_value_kernel);
 
         historical_value_kernel
@@ -320,9 +328,9 @@ async fn test_root_hashes_match_after_crash() {
         let kernel_key_path = KeyPath::from(sha2::Sha256::digest(kernel_key.clone()));
         let value = nomt::KeyReadWrite::Write(Some(raw_value.clone()));
         let user_nomt_values = vec![(user_key_path, value.clone())];
-        let user_historical_values = vec![(user_key, Some(raw_value.clone()))];
+        let user_historical_values = [(user_key, Some(raw_value.clone()))];
         let kernel_nomt_values = vec![(kernel_key_path, value.clone())];
-        let kernel_historical_values = vec![(kernel_key, Some(raw_value.clone()))];
+        let kernel_historical_values = [(kernel_key, Some(raw_value.clone()))];
 
         let (user_session, kernel_session) = stf_storage.begin_sessions();
 
@@ -338,8 +346,12 @@ async fn test_root_hashes_match_after_crash() {
         let root_hash = [user_root_hash, kernel_root_hash].concat();
 
         let historical_change_set = HistoricalStateReader::materialize_values(
-            user_historical_values.iter().map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
-            kernel_historical_values.iter().map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
+            user_historical_values
+                .iter()
+                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
+            kernel_historical_values
+                .iter()
+                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
             root_hash,
             SlotNumber::new(height - 1),
         )
@@ -508,11 +520,12 @@ async fn test_historical_state_with_pruning() {
     // This is where the interesting logic happens.
     for key in 1..=10u64 {
         let user_key = SlotKey::from_slice(&[key as u8, 0, 0]); // Keys must be at least 2 bytes long, so pad with 0s.
-        // First, get the live value and assert that it's what we expect.
+                                                                // First, get the live value and assert that it's what we expect.
         let value = stf_storage
             .historical_state
             .get_user_value_option_by_key(&user_key)
-            .unwrap().map(|v| v.as_ref().to_vec());
+            .unwrap()
+            .map(|v| v.as_ref().to_vec());
         assert_eq!(value, Some(key.to_be_bytes().to_vec()));
 
         // Now, check that the value is pruned at the correct versions.

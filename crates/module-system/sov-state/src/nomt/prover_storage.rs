@@ -161,7 +161,6 @@ where
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
-        .map(Into::into)
     }
 
     fn read_value<N: CompileTimeNamespace>(
@@ -183,8 +182,7 @@ where
                     self.historical_state
                         .get_user_value_option_by_key_historical(key, version)?
                 } else {
-                    self.historical_state
-                        .get_user_value_option_by_key(key)?
+                    self.historical_state.get_user_value_option_by_key(key)?
                 };
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
@@ -196,9 +194,9 @@ where
                         .expect("Failed to build user session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
-                    let historical_value_hash = historical_value.as_ref().map(|v| {
-                       v.combine_val_hash_and_size::<S::Hasher>()
-                    });
+                    let historical_value_hash = historical_value
+                        .as_ref()
+                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
                     assert_eq!(nomt_value, historical_value_hash);
                 }
 
@@ -209,8 +207,7 @@ where
                     self.historical_state
                         .get_kernel_value_option_by_key_historical(key, version)?
                 } else {
-                    self.historical_state
-                        .get_kernel_value_option_by_key(key)?
+                    self.historical_state.get_kernel_value_option_by_key(key)?
                 };
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
@@ -221,9 +218,9 @@ where
                         .expect("Failed to build kernel session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
-                    let historical_value_hash = historical_value.as_ref().map(|v| {
-                        v.combine_val_hash_and_size::<S::Hasher>()
-                    });
+                    let historical_value_hash = historical_value
+                        .as_ref()
+                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
                     assert_eq!(nomt_value, historical_value_hash);
                 }
 
@@ -231,13 +228,10 @@ where
             }
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(
-                    key,
-                    resolved_version.unwrap_or(self.latest_version()),
-                )
-                .expect("Unable to read from AccessoryDb").map(Into::into),
-        }
-        .map(Into::into);
+                .get_value_option(key, resolved_version.unwrap_or(self.latest_version()))
+                .expect("Unable to read from AccessoryDb")
+                .map(Into::into),
+        };
         Ok(val)
     }
 
@@ -730,10 +724,9 @@ where
             return Ok(None);
         };
 
-        Ok(Some(iter.filter_map(|(key, value)| {
-            value
-                .map(|v| (key, v))
-        })))
+        Ok(Some(
+            iter.filter_map(|(key, value)| value.map(|v| (key, v))),
+        ))
     }
 
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {

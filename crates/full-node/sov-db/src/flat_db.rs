@@ -7,7 +7,6 @@ use rockbound::{
     default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB,
 };
 
-use rockbound::versioned_db::SchemaWithVersion;
 use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
     historical_state::StateChanges,
@@ -15,6 +14,7 @@ use crate::{
     schema::{namespace::NomtStateValues, tables::StateRootHashes},
     DbOptions,
 };
+use rockbound::versioned_db::SchemaWithVersion;
 
 /// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
 pub struct FlatStateDb {
@@ -55,12 +55,22 @@ impl FlatStateDb {
         let archival = if separate_archival {
             let archival_path = path.join(Self::ARCHIVAL_DB_PATH_SUFFIX);
             let archival_columns = vec![
-                default_cf_descriptor(NomtStateValues::<UserNamespace>::HISTORICAL_COLUMN_FAMILY_NAME),
-                default_cf_descriptor(NomtStateValues::<KernelNamespace>::HISTORICAL_COLUMN_FAMILY_NAME),
+                default_cf_descriptor(
+                    NomtStateValues::<UserNamespace>::HISTORICAL_COLUMN_FAMILY_NAME,
+                ),
+                default_cf_descriptor(
+                    NomtStateValues::<KernelNamespace>::HISTORICAL_COLUMN_FAMILY_NAME,
+                ),
                 default_cf_descriptor(NomtStateValues::<UserNamespace>::PRUNING_COLUMN_FAMILY_NAME),
-                default_cf_descriptor(NomtStateValues::<KernelNamespace>::PRUNING_COLUMN_FAMILY_NAME),
-                default_cf_descriptor(NomtStateValues::<UserNamespace>::VERSION_METADATA_COLUMN_FAMILY_NAME),
-                default_cf_descriptor(NomtStateValues::<KernelNamespace>::VERSION_METADATA_COLUMN_FAMILY_NAME),
+                default_cf_descriptor(
+                    NomtStateValues::<KernelNamespace>::PRUNING_COLUMN_FAMILY_NAME,
+                ),
+                default_cf_descriptor(
+                    NomtStateValues::<UserNamespace>::VERSION_METADATA_COLUMN_FAMILY_NAME,
+                ),
+                default_cf_descriptor(
+                    NomtStateValues::<KernelNamespace>::VERSION_METADATA_COLUMN_FAMILY_NAME,
+                ),
             ];
             let archival = Self::get_rockbound_options(archival_columns);
             Arc::new(archival.setup_db_in_path_with_column_descriptors(archival_path)?)
@@ -75,7 +85,7 @@ impl FlatStateDb {
         let kernel = Arc::new(VersionedDB::<NomtStateValues<KernelNamespace>>::from_dbs(
             other.clone(),
             archival.clone(),
-            100_000
+            100_000,
         )?);
         Ok(Self {
             user,

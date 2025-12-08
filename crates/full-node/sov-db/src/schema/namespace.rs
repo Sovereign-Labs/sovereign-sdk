@@ -7,9 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::storage::{NibblePath, Node, NodeKey};
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
-use rockbound::versioned_db::{
-     SchemaWithVersion, 
-};
+use rockbound::versioned_db::SchemaWithVersion;
 use rockbound::{CodecError, Schema, SchemaKey, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
 
@@ -70,13 +68,11 @@ impl<N: Namespace> Schema for NomtStateValues<N> {
     type Value = SlotValue;
 }
 
-
 impl<N: Namespace> SchemaWithVersion for NomtStateValues<N> {
     const HISTORICAL_COLUMN_FAMILY_NAME: ColumnFamilyName = N::HISTORICAL_COLUMN_FAMILY;
     const PRUNING_COLUMN_FAMILY_NAME: ColumnFamilyName = N::PRUNING_COLUMN_FAMILY;
     const VERSION_METADATA_COLUMN_FAMILY_NAME: ColumnFamilyName = N::VERSION_METADATA_COLUMN;
 }
-
 
 impl<N: Namespace> KeyEncoder<NomtStateValues<N>> for SlotKey {
     fn encode_key(&self) -> Result<Vec<u8>, CodecError> {

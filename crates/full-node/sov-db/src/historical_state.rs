@@ -40,19 +40,12 @@ pub struct StateChanges {
     pub(crate) other: Arc<SchemaBatch>,
 }
 
-
 impl HistoricalStateReader {
     // Used for testing only.
     #[cfg(test)]
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
-        let kernel_version = flat_state
-            .get_kernel_db()
-            .get_committed_version()
-            .unwrap();
-        let user_version = flat_state
-            .get_user_db()
-            .get_committed_version()
-            .unwrap();
+        let kernel_version = flat_state.get_kernel_db().get_committed_version().unwrap();
+        let user_version = flat_state.get_user_db().get_committed_version().unwrap();
         assert_eq!(
             kernel_version, user_version,
             "Kernel and user should always have the same latest version"
@@ -138,11 +131,8 @@ impl HistoricalStateReader {
     }
 
     /// Get an optional value from the database, given a version and a key hash.
-    pub fn get_user_value_option_by_key(
-        &self,
-        key: &SlotKey,
-    ) -> anyhow::Result<Option<SlotValue>> {
-        Ok(self.user.get_latest_borrowed(key)?)
+    pub fn get_user_value_option_by_key(&self, key: &SlotKey) -> anyhow::Result<Option<SlotValue>> {
+        self.user.get_latest_borrowed(key)
     }
 
     /// Get the very latest version of the given key from the database.
@@ -150,7 +140,7 @@ impl HistoricalStateReader {
         &self,
         key: &SlotKey,
     ) -> anyhow::Result<Option<SlotValue>> {
-        Ok(self.user.get_latest_borrowed_unbound(key)?)
+        self.user.get_latest_borrowed_unbound(key)
     }
 
     /// Iterate over all user values with the given prefix.
@@ -174,7 +164,7 @@ impl HistoricalStateReader {
         &self,
         key: &SlotKey,
     ) -> anyhow::Result<Option<SlotValue>> {
-        Ok(self.kernel.get_latest_borrowed_unbound(key)?)
+        self.kernel.get_latest_borrowed_unbound(key)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
@@ -183,10 +173,7 @@ impl HistoricalStateReader {
         key: &SlotKey,
         version: SlotNumber,
     ) -> anyhow::Result<Option<SlotValue>> {
-        Ok(self
-            .user
-            .get_historical_borrowed(key, version.get())?
-            )
+        Ok(self.user.get_historical_borrowed(key, version.get())?)
     }
 
     /// Get an optional value from the database, given a version and a key hash.
@@ -194,7 +181,7 @@ impl HistoricalStateReader {
         &self,
         key: &SlotKey,
     ) -> anyhow::Result<Option<SlotValue>> {
-        Ok(self.kernel.get_latest_borrowed(key)?)
+        self.kernel.get_latest_borrowed(key)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
@@ -203,10 +190,7 @@ impl HistoricalStateReader {
         key: &SlotKey,
         version: SlotNumber,
     ) -> anyhow::Result<Option<SlotValue>> {
-        Ok(self
-            .kernel
-            .get_historical_borrowed(key, version.get())?
-            )
+        Ok(self.kernel.get_historical_borrowed(key, version.get())?)
     }
 
     /// Get the serialized root hash for a given version.
@@ -344,7 +328,10 @@ mod tests {
         let root_hash0 = vec![1; 32];
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(SlotKey::from_slice(b"key1"), Some(b"value1".to_vec().into()))],
+            vec![(
+                SlotKey::from_slice(b"key1"),
+                Some(b"value1".to_vec().into()),
+            )],
             root_hash0.clone(),
             version0,
         )
@@ -368,7 +355,10 @@ mod tests {
         let root_hash1 = vec![2; 32];
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(SlotKey::from_slice(b"key2"), Some(b"value2".to_vec().into()))],
+            vec![(
+                SlotKey::from_slice(b"key2"),
+                Some(b"value2".to_vec().into()),
+            )],
             root_hash1.clone(),
             version1,
         )
@@ -416,7 +406,10 @@ mod tests {
         let version0 = SlotNumber::new(0);
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(SlotKey::from_slice(b"key1"), Some(b"value1".to_vec().into()))],
+            vec![(
+                SlotKey::from_slice(b"key1"),
+                Some(b"value1".to_vec().into()),
+            )],
             vec![1; 32],
             version0,
         )
@@ -435,7 +428,10 @@ mod tests {
         let version1 = SlotNumber::new(1);
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(SlotKey::from_slice(b"key2"), Some(b"value2".to_vec().into()))],
+            vec![(
+                SlotKey::from_slice(b"key2"),
+                Some(b"value2".to_vec().into()),
+            )],
             vec![2; 32],
             version1,
         )

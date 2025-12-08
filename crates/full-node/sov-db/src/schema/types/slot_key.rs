@@ -2,15 +2,14 @@ use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
+use digest::typenum;
+use digest::Digest;
 use rockbound::versioned_db::HasPrefix;
 use rockbound::versioned_db::VersionedSchemaKeyMarker;
 use serde::{Deserialize, Serialize};
-use digest::Digest;
-use digest::typenum;
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 
 use core::{fmt, str};
-
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
@@ -72,11 +71,11 @@ impl fmt::Display for Prefix {
 }
 
 mod private {
+    use super::Prefix;
     use borsh::{BorshDeserialize, BorshSerialize};
     use serde::{Deserialize, Serialize};
     use serde_with::{serde_as, Bytes};
     use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
-	use super::Prefix;
 
     /// The total number of bytes in an inline key.
     ///
@@ -211,8 +210,8 @@ mod private {
 
     #[test]
     fn test_to_vec_and_back() {
+        use super::SlotKey;
         use super::SlotKeyBuilder;
-        use crate::SlotKey;
         use std::io::Write;
         let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
         builder.write_all(&[1, 2, 3]).unwrap();
@@ -248,18 +247,18 @@ pub struct SlotKey {
 
 impl VersionedSchemaKeyMarker for SlotKey {}
 impl HasPrefix for SlotKey {
-	fn has_prefix(&self, prefix: &Self) -> bool {
-		self.as_ref().starts_with(prefix.as_ref())
-	}
+    fn has_prefix(&self, prefix: &Self) -> bool {
+        self.as_ref().starts_with(prefix.as_ref())
+    }
 }
 
 // Because slot key has an optimized memory layout to avoid allocation when possible, we need to manually implement pretty much every trait.
 // We always want to treat the slot key as if it were a byte slice,
-mod slot_key {
+mod slot_key_inner {
+    use super::Prefix;
     use super::SlotKey;
     use super::SlotKeyBuilder;
     use std::hash::{Hash, Hasher};
-    use super::Prefix;
 
     impl PartialEq for SlotKey {
         fn eq(&self, other: &Self) -> bool {
@@ -291,7 +290,7 @@ mod slot_key {
     impl arbitrary::Arbitrary<'_> for SlotKey {
         fn arbitrary(u: &mut arbitrary::Unstructured) -> arbitrary::Result<Self> {
             use std::io::Write;
-			let prefix = Prefix::arbitrary(u)?;
+            let prefix = Prefix::arbitrary(u)?;
             let len = u.arbitrary_len::<u8>()? + 2;
             let bytes = u.bytes(len)?;
             let mut build = SlotKeyBuilder::with_prefix(prefix);
@@ -552,25 +551,23 @@ impl AsRef<[u8]> for SlotKey {
 
 /// A builder for [`SlotKey`].
 pub enum SlotKeyBuilder {
-	#[allow(missing_docs)]
-	#[allow(private_interfaces)]
+    #[allow(missing_docs)]
+    #[allow(private_interfaces)]
     Inline(private::InlineKey),
-	#[allow(missing_docs)]
+    #[allow(missing_docs)]
     Reference(Vec<u8>),
 }
 
 impl SlotKeyBuilder {
-	/// Creates a new builder with the given prefix.
+    /// Creates a new builder with the given prefix.
     pub fn with_prefix(prefix: Prefix) -> Self {
         Self::Inline(private::InlineKey::try_from_prefix_and_key(prefix, &[]).unwrap())
     }
 
-	/// Converts the builder into a [`SlotKey`].
-	pub fn to_slot_key(self) -> SlotKey {
-		SlotKey {
-			key: self.into(),
-		}
-	}
+    /// Converts the builder into a [`SlotKey`].
+    pub fn to_slot_key(self) -> SlotKey {
+        SlotKey { key: self.into() }
+    }
 }
 
 impl From<SlotKeyBuilder> for KeyContents {
@@ -626,8 +623,6 @@ impl SlotKey {
     }
 }
 
-
-
 // // We return `Vec<u8>` here to be compatible with the `JMT::put_value_set_with_proof` method.
 // fn val_hash_and_size_inner(val_hash: [u8; 32], size: u32) -> Vec<u8> {
 //     let mut val_hash_and_size = Vec::with_capacity(40);
@@ -636,7 +631,6 @@ impl SlotKey {
 //     val_hash_and_size.extend_from_slice(&size_bytes);
 //     val_hash_and_size
 // }
-
 
 /// A serialized value suitable for storing. Internally uses an [`Arc<Vec<u8>>`]
 /// for cheap cloning.
@@ -664,7 +658,6 @@ impl From<Vec<u8>> for SlotValue {
         }
     }
 }
-
 
 /// Used only in tests.
 impl From<&str> for SlotValue {
@@ -722,15 +715,11 @@ impl SlotValue {
     }
 
     /// Combines the value hash with its size.
-    pub fn combine_val_hash_and_size<H: Digest<OutputSize = typenum::U32>>(
-        &self,
-    ) -> Vec<u8> {
+    pub fn combine_val_hash_and_size<H: Digest<OutputSize = typenum::U32>>(&self) -> Vec<u8> {
         let val_hash: [u8; 32] = H::digest(self.value.as_ref()).into();
         val_hash_and_size_inner(val_hash, self.size())
     }
 }
-
-
 
 /// Combines the value hash with its size.
 // We return `Vec<u8>` here to be compatible with the `JMT::put_value_set_with_proof` method.

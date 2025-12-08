@@ -6,7 +6,7 @@ use std::thread::JoinHandle;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
-use rockbound::versioned_db::{VersionedDeltaReader, VersionedTableMetadataKey};
+use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
 use sov_rollup_interface::reexports::digest;
 
@@ -18,9 +18,7 @@ use crate::ledger_db::LedgerDb;
 use crate::metrics::nomt::{CommitDetailedMetric, PrunerMetric};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::{
-    NomtStateValues,
-};
+use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
@@ -81,8 +79,7 @@ where
         // as it duplicates the last written data to `self.state`.
         let flat_metrics = self.flat_state.commit(historical_state)?;
         let accessory_start = std::time::Instant::now();
-        self.accessory
-            .write_schemas(&accessory)?;
+        self.accessory.write_schemas(&accessory)?;
         let accessory_commit = accessory_start.elapsed();
 
         let ledger_start = std::time::Instant::now();
@@ -192,21 +189,24 @@ where
 
     pub(crate) fn start_pruner(&self, versions_to_keep: usize, max_batch_size: usize) -> PrunerJob {
         tracing::info!(versions_to_keep, "Starting pruner task iteration");
-        let user = self.flat_state.get_user_db().clone();
-        let kernel = self.flat_state.get_kernel_db().clone();
+        // TODO(@preston-evans98) re-enable pruning in the new DB schema.
+        // Commented code is left as a reference for the follow up PR.
+        // let user = self.flat_state.get_user_db().clone();
+        // let kernel = self.flat_state.get_kernel_db().clone();
         let accessory_pruner = Pruner::new(self.accessory.clone(), Some(max_batch_size));
 
         // Spawn historical state pruner thread
         let historical_state: JoinHandle<Result<PrunerJobOutput, anyhow::Error>> =
             std::thread::spawn(move || -> anyhow::Result<PrunerJobOutput> {
+                tracing::warn!("Pruning temporarily disabled");
                 let pruning_time = std::time::Instant::now();
-                let current_user_version = user.get_committed_version()?;
-                let current_kernel_version = kernel.get_committed_version()?;
+                // let current_user_version = user.get_committed_version()?;
+                // let current_kernel_version = kernel.get_committed_version()?;
 
-                let mut batch = SchemaBatch::new();
-                let mut keys_to_prune = 0;
-                let mut keys_inspected = 0;
-                let mut hit_size_limit = false;
+                let batch = SchemaBatch::new();
+                let keys_to_prune = 0;
+                let keys_inspected = 0;
+                let hit_size_limit = false;
 
                 // if let Some(user_version) =
                 //     current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))

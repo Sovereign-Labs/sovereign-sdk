@@ -91,7 +91,8 @@ mod tests {
         .unwrap();
         rocksdb.write_schemas(&changes1).unwrap();
         assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(),
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
             Some(value.clone())
         );
 
@@ -103,7 +104,8 @@ mod tests {
         .unwrap();
         rocksdb.write_schemas(&changes2).unwrap();
         assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(),
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
             Some(value)
         );
     }
@@ -128,14 +130,19 @@ mod tests {
         .unwrap();
         rocksdb.write_schemas(&changes1).unwrap();
         assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(),
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
             Some(value.clone())
         );
 
         let changes2 =
             AccessoryDb::materialize_values(vec![(key.clone(), None)], 0.to_slot_number()).unwrap();
         rocksdb.write_schemas(&changes2).unwrap();
-        assert_eq!(db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(), None);
+        assert_eq!(
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -150,6 +157,10 @@ mod tests {
         let db = AccessoryDb::with_reader(reader).unwrap();
 
         let key = b"spam".to_vec();
-        assert_eq!(db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(), None);
+        assert_eq!(
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
+            None
+        );
     }
 }

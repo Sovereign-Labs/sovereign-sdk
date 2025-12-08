@@ -3,7 +3,6 @@ use borsh::BorshDeserialize;
 use sov_bank::{config_gas_token_id, Amount, BurnRate, Coins, IntoPayable};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::optimistic::Attestation;
-use sov_state::{SlotKeyFromCodec};
 use sov_modules_api::{
     DaSpec, Gas, GetGasPrice, Spec, StateAccessor, StateReader, StateTransitionPublicData, TxState,
     VersionReader,
@@ -11,6 +10,7 @@ use sov_modules_api::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::storage::{SlotKey, SlotValue, Storage, StorageProof};
 use sov_state::Kernel;
+use sov_state::SlotKeyFromCodec;
 use tracing::debug;
 
 use crate::{AttesterIncentives, ProcessAttestationErrors, SlashingReason};

@@ -12,8 +12,8 @@ use sov_rollup_interface::stf::StoredEvent;
 
 use crate::accessory_db::AccessoryDb;
 use crate::schema::tables::EventByNumber;
+use crate::schema::types::slot_key::SlotKey;
 use crate::schema::types::EventNumber;
-use crate::SlotKey;
 // Encoding/Decoding data.
 
 pub(crate) type H = sha2::Sha256;

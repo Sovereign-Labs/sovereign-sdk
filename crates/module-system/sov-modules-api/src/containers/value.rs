@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use sov_state::{SlotValueFromCodec};
 use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
+use sov_state::SlotValueFromCodec;
 use sov_state::{EncodeLike, Prefix, SlotKey, SlotValue, StateCodec, StateItemCodec};
 use thiserror::Error;
 

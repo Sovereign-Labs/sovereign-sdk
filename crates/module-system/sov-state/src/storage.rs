@@ -6,7 +6,7 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::KeyHash;
 use serde::de::DeserializeOwned;
-use serde::{Serialize};
+use serde::Serialize;
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
@@ -23,11 +23,11 @@ use crate::{
     MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
 };
 
+pub use sov_db::schema::types::slot_key::val_hash_and_size_inner;
 pub use sov_db::schema::types::slot_key::Prefix;
 pub use sov_db::schema::types::slot_key::SlotKey;
 pub use sov_db::schema::types::slot_key::SlotKeyBuilder;
 pub use sov_db::schema::types::slot_key::SlotValue;
-pub use sov_db::schema::types::slot_key::val_hash_and_size_inner;
 
 /// A trait for creating a new key from a prefix and a key.
 pub trait SlotKeyFromCodec {
@@ -52,7 +52,6 @@ impl SlotKeyFromCodec for SlotKey {
     }
 }
 
-
 /// A trait for creating a new value from a codec.
 pub trait SlotValueFromCodec {
     /// Create a new storage value by serializing the input with the given codec.
@@ -67,13 +66,11 @@ impl SlotValueFromCodec for SlotValue {
     where
         Vq: ?Sized,
         VC: EncodeLike<Vq, V>,
-    
-        {
-            let encoded_value = codec.encode_to_vec_like(value);
-            encoded_value.into()
-        }
+    {
+        let encoded_value = codec.encode_to_vec_like(value);
+        encoded_value.into()
+    }
 }
-
 
 #[derive(
     Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize,
@@ -145,8 +142,6 @@ impl NodeLeaf {
         val_hash_and_size_inner(self.val_hash, self.size)
     }
 }
-
-
 
 #[derive(
     Debug,
@@ -340,7 +335,6 @@ pub trait Storage: Clone + core::fmt::Debug {
         proof: StorageProof<Self::Proof>,
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)>;
 }
-
 
 #[cfg(feature = "native")]
 /// A [`Storage`] that is suitable for use in native execution environments

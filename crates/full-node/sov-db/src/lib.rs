@@ -10,7 +10,6 @@
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
-
 pub(crate) mod flat_db;
 /// Simpler version of `StateDb`, that stores key-values with versions for historical queries.
 pub mod historical_state;
@@ -89,12 +88,7 @@ impl DbOptions<ColumnFamilyDescriptor> {
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open_with_cfds(
-            &config,
-            db_path,
-            self.name,
-            self.columns,
-        )
+        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns)
     }
 }
 
@@ -108,7 +102,7 @@ pub(crate) fn ensure_version_is_correct(
 ) -> anyhow::Result<Option<SchemaValue>> {
     match found {
         Some(((found_key, found_version), value)) => {
-            if &found_key == key {
+            if found_key == key {
                 anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                 Ok(value)
             } else {

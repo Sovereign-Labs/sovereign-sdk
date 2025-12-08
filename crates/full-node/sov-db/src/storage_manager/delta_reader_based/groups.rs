@@ -58,8 +58,7 @@ impl DbGroup {
         } = snapshot;
         // State and accessory go first, as its data can be synced from DA.
         self.state.write_schemas(&state)?;
-        self.accessory
-            .write_schemas(&accessory)?;
+        self.accessory.write_schemas(&accessory)?;
         // Ledger goes last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
         self.ledger.write_schemas(&ledger)?;
