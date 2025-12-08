@@ -10,8 +10,7 @@ use sov_rollup_interface::stf::{
 };
 use sov_rollup_interface::Bytes;
 
-/// Defines slot-key and slot-value types, which can be cheaply cloned with minimal allocation.
-pub mod slot_key;
+pub use sov_db_types as slot_key;
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,

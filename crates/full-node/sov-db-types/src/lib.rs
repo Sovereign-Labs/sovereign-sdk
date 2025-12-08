@@ -4,7 +4,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use digest::typenum;
 use digest::Digest;
+#[cfg(feature = "native")]
 use rockbound::versioned_db::HasPrefix;
+#[cfg(feature = "native")]
 use rockbound::versioned_db::VersionedSchemaKeyMarker;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
@@ -245,7 +247,9 @@ pub struct SlotKey {
     key: KeyContents,
 }
 
+#[cfg(feature = "native")]
 impl VersionedSchemaKeyMarker for SlotKey {}
+#[cfg(feature = "native")]
 impl HasPrefix for SlotKey {
     fn has_prefix(&self, prefix: &Self) -> bool {
         self.as_ref().starts_with(prefix.as_ref())

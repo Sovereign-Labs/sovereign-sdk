@@ -10,6 +10,7 @@ members = [
     # Full Node
     "crates/full-node/sov-blob-sender",
     "crates/full-node/sov-db",
+    "crates/full-node/sov-db-types",
     "crates/full-node/sov-sequencer",
     "crates/full-node/sov-ethereum",
     "crates/full-node/sov-ledger-apis",
@@ -175,6 +176,7 @@ sov-modules-stf-blueprint = { path = "crates/module-system/sov-modules-stf-bluep
 sov-test-utils = { path = "crates/module-system/sov-test-utils", default-features = false, version = "0.3" }
 sov-rpc-eth-types = { path = "crates/utils/sov-rpc-eth-types", default-features = false, version = "0.3" }
 sov-db = { path = "crates/full-node/sov-db", default-features = false, version = "0.3" }
+sov-db-types = { path = "crates/full-node/sov-db-types", version = "0.3" }
 rest-api-load-testing = { path = "crates/utils/rest-api-load-testing" }
 sov-universal-wallet = { path = "crates/universal-wallet/schema", version = "0.3" }
 sov-universal-wallet-macros = { path = "crates/universal-wallet/macros", version = "0.3" }

@@ -23,11 +23,11 @@ use crate::{
     MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
 };
 
-pub use sov_db::schema::types::slot_key::val_hash_and_size_inner;
-pub use sov_db::schema::types::slot_key::Prefix;
-pub use sov_db::schema::types::slot_key::SlotKey;
-pub use sov_db::schema::types::slot_key::SlotKeyBuilder;
-pub use sov_db::schema::types::slot_key::SlotValue;
+pub use sov_db_types::val_hash_and_size_inner;
+pub use sov_db_types::Prefix;
+pub use sov_db_types::SlotKey;
+pub use sov_db_types::SlotKeyBuilder;
+pub use sov_db_types::SlotValue;
 
 /// A trait for creating a new key from a prefix and a key.
 pub trait SlotKeyFromCodec {
