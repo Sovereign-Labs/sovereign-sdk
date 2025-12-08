@@ -191,8 +191,8 @@ reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6
 rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "bb21a29cee84d4491850acd553b150ec6cc1ca71" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
-nomt-core = { version = "1.0.2", default-features = false, features = ["borsh", "serde"] }
-nomt = { version = "1.0.2", default-features = false, features = ["borsh", "serde"] }
+nomt-core = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
+nomt = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
 
 anyhow = { version = "1.0.95" }
 async-trait = "0.1.81"
