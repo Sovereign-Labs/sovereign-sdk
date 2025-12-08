@@ -176,6 +176,9 @@ pub struct PreferredSequencerConfig {
     /// Configuration for the timing oracle.
     #[serde(default)]
     pub timing_oracle: Option<TimingOracleConfig>,
+    /// Configuration for the reate limiting the sequencer.
+    #[serde(default)]
+    pub rate_limiter: Option<SovRateLimiterConfig>,
     /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
@@ -207,6 +210,7 @@ impl Default for PreferredSequencerConfig {
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
             timing_oracle: None,
+            rate_limiter: None,
         }
     }
 }
@@ -254,13 +258,20 @@ pub struct StdSequencerConfig {
 pub struct TimingOracleConfig {
     /// The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.
     pub priority_fee_percentage: u8,
-
     /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
     pub max_fee: u64,
-
     /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
     pub interval_millis: u64,
-
     /// The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.
     pub private_key_hex: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct SovRateLimiterConfig {
+    pub ttl_in_milis: u64,
+    pub refill_rate: u8,
+    pub max_req_counter_per_batch: u64,
+    pub max_space_in_bytes_per_batch: u64,
+    pub max_execution_time_micros_per_batch: u64,
+    pub max_gas_used_per_batch: [u64; 2],
 }
