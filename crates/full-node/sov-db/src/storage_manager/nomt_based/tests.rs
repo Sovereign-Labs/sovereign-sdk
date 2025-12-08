@@ -448,6 +448,7 @@ async fn test_root_hashes_match_after_crash() {
 ///  - Queries for pruned versions return an error.
 ///  - Queries for unpruned versions return the correct value as of that version.
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "TODO: Re-enable this test once pruning is re-enabled"]
 async fn test_historical_state_with_pruning() {
     // Create a temporary directory for the test
     let temp_dir = tempfile::TempDir::new().unwrap();
