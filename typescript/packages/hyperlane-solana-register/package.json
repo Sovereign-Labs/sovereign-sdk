@@ -1,0 +1,43 @@
+{
+    "name": "@sovereign-sdk/hyperlane-solana-register",
+    "version": "0.0.0",
+    "description": "Client-side utilities for our hyperlane solana register solana program",
+    "scripts": {
+        "build": "tsup",
+        "ci": "biome ci",
+        "fix": "biome check --write",
+        "lint": "biome lint",
+        "test": "vitest run --passWithNoTests"
+    },
+    "repository": "github:Sovereign-Labs/sovereign-sdk",
+    "files": [
+        "dist",
+        "README.md",
+        "package.json"
+    ],
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "require": "./dist/index.js",
+            "import": "./dist/index.mjs"
+        }
+    },
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "tsup": "^8.3.0",
+        "typescript": "^5.6.3",
+        "vitest": "4.0.7"
+    },
+    "dependencies": {
+        "@solana/web3.js": "^1.98.4",
+        "borsh": "0.7.0"
+    },
+    "publishConfig": {
+        "access": "public"
+    }
+}
