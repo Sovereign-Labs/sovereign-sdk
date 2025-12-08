@@ -1,0 +1,31 @@
+cargo-features = ["workspace-inheritance"]
+
+[package]
+name = "hyperlane-solana-sovereign-register"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[features]
+default = ["debug-logs"]
+no-entrypoint = []
+test-client = ["dep:solana-sdk", "dep:spl-noop"]
+test-utils = []
+debug-logs = []
+
+[dependencies]
+solana-sdk = { workspace = true, optional = true }
+borsh = { workspace = true }
+solana-program = { workspace = true }
+spl-noop = { workspace = true, features = ["no-entrypoint"], optional = true }
+
+hyperlane-sealevel-mailbox = { workspace = true, features = ["no-entrypoint"] }
+hyperlane-sealevel-igp = { workspace = true, features = ["no-entrypoint"] }
+account-utils = { workspace = true }
+hyperlane-core = { workspace = true }
+hyperlane-sealevel-connection-client = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "lib"]
