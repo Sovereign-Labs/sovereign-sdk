@@ -10228,6 +10228,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=b92b1a616dc93b8588d68369fee542c6fc637474#b92b1a616dc93b8588d68369fee542c6fc637474"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -11781,6 +11782,7 @@ dependencies = [
  "serde_with",
  "sha2 0.10.9",
  "sov-db",
+ "sov-db-types",
  "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
@@ -11793,6 +11795,24 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "uuid 1.18.1",
+]
+
+[[package]]
+name = "sov-db-types"
+version = "0.3.0"
+dependencies = [
+ "arbitrary",
+ "borsh",
+ "derivative",
+ "digest 0.10.7",
+ "hex",
+ "proptest",
+ "proptest-derive 0.5.1",
+ "rockbound",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sov-rollup-interface",
 ]
 
 [[package]]
@@ -12970,6 +12990,7 @@ dependencies = [
  "serde_with",
  "sha2 0.10.9",
  "sov-db",
+ "sov-db-types",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",

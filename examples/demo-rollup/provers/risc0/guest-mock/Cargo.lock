@@ -3936,6 +3936,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-db-types"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "derivative",
+ "digest 0.10.7",
+ "hex",
+ "serde",
+ "serde_with",
+ "sov-rollup-interface",
+]
+
+[[package]]
 name = "sov-demo-prover-guest-mock-risc0"
 version = "0.3.0"
 dependencies = [
@@ -4246,6 +4259,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "serde_with",
+ "sov-db-types",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
