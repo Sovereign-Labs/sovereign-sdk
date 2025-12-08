@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["crates/module-system/module-implementations/extern/hyperlane-solana-register/solana"]
 members = [
     "crates/rollup-interface",
     "crates/adapters/mock-da",
