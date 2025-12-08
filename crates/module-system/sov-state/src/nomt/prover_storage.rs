@@ -532,15 +532,8 @@ where
             .context("kernel state")?
         };
 
-        // Metric
         let user_reads = state_accesses.user.ordered_reads.len();
         let user_writes = state_accesses.user.ordered_writes.len();
-        // let user_write_bytes = state_accesses
-        //     .user
-        //     .ordered_writes
-        //     .iter()
-        //     .map(|(_, slot_value)| slot_value.as_ref().map(|s| s.size()).unwrap_or_default())
-        //     .sum::<u32>();
         let kernel_reads = state_accesses.kernel.ordered_reads.len();
         let kernel_writes = state_accesses.kernel.ordered_reads.len();
         let with_witness = self.strict_with_witness;
