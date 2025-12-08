@@ -39,10 +39,7 @@ type BoxError = anyhow::Error;
 
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
-    // Client is used for a submission request, where we want to have consistent ordering.
-    submit_client: Arc<tokio::sync::Mutex<celestia_client::Client>>,
-    // Client used for queries, where it is not important to have ordering
-    read_client: Arc<celestia_client::Client>,
+    client: Arc<celestia_client::Client>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
     signer_address: Option<CelestiaAddress>,
@@ -54,8 +51,7 @@ pub struct CelestiaService {
 
 impl CelestiaService {
     fn with_client(
-        read_client: celestia_client::Client,
-        submit_client: celestia_client::Client,
+        client: celestia_client::Client,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
         signer_address: Option<CelestiaAddress>,
@@ -65,8 +61,7 @@ impl CelestiaService {
         tx_priority: celestia_client::tx::TxPriority,
     ) -> Self {
         Self {
-            submit_client: Arc::new(tokio::sync::Mutex::new(submit_client)),
-            read_client: Arc::new(read_client),
+            client: Arc::new(client),
             rollup_batch_namespace,
             rollup_proof_namespace,
             signer_address,
@@ -115,13 +110,11 @@ impl CelestiaService {
             namespace = ?ns,
             commitment = %blob_hash,
             bytes,
-            data_bytes = blob.data.len(),
             "Submitting a blob"
         );
 
-        let start_lock = std::time::Instant::now();
-        let submit_client = self.submit_client.lock().await;
-        let lock_acquisition = start_lock.elapsed();
+        let lock_acquisition = std::time::Duration::from_secs(0);
+        let submit_client = self.client.clone();
 
         let start_submit = std::time::Instant::now();
         let blobs = &[blob];
@@ -187,16 +180,12 @@ impl CelestiaService {
 
         let backoff_policy = config.get_backoff_policy();
 
-        let read_client = config
+        let client = config
             .build_client()
             .await
-            .expect("Failed to build read client");
-        let submit_client = config
-            .build_client()
-            .await
-            .expect("Failed to build submit client");
+            .expect("Failed to build celestia-client");
 
-        let fetched_signer = submit_client.address().ok().map(CelestiaAddress);
+        let fetched_signer = client.address().ok().map(CelestiaAddress);
         if fetched_signer.is_none() {
             tracing::info!(
                 "CelestiaService is configured as read-only and won't be able to submit blobs"
@@ -204,8 +193,7 @@ impl CelestiaService {
         }
 
         Self::with_client(
-            read_client,
-            submit_client,
+            client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
             fetched_signer,
@@ -227,7 +215,7 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         tracing::trace!(height, "Making call to header.GetByHeight");
         let start = std::time::Instant::now();
-        let client = &self.read_client;
+        let client = &self.client;
         let result =
             tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
         let response_time = start.elapsed();
@@ -251,7 +239,7 @@ impl CelestiaService {
         namespace: Namespace,
     ) -> Result<NamespaceData, MaybeRetryable<anyhow::Error>> {
         let start = std::time::Instant::now();
-        let client = &self.read_client;
+        let client = &self.client;
         let ns = self.rollup_namespace(&namespace);
         tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
         let result = tokio::time::timeout(
@@ -334,11 +322,8 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         tracing::trace!("Making call to header.NetworkHead");
         let start = std::time::Instant::now();
-        let result = tokio::time::timeout(
-            self.request_timeout,
-            self.read_client.header().network_head(),
-        )
-        .await;
+        let result =
+            tokio::time::timeout(self.request_timeout, self.client.header().network_head()).await;
         let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
         tracing::trace!(
@@ -360,7 +345,7 @@ impl CelestiaService {
     ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
         // TODO: follow up: timeout here
         // TODO: follow up: metrics here
-        self.read_client
+        self.client
             .blob()
             .get_all(height, &[self.rollup_proof_namespace])
             .await
@@ -376,7 +361,7 @@ impl CelestiaService {
     /// Optimized version of `get_last_finalized_block_header`.
     pub async fn subscribe_finalized_header(&self) -> Result<HeaderStream, anyhow::Error> {
         Ok(self
-            .read_client
+            .client
             .header()
             .subscribe()
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
