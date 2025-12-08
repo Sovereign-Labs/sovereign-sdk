@@ -2573,8 +2573,7 @@ checksum = "a5b0c77c1b780822bc749a33e39aeb2c07584ab93332303babeabb645298a76e"
 [[package]]
 name = "nomt-core"
 version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "feeb4e411c8185c33c906539b78330a8478a2d4819de338efb6511b33cc73207"
+source = "git+https://github.com/thrumdev/nomt.git?rev=4189c7dc3dc710fef526591ee73860e462a135de#4189c7dc3dc710fef526591ee73860e462a135de"
 dependencies = [
  "arrayvec",
  "bitvec",

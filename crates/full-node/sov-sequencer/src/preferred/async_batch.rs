@@ -18,6 +18,20 @@ use tokio::sync::oneshot;
 use super::{RejectReason, Spec, StateCheckpoint};
 use crate::common::sender_is_allowed;
 
+/// Returns true if a transaction with the given receipt would be included on-chain
+/// (incrementing the user's nonce), based on the `allow_failed_txs` configuration.
+///
+/// - Successful transactions are always included.
+/// - Reverted transactions are only included if `allow_failed_txs` is true.
+/// - Skipped transactions are never included (they represent pre-execution failures
+///   like invalid signature, invalid nonce, etc.).
+pub fn should_be_included<S: Spec>(
+    receipt: &TransactionReceipt<S>,
+    allow_failed_txs: bool,
+) -> bool {
+    receipt.receipt.is_successful() || (receipt.receipt.is_reverted() && allow_failed_txs)
+}
+
 /// A batch that might be received async from some producer
 #[derive(Debug)]
 pub enum MaybeAsyncBatch<S: Spec> {
@@ -44,6 +58,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
         sequencer_admins: Arc<Vec<S::Address>>,
         address: S::Address,
         is_responsible_for_gating_admins: bool,
+        allow_failed_txs: bool,
     ) -> Self {
         Self::Async {
             txs_receiver,
@@ -53,6 +68,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
                 result_channel,
                 admins: sequencer_admins,
                 tx_profit_threshold,
+                allow_failed_txs,
                 // This will get overwritten by the pre-flight hook.
                 unix_timestamp_micros: AtomicU64::new(0),
                 is_responsible_for_gating_admins,
@@ -163,6 +179,7 @@ pub struct AsyncBatchResponder<S: Spec> {
     result_channel: Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
     admins: Arc<Vec<S::Address>>,
     tx_profit_threshold: u128,
+    allow_failed_txs: bool,
     /// The timestamp of the start of the latest tx in microseconds since the UNIX epoch
     /// We use an atomic u64 to avoid requiring a mutex. Note that this is set during the pre-flight hook.
     /// and read during the post-tx hook. It may not be meaningful before the pre-flight hook is called.
@@ -185,6 +202,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             result_channel: self.result_channel.clone(),
             admins: self.admins.clone(),
             tx_profit_threshold: self.tx_profit_threshold,
+            allow_failed_txs: self.allow_failed_txs,
             unix_timestamp_micros: AtomicU64::new(0),
             is_responsible_for_gating_admins: self.is_responsible_for_gating_admins,
         }
@@ -237,7 +255,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
-        if !receipt.receipt.is_successful() {
+        if !should_be_included(&receipt, self.allow_failed_txs) {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),

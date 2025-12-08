@@ -402,7 +402,7 @@ pub(crate) fn build_rpc_receipt(
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
 
-    let block_hash = block.hash();
+    let block_hash = Some(block.hash().unwrap_or(B256::ZERO));
     let block_number = Some(block.number());
     let transaction_index = tx_number
         .checked_sub(block.tx_range().start)

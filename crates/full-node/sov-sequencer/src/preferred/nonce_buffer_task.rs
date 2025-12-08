@@ -136,11 +136,9 @@ impl NonPersistedTxs {
     }
 
     fn mark_inflight_execution_failed(&mut self) {
-        if !self.has_in_flight {
-            let msg = "Sequencer nonce buffer: non-persisted tracking: attempted to mark executed tx successful when has_in_flight is false!";
-            tracing::error!(msg);
-            debug_assert!(false, "{msg}"); // See comment in mark_inflight
-        }
+        // See the comment in mark_inflight_execution_succeeded: if the queueing behaviour for
+        // multiple TXs with the currently valid nonce is improved, we could assert that
+        // has_in_flight == true here. But right now this invariant doesn't hold.
         self.has_in_flight = false;
     }
 }
@@ -269,14 +267,15 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
 
 #[derive(derivative::Derivative)]
 #[derivative(Clone(bound = ""))]
-pub struct NonceBufferInputSender<S: Spec, Rt: Runtime<S>> {
+pub struct NonceBufferInputSender<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffer_sender_channel: mpsc::Sender<NonceBufferInput<S, Rt>>,
+    execution_backend: E,
 }
 
 pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffers: HashMap<CredentialId, AddressQueue<S, Rt>>,
     buffer_input: mpsc::Receiver<NonceBufferInput<S, Rt>>,
-    input_sender: NonceBufferInputSender<S, Rt>,
+    input_sender: NonceBufferInputSender<E, S, Rt>,
     execution_backend: E,
     maximum_future_nonce_delta: u64,
     future_nonce_transaction_timeout_millis: u64,
@@ -323,15 +322,22 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 
     /// Wipe the entire queue, e.g. because the sequencer had to resync so the queued transactions
     /// are no longer valid/relevant.
-    /// We drop all the buffers, which will drop the oneshot senders from the
-    /// NonceBufferInputSender tasks waiting for a response, where the drop can be handled
-    /// appropriately.
+    /// We explicitly reject all queued transactions with SequencerOverloaded503.
     async fn wipe(&mut self) {
-        self.buffers = Default::default();
+        // Consume all buffers, explicitly rejecting all queued transactions
+        let buffers = std::mem::take(&mut self.buffers);
+        for (_credential_id, queue) in buffers {
+            for (_nonce, tx) in queue.txs {
+                let _ = tx.result_sender.send(wipe_reject_error());
+            }
+        }
         let mut keep_messages = Vec::new();
         while let Ok(m) = self.buffer_input.try_recv() {
-            if matches!(m, NonceBufferInput::TxExecuted { .. }) {
-                keep_messages.push(m);
+            match m {
+                exec @ NonceBufferInput::TxExecuted { .. } => keep_messages.push(exec),
+                NonceBufferInput::NewTx { .. }
+                | NonceBufferInput::TxPersisted { .. }
+                | NonceBufferInput::TxTimedOut { .. } => (),
             }
         }
         for m in keep_messages {
@@ -414,6 +420,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                             if self.execution_backend.get_current_executor_tx_queue_id()
                                 > original_tx_queue_id
                             {
+                                let _ = result_sender.send(wipe_reject_error());
                                 self.wipe().await;
                                 continue;
                             }
@@ -465,8 +472,8 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     // correctness, but pre-downtime transactions are invalidated by the
                     // sequencer anyway so we wipe everything.
                     if is_notready_error(&tx_result) {
-                        self.wipe().await;
                         let _ = result_sender.send(tx_result);
+                        self.wipe().await;
                         continue;
                     }
 
@@ -494,7 +501,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 // Stale transaction in queue - evict and ignore.
                                 // This should not normally happen either, but we handle it to avoid a deadlock
                                 // if it does happen for any reason.
-                                let msg = format!("The nonce buffer task evicted a stale transaction for user {} with nonce {}; the user's current nonce is believed to be {user_nonce}. Stale transactions should not exist in the nonce buffer. The user will see a 503 error.", credential_id, head_entry.key());
+                                let msg = format!("The nonce buffer task evicted a stale transaction for user {} with nonce {}; the user's current nonce is believed to be {user_nonce}. Stale transactions should not exist in the nonce buffer. The user will see an EvictedBeforeExecution error.", credential_id, head_entry.key());
                                 head_entry.remove();
                                 tracing::error!(msg);
                                 debug_assert!(false, "{msg}");
@@ -591,10 +598,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         maximum_future_nonce_delta: u64,
         future_nonce_transaction_timeout_millis: u64,
         mut shutdown_receiver: watch::Receiver<()>,
-    ) -> (JoinHandle<()>, NonceBufferInputSender<S, Rt>) {
+    ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFERED_TXS);
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel,
+            execution_backend: execution_backend.clone(),
         };
         let mut task = NonceBufferTask {
             buffers: Default::default(),
@@ -616,7 +624,9 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
     }
 }
 
-impl<S: Spec, Rt: Runtime<S>> NonceBufferInputSender<S, Rt> {
+impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
+    NonceBufferInputSender<E, S, Rt>
+{
     pub async fn handle_new_tx(
         &self,
         baked_tx: FullyBakedTx,
@@ -637,11 +647,25 @@ impl<S: Spec, Rt: Runtime<S>> NonceBufferInputSender<S, Rt> {
             tracing::warn!("Sequencer nonce buffer input receiver dropped. Assuming sequencer shutdown. Error: {e:?}");
             SequencerStateUpdatorError::Shutdown
         })?;
+        let nonce_when_queued = self
+            .execution_backend
+            .get_current_nonce_for_user(&credential_id);
+        let queued_at = Instant::now();
         queue_receiver.await.unwrap_or_else(|_| {
-            // The oneshot sender was dropped. This might happen on shutdown, but will also happen
-            // if the queue is wiped due to sequencer downtime; so we send the same error that the
-            // inner state does when the `original_tx_queue_id` changes (after downtime).
-            Ok(Err(AcceptTxError::SequencerOverloaded503))
+            // The oneshot sender was dropped. This should normally only happen
+            // on shutdown, or if there's a bug.
+            let current_nonce = self
+                .execution_backend
+                .get_current_nonce_for_user(&credential_id);
+            err_invalid_nonce::<S, Rt>(
+                tx_hash,
+                tx_nonce,
+                current_nonce,
+                nonce_when_queued,
+                queued_at,
+                credential_id,
+                InvalidNonceReason::EvictedBeforeExecution,
+            )
         })
     }
 
@@ -664,6 +688,10 @@ enum InvalidNonceReason {
     /// Tx was queued but the timeout was reached before pre-requisites were all received, so tx
     /// was evicted from the queue.
     Timeout,
+    /// Tx was queued but executor oneshot was dropped. This happens on sequencer shutdown OR if
+    /// the queue enters an inconsistent state and internally evicts stale transactions (which
+    /// should almost never happen in practice unless the queue has a bug).
+    EvictedBeforeExecution,
     /// The nonce was queued for execution, but a new transaction with the same nonce arrived
     /// before it could be executed.
     Replaced,
@@ -685,6 +713,7 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
     let queue_error_msg = match queue_rejection_reason {
         InvalidNonceReason::Invalid => "The sequencer did not attempt to queue the transaction as it was not within valid queue limits (either in the past, or beyond the max limit).".to_string(),
         InvalidNonceReason::Timeout => format!("{was_queued_msg} In that time, the sequencer did not accept all the transactions leading up to this tx's nonce, so it has timed out and is being evicted from the queue."),
+        InvalidNonceReason::EvictedBeforeExecution => format!("{was_queued_msg} It was now dropped from the queue for an unknown reason. This should normally only happen when the sequencer is shutting down."),        
         InvalidNonceReason::Replaced => format!("{was_queued_msg} But a new transaction with the same nonce has arrived and replaced it in the account's queue."),
         InvalidNonceReason::AlreadyQueued => format!("An identical transaction with the same hash is already in the nonce queue; its existing status is unchanged from this request. {was_queued_msg}"),
     };
@@ -708,8 +737,24 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
     ))))
 }
 
+fn wipe_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
+    Ok(Err(AcceptTxError::SequencerOverloaded503))
+}
+
 fn is_notready_error<S: Spec, Rt: Runtime<S>>(result: &TransactionReceiverResult<S, Rt>) -> bool {
-    matches!(result, Ok(Err(AcceptTxError::NotFullySynced(_))))
+    match result {
+        Err(_) => false,
+        Ok(receiver_result) => match receiver_result {
+            Ok(_) => false,
+            Err(accept_tx_error) => match accept_tx_error {
+                AcceptTxError::NotFullySynced(_) => true,
+                AcceptTxError::ReplicaMode
+                | AcceptTxError::SequencerOverloaded503
+                | AcceptTxError::BatchError { .. }
+                | AcceptTxError::NewTxError(_) => false,
+            },
+        },
+    }
 }
 
 #[cfg(test)]
@@ -1067,7 +1112,7 @@ mod tests {
         backend: &MockTxExecutionBackend,
         timeout_override: Option<u64>,
     ) -> (
-        NonceBufferInputSender<TestSpec, TestRuntime>,
+        NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         watch::Sender<()>,
     ) {
         let (shutdown_sender, shutdown_receiver) = watch::channel(());
@@ -1082,7 +1127,7 @@ mod tests {
 
     fn default_test_buffer_task() -> (
         MockTxExecutionBackend,
-        NonceBufferInputSender<TestSpec, TestRuntime>,
+        NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         watch::Sender<()>,
     ) {
         let backend = MockTxExecutionBackend::new();
@@ -1094,7 +1139,7 @@ mod tests {
     /// Includes a short sleep to allow the task to enter the buffer, ensuring transactions are
     /// submitted to the buffer in the order submit_single_transaction is called.
     async fn submit_single_transaction(
-        sender: NonceBufferInputSender<TestSpec, TestRuntime>,
+        sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         nonce: u8,
     ) -> JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>> {
         submit_single_transaction_with_hash(sender, nonce, [nonce; 32]).await
@@ -1103,7 +1148,7 @@ mod tests {
     /// Same as submit_single_transaction but allows overriding the hash, for submitting
     /// transactions with identical nonces but different hashes.
     async fn submit_single_transaction_with_hash(
-        sender: NonceBufferInputSender<TestSpec, TestRuntime>,
+        sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         nonce: u8,
         hash: [u8; 32],
     ) -> JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>> {
@@ -1125,7 +1170,7 @@ mod tests {
     }
 
     async fn submit_transactions(
-        sender: NonceBufferInputSender<TestSpec, TestRuntime>,
+        sender: NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
         nonces: Vec<u8>,
     ) -> Vec<JoinHandle<TransactionReceiverResult<TestSpec, TestRuntime>>> {
         let mut handles = Vec::with_capacity(nonces.len());
@@ -1189,6 +1234,8 @@ mod tests {
                                             let expected_substring = match reason {
                                                 InvalidNonceReason::Invalid => "did not attempt to queue",
                                                 InvalidNonceReason::Timeout => "has timed out and is being evicted",
+                                                InvalidNonceReason::EvictedBeforeExecution => "dropped from the queue for an unknown reason",
+
                                                 InvalidNonceReason::Replaced => "new transaction with the same nonce has arrived and replaced it",
                                                 InvalidNonceReason::AlreadyQueued => "identical transaction with the same hash",
                                             };
