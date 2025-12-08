@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum SequencerKindConfig {
     /// A "Standard" sequencer, which can post transactions to the rollup but not give soft confirmations.
     Standard(StdSequencerConfig),
@@ -176,7 +177,7 @@ pub struct PreferredSequencerConfig {
     /// Configuration for the timing oracle.
     #[serde(default)]
     pub timing_oracle: Option<TimingOracleConfig>,
-    /// Configuration for the reate limiting the sequencer.
+    /// Configuration for rate-limiting the sequencer.
     #[serde(default)]
     pub rate_limiter: Option<SovRateLimiterConfig>,
     /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
@@ -266,12 +267,14 @@ pub struct TimingOracleConfig {
     pub private_key_hex: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct SovRateLimiterConfig {
-    pub ttl_in_milis: u64,
-    pub refill_rate: u8,
-    pub max_req_counter_per_batch: u64,
-    pub max_space_in_bytes_per_batch: u64,
-    pub max_execution_time_micros_per_batch: u64,
-    pub max_gas_used_per_batch: [u64; 2],
+    /// The maximum number of requests allowed per batch.
+    pub max_requests_per_batch: u64,
+    /// Determines how quickly tokens are refilled in the token-bucket algorithm.
+    /// Each user can consume, on average, only a certain percentage of the batch resources.
+    /// Over time, users send requests that draw from their available resources, while a
+    /// constant stream of tokens refilling those resources. The higher the value of `refill_rate`,
+    /// the faster the user’s resources are refilled.
+    pub refill_rate: u64,
 }
