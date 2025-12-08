@@ -3,6 +3,7 @@ use std::any::Any;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
+use std::io::Write;
 
 use anyhow::Context;
 use nomt::hasher::BinaryHasher;
@@ -531,6 +532,21 @@ where
             .context("kernel state")?
         };
 
+        let user_reads = state_accesses.user.ordered_reads.len();
+        let user_writes = state_accesses.user.ordered_writes.len();
+        let kernel_reads = state_accesses.kernel.ordered_reads.len();
+        let kernel_writes = state_accesses.kernel.ordered_reads.len();
+        let with_witness = self.strict_with_witness;
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(NomtProverComputeStateResult {
+                user_reads,
+                user_writes,
+                kernel_reads,
+                kernel_writes,
+                with_witness,
+            });
+        });
+
         // Additional self-check that the finished session has the same previous root hash as passed prev_state_root.
         let kernel_finished_session_prev_root = kernel_finished_session.prev_root().into_inner();
         let user_finished_session_prev_root = user_finished_session.prev_root().into_inner();
@@ -751,5 +767,31 @@ where
 
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         self.pinned_cache.take()
+    }
+}
+
+/// Metric for number of reads and writes in both namespaces that have been passed to `compute_state_update`
+#[derive(Clone, Debug)]
+pub struct NomtProverComputeStateResult {
+    user_reads: usize,
+    user_writes: usize,
+    kernel_reads: usize,
+    kernel_writes: usize,
+    with_witness: bool,
+}
+
+impl sov_metrics::Metric for NomtProverComputeStateResult {
+    fn measurement_name(&self) -> &'static str {
+        "sov_nomt_prover_compute_state"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let user_reads = self.user_reads;
+        let user_writes = self.user_writes;
+        let kernel_reads = self.kernel_reads;
+        let kernel_writes = self.kernel_writes;
+        let with_witness = self.with_witness as u8;
+        write!(buffer, "{name},with_witness={with_witness} user_reads={user_reads},user_writes={user_writes},kernel_reads={kernel_reads},kernel_writes={kernel_writes}")
     }
 }
