@@ -61,9 +61,13 @@ pub fn initialize_logging() -> Option<OtelGuard> {
 
     if let Some(otel) = otel.as_ref() {
         layers = layers
-            .and_then(otel.otel_tracing_layer().with_filter(get_env_filter()))
             .and_then(otel.otel_logging_layer().with_filter(get_env_filter()))
             .boxed();
+        if let Some(otel_tracing_layer) = otel.otel_tracing_layer() {
+            layers = layers
+                .and_then(otel_tracing_layer.with_filter(get_env_filter()))
+                .boxed();
+        }
     }
 
     tracing_subscriber::registry().with(layers).init();
