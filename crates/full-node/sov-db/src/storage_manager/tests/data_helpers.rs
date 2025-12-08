@@ -13,6 +13,7 @@ use sov_rollup_interface::stf::StoredEvent;
 use crate::accessory_db::AccessoryDb;
 use crate::schema::tables::EventByNumber;
 use crate::schema::types::EventNumber;
+use crate::SlotKey;
 // Encoding/Decoding data.
 
 pub(crate) type H = sha2::Sha256;
@@ -44,7 +45,7 @@ pub fn materialize_ledger_changes(da_header: &MockBlockHeader) -> SchemaBatch {
 #[allow(missing_docs)]
 pub fn verify_accessory_db(accessory_db: &AccessoryDb, expected_values: &[(u64, MockHash)]) {
     for (expected_height, expected_hash) in expected_values {
-        let key = expected_height.to_be_bytes().to_vec();
+        let key = SlotKey::from_slice(&expected_height.to_be_bytes());
         let actual_value = accessory_db
             .get_value_option(&key, SlotNumber::GENESIS)
             .unwrap()

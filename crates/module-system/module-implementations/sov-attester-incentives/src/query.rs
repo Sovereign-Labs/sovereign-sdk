@@ -12,6 +12,7 @@ use sov_modules_api::{ApiStateAccessor, Gas, GetGasPrice, Spec, StateCheckpoint,
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::storage::{SlotKey, Storage, StorageProof};
 use sov_state::User;
+use sov_state::{SlotKeyFromCodec};
 
 use super::AttesterIncentives;
 use crate::UnbondingInfo;

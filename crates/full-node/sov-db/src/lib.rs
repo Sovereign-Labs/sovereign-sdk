@@ -100,10 +100,10 @@ impl DbOptions<ColumnFamilyDescriptor> {
 }
 
 pub(crate) fn ensure_version_is_correct(
-    key: &SlotKey,
+    key: &[u8],
     version: sov_rollup_interface::common::SlotNumber,
     found: Option<(
-        (SlotKey, sov_rollup_interface::common::SlotNumber),
+        (SchemaKey, sov_rollup_interface::common::SlotNumber),
         Option<SchemaValue>,
     )>,
 ) -> anyhow::Result<Option<SchemaValue>> {

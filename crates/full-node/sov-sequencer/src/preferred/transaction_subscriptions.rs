@@ -661,7 +661,7 @@ mod tests {
             }
             slot.add_batch(batch);
             let commit_data = ledger_db.materialize_slot(slot, b"state-root").unwrap();
-            storage_manager.commit(commit_data);
+            storage_manager.commit(&commit_data);
             ledger_db.replace_reader(storage_manager.create_ledger_storage());
         }
         // Prune the cache to remove the first 105 txs. This forces the stream to fall back to the DB for those txs

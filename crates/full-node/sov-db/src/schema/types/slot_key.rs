@@ -211,7 +211,7 @@ mod private {
 
     #[test]
     fn test_to_vec_and_back() {
-        use crate::storage::SlotKeyBuilder;
+        use super::SlotKeyBuilder;
         use crate::SlotKey;
         use std::io::Write;
         let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(9, 8));
@@ -612,8 +612,8 @@ impl SlotKey {
     /// Builds a storage key from a byte slice
     pub fn from_slice(key: &[u8]) -> Self {
         use std::io::Write;
-        let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(0, 0));
-        builder.write_all(key).unwrap();
+        let mut builder = SlotKeyBuilder::with_prefix(Prefix::new(key[0], key[1]));
+        builder.write_all(&key[2..]).unwrap();
         Self {
             key: builder.into(),
         }

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use rockbound::{
-    default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB, SchemaBatch,
+    default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB,
 };
 
 use rockbound::versioned_db::SchemaWithVersion;

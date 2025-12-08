@@ -47,11 +47,11 @@ impl HistoricalStateReader {
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
         let kernel_version = flat_state
             .get_kernel_db()
-            .load_latest_committed_version()
+            .get_committed_version()
             .unwrap();
         let user_version = flat_state
             .get_user_db()
-            .load_latest_committed_version()
+            .get_committed_version()
             .unwrap();
         assert_eq!(
             kernel_version, user_version,
@@ -241,10 +241,10 @@ impl HistoricalStateReader {
         let mut kernel_batch = VersionedSchemaBatch::default();
         let mut user_batch = VersionedSchemaBatch::default();
 
-        // We always .put and not .delete to keep archival data.
         for (key, value) in kernel_changes {
             metric.inc_kernel_items();
             metric.track_key_value_size(&key, &value);
+            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
             if let Some(value) = value {
                 kernel_batch.put_versioned(key, value);
             } else {
@@ -255,6 +255,7 @@ impl HistoricalStateReader {
         for (key, value) in user_changes {
             metric.inc_user_items();
             metric.track_key_value_size(&key, &value);
+            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
             if let Some(value) = value {
                 user_batch.put_versioned(key, value);
             } else {
@@ -301,10 +302,10 @@ mod tests {
         let key2 = b"BBB";
 
         let writes = vec![
-            vec![(key2.to_vec(), Some(vec![1, 1, 1]))],
-            vec![(key1.to_vec(), Some(vec![2, 2, 2]))],
-            vec![(key1.to_vec(), Some(vec![3, 3, 3]))],
-            vec![(key1.to_vec(), Some(vec![4, 4, 4]))],
+            vec![(SlotKey::from_slice(key2), Some(vec![1, 1, 1].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![2, 2, 2].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![3, 3, 3].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![4, 4, 4].into()))],
         ];
         for (idx, kernel_writes) in writes.into_iter().enumerate() {
             let historical_state = HistoricalStateReader::new_empty(&rocksdb);
@@ -343,7 +344,7 @@ mod tests {
         let root_hash0 = vec![1; 32];
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key1".to_vec(), Some(b"value1".to_vec()))],
+            vec![(SlotKey::from_slice(b"key1"), Some(b"value1".to_vec().into()))],
             root_hash0.clone(),
             version0,
         )
@@ -367,7 +368,7 @@ mod tests {
         let root_hash1 = vec![2; 32];
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key2".to_vec(), Some(b"value2".to_vec()))],
+            vec![(SlotKey::from_slice(b"key2"), Some(b"value2".to_vec().into()))],
             root_hash1.clone(),
             version1,
         )
@@ -415,7 +416,7 @@ mod tests {
         let version0 = SlotNumber::new(0);
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key1".to_vec(), Some(b"value1".to_vec()))],
+            vec![(SlotKey::from_slice(b"key1"), Some(b"value1".to_vec().into()))],
             vec![1; 32],
             version0,
         )
@@ -434,7 +435,7 @@ mod tests {
         let version1 = SlotNumber::new(1);
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key2".to_vec(), Some(b"value2".to_vec()))],
+            vec![(SlotKey::from_slice(b"key2"), Some(b"value2".to_vec().into()))],
             vec![2; 32],
             version1,
         )

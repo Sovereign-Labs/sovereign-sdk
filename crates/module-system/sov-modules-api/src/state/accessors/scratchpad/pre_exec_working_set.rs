@@ -128,6 +128,7 @@ mod tests {
     use sov_state::codec::BcsCodec;
     use sov_state::namespaces::User;
     use sov_state::{SlotKey, SlotValue};
+    use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
     use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 

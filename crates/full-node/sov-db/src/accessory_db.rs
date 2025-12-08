@@ -3,6 +3,7 @@ use rockbound::SchemaBatch;
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::schema::tables::{ModuleAccessoryState, ACCESSORY_TABLES};
+use crate::schema::types::slot_key::SlotKey;
 use crate::schema::types::{AccessoryKey, AccessoryStateValue};
 use crate::{ensure_version_is_correct, DbOptions};
 
@@ -41,10 +42,10 @@ impl AccessoryDb {
         version: SlotNumber,
     ) -> anyhow::Result<AccessoryStateValue> {
         ensure_version_is_correct(
-            key,
+            key.as_ref(),
             version,
             self.db
-                .get_prev::<ModuleAccessoryState>(&(key.to_vec(), version))?,
+                .get_prev::<ModuleAccessoryState>(&(key.as_ref().to_vec(), version))?,
         )
     }
 
@@ -88,9 +89,9 @@ mod tests {
             0.to_slot_number(),
         )
         .unwrap();
-        rocksdb.write_schemas(changes1).unwrap();
+        rocksdb.write_schemas(&changes1).unwrap();
         assert_eq!(
-            db.get_value_option(&key, 0.to_slot_number()).unwrap(),
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(),
             Some(value.clone())
         );
 
@@ -100,9 +101,9 @@ mod tests {
             1.to_slot_number(),
         )
         .unwrap();
-        rocksdb.write_schemas(changes2).unwrap();
+        rocksdb.write_schemas(&changes2).unwrap();
         assert_eq!(
-            db.get_value_option(&key, 0.to_slot_number()).unwrap(),
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(),
             Some(value)
         );
     }
@@ -125,16 +126,16 @@ mod tests {
             0.to_slot_number(),
         )
         .unwrap();
-        rocksdb.write_schemas(changes1).unwrap();
+        rocksdb.write_schemas(&changes1).unwrap();
         assert_eq!(
-            db.get_value_option(&key, 0.to_slot_number()).unwrap(),
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(),
             Some(value.clone())
         );
 
         let changes2 =
             AccessoryDb::materialize_values(vec![(key.clone(), None)], 0.to_slot_number()).unwrap();
-        rocksdb.write_schemas(changes2).unwrap();
-        assert_eq!(db.get_value_option(&key, 0.to_slot_number()).unwrap(), None);
+        rocksdb.write_schemas(&changes2).unwrap();
+        assert_eq!(db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(), None);
     }
 
     #[test]
@@ -149,6 +150,6 @@ mod tests {
         let db = AccessoryDb::with_reader(reader).unwrap();
 
         let key = b"spam".to_vec();
-        assert_eq!(db.get_value_option(&key, 0.to_slot_number()).unwrap(), None);
+        assert_eq!(db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number()).unwrap(), None);
     }
 }

@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::str::FromStr;
+use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
 
 #[cfg(feature = "native")]
 use anyhow::ensure;

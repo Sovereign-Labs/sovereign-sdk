@@ -185,6 +185,7 @@ mod tests {
     use sov_metrics::StateAccessMetric;
     use sov_rollup_interface::stf::ExecutionContext;
     use sov_state::codec::BcsCodec;
+    use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
     use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
     use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::TestHasher;
