@@ -92,7 +92,7 @@ const TTL_MULTIPLIER: u64 = 20;
 // A single user is limited to 1/PER_KEY = 0.5% of resources of a single batch.
 const PER_KEY: u64 = 200;
 
-fn to_rate_limiter_config<S: Spec>(
+fn clculate_limits<S: Spec>(
     sov_config: SovRateLimiterConfig,
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
@@ -144,7 +144,7 @@ impl<S: Spec> SovRateLimiter<S> {
         max_batch_size_bytes: usize,
     ) -> Self {
         let inner = config.map(|sov_config| {
-            let config = to_rate_limiter_config(
+            let config = clculate_limits(
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
@@ -182,14 +182,13 @@ mod tests {
     type Gas = <TestSpec as Spec>::Gas;
 
     #[test]
-    fn test_to_rate_limiter_config() {
+    fn test_clculate_limits() {
         let sov_config = SovRateLimiterConfig {
             max_requests_per_batch: 234000000,
             refill_rate: 1,
         };
 
-        let rate_limiter_config =
-            to_rate_limiter_config::<TestSpec>(sov_config, 1_000_000_000, 1000000);
+        let rate_limiter_config = clculate_limits::<TestSpec>(sov_config, 1_000_000_000, 1000000);
 
         let max_allowed_resources_per_key = rate_limiter_config.max_allowed_resources;
 
