@@ -71,7 +71,8 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let da_service = CelestiaService::new(config, rollup_params).await;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
     let signer = da_service
         .get_signer()
         .await
@@ -96,7 +97,8 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
 
     let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
     let signer = da_service
@@ -124,8 +126,9 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
 async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -145,8 +148,9 @@ async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
 async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -169,8 +173,9 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
 async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV).await;
+    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 

@@ -85,7 +85,6 @@ impl Metric for BlobSubmitMeasurement {
     }
 }
 
-
 #[derive(Debug)]
 pub struct CelestiaAdapterStateMeasurement {
     pub balance: u64,
@@ -99,6 +98,13 @@ impl Metric for CelestiaAdapterStateMeasurement {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        Ok(())
+        let name = self.measurement_name();
+        let balance = self.balance;
+        let gas_price = self.gas_price;
+        let sync_distance = self.sync_distance;
+        write!(
+            buffer,
+            "{name} balance={balance},gas_price={gas_price:?},sync_distance={sync_distance}"
+        )
     }
 }

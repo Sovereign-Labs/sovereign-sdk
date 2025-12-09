@@ -32,7 +32,6 @@ use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
-use sov_test_utils::ledger_db::sov_api_spec::tokio_tungstenite::tungstenite::client;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -178,7 +177,11 @@ impl CelestiaService {
 }
 
 impl CelestiaService {
-    pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
+    pub async fn new(
+        config: CelestiaConfig,
+        chain_params: RollupParams,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    ) -> Self {
         tracing::info!(?config, "Initializing Celestia Adapter");
         let request_timeout = Duration::from_secs(config.request_timeout_secs.get());
 
@@ -196,6 +199,20 @@ impl CelestiaService {
             );
         }
 
+        let tx_priority = config.tx_priority.clone().into();
+        if let Ok(signer) = client.address() {
+            let bg_client = config
+                .build_client()
+                .await
+                .expect("Failed to build celestia-client for background task");
+            tokio::spawn(stat_collection_task(
+                bg_client,
+                signer,
+                tx_priority,
+                shutdown_receiver,
+            ));
+        }
+
         Self::with_client(
             client,
             chain_params.rollup_batch_namespace,
@@ -204,7 +221,7 @@ impl CelestiaService {
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
-            config.tx_priority.into(),
+            tx_priority,
         )
     }
 }
@@ -563,27 +580,36 @@ async fn stat_collection_task(
     client: celestia_client::Client,
     signer: celestia_types::state::AccAddress,
     priority: celestia_client::tx::TxPriority,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) {
     let chain_id = client.chain_id();
-    let sleep_time = std::time::Duration::from_secs(30);
-    tracing::info!(%chain_id, period = ?sleep_time, "Starting celestia stat collection task");
+    let period = Duration::from_secs(30);
+    tracing::info!(%chain_id, ?period, "Starting celestia stat collection task");
+
+    let mut interval = tokio::time::interval(period);
 
     loop {
-        match gather_stat(&client, &signer, priority).await {
-            Ok(measurement) => {
-                sov_metrics::track_metrics(|tracker| {
-                    tracker.submit(measurement);
-                });
+        tokio::select! {
+            _ = shutdown_receiver.changed() => {
+                tracing::info!("Shutting down celestia stat collection task");
+                return;
             }
-            Err(error) => {
-                tracing::info!(
-                    ?error,
-                    "Error gathering background statistics for celestia adapter"
-                );
+            _ = interval.tick() => {
+                match gather_stat(&client, &signer, priority).await {
+                    Ok(measurement) => {
+                        sov_metrics::track_metrics(|tracker| {
+                            tracker.submit(measurement);
+                        });
+                    }
+                    Err(error) => {
+                        tracing::info!(
+                            ?error,
+                            "Error gathering background statistics for celestia adapter"
+                        );
+                    }
+                }
             }
         }
-        tokio::time::sleep(sleep_time).await;
     }
 }
 
