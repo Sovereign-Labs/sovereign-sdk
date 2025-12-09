@@ -102,9 +102,11 @@ impl Metric for CelestiaAdapterStateMeasurement {
         let balance = self.balance;
         let gas_price = self.gas_price;
         let sync_distance = self.sync_distance;
+        // Celestia minimum gas price can be 0.000001 utia, so 6 decimal places is sufficient.
+        // See: https://forum.celestia.org/t/cip-price-enforcement/1351/5
         write!(
             buffer,
-            "{name} balance={balance},gas_price={gas_price:?},sync_distance={sync_distance}"
+            "{name} balance={balance},gas_price={gas_price:.6},sync_distance={sync_distance}"
         )
     }
 }
