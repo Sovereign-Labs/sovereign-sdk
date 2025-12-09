@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/multisig",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Multisig functionality for Sovereign SDK applications",
   "scripts": {
     "build": "tsup",
