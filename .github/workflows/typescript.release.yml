@@ -23,9 +23,6 @@ jobs:
       pull-requests: write # to create pull request (changesets/action)
     name: Release
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./typescript
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,15 +40,18 @@ jobs:
           bun-version: 1.2.5
       - name: Install dependencies
         run: pnpm install
+        working-directory: ./typescript
       - name: Build
         run: pnpm build
+        working-directory: ./typescript
       - name: Run Tests
         run: pnpm test
+        working-directory: ./typescript
       - name: Create Release Pull Request or Publish to npm
         uses: changesets/action@v1
         with:
-          publish: pnpm --dir ./typescript release
-          version: pnpm --dir ./typescript pkg-version
+          publish: pnpm ./typescript release
+          version: pnpm ./typescript pkg-version
           cwd: ./typescript
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
