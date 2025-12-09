@@ -47,16 +47,12 @@ jobs:
       - name: Run Tests
         run: pnpm test
         working-directory: ./typescript
-      - name: Hacky symlink
-        run: |
-          ln -s typescript/package.json package.json
-          ln -s typescript/pnpm-lock.yaml pnpm-lock.yaml
-          ln -s typescript/.changeset .changeset
       - name: Create Release Pull Request or Publish to npm
-        uses: changesets/action@v1
+        uses: Sovereign-Labs/changesets-action@v1.5.4
         with:
-          publish: pnpm --dir typescript release
-          version: pnpm --dir typescript pkg-version
+          publish: pnpm release
+          version: pnpm pkg-version
+          cwd: ./typescript
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
