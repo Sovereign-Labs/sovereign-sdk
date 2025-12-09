@@ -72,6 +72,7 @@ expression: config
       "is_replica": false,
       "num_cache_warmup_workers": 0,
       "timing_oracle": null,
+      "rate_limiter": null,
       "maximum_future_nonce_delta": 100,
       "future_nonce_transaction_timeout_millis": 2000
     },

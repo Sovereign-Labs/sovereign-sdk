@@ -1,6 +1,6 @@
 use crate::preferred::rate_limiter::resource::LimitExceeded;
 use crate::preferred::rate_limiter::resource::Resource;
-use mini_moka::unsync::Cache;
+use mini_moka::sync::Cache;
 use sov_modules_api::Gas;
 use sov_modules_api::Spec;
 use std::fmt::Debug;
@@ -11,7 +11,7 @@ use std::time::Instant;
 /// Configuration for the rate limiter.
 #[derive(Debug, Clone)]
 pub(crate) struct RateLimiterConfig<S: Spec> {
-    pub(crate) ttl_in_milis: u64,
+    pub(crate) ttl_in_millis: u64,
     pub(crate) max_allowed_resources: TotalResources<S::Gas>,
     pub(crate) refill_rate: RefillRatePerMillis<S::Gas>,
 }
@@ -20,6 +20,33 @@ pub(crate) struct RateLimiterConfig<S: Spec> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ResourceUsed<G: Gas> {
     pub(crate) inner: Resource<G>,
+}
+
+impl<G: Gas> ResourceUsed<G> {
+    pub(crate) fn zero() -> Self {
+        Self {
+            inner: Resource::zero(),
+        }
+    }
+
+    pub(crate) fn new(
+        req_counter: u64,
+        tx_size_in_bytes: usize,
+        execution_time_micros: u64,
+        gas_used: G,
+    ) -> Self {
+        Self {
+            inner: Resource {
+                req_counter,
+                // This cast is safe because a single transaction can never use more than u64::MAX bytes.
+                space_in_bytes: tx_size_in_bytes
+                    .try_into()
+                    .expect("Alowed transactions size overflows u64::MAX"),
+                execution_time_micros,
+                gas_used,
+            },
+        }
+    }
 }
 
 /// [`RefillRatePerMillis`] determines how quickly used resources are refilled.
@@ -212,10 +239,10 @@ pub(crate) struct RateLimiter<K, S: Spec> {
     refill_rate: RefillRatePerMillis<S::Gas>,
 }
 
-impl<K: Hash + Eq + Debug, S: Spec> RateLimiter<K, S> {
+impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(config: RateLimiterConfig<S>) -> Self {
         let data = Cache::builder()
-            .time_to_live(Duration::from_millis(config.ttl_in_milis))
+            .time_to_live(Duration::from_millis(config.ttl_in_millis))
             .build();
 
         Self {
@@ -230,7 +257,7 @@ impl<K: Hash + Eq + Debug, S: Spec> RateLimiter<K, S> {
         now: Instant,
         key: &K,
     ) -> Result<Throttler<S::Gas>, LimitExceeded<S::Gas>> {
-        match self.data.get(key).copied() {
+        match self.data.get(key) {
             Some(throttler) => Ok(throttler.allow_request_and_refill_resource_used(
                 now,
                 &self.max_allowed_resources,
@@ -275,7 +302,7 @@ mod tests {
         let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_milis: 1_000_000,
+            ttl_in_millis: 1_000_000,
             max_allowed_resources,
             refill_rate,
         };
@@ -334,7 +361,7 @@ mod tests {
         let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_milis: 1_000_000,
+            ttl_in_millis: 1_000_000,
             max_allowed_resources,
             refill_rate,
         };
@@ -410,7 +437,7 @@ mod tests {
         let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_milis: 2,
+            ttl_in_millis: 2,
             max_allowed_resources,
             refill_rate,
         };
@@ -474,12 +501,6 @@ mod tests {
                 .refill_rate
                 .token_resource_per_ms
                 .saturating_mul_by_scalar(time_passed_ms)
-        }
-    }
-
-    impl<K: Hash + Eq, S: Spec> RateLimiter<K, S> {
-        fn get_throtler(&mut self, key: &K) -> Option<&Throttler<S::Gas>> {
-            self.data.get(key)
         }
     }
 

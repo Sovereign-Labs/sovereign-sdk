@@ -19,6 +19,7 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
+use crate::preferred::rate_limiter::ResourceLimitExceededError;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use crate::preferred::tx_nonce_queue::TxNonceQueues;
@@ -749,6 +750,7 @@ where
                     }
                 },
                 AcceptTxError::ReplicaMode => return Err(replica_mode_error()),
+                AcceptTxError::RateLimiter(err) => return Err(rate_limit_error(err)),
             },
         }
     }
@@ -1091,6 +1093,14 @@ where
     }
 }
 
+fn rate_limit_error<S: Spec>(err: ResourceLimitExceededError<S>) -> ErrorObject {
+    ErrorObject {
+        status: StatusCode::SERVICE_UNAVAILABLE,
+        message: format!("The sender was rate-limited by the sequencer: {err:?}"),
+        details: Default::default(),
+    }
+}
+
 fn replica_mode_error() -> ErrorObject {
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,
@@ -1156,6 +1166,21 @@ where
     events: Vec<RuntimeEventResponse<<Rt as RuntimeEventProcessor>::RuntimeEvent>>,
     receipt: ApiTxEffect<TxReceiptContents<S>>,
     tx_number: u64,
+}
+
+impl<S, Rt> Confirmation<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
+    /// Gas used by the transaction
+    pub fn gas_used(&self) -> <S as Spec>::Gas {
+        match &self.receipt {
+            ApiTxEffect::Skipped { data } => data.gas_used,
+            ApiTxEffect::Reverted { data } => data.gas_used,
+            ApiTxEffect::Successful { data } => data.gas_used,
+        }
+    }
 }
 
 fn get_next_sequence_number_according_to_node<S, Rt>(
