@@ -55,8 +55,8 @@ jobs:
       - name: Create Release Pull Request or Publish to npm
         uses: changesets/action@v1
         with:
-          publish: cd typescript && pnpm release
-          version: cd typescript && pnpm pkg-version
+          publish: pnpm --dir typescript release
+          version: pnpm --dir typescript pkg-version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
