@@ -26,6 +26,9 @@ pub struct FullyBakedTx {
     /// Serialized transaction.
     #[as_ref(forward)]
     pub data: Bytes,
+    /// Sequencer-provided metadata for each transaction (e.g., timestamps).
+    /// This data is NOT signed by users but is added by the sequencer.
+    pub sequencing_data: Option<Bytes>,
 }
 
 impl std::fmt::Debug for FullyBakedTx {
@@ -42,6 +45,7 @@ impl FullyBakedTx {
     pub fn new(data: Vec<u8>) -> Self {
         Self {
             data: Bytes::from_owner(data),
+            sequencing_data: None,
         }
     }
 }

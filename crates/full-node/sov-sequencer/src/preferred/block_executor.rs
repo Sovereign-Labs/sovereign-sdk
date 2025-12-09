@@ -643,6 +643,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 data: tx_receipt.body_to_save.clone().expect(
                     "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
                 ),
+                sequencing_data: None, // TODO
             },
             tx_hash: tx_receipt.tx_hash,
             confirmation: Confirmation {

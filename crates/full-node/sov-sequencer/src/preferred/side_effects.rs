@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
@@ -117,20 +118,26 @@ where
                         tracing::debug!(tx_hash = %tx.accepted_tx.tx_hash, "Transaction was accepted by the sequencer");
                     }
                 }
+                let txs = txs_to_insert
+                    .iter()
+                    .map(|contents| {
+                        // Create timestamp as sequencing_data (nanoseconds since UNIX epoch as u128 little-endian)
+                        let timestamp_nanos = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .expect("System time before UNIX epoch")
+                            .as_nanos();
+                        let sequencing_data = timestamp_nanos.to_le_bytes().to_vec();
+                        (
+                            FullyBakedTx {
+                                data: contents.accepted_tx.tx.data.clone(),
+                                sequencing_data: Some(sequencing_data.into()),
+                            },
+                            contents.accepted_tx.tx_hash,
+                        )
+                    })
+                    .collect();
                 self.db
-                    .bulk_insert_txs(
-                        txs_to_insert
-                            .iter()
-                            .map(|contents| {
-                                (
-                                    contents.accepted_tx.tx.clone(),
-                                    contents.accepted_tx.tx_hash,
-                                )
-                            })
-                            .collect(),
-                        sequence_number,
-                        tx_idx_within_batch,
-                    )
+                    .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)
                     .await?;
 
                 let checkpoint_ref = self.checkpoint_sender.borrow().clone();
