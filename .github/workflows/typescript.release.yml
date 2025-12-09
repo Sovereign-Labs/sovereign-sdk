@@ -3,6 +3,7 @@ name: Release (TypeScript)
 on:
   push:
     branches: ["nightly"]
+  workflow_dispatch: {}
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
