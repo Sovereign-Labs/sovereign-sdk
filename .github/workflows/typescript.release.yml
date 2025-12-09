@@ -51,6 +51,7 @@ jobs:
         run: |
           ln -s typescript/package.json package.json
           ln -s typescript/pnpm-lock.yaml pnpm-lock.yaml
+          ln -s typescript/.changeset .changeset
       - name: Create Release Pull Request or Publish to npm
         uses: changesets/action@v1
         with:
