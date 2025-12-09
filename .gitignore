@@ -45,7 +45,3 @@ constants_output.csv
 
 # Temporary test data files
 examples/demo-rollup/tests/resync/data/.tmp*
-
-package.json
-pnpm-lock.yaml
-
