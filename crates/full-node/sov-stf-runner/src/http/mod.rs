@@ -60,6 +60,9 @@ where
     fn call(&mut self, mut req: axum::http::Request<B>) -> Self::Future {
         // Extract SocketAddr from axum's ConnectInfo and insert it directly
         // into extensions so jsonrpsee can access it
+
+        let headers: &axum::http::HeaderMap = req.headers();
+
         if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned()
         {
             req.extensions_mut().insert(addr);

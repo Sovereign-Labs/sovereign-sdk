@@ -228,11 +228,14 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
     async fn axum_accept_tx(
         connect_info: ConnectInfo<SocketAddr>,
+        headers: axum::http::HeaderMap,
         state: State<Self>,
         tx: Json<AcceptTx>,
     ) -> ApiResult<
         TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>,
     > {
+        println!("Headers {:?}", headers);
+
         let raw_tx = RawTx::new(tx.0.body.blob);
         let baked_tx = <<Seq::Rt as Runtime<Seq::Spec>>::Auth as TransactionAuthenticator<
             Seq::Spec,
