@@ -47,11 +47,15 @@ jobs:
       - name: Run Tests
         run: pnpm test
         working-directory: ./typescript
+      - name: Hacky symlink
+        run: |
+          ln -s typescript/package.json package.json
+          ln -s typescript/pnpm-lock.yaml pnpm-lock.yaml
       - name: Create Release Pull Request or Publish to npm
         uses: changesets/action@v1
         with:
-          publish: pnpm ./typescript release
-          version: pnpm ./typescript pkg-version
+          publish: pnpm --dir ./typescript release
+          version: pnpm --dir ./typescript pkg-version
           cwd: ./typescript
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
