@@ -3,6 +3,7 @@ name: Release (TypeScript)
 on:
   push:
     branches: ["nightly"]
+  workflow_dispatch: {}
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -44,6 +45,7 @@ jobs:
         with:
           publish: pnpm release
           version: pnpm pkg-version
+          cwd: ./typescript
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
