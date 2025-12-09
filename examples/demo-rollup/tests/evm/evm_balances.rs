@@ -18,7 +18,7 @@ async fn evm_test_balances() -> anyhow::Result<()> {
 
     let reciever_address = Address::from_str(RECIEVER_ADDR_STR).unwrap();
 
-    let (snder_bank_balance_start, sender_evm_balance_start) =
+    let (sender_bank_balance_start, sender_evm_balance_start) =
         get_balances(sender_address, &test_rollup, &evm_client).await;
 
     let (reciever_bank_balance_start, reciever_evm_balance_start) =
@@ -30,7 +30,7 @@ async fn evm_test_balances() -> anyhow::Result<()> {
         .await;
     test_rollup.wait_for_next_blocks(2).await;
 
-    let (snder_bank_balance_end, sender_evm_balance_end) =
+    let (sender_bank_balance_end, sender_evm_balance_end) =
         get_balances(sender_address, &test_rollup, &evm_client).await;
 
     let (reciever_bank_balance_end, reciever_evm_balance_end) =
@@ -39,11 +39,11 @@ async fn evm_test_balances() -> anyhow::Result<()> {
     // ASSERTIONS:
 
     // Sender
-    assert_eq!(snder_bank_balance_start, sender_evm_balance_start);
-    assert_eq!(snder_bank_balance_end, sender_evm_balance_end);
+    assert_eq!(sender_bank_balance_start, sender_evm_balance_start);
+    assert_eq!(sender_bank_balance_end, sender_evm_balance_end);
 
     //  Sender also pays gas, so the balance check uses `>`
-    assert!(snder_bank_balance_start > snder_bank_balance_end + eth_to_send);
+    assert!(sender_bank_balance_start > sender_bank_balance_end + eth_to_send);
 
     // Receiver
     assert_eq!(reciever_bank_balance_start, reciever_evm_balance_start);
