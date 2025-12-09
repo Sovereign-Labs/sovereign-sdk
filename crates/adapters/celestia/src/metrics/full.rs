@@ -84,3 +84,21 @@ impl Metric for BlobSubmitMeasurement {
         )
     }
 }
+
+
+#[derive(Debug)]
+pub struct CelestiaAdapterStateMeasurement {
+    pub balance: u64,
+    pub gas_price: f64,
+    pub sync_distance: u64,
+}
+
+impl Metric for CelestiaAdapterStateMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_periodic_data"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        Ok(())
+    }
+}

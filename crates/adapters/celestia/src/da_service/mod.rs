@@ -6,7 +6,10 @@ use crate::metrics::client::{
     GetBlockHeaderMeasurement, GetChainHeadMeasurement, GetNamespaceDataMeasurement,
     SubmitPayForBlob,
 };
-use crate::metrics::full::{BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics};
+use crate::metrics::full::{
+    BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
+    NamespaceDataMetrics,
+};
 use crate::metrics::RollupNamespace;
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
@@ -29,6 +32,7 @@ use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
+use sov_test_utils::ledger_db::sov_api_spec::tokio_tungstenite::tungstenite::client;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -553,4 +557,62 @@ fn flatten_timeout<T>(
         Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
         Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
     }
+}
+
+async fn stat_collection_task(
+    client: celestia_client::Client,
+    signer: celestia_types::state::AccAddress,
+    priority: celestia_client::tx::TxPriority,
+    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) {
+    let chain_id = client.chain_id();
+    let sleep_time = std::time::Duration::from_secs(30);
+    tracing::info!(%chain_id, period = ?sleep_time, "Starting celestia stat collection task");
+
+    loop {
+        match gather_stat(&client, &signer, priority).await {
+            Ok(measurement) => {
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(measurement);
+                });
+            }
+            Err(error) => {
+                tracing::info!(
+                    ?error,
+                    "Error gathering background statistics for celestia adapter"
+                );
+            }
+        }
+        tokio::time::sleep(sleep_time).await;
+    }
+}
+
+async fn gather_stat(
+    client: &celestia_client::Client,
+    signer: &celestia_types::state::AccAddress,
+    priority: celestia_client::tx::TxPriority,
+) -> anyhow::Result<CelestiaAdapterStateMeasurement> {
+    let balance = client
+        .state()
+        .balance_for_address(signer)
+        .await
+        .context("state.BalanceForAddress")?;
+
+    let sync_state = client
+        .header()
+        .sync_state()
+        .await
+        .context("header.SyncState")?;
+    let sync_distance = sync_state.to_height.saturating_sub(sync_state.from_height);
+    let gas_price = client
+        .state()
+        .estimate_gas_price(priority)
+        .await
+        .context("state.EstimateGasPrice")?;
+
+    Ok(CelestiaAdapterStateMeasurement {
+        balance,
+        gas_price,
+        sync_distance,
+    })
 }
