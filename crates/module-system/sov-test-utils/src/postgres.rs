@@ -1,11 +1,8 @@
 use sov_sequencer::preferred::PostgresConfig;
 use std::borrow::Cow;
-use std::path::Path;
-use testcontainers::core::Mount;
 use testcontainers::core::WaitFor;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, Image, ImageExt};
-use tracing::debug;
+use testcontainers::{ContainerAsync, Image};
 
 /// A Docker image for PostgreSQL.
 #[derive(Debug, Clone, Default)]
@@ -53,23 +50,12 @@ pub enum CreatePostgresError {
 
 /// Creates a container with a PostgreSQL database.
 pub async fn create_postgres_container(
-    dir: &Path,
 ) -> Result<ContainerAsync<PostgresImage>, CreatePostgresError> {
     if should_skip_postgres() {
         return Err(CreatePostgresError::DockerNotSupported);
     }
 
-    let postgres_data_dir = dir.join("postgres_data");
-    debug!(?postgres_data_dir, "Using Postgres data directory");
-
-    std::fs::create_dir_all(&postgres_data_dir)
-        .map_err(|e| CreatePostgresError::DockerError(e.into()))?;
-
     let img = PostgresImage
-        .with_mount(Mount::bind_mount(
-            postgres_data_dir.to_string_lossy(),
-            "/var/lib/postgresql/data",
-        ))
         .start()
         .await
         .map_err(|e| CreatePostgresError::DockerError(e.into()))?;

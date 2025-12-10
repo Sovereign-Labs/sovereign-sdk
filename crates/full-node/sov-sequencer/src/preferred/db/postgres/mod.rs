@@ -463,8 +463,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_sequencer_leader_election() {
-        let dir = tempfile::tempdir().unwrap();
-        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
+        let postgres = create_postgres_container().await;
         let postgres = match postgres {
             Ok(pg) => pg,
             Err(CreatePostgresError::DockerNotSupported) => return,

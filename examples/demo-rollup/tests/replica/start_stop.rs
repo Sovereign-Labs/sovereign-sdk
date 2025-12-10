@@ -4,7 +4,7 @@ use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_start_stop() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,sov=debug");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info");
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -21,6 +21,7 @@ async fn test_replica_start_stop() {
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
+    // Why replica starts first?
     let replica = postgres.clone().map(|pg| (pg, "replica".into()));
     let replica_test_rollup = start_rollup(true, addr, replica).await;
 
@@ -77,6 +78,8 @@ async fn test_replica_start_stop() {
         test_rollup
     };
 
+    // TODO: Read logs from postgres here.
+
     {
         let mut event_subscription = replica_test_rollup
             .api_client()
@@ -106,8 +109,11 @@ async fn test_replica_start_stop() {
             .await
             .unwrap();
 
+        // ERROR IS HERE
         assert_eq!(receiver_balance.0, 2 * (nb_of_txs as u128) * AMOUNT);
     }
+
+    // TODO: Read logs from postgres here.
 
     // Restart replica
     let replica_test_rollup = {
@@ -119,6 +125,8 @@ async fn test_replica_start_stop() {
             .unwrap();
         replica_test_rollup
     };
+
+    // TODO: Read logs from postgres here.
 
     {
         let mut event_subscription = replica_test_rollup
@@ -152,6 +160,8 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 3 * (nb_of_txs as u128) * AMOUNT);
     }
 
+    // TODO: Read logs from postgres here.
+
     // Restart replica and wait
     let replica_test_rollup = {
         let builder = replica_test_rollup.shutdown().await.unwrap();
@@ -168,6 +178,8 @@ async fn test_replica_start_stop() {
             .unwrap();
         replica_test_rollup
     };
+
+    // TODO: Read logs from postgres here.
 
     {
         let mut event_subscription = replica_test_rollup
@@ -200,6 +212,8 @@ async fn test_replica_start_stop() {
 
         assert_eq!(receiver_balance.0, 4 * (nb_of_txs as u128) * AMOUNT);
     }
+
+    // TODO: Read logs from postgres here.
 
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;

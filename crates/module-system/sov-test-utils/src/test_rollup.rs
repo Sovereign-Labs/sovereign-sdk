@@ -53,7 +53,6 @@ pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
 };
-use tempfile::TempDir;
 use testcontainers::ContainerAsync;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -420,18 +419,15 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 }
 
 pub struct PostgresData {
-    storage_path: TempDir,
     postgres: ContainerAsync<PostgresImage>,
     connection_string: String,
 }
 
 impl PostgresData {
     pub async fn create_postgres() -> Result<Arc<PostgresData>, CreatePostgresError> {
-        let dir = tempfile::tempdir().unwrap();
-        let pg = create_postgres_container(&dir.path().join("postgres_data")).await?;
+        let pg = create_postgres_container().await?;
 
         Ok(Arc::new(PostgresData {
-            storage_path: dir,
             connection_string: connection_string_from_postgres_container(&pg).await?,
             postgres: pg,
         }))
