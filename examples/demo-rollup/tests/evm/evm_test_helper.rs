@@ -101,11 +101,15 @@ pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
     alloy_client_with_signer(socket, SENDER_PRIV_KEY)
 }
 
-pub(crate) fn alloy_client_with_reqwest<B>(socket: SocketAddr, b: B) -> DynProvider
+pub(crate) fn alloy_client_with_reqwest<B>(
+    socket: SocketAddr,
+    b: B,
+    private_key: &str,
+) -> DynProvider
 where
     B: FnOnce(reqwest::ClientBuilder) -> reqwest::Client,
 {
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
+    let signer: PrivateKeySigner = private_key.parse().unwrap();
     let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
     ProviderBuilder::new()
         .wallet(signer)
