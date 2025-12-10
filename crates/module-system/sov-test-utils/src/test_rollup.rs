@@ -17,7 +17,6 @@ use crate::{
 };
 use anyhow::Context;
 use derivative::Derivative;
-use tracing::Instrument;
 use serde::Deserialize;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
@@ -60,6 +59,7 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
 use tokio_stream::StreamExt;
+use tracing::Instrument;
 
 /// Specifies how to source the genesis data for a rollup.
 #[derive(Derivative)]
