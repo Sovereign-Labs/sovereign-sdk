@@ -2,7 +2,7 @@ name: Release (TypeScript)
 
 on:
   push:
-    branches: ["nightly"]
+    branches: ["dev"]
   workflow_dispatch:
     inputs:
       branch:
