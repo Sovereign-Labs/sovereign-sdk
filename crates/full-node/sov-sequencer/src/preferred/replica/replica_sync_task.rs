@@ -333,9 +333,7 @@ mod tests {
     }
 
     async fn run(test_cases: Vec<TestCase>, expected: Vec<DbData>, exec_seq_nr: u64) {
-        let dir = tempfile::tempdir().unwrap();
-
-        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
+        let postgres = create_postgres_container().await;
         let postgres = match postgres {
             Ok(pg) => pg,
             Err(CreatePostgresError::DockerNotSupported) => return,

@@ -65,6 +65,7 @@ pub mod sequencer;
 /// Utilities for testing that require [`ProverStorage`].
 pub mod storage;
 
+pub mod docker;
 /// Utilities that specify an interface for testing.
 pub mod interface;
 
