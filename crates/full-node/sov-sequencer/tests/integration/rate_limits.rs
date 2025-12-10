@@ -5,9 +5,13 @@ use sov_api_spec::types as api_types;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
+use sov_modules_api::CryptoSpec;
 use sov_modules_api::DispatchCall;
+use sov_modules_api::PrivateKey;
 use sov_modules_api::RawTx;
+use sov_modules_api::Spec;
 use sov_modules_stf_blueprint::Runtime;
+use sov_sequencer::rest_api::AcceptTx;
 use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
@@ -31,7 +35,9 @@ generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, 
 type RT = TestRuntime<TestSpec>;
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, RT>;
 
-async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
+async fn create_test_rollup(
+    rate_limiter_config: SovRateLimiterConfig,
+) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let reward_user = TestUser::<TestSpec>::generate(TEST_DEFAULT_USER_BALANCE);
 
     let genesis_config =
@@ -71,10 +77,7 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 3000;
-            config.rate_limiter = Some(SovRateLimiterConfig {
-                refill_rate: 10,
-                max_requests_per_batch: 1_000_000,
-            });
+            config.rate_limiter = Some(rate_limiter_config);
         }
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
@@ -86,7 +89,11 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting() {
-    let (test_rollup, admin) = create_test_rollup().await;
+    let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
+        max_requests_per_batch: 1_000_000,
+        refill_rate: 10,
+    })
+    .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -126,6 +133,67 @@ async fn test_rate_limiting() {
         })
         .await
         .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_correct_ip() {
+    let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
+        max_requests_per_batch: 0,
+        refill_rate: 0,
+    })
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let base_url = test_rollup.client.base_url.clone();
+    let client = test_rollup.api_client().clone();
+
+    let url = format!("{base_url}/sequencer/txs");
+    let x_forwarded_for = "123.123.123.123";
+
+    // Send first tx.
+    {
+        let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 0);
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
+        };
+
+        client
+            .client()
+            .post(&url)
+            .json(&request)
+            .header("X-forwarded-for", x_forwarded_for)
+            .send()
+            .await
+            .unwrap();
+    }
+
+    // Send another tx with the same x_forwarded_for ip but diffrent sender address.
+    {
+        let private_key = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+        let tx: RawTx = tx_set_value_and_sleep(&private_key, 1, 100, 0);
+
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
+        };
+
+        let resp = client
+            .client()
+            .post(&url)
+            .json(&request)
+            // The header should be case insensitive.
+            .header("x-forwarded-for", x_forwarded_for)
+            .send()
+            .await
+            .unwrap();
+
+        let err = resp.bytes().await.unwrap();
+        let err_str = std::str::from_utf8(&err).unwrap().to_string();
+
+        // Check that the correct IP was rate limmited.
+        assert!(err_str
+            .contains("The sender was rate-limited by the sequencer: Ip { ip: 123.123.123.123"))
+    }
 }
 
 fn tx_set_value_and_sleep(

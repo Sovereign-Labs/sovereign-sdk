@@ -8,7 +8,7 @@ use sov_rollup_interface::{crypto::CredentialId, TxHash};
 use std::cmp::Ordering;
 use std::collections::{btree_map::OccupiedEntry, BTreeMap};
 use std::fmt::Debug;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
@@ -144,7 +144,7 @@ pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>> {
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         reason: &'static str,
     ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>;
 }
@@ -184,7 +184,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         reason: &'static str,
     ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
         self.state_updator
@@ -193,7 +193,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
                 tx_hash,
                 original_tx_queue_id,
                 credential_id,
-                socket_addr,
+                ip_addr,
                 reason,
             )
             .await
@@ -390,7 +390,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     async fn drain_any_ready_transactions(
         &self,
         credential_id: &CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         mut expected_nonce: u64,
     ) {
         loop {
@@ -407,7 +407,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     queued_tx.tx_hash,
                     queued_tx.original_tx_queue_id,
                     *credential_id,
-                    socket_addr,
+                    ip_addr,
                     "nonce_queue_trigger",
                 )
                 .await;
@@ -510,7 +510,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         tx_hash: TxHash,
         tx_nonce: u64,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         original_tx_queue_id: u64,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -540,7 +540,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                         tx_hash,
                         original_tx_queue_id,
                         credential_id,
-                        socket_addr,
+                        ip_addr,
                         "nonce_queue_immediate",
                     )
                     .await;
@@ -552,11 +552,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
                         queues
-                            .drain_any_ready_transactions(
-                                &credential_id,
-                                socket_addr,
-                                starting_nonce,
-                            )
+                            .drain_any_ready_transactions(&credential_id, ip_addr, starting_nonce)
                             .await;
                     });
                 }
@@ -627,7 +623,7 @@ mod tests {
     use sov_modules_api::{SkippedTxContents, TransactionReceipt, TxProcessingError};
     use sov_test_utils::runtime::TestOptimisticRuntime;
     use sov_test_utils::TestSpec;
-    use std::net::{Ipv4Addr, SocketAddrV4};
+    use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
     use std::time::Duration;
@@ -973,7 +969,7 @@ mod tests {
 
         // Drain starting from nonce 5 (3 and 4 should be silently evicted, 5 should execute)
         queues
-            .drain_any_ready_transactions(&credential_id, SOCKET_ADDR, 5)
+            .drain_any_ready_transactions(&credential_id, SOCKET_ADDR.ip(), 5)
             .await;
 
         let executed_nonces = backend.get_executed_nonces();
@@ -1017,7 +1013,7 @@ mod tests {
 
         // Drain starting from nonce 0
         queues
-            .drain_any_ready_transactions(&credential_id, SOCKET_ADDR, 0)
+            .drain_any_ready_transactions(&credential_id, SOCKET_ADDR.ip(), 0)
             .await;
 
         // Should have executed exactly 2 transactions (0 and 1), then stopped at gap
@@ -1100,7 +1096,7 @@ mod tests {
             tx_hash: TxHash,
             _original_tx_queue_id: u64,
             _credential_id: CredentialId,
-            _socket_addr: SocketAddr,
+            _ip_addr: IpAddr,
             _reason: &'static str,
         ) -> Result<TransactionReceiverResult<TestSpec, TestRuntime>, SequencerStateUpdatorError>
         {
@@ -1202,7 +1198,7 @@ mod tests {
                         TxHash::from([nonce; 32]),
                         nonce as u64,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1220,7 +1216,7 @@ mod tests {
                 TxHash::from([0; 32]),
                 0,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;
@@ -1268,7 +1264,7 @@ mod tests {
                 TxHash::from([4; 32]),
                 4,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;
@@ -1334,7 +1330,7 @@ mod tests {
                 TxHash::from([11; 32]),
                 11,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;
@@ -1390,7 +1386,7 @@ mod tests {
                         TxHash::from([2; 32]),
                         2,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1407,7 +1403,7 @@ mod tests {
                 TxHash::from([0; 32]),
                 0,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;
@@ -1429,7 +1425,7 @@ mod tests {
                 TxHash::from([1; 32]),
                 1,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;
@@ -1468,7 +1464,7 @@ mod tests {
                         TxHash::from([1; 32]),
                         1,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1544,7 +1540,7 @@ mod tests {
                         TxHash::from([nonce; 32]),
                         nonce as u64,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1562,7 +1558,7 @@ mod tests {
                 TxHash::from([0; 32]),
                 0,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;
@@ -1606,7 +1602,7 @@ mod tests {
                         TxHash::from([1; 32]),
                         1,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1687,7 +1683,7 @@ mod tests {
                         TxHash::from([0; 32]),
                         0,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1713,7 +1709,7 @@ mod tests {
                         TxHash::from([1; 32]),
                         1,
                         credential_id,
-                        SOCKET_ADDR,
+                        SOCKET_ADDR.ip(),
                         0,
                     )
                     .await
@@ -1761,7 +1757,7 @@ mod tests {
                 TxHash::from([0; 32]),
                 0,
                 credential_id,
-                SOCKET_ADDR,
+                SOCKET_ADDR.ip(),
                 0,
             )
             .await;

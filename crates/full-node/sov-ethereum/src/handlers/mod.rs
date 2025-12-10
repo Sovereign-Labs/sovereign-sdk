@@ -29,12 +29,13 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
+use sov_rest_utils::GetIPResult;
 #[cfg(feature = "local")]
 use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::marker::PhantomData;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -51,7 +52,7 @@ type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 
 const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
-const SOCKET_ADDRESS_ERROR: &str = "Unable to retrieve the peer socket address";
+const IP_ADDRESS_ERROR: &str = "Unable to retrieve the peer IP address";
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
@@ -68,10 +69,11 @@ where
         extensions: Extensions,
     ) -> RpcResult<B256> {
         let start = Instant::now();
-        let addr = get_socket_addr(extensions)?;
+        let ip_addr = get_peer_ip_addr(extensions)?;
 
         let noop = |tx_hash, _| Ok(tx_hash);
-        let result = Self::process_raw_transaction(parameters.one()?, ethereum, noop, addr).await;
+        let result =
+            Self::process_raw_transaction(parameters.one()?, ethereum, noop, ip_addr).await;
         track_metrics("eth_sendRawTransaction", start, &result);
         result
     }
@@ -91,7 +93,7 @@ where
                 ETH_RPC_ERROR,
             ));
         }
-        let addr = get_socket_addr(extensions)?;
+        let addr = get_peer_ip_addr(extensions)?;
 
         let result = timeout(
             Duration::from_millis(timeout_ms),
@@ -117,7 +119,7 @@ where
         extensions: Extensions,
     ) -> RpcResult<Option<Receipt>> {
         let start = Instant::now();
-        let addr = get_socket_addr(extensions)?;
+        let addr = get_peer_ip_addr(extensions)?;
 
         let result =
             Self::process_raw_transaction(parameters.one()?, ethereum, Self::get_receipt, addr)
@@ -136,7 +138,7 @@ where
         data: Bytes,
         ethereum: Arc<Ethereum<S, Seq>>,
         on_success: F,
-        addr: SocketAddr,
+        ip_addr: IpAddr,
     ) -> RpcResult<T>
     where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
@@ -147,7 +149,7 @@ where
         Self::authenticate_tx(&tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
-        seq.accept_tx(tx, addr).await.map_err(|e| {
+        seq.accept_tx(tx, ip_addr).await.map_err(|e| {
             to_jsonrpsee_error_object(
                 format!("{} - '{}' ({:?})", e.status, e.message, e.details),
                 ETH_RPC_ERROR,
@@ -187,7 +189,7 @@ where
         extensions: Extensions,
     ) -> RpcResult<B256> {
         let mut transaction_request: TransactionRequest = parameters.one()?;
-        let addr = get_socket_addr(extensions)?;
+        let ip_addr = get_peer_ip_addr(extensions)?;
 
         let evm = Evm::<S>::default();
 
@@ -255,12 +257,16 @@ where
 
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
-        ethereum.sequencer.accept_tx(tx, addr).await.map_err(|e| {
-            to_jsonrpsee_error_object(
-                format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-                ETH_RPC_ERROR,
-            )
-        })?;
+        ethereum
+            .sequencer
+            .accept_tx(tx, ip_addr)
+            .await
+            .map_err(|e| {
+                to_jsonrpsee_error_object(
+                    format!("{} - '{}' ({:?})", e.status, e.message, e.details),
+                    ETH_RPC_ERROR,
+                )
+            })?;
 
         Ok(tx_hash)
     }
@@ -281,10 +287,15 @@ fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResu
 }
 
 // Gets the SocketAddr needed for rete-limiting.
-fn get_socket_addr(extensions: Extensions) -> Result<SocketAddr, ErrorObjectOwned> {
+fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> {
     // The `SocketAddr`` was injected into the request extensions by specific middleware in `axum::serve`.
-    extensions
-        .get::<SocketAddr>()
-        .copied()
-        .ok_or_else(|| to_jsonrpsee_error_object(SOCKET_ADDRESS_ERROR, ETH_RPC_ERROR))
+    let ip_result = extensions.get::<GetIPResult>().copied().ok_or_else(|| {
+        tracing::error!("Axum Extensions map does not contain GetIPResult");
+        to_jsonrpsee_error_object(IP_ADDRESS_ERROR, ETH_RPC_ERROR)
+    })?;
+
+    ip_result.maybe_ip.or_else(|e| {
+        let err_msg = format!("IP address error: {e:?}");
+        Err(to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR))
+    })
 }

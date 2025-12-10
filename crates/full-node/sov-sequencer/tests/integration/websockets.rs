@@ -1,15 +1,14 @@
-use std::net::{Ipv4Addr, SocketAddr};
-
 use futures::stream::StreamExt;
 use sov_api_spec::types::TxStatus;
 use sov_sequencer::Sequencer;
 use sov_test_utils::sequencer::TestSequencerSetup;
+use std::net::{IpAddr, Ipv4Addr};
 
 use crate::utils::{generate_txs, RT};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mempool_eviction_event() {
-    let socket_addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
+    let ip_addr = IpAddr::V4(Ipv4Addr::LOCALHOST);
     let mempool_max_txs_count = 1;
     let sequencer = TestSequencerSetup::<RT>::with_real_sequencer_and_mempool_max_txs_count(
         mempool_max_txs_count.try_into().unwrap(),
@@ -33,7 +32,7 @@ async fn mempool_eviction_event() {
 
     sequencer
         .sequencer
-        .accept_tx(txs[0].fully_baked_tx.clone(), socket_addr)
+        .accept_tx(txs[0].fully_baked_tx.clone(), ip_addr)
         .await
         .unwrap();
 
@@ -43,12 +42,11 @@ async fn mempool_eviction_event() {
         TxStatus::Submitted
     );
 
-    let socket_addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
     // In the meantime, another transaction enters the mempool and causes the
     // first one to be evicted.
     sequencer
         .sequencer
-        .accept_tx(txs[1].fully_baked_tx.clone(), socket_addr)
+        .accept_tx(txs[1].fully_baked_tx.clone(), ip_addr)
         .await
         .unwrap();
 

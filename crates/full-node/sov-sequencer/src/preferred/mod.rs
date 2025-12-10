@@ -61,7 +61,7 @@ use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
 use std::boxed::Box;
 use std::marker::PhantomData;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::path::Path;
@@ -616,7 +616,7 @@ where
     async fn accept_tx_inner(
         &self,
         baked_tx: FullyBakedTx,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
@@ -658,7 +658,7 @@ where
                         tx_hash,
                         original_tx_queue_id,
                         credential_id,
-                        socket_addr,
+                        ip_addr,
                         "accept_tx",
                     )
                     .await,
@@ -671,7 +671,7 @@ where
                         tx_hash,
                         tx_nonce,
                         credential_id,
-                        socket_addr,
+                        ip_addr,
                         original_tx_queue_id,
                     )
                     .await,
@@ -1067,10 +1067,10 @@ where
     async fn accept_tx(
         &self,
         baked_tx: FullyBakedTx,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         let sequencer = self.clone();
-        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, socket_addr).await })
+        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, ip_addr).await })
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, "A panic occurred while accepting a transaction");

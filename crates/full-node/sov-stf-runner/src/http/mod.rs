@@ -1,3 +1,5 @@
+use crate::http::id_provider::HexIdProvider;
+use crate::CorsConfiguration;
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
 use axum::extract::{ConnectInfo, Request};
@@ -19,10 +21,9 @@ use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
 use tower_layer::{Identity, Layer};
-
-use crate::http::id_provider::HexIdProvider;
-use crate::CorsConfiguration;
 mod id_provider;
+use sov_rest_utils::get_client_ip;
+use sov_rest_utils::GetIPResult;
 
 // Middleware to inject SocketAddr from axum's ConnectInfo into the request extensions
 // so that jsonrpsee RPC handlers can access it via the Extensions parameter
@@ -60,13 +61,12 @@ where
     fn call(&mut self, mut req: axum::http::Request<B>) -> Self::Future {
         // Extract SocketAddr from axum's ConnectInfo and insert it directly
         // into extensions so jsonrpsee can access it
+        let headers = req.headers();
+        let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>();
 
-        let headers: &axum::http::HeaderMap = req.headers();
+        let maybe_ip = get_client_ip(headers.clone(), connect_info);
+        req.extensions_mut().insert(GetIPResult { maybe_ip });
 
-        if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned()
-        {
-            req.extensions_mut().insert(addr);
-        }
         self.inner.call(req)
     }
 }
@@ -80,7 +80,6 @@ pub(crate) async fn start_http_server(
 ) -> anyhow::Result<(JoinHandle<anyhow::Result<()>>, SocketAddr)> {
     let listener = TcpListener::bind(listen_address_http).await?;
     let rest_address = listener.local_addr()?;
-
     let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
 
     let handle = tokio::spawn(async move {

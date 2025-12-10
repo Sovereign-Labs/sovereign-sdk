@@ -140,7 +140,7 @@ where
 
             let baked_tx = Rt::Auth::encode_with_standard_auth(raw_tx);
 
-            if let Err(error) = seq.accept_tx(baked_tx, socket_addr).await {
+            if let Err(error) = seq.accept_tx(baked_tx, socket_addr.ip()).await {
                 // Reduce log spam by only logging 1 of every 100 consecutive failures
                 if consecutive_failures % 100 == 0 {
                     tracing::error!(?error, "Error submitting timestamp oracle update tx");
