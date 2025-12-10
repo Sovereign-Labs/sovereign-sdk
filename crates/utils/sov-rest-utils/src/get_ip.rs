@@ -1,20 +1,20 @@
 use axum::extract::ConnectInfo;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use client_ip::{rightmost_x_forwarded_for, Error};
 use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 
 use crate::ErrorObject;
 
 static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
 
 /// ClientIpError
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ClientIpError {
     /// ConnectInfo is missing.
     MissingConnectInfo,
     /// IP is not a valid ascii string.
-    InvalidXForwardedForEncoding,
-    /// IP string can't be parsed as IpAddr.
-    InvalidXForwardedForParse,
+    InvalidXForwardedForEncoding(Error),
 }
 
 impl ClientIpError {
@@ -30,10 +30,10 @@ impl ClientIpError {
 }
 
 /// GetIPResult
-#[derive(Clone, Debug, Copy)]
+#[derive(Debug, Clone)]
 pub struct GetIPResult {
     /// Ip address or Error.
-    pub maybe_ip: Result<IpAddr, ClientIpError>,
+    pub maybe_ip: Arc<Result<IpAddr, ClientIpError>>,
 }
 
 /// Get the original sender's IP address.
@@ -41,29 +41,9 @@ pub fn get_client_ip(
     headers: HeaderMap<HeaderValue>,
     connect_info: Option<&ConnectInfo<SocketAddr>>,
 ) -> Result<IpAddr, ClientIpError> {
-    // Try X-Forwarded-For first
-    if let Some(header_val) = headers.get(&X_FORWARDED_FOR) {
-        let header_str = header_val.to_str().map_err(|e| {
-            tracing::error!(error = %e, "x-forwarded-for is not a valid ascii string.");
-            ClientIpError::InvalidXForwardedForEncoding
-        })?;
-
-        // Take the first IP in the comma-separated chain
-        let first_ip_str = header_str
-            .split(',')
-            .next()
-            .ok_or({
-                tracing::error!("x-forwarded-for can't be parsed as IpAddr.");
-                ClientIpError::InvalidXForwardedForParse
-            })?
-            .trim();
-
-        let ip = first_ip_str.parse::<IpAddr>().map_err(|e| {
-            tracing::error!(error = %e, "x-forwarded-for can't be parsed as IpAddr.");
-            ClientIpError::InvalidXForwardedForParse
-        })?;
-
-        return Ok(ip);
+    if headers.contains_key(&X_FORWARDED_FOR) {
+        return rightmost_x_forwarded_for(&headers)
+            .map_err(|e| ClientIpError::InvalidXForwardedForEncoding(e));
     }
 
     // Fallback to the socket address from ConnectInfo
@@ -133,7 +113,13 @@ mod tests {
                 HeaderValue::from_static(frowarded_for_ip),
             );
             let err = get_client_ip(headers, None).unwrap_err();
-            assert_eq!(err, ClientIpError::InvalidXForwardedForParse);
+            assert_eq!(
+                err,
+                ClientIpError::InvalidXForwardedForEncoding(Error::MalformedHeaderValue {
+                    header_name: HeaderName::from_static("x-forwarded-for"),
+                    header_value: frowarded_for_ip.to_string(),
+                })
+            );
         }
 
         // Test missing ip
@@ -149,7 +135,13 @@ mod tests {
             let mut headers = HeaderMap::new();
             headers.insert("x-forwarded-for", HeaderValue::from_static(empty_ip));
             let err = get_client_ip(headers, None).unwrap_err();
-            assert_eq!(err, ClientIpError::InvalidXForwardedForParse);
+            assert_eq!(
+                err,
+                ClientIpError::InvalidXForwardedForEncoding(Error::MalformedHeaderValue {
+                    header_name: HeaderName::from_static("x-forwarded-for"),
+                    header_value: empty_ip.to_string(),
+                })
+            );
         }
     }
 }

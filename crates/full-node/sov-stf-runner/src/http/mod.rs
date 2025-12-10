@@ -14,6 +14,7 @@ use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
 use sov_metrics::{track_metrics, HttpMetrics};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -65,7 +66,9 @@ where
         let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>();
 
         let maybe_ip = get_client_ip(headers.clone(), connect_info);
-        req.extensions_mut().insert(GetIPResult { maybe_ip });
+        req.extensions_mut().insert(GetIPResult {
+            maybe_ip: Arc::new(maybe_ip),
+        });
 
         self.inner.call(req)
     }
