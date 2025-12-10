@@ -289,13 +289,16 @@ fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResu
 // Gets the IP needed for rete-limiting.
 fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> {
     // The `SocketAddr`` was injected into the request extensions by specific middleware in `axum::serve`.
-    let ip_result = extensions.get::<GetIPResult>().copied().ok_or_else(|| {
+    let ip_result = extensions.get::<GetIPResult>().ok_or_else(|| {
         tracing::error!("Axum Extensions map does not contain GetIPResult");
         to_jsonrpsee_error_object(IP_ADDRESS_ERROR, ETH_RPC_ERROR)
     })?;
 
-    ip_result.maybe_ip.map_err(|e| {
-        let err_msg = format!("IP address error: {e:?}");
-        to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR)
-    })
+    match ip_result.maybe_ip.as_ref() {
+        Ok(ok) => return Ok(*ok),
+        Err(err) => {
+            let err_msg = format!("IP address error: {err:?}");
+            return Err(to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR));
+        }
+    }
 }
