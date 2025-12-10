@@ -294,8 +294,8 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
         to_jsonrpsee_error_object(IP_ADDRESS_ERROR, ETH_RPC_ERROR)
     })?;
 
-    ip_result.maybe_ip.or_else(|e| {
+    ip_result.maybe_ip.map_err(|e| {
         let err_msg = format!("IP address error: {e:?}");
-        Err(to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR))
+        to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR)
     })
 }
