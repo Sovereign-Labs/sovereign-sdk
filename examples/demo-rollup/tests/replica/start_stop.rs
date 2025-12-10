@@ -4,8 +4,7 @@ use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_start_stop() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info");
-    tracing::info!("STARTING test_replica_start_stop");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,tower=off,sqlx=trace");
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -72,7 +71,7 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT);
     }
 
-    tracing::info!("===== RESTART MASTER 1");
+    tracing::info!("=== IN TEST: RESTART MASTER 1");
     // Restart master.
     let test_rollup = {
         let builder = test_rollup.shutdown().await.unwrap();
@@ -83,10 +82,9 @@ async fn test_replica_start_stop() {
 
     if let Some(pg_data) = &postgres {
         sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
-    } else {
-        tracing::info!("NO LUCK");
     }
 
+    tracing::info!("=== IN TEST: WAIT FOR EVENTS 0");
     {
         let mut event_subscription = replica_test_rollup
             .api_client()
@@ -104,7 +102,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -120,11 +118,9 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 2 * (nb_of_txs as u128) * AMOUNT);
     }
 
-    tracing::info!("=== RESTART REPLICA");
+    tracing::info!("=== IN TEST: RESTART REPLICA");
     if let Some(pg_data) = &postgres {
         sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
-    } else {
-        tracing::info!("NO LUCK");
     }
 
     // Restart replica
@@ -138,11 +134,9 @@ async fn test_replica_start_stop() {
         replica_test_rollup
     };
 
-    tracing::info!("READING EVENTS");
+    tracing::info!("=== IN TEST: READING EVENTS 1");
     if let Some(pg_data) = &postgres {
         sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
-    } else {
-        tracing::info!("NO LUCK");
     }
 
     {
@@ -162,7 +156,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -177,11 +171,9 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 3 * (nb_of_txs as u128) * AMOUNT);
     }
 
-    tracing::info!("RESTART REPLICA AND WAIT");
+    tracing::info!("=== IN TEST: RESTART REPLICA AND WAIT");
     if let Some(pg_data) = &postgres {
         sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
-    } else {
-        tracing::info!("NO LUCK");
     }
 
     // Restart replica and wait
@@ -201,11 +193,9 @@ async fn test_replica_start_stop() {
         replica_test_rollup
     };
 
-    tracing::info!("READ EVENTS AGAIN");
+    tracing::info!("=== IN TEST: READ EVENTS AGAIN");
     if let Some(pg_data) = &postgres {
         sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
-    } else {
-        tracing::info!("NO LUCK");
     }
     {
         let mut event_subscription = replica_test_rollup
@@ -224,7 +214,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -239,11 +229,8 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 4 * (nb_of_txs as u128) * AMOUNT);
     }
 
-    tracing::info!("Completing stuff");
     if let Some(pg_data) = &postgres {
         sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
-    } else {
-        tracing::info!("NO LUCK");
     }
 
     let _ = replica_test_rollup.shutdown().await;

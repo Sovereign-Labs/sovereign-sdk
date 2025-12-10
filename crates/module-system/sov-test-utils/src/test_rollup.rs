@@ -285,7 +285,13 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             other_handles.push(handle);
         }
 
+        let is_replica = match &self.config.sequencer_config {
+            SequencerKindConfig::Standard(_s) => false,
+            SequencerKindConfig::Preferred(p) => p.is_replica.unwrap_or_default(),
+        };
+
         let rollup_task = tokio::spawn(async move {
+            let _span = tracing::info_span!("rollup-kind", ?is_replica);
             match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
                 Ok(()) => {
                     tracing::info!("Completed running a rollup");

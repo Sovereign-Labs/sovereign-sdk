@@ -23,6 +23,8 @@ pub async fn create_postgres_container() -> Result<ContainerAsync<Postgres>, Cre
 
     let img = Postgres::default()
         .with_tag("17-alpine")
+        .with_shm_size(256 * 1024 * 1024) // 256MB
+        .with_env_var("POSTGRES_HOST_AUTH_METHOD", "trust")
         .start()
         .await
         .map_err(|e| CreatePostgresError::DockerError(e.into()))?;
@@ -53,7 +55,7 @@ pub async fn connection_string_from_postgres_container(
     container: &ContainerAsync<Postgres>,
 ) -> anyhow::Result<String> {
     let postgres_connection_string = format!(
-        "postgres://postgres:postgres@{}:{}",
+        "postgres://postgres:postgres@{}:{}?sslmode=disable",
         container.get_host().await?,
         container.get_host_port_ipv4(5432).await?
     );
