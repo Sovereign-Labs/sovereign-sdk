@@ -192,7 +192,7 @@ async fn test_correct_ip() {
 
         // Check that the correct IP was rate limmited.
         assert!(err_str
-            .contains("The sender was rate-limited by the sequencer: Ip { ip: 123.123.123.123"))
+            .contains("The sender was rate-limited by the sequencer: Ip { ip: 123.123.123.123"));
     }
 }
 
