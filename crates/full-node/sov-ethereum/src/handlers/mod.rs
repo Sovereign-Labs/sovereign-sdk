@@ -296,10 +296,10 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
     })?;
 
     match ip_result.maybe_ip.as_ref() {
-        Ok(ok) => return Ok(*ok),
+        Ok(ok) => Ok(*ok),
         Err(err) => {
             let err_msg = format!("IP address error: {err:?}");
-            return Err(to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR));
+            Err(to_jsonrpsee_error_object(err_msg, ETH_RPC_ERROR))
         }
     }
 }
