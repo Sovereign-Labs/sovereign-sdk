@@ -43,7 +43,7 @@ pub fn get_client_ip(
 ) -> Result<IpAddr, ClientIpError> {
     if headers.contains_key(&X_FORWARDED_FOR) {
         return rightmost_x_forwarded_for(&headers)
-            .map_err(|e| ClientIpError::InvalidXForwardedForEncoding(e));
+            .map_err(ClientIpError::InvalidXForwardedForEncoding);
     }
 
     // Fallback to the socket address from ConnectInfo
@@ -94,11 +94,11 @@ mod tests {
 
         // Many ips in x-forwarded-for
         {
-            let many_ips = "123.123.123.123, 223.223.223.223,323.323.323.32";
+            let many_ips = "223.223.223.223,323.323.323.32,123.123.123.123";
             let mut headers = HeaderMap::new();
             headers.insert("x-forwarded-for", HeaderValue::from_static(many_ips));
             let ip = get_client_ip(headers, None).unwrap();
-            assert_eq!(ip.to_string(), ip.to_string());
+            assert_eq!(ip.to_string(), "123.123.123.123".to_string());
         }
     }
 

@@ -11824,6 +11824,7 @@ dependencies = [
  "ethers",
  "futures",
  "hex",
+ "jsonrpsee",
  "prometheus_exporter",
  "proptest",
  "rand 0.8.5",
