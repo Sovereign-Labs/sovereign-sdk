@@ -5,6 +5,7 @@ use tokio::time::Duration;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_start_stop() {
     sov_test_utils::logging::initialize_or_change_logging_with_filter("info");
+    tracing::info!("STARTING test_replica_start_stop");
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -38,6 +39,7 @@ async fn test_replica_start_stop() {
 
     let nb_of_txs = 300;
 
+    tracing::info!("===== 1 BEGIN");
     {
         let mut event_subscription = replica_test_rollup
             .api_client()
@@ -70,6 +72,7 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, (nb_of_txs as u128) * AMOUNT);
     }
 
+    tracing::info!("===== RESTART MASTER 1");
     // Restart master.
     let test_rollup = {
         let builder = test_rollup.shutdown().await.unwrap();
@@ -78,7 +81,11 @@ async fn test_replica_start_stop() {
         test_rollup
     };
 
-    // TODO: Read logs from postgres here.
+    if let Some(pg_data) = &postgres {
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
+    } else {
+        tracing::info!("NO LUCK");
+    }
 
     {
         let mut event_subscription = replica_test_rollup
@@ -113,7 +120,12 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 2 * (nb_of_txs as u128) * AMOUNT);
     }
 
-    // TODO: Read logs from postgres here.
+    tracing::info!("=== RESTART REPLICA");
+    if let Some(pg_data) = &postgres {
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
+    } else {
+        tracing::info!("NO LUCK");
+    }
 
     // Restart replica
     let replica_test_rollup = {
@@ -126,7 +138,12 @@ async fn test_replica_start_stop() {
         replica_test_rollup
     };
 
-    // TODO: Read logs from postgres here.
+    tracing::info!("READING EVENTS");
+    if let Some(pg_data) = &postgres {
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
+    } else {
+        tracing::info!("NO LUCK");
+    }
 
     {
         let mut event_subscription = replica_test_rollup
@@ -160,7 +177,12 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 3 * (nb_of_txs as u128) * AMOUNT);
     }
 
-    // TODO: Read logs from postgres here.
+    tracing::info!("RESTART REPLICA AND WAIT");
+    if let Some(pg_data) = &postgres {
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
+    } else {
+        tracing::info!("NO LUCK");
+    }
 
     // Restart replica and wait
     let replica_test_rollup = {
@@ -179,8 +201,12 @@ async fn test_replica_start_stop() {
         replica_test_rollup
     };
 
-    // TODO: Read logs from postgres here.
-
+    tracing::info!("READ EVENTS AGAIN");
+    if let Some(pg_data) = &postgres {
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
+    } else {
+        tracing::info!("NO LUCK");
+    }
     {
         let mut event_subscription = replica_test_rollup
             .api_client()
@@ -213,7 +239,12 @@ async fn test_replica_start_stop() {
         assert_eq!(receiver_balance.0, 4 * (nb_of_txs as u128) * AMOUNT);
     }
 
-    // TODO: Read logs from postgres here.
+    tracing::info!("Completing stuff");
+    if let Some(pg_data) = &postgres {
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres).await;
+    } else {
+        tracing::info!("NO LUCK");
+    }
 
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;

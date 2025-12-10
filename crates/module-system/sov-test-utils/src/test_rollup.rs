@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use crate::postgres::create_postgres_container;
 use crate::postgres::CreatePostgresError;
-use crate::postgres::PostgresImage;
 use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
@@ -54,6 +53,7 @@ use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
 };
 use testcontainers::ContainerAsync;
+use testcontainers_modules::postgres::Postgres;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
@@ -419,7 +419,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 }
 
 pub struct PostgresData {
-    postgres: ContainerAsync<PostgresImage>,
+    pub postgres: ContainerAsync<Postgres>,
     connection_string: String,
 }
 

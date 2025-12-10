@@ -1,4 +1,3 @@
-use crate::with_agent::helpers::docker::print_logs_from_container;
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
 use crate::with_agent::helpers::{EVM_MAILBOX, RELAYER_ACCOUNT};
 use serde::de::DeserializeOwned;
@@ -7,6 +6,7 @@ use serde_json::{json, Value};
 use sov_hyperlane_integration::{EthAddress, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, HexHash, HexString};
+use sov_test_utils::docker::print_logs_from_container;
 use testcontainers::core::ExecCommand;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, ImageExt};
