@@ -24,7 +24,6 @@ pub async fn create_postgres_container() -> Result<ContainerAsync<Postgres>, Cre
     let img = Postgres::default()
         .with_tag("17-alpine")
         .with_shm_size(256 * 1024 * 1024) // 256MB
-        .with_env_var("POSTGRES_HOST_AUTH_METHOD", "trust")
         .start()
         .await
         .map_err(|e| CreatePostgresError::DockerError(e.into()))?;

@@ -17,6 +17,7 @@ use crate::{
 };
 use anyhow::Context;
 use derivative::Derivative;
+use tracing::Instrument;
 use serde::Deserialize;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
@@ -290,19 +291,22 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             SequencerKindConfig::Preferred(p) => p.is_replica.unwrap_or_default(),
         };
 
-        let rollup_task = tokio::spawn(async move {
-            let _span = tracing::info_span!("rollup-kind", ?is_replica);
-            match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
-                Ok(()) => {
-                    tracing::info!("Completed running a rollup");
-                    Ok(())
-                }
-                Err(error) => {
-                    tracing::error!(?error, "Rollup execution returned an error");
-                    Err(error)
+        let span = tracing::info_span!("rollup_task", ?is_replica);
+        let rollup_task = tokio::spawn(
+            async move {
+                match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
+                    Ok(()) => {
+                        tracing::info!("Completed running a rollup");
+                        Ok(())
+                    }
+                    Err(error) => {
+                        tracing::error!(?error, "Rollup execution returned an error");
+                        Err(error)
+                    }
                 }
             }
-        });
+            .instrument(span),
+        );
 
         let rest_addr = rest_addr_rx.await?;
 

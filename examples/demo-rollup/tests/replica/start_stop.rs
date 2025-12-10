@@ -4,7 +4,7 @@ use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_start_stop() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,tower=off,sqlx=trace");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,tower=off");
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
