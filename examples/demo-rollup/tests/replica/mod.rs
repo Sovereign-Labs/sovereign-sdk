@@ -10,7 +10,7 @@ use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{MockAddress, MockDaConfig};
+use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
@@ -23,7 +23,7 @@ use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
-use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -55,7 +55,9 @@ async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
 async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
-    da_config.block_producing = TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+    da_config.block_producing = BlockProducingConfig::Periodic {
+        block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 2,
+    };
 
     let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
 
