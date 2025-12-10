@@ -74,6 +74,7 @@ where
         let noop = |tx_hash, _| Ok(tx_hash);
         let result =
             Self::process_raw_transaction(parameters.one()?, ethereum, noop, ip_addr).await;
+
         track_metrics("eth_sendRawTransaction", start, &result);
         result
     }

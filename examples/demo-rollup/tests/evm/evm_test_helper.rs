@@ -98,6 +98,18 @@ pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
     alloy_client_with_signer(socket, SENDER_PRIV_KEY)
 }
 
+pub(crate) fn alloy_client_with_reqwest<B>(socket: SocketAddr, b: B) -> DynProvider
+where
+    B: FnOnce(reqwest::ClientBuilder) -> reqwest::Client,
+{
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
+    let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
+    ProviderBuilder::new()
+        .wallet(signer)
+        .with_reqwest(url, b)
+        .erased()
+}
+
 /// Deploys a test contract on the test rollup.
 pub(crate) async fn deploy_contract_check(
     client: &SimpleStorageClient,
