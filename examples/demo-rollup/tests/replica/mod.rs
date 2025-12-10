@@ -23,7 +23,7 @@ use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
-use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
+use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
