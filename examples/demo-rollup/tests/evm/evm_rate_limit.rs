@@ -36,7 +36,10 @@ async fn evm_test_foo() -> anyhow::Result<()> {
         .unwrap();
 
     let mut headers = HeaderMap::new();
-    headers.insert("Any-Header-You-Like", HeaderValue::from_static("42"));
+    headers.insert(
+        "x-forwarded-for",
+        HeaderValue::from_static("123.123.123.123"),
+    );
 
     let client = HttpClientBuilder::default()
         .set_headers(headers)
