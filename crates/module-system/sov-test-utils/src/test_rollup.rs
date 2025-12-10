@@ -59,7 +59,6 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio::time::Duration;
 use tokio_stream::StreamExt;
-use tracing::Instrument;
 
 /// Specifies how to source the genesis data for a rollup.
 #[derive(Derivative)]
@@ -286,27 +285,18 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             other_handles.push(handle);
         }
 
-        let is_replica = match &self.config.sequencer_config {
-            SequencerKindConfig::Standard(_s) => false,
-            SequencerKindConfig::Preferred(p) => p.is_replica.unwrap_or_default(),
-        };
-
-        let span = tracing::info_span!("rollup_task", ?is_replica);
-        let rollup_task = tokio::spawn(
-            async move {
-                match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
-                    Ok(()) => {
-                        tracing::info!("Completed running a rollup");
-                        Ok(())
-                    }
-                    Err(error) => {
-                        tracing::error!(?error, "Rollup execution returned an error");
-                        Err(error)
-                    }
+        let rollup_task = tokio::spawn(async move {
+            match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
+                Ok(()) => {
+                    tracing::info!("Completed running a rollup");
+                    Ok(())
+                }
+                Err(error) => {
+                    tracing::error!(?error, "Rollup execution returned an error");
+                    Err(error)
                 }
             }
-            .instrument(span),
-        );
+        });
 
         let rest_addr = rest_addr_rx.await?;
 
