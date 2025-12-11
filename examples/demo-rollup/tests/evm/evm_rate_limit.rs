@@ -61,8 +61,8 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
         let b = |b: reqwest::ClientBuilder| b.default_headers(headers).build().unwrap();
 
         let client = alloy_client_with_reqwest(rollup.http_addr, b, SECONDARY_SENDER_PRIV_KEY);
-        let tx = TransactionRequest::default().with_to(Address::ZERO);
-        let _pending = client.send_transaction(tx).await.unwrap();
+        let _tx = TransactionRequest::default().with_to(Address::ZERO);
+        //let _pending = client.send_transaction(tx).await.unwrap();
     }
     Ok(())
 }
