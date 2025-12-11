@@ -398,7 +398,7 @@ mod derive_dispatch {
         let sequencer = <ZkTestSpec as Spec>::Address::from([1; 28]);
         let sequencer_da = <<ZkTestSpec as Spec>::Da as DaSpec>::Address::new([0; 32]);
         let context: Context<ZkTestSpec> =
-            Context::new(sender, Default::default(), sequencer, sequencer_da);
+            Context::new(sender, Default::default(), sequencer, sequencer_da, None);
 
         let value = 11;
         {

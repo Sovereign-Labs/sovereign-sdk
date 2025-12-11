@@ -89,6 +89,7 @@ fn dummy_context() -> Context<S> {
         Default::default(),
         Address::new([0; Address::LENGTH]),
         [1; 32].into(),
+        None,
     )
 }
 

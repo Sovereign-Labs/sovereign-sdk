@@ -649,6 +649,7 @@ fn test_is_preferred_sequencer() {
             Credentials::default(),
             random_address,
             random_da_address,
+            None,
         );
 
         let is_preferred = revenue_share.is_preferred_sequencer(&ctx, state);
