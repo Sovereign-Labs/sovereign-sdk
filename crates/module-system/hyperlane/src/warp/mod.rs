@@ -24,6 +24,7 @@ use crate::{HyperlaneAddress, Mailbox, Recipient};
 mod api;
 #[cfg(feature = "native")]
 mod execution_config;
+#[cfg(feature = "native")]
 mod hooks;
 #[cfg(feature = "native")]
 mod metrics;
