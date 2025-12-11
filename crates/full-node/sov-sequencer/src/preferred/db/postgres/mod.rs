@@ -319,10 +319,12 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         let event_types = vec!["transaction"; txs.len()];
         let tx_indexes = (start..end).collect::<Vec<_>>();
         let hashes = txs.iter().map(|(_, hash)| hash.0).collect::<Vec<_>>();
+        // Serialize the full FullyBakedTx (including sequencing_data) to preserve metadata
         let txs = txs
             .iter()
-            .map(|(tx, _)| tx.data.as_ref())
+            .map(|(tx, _)| borsh::to_vec(tx).unwrap())
             .collect::<Vec<_>>();
+        let txs_refs: Vec<&[u8]> = txs.iter().map(|t| t.as_slice()).collect();
         run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
@@ -333,7 +335,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             .bind(&event_types[..])
             .bind(&tx_indexes[..])
             .bind(&hashes[..])
-            .bind(&txs[..])
+            .bind(&txs_refs[..])
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;
