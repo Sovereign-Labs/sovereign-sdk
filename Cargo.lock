@@ -11840,6 +11840,7 @@ dependencies = [
  "sov-eth-client",
  "sov-ethereum",
  "sov-evm",
+ "sov-evm-test-utils",
  "sov-full-node-configs",
  "sov-kernels",
  "sov-metrics",
@@ -11930,9 +11931,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-cli",
+ "sov-evm-test-utils",
  "sov-modules-api",
  "sov-rpc-eth-types",
- "sov-test-utils",
  "tracing",
 ]
 
@@ -12078,7 +12079,7 @@ dependencies = [
  "reqwest 0.12.23",
  "serde",
  "sov-eth-client",
- "sov-test-utils",
+ "sov-evm-test-utils",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",

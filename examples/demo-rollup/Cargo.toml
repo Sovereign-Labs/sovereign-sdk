@@ -41,7 +41,7 @@ sov-state = { workspace = true, features = ["native"] }
 demo-stf = { workspace = true, features = ["native"] }
 
 risc0 = { path = "./provers/risc0" }
- sp1 = { path = "./provers/sp1" }
+sp1 = { path = "./provers/sp1" }
 
 borsh = { workspace = true, features = ["bytes", "derive"] }
 async-trait = { workspace = true }
@@ -93,6 +93,7 @@ sov-api-spec = { workspace = true }
 sov-evm = { workspace = true, features = ["native", "arbitrary"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }
 sov-test-utils = { workspace = true }
+sov-evm-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }

@@ -4,7 +4,7 @@ use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::U256;
 use ethers::abi::Address;
-use sov_test_utils::SimpleStorage;
+use sov_evm_test_utils::SimpleStorage;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn simple_transfer() -> anyhow::Result<()> {
