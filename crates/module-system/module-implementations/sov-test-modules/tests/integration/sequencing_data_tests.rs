@@ -24,10 +24,10 @@ fn success() {
     runner.execute_transaction(TransactionTestCase {
         input: user.create_plain_message::<RT, SequencingDataTester<S>>(()),
         assert: Box::new(|result, _state| {
+            let receipt = result.tx_receipt;
             assert!(
-                result.tx_receipt.is_successful(),
-                "Transaction should succeed. Receipt: {:?}",
-                result.tx_receipt
+                receipt.is_successful(),
+                "Transaction should succeed. Receipt: {receipt:?}",
             );
         }),
     });

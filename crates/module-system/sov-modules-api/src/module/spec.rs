@@ -8,7 +8,7 @@ use sov_rollup_interface::crypto::{CredentialId, Signature};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{CryptoSpec, StateTransitionPublicData, Zkvm};
-use sov_rollup_interface::BasicAddress;
+use sov_rollup_interface::{BasicAddress, Bytes};
 use sov_state::{Storage, StorageProof};
 
 use crate::gas::Gas;
@@ -161,7 +161,7 @@ pub struct Context<S: Spec> {
     /// The DA layer address of the sequencer who included the transaction.
     sequencer_da_address: <S::Da as DaSpec>::Address,
     /// Sequencing data provided by the sequencer
-    sequencing_data: Option<Vec<u8>>,
+    sequencing_data: Option<Bytes>,
     /// The rollup address that pays the gas fees for the transaction.
     gas_refund_recipient: S::Address,
 }
@@ -183,13 +183,8 @@ impl<S: Spec> Context<S> {
     }
 
     /// Returns the sequencing data
-    pub fn sequencing_data(&self) -> &Option<Vec<u8>> {
+    pub fn sequencing_data(&self) -> &Option<Bytes> {
         &self.sequencing_data
-    }
-
-    /// Updates the sequencing data
-    pub fn set_sequencing_data(&mut self, data: Vec<u8>) {
-        self.sequencing_data = Some(data);
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
@@ -208,6 +203,7 @@ impl<S: Spec> Context<S> {
         sender_credentials: Credentials,
         sequencer: S::Address,
         sequencer_da_address: <S::Da as DaSpec>::Address,
+        sequencing_data: Option<Bytes>,
     ) -> Self {
         Self::with_payer(
             sender,
@@ -215,6 +211,7 @@ impl<S: Spec> Context<S> {
             sequencer,
             sequencer_da_address,
             sender,
+            sequencing_data,
         )
     }
 
@@ -225,6 +222,7 @@ impl<S: Spec> Context<S> {
         sequencer: S::Address,
         sequencer_da_address: <S::Da as DaSpec>::Address,
         payer: S::Address,
+        sequencing_data: Option<Bytes>,
     ) -> Self {
         Self {
             sender_credentials,
@@ -232,7 +230,7 @@ impl<S: Spec> Context<S> {
             sequencer,
             sequencer_da_address,
             gas_refund_recipient: payer,
-            sequencing_data: None,
+            sequencing_data,
         }
     }
 
@@ -279,6 +277,7 @@ mod arbitrary {
                 Default::default(),
                 sequencer,
                 sequencer_da_address,
+                None,
             ))
         }
     }

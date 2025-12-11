@@ -296,7 +296,6 @@ where
             &NoOpControlFlow,
             operating_mode,
             metrics,
-            None, // Standard sequencer doesn't provide sequencing_data
         );
 
         match res {

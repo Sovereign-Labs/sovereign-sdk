@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use sov_modules_api::sequencing_metadata::HDTimestamp;
 use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
@@ -121,19 +121,9 @@ where
                 let txs = txs_to_insert
                     .iter()
                     .map(|contents| {
-                        // Create timestamp as sequencing_data (nanoseconds since UNIX epoch as u128 little-endian)
-                        let timestamp_nanos = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .expect("System time before UNIX epoch")
-                            .as_nanos();
-                        let sequencing_data = timestamp_nanos.to_le_bytes().to_vec();
-                        (
-                            FullyBakedTx {
-                                data: contents.accepted_tx.tx.data.clone(),
-                                sequencing_data: Some(sequencing_data.into()),
-                            },
-                            contents.accepted_tx.tx_hash,
-                        )
+                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone().into());
+                        tx.set_sequencing_metadata(&HDTimestamp::now());
+                        (tx, contents.accepted_tx.tx_hash)
                     })
                     .collect();
                 self.db

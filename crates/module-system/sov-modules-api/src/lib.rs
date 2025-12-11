@@ -59,6 +59,9 @@ pub mod state;
 /// Defines the metadata that is used to generate execution proofs.
 pub mod proof_metadata;
 
+/// Defines the metadata that is added to transactions by the sequencer but not signed by the user
+pub mod sequencing_metadata;
+
 mod reexport_macros;
 
 #[cfg(test)]

@@ -48,6 +48,11 @@ impl FullyBakedTx {
             sequencing_data: None,
         }
     }
+
+    /// Sets sequencing metadata
+    pub fn set_sequencing_metadata(&mut self, metadata: &impl BorshSerialize) {
+        self.sequencing_data = Some(borsh::to_vec(metadata).unwrap().into());
+    }
 }
 
 /// `RawTx` represents a serialized signed rollup transaction. A `RawTx` needs to be encoded
