@@ -331,10 +331,11 @@ async fn test_pinning_after_recovery() {
     let (test_rollup, admin) = create_test_nomt_rollup().await;
 
     let client = test_rollup.api_client().clone();
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
 
     // Finalise some blocks
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Sanity check tx that the rollup works, and send the tx all the way through to DA.
     // Set a value in the pinned cache.
@@ -347,12 +348,7 @@ async fn test_pinning_after_recovery() {
             value: 1,
         }),
     );
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     test_rollup.force_close_batch().await.unwrap();
     da_layer.produce_and_wait_for_n_slots(1).await;
 
@@ -400,12 +396,7 @@ async fn test_pinning_after_recovery() {
         }),
         Some(0),
     );
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx2),
-        })
-        .await
-        .unwrap();
+    client.send_raw_tx_to_sequencer(&tx2).await.unwrap();
 
     test_rollup.force_close_batch().await.unwrap();
     // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
@@ -414,7 +405,10 @@ async fn test_pinning_after_recovery() {
         let _ = da_layer.produce_block().await;
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
-    test_rollup.shutdown().await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(30), test_rollup.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 /// Ensures that RAM pinning still works after a total resync.
