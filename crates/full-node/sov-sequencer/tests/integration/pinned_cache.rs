@@ -19,7 +19,6 @@ use sov_state::DefaultStorageSpec;
 use sov_test_modules::pinned_cache::CallMessage as PinnedCacheCallMessage;
 use sov_test_modules::pinned_cache::PinnedCacheTester;
 use sov_test_modules::pinned_cache::ValueRange;
-use sov_test_utils::default_test_signed_transaction;
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
@@ -31,6 +30,7 @@ use sov_test_utils::MockDaSpec;
 use sov_test_utils::RtAgnosticBlueprint;
 use sov_test_utils::TestNomtSpec as TestSpec;
 use sov_test_utils::TestUser;
+use sov_test_utils::{default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS};
 use tokio_stream::StreamExt;
 
 type TestNomtBlueprint = RtAgnosticBlueprint<
@@ -328,13 +328,16 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pinning_after_recovery() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+    // sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
 
     let client = test_rollup.api_client().clone();
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
 
     // Finalise some blocks
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    println!("1");
 
     // Sanity check tx that the rollup works, and send the tx all the way through to DA.
     // Set a value in the pinned cache.
@@ -347,14 +350,10 @@ async fn test_pinning_after_recovery() {
             value: 1,
         }),
     );
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     test_rollup.force_close_batch().await.unwrap();
     da_layer.produce_and_wait_for_n_slots(1).await;
+    println!("2");
 
     // Pause sequencer update_state and run some blocks so deferred_slots_count is reached
     test_rollup.pause_preferred_batches().await;
@@ -364,30 +363,46 @@ async fn test_pinning_after_recovery() {
     );
     // This can be lower than DEFERRED_SLOTS_COUNT because the sequencer takes into account a)
     // possible node lag and b) a 90% threshold.
-    for _ in 0..40 {
-        let _ = da_layer.produce_block().await; // Don't wait for state updates since we've just paused them
-    }
+    test_rollup.tenderly_produce_blocks(40).await.unwrap();
     // Make sure the DA has synced everything
     test_rollup.wait_for_node_synced().await.unwrap();
+    println!("2");
 
     tracing::info!("Resuming preferred sequencer batch production.");
     test_rollup.resume_preferred_batches().await;
+    println!("3");
     // Normally on the next state update, the sequencer should always enter recovery.
     // However for some reason this was flaky.
-    test_rollup.da_service.produce_block_now().await.unwrap();
+    test_rollup.tenderly_produce_blocks(1).await.unwrap();
+    let max_wait = 1000;
+    let mut i = 0;
+    let reasonable_time_for_rollup =
+        std::time::Duration::from_millis(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
     while test_rollup.is_sequencer_ready().await {
         // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
         // This is unrelated to the feature under test, so I've left it for now. Anyone reading this should feel free to change the test.
-        let _ = da_layer.produce_block().await;
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        test_rollup.tenderly_produce_blocks(1).await.unwrap();
+        i += 1;
+        if i > max_wait {
+            panic!("sequencer never became ready in {max_wait} blocks");
+        }
+        tokio::time::sleep(reasonable_time_for_rollup).await;
     }
+    test_rollup.wait_for_node_synced().await.unwrap();
+    println!("4");
 
+    i = 0;
     while !test_rollup.is_sequencer_ready().await {
         // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
         // This is unrelated to the feature under test, so I've left it for now. Anyone reading this should feel free to change the test.
-        let _ = da_layer.produce_block().await;
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        test_rollup.tenderly_produce_blocks(1).await.unwrap();
+        if i > max_wait {
+            panic!("sequencer never became ready in {max_wait} blocks");
+        }
+        i += 1;
+        tokio::time::sleep(reasonable_time_for_rollup).await;
     }
+    println!("5");
 
     // Read the value that should be in pinned cache. We should get the correct value (1) and not touch storage.
     let tx2 = tx_read_pinned_cache(
@@ -400,21 +415,17 @@ async fn test_pinning_after_recovery() {
         }),
         Some(0),
     );
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx2),
-        })
-        .await
-        .unwrap();
+    client.send_raw_tx_to_sequencer(&tx2).await.unwrap();
+    println!("6");
 
     test_rollup.force_close_batch().await.unwrap();
     // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
     // So we just produce blocks and sleep
-    for _ in 0..3 {
-        let _ = da_layer.produce_block().await;
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-    }
-    test_rollup.shutdown().await.unwrap();
+    test_rollup.tenderly_produce_blocks(3).await.unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(30), test_rollup.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 /// Ensures that RAM pinning still works after a total resync.

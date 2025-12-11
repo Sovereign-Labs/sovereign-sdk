@@ -11568,6 +11568,7 @@ dependencies = [
  "serde",
  "sov-address",
  "sov-capabilities",
+ "sov-evm-test-utils",
  "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
@@ -11850,6 +11851,7 @@ dependencies = [
  "sov-eth-client",
  "sov-ethereum",
  "sov-evm",
+ "sov-evm-test-utils",
  "sov-full-node-configs",
  "sov-kernels",
  "sov-metrics",
@@ -11940,9 +11942,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-cli",
+ "sov-evm-test-utils",
  "sov-modules-api",
  "sov-rpc-eth-types",
- "sov-test-utils",
  "tracing",
 ]
 
@@ -12057,6 +12059,7 @@ dependencies = [
  "sov-chain-state",
  "sov-eth-dev-signer",
  "sov-evm",
+ "sov-evm-test-utils",
  "sov-kernels",
  "sov-metrics",
  "sov-mock-da",
@@ -12088,10 +12091,28 @@ dependencies = [
  "reqwest 0.12.23",
  "serde",
  "sov-eth-client",
- "sov-test-utils",
+ "sov-evm-test-utils",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
+]
+
+[[package]]
+name = "sov-evm-test-utils"
+version = "0.3.0"
+dependencies = [
+ "alloy",
+ "alloy-contract",
+ "alloy-dyn-abi",
+ "alloy-primitives",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "anyhow",
+ "async-trait",
+ "ethereum-types",
+ "ethers",
+ "hex",
+ "serde_json",
 ]
 
 [[package]]
@@ -12845,6 +12866,7 @@ dependencies = [
  "sov-api-spec",
  "sov-bank",
  "sov-celestia-adapter",
+ "sov-evm-test-utils",
  "sov-kernels",
  "sov-metrics",
  "sov-mock-da",
@@ -12877,6 +12899,7 @@ dependencies = [
  "serde",
  "sov-api-spec",
  "sov-bank",
+ "sov-evm-test-utils",
  "sov-mock-da",
  "sov-modules-api",
  "sov-synthetic-load",
@@ -13093,20 +13116,12 @@ dependencies = [
 name = "sov-test-utils"
 version = "0.3.0"
 dependencies = [
- "alloy",
- "alloy-contract",
- "alloy-primitives",
- "alloy-rpc-types-eth",
- "alloy-sol-types",
  "anyhow",
  "async-trait",
  "axum-server",
  "borsh",
  "derivative",
  "derive_more 1.0.0",
- "ethereum-types",
- "ethers",
- "hex",
  "jsonschema",
  "num_cpus",
  "reqwest 0.12.23",
@@ -13212,6 +13227,7 @@ dependencies = [
  "sov-address",
  "sov-eth-dev-signer",
  "sov-evm",
+ "sov-evm-test-utils",
  "sov-kernels",
  "sov-modules-api",
  "sov-modules-stf-blueprint",

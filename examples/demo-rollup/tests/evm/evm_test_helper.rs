@@ -13,6 +13,7 @@ use reqwest::Url;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::SimpleStorageClient;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_full_node_configs::sequencer::TimingOracleConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
@@ -23,7 +24,6 @@ use sov_sequencer::SovRateLimiterConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
-use sov_test_utils::LegacySimpleStorage;
 
 pub(crate) const SENDER_PRIV_KEY: &str =
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";

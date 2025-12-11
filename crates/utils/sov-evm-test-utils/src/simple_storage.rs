@@ -2,8 +2,7 @@ use ethereum_types::U256;
 use ethers::contract::BaseContract;
 use ethers::core::types::Bytes;
 
-use crate::evm::make_contract_from_abi;
-use crate::evm::test_data_path;
+use crate::{make_contract_from_abi, test_data_path};
 
 sol!(
     #[sol(

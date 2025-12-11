@@ -5,7 +5,7 @@ use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 use alloy::primitives::B256;
 use alloy::providers::Provider;
 use alloy::signers::local::PrivateKeySigner;
-use sov_test_utils::SimpleStorage;
+use sov_evm_test_utils::SimpleStorage;
 
 /// Verifies that contract deployments works when `to` and `gas` are absent.
 /// The handler should auto-estimate gas and convert `to: None` to `to: Some(TxKind::Create)`.

@@ -9,12 +9,12 @@ use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_ethereum::Cursor;
+use sov_evm_test_utils::SimpleStorage;
 use sov_modules_api::execution_mode::Native;
 use sov_rpc_eth_types::FilterWithCursor;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 use sov_sequencer::SeqConfigExtension;
 use sov_test_utils::test_rollup::TestRollup;
-use sov_test_utils::SimpleStorage;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_log_from_pending_block() -> anyhow::Result<()> {

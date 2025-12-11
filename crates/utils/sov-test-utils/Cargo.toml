@@ -29,17 +29,8 @@ serde_json = { workspace = true }
 testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true, features = ["postgres"] }
 tracing = { workspace = true }
-hex = { workspace = true }
 num_cpus = { workspace = true }
 tokio-stream = { workspace = true }
-
-ethereum-types = { workspace = true }
-ethers = { workspace = true }
-alloy-contract = { workspace = true }
-alloy-sol-types = { workspace = true, features = ["json"] }
-alloy-primitives = { workspace = true }
-alloy-rpc-types-eth = "1.0.30"
-alloy = { workspace = true }
 
 sha2 = { workspace = true }
 sov-address = { workspace = true }
@@ -80,7 +71,6 @@ reqwest = { workspace = true, features = ["json"] }
 
 [features]
 arbitrary = [
-	"ethereum-types/arbitrary",
 	"sov-db/arbitrary",
 	"sov-mock-zkvm/arbitrary",
 	"sov-modules-api/arbitrary",
@@ -94,8 +84,4 @@ arbitrary = [
 	"sov-mock-da/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-paymaster/arbitrary",
-	"alloy-primitives/arbitrary",
-	"alloy-rpc-types-eth/arbitrary",
-	"alloy-sol-types/arbitrary",
-	"alloy/arbitrary"
 ]

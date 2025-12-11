@@ -93,6 +93,7 @@ bincode = { workspace = true }
 
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
+sov-evm-test-utils = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
 sov-modules-api = { workspace = true, features = ["test-utils"] }
 
@@ -118,6 +119,7 @@ arbitrary = [
 	"alloy-consensus/arbitrary",
 	"reth-primitives-traits/arbitrary",
 	"reth-ethereum-primitives/arbitrary",
+	"sov-evm-test-utils/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",

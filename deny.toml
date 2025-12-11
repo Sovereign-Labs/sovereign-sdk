@@ -306,6 +306,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-evm-test-utils"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "rest-api-load-testing"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

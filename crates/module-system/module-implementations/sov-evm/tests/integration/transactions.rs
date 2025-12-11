@@ -7,9 +7,10 @@ use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
 use revm::Database;
 use sov_evm::Evm;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::GasArray;
+use sov_test_utils::BatchTestCase;
 use sov_test_utils::TransactionType;
-use sov_test_utils::{BatchTestCase, LegacySimpleStorage};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
