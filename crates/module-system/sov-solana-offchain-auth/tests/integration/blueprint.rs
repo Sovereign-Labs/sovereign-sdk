@@ -182,7 +182,7 @@ where
     // Submit to sequencer (similar to axum_accept_tx but with Solana auth)
     let tx_with_hash = sequencer
         .0
-        .accept_tx(encoded_tx, connect_info.0)
+        .accept_tx(encoded_tx, connect_info.0.ip())
         .await
         .map_err(|e| {
             if e.status.is_server_error() {

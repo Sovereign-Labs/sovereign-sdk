@@ -47,7 +47,10 @@ use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::preferred::{PostgresConfig, PreferredSequencerConfig, TimingOracleConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
-use sov_sequencer::{SequencerApis, SequencerConfig, SequencerKindConfig, StateUpdateNotification};
+use sov_sequencer::{
+    SequencerApis, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig,
+    StateUpdateNotification,
+};
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
@@ -129,6 +132,20 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
 }
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
+    /// See [`PreferredSequencerConfig::rate_limiter`].
+    pub fn with_rate_limiter(mut self, rate_limiter: Option<SovRateLimiterConfig>) -> Self {
+        if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
+            config.rate_limiter = rate_limiter;
+        } else {
+            self.config.sequencer_config =
+                SequencerKindConfig::Preferred(PreferredSequencerConfig {
+                    rate_limiter,
+                    ..PreferredSequencerConfig::default()
+                });
+        }
+        self
+    }
+
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
     pub fn with_preferred_seq_min_profit_per_tx(mut self, minimum_profit_per_tx: u128) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {

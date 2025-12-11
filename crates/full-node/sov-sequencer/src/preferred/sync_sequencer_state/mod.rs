@@ -27,7 +27,7 @@ use sov_modules_api::GasSpec;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
 pub(crate) use sync_state::*;
@@ -71,7 +71,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         reason: &'static str,
     },
 
