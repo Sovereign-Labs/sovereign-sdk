@@ -25,7 +25,10 @@ use crate::common::sender_is_allowed;
 /// - Reverted transactions are only included if `allow_failed_txs` is true.
 /// - Skipped transactions are never included (they represent pre-execution failures
 ///   like invalid signature, invalid nonce, etc.).
-pub fn should_be_included<S: Spec>(receipt: &TransactionReceipt<S>, allow_failed_txs: bool) -> bool {
+pub fn should_be_included<S: Spec>(
+    receipt: &TransactionReceipt<S>,
+    allow_failed_txs: bool,
+) -> bool {
     receipt.receipt.is_successful() || (receipt.receipt.is_reverted() && allow_failed_txs)
 }
 
