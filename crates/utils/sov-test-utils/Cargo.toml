@@ -29,7 +29,6 @@ serde_json = { workspace = true }
 testcontainers = { workspace = true }
 testcontainers-modules = { workspace = true, features = ["postgres"] }
 tracing = { workspace = true }
-hex = { workspace = true }
 num_cpus = { workspace = true }
 tokio-stream = { workspace = true }
 
