@@ -2,10 +2,11 @@ use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Bytes, TxKind};
 use sov_evm::{EthereumAuthenticator, Evm};
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::RawTx;
-use sov_test_utils::{LegacySimpleStorage, TransactionTestCase, TransactionType};
+use sov_test_utils::{TransactionTestCase, TransactionType};
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};

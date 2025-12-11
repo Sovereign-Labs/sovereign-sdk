@@ -12046,6 +12046,7 @@ dependencies = [
  "sov-chain-state",
  "sov-eth-dev-signer",
  "sov-evm",
+ "sov-evm-test-utils",
  "sov-kernels",
  "sov-metrics",
  "sov-mock-da",
@@ -12086,6 +12087,19 @@ dependencies = [
 [[package]]
 name = "sov-evm-test-utils"
 version = "0.3.0"
+dependencies = [
+ "alloy",
+ "alloy-contract",
+ "alloy-primitives",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "anyhow",
+ "async-trait",
+ "ethereum-types",
+ "ethers",
+ "hex",
+ "serde_json",
+]
 
 [[package]]
 name = "sov-full-node-configs"
@@ -13084,19 +13098,12 @@ dependencies = [
 name = "sov-test-utils"
 version = "0.3.0"
 dependencies = [
- "alloy",
- "alloy-contract",
- "alloy-primitives",
- "alloy-rpc-types-eth",
- "alloy-sol-types",
  "anyhow",
  "async-trait",
  "axum-server",
  "borsh",
  "derivative",
  "derive_more 1.0.0",
- "ethereum-types",
- "ethers",
  "hex",
  "jsonschema",
  "num_cpus",
@@ -13203,6 +13210,7 @@ dependencies = [
  "sov-address",
  "sov-eth-dev-signer",
  "sov-evm",
+ "sov-evm-test-utils",
  "sov-kernels",
  "sov-modules-api",
  "sov-modules-stf-blueprint",

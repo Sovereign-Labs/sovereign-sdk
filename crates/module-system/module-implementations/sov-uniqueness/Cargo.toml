@@ -29,6 +29,7 @@ tempfile = { workspace = true }
 strum = { workspace = true }
 sov-modules-api = { workspace = true, features = ["test-utils"] }
 sov-test-utils = { workspace = true }
+sov-evm-test-utils = { workspace = true }
 sov-value-setter = { workspace = true }
 sov-evm = { workspace = true, features = ["native"] }
 reth-primitives = { workspace = true }
@@ -51,7 +52,8 @@ arbitrary = [
 	"sov-rollup-interface/arbitrary",
 	"alloy-consensus/arbitrary",
 	"alloy-eips/arbitrary",
-	"alloy-primitives/arbitrary"
+	"alloy-primitives/arbitrary",
+	"sov-evm-test-utils/arbitrary"
 ]
 native = [
 	"reth-primitives/std",

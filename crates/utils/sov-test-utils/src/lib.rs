@@ -6,7 +6,6 @@
 
 use std::sync::Arc;
 
-pub use evm::*;
 pub use generators::MessageGenerator;
 pub use interface::*;
 pub use rt_agnostic_blueprint::RtAgnosticBlueprint;
@@ -37,8 +36,6 @@ pub use {
     sov_bank, sov_chain_state, sov_paymaster, sov_rollup_apis, sov_sequencer_registry,
     sov_universal_wallet,
 };
-
-mod evm;
 
 /// Utilities for working with PostgreSQL.
 pub mod postgres;
@@ -147,7 +144,7 @@ pub const TEST_DEFAULT_MAX_PRIORITY_FEE: PriorityFeeBips = PriorityFeeBips::from
 
 // --- End Blessed gas parameters (used for testing) ---
 
-// Blessed rollup constants
+// Blessed rollup constants.
 // Constants used in the genesis configuration of the test runtime
 
 // --- Attester incentives constants ---
@@ -191,7 +188,7 @@ pub const TEST_DEFAULT_MOCK_DA_ON_ANY_SUBMIT: BlockProducingConfig =
         block_wait_timeout_ms: Some(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS),
     };
 
-/// How much time it should take at worst to shutdown, even on slower machine
+/// How much time it should take at worst to shut down, even on slower machine
 pub const TEST_NORMAL_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Used in config for polling in other places.

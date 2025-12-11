@@ -10,6 +10,27 @@ publish = false
 repository.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+ethereum-types = { workspace = true }
+ethers = { workspace = true }
+hex = { workspace = true }
+alloy-contract = { workspace = true }
+alloy-sol-types = { workspace = true, features = ["json"] }
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = "1.0.30"
+alloy = { workspace = true }
+
 
 [lints]
 workspace = true
+
+[features]
+arbitrary = [
+	"alloy-primitives/arbitrary",
+	"alloy-rpc-types-eth/arbitrary",
+	"alloy-sol-types/arbitrary",
+	"alloy/arbitrary",
+	"ethereum-types/arbitrary"
+]
