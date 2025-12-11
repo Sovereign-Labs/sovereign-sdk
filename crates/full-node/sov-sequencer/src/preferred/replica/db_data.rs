@@ -165,8 +165,7 @@ pub(crate) fn row_to_event(row: PgRow) -> Result<(DbData, EventType), ParsingErr
         }
         EventType::Transaction => {
             // Deserialize the full FullyBakedTx (including sequencing_data)
-            let baked_tx = borsh::from_slice::<FullyBakedTx>(&data)
-                .map_err(ParsingError::Borsh)?;
+            let baked_tx = borsh::from_slice::<FullyBakedTx>(&data).map_err(ParsingError::Borsh)?;
             let tx_hash: TxHash = TxHash::new(row.get("hash"));
             DbData::Transaction(sequence_number, baked_tx, tx_hash)
         }
