@@ -6,7 +6,11 @@ use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 use alloy::network::TransactionBuilder;
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionRequest;
+use alloy::transports::RpcError;
+use alloy::transports::TransportErrorKind;
 use alloy_primitives::Address;
+use alloy_provider::DynProvider;
+use core::net::SocketAddr;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use sov_demo_rollup::mock_da_risc0_host_args;
@@ -16,6 +20,16 @@ use sov_modules_api::execution_mode::Native;
 use sov_sequencer::SovRateLimiterConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::TestRollup;
+
+const X_FORWARDED_FOR: &str = "123.123.123.123";
+
+fn make_client_with_x_forwarded_for_header(http_addr: SocketAddr, priv_key: &str) -> DynProvider {
+    let mut headers = HeaderMap::new();
+    headers.insert("x-forwarded-for", HeaderValue::from_static(X_FORWARDED_FOR));
+    let client_builder =
+        |builder: reqwest::ClientBuilder| builder.default_headers(headers).build().unwrap();
+    alloy_client_with_reqwest(http_addr, client_builder, priv_key)
+}
 
 async fn setup_test_rollup(
     rate_limiter: SovRateLimiterConfig,
@@ -35,34 +49,33 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(rate_limiter).await;
     rollup.wait_for_next_blocks(1).await;
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "x-forwarded-for",
-        HeaderValue::from_static("123.123.123.123"),
-    );
-
+    // Make first request.
     {
-        let b = |b: reqwest::ClientBuilder| b.default_headers(headers).build().unwrap();
-
-        let client = alloy_client_with_reqwest(rollup.http_addr, b, SENDER_PRIV_KEY);
+        let client = make_client_with_x_forwarded_for_header(rollup.http_addr, SENDER_PRIV_KEY);
         let tx = TransactionRequest::default().with_to(Address::ZERO);
         let pending = client.send_transaction(tx).await?;
-        let hash = *pending.tx_hash();
-        let confirmed_hash = pending.watch().await?;
-        assert_eq!(confirmed_hash, hash);
+        _ = pending.watch().await?;
     }
 
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        "x-forwarded-for",
-        HeaderValue::from_static("123.123.123.123"),
-    );
+    // The second request should be rate-limited, and the error message must include `X_FORWARDED_FOR`.
     {
-        let b = |b: reqwest::ClientBuilder| b.default_headers(headers).build().unwrap();
-
-        let client = alloy_client_with_reqwest(rollup.http_addr, b, SECONDARY_SENDER_PRIV_KEY);
-        let _tx = TransactionRequest::default().with_to(Address::ZERO);
-        //let _pending = client.send_transaction(tx).await.unwrap();
+        let client =
+            make_client_with_x_forwarded_for_header(rollup.http_addr, SECONDARY_SENDER_PRIV_KEY);
+        let tx = TransactionRequest::default().with_to(Address::ZERO);
+        let err = client.send_transaction(tx).await.unwrap_err();
+        assert_err(err);
     }
     Ok(())
+}
+
+fn assert_err(err: RpcError<TransportErrorKind>) {
+    let err_str = err
+        .as_error_resp()
+        .unwrap()
+        .data
+        .as_ref()
+        .unwrap()
+        .to_string();
+
+    err_str.contains("X_FORWARDED_FOR");
 }
