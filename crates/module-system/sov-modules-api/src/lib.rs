@@ -97,6 +97,7 @@ pub use reexport_macros::*;
 #[cfg(feature = "native")]
 pub use rpc::*;
 pub use runtime::*;
+pub use sequencing_metadata::*;
 pub use sov_rollup_interface::common::{
     safe_vec, HexHash, HexString, SafeString, SafeVec, SizedSafeString, VisibleSlotNumber,
 };

@@ -131,7 +131,11 @@ impl PostgresBackend {
                         })?))
                     })
                     .collect::<anyhow::Result<Vec<_>>>()?;
-                let txs = txs.into_iter().map(FullyBakedTx::new).collect::<Vec<_>>();
+                // Deserialize the full FullyBakedTx (including sequencing_data)
+                let txs = txs
+                    .into_iter()
+                    .map(|data| borsh::from_slice::<FullyBakedTx>(&data))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(PreferredSequencerReadBlob::Batch(
                     InProgressBatch {
@@ -343,6 +347,8 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         tx: FullyBakedTx,
         hash: TxHash,
     ) -> anyhow::Result<()> {
+        // Serialize the full FullyBakedTx (including sequencing_data) to preserve metadata
+        let tx_serialized = borsh::to_vec(&tx)?;
         run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
@@ -351,7 +357,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             .bind(i64::try_from(sequence_number)?)
             .bind(i64::try_from(tx_index_within_batch)?)
             .bind::<&[u8]>(hash.as_ref())
-            .bind(tx.data.as_ref())
+            .bind(&tx_serialized)
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;
