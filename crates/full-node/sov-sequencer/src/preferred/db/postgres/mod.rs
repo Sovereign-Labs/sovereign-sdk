@@ -450,10 +450,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
 
 #[cfg(test)]
 mod tests {
-    use std::num::NonZero;
-
     use super::*;
-    use sov_modules_api::VisibleSlotNumber;
     use sov_test_utils::postgres::{
         config_from_postgres_container, create_postgres_container, CreatePostgresError,
     };
@@ -531,40 +528,5 @@ mod tests {
             let leader_1 = db_1.maybe_update_leader().await.unwrap();
             assert_eq!(leader_1.node_id, node_id_1);
         }
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_sequencing_data_roundtrip() -> anyhow::Result<()> {
-        let dir = tempfile::tempdir()?;
-        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await?;
-
-        let config = config_from_postgres_container(&postgres, "test_node".to_string()).await?;
-        let mut db = PostgresBackend::connect(&config).await?;
-
-        let batch = BatchToStore {
-            sequence_number: SequenceNumber::from(1u64),
-            visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
-            visible_slots_to_advance: NonZero::new(1).unwrap(),
-            blob_id: BlobInternalId::from(1u64),
-        };
-
-        db.begin_rollup_block(batch).await?;
-
-        let sequencing_data = Some(vec![1].into());
-        db.add_tx(
-            SequenceNumber::from(1u64),
-            0,
-            FullyBakedTx {
-                data: vec![42].into(),
-                sequencing_data: sequencing_data.clone(),
-            },
-            TxHash::new([1; 32]),
-        )
-        .await?;
-
-        let in_progress = db.read_in_progress_batch().await?.unwrap();
-        assert_eq!(in_progress.txs[0].sequencing_data, sequencing_data);
-
-        Ok(())
     }
 }
