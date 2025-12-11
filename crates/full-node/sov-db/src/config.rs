@@ -107,7 +107,6 @@ impl RollupDbConfig {
             self.kernel_commit_concurrency
                 .expect("`kernel_commit_concurrency` concurrency must be set"),
         );
-        opts.use_merkle_page_elision(false);
         if cfg!(debug_assertions) {
             // 9.77MB
             opts.hashtable_buckets(2_500);
@@ -135,7 +134,6 @@ impl RollupDbConfig {
         // Enabling rollback for user space too, to be able to sync with the historical state.
         opts.rollback(true);
         opts.max_rollback_log_len(1);
-        opts.use_merkle_page_elision(false);
         opts.commit_concurrency(
             self.user_commit_concurrency
                 .expect("`user_commit_concurrency` must be set"),
@@ -144,7 +142,7 @@ impl RollupDbConfig {
             self.user_hashtable_buckets
                 .expect("`user_hashtable_buckets` must be set"),
         );
-        if let Some(preallocate_ht) = self.kernel_preallocate_ht {
+        if let Some(preallocate_ht) = self.user_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
         }
         if let Some(page_cache_size) = self.user_page_cache_size {
