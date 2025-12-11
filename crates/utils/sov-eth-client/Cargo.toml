@@ -21,7 +21,7 @@ derive_more = { workspace = true }
 ethereum-types = { workspace = true }
 ethers = { workspace = true }
 futures = { workspace = true }
-jsonrpsee = { workspace = true }
+jsonrpsee = { workspace = true, features = ["ws-client"] }
 reth-primitives = { workspace = true }
 serde = { workspace = true }
 sov-cli = { workspace = true }
