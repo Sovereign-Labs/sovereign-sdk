@@ -33,7 +33,14 @@ async fn setup_test_rollup() -> (
         private_key_hex: Some(private_key_hex),
     };
 
-    let test_rollup = start_node(config, 0, Some(EVM_EXTENSION), Some(time_stamp_config)).await;
+    let test_rollup = start_node(
+        config,
+        0,
+        Some(EVM_EXTENSION),
+        Some(time_stamp_config),
+        None,
+    )
+    .await;
     test_rollup.wait_for_next_blocks(10).await;
     let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
 

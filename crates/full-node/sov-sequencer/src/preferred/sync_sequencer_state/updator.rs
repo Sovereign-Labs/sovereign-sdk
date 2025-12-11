@@ -10,13 +10,13 @@ use crate::preferred::FetchBatches;
 use crate::preferred::PreferredSeqOperation;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::{SequencerNotReadyDetails, TxHash};
-use core::net::SocketAddr;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::CredentialId;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -129,7 +129,7 @@ where
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         reason: &'static str,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -142,7 +142,7 @@ where
             tx_hash,
             original_tx_queue_id,
             credential_id,
-            socket_addr,
+            ip_addr,
             reason,
         })
         .await?;

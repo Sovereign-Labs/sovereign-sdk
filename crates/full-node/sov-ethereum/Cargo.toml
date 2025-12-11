@@ -24,6 +24,7 @@ sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
+sov-rest-utils = { workspace = true }
 
 borsh = { workspace = true }
 serde = { workspace = true }
