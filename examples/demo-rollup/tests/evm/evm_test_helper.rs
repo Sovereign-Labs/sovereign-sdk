@@ -79,6 +79,7 @@ pub(crate) async fn create_simple_storage_client(
 pub(crate) async fn alloy_ws_client(socket: SocketAddr) -> DynProvider {
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
     let url = Url::parse(&format!("ws://{socket}/rpc")).unwrap();
+    //let url = Url::parse(&format!("ws://16.58.7.155:80/rpc")).unwrap();
     let ws = WsConnect::new(url);
     ProviderBuilder::new()
         .wallet(signer)
