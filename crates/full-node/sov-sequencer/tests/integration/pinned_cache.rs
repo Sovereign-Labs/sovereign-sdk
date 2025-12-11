@@ -19,7 +19,7 @@ use sov_state::DefaultStorageSpec;
 use sov_test_modules::pinned_cache::CallMessage as PinnedCacheCallMessage;
 use sov_test_modules::pinned_cache::PinnedCacheTester;
 use sov_test_modules::pinned_cache::ValueRange;
-use sov_test_utils::default_test_signed_transaction;
+use sov_test_utils::{default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS};
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
@@ -376,6 +376,7 @@ async fn test_pinning_after_recovery() {
     test_rollup.tenderly_produce_blocks(1).await.unwrap();
     let max_wait = 1000;
     let mut i = 0;
+    let reasonable_time_for_rollup = std::time::Duration::from_millis(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
     while test_rollup.is_sequencer_ready().await {
         // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
         // This is unrelated to the feature under test, so I've left it for now. Anyone reading this should feel free to change the test.
@@ -384,6 +385,7 @@ async fn test_pinning_after_recovery() {
         if i > max_wait {
             panic!("sequencer never became ready in {max_wait} blocks");
         }
+        tokio::time::sleep(reasonable_time_for_rollup).await;
     }
     test_rollup.wait_for_node_synced().await.unwrap();
     println!("4");
@@ -396,6 +398,8 @@ async fn test_pinning_after_recovery() {
         if i > max_wait {
             panic!("sequencer never became ready in {max_wait} blocks");
         }
+        i += 1;
+        tokio::time::sleep(reasonable_time_for_rollup).await;
     }
     println!("5");
 
