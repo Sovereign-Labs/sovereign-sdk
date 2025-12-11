@@ -12091,6 +12091,7 @@ version = "0.3.0"
 dependencies = [
  "alloy",
  "alloy-contract",
+ "alloy-dyn-abi",
  "alloy-primitives",
  "alloy-rpc-types-eth",
  "alloy-sol-types",

@@ -20,6 +20,7 @@ alloy-contract = { workspace = true }
 alloy-sol-types = { workspace = true, features = ["json"] }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
+alloy-dyn-abi= { version = "1.3.1", features = ["eip712"] }
 alloy = { workspace = true }
 
 
@@ -32,5 +33,6 @@ arbitrary = [
 	"alloy-rpc-types-eth/arbitrary",
 	"alloy-sol-types/arbitrary",
 	"alloy/arbitrary",
-	"ethereum-types/arbitrary"
+	"ethereum-types/arbitrary",
+	"alloy-dyn-abi/arbitrary",
 ]

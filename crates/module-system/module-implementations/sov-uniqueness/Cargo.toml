@@ -53,7 +53,7 @@ arbitrary = [
 	"alloy-consensus/arbitrary",
 	"alloy-eips/arbitrary",
 	"alloy-primitives/arbitrary",
-	"sov-evm-test-utils/arbitrary"
+	"sov-evm-test-utils/arbitrary",
 ]
 native = [
 	"reth-primitives/std",
