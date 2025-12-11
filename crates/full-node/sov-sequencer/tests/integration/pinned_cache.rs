@@ -328,6 +328,7 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pinning_after_recovery() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+    sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
 
     let client = test_rollup.api_client().clone();
