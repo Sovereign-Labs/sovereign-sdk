@@ -87,7 +87,8 @@ fuzz_target!(
         for _ in 0..iterations {
             // we use slices for better select performance
             let sender = addresses.choose(rng).unwrap();
-            let context = Context::<S>::new(*sender, Default::default(), sequencer, sequencer_da);
+            let context =
+                Context::<S>::new(*sender, Default::default(), sequencer, sequencer_da, None);
 
             // clear previous state
             let previous = state.get(sender).unwrap().as_hex();
