@@ -236,7 +236,9 @@ impl<G: Gas> Throttler<G> {
 ///   total_resource_used = 3 micros
 pub(crate) struct RateLimiter<K, S: Spec> {
     data: Cache<K, Throttler<S::Gas>>,
-    config: RateLimiterConfig<S>,
+    max_allowed_resources: TotalResources<S::Gas>,
+    refill_rate: RefillRatePerMillis<S::Gas>,
+
     special_keys: HashMap<K, RateLimiterConfig<S>>,
 }
 
@@ -252,7 +254,8 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
 
         Self {
             data,
-            config,
+            max_allowed_resources: config.max_allowed_resources,
+            refill_rate: config.refill_rate,
             special_keys,
         }
     }
