@@ -267,6 +267,13 @@ pub struct TimingOracleConfig {
     pub private_key_hex: Option<String>,
 }
 
+/*
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct SovRateLimiterConfig {
+    pub default_limits: Limits,
+    pub custom_limits: Vec<(String, Limits)>,
+}*/
+
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct SovRateLimiterConfig {
     /// Determines the threshold for rate-limiting requests.
