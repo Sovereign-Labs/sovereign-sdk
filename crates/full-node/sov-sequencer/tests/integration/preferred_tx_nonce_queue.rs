@@ -299,7 +299,7 @@ async fn test_zero_length_queue() {
     // Absolutely ensure all of the transactions have time to hit the queue (500 ms is very
     // generous) - while also absolutely making sure we don't hit the timeout case before sending
     // transaction 0 (so if they got queued, they would then execute, failing the test).
-    tokio::time::sleep(LONGISH_TIMEOUT / 4).await;
+    tokio::time::sleep(Duration::from_millis(LONGISH_TIMEOUT / 4)).await;
     // Send the 0 nonce transaction - if the above had gotten queued (which they shouldn't have),
     // this would let them succeed
     submit_tx_set_value(&client, &key, 0, true).await;
@@ -327,11 +327,11 @@ async fn test_zero_length_queue() {
 async fn test_repeated_timeouts_with_race_conditions() {
     // We have to bump the timeout since the queue doesn't check pre-reqs currently, so all txs
     // need to process before the timeout even on slow CI runners
-    const LONGER_TIMEOUT: u64 = 5000; 
+    const LONGER_TIMEOUT: u64 = 5000;
     const DELAY_BEFORE_NONCE_0: u64 = 500;
     const NUM_TXS: u64 = 100;
 
-    let (test_rollup, admin) = create_test_rollup(NUM_TXS + 10, SHORTENED_TIMEOUT).await;
+    let (test_rollup, admin) = create_test_rollup(NUM_TXS + 10, LONGER_TIMEOUT).await;
     let client = test_rollup.api_client().clone();
     let key = admin.private_key;
 
