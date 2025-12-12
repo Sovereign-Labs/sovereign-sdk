@@ -4455,7 +4455,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derivative",
  "schemars 0.8.22",
  "serde",
  "sov-modules-api",
@@ -4567,7 +4566,6 @@ dependencies = [
 name = "sov-modules-api"
 version = "0.3.0"
 dependencies = [
- "alloy-eips",
  "alloy-primitives",
  "alloy-sol-types",
  "anyhow",
