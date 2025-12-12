@@ -29,10 +29,14 @@ workspace = true
 
 [features]
 default = []
-native = ["dep:rockbound"]
+native = [
+	"dep:rockbound",
+	"sov-rollup-interface/native"
+]
 arbitrary = [
-    "dep:arbitrary",
+	"dep:arbitrary",
 	"dep:proptest",
 	"dep:proptest-derive",
-    "sov-rollup-interface/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"rockbound?/arbitrary"
 ]

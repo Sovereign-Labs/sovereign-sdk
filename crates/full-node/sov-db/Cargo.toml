@@ -61,17 +61,18 @@ proptest = { workspace = true }
 
 [features]
 arbitrary = [
-    "dep:arbitrary",
-    "dep:proptest",
-    "dep:proptest-derive",
-    "dep:tempfile",
-    "rockbound/arbitrary",
-    "sov-mock-zkvm/arbitrary",
-    "sov-rollup-interface/arbitrary",
-    "sov-test-utils/arbitrary",
-    "sov-mock-da/arbitrary",
-    "sov-db/arbitrary",
-    "uuid/arbitrary"
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"dep:tempfile",
+	"rockbound/arbitrary",
+	"sov-mock-zkvm/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-db/arbitrary",
+	"uuid/arbitrary",
+	"sov-db-types/arbitrary"
 ]
 test-utils = ["dep:rand"]
 
