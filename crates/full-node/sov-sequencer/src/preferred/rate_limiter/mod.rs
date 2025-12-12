@@ -298,6 +298,7 @@ mod tests {
         };
 
         let config = RateLimiterConfig::<TestSpec> {
+            ttl_in_millis: 1_000_000,
             max_allowed_resources,
             refill_rate,
         };
@@ -308,7 +309,7 @@ mod tests {
         let ip1 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let ip2 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
 
-        let mut rate_limiter = SovRateLimiter::new_for_test(1_000_000, Some(config));
+        let mut rate_limiter = SovRateLimiter::new_for_test(Some(config));
 
         // Update rate limiter for (ip1, cred1)
         {
@@ -337,10 +338,8 @@ mod tests {
     }
 
     impl<S: Spec> SovRateLimiter<S> {
-        fn new_for_test(ttl_in_millis: u64, config: Option<RateLimiterConfig<S>>) -> Self {
-            let inner = config.map(|c| {
-                SovRateLimiterInner::new(ttl_in_millis, c, Default::default(), Default::default())
-            });
+        fn new_for_test(config: Option<RateLimiterConfig<S>>) -> Self {
+            let inner = config.map(|c| SovRateLimiterInner::new(c));
             Self { inner }
         }
     }
