@@ -419,7 +419,7 @@ mod tests {
                 .unwrap();
         }
 
-        // After two runs, the rate limiter charged 2*resource_used_per_run.
+        // After two runs, the standard cred_id is rate limitied but special_cred_id has higher limits.
         {
             let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
             rollup_simulator
