@@ -12788,6 +12788,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "serde_yaml",
+ "sov-accounts",
  "sov-api-spec",
  "sov-blob-sender",
  "sov-blob-storage",

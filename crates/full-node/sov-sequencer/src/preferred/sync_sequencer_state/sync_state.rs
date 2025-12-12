@@ -804,6 +804,13 @@ where
             });
         };
 
+        let c = &mut inner.executor.checkpoint;
+        let acc = sov_accounts::Accounts::<S>::default();
+
+        let default_address = todo!();
+        let add = acc.resolve_sender_address(default_address, &credential_id, c);
+        //resolve_sender_address
+
         let token = inner
             .rate_limiter
             .allow(ip_addr, credential_id)

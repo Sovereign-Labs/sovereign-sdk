@@ -41,7 +41,7 @@ pub use sov_full_node_configs::sequencer::{
     PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
-    BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
+    AuthorizationData, BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
@@ -633,14 +633,27 @@ where
             .api_state()
             .default_api_state_accessor()
             .to_provable_reader();
-        let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
-            .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
-        let call = Rt::wrap_call(call);
-        let delay_ms = self.runtime.get_transaction_delay_ms(&call);
-        // We need to destructure auth_data because it's not `Send`.
-        let uniqueness = auth_data.uniqueness;
-        let credential_id = auth_data.credential_id;
-        drop(auth_data);
+
+        let (delay_ms, credential_id, uniqueness, default_address) = {
+            let (_, auth_data, call) =
+                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
+                    .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
+            let call = Rt::wrap_call(call);
+            let delay_ms = self.runtime.get_transaction_delay_ms(&call);
+
+            let AuthorizationData {
+                uniqueness,
+                tx_hash,
+                credential_id,
+                credentials,
+                default_address,
+            } = auth_data;
+
+            //drop(credentials);
+
+            // We need to destructure auth_data because it's not `Send`.
+            (delay_ms, credential_id, uniqueness, default_address)
+        };
 
         if delay_ms > 0 {
             tracing::debug!(%tx_hash, delay_ms, "Delaying transaction processing");

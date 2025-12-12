@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::{From, Into};
@@ -136,7 +135,7 @@ impl<S: Spec> TxDetails<S> {
 /// For example, this could be a public key of the sender of the transaction.
 #[derive(Clone, Debug, Default)]
 pub struct Credentials {
-    credentials: Rc<BTreeMap<core::any::TypeId, Rc<dyn core::any::Any>>>,
+    credentials: Arc<BTreeMap<core::any::TypeId, Arc<dyn core::any::Any>>>,
 }
 
 impl Credentials {
@@ -145,10 +144,10 @@ impl Credentials {
     where
         T: core::any::Any,
     {
-        let mut map: BTreeMap<std::any::TypeId, Rc<dyn core::any::Any>> = BTreeMap::new();
-        map.insert(core::any::TypeId::of::<T>(), Rc::new(credential));
+        let mut map: BTreeMap<std::any::TypeId, Arc<dyn core::any::Any>> = BTreeMap::new();
+        map.insert(core::any::TypeId::of::<T>(), Arc::new(credential));
         Self {
-            credentials: Rc::new(map),
+            credentials: Arc::new(map),
         }
     }
 
