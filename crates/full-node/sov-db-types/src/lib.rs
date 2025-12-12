@@ -627,15 +627,6 @@ impl SlotKey {
     }
 }
 
-// // We return `Vec<u8>` here to be compatible with the `JMT::put_value_set_with_proof` method.
-// fn val_hash_and_size_inner(val_hash: [u8; 32], size: u32) -> Vec<u8> {
-//     let mut val_hash_and_size = Vec::with_capacity(40);
-//     let size_bytes = size.to_le_bytes();
-//     val_hash_and_size.extend_from_slice(&val_hash);
-//     val_hash_and_size.extend_from_slice(&size_bytes);
-//     val_hash_and_size
-// }
-
 /// A serialized value suitable for storing. Internally uses an [`Arc<Vec<u8>>`]
 /// for cheap cloning.
 #[derive(

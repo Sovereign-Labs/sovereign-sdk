@@ -124,7 +124,6 @@ impl FlatStateDb {
     /// Coalesce all the changes into a single schema batch and write it atomically.
     pub fn commit(&self, state: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
-        // let commit = self.prepare_commit(state)?;
         let prepare = start_prepare.elapsed();
         let start_write = std::time::Instant::now();
         let version = self
