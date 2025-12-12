@@ -7,6 +7,7 @@ use limiter::*;
 use resource::*;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_modules_api::{CredentialId, Spec};
+use std::hash::Hash;
 use std::{collections::HashMap, net::IpAddr, time::Instant};
 
 use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
@@ -35,9 +36,9 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
 }
 
 #[derive(Default)]
-pub struct SpecialKeys<S: Spec> {
-    pub ips: HashMap<IpAddr, Resource<S::Gas>>,
-    pub credentials: HashMap<CredentialId, Resource<S::Gas>>,
+pub struct SpecialKeys {
+    pub ips: Vec<(IpAddr, SovRateLimiterConfig)>,
+    pub credentials: Vec<(CredentialId, SovRateLimiterConfig)>,
 }
 
 struct SovRateLimiterInner<S: Spec> {
@@ -46,10 +47,19 @@ struct SovRateLimiterInner<S: Spec> {
 }
 
 impl<S: Spec> SovRateLimiterInner<S> {
-    fn new(config: RateLimiterConfig<S>) -> Self {
+    fn new(
+        ttl_in_millis: u64,
+        config: RateLimiterConfig<S>,
+        credentials: HashMap<CredentialId, RateLimiterConfig<S>>,
+        ips: HashMap<IpAddr, RateLimiterConfig<S>>,
+    ) -> Self {
         Self {
-            by_credential_rate_limiter: RateLimiter::new(config.clone()),
-            by_ip_rate_limiter: RateLimiter::new(config),
+            by_credential_rate_limiter: RateLimiter::new(
+                ttl_in_millis,
+                config.clone(),
+                credentials,
+            ),
+            by_ip_rate_limiter: RateLimiter::new(ttl_in_millis, config, ips),
         }
     }
 
@@ -104,8 +114,6 @@ fn clculate_limits<S: Spec>(
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
 ) -> RateLimiterConfig<S> {
-    // All entries older than this value are evicted from the rate limiter.
-    let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
     let max_gas = comfortable_gas_limit::<S>();
 
     let max_resources_per_batch = Resource {
@@ -130,12 +138,57 @@ fn clculate_limits<S: Spec>(
         .div_by_scalar(1000);
 
     RateLimiterConfig {
-        ttl_in_millis,
         max_allowed_resources: TotalResources { inner: max_per_key },
         refill_rate: RefillRatePerMillis {
             token_resource_per_ms: refill_rate,
         },
     }
+}
+
+fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
+    batch_execution_time_limit_millis: u64,
+    max_batch_size_bytes: usize,
+    v: Vec<(K, SovRateLimiterConfig)>,
+) -> HashMap<K, RateLimiterConfig<S>> {
+    v.into_iter()
+        .map(|x| {
+            (
+                x.0,
+                clculate_limits::<S>(x.1, batch_execution_time_limit_millis, max_batch_size_bytes),
+            )
+        })
+        .collect()
+}
+
+fn limits<S: Spec>(
+    sov_config: SovRateLimiterConfig,
+    batch_execution_time_limit_millis: u64,
+    max_batch_size_bytes: usize,
+    special_keys: SpecialKeys,
+) -> (
+    RateLimiterConfig<S>,
+    HashMap<CredentialId, RateLimiterConfig<S>>,
+    HashMap<IpAddr, RateLimiterConfig<S>>,
+) {
+    let default_config = clculate_limits::<S>(
+        sov_config,
+        batch_execution_time_limit_millis,
+        max_batch_size_bytes,
+    );
+
+    let credentials = to_limiter_config_map::<CredentialId, S>(
+        batch_execution_time_limit_millis,
+        max_batch_size_bytes,
+        special_keys.credentials,
+    );
+
+    let ips = to_limiter_config_map::<IpAddr, S>(
+        batch_execution_time_limit_millis,
+        max_batch_size_bytes,
+        special_keys.ips,
+    );
+
+    (default_config, credentials, ips)
 }
 
 pub(crate) struct SovRateLimiter<S: Spec> {
@@ -149,14 +202,19 @@ impl<S: Spec> SovRateLimiter<S> {
         config: Option<SovRateLimiterConfig>,
         batch_execution_time_limit_millis: u64,
         max_batch_size_bytes: usize,
+        special_keys: SpecialKeys,
     ) -> Self {
         let inner = config.map(|sov_config| {
-            let config = clculate_limits(
+            // All entries older than this value are evicted from the rate limiter.
+            let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
+
+            let (config, credentials, ips) = limits(
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
+                special_keys,
             );
-            SovRateLimiterInner::new(config)
+            SovRateLimiterInner::new(ttl_in_millis, config, credentials, ips)
         });
         Self { inner }
     }
@@ -191,6 +249,7 @@ mod tests {
     #[test]
     fn test_clculate_limits() {
         let sov_config = SovRateLimiterConfig {
+            portion: 5,
             max_requests_per_batch: 234000000,
             refill_rate: 1,
         };
@@ -240,7 +299,6 @@ mod tests {
         };
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_millis: 1_000_000,
             max_allowed_resources,
             refill_rate,
         };
@@ -251,7 +309,7 @@ mod tests {
         let ip1 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let ip2 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
 
-        let mut rate_limiter = SovRateLimiter::new_for_test(Some(config));
+        let mut rate_limiter = SovRateLimiter::new_for_test(1_000_000, Some(config));
 
         // Update rate limiter for (ip1, cred1)
         {
@@ -280,8 +338,10 @@ mod tests {
     }
 
     impl<S: Spec> SovRateLimiter<S> {
-        fn new_for_test(config: Option<RateLimiterConfig<S>>) -> Self {
-            let inner = config.map(|c| SovRateLimiterInner::new(c));
+        fn new_for_test(ttl_in_millis: u64, config: Option<RateLimiterConfig<S>>) -> Self {
+            let inner = config.map(|c| {
+                SovRateLimiterInner::new(ttl_in_millis, c, Default::default(), Default::default())
+            });
             Self { inner }
         }
     }

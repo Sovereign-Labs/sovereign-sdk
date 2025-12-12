@@ -178,6 +178,7 @@ where
             .sequencer_kind_config
             .batch_execution_time_limit_millis,
         seq_config.max_batch_size_bytes,
+        Default::default(),
     );
 
     let inner = Inner {
