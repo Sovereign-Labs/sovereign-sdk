@@ -1,7 +1,7 @@
 use crate::evm::evm_test_helper::{self};
 use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
+use alloy_primitives::{Address, U256};
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use ethereum_types::Address;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -45,7 +45,7 @@ fn create_insert_credentials(
     let key = key_and_address.private_key;
 
     let mut credentials = [0; 32];
-    credentials[12..].copy_from_slice(&from_addr.to_fixed_bytes());
+    credentials[12..].copy_from_slice(&from_addr.0 .0);
 
     let msg = RuntimeCall::<TestSpec>::Accounts(sov_accounts::CallMessage::InsertCredentialId(
         credentials.into(),
@@ -74,7 +74,7 @@ async fn execute_evm_tests(client: &SimpleStorageClient) -> Result<(), Box<dyn s
 
     // Balance should be > 0 in genesis
     let balance = client.eth_get_balance(client.address()).await;
-    assert!(balance > ethereum_types::U256::zero());
+    assert!(balance > U256::ZERO);
 
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 

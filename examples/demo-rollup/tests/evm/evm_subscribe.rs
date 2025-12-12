@@ -111,9 +111,8 @@ async fn evm_test_log_subscription_with_pending_blcok() {
     let block_nr = evm_client
         .eth_get_block_by_number(Some("pending".to_string()))
         .await
-        .number
-        .unwrap()
-        .as_u64();
+        .header
+        .number;
 
     // Verify conditions for logs in the pending block.
     for log in logs_from_subscription {
@@ -178,9 +177,8 @@ async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
     let block_nr = evm_client
         .eth_get_block_by_number(Some("pending".to_string()))
         .await
-        .number
-        .unwrap()
-        .as_u64();
+        .header
+        .number;
 
     // Verify conditions for logs in the pending block.
     for log in logs_from_subscription {
