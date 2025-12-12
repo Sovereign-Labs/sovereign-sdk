@@ -25,7 +25,6 @@ sov-api-spec = { workspace = true }
 sov-transaction-generator = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sov-evm-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 # modules
 sov-value-setter = { workspace = true }

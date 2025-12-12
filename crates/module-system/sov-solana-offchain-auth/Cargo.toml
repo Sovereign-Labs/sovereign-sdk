@@ -16,7 +16,6 @@ workspace = true
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
-derive_more = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 schemars = { workspace = true }

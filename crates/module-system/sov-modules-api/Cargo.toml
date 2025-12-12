@@ -21,7 +21,6 @@ axum = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
 alloy-sol-types = { workspace = true }
 alloy-primitives = { workspace = true }
-alloy-eips = { workspace = true }
 derive_more = { workspace = true, default-features = true, features = [
     "deref",
     "debug",
@@ -98,7 +97,6 @@ arbitrary = [
 	"sov-modules-macros/arbitrary",
 	"alloy-primitives/arbitrary",
 	"alloy-sol-types/arbitrary",
-	"alloy-eips/arbitrary"
 ]
 expensive-observability = ["native"]
 bench = ["sov-modules-api/bench", "sov-state/bench", "sov-modules-macros/bench"]
