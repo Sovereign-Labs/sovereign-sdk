@@ -11720,7 +11720,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derivative",
  "schemars 0.8.22",
  "serde",
  "sov-bank",
@@ -12353,7 +12352,6 @@ dependencies = [
 name = "sov-modules-api"
 version = "0.3.0"
 dependencies = [
- "alloy-eips",
  "alloy-primitives",
  "alloy-sol-types",
  "anyhow",
@@ -12775,11 +12773,9 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "mini-moka",
- "num_cpus",
  "openapiv3",
  "proptest",
  "proptest-derive 0.5.1",
- "rand 0.8.5",
  "reltester",
  "rockbound",
  "schemars 0.8.22",
@@ -12917,7 +12913,6 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "bs58",
- "derive_more 1.0.0",
  "hex",
  "jsonrpsee",
  "reqwest 0.12.23",
