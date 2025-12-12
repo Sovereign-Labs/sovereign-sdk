@@ -10,12 +10,12 @@ repository.workspace = true
 
 [dependencies]
 sov-rollup-interface = { workspace = true }
-borsh = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
 digest = { workspace = true }
 rockbound = { workspace = true, optional = true }
 arbitrary = { workspace = true, features = ["derive"], optional = true }
 derivative = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 serde_with = { workspace = true }
 proptest = { workspace = true, optional = true }
