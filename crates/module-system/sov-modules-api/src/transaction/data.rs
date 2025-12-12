@@ -111,6 +111,7 @@ pub struct TxDetails<S: Spec> {
     pub chain_id: u64,
 }
 
+#[cfg(feature = "evm")]
 pub mod sol_struct {
     use alloy_sol_types::sol;
 
@@ -122,6 +123,7 @@ pub mod sol_struct {
     }
 }
 
+#[cfg(feature = "evm")]
 impl<S: Spec> TxDetails<S> {
     /// Converts the `TxDetails` to a SolStruct representation.
     /// This is useful for EIP-712 signing.
