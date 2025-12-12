@@ -7,6 +7,7 @@ use limiter::*;
 use resource::*;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_modules_api::{CredentialId, Spec};
+use std::hash::Hash;
 use std::{collections::HashMap, net::IpAddr, time::Instant};
 
 use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
@@ -35,9 +36,9 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
 }
 
 #[derive(Default)]
-pub struct SpecialKeys<S: Spec> {
-    pub ips: HashMap<IpAddr, Resource<S::Gas>>,
-    pub credentials: HashMap<CredentialId, Resource<S::Gas>>,
+pub struct SpecialKeys {
+    pub ips: Vec<(IpAddr, SovRateLimiterConfig)>,
+    pub credentials: Vec<(CredentialId, SovRateLimiterConfig)>,
 }
 
 struct SovRateLimiterInner<S: Spec> {
@@ -46,7 +47,11 @@ struct SovRateLimiterInner<S: Spec> {
 }
 
 impl<S: Spec> SovRateLimiterInner<S> {
-    fn new(config: RateLimiterConfig<S>) -> Self {
+    fn new(
+        config: RateLimiterConfig<S>,
+        credentials: HashMap<CredentialId, RateLimiterConfig<S>>,
+        ips: HashMap<IpAddr, RateLimiterConfig<S>>,
+    ) -> Self {
         Self {
             by_credential_rate_limiter: RateLimiter::new(config.clone()),
             by_ip_rate_limiter: RateLimiter::new(config),
@@ -138,6 +143,52 @@ fn clculate_limits<S: Spec>(
     }
 }
 
+fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
+    batch_execution_time_limit_millis: u64,
+    max_batch_size_bytes: usize,
+    v: Vec<(K, SovRateLimiterConfig)>,
+) -> HashMap<K, RateLimiterConfig<S>> {
+    v.into_iter()
+        .map(|x| {
+            (
+                x.0,
+                clculate_limits::<S>(x.1, batch_execution_time_limit_millis, max_batch_size_bytes),
+            )
+        })
+        .collect()
+}
+
+fn limits<S: Spec>(
+    sov_config: SovRateLimiterConfig,
+    batch_execution_time_limit_millis: u64,
+    max_batch_size_bytes: usize,
+    special_keys: SpecialKeys,
+) -> (
+    RateLimiterConfig<S>,
+    HashMap<CredentialId, RateLimiterConfig<S>>,
+    HashMap<IpAddr, RateLimiterConfig<S>>,
+) {
+    let default_config = clculate_limits::<S>(
+        sov_config,
+        batch_execution_time_limit_millis,
+        max_batch_size_bytes,
+    );
+
+    let credentials = to_limiter_config_map::<CredentialId, S>(
+        batch_execution_time_limit_millis,
+        max_batch_size_bytes,
+        special_keys.credentials,
+    );
+
+    let ips = to_limiter_config_map::<IpAddr, S>(
+        batch_execution_time_limit_millis,
+        max_batch_size_bytes,
+        special_keys.ips,
+    );
+
+    (default_config, credentials, ips)
+}
+
 pub(crate) struct SovRateLimiter<S: Spec> {
     /// If [`SovRateLimiter`] is initialized with a None config, this field is None.
     /// Not providing a config is the mechanism for disabling the rollup’s rate limiter.
@@ -149,14 +200,16 @@ impl<S: Spec> SovRateLimiter<S> {
         config: Option<SovRateLimiterConfig>,
         batch_execution_time_limit_millis: u64,
         max_batch_size_bytes: usize,
+        special_keys: SpecialKeys,
     ) -> Self {
         let inner = config.map(|sov_config| {
-            let config = clculate_limits(
+            let (config, credentials, ips) = limits(
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
+                special_keys,
             );
-            SovRateLimiterInner::new(config)
+            SovRateLimiterInner::new(config, credentials, ips)
         });
         Self { inner }
     }
