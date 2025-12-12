@@ -361,7 +361,7 @@ mod tests {
                 .unwrap();
         }
 
-        // New address has fresh rate limiter throtler.
+        // New credential has fresh rate limiter throtler.
         let cred_id_2 = CredentialId::from([2; 32]);
         let now = Instant::now();
         {
@@ -375,36 +375,28 @@ mod tests {
     fn test_rate_limiter_happy_path_sepcial_address() {
         let resource_used_per_run = small_resource_used_per_run();
 
-        let allowed_resources = TotalResources {
-            inner: Resource {
-                req_counter: 0,
-                space_in_bytes: 0,
-                execution_time_micros: 0,
-                gas_used: Gas::from([0, 0]),
-            },
-        };
-
-        let config = RateLimiterConfig {
-            max_allowed_resources: allowed_resources,
-            refill_rate: RefillRatePerMillis {
-                token_resource_per_ms: Resource::zero(),
-            },
+        let default_config = RateLimiterConfig {
+            max_allowed_resources: TotalResources::zero(),
+            refill_rate: RefillRatePerMillis::zero(),
         };
 
         let cred_id = CredentialId::from([1; 32]);
         let special_cred_id = CredentialId::from([2; 32]);
+
         let special_keys = HashMap::from([(
             special_cred_id,
             RateLimiterConfig::<TestSpec> {
                 max_allowed_resources: max_allowed_resources(),
-                refill_rate: RefillRatePerMillis::<Gas> {
-                    token_resource_per_ms: Resource::zero(),
-                },
+                refill_rate: RefillRatePerMillis::zero(),
             },
         )]);
 
-        let mut rollup_simulator =
-            Simulator::new(TTL_IN_MILLIS, config, resource_used_per_run, special_keys);
+        let mut rollup_simulator = Simulator::new(
+            TTL_IN_MILLIS,
+            default_config,
+            resource_used_per_run,
+            special_keys,
+        );
 
         let now = Instant::now();
 
@@ -653,6 +645,14 @@ mod tests {
                 execution_time_micros: 400,
                 gas_used: Gas::from([0, 0]),
             },
+        }
+    }
+
+    impl<G: Gas> RefillRatePerMillis<G> {
+        fn zero() -> Self {
+            Self {
+                token_resource_per_ms: Resource::zero(),
+            }
         }
     }
 }
