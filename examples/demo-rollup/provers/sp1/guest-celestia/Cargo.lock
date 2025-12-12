@@ -6037,7 +6037,6 @@ dependencies = [
 name = "sov-modules-api"
 version = "0.3.0"
 dependencies = [
- "alloy-sol-types",
  "anyhow",
  "bech32",
  "borsh",
