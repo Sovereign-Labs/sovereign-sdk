@@ -3,6 +3,7 @@ use crate::preferred::rate_limiter::resource::Resource;
 use mini_moka::sync::Cache;
 use sov_modules_api::Gas;
 use sov_modules_api::Spec;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::time::Duration;
@@ -11,7 +12,7 @@ use std::time::Instant;
 /// Configuration for the rate limiter.
 #[derive(Debug, Clone)]
 pub(crate) struct RateLimiterConfig<S: Spec> {
-    pub(crate) ttl_in_millis: u64,
+    //pub(crate) ttl_in_millis: u64,
     pub(crate) max_allowed_resources: TotalResources<S::Gas>,
     pub(crate) refill_rate: RefillRatePerMillis<S::Gas>,
 }
@@ -237,20 +238,29 @@ pub(crate) struct RateLimiter<K, S: Spec> {
     data: Cache<K, Throttler<S::Gas>>,
     max_allowed_resources: TotalResources<S::Gas>,
     refill_rate: RefillRatePerMillis<S::Gas>,
+
+    special_keys: HashMap<K, RateLimiterConfig<S>>,
 }
 
 impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
-    pub(crate) fn new(config: RateLimiterConfig<S>) -> Self {
+    pub(crate) fn new(
+        ttl_in_millis: u64,
+        config: RateLimiterConfig<S>,
+        special_keys: HashMap<K, RateLimiterConfig<S>>,
+    ) -> Self {
         let data = Cache::builder()
-            .time_to_live(Duration::from_millis(config.ttl_in_millis))
+            .time_to_live(Duration::from_millis(ttl_in_millis))
             .build();
 
         Self {
             data,
             max_allowed_resources: config.max_allowed_resources,
             refill_rate: config.refill_rate,
+            special_keys,
         }
     }
+
+    //fn get_allowed_resources(&self, k: Key) -> TotalResources<S::Gas> {}
 
     pub(crate) fn allow(
         &mut self,
