@@ -296,7 +296,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sov_modules_api::Spec;
+    use sov_modules_api::{CredentialId, Spec};
     use sov_test_utils::TestSpec;
     use std::thread::sleep;
 
@@ -325,13 +325,14 @@ mod tests {
             Default::default(),
         );
 
-        let addr = <TestSpec as Spec>::Address::from([1; 28]);
+        let cred_id = CredentialId::from([1; 32]);
+
         let now = Instant::now();
 
         // After a single run, the rate limiter charged resource_used_per_run.
         {
             rollup_simulator
-                .run_and_assert_limits(now, &addr, rollup_simulator.resource_used_per_run)
+                .run_and_assert_limits(now, cred_id, rollup_simulator.resource_used_per_run)
                 .unwrap();
         }
 
@@ -339,7 +340,7 @@ mod tests {
         {
             let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
             rollup_simulator
-                .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
+                .run_and_assert_limits(now, cred_id, expected_rate_limiter_usage)
                 .unwrap();
         }
 
@@ -353,19 +354,19 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(3)
-                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, &addr));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, cred_id));
 
             rollup_simulator
-                .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
+                .run_and_assert_limits(now, cred_id, expected_rate_limiter_usage)
                 .unwrap();
         }
 
         // New address has fresh rate limiter throtler.
-        let addr_2 = <TestSpec as Spec>::Address::from([2; 28]);
+        let cred_id_2 = CredentialId::from([2; 32]);
         let now = Instant::now();
         {
             rollup_simulator
-                .run_and_assert_limits(now, &addr_2, rollup_simulator.resource_used_per_run)
+                .run_and_assert_limits(now, cred_id_2, rollup_simulator.resource_used_per_run)
                 .unwrap();
         }
     }
@@ -390,10 +391,10 @@ mod tests {
             },
         };
 
-        let addr = <TestSpec as Spec>::Address::from([1; 28]);
-        let special_addr = <TestSpec as Spec>::Address::from([2; 28]);
+        let cred_id = CredentialId::from([1; 32]);
+        let special_cred_id = CredentialId::from([2; 32]);
         let special_keys = HashMap::from([(
-            special_addr,
+            special_cred_id,
             RateLimiterConfig::<TestSpec> {
                 max_allowed_resources: max_allowed_resources(),
                 refill_rate: RefillRatePerMillis::<Gas> {
@@ -410,11 +411,11 @@ mod tests {
         // After a single run, the rate limiter charged resource_used_per_run.
         {
             rollup_simulator
-                .run_and_assert_limits(now, &addr, rollup_simulator.resource_used_per_run)
+                .run_and_assert_limits(now, cred_id, rollup_simulator.resource_used_per_run)
                 .unwrap();
 
             rollup_simulator
-                .run_and_assert_limits(now, &special_addr, rollup_simulator.resource_used_per_run)
+                .run_and_assert_limits(now, special_cred_id, rollup_simulator.resource_used_per_run)
                 .unwrap();
         }
 
@@ -422,11 +423,11 @@ mod tests {
         {
             let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
             rollup_simulator
-                .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
+                .run_and_assert_limits(now, cred_id, expected_rate_limiter_usage)
                 .unwrap_err();
 
             rollup_simulator
-                .run_and_assert_limits(now, &special_addr, expected_rate_limiter_usage)
+                .run_and_assert_limits(now, special_cred_id, expected_rate_limiter_usage)
                 .unwrap();
         }
     }
@@ -449,7 +450,7 @@ mod tests {
             Default::default(),
         );
 
-        let addr = <TestSpec as Spec>::Address::from([1; 28]);
+        let cred_id = CredentialId::from([1; 32]);
         let now = Instant::now();
 
         let mut run_number = 1;
@@ -460,7 +461,7 @@ mod tests {
                 rollup_simulator.resource_used_per_run.mul(run_number);
 
             let res =
-                rollup_simulator.run_and_assert_limits(now, &addr, expected_rate_limiter_usage);
+                rollup_simulator.run_and_assert_limits(now, cred_id, expected_rate_limiter_usage);
 
             if let Err(err) = res {
                 break err;
@@ -483,10 +484,10 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(run_number)
-                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, &addr));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, cred_id));
 
             let err = rollup_simulator
-                .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
+                .run_and_assert_limits(now, cred_id, expected_rate_limiter_usage)
                 .unwrap_err();
 
             assert!(matches!(err, LimitExceeded::RequestCount { .. }));
@@ -502,10 +503,10 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(run_number)
-                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, &addr));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, cred_id));
 
             let res =
-                rollup_simulator.run_and_assert_limits(now, &addr, expected_rate_limiter_usage);
+                rollup_simulator.run_and_assert_limits(now, cred_id, expected_rate_limiter_usage);
 
             assert!(res.is_ok());
         }
@@ -530,23 +531,23 @@ mod tests {
             Default::default(),
         );
 
-        let addr = <TestSpec as Spec>::Address::from([1; 28]);
+        let cred_id = CredentialId::from([1; 32]);
         let now = Instant::now();
 
         rollup_simulator
-            .run_and_assert_limits(now, &addr, rollup_simulator.resource_used_per_run)
+            .run_and_assert_limits(now, cred_id, rollup_simulator.resource_used_per_run)
             .unwrap();
 
         // We configured the rate limiter with `ttl_in_millis = 2`. After 5 ms, the entry should be evicted.
         // Unfortunately, we cannot test this without using `sleep`.
         sleep(Duration::from_millis(5));
 
-        let throttler = rollup_simulator.rate_limiter.data.get(&addr);
+        let throttler = rollup_simulator.rate_limiter.data.get(&cred_id);
         assert!(throttler.is_none());
     }
 
     struct Simulator {
-        rate_limiter: RateLimiter<<TestSpec as Spec>::Address, TestSpec>,
+        rate_limiter: RateLimiter<CredentialId, TestSpec>,
         resource_used_per_run: ResourceUsed<Gas>,
     }
 
@@ -555,7 +556,7 @@ mod tests {
             ttl_in_millis: u64,
             config: RateLimiterConfig<TestSpec>,
             resource_used_per_run: ResourceUsed<Gas>,
-            special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
+            special_configs: HashMap<CredentialId, RateLimiterConfig<TestSpec>>,
         ) -> Self {
             let rate_limiter = RateLimiter::new(ttl_in_millis, config, special_configs);
             Self {
@@ -567,14 +568,14 @@ mod tests {
         fn run_and_assert_limits(
             &mut self,
             now: Instant,
-            addr: &<TestSpec as Spec>::Address,
+            cred_id: CredentialId,
             resource_used_so_far: ResourceUsed<Gas>,
         ) -> Result<(), LimitExceeded<Gas>> {
-            let throttler = self.rate_limiter.allow(now, addr)?;
+            let throttler = self.rate_limiter.allow(now, &cred_id)?;
 
-            let throttler = self
-                .rate_limiter
-                .update(*addr, throttler, self.resource_used_per_run);
+            let throttler =
+                self.rate_limiter
+                    .update(cred_id, throttler, self.resource_used_per_run);
 
             assert_eq!(
                 throttler.total_resource_used.inner,
@@ -587,10 +588,10 @@ mod tests {
         fn resource_tokens_to_refill(
             &self,
             time_passed_ms: u64,
-            addr: &<TestSpec as Spec>::Address,
+            cred_id: CredentialId,
         ) -> Resource<Gas> {
             self.rate_limiter
-                .get_config(addr)
+                .get_config(&cred_id)
                 .refill_rate
                 .token_resource_per_ms
                 .saturating_mul_by_scalar(time_passed_ms)
