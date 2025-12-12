@@ -13,16 +13,17 @@ use reqwest::Url;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::SimpleStorageClient;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_full_node_configs::sequencer::TimingOracleConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_risc0_adapter::Risc0;
 use sov_sequencer::SeqConfigExtension;
+use sov_sequencer::SovRateLimiterConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
-use sov_test_utils::LegacySimpleStorage;
 
 pub(crate) const SENDER_PRIV_KEY: &str =
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
@@ -40,6 +41,7 @@ pub(crate) async fn start_node(
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     timing_oracle_config: Option<TimingOracleConfig>,
+    rate_limiter: Option<SovRateLimiterConfig>,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
@@ -51,6 +53,7 @@ pub(crate) async fn start_node(
     )
     .with_preferred_seq_oracle_config(timing_oracle_config)
     .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_rate_limiter(rate_limiter)
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.rollup_prover_config = None; // FIXME(@neysofu): reenable once sov-ethereum is compatible with proof blobs
@@ -96,6 +99,22 @@ pub(crate) fn alloy_client_with_signer(socket: SocketAddr, private_key: &str) ->
 
 pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
     alloy_client_with_signer(socket, SENDER_PRIV_KEY)
+}
+
+pub(crate) fn alloy_client_with_reqwest<B>(
+    socket: SocketAddr,
+    b: B,
+    private_key: &str,
+) -> DynProvider
+where
+    B: FnOnce(reqwest::ClientBuilder) -> reqwest::Client,
+{
+    let signer: PrivateKeySigner = private_key.parse().unwrap();
+    let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();
+    ProviderBuilder::new()
+        .wallet(signer)
+        .with_reqwest(url, b)
+        .erased()
 }
 
 /// Deploys a test contract on the test rollup.
@@ -172,7 +191,7 @@ pub async fn setup_test_rollup(
 ) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, finalization_blocks, Some(extension), None).await
+    start_node(config, finalization_blocks, Some(extension), None, None).await
 }
 
 pub async fn setup_with_simple_storage(

@@ -20,7 +20,6 @@ anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }
 tracing = { workspace = true }
-derivative = { workspace = true }
 
 sov-modules-api = { workspace = true }
 sov-rollup-interface = { workspace = true }

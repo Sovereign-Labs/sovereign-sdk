@@ -37,14 +37,19 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Rollup config: {:?}", rollup_config);
 
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
+    shutdown_rx.mark_unchanged();
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
             rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
         },
+        shutdown_rx,
     )
     .await;
 
-    sov_celestia_adapter::checker::check_da_service(&da_service, args.rounds).await
+    sov_celestia_adapter::checker::check_da_service(&da_service, args.rounds).await?;
+    shutdown_tx.send(())?;
+    Ok(())
 }

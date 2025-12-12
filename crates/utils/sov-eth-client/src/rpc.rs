@@ -38,7 +38,9 @@ impl RpcClient {
         let client = SignerMiddleware::new_with_provider_chain(provider, wallet)
             .await
             .unwrap();
+
         let ws = WsClientBuilder::default().build(ws_conn_str).await.unwrap();
+
         let pub_sub = ProviderBuilder::default()
             .connect(ws_conn_str)
             .await

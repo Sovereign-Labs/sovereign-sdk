@@ -1,7 +1,7 @@
 use alloy_primitives::{B256, U256};
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockId;
-use sov_test_utils::BlockHash;
+use sov_evm_test_utils::BlockHash;
 
 use crate::evm::evm_test_helper::{alloy_client, setup_test_rollup, EVM_EXTENSION};
 

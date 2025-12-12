@@ -29,7 +29,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 use std::boxed::Box;
 use std::marker::PhantomData;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
@@ -707,7 +707,7 @@ where
     async fn accept_tx(
         &self,
         baked_tx: FullyBakedTx,
-        _socket_addr: SocketAddr,
+        _ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         let sequencer = self.clone();
         tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx).await })

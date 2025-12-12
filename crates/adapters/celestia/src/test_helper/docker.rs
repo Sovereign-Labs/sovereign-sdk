@@ -299,7 +299,9 @@ async fn test_service_starts() -> anyhow::Result<()> {
 
     let config = dev_node.get_config().await?;
     tracing::info!("CONFIG: {:?}", config);
-    let da_service = CelestiaService::new(config, crate::test_helper::ROLLUP_PARAMS_DEV).await;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service =
+        CelestiaService::new(config, crate::test_helper::ROLLUP_PARAMS_DEV, shutdown_rx).await;
     let signer = da_service.get_signer().await;
     assert_eq!(signer, Some(dev_node.get_signer_address(0).await?));
     let header_1 = da_service.get_head_block_header().await?;

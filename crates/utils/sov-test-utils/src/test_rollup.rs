@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use crate::postgres::create_postgres_container;
 use crate::postgres::CreatePostgresError;
-use crate::postgres::PostgresImage;
 use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
@@ -48,13 +47,16 @@ use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::preferred::{PostgresConfig, PreferredSequencerConfig, TimingOracleConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
-use sov_sequencer::{SequencerApis, SequencerConfig, SequencerKindConfig, StateUpdateNotification};
+use sov_sequencer::{
+    SequencerApis, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig,
+    StateUpdateNotification,
+};
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
 };
-use tempfile::TempDir;
 use testcontainers::ContainerAsync;
+use testcontainers_modules::postgres::Postgres;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
@@ -130,6 +132,20 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
 }
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
+    /// See [`PreferredSequencerConfig::rate_limiter`].
+    pub fn with_rate_limiter(mut self, rate_limiter: Option<SovRateLimiterConfig>) -> Self {
+        if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
+            config.rate_limiter = rate_limiter;
+        } else {
+            self.config.sequencer_config =
+                SequencerKindConfig::Preferred(PreferredSequencerConfig {
+                    rate_limiter,
+                    ..PreferredSequencerConfig::default()
+                });
+        }
+        self
+    }
+
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
     pub fn with_preferred_seq_min_profit_per_tx(mut self, minimum_profit_per_tx: u128) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
@@ -420,18 +436,15 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 }
 
 pub struct PostgresData {
-    storage_path: TempDir,
-    postgres: ContainerAsync<PostgresImage>,
+    pub postgres: ContainerAsync<Postgres>,
     connection_string: String,
 }
 
 impl PostgresData {
     pub async fn create_postgres() -> Result<Arc<PostgresData>, CreatePostgresError> {
-        let dir = tempfile::tempdir().unwrap();
-        let pg = create_postgres_container(&dir.path().join("postgres_data")).await?;
+        let pg = create_postgres_container().await?;
 
         Ok(Arc::new(PostgresData {
-            storage_path: dir,
             connection_string: connection_string_from_postgres_container(&pg).await?,
             postgres: pg,
         }))

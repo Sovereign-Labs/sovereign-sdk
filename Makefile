@@ -6,7 +6,8 @@ PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
 			   examples/demo-rollup/provers/sp1/guest-celestia
 
 # Absolutely all dirs
-ALL_DIRS := $(PROVER_DIRS)
+ALL_DIRS := $(PROVER_DIRS) \
+						crates/module-system/module-implementations/extern/hyperlane-solana-register/solana
 
 # We run `cargo hack` with the `--partition 1/1` by default, but overrides allow
 # CI to parallelize checks.

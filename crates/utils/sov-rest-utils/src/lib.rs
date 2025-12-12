@@ -23,6 +23,7 @@
 
 mod axum_extractors;
 mod filter;
+mod get_ip;
 mod pagination;
 mod sorting;
 
@@ -31,9 +32,6 @@ pub mod errors;
 #[doc(hidden)]
 #[cfg(test)]
 pub mod test_utils;
-
-use std::fmt::Debug;
-
 use axum::body::Body;
 use axum::extract::ws::WebSocket;
 use axum::extract::Request;
@@ -43,9 +41,11 @@ use axum::{Json, Router};
 pub use axum_extractors::{Path, Query};
 pub use filter::{Filter, FilterError, FilterQuery};
 use futures::{SinkExt, StreamExt};
+pub use get_ip::*;
 pub use pagination::{PageSelection, PaginatedResponse, Pagination};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
+use std::fmt::Debug;
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;
 use tower_http::trace::TraceLayer;

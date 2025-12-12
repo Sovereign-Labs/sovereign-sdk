@@ -1,6 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
+use crate::utils::encode_call;
 use crate::utils::{
     generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
     tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
@@ -37,9 +38,9 @@ use sov_test_utils::test_rollup::FullNodeBlueprint;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{
-    default_test_signed_transaction, generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint,
-    TestSpec, TestUser, TEST_DEFAULT_MOCK_DA_ON_SUBMIT, TEST_FINALIZATION_BLOCKS,
-    TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
+    generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
+    TEST_DEFAULT_MOCK_DA_ON_SUBMIT, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
+    TEST_MAX_CONCURRENT_BLOBS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
@@ -3338,14 +3339,14 @@ fn tx_delayed_call(key: &Ed25519PrivateKey, generation: u64) -> RawTx {
     let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::HooksCount(
         sov_test_modules::hooks_count::CallMessage::DelayedCallMsg {},
     );
-    encode_call(key, generation, &msg)
+    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
 }
 
 fn tx_set_many_values(key: &Ed25519PrivateKey, generation: u64, values_to_set: Vec<u8>) -> RawTx {
     let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
         sov_value_setter::CallMessage::SetManyValues(values_to_set),
     );
-    encode_call(key, generation, &msg)
+    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
 }
 
 fn tx_set_value_and_sleep(
@@ -3360,14 +3361,14 @@ fn tx_set_value_and_sleep(
             sleep_millis,
         },
     );
-    encode_call(key, generation, &msg)
+    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
 }
 
 fn tx_panic(key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
     let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
         sov_value_setter::CallMessage::Panic,
     );
-    encode_call(key, nonce, &msg)
+    encode_call::<TestRuntime<TestSpec>>(key, nonce, &msg)
 }
 
 fn tx_assert_visible_slot_number(
@@ -3381,7 +3382,7 @@ fn tx_assert_visible_slot_number(
         },
     );
 
-    encode_call(key, nonce, &msg)
+    encode_call::<TestRuntime<TestSpec>>(key, nonce, &msg)
 }
 
 fn tx_assert_state_root(
@@ -3395,22 +3396,7 @@ fn tx_assert_state_root(
         },
     );
 
-    encode_call(key, nonce, &msg)
-}
-
-fn encode_call(
-    key: &Ed25519PrivateKey,
-    generation: u64,
-    call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
-) -> RawTx {
-    let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
-        key,
-        call_message,
-        generation,
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
-    );
-
-    RawTx::new(borsh::to_vec(&tx).unwrap())
+    encode_call::<TestRuntime<TestSpec>>(key, nonce, &msg)
 }
 
 mod tests_with_basic_kernel {

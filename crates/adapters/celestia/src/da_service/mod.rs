@@ -6,7 +6,10 @@ use crate::metrics::client::{
     GetBlockHeaderMeasurement, GetChainHeadMeasurement, GetNamespaceDataMeasurement,
     SubmitPayForBlob,
 };
-use crate::metrics::full::{BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics};
+use crate::metrics::full::{
+    BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
+    NamespaceDataMetrics,
+};
 use crate::metrics::RollupNamespace;
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
@@ -174,7 +177,11 @@ impl CelestiaService {
 }
 
 impl CelestiaService {
-    pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
+    pub async fn new(
+        config: CelestiaConfig,
+        chain_params: RollupParams,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    ) -> Self {
         tracing::info!(?config, "Initializing Celestia Adapter");
         let request_timeout = Duration::from_secs(config.request_timeout_secs.get());
 
@@ -192,6 +199,20 @@ impl CelestiaService {
             );
         }
 
+        let tx_priority = config.tx_priority.clone().into();
+        if let Ok(signer) = client.address() {
+            let bg_client = config
+                .build_client()
+                .await
+                .expect("Failed to build celestia-client for background task");
+            tokio::spawn(stat_collection_task(
+                bg_client,
+                signer,
+                tx_priority,
+                shutdown_receiver,
+            ));
+        }
+
         Self::with_client(
             client,
             chain_params.rollup_batch_namespace,
@@ -200,7 +221,7 @@ impl CelestiaService {
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
-            config.tx_priority.into(),
+            tx_priority,
         )
     }
 }
@@ -553,4 +574,71 @@ fn flatten_timeout<T>(
         Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
         Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
     }
+}
+
+async fn stat_collection_task(
+    client: celestia_client::Client,
+    signer: celestia_types::state::AccAddress,
+    priority: celestia_client::tx::TxPriority,
+    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) {
+    let chain_id = client.chain_id();
+    let period = Duration::from_secs(30);
+    tracing::info!(%chain_id, ?period, "Starting celestia stat collection task");
+
+    let mut interval = tokio::time::interval(period);
+
+    loop {
+        tokio::select! {
+            _ = shutdown_receiver.changed() => {
+                tracing::info!("Shutting down celestia stat collection task");
+                return;
+            }
+            _ = interval.tick() => {
+                match gather_stat(&client, &signer, priority).await {
+                    Ok(measurement) => {
+                        sov_metrics::track_metrics(|tracker| {
+                            tracker.submit(measurement);
+                        });
+                    }
+                    Err(error) => {
+                        tracing::info!(
+                            ?error,
+                            "Error gathering background statistics for celestia adapter"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn gather_stat(
+    client: &celestia_client::Client,
+    signer: &celestia_types::state::AccAddress,
+    priority: celestia_client::tx::TxPriority,
+) -> anyhow::Result<CelestiaAdapterStateMeasurement> {
+    let balance = client
+        .state()
+        .balance_for_address(signer)
+        .await
+        .context("state.BalanceForAddress")?;
+
+    let sync_state = client
+        .header()
+        .sync_state()
+        .await
+        .context("header.SyncState")?;
+    let sync_distance = sync_state.to_height.saturating_sub(sync_state.from_height);
+    let gas_price = client
+        .state()
+        .estimate_gas_price(priority)
+        .await
+        .context("state.EstimateGasPrice")?;
+
+    Ok(CelestiaAdapterStateMeasurement {
+        balance,
+        gas_price,
+        sync_distance,
+    })
 }

@@ -4,9 +4,10 @@ use alloy_primitives::{Bytes, TxKind};
 use revm::context::result::ExecutionResult;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_evm::{convert_to_tx_signed, create_tx_env, executor, EthereumAuthenticator, Evm, SpecId};
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
-use sov_test_utils::{LegacySimpleStorage, TransactionType};
+use sov_test_utils::TransactionType;
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};
