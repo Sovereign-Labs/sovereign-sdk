@@ -2,6 +2,7 @@ use crate::utils::encode_call;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
+use sov_full_node_configs::sequencer::Limits;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
@@ -90,9 +91,13 @@ async fn create_test_rollup(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting() {
     let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
-        max_threshold_per_key_to_batch_capacity_ratio: 200,
-        max_requests_per_batch: 1_000_000,
-        refill_rate: 10,
+        default_limits: Limits {
+            max_threshold_per_key_to_batch_capacity_ratio: 200,
+            max_requests_per_batch: 1_000_000,
+            refill_rate: 10,
+        },
+        credential_custom_limits: vec![],
+        ip_custom_limits: vec![],
     })
     .await;
     test_rollup.produce_enough_finalized_slots().await;
@@ -139,9 +144,13 @@ async fn test_rate_limiting() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_correct_ip() {
     let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
-        max_threshold_per_key_to_batch_capacity_ratio: 200,
-        max_requests_per_batch: 0,
-        refill_rate: 0,
+        default_limits: Limits {
+            max_threshold_per_key_to_batch_capacity_ratio: 200,
+            max_requests_per_batch: 0,
+            refill_rate: 0,
+        },
+        credential_custom_limits: vec![],
+        ip_custom_limits: vec![],
     })
     .await;
     test_rollup.produce_enough_finalized_slots().await;
