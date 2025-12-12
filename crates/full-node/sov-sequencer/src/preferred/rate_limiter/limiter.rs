@@ -267,8 +267,8 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         match self.data.get(key) {
             Some(throttler) => Ok(throttler.allow_request_and_refill_resource_used(
                 now,
-                &self.max_allowed_resources,
-                &self.refill_rate,
+                &self.config.max_allowed_resources,
+                &self.config.refill_rate,
             )?),
             None => Ok(Throttler {
                 total_resource_used: TotalResources::zero(),
@@ -304,17 +304,17 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_happy_path() {
+        let ttl_in_millis = 1_000_000;
         let resource_used_per_run = small_resource_used_per_run();
         let max_allowed_resources = max_allowed_resources();
         let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_millis: 1_000_000,
             max_allowed_resources,
             refill_rate,
         };
 
-        let mut rollup_simulator = Simulator::new(config, resource_used_per_run);
+        let mut rollup_simulator = Simulator::new(ttl_in_millis, config, resource_used_per_run);
 
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
         let now = Instant::now();
@@ -363,17 +363,17 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_resources_exhausted() {
+        let ttl_in_millis = 1_000_000;
         let resource_used_per_run = big_resource_used_per_run();
         let max_allowed_resources = max_allowed_resources();
         let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_millis: 1_000_000,
             max_allowed_resources,
             refill_rate,
         };
 
-        let mut rollup_simulator = Simulator::new(config, resource_used_per_run);
+        let mut rollup_simulator = Simulator::new(ttl_in_millis, config, resource_used_per_run);
 
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
         let now = Instant::now();
@@ -439,17 +439,17 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_ttl() {
+        let ttl_in_millis = 2;
         let resource_used_per_run = big_resource_used_per_run();
         let max_allowed_resources = max_allowed_resources();
         let refill_rate = refill_rate();
 
         let config = RateLimiterConfig::<TestSpec> {
-            ttl_in_millis: 2,
             max_allowed_resources,
             refill_rate,
         };
 
-        let mut rollup_simulator = Simulator::new(config, resource_used_per_run);
+        let mut rollup_simulator = Simulator::new(ttl_in_millis, config, resource_used_per_run);
 
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
         let now = Instant::now();
@@ -473,10 +473,11 @@ mod tests {
 
     impl Simulator {
         fn new(
+            ttl_in_millis: u64,
             config: RateLimiterConfig<TestSpec>,
             resource_used_per_run: ResourceUsed<Gas>,
         ) -> Self {
-            let rate_limiter = RateLimiter::new(config);
+            let rate_limiter = RateLimiter::new(ttl_in_millis, config, Default::default());
             Self {
                 rate_limiter,
                 resource_used_per_run,
@@ -504,7 +505,9 @@ mod tests {
         }
 
         fn resource_tokens_to_refill(&self, time_passed_ms: u64) -> Resource<Gas> {
+            // TODO
             self.rate_limiter
+                .config
                 .refill_rate
                 .token_resource_per_ms
                 .saturating_mul_by_scalar(time_passed_ms)
