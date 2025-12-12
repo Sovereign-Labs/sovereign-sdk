@@ -12,7 +12,6 @@ use std::time::Instant;
 /// Configuration for the rate limiter.
 #[derive(Debug, Clone)]
 pub(crate) struct RateLimiterConfig<S: Spec> {
-    //pub(crate) ttl_in_millis: u64,
     pub(crate) max_allowed_resources: TotalResources<S::Gas>,
     pub(crate) refill_rate: RefillRatePerMillis<S::Gas>,
 }
@@ -236,15 +235,15 @@ impl<G: Gas> Throttler<G> {
 ///   total_resource_used = 3 micros
 pub(crate) struct RateLimiter<K, S: Spec> {
     data: Cache<K, Throttler<S::Gas>>,
-    config: RateLimiterConfig<S>,
-    special_keys: HashMap<K, RateLimiterConfig<S>>,
+    default_config: RateLimiterConfig<S>,
+    special_configs: HashMap<K, RateLimiterConfig<S>>,
 }
 
 impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(
         ttl_in_millis: u64,
-        config: RateLimiterConfig<S>,
-        special_keys: HashMap<K, RateLimiterConfig<S>>,
+        default_config: RateLimiterConfig<S>,
+        special_configs: HashMap<K, RateLimiterConfig<S>>,
     ) -> Self {
         let data = Cache::builder()
             .time_to_live(Duration::from_millis(ttl_in_millis))
@@ -252,12 +251,10 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
 
         Self {
             data,
-            config,
-            special_keys,
+            default_config,
+            special_configs,
         }
     }
-
-    //fn get_allowed_resources(&self, k: Key) -> TotalResources<S::Gas> {}
 
     pub(crate) fn allow(
         &mut self,
@@ -265,11 +262,14 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         key: &K,
     ) -> Result<Throttler<S::Gas>, LimitExceeded<S::Gas>> {
         match self.data.get(key) {
-            Some(throttler) => Ok(throttler.allow_request_and_refill_resource_used(
-                now,
-                &self.config.max_allowed_resources,
-                &self.config.refill_rate,
-            )?),
+            Some(throttler) => {
+                let config = self.get_config(key);
+                Ok(throttler.allow_request_and_refill_resource_used(
+                    now,
+                    &config.max_allowed_resources,
+                    &config.refill_rate,
+                )?)
+            }
             None => Ok(Throttler {
                 total_resource_used: TotalResources::zero(),
                 last_refill: now,
@@ -286,6 +286,10 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         let throttler = throttler.throttle(resource_used, &key);
         self.data.insert(key, throttler);
         throttler
+    }
+
+    fn get_config(&self, k: &K) -> &RateLimiterConfig<S> {
+        self.special_configs.get(k).unwrap_or(&self.default_config)
     }
 }
 
@@ -344,7 +348,7 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(3)
-                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, &addr));
 
             rollup_simulator
                 .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
@@ -409,7 +413,7 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(run_number)
-                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, &addr));
 
             let err = rollup_simulator
                 .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
@@ -428,7 +432,7 @@ mod tests {
             let expected_rate_limiter_usage = rollup_simulator
                 .resource_used_per_run
                 .mul(run_number)
-                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms));
+                .refill(&rollup_simulator.resource_tokens_to_refill(time_passed_ms, &addr));
 
             let res =
                 rollup_simulator.run_and_assert_limits(now, &addr, expected_rate_limiter_usage);
@@ -504,10 +508,13 @@ mod tests {
             Ok(())
         }
 
-        fn resource_tokens_to_refill(&self, time_passed_ms: u64) -> Resource<Gas> {
-            // TODO
+        fn resource_tokens_to_refill(
+            &self,
+            time_passed_ms: u64,
+            addr: &<TestSpec as Spec>::Address,
+        ) -> Resource<Gas> {
             self.rate_limiter
-                .config
+                .get_config(addr)
                 .refill_rate
                 .token_resource_per_ms
                 .saturating_mul_by_scalar(time_passed_ms)
