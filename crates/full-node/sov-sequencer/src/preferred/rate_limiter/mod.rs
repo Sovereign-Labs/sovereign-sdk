@@ -7,14 +7,14 @@ use limiter::*;
 use resource::*;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_modules_api::{CredentialId, Spec};
-use std::{net::IpAddr, time::Instant};
+use std::{collections::HashMap, net::IpAddr, time::Instant};
 
 use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
 
 #[derive(Debug)]
 pub(crate) struct Token<S: Spec> {
     credential_id: CredentialId,
-    throttler_for_addr: Throttler<S::Gas>,
+    throttler_for_credential: Throttler<S::Gas>,
 
     ip: IpAddr,
     throttler_for_ip: Throttler<S::Gas>,
@@ -34,15 +34,21 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
     },
 }
 
+#[derive(Default)]
+pub struct SpecialKeys<S: Spec> {
+    pub ips: HashMap<IpAddr, Resource<S::Gas>>,
+    pub credentials: HashMap<CredentialId, Resource<S::Gas>>,
+}
+
 struct SovRateLimiterInner<S: Spec> {
-    by_addr_rate_limiter: RateLimiter<CredentialId, S>,
+    by_credential_rate_limiter: RateLimiter<CredentialId, S>,
     by_ip_rate_limiter: RateLimiter<IpAddr, S>,
 }
 
 impl<S: Spec> SovRateLimiterInner<S> {
     fn new(config: RateLimiterConfig<S>) -> Self {
         Self {
-            by_addr_rate_limiter: RateLimiter::new(config.clone()),
+            by_credential_rate_limiter: RateLimiter::new(config.clone()),
             by_ip_rate_limiter: RateLimiter::new(config),
         }
     }
@@ -53,15 +59,16 @@ impl<S: Spec> SovRateLimiterInner<S> {
         credential_id: CredentialId,
     ) -> Result<Token<S>, ResourceLimitExceededError<S>> {
         let now = Instant::now();
-        let throttler_for_addr = match self.by_addr_rate_limiter.allow(now, &credential_id) {
-            Ok(ok) => ok,
-            Err(reason) => {
-                return Err(ResourceLimitExceededError::CredentialId {
-                    credential_id,
-                    reason,
-                })
-            }
-        };
+        let throttler_for_credential =
+            match self.by_credential_rate_limiter.allow(now, &credential_id) {
+                Ok(ok) => ok,
+                Err(reason) => {
+                    return Err(ResourceLimitExceededError::CredentialId {
+                        credential_id,
+                        reason,
+                    })
+                }
+            };
 
         let throttler_for_ip = self
             .by_ip_rate_limiter
@@ -70,16 +77,16 @@ impl<S: Spec> SovRateLimiterInner<S> {
 
         Ok(Token {
             credential_id,
-            throttler_for_addr,
+            throttler_for_credential,
             ip,
             throttler_for_ip,
         })
     }
 
     fn update(&mut self, token: Token<S>, resource_used: ResourceUsed<S::Gas>) {
-        self.by_addr_rate_limiter.update(
+        self.by_credential_rate_limiter.update(
             token.credential_id,
-            token.throttler_for_addr,
+            token.throttler_for_credential,
             resource_used,
         );
         self.by_ip_rate_limiter
