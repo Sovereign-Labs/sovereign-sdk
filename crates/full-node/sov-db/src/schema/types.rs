@@ -10,6 +10,8 @@ use sov_rollup_interface::stf::{
 };
 use sov_rollup_interface::Bytes;
 
+pub use sov_db_types as slot_key;
+
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
 /// than most bytes abstractions, but is vulnerable to out-of-memory attacks

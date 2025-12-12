@@ -216,7 +216,7 @@ pub fn materialize_and_commit_complex_ledger_db_data(
         let state_root = format!("state-root-{}", slot.slot_data().header.height);
         ledger_data.merge(ledger_db.materialize_slot(slot, state_root.as_bytes())?);
         ledger_db.send_notifications();
-        storage_manager.commit(ledger_data.clone());
+        storage_manager.commit(&ledger_data);
     }
 
     let slot_num = ledger_db.get_next_items_numbers()?.slot_number;
@@ -229,7 +229,7 @@ pub fn materialize_and_commit_complex_ledger_db_data(
         },
     )?);
     ledger_db.send_notifications();
-    storage_manager.commit(ledger_data.clone());
+    storage_manager.commit(&ledger_data);
 
     Ok(())
 }
@@ -278,7 +278,7 @@ impl LedgerTestService {
             LedgerTestServiceData::Simple => {
                 let ledger_data = materialize_simple_ledger_db_data(&ledger_db).await?;
                 ledger_db.send_notifications();
-                storage_manager.commit(ledger_data);
+                storage_manager.commit(&ledger_data);
             }
             LedgerTestServiceData::Complex => {
                 materialize_and_commit_complex_ledger_db_data(&ledger_db, &mut storage_manager)?;

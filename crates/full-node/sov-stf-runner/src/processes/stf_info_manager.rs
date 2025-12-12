@@ -487,7 +487,7 @@ mod tests {
                 let stf_info = make_stf_info(height);
                 let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
                 sender.notify(stf_info.slot_number, &ledger_db).await?;
-                storage_manager.commit(schema_batch);
+                storage_manager.commit(&schema_batch);
             }
         }
 
@@ -523,12 +523,12 @@ mod tests {
 
             let stf_info = make_stf_info(channel_size + 1);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-            storage_manager.commit(schema_batch);
+            storage_manager.commit(&schema_batch);
             sender.notify(stf_info.slot_number, &ledger_db).await?;
 
             let stf_info = make_stf_info(channel_size + 2);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-            storage_manager.commit(schema_batch);
+            storage_manager.commit(&schema_batch);
             sender.notify(stf_info.slot_number, &ledger_db).await?;
 
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 2);
@@ -560,7 +560,7 @@ mod tests {
         for height in 1..channel_size {
             let stf_info = make_stf_info(height);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-            storage_manager.commit(schema_batch);
+            storage_manager.commit(&schema_batch);
             sender.notify(stf_info.slot_number, &ledger_db).await?;
         }
 
@@ -587,7 +587,7 @@ mod tests {
         for height in 1..3 {
             let stf_info = make_stf_info(height);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-            storage_manager.commit(schema_batch);
+            storage_manager.commit(&schema_batch);
             sender.notify(stf_info.slot_number, &ledger_db).await?;
         }
 
@@ -629,7 +629,7 @@ mod tests {
                     .materialize_stf_info(&stf_info, &ledger_db)
                     .await
                     .unwrap();
-                storage_manager.commit(schema_batch);
+                storage_manager.commit(&schema_batch);
                 sender
                     .notify(stf_info.slot_number, &ledger_db)
                     .await
@@ -734,7 +734,7 @@ mod tests {
             for height in 1..test_case.nb_of_stf_infos {
                 let stf_info = make_stf_info(height);
                 let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-                storage_manager.commit(schema_batch);
+                storage_manager.commit(&schema_batch);
                 sender.notify(stf_info.slot_number, &ledger_db).await?;
                 receiver.read_next().await?.unwrap();
                 receiver
@@ -774,7 +774,7 @@ mod tests {
             .materialize_stf_info(&original_state_transition_info, ledger_db)
             .await
             .unwrap();
-        storage_manager.commit(schema_batch);
+        storage_manager.commit(&schema_batch);
         sender
             .notify(SlotNumber::new_dangerous(rollup_height), ledger_db)
             .await

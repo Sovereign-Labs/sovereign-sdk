@@ -1,0 +1,42 @@
+[package]
+name = "sov-db-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish.workspace = true
+repository.workspace = true
+
+[dependencies]
+sov-rollup-interface = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+digest = { workspace = true }
+rockbound = { workspace = true, optional = true }
+arbitrary = { workspace = true, features = ["derive"], optional = true }
+derivative = { workspace = true }
+serde = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
+serde_with = { workspace = true }
+proptest = { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+native = [
+	"dep:rockbound",
+	"sov-rollup-interface/native"
+]
+arbitrary = [
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"sov-rollup-interface/arbitrary",
+	"rockbound?/arbitrary"
+]

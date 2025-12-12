@@ -147,23 +147,21 @@ where
     }
 
     fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
-        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-        let key = key.as_ref().to_vec();
         match N::NAMESPACE {
             Namespace::User => self
                 .historical_state
-                .get_user_value_option_by_key_unbound(key.as_ref())
+                .get_user_value_option_by_key_unbound(key)
                 .expect("Unable to read from UserDb"),
             Namespace::Kernel => self
                 .historical_state
-                .get_kernel_value_option_by_key_unbound(key.as_ref())
+                .get_kernel_value_option_by_key_unbound(key)
                 .expect("Unable to read from KernelDb"),
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(key.as_ref(), SlotNumber::MAX)
-                .expect("Unable to read from AccessoryDb"),
+                .get_value_option(key, SlotNumber::MAX)
+                .expect("Unable to read from AccessoryDb")
+                .map(Into::into),
         }
-        .map(Into::into)
     }
 
     fn read_value<N: CompileTimeNamespace>(
@@ -179,20 +177,17 @@ where
             return Ok(None);
         };
         let _span = tracing::debug_span!("NomtProverStorage::read_value", ?resolved_version, passed_version = ?version).entered();
-        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-        let key_vec = key.as_ref().to_vec();
         let val = match N::NAMESPACE {
             Namespace::User => {
                 let historical_value = if let Some(version) = resolved_version {
                     self.historical_state
-                        .get_user_value_option_by_key_historical(key_vec.as_ref(), version)?
+                        .get_user_value_option_by_key_historical(key, version)?
                 } else {
-                    self.historical_state
-                        .get_user_value_option_by_key(key_vec.as_ref())?
+                    self.historical_state.get_user_value_option_by_key(key)?
                 };
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
-                    let key_path = S::Hasher::digest(&key_vec).into();
+                    let key_path = S::Hasher::digest(key.as_ref()).into();
 
                     let nomt_session = self
                         .state_session_builder
@@ -200,9 +195,9 @@ where
                         .expect("Failed to build user session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
-                    let historical_value_hash = historical_value.as_ref().map(|v| {
-                        SlotValue::from(v.to_vec()).combine_val_hash_and_size::<S::Hasher>()
-                    });
+                    let historical_value_hash = historical_value
+                        .as_ref()
+                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
                     assert_eq!(nomt_value, historical_value_hash);
                 }
 
@@ -211,23 +206,22 @@ where
             Namespace::Kernel => {
                 let historical_value = if let Some(version) = version {
                     self.historical_state
-                        .get_kernel_value_option_by_key_historical(key_vec.as_ref(), version)?
+                        .get_kernel_value_option_by_key_historical(key, version)?
                 } else {
-                    self.historical_state
-                        .get_kernel_value_option_by_key(key_vec.as_ref())?
+                    self.historical_state.get_kernel_value_option_by_key(key)?
                 };
                 let version_to_check = resolved_version.unwrap_or(self.latest_version());
                 if self.should_check_dbs_sync(version_to_check) {
-                    let key_path = S::Hasher::digest(&key_vec).into();
+                    let key_path = S::Hasher::digest(key.as_ref()).into();
                     let nomt_session = self
                         .state_session_builder
                         .begin_kernel_session_without_witness()
                         .expect("Failed to build kernel session");
                     let nomt_value = nomt_session.read(key_path).unwrap();
                     drop(nomt_session);
-                    let historical_value_hash = historical_value.as_ref().map(|v| {
-                        SlotValue::from(v.to_vec()).combine_val_hash_and_size::<S::Hasher>()
-                    });
+                    let historical_value_hash = historical_value
+                        .as_ref()
+                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
                     assert_eq!(nomt_value, historical_value_hash);
                 }
 
@@ -235,13 +229,10 @@ where
             }
             Namespace::Accessory => self
                 .accessory
-                .get_value_option(
-                    &key_vec, // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-                    resolved_version.unwrap_or(self.latest_version()),
-                )
-                .expect("Unable to read from AccessoryDb"),
-        }
-        .map(Into::into);
+                .get_value_option(key, resolved_version.unwrap_or(self.latest_version()))
+                .expect("Unable to read from AccessoryDb")
+                .map(Into::into),
+        };
         Ok(val)
     }
 
@@ -597,15 +588,8 @@ where
             next_root_hash,
             pinned_cache,
         } = state_update;
-        let user_to_materialize = user_versioned.ordered_writes.into_iter().map(|(k, v)| {
-            // TODO: Clone now, figure out how to optimize later
-            // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-            (k.as_ref().to_vec(), v.map(|x| x.value().to_vec()))
-        });
-        let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter().map(|(k, v)| {
-            // TODO: Clone now, figure out how to optimize later
-            (k.as_ref().to_vec(), v.map(|x| x.value().to_vec()))
-        });
+        let user_to_materialize = user_versioned.ordered_writes.into_iter();
+        let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter();
         let historical_schema_batch = HistoricalStateReader::materialize_values(
             user_to_materialize,
             kernel_to_materialize,
@@ -749,20 +733,16 @@ where
         &self,
         prefix: SlotKey,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
-        // TODO: Remove useless clone here.
-        let prefix_vec = prefix.as_ref().to_vec();
         let iter = self
             .historical_state
-            .iter_user_values_with_prefix(&prefix_vec)?;
+            .iter_user_values_with_prefix(&prefix)?;
         let Some(iter) = iter else {
             return Ok(None);
         };
 
-        Ok(Some(iter.filter_map(|(key, value)| {
-            value
-                .flatten()
-                .map(|v| (SlotKey::from_slice_including_prefix(&key), v.into()))
-        })))
+        Ok(Some(
+            iter.filter_map(|(key, value)| value.map(|v| (key, v))),
+        ))
     }
 
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {

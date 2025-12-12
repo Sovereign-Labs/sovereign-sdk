@@ -76,6 +76,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-db-types"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-kernels"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
