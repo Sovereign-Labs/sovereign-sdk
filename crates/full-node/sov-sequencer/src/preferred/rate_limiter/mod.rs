@@ -48,18 +48,13 @@ struct SovRateLimiterInner<S: Spec> {
 
 impl<S: Spec> SovRateLimiterInner<S> {
     fn new(
-        ttl_in_millis: u64,
         config: RateLimiterConfig<S>,
         credentials: HashMap<CredentialId, RateLimiterConfig<S>>,
         ips: HashMap<IpAddr, RateLimiterConfig<S>>,
     ) -> Self {
         Self {
-            by_credential_rate_limiter: RateLimiter::new(
-                ttl_in_millis,
-                config.clone(),
-                credentials,
-            ),
-            by_ip_rate_limiter: RateLimiter::new(ttl_in_millis, config, ips),
+            by_credential_rate_limiter: RateLimiter::new(config.clone()),
+            by_ip_rate_limiter: RateLimiter::new(config),
         }
     }
 
@@ -114,6 +109,8 @@ fn clculate_limits<S: Spec>(
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
 ) -> RateLimiterConfig<S> {
+    // All entries older than this value are evicted from the rate limiter.
+    let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
     let max_gas = comfortable_gas_limit::<S>();
 
     let max_resources_per_batch = Resource {
@@ -138,6 +135,7 @@ fn clculate_limits<S: Spec>(
         .div_by_scalar(1000);
 
     RateLimiterConfig {
+        ttl_in_millis,
         max_allowed_resources: TotalResources { inner: max_per_key },
         refill_rate: RefillRatePerMillis {
             token_resource_per_ms: refill_rate,
@@ -205,16 +203,13 @@ impl<S: Spec> SovRateLimiter<S> {
         special_keys: SpecialKeys,
     ) -> Self {
         let inner = config.map(|sov_config| {
-            // All entries older than this value are evicted from the rate limiter.
-            let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
-
             let (config, credentials, ips) = limits(
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
                 special_keys,
             );
-            SovRateLimiterInner::new(ttl_in_millis, config, credentials, ips)
+            SovRateLimiterInner::new(config, credentials, ips)
         });
         Self { inner }
     }
