@@ -173,12 +173,11 @@ where
     let is_ready = Err(SequencerNotReadyDetails::Startup);
 
     let rate_limiter = SovRateLimiter::new(
-        seq_config.sequencer_kind_config.rate_limiter,
+        seq_config.sequencer_kind_config.rate_limiter.clone(),
         seq_config
             .sequencer_kind_config
             .batch_execution_time_limit_millis,
         seq_config.max_batch_size_bytes,
-        Default::default(),
     );
 
     let inner = Inner {

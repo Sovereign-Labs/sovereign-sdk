@@ -648,7 +648,7 @@ mod tests {
         }
     }
 
-    impl<G: Gas> RefillRatePerMillis<G> {
+    impl RefillRatePerMillis<Gas> {
         fn zero() -> Self {
             Self {
                 token_resource_per_ms: Resource::zero(),

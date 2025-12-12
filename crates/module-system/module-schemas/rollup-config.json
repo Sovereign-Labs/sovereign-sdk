@@ -170,6 +170,11 @@
         }
       ]
     },
+    "CredentialId": {
+      "description": "32 bytes in hexadecimal format, with `0x` prefix.",
+      "type": "string",
+      "pattern": "^0x[a-fA-F0-9]{64}$"
+    },
     "HexHash": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
       "type": "string",
@@ -976,17 +981,18 @@
     "SovRateLimiterConfig": {
       "type": "object",
       "required": [
-        "custom_limits",
-        "default_limits"
+        "credential_custom_limits",
+        "default_limits",
+        "ip_custom_limits"
       ],
       "properties": {
-        "custom_limits": {
+        "credential_custom_limits": {
           "type": "array",
           "items": {
             "type": "array",
             "items": [
               {
-                "type": "string"
+                "$ref": "#/definitions/CredentialId"
               },
               {
                 "$ref": "#/definitions/Limits"
@@ -998,6 +1004,23 @@
         },
         "default_limits": {
           "$ref": "#/definitions/Limits"
+        },
+        "ip_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string",
+                "format": "ip"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
         }
       }
     },

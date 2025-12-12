@@ -5,7 +5,7 @@ mod resource;
 pub(crate) use limiter::ResourceUsed;
 use limiter::*;
 use resource::*;
-use sov_full_node_configs::sequencer::SovRateLimiterConfig;
+use sov_full_node_configs::sequencer::{Limits, SovRateLimiterConfig};
 use sov_modules_api::{CredentialId, Spec};
 use std::hash::Hash;
 use std::{collections::HashMap, net::IpAddr, time::Instant};
@@ -110,14 +110,14 @@ const TTL_MULTIPLIER: u64 = 20;
 const PER_KEY: u64 = 200;
 
 fn clculate_limits<S: Spec>(
-    sov_config: SovRateLimiterConfig,
+    limits: Limits,
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
 ) -> RateLimiterConfig<S> {
     let max_gas = comfortable_gas_limit::<S>();
 
     let max_resources_per_batch = Resource {
-        req_counter: sov_config.max_requests_per_batch,
+        req_counter: limits.max_requests_per_batch,
         // The expect is justified because we will never have batches larger than u64::MAX bytes.
         space_in_bytes: max_batch_size_bytes
             .try_into()
@@ -134,7 +134,7 @@ fn clculate_limits<S: Spec>(
 
     // The refill rate is defined as 0.1% of max_per_key. After one second, the system refills max_per_key tokens.
     let refill_rate = max_per_key
-        .saturating_mul_by_scalar(sov_config.refill_rate)
+        .saturating_mul_by_scalar(limits.refill_rate)
         .div_by_scalar(1000);
 
     RateLimiterConfig {
@@ -148,7 +148,7 @@ fn clculate_limits<S: Spec>(
 fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
-    v: Vec<(K, SovRateLimiterConfig)>,
+    v: Vec<(K, Limits)>,
 ) -> HashMap<K, RateLimiterConfig<S>> {
     v.into_iter()
         .map(|x| {
@@ -164,14 +164,13 @@ fn limits<S: Spec>(
     sov_config: SovRateLimiterConfig,
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
-    special_keys: SpecialKeys,
 ) -> (
     RateLimiterConfig<S>,
     HashMap<CredentialId, RateLimiterConfig<S>>,
     HashMap<IpAddr, RateLimiterConfig<S>>,
 ) {
     let default_config = clculate_limits::<S>(
-        sov_config,
+        sov_config.default_limits,
         batch_execution_time_limit_millis,
         max_batch_size_bytes,
     );
@@ -179,13 +178,13 @@ fn limits<S: Spec>(
     let credentials = to_limiter_config_map::<CredentialId, S>(
         batch_execution_time_limit_millis,
         max_batch_size_bytes,
-        special_keys.credentials,
+        sov_config.credential_custom_limits,
     );
 
     let ips = to_limiter_config_map::<IpAddr, S>(
         batch_execution_time_limit_millis,
         max_batch_size_bytes,
-        special_keys.ips,
+        sov_config.ip_custom_limits,
     );
 
     (default_config, credentials, ips)
@@ -202,7 +201,6 @@ impl<S: Spec> SovRateLimiter<S> {
         config: Option<SovRateLimiterConfig>,
         batch_execution_time_limit_millis: u64,
         max_batch_size_bytes: usize,
-        special_keys: SpecialKeys,
     ) -> Self {
         let inner = config.map(|sov_config| {
             // All entries older than this value are evicted from the rate limiter.
@@ -212,7 +210,6 @@ impl<S: Spec> SovRateLimiter<S> {
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
-                special_keys,
             );
             SovRateLimiterInner::new(ttl_in_millis, config, credentials, ips)
         });

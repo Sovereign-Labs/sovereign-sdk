@@ -1,7 +1,8 @@
-use std::num::NonZero;
+use std::{net::IpAddr, num::NonZero};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::crypto::CredentialId;
 
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -267,15 +268,15 @@ pub struct TimingOracleConfig {
     pub private_key_hex: Option<String>,
 }
 
-/*
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct SovRateLimiterConfig {
     pub default_limits: Limits,
-    pub custom_limits: Vec<(String, Limits)>,
-}*/
+    pub credential_custom_limits: Vec<(CredentialId, Limits)>,
+    pub ip_custom_limits: Vec<(IpAddr, Limits)>,
+}
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub struct SovRateLimiterConfig {
+pub struct Limits {
     /// Determines the threshold for rate-limiting requests.
     /// This value is used as follows:
     ///
