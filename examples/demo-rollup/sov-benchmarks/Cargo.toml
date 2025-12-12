@@ -17,7 +17,6 @@ sov-state = { workspace = true }
 
 sov-test-modules = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sov-evm-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-address = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true, features = ["bench"] }
 sov-transaction-generator = { workspace = true }
