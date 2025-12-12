@@ -2,6 +2,7 @@
 - #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
 - #2214 EVM related test utils are extracted into separate crate: `sov-evm-test-utils`. Please update if you use them.
 - #2219 Dependency tree shaking.
+- #2224 `alloy-sol-types` is behind `evm` feature in sov-modules-api. Add this feature if there's compilation errors.
 
 # 2025-12-03
  - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
