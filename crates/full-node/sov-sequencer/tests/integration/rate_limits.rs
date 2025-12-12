@@ -90,7 +90,7 @@ async fn create_test_rollup(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting() {
     let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
-        portion: 5,
+        max_threshold_per_key_to_batch_capacity_ratio: 200,
         max_requests_per_batch: 1_000_000,
         refill_rate: 10,
     })
@@ -139,7 +139,7 @@ async fn test_rate_limiting() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_correct_ip() {
     let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
-        portion: 5,
+        max_threshold_per_key_to_batch_capacity_ratio: 200,
         max_requests_per_batch: 0,
         refill_rate: 0,
     })

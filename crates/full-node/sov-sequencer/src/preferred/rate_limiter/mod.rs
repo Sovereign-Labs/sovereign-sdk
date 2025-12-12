@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn test_clculate_limits() {
         let sov_config = SovRateLimiterConfig {
-            portion: 5,
+            max_threshold_per_key_to_batch_capacity_ratio: 200,
             max_requests_per_batch: 234000000,
             refill_rate: 1,
         };
