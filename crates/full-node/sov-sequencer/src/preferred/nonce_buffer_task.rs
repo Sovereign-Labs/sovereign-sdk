@@ -11,12 +11,12 @@ use std::collections::hash_map;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
-use std::net::IpAddr;
 
 use crate::common::AcceptedTx;
 
