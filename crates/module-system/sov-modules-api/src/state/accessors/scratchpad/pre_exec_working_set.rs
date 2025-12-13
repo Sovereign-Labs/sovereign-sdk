@@ -127,6 +127,7 @@ delegate_version_reader!(PreExecWorkingSet<S, I> where [S: Spec, I: StateProvide
 mod tests {
     use sov_state::codec::BcsCodec;
     use sov_state::namespaces::User;
+    use sov_state::SlotValueFromCodec;
     use sov_state::{SlotKey, SlotValue};
     use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};

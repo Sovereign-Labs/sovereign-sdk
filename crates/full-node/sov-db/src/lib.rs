@@ -55,7 +55,6 @@ pub struct DbOptions<Columns = rockbound::schema::ColumnFamilyName> {
     pub(crate) path_suffix: &'static str,
     /// A set of colums that this db is going to use.
     pub(crate) columns: Vec<Columns>,
-    pub(crate) cacheable_columns: Vec<String>,
 }
 
 impl<T> DbOptions<T> {
@@ -65,7 +64,6 @@ impl<T> DbOptions<T> {
             name: self.name,
             path_suffix: self.path_suffix,
             columns: self.columns.into_iter().map(f).collect(),
-            cacheable_columns: self.cacheable_columns,
         }
     }
 }
@@ -87,23 +85,15 @@ impl DbOptions<ColumnFamilyDescriptor> {
     pub fn setup_db_in_path_with_column_descriptors(
         self,
         path: impl AsRef<std::path::Path>,
-        cache_size: usize,
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open_with_cfds(
-            &config,
-            db_path,
-            self.name,
-            self.columns,
-            self.cacheable_columns,
-            cache_size,
-        )
+        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns)
     }
 }
 
 pub(crate) fn ensure_version_is_correct(
-    key: &SchemaKey,
+    key: &[u8],
     version: sov_rollup_interface::common::SlotNumber,
     found: Option<(
         (SchemaKey, sov_rollup_interface::common::SlotNumber),
@@ -112,7 +102,7 @@ pub(crate) fn ensure_version_is_correct(
 ) -> anyhow::Result<Option<SchemaValue>> {
     match found {
         Some(((found_key, found_version), value)) => {
-            if &found_key == key {
+            if found_key == key {
                 anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                 Ok(value)
             } else {

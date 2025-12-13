@@ -81,6 +81,7 @@ fn make_user_value_proof(
 
 mod map {
     use sov_state::{Prefix, ProvableNamespace, SlotKey, SlotValue};
+    use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
 
     use super::{make_user_map_proof, S};
 
@@ -123,6 +124,7 @@ mod map {
 
 mod value {
     use sov_state::{Prefix, ProvableNamespace, SlotKey, SlotValue};
+    use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
 
     use super::{make_user_value_proof, S};
 

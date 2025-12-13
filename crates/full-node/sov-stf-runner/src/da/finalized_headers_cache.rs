@@ -205,6 +205,7 @@ async fn background_header_fetch_task<Da: DaService>(
     shutdown_rx: tokio::sync::watch::Receiver<()>,
 ) {
     let mut interval = tokio::time::interval(polling_interval);
+    tracing::info!(?interval, "Starting background fetcher task");
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
@@ -220,7 +221,7 @@ async fn background_header_fetch_task<Da: DaService>(
                     .await
                 {
                     FutureOrShutdownOutput::Shutdown => {
-                        tracing::info!("DA header provider received shutdown signal");
+                        tracing::info!("DA header provider received shutdown signal, stopping");
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {

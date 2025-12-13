@@ -3925,7 +3925,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derivative",
  "schemars 0.8.22",
  "serde",
  "sov-modules-api",
@@ -3933,6 +3932,19 @@ dependencies = [
  "sov-state",
  "thiserror 1.0.69",
  "tracing",
+]
+
+[[package]]
+name = "sov-db-types"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "derivative",
+ "digest 0.10.7",
+ "hex",
+ "serde",
+ "serde_with",
+ "sov-rollup-interface",
 ]
 
 [[package]]
@@ -4055,9 +4067,6 @@ dependencies = [
 name = "sov-modules-api"
 version = "0.3.0"
 dependencies = [
- "alloy-eips",
- "alloy-primitives",
- "alloy-sol-types",
  "anyhow",
  "bech32",
  "borsh",
@@ -4246,6 +4255,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "serde_with",
+ "sov-db-types",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",

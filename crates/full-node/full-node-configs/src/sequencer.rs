@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum SequencerKindConfig {
     /// A "Standard" sequencer, which can post transactions to the rollup but not give soft confirmations.
     Standard(StdSequencerConfig),
@@ -176,6 +177,9 @@ pub struct PreferredSequencerConfig {
     /// Configuration for the timing oracle.
     #[serde(default)]
     pub timing_oracle: Option<TimingOracleConfig>,
+    /// Configuration for rate-limiting the sequencer.
+    #[serde(default)]
+    pub rate_limiter: Option<SovRateLimiterConfig>,
     /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
@@ -207,6 +211,7 @@ impl Default for PreferredSequencerConfig {
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
             timing_oracle: None,
+            rate_limiter: None,
         }
     }
 }
@@ -254,13 +259,23 @@ pub struct StdSequencerConfig {
 pub struct TimingOracleConfig {
     /// The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.
     pub priority_fee_percentage: u8,
-
     /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
     pub max_fee: u64,
-
     /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
     pub interval_millis: u64,
-
     /// The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.
     pub private_key_hex: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct SovRateLimiterConfig {
+    /// The maximum number of requests allowed per batch.
+    pub max_requests_per_batch: u64,
+    /// Determines how quickly tokens are refilled in the token-bucket algorithm.
+    /// Each user can consume, on average, only a certain percentage of the batch resources.
+    /// Over time, users send requests that draw from their available resources, while a
+    /// constant stream of tokens refilling those resources.
+    /// At refill_rate = 1, tokens regenerate at 0.0005% × BatchCapacity per millisecond.
+    /// Values between 1 and 20 are recommended starting points.
+    pub refill_rate: u64,
 }

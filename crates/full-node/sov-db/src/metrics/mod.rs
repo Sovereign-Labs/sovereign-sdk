@@ -1,7 +1,8 @@
 use std::io::Write;
 
-use rockbound::{SchemaKey, SchemaValue};
 use sov_metrics::Metric;
+
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
 
 pub mod nomt;
 
@@ -41,14 +42,14 @@ impl StateMaterializationMetrics {
         self.kernel_items += 1;
     }
 
-    pub(crate) fn track_key_value_size(&mut self, key: &SchemaKey, value: &Option<SchemaValue>) {
+    pub(crate) fn track_key_value_size(&mut self, key: &SlotKey, value: &Option<SlotValue>) {
         self.cumulative_keys_size += key.len();
         if let Some(value) = value {
-            self.cumulative_values_size += value.len();
+            self.cumulative_values_size += value.as_ref().len();
         }
         self.max_key_size = std::cmp::max(self.max_key_size, key.len());
         if let Some(value) = value {
-            self.max_value_size = std::cmp::max(self.max_value_size, value.len());
+            self.max_value_size = std::cmp::max(self.max_value_size, value.as_ref().len());
         }
     }
 }

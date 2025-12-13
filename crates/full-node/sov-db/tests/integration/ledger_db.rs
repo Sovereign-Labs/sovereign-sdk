@@ -103,7 +103,7 @@ async fn test_save_aggregated_proof() {
         let proof_change_set = ledger_db
             .materialize_aggregated_proof(slot_num, agg_proof.clone())
             .unwrap();
-        storage_manager.commit(proof_change_set);
+        storage_manager.commit(&proof_change_set);
 
         let proof_from_db = ledger_db
             .get_latest_aggregated_proof()
@@ -131,7 +131,7 @@ async fn test_stf_info() {
         .materialize_stf_info(&original_stored_inf_info, SlotNumber::GENESIS)
         .unwrap();
 
-    storage_manager.commit(schema_batch);
+    storage_manager.commit(&schema_batch);
 
     let stored_stf_info = ledger_db
         .get_stf_info(SlotNumber::GENESIS)

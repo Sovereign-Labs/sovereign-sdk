@@ -372,14 +372,19 @@ async fn test_nonce_queue_timeout() {
 /// Test transaction rejection with a zero-length queue
 #[tokio::test(flavor = "multi_thread")]
 async fn test_zero_length_queue() {
-    let (test_rollup, admin) = create_test_rollup(0, DEFAULT_TIMEOUT).await;
+    const LONGISH_TIMEOUT: u64 = 2000;
+    let (test_rollup, admin) = create_test_rollup(0, LONGISH_TIMEOUT).await;
     let client = test_rollup.api_client().clone();
     let key = admin.private_key;
 
     // Spam some transactions with nonces above 0. Expect them to fail because queue size is 0.
     let handles = submit_parallel_txs(&client, &key, (1..5).collect(), false).await;
+    // Absolutely ensure all of the transactions have time to hit the queue (500 ms is very
+    // generous) - while also absolutely making sure we don't hit the timeout case before sending
+    // transaction 0 (so if they got queued, they would then execute, failing the test).
+    tokio::time::sleep(Duration::from_millis(LONGISH_TIMEOUT / 4)).await;
     // Send the 0 nonce transaction - if the above had gotten queued (which they shouldn't have),
-    // this would have let them succeed
+    // this would let them succeed
     submit_tx_set_value(&client, &key, 0, true).await;
 
     for handle in handles {
@@ -403,11 +408,13 @@ async fn test_zero_length_queue() {
 /// timeouts both locally and in CI, without observable flakiness (at the time of writing).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_repeated_timeouts_with_race_conditions() {
-    const SHORTENED_TIMEOUT: u64 = 2000;
-    const DELAY_BEFORE_NONCE_0: u64 = SHORTENED_TIMEOUT - 400;
+    // We have to bump the timeout since the queue doesn't check pre-reqs currently, so all txs
+    // need to process before the timeout even on slow CI runners
+    const LONGER_TIMEOUT: u64 = 5000;
+    const DELAY_BEFORE_NONCE_0: u64 = 500;
     const NUM_TXS: u64 = 100;
 
-    let (test_rollup, admin) = create_test_rollup(NUM_TXS + 10, SHORTENED_TIMEOUT).await;
+    let (test_rollup, admin) = create_test_rollup(NUM_TXS + 10, LONGER_TIMEOUT).await;
     let client = test_rollup.api_client().clone();
     let key = admin.private_key;
 

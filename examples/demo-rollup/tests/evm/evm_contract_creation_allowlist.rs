@@ -3,7 +3,7 @@ use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use crate::evm::evm_test_helper::SECONDARY_SENDER_PRIV_KEY;
 use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
-use sov_test_utils::SimpleStorage;
+use sov_evm_test_utils::SimpleStorage;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn allowed() -> anyhow::Result<()> {

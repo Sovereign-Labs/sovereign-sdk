@@ -32,7 +32,7 @@ use sov_modules_api::{
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -236,7 +236,7 @@ where
                 tx_hash,
                 original_tx_queue_id,
                 credential_id,
-                socket_addr,
+                ip_addr,
                 reason,
             } => {
                 let ret = self
@@ -245,7 +245,7 @@ where
                         tx_hash,
                         original_tx_queue_id,
                         credential_id,
-                        socket_addr,
+                        ip_addr,
                         reason,
                     )
                     .await;
@@ -762,8 +762,8 @@ where
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        _credential_id: CredentialId,
-        _socket_addr: SocketAddr,
+        credential_id: CredentialId,
+        ip_addr: IpAddr,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -804,10 +804,18 @@ where
             });
         };
 
-        let (rx, remaining_slot_gas) = inner
-            .do_new_tx(tx_hash, baked_tx)
-            .await
-            .map_err(AcceptTxError::NewTxError)?;
+        let token = inner
+            .rate_limiter
+            .allow(ip_addr, credential_id)
+            .map_err(|err| AcceptTxError::RateLimiter(err))?;
+
+        let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
+
+        // Do not use `?` or return early here. We must always call `rate_limiter.update`
+        // to ensure the limits are updated even for unsuccessful transactions.
+        let res = res.map_err(AcceptTxError::NewTxError);
+        inner.rate_limiter.update(token, resource_used);
+        let (rx, remaining_slot_gas) = res?;
 
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
 
@@ -876,12 +884,8 @@ where
             seq_nr_from_master,
         )?;
 
-        let _ = inner
-            .do_new_tx(tx_hash, baked_tx)
-            .await
-            .map_err(ReplicaError::NewTx)?
-            .0
-            .await;
+        let (res, _) = inner.do_new_tx(tx_hash, baked_tx).await;
+        let _ = res.map_err(ReplicaError::NewTx)?.0.await;
 
         Ok(())
     }

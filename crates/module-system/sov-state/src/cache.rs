@@ -788,7 +788,7 @@ mod tests {
     use super::*;
 
     pub fn create_key(key: u8) -> SlotKey {
-        SlotKey::from_slice(&[key])
+        SlotKey::from_slice(&[key, 0, 0])
     }
 
     pub fn create_value(v: u8) -> Option<SlotValue> {

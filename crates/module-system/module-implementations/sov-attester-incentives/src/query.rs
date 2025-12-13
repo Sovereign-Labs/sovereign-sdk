@@ -11,6 +11,7 @@ use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::{ApiStateAccessor, Gas, GetGasPrice, Spec, StateCheckpoint, StateReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::storage::{SlotKey, Storage, StorageProof};
+use sov_state::SlotKeyFromCodec;
 use sov_state::User;
 
 use super::AttesterIncentives;

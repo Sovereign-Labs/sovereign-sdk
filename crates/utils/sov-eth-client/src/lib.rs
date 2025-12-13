@@ -7,8 +7,8 @@ use ethers::core::types::Eip1559TransactionRequest;
 use ethers::providers::{Http, PendingTransaction};
 use futures::StreamExt;
 use sov_cli::NodeClient;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::{Runtime, Spec};
-use sov_test_utils::LegacySimpleStorage;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 

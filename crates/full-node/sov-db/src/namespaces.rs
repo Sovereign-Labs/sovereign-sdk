@@ -4,7 +4,7 @@ use rockbound::schema::ColumnFamilyName;
 
 pub use crate::schema::namespace::Namespace;
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The Kernel namespace. Has access to the core state information of the rollup
 pub struct KernelNamespace;
 
@@ -22,7 +22,7 @@ impl Namespace for KernelNamespace {
     const HISTORICAL_COLUMN_FAMILY: ColumnFamilyName = "kernel_historical_state_values";
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 /// The User namespace. Has access to the user space and the public information of the rollup.
 pub struct UserNamespace;
 

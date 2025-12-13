@@ -19,6 +19,7 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
+use crate::preferred::rate_limiter::ResourceLimitExceededError;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use anyhow::Context;
@@ -58,7 +59,7 @@ use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootBackgroundTaskState;
 use std::boxed::Box;
 use std::marker::PhantomData;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::path::Path;
@@ -615,7 +616,7 @@ where
     async fn accept_tx_inner(
         &self,
         baked_tx: FullyBakedTx,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
@@ -657,7 +658,7 @@ where
                         tx_hash,
                         original_tx_queue_id,
                         credential_id,
-                        socket_addr,
+                        ip_addr,
                         "accept_tx",
                     )
                     .await,
@@ -670,7 +671,7 @@ where
                         tx_hash,
                         tx_nonce,
                         credential_id,
-                        socket_addr,
+                        ip_addr,
                         original_tx_queue_id,
                     )
                     .await,
@@ -751,6 +752,7 @@ where
                     }
                 },
                 AcceptTxError::ReplicaMode => return Err(replica_mode_error()),
+                AcceptTxError::RateLimiter(err) => return Err(rate_limit_error(err)),
             },
         }
     }
@@ -1067,10 +1069,10 @@ where
     async fn accept_tx(
         &self,
         baked_tx: FullyBakedTx,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         let sequencer = self.clone();
-        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, socket_addr).await })
+        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, ip_addr).await })
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, "A panic occurred while accepting a transaction");
@@ -1090,6 +1092,14 @@ where
         // way that facilitates random access to tx status information. That
         // means the sequencer only relies on the cache. FIXME(@neysofu).
         Ok(TxStatus::Unknown)
+    }
+}
+
+fn rate_limit_error<S: Spec>(err: ResourceLimitExceededError<S>) -> ErrorObject {
+    ErrorObject {
+        status: StatusCode::SERVICE_UNAVAILABLE,
+        message: format!("The sender was rate-limited by the sequencer: {err:?}"),
+        details: Default::default(),
     }
 }
 
@@ -1158,6 +1168,21 @@ where
     events: Vec<RuntimeEventResponse<<Rt as RuntimeEventProcessor>::RuntimeEvent>>,
     receipt: ApiTxEffect<TxReceiptContents<S>>,
     tx_number: u64,
+}
+
+impl<S, Rt> Confirmation<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
+    /// Gas used by the transaction
+    pub fn gas_used(&self) -> <S as Spec>::Gas {
+        match &self.receipt {
+            ApiTxEffect::Skipped { data } => data.gas_used,
+            ApiTxEffect::Reverted { data } => data.gas_used,
+            ApiTxEffect::Successful { data } => data.gas_used,
+        }
+    }
 }
 
 fn get_next_sequence_number_according_to_node<S, Rt>(

@@ -6,8 +6,8 @@ use alloy_rpc_types_eth::BlockId;
 use alloy_rpc_types_eth::BlockNumberOrTag;
 use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
 use alloy_rpc_types_eth::Header;
-use sov_test_utils::Erc20;
-use sov_test_utils::Submit;
+use sov_evm_test_utils::Erc20;
+use sov_evm_test_utils::Submit;
 
 use crate::evm::evm_test_helper::alloy_client;
 use crate::evm::evm_test_helper::setup_test_rollup;

@@ -91,6 +91,18 @@ impl<G: Gas> Resource<G> {
         }
     }
 
+    #[must_use]
+    pub(crate) fn div_by_scalar(&self, scalar: u64) -> Self {
+        let gas_used = self.gas_used.scalar_division(scalar);
+
+        Self {
+            req_counter: self.req_counter / scalar,
+            space_in_bytes: self.space_in_bytes / scalar,
+            execution_time_micros: self.execution_time_micros / scalar,
+            gas_used,
+        }
+    }
+
     pub(crate) fn err_if_exceeding(&self, other: &Self) -> Result<(), LimitExceeded<G>> {
         if self.req_counter > other.req_counter {
             return Err(LimitExceeded::RequestCount {

@@ -5,7 +5,7 @@ use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy::contract::Error;
 use alloy::transports::RpcError;
-use sov_test_utils::SimpleStorage;
+use sov_evm_test_utils::SimpleStorage;
 
 async fn deploy_with_gas(addr: SocketAddr, gas: u64) -> String {
     let client = alloy_client(addr);

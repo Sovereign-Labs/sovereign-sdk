@@ -84,3 +84,29 @@ impl Metric for BlobSubmitMeasurement {
         )
     }
 }
+
+#[derive(Debug)]
+pub struct CelestiaAdapterStateMeasurement {
+    pub balance: u64,
+    pub gas_price: f64,
+    pub sync_distance: u64,
+}
+
+impl Metric for CelestiaAdapterStateMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_periodic_data"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let balance = self.balance;
+        let gas_price = self.gas_price;
+        let sync_distance = self.sync_distance;
+        // Celestia minimum gas price can be 0.000001 utia, so 6 decimal places is sufficient.
+        // See: https://forum.celestia.org/t/cip-price-enforcement/1351/5
+        write!(
+            buffer,
+            "{name} balance={balance},gas_price={gas_price:.6},sync_distance={sync_distance}"
+        )
+    }
+}

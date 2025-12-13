@@ -267,7 +267,6 @@ impl LedgerDb {
             name: Self::DB_NAME,
             path_suffix: Self::DB_PATH_SUFFIX,
             columns: LEDGER_TABLES.to_vec(),
-            cacheable_columns: vec![],
         }
     }
 

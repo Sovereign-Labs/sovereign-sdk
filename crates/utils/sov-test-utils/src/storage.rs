@@ -111,8 +111,8 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             state_change_set,
             accessory_change_set,
         } = stf_change_set;
-        self.state.write_schemas(state_change_set).unwrap();
-        self.accessory.write_schemas(accessory_change_set).unwrap();
+        self.state.write_schemas(&state_change_set).unwrap();
+        self.accessory.write_schemas(&accessory_change_set).unwrap();
     }
 }
 
@@ -142,7 +142,7 @@ impl SimpleLedgerStorageManager {
     }
 
     /// Write changes directly to the underlying db
-    pub fn commit(&mut self, ledger_change_set: SchemaBatch) {
+    pub fn commit(&mut self, ledger_change_set: &SchemaBatch) {
         self.db.write_schemas(ledger_change_set).unwrap();
     }
 }
@@ -235,7 +235,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
 
         self.state.commit_change_set(state).unwrap();
         tracing::trace!("Committed state changes to disk");
-        self.accessory.write_schemas(accessory).unwrap();
+        self.accessory.write_schemas(&accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");
         self.historical_state.commit(historical_state).unwrap();
         *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));

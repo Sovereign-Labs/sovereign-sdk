@@ -51,16 +51,6 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
             });
             PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack
         }
-        (false, true, false, _, _) => {
-            error!(
-                    slot_number_according_to_node=%info.slot_number,
-                    %current_visible_slot_number,
-                    deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
-                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
-            inner.trigger_recovery(info).await;
-
-            PreferredSeqOperation::RecoverAndCatchUp
-        }
         // Node is out of sync and doesn't know it. This is a rare edge case after a DB wipe.
         (_, _, _, _, true) => {
             // Check for this condition after all of the normal "out-of-sync" conditions have been checked, because it may be possible for other unsynced conditions to trip this check
@@ -71,6 +61,16 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
                 synced_da_height: sync_status.synced_da_height(),
             });
             PreferredSeqOperation::WaitForNodeResyncToTip
+        }
+        (false, true, false, _, _) => {
+            error!(
+                    slot_number_according_to_node=%info.slot_number,
+                    %current_visible_slot_number,
+                    deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
+                    "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Normal operation will be suspended until this can be remedied.");
+            inner.trigger_recovery(info).await;
+
+            PreferredSeqOperation::RecoverAndCatchUp
         }
         (false, false, false, _, _) => {
             reply_soft_confirmations(info, inner, initial_status, time_spent_fetching_batches).await
