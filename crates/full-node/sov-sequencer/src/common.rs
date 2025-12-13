@@ -443,30 +443,30 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
 
             trace!(%storage_slot_number, "Querying slot data from node to notify about transaction status");
 
-            for slot_number in range {
-                let slot = ledger_db
-                    .get_slot_by_number::<BatchSequencerReceipt<S>, TxReceiptContents<S>, RuntimeEventResponse<Rt::RuntimeEvent>>(
-                        slot_number,
-                        QueryMode::Full,
-                    )
-                    .await?
-                    .expect("Received slot notification from node, but it's absent in the ledger. This is a bug, please report it");
+            // for slot_number in range {
+            //     let slot = ledger_db
+            //         .get_slot_by_number::<BatchSequencerReceipt<S>, TxReceiptContents<S>, RuntimeEventResponse<Rt::RuntimeEvent>>(
+            //             slot_number,
+            //             QueryMode::Full,
+            //         )
+            //         .await?
+            //         .expect("Received slot notification from node, but it's absent in the ledger. This is a bug, please report it");
 
-                for batch in slot.batches.unwrap_or_default().iter() {
-                    let ItemOrHash::Full(batch) = batch else {
-                        continue;
-                    };
-                    for tx in batch.txs.as_deref().unwrap_or_default().iter() {
-                        let ItemOrHash::Full(tx) = tx else {
-                            continue;
-                        };
+            //     for batch in slot.batches.unwrap_or_default().iter() {
+            //         let ItemOrHash::Full(batch) = batch else {
+            //             continue;
+            //         };
+            //         for tx in batch.txs.as_deref().unwrap_or_default().iter() {
+            //             let ItemOrHash::Full(tx) = tx else {
+            //                 continue;
+            //             };
 
-                        let tx_hash = TxHash::new(tx.hash);
-                        trace!(%tx_hash, "Notifying about transaction status as a result of node processing a slot");
-                        txsm.notify(tx_hash, TxStatus::Processed);
-                    }
-                }
-            }
+            //             let tx_hash = TxHash::new(tx.hash);
+            //             trace!(%tx_hash, "Notifying about transaction status as a result of node processing a slot");
+            //             txsm.notify(tx_hash, TxStatus::Processed);
+            //         }
+            //     }
+            // }
             *latest_processed_slot_number.lock().await = info.slot_number;
 
             Ok(())
