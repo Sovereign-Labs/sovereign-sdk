@@ -326,6 +326,7 @@ where
         let synchronized_state_task = synchronized_state.start().await;
         handles.push(synchronized_state_task);
 
+        // let backup_checkpoint = checkpoint_receiver.borrow().clone();
         let side_effects_task = SideEffectsTask {
             checkpoint_sender,
             blob_sender,
@@ -333,6 +334,7 @@ where
             db,
             shutdown_sender: shutdown_sender.clone(),
             transaction_cache: cached_txs.write_handle(),
+            // backup_checkpoint,
         }
         .spawn();
         handles.push(side_effects_task);
@@ -631,7 +633,7 @@ where
         // Check if this transaction has a configured delay
         let mut state = self
             .api_state()
-            .default_api_state_accessor()
+            .approximate_api_state_accessor().expect("Impossible to get an approximate api state accessor. This is a bug. Please report it.")
             .to_provable_reader();
         let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
             .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;

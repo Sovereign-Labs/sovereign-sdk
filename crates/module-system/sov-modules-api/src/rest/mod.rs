@@ -222,6 +222,29 @@ impl<S: Spec, T> ApiState<S, T> {
         )
     }
 
+    /// Returns an [`ApiStateAccessor`] that you can use to read state from within REST API. It may be unaware of soft confirmed txs,
+    /// but is much cheaper to instantiate than a full [`ApiStateAccessor`].
+    pub fn approximate_api_state_accessor(&self) -> Result<ApiStateAccessor<S>, anyhow::Error> {
+        let checkpoint = self.checkpoint_receiver.borrow().empty_from_self();
+        let kernel = self.kernel.clone();
+        let visible_slot_number = checkpoint.current_visible_slot_number();
+        let state = ApiStateAccessor::new_with_visible_slot_number(&checkpoint, kernel.clone(), visible_slot_number);
+
+        // This is not a security isse and this code runs offchain.
+        // TODO: Move this inside the constructor
+        // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2244>
+        // let gas_price = self
+        // .kernel
+        // .base_fee_per_gas_at(height, &mut state)
+        // .ok_or_else(|| {
+        //     anyhow::anyhow!("Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.")
+        // })?;
+
+        // state.set_gas_price(gas_price);
+
+        Ok(state)
+    }
+
     /// Returns an [`ApiStateAccessor`] that you can use to read state from within REST
     /// API. The new accessor can be set to read any historical rollup state available to the node,
     /// or to read the rollup's latest state (by passing `None` as the height parameter).

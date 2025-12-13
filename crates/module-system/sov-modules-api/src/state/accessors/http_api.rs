@@ -439,6 +439,43 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         .expect("Creating an ApiStateCheckpoint without specifying a height is infallible")
     }
 
+    /// Creates a new [`ApiStateAccessor`] from a [`StateCheckpoint`] with a gas price of zero at the [`StateCheckpoint::rollup_height_to_access`].
+    pub fn new_with_visible_slot_number(
+        state_checkpoint: &StateCheckpoint<S>,
+        kernel: Arc<dyn KernelWithSlotMapping<S>>,
+        visible_slot_number: VisibleSlotNumber,
+    ) -> Self {
+        let delta: &super::internals::Delta<<S as Spec>::Storage> = &state_checkpoint.delta;
+        let gas_meter = BasicGasMeter::new_api(<S::Gas as Gas>::Price::ZEROED,);
+        let rollup_height = state_checkpoint.rollup_height_to_access();
+        let state_to_access = StateToAccess::RollupHeight(rollup_height);
+
+        let mut out = Self {
+            storage: delta.inner.clone(),
+            uncomitted_changes: delta.uncomitted_changes.as_ref().map(|g| g.box_clone()),
+            witness: Default::default(),
+            gas_meter,
+            events: Vec::new(),
+            temp_cache: TempCache::new(),
+            kernel_cache: delta.kernel_cache.clone_without_pinned_cache(),
+            user_cache: delta.user_cache.clone_without_pinned_cache(),
+            accessory_writes: delta.accessory_writes.clone(),
+            kernel: kernel.clone(),
+            state_to_access,
+            visible_slot_number: None,
+            safe_true_slot_number_to_use: None,
+            encountered_pruning_error: None,
+            metrics: StateMetrics::default(),
+        };
+
+       
+        out.safe_true_slot_number_to_use = kernel.true_slot_number_at_historical_height(rollup_height, &mut out);
+
+        out.visible_slot_number = Some(visible_slot_number);
+
+        out
+    }
+
     /// Creates a new [`ApiStateAccessor`] which queries all state at the provided slot number.
     pub fn new_archival_with_true_slot_number(
         state_checkpoint: &StateCheckpoint<S>,

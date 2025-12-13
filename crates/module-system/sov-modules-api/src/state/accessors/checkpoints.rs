@@ -189,6 +189,21 @@ impl<S: Spec> StateCheckpoint<S> {
         Self::with_witness(inner, Default::default(), kernel, pinned_cache)
     }
 
+     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
+    /// by the given [`Storage`].
+    pub fn empty_from_self(
+        &self,
+    ) -> Self {
+        let delta = Delta::with_witness(self.storage().clone(), Default::default());
+        Self {
+            delta,
+            visible_slot_num: self.visible_slot_num,
+            rollup_height: self.rollup_height,
+            cache: TempCache::new(),
+            metrics: StateMetrics::default(),
+        }
+    }
+
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`] and witness.
     pub fn with_witness<K: Kernel<S>>(
