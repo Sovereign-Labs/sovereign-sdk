@@ -11,12 +11,12 @@ use std::collections::hash_map;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
+use std::net::IpAddr;
 
 use crate::common::AcceptedTx;
 
@@ -42,7 +42,7 @@ pub(crate) type TransactionReceiverResult<S, Rt> =
 struct QueuedTx<S: Spec, Rt: Runtime<S>> {
     pub baked_tx: FullyBakedTx,
     pub tx_hash: TxHash,
-    pub socket_addr: SocketAddr,
+    pub ip_addr: IpAddr,
     pub original_tx_queue_id: u64,
     pub nonce_when_queued: u64,
     pub queued_at: Instant,
@@ -179,7 +179,7 @@ enum NonceBufferInput<S: Spec, Rt: Runtime<S>> {
         credential_id: CredentialId,
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         tx_nonce: u64,
         original_tx_queue_id: u64,
         result_sender: oneshot::Sender<TransactionReceiverResult<S, Rt>>,
@@ -218,7 +218,7 @@ pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>>: Clone {
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         original_tx_queue_id: u64,
         reason: &'static str,
     ) -> TransactionReceiverResult<S, Rt>;
@@ -262,7 +262,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         original_tx_queue_id: u64,
         reason: &'static str,
     ) -> TransactionReceiverResult<S, Rt> {
@@ -272,7 +272,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
                 tx_hash,
                 original_tx_queue_id,
                 credential_id,
-                socket_addr,
+                ip_addr,
                 reason,
             )
             .await
@@ -368,7 +368,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     credential_id,
                     baked_tx,
                     tx_hash,
-                    socket_addr,
+                    ip_addr,
                     tx_nonce,
                     original_tx_queue_id,
                     result_sender,
@@ -419,7 +419,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 QueuedTx {
                                     baked_tx,
                                     tx_hash,
-                                    socket_addr,
+                                    ip_addr,
                                     original_tx_queue_id,
                                     nonce_when_queued: user_nonce,
                                     queued_at: Instant::now(),
@@ -449,7 +449,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                         &baked_tx,
                                         tx_hash,
                                         credential_id,
-                                        socket_addr,
+                                        ip_addr,
                                         original_tx_queue_id,
                                         "nonce_queue_immediate",
                                     )
@@ -541,7 +541,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                         credential_id,
                                         baked_tx: tx.baked_tx,
                                         tx_hash: tx.tx_hash,
-                                        socket_addr: tx.socket_addr,
+                                        ip_addr: tx.ip_addr,
                                         tx_nonce: user_nonce,
                                         original_tx_queue_id: tx.original_tx_queue_id,
                                         result_sender: tx.result_sender,
@@ -652,7 +652,7 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         tx_hash: TxHash,
         tx_nonce: u64,
         credential_id: CredentialId,
-        socket_addr: SocketAddr,
+        ip_addr: IpAddr,
         original_tx_queue_id: u64,
     ) -> TransactionReceiverResult<S, Rt> {
         let (queue_sender, queue_receiver) = oneshot::channel();
@@ -660,7 +660,7 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
             credential_id,
             baked_tx,
             tx_hash,
-            socket_addr,
+            ip_addr,
             tx_nonce,
             original_tx_queue_id,
             result_sender: queue_sender,
@@ -772,7 +772,8 @@ fn is_notready_error<S: Spec, Rt: Runtime<S>>(result: &TransactionReceiverResult
                 AcceptTxError::ReplicaMode
                 | AcceptTxError::SequencerOverloaded503
                 | AcceptTxError::BatchError { .. }
-                | AcceptTxError::NewTxError(_) => false,
+                | AcceptTxError::NewTxError(_)
+                | AcceptTxError::RateLimiter(_) => false,
             },
         },
     }
@@ -812,7 +813,7 @@ mod tests {
                 data: vec![nonce].into(),
             },
             tx_hash: TxHash::from(hash),
-            socket_addr: "127.0.0.1:12346".parse().unwrap(),
+            ip_addr: "127.0.0.1".parse().unwrap(),
             nonce_when_queued: 0,
             queued_at: Instant::now(),
             original_tx_queue_id: 0,
@@ -1031,7 +1032,7 @@ mod tests {
             baked_tx: &FullyBakedTx,
             tx_hash: TxHash,
             _credential_id: CredentialId,
-            _socket_addr: SocketAddr,
+            _ip_addr: IpAddr,
             _original_tx_queue_id: u64,
             _reason: &'static str,
         ) -> TransactionReceiverResult<TestSpec, TestRuntime> {
