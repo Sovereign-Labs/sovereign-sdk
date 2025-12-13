@@ -436,6 +436,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         credential_id: CredentialId,
         original_tx_queue_id: u64,
     ) -> Action<S, Rt> {
+        return Action::ExecuteNow(baked_tx);
         // First acquire lock on this user's queue, before checking the nonce. Otherwise there can
         // be a race condition if a new transaction were to execute after this tx checked its nonce
         // but before it added itself to the queue.
@@ -531,7 +532,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // We obviously don't physically insert and pop it, but we mark it as the last
                 // popped for accounting purposes. E.g. since we have this tx, it can now satisfy
                 // prerequisite checks for any queued txs.
-                self.mark_popped(&credential_id, tx_nonce);
+                // self.mark_popped(&credential_id, tx_nonce);
 
                 let res = self
                     .submitter
@@ -550,11 +551,14 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 if res.as_ref().is_ok_and(|r| r.is_ok()) {
                     let queues = self.clone();
                     let starting_nonce = tx_nonce + 1;
-                    tokio::spawn(async move {
-                        queues
-                            .drain_any_ready_transactions(&credential_id, ip_addr, starting_nonce)
-                            .await;
-                    });
+                    if starting_nonce == u64::MAX {
+                        self.mark_popped(&credential_id, tx_nonce);
+                        tokio::spawn(async move {
+                            queues
+                                .drain_any_ready_transactions(&credential_id, ip_addr, starting_nonce)
+                                .await;
+                        });
+                    }
                 }
                 res
             }
