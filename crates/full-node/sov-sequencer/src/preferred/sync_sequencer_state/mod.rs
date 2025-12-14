@@ -69,7 +69,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        limiter_data: LimiterData<S>,
+        limiter_data: LimiterData<S::Address>,
         reason: &'static str,
     },
 

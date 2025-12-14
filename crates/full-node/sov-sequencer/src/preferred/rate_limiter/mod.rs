@@ -6,7 +6,7 @@ pub(crate) use limiter::ResourceUsed;
 use limiter::*;
 use resource::*;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
-use sov_modules_api::{CredentialId, Spec};
+use sov_modules_api::{BasicAddress, CredentialId, Spec};
 use std::{net::IpAddr, time::Instant};
 
 use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
@@ -280,9 +280,9 @@ mod tests {
     }
 }
 
-#[derive(Clone)]
-pub struct LimiterData<S: Spec> {
-    pub default_address: S::Address,
+#[derive(Clone, Copy)]
+pub struct LimiterData<Address: BasicAddress> {
+    pub default_address: Address,
     pub credential_id: CredentialId,
     pub ip_addr: IpAddr,
 }

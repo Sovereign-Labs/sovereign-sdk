@@ -670,7 +670,7 @@ where
                         &baked_tx,
                         tx_hash,
                         original_tx_queue_id,
-                        &limiter_data,
+                        limiter_data,
                         "accept_tx",
                     )
                     .await,

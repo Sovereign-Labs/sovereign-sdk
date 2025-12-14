@@ -760,7 +760,7 @@ where
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        limiter_data: LimiterData<S>,
+        limiter_data: LimiterData<S::Address>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;

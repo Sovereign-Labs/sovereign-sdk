@@ -127,7 +127,7 @@ where
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        limiter_data: &LimiterData<S>,
+        limiter_data: LimiterData<S::Address>,
         reason: &'static str,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -139,7 +139,7 @@ where
             baked_tx: baked_tx.clone(),
             tx_hash,
             original_tx_queue_id,
-            limiter_data: limiter_data.clone(),
+            limiter_data,
             reason,
         })
         .await?;
