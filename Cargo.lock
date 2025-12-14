@@ -12449,6 +12449,7 @@ dependencies = [
  "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-state",
  "sov-test-utils",
  "strum 0.26.3",
  "thiserror 1.0.69",
