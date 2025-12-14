@@ -25,7 +25,6 @@ sov-bank = { workspace = true }
 sov-sequencer-registry = { workspace = true }
 
 [dev-dependencies]
-sov-state = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-revenue-share = { path = ".", features = ["native"] }

@@ -170,7 +170,7 @@ macro_rules! generate_runtime_without_capabilities {
                 default_address: &S::Address,
                 credential_id: &sov_modules_api::CredentialId,
                 state: &mut ST,
-            ) -> Result<S::Address, <ST as sov_modules_api::StateWriter<sov_state::User>>::Error>{
+            ) -> Result<S::Address, <ST as sov_modules_api::StateWriter<sov_modules_api::User>>::Error>{
                 self.accounts.resolve_sender_address(default_address, credential_id, state)
             }
 
