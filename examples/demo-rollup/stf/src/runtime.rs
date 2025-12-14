@@ -231,6 +231,7 @@ where
         Some(pinned_cache)
     }
 
+    #[cfg(feature = "native")]
     fn resolve_addrss<ST: sov_modules_api::StateAccessor>(
         &mut self,
         default_address: &S::Address,
