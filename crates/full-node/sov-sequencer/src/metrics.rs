@@ -192,15 +192,27 @@ impl Metric for PreferredSequencerPruneMetrics {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct PreferredSequencerExecutorEventSendingMetrics {
-    pub blocked_for_us: u64,
-    pub queue_depth: usize,
+/// Trait for providing the measurement name for channel queue metrics.
+/// Used with `ChannelQueueMetrics<T>` to create type-safe metric variants.
+pub trait ChannelQueueMetricName: Default + std::fmt::Debug + Send + Sync {
+    const MEASUREMENT_NAME: &'static str;
 }
 
-impl Metric for PreferredSequencerExecutorEventSendingMetrics {
+/// Generic metrics for channel queue send operations.
+/// Tracks how long sends blocked and the queue depth after sending.
+#[derive(Debug, Default)]
+pub struct ChannelQueueMetrics<T: ChannelQueueMetricName> {
+    /// How long the send was blocked waiting for capacity (microseconds).
+    /// Zero if the send was not blocked.
+    pub blocked_for_us: u64,
+    /// Current depth of the queue after sending.
+    pub queue_depth: usize,
+    _marker: std::marker::PhantomData<T>,
+}
+
+impl<T: ChannelQueueMetricName> Metric for ChannelQueueMetrics<T> {
     fn measurement_name(&self) -> &'static str {
-        "sov_rollup_preferred_sequencer_executor_event_sending"
+        T::MEASUREMENT_NAME
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -213,3 +225,28 @@ impl Metric for PreferredSequencerExecutorEventSendingMetrics {
         )
     }
 }
+
+/// Marker type for executor event sending metrics.
+#[derive(Debug, Default)]
+pub struct ExecutorEventSendingMetricName;
+impl ChannelQueueMetricName for ExecutorEventSendingMetricName {
+    const MEASUREMENT_NAME: &'static str = "sov_rollup_preferred_sequencer_executor_event_sending";
+}
+
+/// Marker type for nonce buffer main queue metrics.
+#[derive(Debug, Default)]
+pub struct NonceBufferMainQueueMetricName;
+impl ChannelQueueMetricName for NonceBufferMainQueueMetricName {
+    const MEASUREMENT_NAME: &'static str = "sov_rollup_nonce_buffer_main_queue";
+}
+
+/// Marker type for nonce buffer timeout queue metrics.
+#[derive(Debug, Default)]
+pub struct NonceBufferTimeoutQueueMetricName;
+impl ChannelQueueMetricName for NonceBufferTimeoutQueueMetricName {
+    const MEASUREMENT_NAME: &'static str = "sov_rollup_nonce_buffer_timeout_queue";
+}
+
+/// Metrics for executor event sending operations.
+pub type PreferredSequencerExecutorEventSendingMetrics =
+    ChannelQueueMetrics<ExecutorEventSendingMetricName>;
