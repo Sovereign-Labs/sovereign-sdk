@@ -6962,6 +6962,7 @@ dependencies = [
  "serde",
  "sov-bank",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
  "strum 0.26.3",

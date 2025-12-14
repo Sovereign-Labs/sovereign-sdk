@@ -11,6 +11,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 #[derive(
     Debug,
     Clone,
+    Copy,
     PartialEq,
     Eq,
     PartialOrd,

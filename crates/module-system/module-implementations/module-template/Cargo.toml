@@ -26,6 +26,7 @@ sov-bank = { workspace = true }
 sov-modules-api = { workspace = true }
 
 [dev-dependencies]
+sov-rollup-interface = { workspace = true }
 tempfile = { workspace = true }
 strum = { workspace = true }
 module-template = { path = ".", version = "*", features = ["native"] }
