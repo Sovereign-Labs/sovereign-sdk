@@ -34,7 +34,7 @@ impl<S: Spec> StakeRegistration for ProverIncentives<S> {
     > {
         self.bonded_provers
             .get(address, state)
-            .map(|opt| opt.map(|b| (address.clone(), b)))
+            .map(|opt| opt.map(|b| (address, b)))
     }
 
     fn set_allowed_staker<ST: StateAccessor>(

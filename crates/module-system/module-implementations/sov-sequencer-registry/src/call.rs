@@ -89,7 +89,7 @@ impl<S: Spec> SequencerRegistry<S> {
 
         if amount < minimum_bond {
             return Err(SequencerRegistryError::<S, ST>::InsufficientStakeAmount {
-                address: address.clone(),
+                address: address,
                 bond_amount: amount,
                 minimum_bond_amount: minimum_bond,
             });
@@ -104,12 +104,12 @@ impl<S: Spec> SequencerRegistry<S> {
             )
             .map_err(
                 |_| SequencerRegistryError::<S, ST>::InsufficientFundsToRegister {
-                    address: address.clone(),
+                    address: address,
                     amount,
                 },
             )?;
         let new_sequencer = KnownSequencer {
-            address: address.clone(),
+            address: address,
             balance: amount,
             balance_state: BalanceState::Active,
         };
@@ -140,7 +140,7 @@ impl<S: Spec> SequencerRegistry<S> {
         let address = existing_sequencer.address.clone();
         existing_sequencer.balance = existing_sequencer.balance.checked_add(amount).ok_or(
             SequencerRegistryError::<S, ST>::ToppingAccountMakesBalanceOverflow {
-                address: address.clone(),
+                address,
                 existing_balance: existing_sequencer.balance,
                 amount_to_add: amount,
             },
@@ -157,7 +157,7 @@ impl<S: Spec> SequencerRegistry<S> {
             )
             .map_err(
                 |_| SequencerRegistryError::<S, ST>::InsufficientFundsToTopUpAccount {
-                    address: address.clone(),
+                    address: address,
                     amount_to_add: amount,
                 },
             )?;

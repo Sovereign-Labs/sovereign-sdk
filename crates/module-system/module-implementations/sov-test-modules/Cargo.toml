@@ -47,5 +47,6 @@ native = [
 	"sov-test-modules/native",
 	"sov-state/native",
 	"sov-address/native",
-	"sov-bank/native"
+	"sov-bank/native",
+	"sov-rollup-interface/native"
 ]
