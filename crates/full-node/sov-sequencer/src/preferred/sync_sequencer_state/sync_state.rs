@@ -801,12 +801,14 @@ where
             });
         };
 
-        /*
         let checkpoint = &mut inner.executor.checkpoint;
         let mut rt = Rt::default();
-        let default_address = todo!();
 
-        rt.resolve_addrss(default_address, &credential_id, checkpoint);*/
+        let _ = rt.resolve_addrss(
+            &limiter_data.default_address,
+            &limiter_data.credential_id,
+            checkpoint,
+        );
 
         let token = inner
             .rate_limiter

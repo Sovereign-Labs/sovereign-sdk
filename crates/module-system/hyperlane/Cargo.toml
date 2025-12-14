@@ -15,6 +15,7 @@ publish = false
 workspace = true
 
 [dev-dependencies]
+sov-rollup-interface = { workspace = true }
 sov-address = { workspace = true }
 sov-api-spec = { workspace = true }
 sov-hyperlane-integration = { path = ".", features = ["test-utils", "native"] }

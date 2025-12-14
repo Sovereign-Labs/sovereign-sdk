@@ -15,6 +15,7 @@ publish = false
 workspace = true
 
 [dev-dependencies]
+sov-rollup-interface = { workspace = true }
 sov-address = { workspace = true }
 tempfile = { workspace = true }
 sha2 = { workspace = true }
