@@ -276,7 +276,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             sender,
             auth_data.credentials.clone(),
             sequencer_rollup_address,
-            sequencer.clone(),
+            *sequencer,
         ))
     }
 
@@ -293,10 +293,10 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         )?;
         // The tx sender & sequencer are the same entity
         Ok(Context::new(
-            sender.clone(),
+            sender,
             auth_data.credentials.clone(),
             sender,
-            sequencer.clone(),
+            *sequencer,
         ))
     }
 }

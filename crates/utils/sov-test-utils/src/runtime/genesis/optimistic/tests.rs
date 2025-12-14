@@ -133,16 +133,14 @@ fn create_test_rt_genesis_config<S: Spec>(
     let user_stake = <S as Spec>::Gas::from(TEST_DEFAULT_USER_STAKE);
     let prover_placeholder = TestUser::<S>::generate(TEST_DEFAULT_USER_BALANCE);
     crate::runtime::GenesisConfig {
-        value_setter: ValueSetterConfig {
-            admin: admin.clone(),
-        },
+        value_setter: ValueSetterConfig { admin },
         paymaster: PaymasterConfig {
             payers: SafeVec::new(),
         },
         sequencer_registry: SequencerRegistryConfig {
             minimum_bond: TEST_MIN_SEQ_BOND,
             sequencer_config: SequencerConfig {
-                seq_rollup_address: seq_rollup_address.clone(),
+                seq_rollup_address,
                 seq_da_address,
                 seq_bond,
                 is_preferred_sequencer: true,
@@ -154,10 +152,7 @@ fn create_test_rt_genesis_config<S: Spec>(
         attester_incentives: AttesterIncentivesConfig {
             minimum_attester_bond: user_stake,
             minimum_challenger_bond: user_stake,
-            initial_attesters: vec![(
-                admin.clone(),
-                user_stake.value(S::initial_base_fee_per_gas()),
-            )],
+            initial_attesters: vec![(admin, user_stake.value(S::initial_base_fee_per_gas()))],
             rollup_finality_period: SlotNumber::new_dangerous(TEST_ROLLUP_FINALITY_PERIOD),
             maximum_attested_height: TEST_MAX_ATTESTED_HEIGHT,
             light_client_finalized_height: TEST_LIGHT_CLIENT_FINALIZED_HEIGHT,
@@ -176,12 +171,12 @@ fn create_test_rt_genesis_config<S: Spec>(
                     let mut additional_accounts_vec = additional_accounts.to_vec();
                     additional_accounts_vec.append(&mut vec![
                         (seq_rollup_address, init_balance),
-                        (admin.clone(), init_balance),
+                        (admin, init_balance),
                         (prover_placeholder.address(), prover_placeholder.balance()),
                     ]);
                     additional_accounts_vec
                 },
-                admins: vec![admin.clone()],
+                admins: vec![admin],
             }),
             tokens: vec![],
         },

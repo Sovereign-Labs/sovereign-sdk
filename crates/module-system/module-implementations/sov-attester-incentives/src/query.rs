@@ -162,7 +162,7 @@ where
         .ok()?;
         let proof = self
             .attester_incentives
-            .get_bond_proof(self.attester_address.clone(), &mut state)?;
+            .get_bond_proof(self.attester_address, &mut state)?;
 
         Some(ProofOfBond {
             claimed_slot_number: slot_number,

@@ -513,7 +513,7 @@ impl DaService for CelestiaService {
     }
 
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
-        self.signer_address.clone()
+        self.signer_address
     }
 }
 

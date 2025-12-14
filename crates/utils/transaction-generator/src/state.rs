@@ -94,7 +94,7 @@ impl<S: Spec, Tag: Eq + Hash, T> State<S, Tag, T> {
         let mut output = Self::default();
         let address: <S as Spec>::Address = account.private_key.pub_key().credential_id().into();
         for tag in tags {
-            output.tags.entry(tag).or_default().insert(address.clone());
+            output.tags.entry(tag).or_default().insert(address);
         }
         for balance in account.balances.iter() {
             let duplicate = output.tokens.insert(

@@ -279,7 +279,7 @@ where
             * 1000;
 
         let rollup_exec_config = RollupBlockExecutorConfig {
-            da_address: da_address.clone(),
+            da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_compute_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),

@@ -136,7 +136,7 @@ pub struct ProofManagerConfig<Address> {
     bound = "Address: JsonSchema, Da: DaService, M: JsonSchema",
     rename = "RollupConfig"
 )]
-pub struct RollupConfig<Address, Da: DaService, M> {
+pub struct RollupConfig<Address: Copy, Da: DaService, M> {
     /// Currently rollup config runner only supports storage path parameter
     pub storage: RollupDbConfig,
     /// Runner own configuration.
@@ -151,7 +151,7 @@ pub struct RollupConfig<Address, Da: DaService, M> {
     pub monitoring: M,
 }
 
-impl<Address, Da: DaService, M> RollupConfig<Address, Da, M> {
+impl<Address: Copy, Da: DaService, M> RollupConfig<Address, Da, M> {
     pub fn extension_or_panic(&self) -> SeqConfigExtension {
         *self.sequencer
             .extension

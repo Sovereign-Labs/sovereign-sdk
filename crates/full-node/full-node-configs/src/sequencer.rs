@@ -36,7 +36,7 @@ fn default_response_size_limit() -> usize {
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[schemars(rename = "SequencerConfig")]
-pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
+pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
     /// batch production endpoint has to be called explicitly.
@@ -77,13 +77,13 @@ fn default_automatic_batch_production() -> bool {
     true
 }
 
-impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
+impl<Addr: Copy + Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
     /// Replaces the value of [`SequencerConfig::sequencer_kind_config`].
     pub fn with_seq_config<Sc2>(&self, seq_config: Sc2) -> SequencerConfig<Addr, Sc2> {
         SequencerConfig {
             automatic_batch_production: self.automatic_batch_production,
             dropped_tx_ttl_secs: self.dropped_tx_ttl_secs,
-            rollup_address: self.rollup_address.clone(),
+            rollup_address: self.rollup_address,
             max_allowed_node_distance_behind: self.max_allowed_node_distance_behind,
             admin_addresses: self.admin_addresses.clone(),
             max_batch_size_bytes: self.max_batch_size_bytes,
@@ -95,7 +95,7 @@ impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
     }
 }
 
-impl<Addr> SequencerConfig<Addr> {
+impl<Addr: Copy> SequencerConfig<Addr> {
     /// Returns true if the sequencer uses [`SequencerKindConfig::Preferred`].
     pub fn is_preferred_sequencer(&self) -> bool {
         matches!(
