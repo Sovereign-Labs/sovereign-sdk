@@ -1,6 +1,7 @@
 use crate::metrics::{PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::BatchToStore;
+use crate::preferred::rate_limiter::LimiterData;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
@@ -28,11 +29,10 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{
-    CredentialId, FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -235,8 +235,7 @@ where
                 baked_tx,
                 tx_hash,
                 original_tx_queue_id,
-                credential_id,
-                ip_addr,
+                limiter_data,
                 reason,
             } => {
                 let ret = self
@@ -244,8 +243,7 @@ where
                         baked_tx,
                         tx_hash,
                         original_tx_queue_id,
-                        credential_id,
-                        ip_addr,
+                        limiter_data,
                         reason,
                     )
                     .await;
@@ -762,8 +760,7 @@ where
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        limiter_data: LimiterData<S>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -804,9 +801,16 @@ where
             });
         };
 
+        /*
+        let checkpoint = &mut inner.executor.checkpoint;
+        let mut rt = Rt::default();
+        let default_address = todo!();
+
+        rt.resolve_addrss(default_address, &credential_id, checkpoint);*/
+
         let token = inner
             .rate_limiter
-            .allow(ip_addr, credential_id)
+            .allow(limiter_data.ip_addr, limiter_data.credential_id)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;

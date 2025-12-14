@@ -19,7 +19,7 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
-use crate::preferred::rate_limiter::ResourceLimitExceededError;
+use crate::preferred::rate_limiter::{LimiterData, ResourceLimitExceededError};
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use crate::preferred::tx_nonce_queue::TxNonceQueues;
@@ -628,19 +628,32 @@ where
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
         tracing::debug!(%tx_hash, "Executing accept_tx");
 
-        // Check if this transaction has a configured delay
-        let mut state = self
-            .api_state()
-            .default_api_state_accessor()
-            .to_provable_reader();
-        let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
-            .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
-        let call = Rt::wrap_call(call);
-        let delay_ms = self.runtime.get_transaction_delay_ms(&call);
-        // We need to destructure auth_data because it's not `Send`.
-        let uniqueness = auth_data.uniqueness;
-        let credential_id = auth_data.credential_id;
-        drop(auth_data);
+        let (limiter_data, uniqueness, delay_ms) = {
+            // Check if this transaction has a configured delay
+            let mut state = self
+                .api_state()
+                .default_api_state_accessor()
+                .to_provable_reader();
+            let (_, auth_data, call) =
+                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
+                    .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
+            let call = Rt::wrap_call(call);
+            let delay_ms = self.runtime.get_transaction_delay_ms(&call);
+            // We need to destructure auth_data because it's not `Send`.
+            let uniqueness = auth_data.uniqueness;
+
+            (
+                LimiterData {
+                    default_address: auth_data.default_address.clone(),
+                    credential_id: auth_data.credential_id,
+                    ip_addr,
+                },
+                uniqueness,
+                delay_ms,
+            )
+        };
+
+        let credential_id = limiter_data.credential_id;
 
         if delay_ms > 0 {
             tracing::debug!(%tx_hash, delay_ms, "Delaying transaction processing");
@@ -657,8 +670,7 @@ where
                         &baked_tx,
                         tx_hash,
                         original_tx_queue_id,
-                        credential_id,
-                        ip_addr,
+                        &limiter_data,
                         "accept_tx",
                     )
                     .await,
@@ -670,8 +682,7 @@ where
                         baked_tx,
                         tx_hash,
                         tx_nonce,
-                        credential_id,
-                        ip_addr,
+                        limiter_data,
                         original_tx_queue_id,
                     )
                     .await,

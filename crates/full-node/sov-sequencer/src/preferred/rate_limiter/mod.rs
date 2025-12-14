@@ -279,3 +279,10 @@ mod tests {
         }
     }
 }
+
+#[derive(Clone)]
+pub struct LimiterData<S: Spec> {
+    pub default_address: S::Address,
+    pub credential_id: CredentialId,
+    pub ip_addr: IpAddr,
+}

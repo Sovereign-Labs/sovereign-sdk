@@ -8,11 +8,11 @@ use sov_rollup_interface::{crypto::CredentialId, TxHash};
 use std::cmp::Ordering;
 use std::collections::{btree_map::OccupiedEntry, BTreeMap};
 use std::fmt::Debug;
-use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::common::AcceptedTx;
+use crate::preferred::rate_limiter::LimiterData;
 
 use super::sync_sequencer_state::{
     AcceptTxError, SequencerStateUpdator, SequencerStateUpdatorError,
@@ -143,8 +143,7 @@ pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>> {
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        limiter_data: &LimiterData<S>,
         reason: &'static str,
     ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>;
 }
@@ -183,8 +182,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        limiter_data: &LimiterData<S>,
         reason: &'static str,
     ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
         self.state_updator
@@ -192,8 +190,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
                 baked_tx,
                 tx_hash,
                 original_tx_queue_id,
-                credential_id,
-                ip_addr,
+                limiter_data,
                 reason,
             )
             .await
@@ -389,13 +386,14 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     /// DashMap as local variables; all queue manipulations happen inside sync functions.
     async fn drain_any_ready_transactions(
         &self,
-        credential_id: &CredentialId,
-        ip_addr: IpAddr,
+        limiter_data: LimiterData<S>,
         mut expected_nonce: u64,
     ) {
+        let credential_id = limiter_data.credential_id;
+
         loop {
             // Get the next valid tx - as long as there is one. If not, we're done.
-            let Some(queued_tx) = self.get_maybe_next_valid_tx(credential_id, expected_nonce)
+            let Some(queued_tx) = self.get_maybe_next_valid_tx(&credential_id, expected_nonce)
             else {
                 return;
             };
@@ -406,8 +404,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     &queued_tx.tx,
                     queued_tx.tx_hash,
                     queued_tx.original_tx_queue_id,
-                    *credential_id,
-                    ip_addr,
+                    &limiter_data,
                     "nonce_queue_trigger",
                 )
                 .await;
@@ -509,8 +506,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         tx_nonce: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        limiter_data: LimiterData<S>,
         original_tx_queue_id: u64,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -520,7 +516,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             baked_tx,
             tx_hash,
             tx_nonce,
-            credential_id,
+            limiter_data.credential_id,
             original_tx_queue_id,
         );
 
@@ -531,7 +527,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // We obviously don't physically insert and pop it, but we mark it as the last
                 // popped for accounting purposes. E.g. since we have this tx, it can now satisfy
                 // prerequisite checks for any queued txs.
-                self.mark_popped(&credential_id, tx_nonce);
+                self.mark_popped(&limiter_data.credential_id, tx_nonce);
 
                 let res = self
                     .submitter
@@ -539,8 +535,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                         &baked_tx,
                         tx_hash,
                         original_tx_queue_id,
-                        credential_id,
-                        ip_addr,
+                        &limiter_data,
                         "nonce_queue_immediate",
                     )
                     .await;
@@ -552,7 +547,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
                         queues
-                            .drain_any_ready_transactions(&credential_id, ip_addr, starting_nonce)
+                            .drain_any_ready_transactions(limiter_data, starting_nonce)
                             .await;
                     });
                 }
@@ -569,12 +564,12 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 // queue it can be evicted (dropping it and the sender).
                                 // Since the transaction was queued and therefore had an incorrect
                                 // nonce to begin with, we conservatively reject with a nonce error.
-                                let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+                                let current_nonce = self.submitter.get_current_nonce_for_user(&limiter_data.credential_id);
                                 err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
                                     current_nonce,
-                                    credential_id,
+                                    limiter_data.credential_id,
                                 )
                             });
                         },
@@ -582,27 +577,30 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 self.future_nonce_transaction_timeout_millis
                         )) => {
                             // Timeout waiting for prerequisite transactions
-                            let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
-                            if self.has_prerequisites_to_nonce(&credential_id, tx_nonce, current_nonce) {
+                            let current_nonce = self.submitter.get_current_nonce_for_user(&limiter_data.credential_id);
+                            if self.has_prerequisites_to_nonce(&limiter_data.credential_id, tx_nonce, current_nonce) {
                                 // Still has a valid path to execution, keep waiting
                                 continue;
                             } else {
                                 // No path to execution, evict and reject
-                                self.evict(&credential_id, tx_nonce);
+                                self.evict(&limiter_data.credential_id, tx_nonce);
                                 break err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
                                     current_nonce,
-                                    credential_id,
+                                    limiter_data.credential_id,
                                 );
                             }
                         }
                     }
                 }
             }
-            Action::Reject(current_nonce) => {
-                err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, credential_id)
-            }
+            Action::Reject(current_nonce) => err_invalid_nonce::<S, Rt>(
+                tx_hash,
+                tx_nonce,
+                current_nonce,
+                limiter_data.credential_id,
+            ),
         }
     }
 
