@@ -1,9 +1,16 @@
 //! Module system runtime types and traits
 pub mod capabilities;
 
+#[cfg(not(feature = "native"))]
+use std::default;
 #[cfg(feature = "native")]
 use std::io;
 
+#[cfg(feature = "native")]
+use crate::hooks::FinalizeHook;
+use crate::hooks::{BlockHooks, TxHooks};
+use crate::transaction::TransactionCallable;
+use crate::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
@@ -12,11 +19,6 @@ use sov_rollup_interface::stf::GenesisParams;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
 
-#[cfg(feature = "native")]
-use crate::hooks::FinalizeHook;
-use crate::hooks::{BlockHooks, TxHooks};
-use crate::transaction::TransactionCallable;
-use crate::Context;
 #[cfg(feature = "native")]
 use crate::FullyBakedTx;
 use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
@@ -139,7 +141,6 @@ pub trait Runtime<S: Spec>:
     /// Messages with equal priority are processed in the order they are received. If messages have a delay configured in [`Runtime::get_transaction_delay_ms`],
     /// they are considered to be "received" after the delay period has elapsed.
     // Returns a u32 so that the sequencer can represent priority as a u64 and have some reserved values that are greater than the maximum priority level of any transaction.
-    #[cfg(feature = "native")]
     fn get_transaction_priority(&self, _call: &FullyBakedTx) -> u32 {
         0
     }
@@ -164,10 +165,17 @@ pub trait Runtime<S: Spec>:
     }
 
     /// Populates the pinned state cache for the given storage if supported
-    #[cfg(feature = "native")]
     fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
         None
     }
+
+    /// Resolve CredentialId to address.
+    fn resolve_addrss<ST: crate::StateAccessor>(
+        &mut self,
+        default_address: &S::Address,
+        credential_id: &sov_rollup_interface::crypto::CredentialId,
+        state: &mut ST,
+    ) -> Result<S::Address, <ST as crate::StateWriter<sov_state::User>>::Error>;
 }
 
 #[cfg(feature = "native")]

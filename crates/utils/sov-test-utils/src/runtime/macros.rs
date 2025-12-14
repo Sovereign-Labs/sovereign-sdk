@@ -165,6 +165,15 @@ macro_rules! generate_runtime_without_capabilities {
                 }
             }
 
+            fn resolve_addrss<ST: sov_modules_api::StateAccessor>(
+                &mut self,
+                default_address: &S::Address,
+                credential_id: &sov_rollup_interface::crypto::CredentialId,
+                state: &mut ST,
+            ) -> Result<S::Address, <ST as sov_modules_api::StateWriter<sov_state::User>>::Error>{
+                self.accounts.resolve_sender_address(default_address, credential_id, state)
+            }
+
             fn genesis_config(_input: &Self::GenesisInput) -> ::sov_modules_api::prelude::anyhow::Result<Self::GenesisConfig> {
                 unimplemented!()
             }
