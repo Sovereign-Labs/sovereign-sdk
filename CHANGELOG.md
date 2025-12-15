@@ -3,6 +3,7 @@
 
 # 2025-12-15
 - #2167 Updates the internals of the nonce queue. 
+- #2188 **DB Breaking change**: Adds sequencer-provided metadata (timestamps, etc.) to transaction context accessible via `context.sequencing_data()`. Database schema changed - requires state wipe or resync.
 
 # 2025-12-14 
 - #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
@@ -17,8 +18,6 @@ ow, BasicAddress is required to implement Copy, ensuring that duplicating an add
 
 # 2025-12-08
 - #2197 **Breaking DB change**: Restructures the internals of the database for NOMT to eliminate most allocations. This gives a 10-40% performance boost depending on the workload. Updating to this version requires a wipe or a resync.
-# 2025-12-11
-- #2188 **DB Breaking change**: Adds sequencer-provided metadata (timestamps, etc.) to transaction context accessible via `context.sequencing_data()`. Database schema changed - requires state wipe or resync.
 
 # 2025-12-03
  - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
