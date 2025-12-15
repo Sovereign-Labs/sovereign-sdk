@@ -1,4 +1,5 @@
 //! Configuration for metrics.
+use std::net::ToSocketAddrs;
 
 /// Variant of transport supported by metrics sender.
 #[derive(Debug, Clone, Copy, derivative::Derivative, schemars::JsonSchema, serde::Deserialize)]
@@ -52,8 +53,10 @@ impl std::str::FromStr for TelegrafSocketConfig {
         };
 
         let addr = rest
-            .parse::<std::net::SocketAddr>()
-            .map_err(|e| format!("Invalid address '{rest}': {e}"))?;
+            .to_socket_addrs()
+            .map_err(|e| format!("Invalid address '{rest}': {e}"))?
+            .next()
+            .ok_or_else(|| format!("Could not resolve address: '{rest}'"))?;
 
         Ok(TelegrafSocketConfig { transport, addr })
     }
