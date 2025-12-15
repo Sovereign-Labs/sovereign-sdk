@@ -1,10 +1,13 @@
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, Bytes, TxHash, U256};
-use alloy_provider::DynProvider;
+use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
+use alloy_eips::Encodable2718;
+use alloy_primitives::{Address, Bytes, TxHash, TxKind, U256};
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
+use alloy_provider::RootProvider;
 use alloy_pubsub::Subscription;
 use alloy_rpc_types::{Block, Filter, Log, Transaction, TransactionReceipt, TransactionRequest};
+use alloy_signer::SignerSync;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::ws_client::WsClientBuilder;
@@ -14,8 +17,8 @@ use sov_rpc_eth_types::LogsWithMaybeCursor;
 
 pub struct RpcClient {
     pub ws: jsonrpsee::ws_client::WsClient,
-    pub pub_sub: alloy_provider::RootProvider,
-    pub alloy_client: DynProvider,
+    pub pub_sub: RootProvider,
+    http_provider: RootProvider,
     signer: PrivateKeySigner,
     chain_id: u64,
 }
@@ -33,15 +36,14 @@ impl RpcClient {
             .unwrap();
 
         let signer: PrivateKeySigner = private_key.parse().unwrap();
-        let alloy_client = ProviderBuilder::new()
-            .wallet(signer.clone())
-            .connect_http(http_conn_str.parse().unwrap())
-            .erased();
 
-        let chain_id = alloy_client.get_chain_id().await.unwrap();
+        // Use a simple provider without wallet filler to avoid the `to` requirement
+        let http_provider = ProviderBuilder::default().connect_http(http_conn_str.parse().unwrap());
+
+        let chain_id = http_provider.get_chain_id().await.unwrap();
 
         Self {
-            alloy_client,
+            http_provider,
             ws,
             pub_sub,
             signer,
@@ -61,33 +63,33 @@ impl RpcClient {
 // Alloy client methods
 impl RpcClient {
     pub async fn eth_accounts(&self) -> Vec<Address> {
-        self.alloy_client.get_accounts().await.unwrap()
+        self.http_provider.get_accounts().await.unwrap()
     }
 
     pub async fn receipt(&self, hash: TxHash) -> Option<TransactionReceipt> {
-        self.alloy_client
+        self.http_provider
             .get_transaction_receipt(hash)
             .await
             .unwrap()
     }
 
     pub async fn transaction(&self, hash: TxHash) -> Option<Transaction> {
-        self.alloy_client
+        self.http_provider
             .get_transaction_by_hash(hash)
             .await
             .unwrap()
     }
 
     pub async fn eth_chain_id(&self) -> u64 {
-        self.alloy_client.get_chain_id().await.unwrap()
+        self.http_provider.get_chain_id().await.unwrap()
     }
 
     pub async fn eth_get_balance(&self, address: Address) -> U256 {
-        self.alloy_client.get_balance(address).await.unwrap()
+        self.http_provider.get_balance(address).await.unwrap()
     }
 
     pub async fn eth_get_code(&self, address: Address) -> Vec<u8> {
-        self.alloy_client
+        self.http_provider
             .get_code_at(address)
             .await
             .unwrap()
@@ -95,30 +97,51 @@ impl RpcClient {
     }
 
     pub async fn eth_get_transaction_count(&self, address: Address) -> u64 {
-        self.alloy_client
+        self.http_provider
             .get_transaction_count(address)
             .await
             .unwrap()
     }
 
     pub async fn eth_estimate_gas(&self, tx: TransactionRequest) -> u64 {
-        self.alloy_client.estimate_gas(tx).await.unwrap()
+        self.http_provider.estimate_gas(tx).await.unwrap()
     }
 
     pub async fn eth_send_transaction(
         &self,
         tx: TransactionRequest,
     ) -> Result<TxHash, Box<dyn std::error::Error>> {
-        let pending = self.alloy_client.send_transaction(tx).await?;
+        // Build an EIP-1559 transaction from the request
+        let eip1559_tx = TxEip1559 {
+            chain_id: self.chain_id,
+            nonce: tx.nonce.unwrap_or(0),
+            gas_limit: tx.gas.unwrap_or(21000),
+            max_fee_per_gas: tx.max_fee_per_gas.unwrap_or(0),
+            max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap_or(0),
+            to: tx.to.unwrap_or(TxKind::Create),
+            value: tx.value.unwrap_or(U256::ZERO),
+            input: tx.input.into_input().unwrap_or_default(),
+            access_list: Default::default(),
+        };
+
+        // Sign the transaction
+        let sig = self.signer.sign_hash_sync(&eip1559_tx.signature_hash())?;
+        let signed = eip1559_tx.into_signed(sig);
+
+        // Wrap in TxEnvelope for proper EIP-2718 encoding
+        let envelope = TxEnvelope::Eip1559(signed);
+        let encoded = envelope.encoded_2718();
+
+        let pending = self.http_provider.send_raw_transaction(&encoded).await?;
         Ok(*pending.tx_hash())
     }
 
     pub async fn block_number(&self) -> u64 {
-        self.alloy_client.get_block_number().await.unwrap()
+        self.http_provider.get_block_number().await.unwrap()
     }
 
     pub async fn eth_gas_price(&self) -> u128 {
-        self.alloy_client.get_gas_price().await.unwrap()
+        self.http_provider.get_gas_price().await.unwrap()
     }
 }
 

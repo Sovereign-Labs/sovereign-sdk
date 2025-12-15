@@ -12,10 +12,15 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 alloy = { workspace = true, features = ["reqwest"] }
+alloy-consensus = { workspace = true }
+alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
+alloy-rlp = { workspace = true }
 alloy-rpc-types  = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-pubsub = "1.0"
+alloy-signer = { workspace = true }
+reqwest = { workspace = true }
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
