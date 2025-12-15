@@ -41,7 +41,7 @@ where
         let (tx_scratchpad, transaction_consumption) = working_set.revert();
         let receipt = TransactionReceipt {
             tx_hash: raw_tx_hash,
-            body_to_save: Some(raw_tx.data),
+            body_to_save: Some(raw_tx),
             events: vec![], // As in Ethereum, reverted transactions don't emit events
             receipt: TxEffect::Reverted(RevertedTxContents {
                 gas_used: *transaction_consumption.base_fee(),
@@ -67,7 +67,7 @@ where
                 tx_scratchpad,
                 TransactionReceipt {
                     tx_hash: raw_tx_hash,
-                    body_to_save: Some(raw_tx.data),
+                    body_to_save: Some(raw_tx),
                     events: convert_to_runtime_events::<S, RT>(events, raw_tx_hash.into()),
                     receipt: TxEffect::Successful(SuccessfulTxContents {
                         gas_used: *gas_used,
@@ -96,7 +96,7 @@ where
 
             let receipt = TransactionReceipt {
                 tx_hash: raw_tx_hash,
-                body_to_save: Some(raw_tx.data),
+                body_to_save: Some(raw_tx),
                 events: vec![], // As in Ethereum, reverted transactions don't emit events
                 receipt: TxEffect::Reverted(RevertedTxContents {
                     gas_used: *transaction_consumption.base_fee(),
@@ -173,7 +173,7 @@ pub(crate) fn create_tx_receipt<S: Spec>(
 
     TransactionReceipt {
         tx_hash: raw_tx_hash,
-        body_to_save: Some(raw_tx_body),
+        body_to_save: Some(FullyBakedTx::new(raw_tx_body.to_vec())),
         events: Vec::new(),
         receipt: TxEffect::Skipped(skipped),
     }

@@ -173,7 +173,9 @@ pub fn split_tx_for_storage<T: TxReceiptContents>(
     let tx_for_storage = StoredTransaction {
         hash: tx.tx_hash.into(),
         events: event_range,
-        body: tx.body_to_save,
+        body: tx
+            .body_to_save
+            .map(|ftx| borsh::to_vec(&ftx).expect("Serialization to vec is infallible").into()),
         receipt: DbBytes::new(
             bincode::serialize(&tx.receipt).expect("Serialization to vec is infallible"),
         ),

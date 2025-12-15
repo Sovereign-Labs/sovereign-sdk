@@ -639,12 +639,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;
         AcceptedTx {
-            tx: FullyBakedTx {
-                data: tx_receipt.body_to_save.clone().expect(
-                    "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
-                ),
-                sequencing_data: None, // TODO
-            },
+            tx: tx_receipt.body_to_save.clone().expect(
+                "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
+            ),
             tx_hash: tx_receipt.tx_hash,
             confirmation: Confirmation {
                 events,

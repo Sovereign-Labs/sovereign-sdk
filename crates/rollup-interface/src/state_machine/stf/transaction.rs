@@ -1,10 +1,9 @@
 use std::fmt::Debug;
 
-use bytes::Bytes;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use super::StoredEvent;
+use super::{FullyBakedTx, StoredEvent};
 use crate::TxHash;
 
 /// Ignored transactions consume gas but do not otherwise impact the state of the rollup.
@@ -25,11 +24,11 @@ pub struct IgnoredTransactionReceipt<T: TxReceiptContents> {
 pub struct TransactionReceipt<T: TxReceiptContents> {
     /// The canonical hash of this transaction
     pub tx_hash: TxHash,
-    /// The canonically serialized body of the transaction, if it should be persisted
+    /// The full transaction data including sequencing metadata, if it should be persisted
     /// in the database.
     /// Skip serialization because it is unnecessary over the wire.
     #[serde(skip_serializing)]
-    pub body_to_save: Option<Bytes>,
+    pub body_to_save: Option<FullyBakedTx>,
     /// The events output by this transaction
     pub events: Vec<StoredEvent>,
     /// Any additional structured data to be saved in the database and served over RPC
