@@ -138,6 +138,18 @@ where
     }
 
     #[cfg(feature = "native")]
+    fn resolve_address<ST: sov_modules_api::StateAccessor>(
+        &mut self,
+        default_address: &S::Address,
+        credential_id: &sov_modules_api::CredentialId,
+        state: &mut ST,
+    ) -> Result<S::Address, <ST as sov_modules_api::StateWriter<sov_modules_api::User>>::Error>
+    {
+        self.accounts
+            .resolve_sender_address(default_address, credential_id, state)
+    }
+
+    #[cfg(feature = "native")]
     fn genesis_config(input: &Self::GenesisInput) -> anyhow::Result<Self::GenesisConfig> {
         crate::genesis_config::create_genesis_config(input)
     }

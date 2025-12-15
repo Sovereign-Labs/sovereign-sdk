@@ -1,4 +1,4 @@
-use std::num::NonZero;
+use std::{net::IpAddr, num::NonZero};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7,14 +7,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
-pub enum SequencerKindConfig {
+pub enum SequencerKindConfig<Address: Copy> {
     /// A "Standard" sequencer, which can post transactions to the rollup but not give soft confirmations.
     Standard(StdSequencerConfig),
     /// A "Preferred" sequencer which is allowed to give soft confirmations.
-    Preferred(PreferredSequencerConfig),
+    Preferred(PreferredSequencerConfig<Address>),
 }
 
-impl Default for SequencerKindConfig {
+impl<Address: Copy + serde::Serialize + serde::de::DeserializeOwned> Default
+    for SequencerKindConfig<Address>
+{
     fn default() -> Self {
         SequencerKindConfig::Preferred(PreferredSequencerConfig::default())
     }
@@ -36,7 +38,7 @@ fn default_response_size_limit() -> usize {
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[schemars(rename = "SequencerConfig")]
-pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig> {
+pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
     /// batch production endpoint has to be called explicitly.
@@ -137,7 +139,7 @@ pub struct PostgresConfig {
 
 /// Configuration for [`PreferredSequencer`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub struct PreferredSequencerConfig {
+pub struct PreferredSequencerConfig<Address: Copy> {
     /// The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero.
     /// Sequencers should set this to a non-zero value if they wish to cover their DA costs.
     #[serde(default)]
@@ -178,8 +180,8 @@ pub struct PreferredSequencerConfig {
     #[serde(default)]
     pub timing_oracle: Option<TimingOracleConfig>,
     /// Configuration for rate-limiting the sequencer.
-    #[serde(default)]
-    pub rate_limiter: Option<SovRateLimiterConfig>,
+    #[serde(default = "default_rate_limiter::<Address>")]
+    pub rate_limiter: Option<SovRateLimiterConfig<Address>>,
     /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
@@ -194,7 +196,7 @@ pub struct PreferredSequencerConfig {
     pub future_nonce_transaction_timeout_millis: u64,
 }
 
-impl Default for PreferredSequencerConfig {
+impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
     fn default() -> Self {
         Self {
             minimum_profit_per_tx: 0,
@@ -214,6 +216,10 @@ impl Default for PreferredSequencerConfig {
             rate_limiter: None,
         }
     }
+}
+
+const fn default_rate_limiter<Address: Copy>() -> Option<SovRateLimiterConfig<Address>> {
+    None
 }
 
 pub const fn default_maximum_future_nonce_delta() -> u64 {
@@ -267,15 +273,31 @@ pub struct TimingOracleConfig {
     pub private_key_hex: Option<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct SovRateLimiterConfig<Address: Copy> {
+    pub default_limits: Limits,
+    pub address_custom_limits: Vec<(Address, Limits)>,
+    pub ip_custom_limits: Vec<(IpAddr, Limits)>,
+}
+
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub struct SovRateLimiterConfig {
-    /// The maximum number of requests allowed per batch.
-    pub max_requests_per_batch: u64,
+pub struct Limits {
+    /// Determines the threshold for rate-limiting requests.
+    /// This value is used as follows:
+    ///
+    /// MAX_THRESHOLD_PER_KEY =
+    ///     MAX_BATCH_RESOURCE_CAPACITY / max_threshold_per_key_to_batch_capacity_ratio
+    ///
+    /// For example, setting max_threshold_per_key_to_batch_capacity_ratio to 200
+    /// means that MAX_THRESHOLD_PER_KEY will be 0.5% of MAX_BATCH_RESOURCE_CAPACITY.
+    pub max_threshold_per_key_to_batch_capacity_ratio: u64,
     /// Determines how quickly tokens are refilled in the token-bucket algorithm.
-    /// Each user can consume, on average, only a certain percentage of the batch resources.
+    /// Each user can consume, on average, only a certain percentage of the batch resources (MAX_THRESHOLD_PER_KEY).
     /// Over time, users send requests that draw from their available resources, while a
     /// constant stream of tokens refilling those resources.
-    /// At refill_rate = 1, tokens regenerate at 0.0005% × BatchCapacity per millisecond.
+    /// At refill_rate = 1, tokens regenerate at MAX_THRESHOLD_PER_KEY/100 per millisecond.
     /// Values between 1 and 20 are recommended starting points.
     pub refill_rate: u64,
+    /// The maximum number of requests allowed per batch.
+    pub max_requests_per_batch: u64,
 }

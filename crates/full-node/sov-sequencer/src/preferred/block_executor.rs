@@ -142,7 +142,7 @@ where
     Rt: Runtime<S>,
 {
     pub checkpoint: StateCheckpoint<S>,
-    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
 
@@ -181,7 +181,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub fn new(
         info: &StateUpdateInfo<S::Storage>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
@@ -199,7 +199,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         info: &StateUpdateInfo<S::Storage>,
         tx_cache_writer: TxResultWriter<S, Rt>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
@@ -217,7 +217,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         info: &StateUpdateInfo<S::Storage>,
         tx_cache_writer: Option<TxResultWriter<S, Rt>>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         pinned_cache: Option<PinnedCache>,
     ) -> Self {

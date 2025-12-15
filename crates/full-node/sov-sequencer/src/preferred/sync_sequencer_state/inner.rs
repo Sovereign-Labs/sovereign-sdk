@@ -72,7 +72,7 @@ where
     // See [`LedgerDb::with_shared_notifications`] for more details.
     pub(crate) api_ledger_db: LedgerDb,
 
-    pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) shutdown_receiver: watch::Receiver<()>,
     pub(crate) shutdown_sender: watch::Sender<()>,
 

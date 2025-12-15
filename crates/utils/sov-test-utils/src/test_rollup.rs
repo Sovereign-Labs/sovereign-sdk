@@ -37,6 +37,7 @@ use sov_modules_api::prelude::axum::ServiceExt;
 use sov_modules_api::ModuleExecutionConfig;
 use sov_modules_api::{Spec, Zkvm};
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
+use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::{GenesisParams, Runtime};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
@@ -99,7 +100,7 @@ impl StoragePath {
 pub struct RollupBuilderConfig<S: Spec> {
     pub automatic_batch_production: bool,
     pub max_allowed_node_distance_behind: u64,
-    pub sequencer_config: SequencerKindConfig,
+    pub sequencer_config: SequencerKindConfig<S::Address>,
     pub prover_address: String,
     pub sequencer_address: String,
     pub aggregated_proof_block_jump: usize,
@@ -133,7 +134,12 @@ pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
 
 impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     /// See [`PreferredSequencerConfig::rate_limiter`].
-    pub fn with_rate_limiter(mut self, rate_limiter: Option<SovRateLimiterConfig>) -> Self {
+    pub fn with_rate_limiter(
+        mut self,
+        rate_limiter: Option<
+            SovRateLimiterConfig<<<R as RollupBlueprint<Native>>::Spec as Spec>::Address>,
+        >,
+    ) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
             config.rate_limiter = rate_limiter;
         } else {

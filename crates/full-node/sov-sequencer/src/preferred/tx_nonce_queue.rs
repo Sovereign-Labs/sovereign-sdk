@@ -8,11 +8,11 @@ use sov_rollup_interface::{crypto::CredentialId, TxHash};
 use std::cmp::Ordering;
 use std::collections::{btree_map::OccupiedEntry, BTreeMap};
 use std::fmt::Debug;
-use std::net::IpAddr;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::common::AcceptedTx;
+use crate::preferred::rate_limiter::IpAndCredentialId;
 
 use super::sync_sequencer_state::{
     AcceptTxError, SequencerStateUpdator, SequencerStateUpdatorError,
@@ -143,8 +143,7 @@ pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>> {
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError>;
 }
@@ -183,8 +182,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<TransactionReceiverResult<S, Rt>, SequencerStateUpdatorError> {
         self.state_updator
@@ -192,8 +190,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
                 baked_tx,
                 tx_hash,
                 original_tx_queue_id,
-                credential_id,
-                ip_addr,
+                ip_and_credential,
                 reason,
             )
             .await
@@ -389,13 +386,13 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
     /// DashMap as local variables; all queue manipulations happen inside sync functions.
     async fn drain_any_ready_transactions(
         &self,
-        credential_id: &CredentialId,
-        ip_addr: IpAddr,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         mut expected_nonce: u64,
     ) {
         loop {
             // Get the next valid tx - as long as there is one. If not, we're done.
-            let Some(queued_tx) = self.get_maybe_next_valid_tx(credential_id, expected_nonce)
+            let Some(queued_tx) =
+                self.get_maybe_next_valid_tx(&ip_and_credential.credential_id, expected_nonce)
             else {
                 return;
             };
@@ -406,8 +403,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     &queued_tx.tx,
                     queued_tx.tx_hash,
                     queued_tx.original_tx_queue_id,
-                    *credential_id,
-                    ip_addr,
+                    ip_and_credential,
                     "nonce_queue_trigger",
                 )
                 .await;
@@ -509,8 +505,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         tx_nonce: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         original_tx_queue_id: u64,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -520,7 +515,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
             baked_tx,
             tx_hash,
             tx_nonce,
-            credential_id,
+            ip_and_credential.credential_id,
             original_tx_queue_id,
         );
 
@@ -531,7 +526,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                 // We obviously don't physically insert and pop it, but we mark it as the last
                 // popped for accounting purposes. E.g. since we have this tx, it can now satisfy
                 // prerequisite checks for any queued txs.
-                self.mark_popped(&credential_id, tx_nonce);
+                self.mark_popped(&ip_and_credential.credential_id, tx_nonce);
 
                 let res = self
                     .submitter
@@ -539,8 +534,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                         &baked_tx,
                         tx_hash,
                         original_tx_queue_id,
-                        credential_id,
-                        ip_addr,
+                        ip_and_credential,
                         "nonce_queue_immediate",
                     )
                     .await;
@@ -552,7 +546,7 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                     let starting_nonce = tx_nonce + 1;
                     tokio::spawn(async move {
                         queues
-                            .drain_any_ready_transactions(&credential_id, ip_addr, starting_nonce)
+                            .drain_any_ready_transactions(ip_and_credential, starting_nonce)
                             .await;
                     });
                 }
@@ -569,12 +563,12 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 // queue it can be evicted (dropping it and the sender).
                                 // Since the transaction was queued and therefore had an incorrect
                                 // nonce to begin with, we conservatively reject with a nonce error.
-                                let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
+                                let current_nonce = self.submitter.get_current_nonce_for_user(&ip_and_credential.credential_id);
                                 err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
                                     current_nonce,
-                                    credential_id,
+                                    ip_and_credential.credential_id,
                                 )
                             });
                         },
@@ -582,27 +576,30 @@ impl<Sb: TxExecutionBackend<S, Rt> + Sync + Send + Clone + 'static, S: Spec, Rt:
                                 self.future_nonce_transaction_timeout_millis
                         )) => {
                             // Timeout waiting for prerequisite transactions
-                            let current_nonce = self.submitter.get_current_nonce_for_user(&credential_id);
-                            if self.has_prerequisites_to_nonce(&credential_id, tx_nonce, current_nonce) {
+                            let current_nonce = self.submitter.get_current_nonce_for_user(&ip_and_credential.credential_id);
+                            if self.has_prerequisites_to_nonce(&ip_and_credential.credential_id, tx_nonce, current_nonce) {
                                 // Still has a valid path to execution, keep waiting
                                 continue;
                             } else {
                                 // No path to execution, evict and reject
-                                self.evict(&credential_id, tx_nonce);
+                                self.evict(&ip_and_credential.credential_id, tx_nonce);
                                 break err_invalid_nonce::<S, Rt>(
                                     tx_hash,
                                     tx_nonce,
                                     current_nonce,
-                                    credential_id,
+                                    ip_and_credential.credential_id,
                                 );
                             }
                         }
                     }
                 }
             }
-            Action::Reject(current_nonce) => {
-                err_invalid_nonce::<S, Rt>(tx_hash, tx_nonce, current_nonce, credential_id)
-            }
+            Action::Reject(current_nonce) => err_invalid_nonce::<S, Rt>(
+                tx_hash,
+                tx_nonce,
+                current_nonce,
+                ip_and_credential.credential_id,
+            ),
         }
     }
 
@@ -623,15 +620,13 @@ mod tests {
     use sov_modules_api::{SkippedTxContents, TransactionReceipt, TxProcessingError};
     use sov_test_utils::runtime::TestOptimisticRuntime;
     use sov_test_utils::TestSpec;
-    use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+    use std::net::Ipv4Addr;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
     use std::time::Duration;
     use tokio::sync::oneshot;
 
     type TestRuntime = TestOptimisticRuntime<TestSpec>;
-
-    static SOCKET_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0));
 
     // Helper to create a mock QueuedTx for testing
     fn create_mock_queued_tx(nonce: u8) -> QueuedTx<TestSpec, TestRuntime> {
@@ -958,19 +953,18 @@ mod tests {
     #[tokio::test]
     async fn test_drain_evicts_stale_and_executes_ready() {
         let (queues, backend) = default_test_tx_nonce_queues();
-        let credential_id = CredentialId::from([1u8; 32]);
+
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Enqueue transactions with nonces 3, 4, 5
         let mut handles = vec![];
         for nonce in [3, 4, 5] {
-            let entry = queues.lock_for_address(credential_id);
+            let entry = queues.lock_for_address(ip_and_cred_id.credential_id);
             handles.push(enqueue_mock_queued_tx(entry, nonce));
         }
 
         // Drain starting from nonce 5 (3 and 4 should be silently evicted, 5 should execute)
-        queues
-            .drain_any_ready_transactions(&credential_id, SOCKET_ADDR.ip(), 5)
-            .await;
+        queues.drain_any_ready_transactions(ip_and_cred_id, 5).await;
 
         let executed_nonces = backend.get_executed_nonces();
         assert_eq!(
@@ -993,28 +987,30 @@ mod tests {
             .is_ok());
 
         // Verify queue is empty
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 6);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            6
+        );
         assert!(queues
             .queues
-            .get(&credential_id)
+            .get(&ip_and_cred_id.credential_id)
             .is_none_or(|q| q.is_empty()));
     }
 
     #[tokio::test]
     async fn test_drain_stops_at_gap() {
         let (queues, backend) = default_test_tx_nonce_queues();
-        let credential_id = CredentialId::from([1u8; 32]);
+
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Enqueue transactions: 0, 1, 3, 4 (gap at 2)
         for nonce in [0, 1, 3, 4] {
-            let entry = queues.lock_for_address(credential_id);
+            let entry = queues.lock_for_address(ip_and_cred_id.credential_id);
             enqueue_mock_queued_tx(entry, nonce);
         }
 
         // Drain starting from nonce 0
-        queues
-            .drain_any_ready_transactions(&credential_id, SOCKET_ADDR.ip(), 0)
-            .await;
+        queues.drain_any_ready_transactions(ip_and_cred_id, 0).await;
 
         // Should have executed exactly 2 transactions (0 and 1), then stopped at gap
         let executed_nonces = backend.get_executed_nonces();
@@ -1025,7 +1021,7 @@ mod tests {
         );
 
         // Transactions 3 and 4 should still be in queue
-        assert!(queues.has_prerequisites_to_nonce(&credential_id, 4, 3));
+        assert!(queues.has_prerequisites_to_nonce(&ip_and_cred_id.credential_id, 4, 3));
     }
 
     /// Mock implementation of TxExecutionBackend for testing handle_new_tx
@@ -1095,8 +1091,7 @@ mod tests {
             baked_tx: &FullyBakedTx,
             tx_hash: TxHash,
             _original_tx_queue_id: u64,
-            _credential_id: CredentialId,
-            _ip_addr: IpAddr,
+            _credential_id: IpAndCredentialId<<TestSpec as Spec>::Address>,
             _reason: &'static str,
         ) -> Result<TransactionReceiverResult<TestSpec, TestRuntime>, SequencerStateUpdatorError>
         {
@@ -1185,7 +1180,7 @@ mod tests {
             5000, // timeout (long enough to not trigger)
         );
 
-        let credential_id = CredentialId::from([1u8; 32]);
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Submit TXs with nonces 1, 2, 3 (should be queued)
         let mut handles = vec![];
@@ -1197,8 +1192,7 @@ mod tests {
                         create_test_tx(nonce),
                         TxHash::from([nonce; 32]),
                         nonce as u64,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1215,8 +1209,7 @@ mod tests {
                 create_test_tx(0),
                 TxHash::from([0; 32]),
                 0,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1247,7 +1240,10 @@ mod tests {
         );
 
         // Verify current nonce advanced
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 4);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            4
+        );
     }
 
     #[tokio::test]
@@ -1255,7 +1251,7 @@ mod tests {
         let backend = MockTxExecutionBackend::new().with_current_nonce(5);
         let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
 
-        let credential_id = CredentialId::from([1u8; 32]);
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Submit TX with nonce 4 (past nonce, current is 5)
         let result = queues
@@ -1263,8 +1259,7 @@ mod tests {
                 create_test_tx(4),
                 TxHash::from([4; 32]),
                 4,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1309,7 +1304,10 @@ mod tests {
         assert!(backend.get_executed_nonces().is_empty());
 
         // Verify nonce didn't change
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 5);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            5
+        );
     }
 
     #[tokio::test]
@@ -1321,7 +1319,7 @@ mod tests {
             5000,
         );
 
-        let credential_id = CredentialId::from([1u8; 32]);
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Submit TX with nonce 11 (too far in future, max valid is 10)
         let result = queues
@@ -1329,8 +1327,7 @@ mod tests {
                 create_test_tx(11),
                 TxHash::from([11; 32]),
                 11,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1367,14 +1364,17 @@ mod tests {
         assert!(backend.get_executed_nonces().is_empty());
 
         // Verify nonce didn't change
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 0);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            0
+        );
     }
 
     #[tokio::test]
     async fn test_queue_future_nonce_then_fill_gap() {
         let backend = MockTxExecutionBackend::new().with_current_nonce(0);
         let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
-        let credential_id = CredentialId::from([1u8; 32]);
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Submit TX with nonce 2 (should queue, current is 0)
         let handle_2 = tokio::spawn({
@@ -1385,8 +1385,7 @@ mod tests {
                         create_test_tx(2),
                         TxHash::from([2; 32]),
                         2,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1402,8 +1401,7 @@ mod tests {
                 create_test_tx(0),
                 TxHash::from([0; 32]),
                 0,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1416,7 +1414,10 @@ mod tests {
 
         // Verify only N=0 executed, N+2 still queued
         assert_eq!(backend.get_executed_nonces(), vec![0]);
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 1);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            1
+        );
 
         // Now submit TX with nonce 1 (should execute and trigger drain of N+2)
         let result_1 = queues
@@ -1424,8 +1425,7 @@ mod tests {
                 create_test_tx(1),
                 TxHash::from([1; 32]),
                 1,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1441,7 +1441,10 @@ mod tests {
 
         // Verify all executed in order
         assert_eq!(backend.get_executed_nonces(), vec![0, 1, 2]);
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 3);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            3
+        );
     }
 
     #[tokio::test]
@@ -1452,7 +1455,7 @@ mod tests {
             10,
             200, // Short timeout (200ms) to make test fast
         );
-        let credential_id = CredentialId::from([1u8; 32]);
+        let ip_and_cred_id = ip_and_cred_id();
 
         // Submit TX with nonce 1 (will queue and wait)
         let handle = tokio::spawn({
@@ -1463,8 +1466,7 @@ mod tests {
                         create_test_tx(1),
                         TxHash::from([1; 32]),
                         1,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1509,10 +1511,13 @@ mod tests {
 
         // Verify no TXs were executed
         assert!(backend.get_executed_nonces().is_empty());
-        assert_eq!(backend.get_current_nonce_for_user(&credential_id), 0);
+        assert_eq!(
+            backend.get_current_nonce_for_user(&ip_and_cred_id.credential_id),
+            0
+        );
 
         // Verify TX was removed from queue
-        assert!(!queues.has_prerequisites_to_nonce(&credential_id, 1, 0));
+        assert!(!queues.has_prerequisites_to_nonce(&ip_and_cred_id.credential_id, 1, 0));
     }
 
     #[tokio::test]
@@ -1527,7 +1532,8 @@ mod tests {
             500, // Timeout is 250ms, longer than execution delay but shorter than total time to
                  // execute all queued TXs
         );
-        let credential_id = CredentialId::from([1u8; 32]);
+        let ip_and_cred_id = ip_and_cred_id();
+        let credential_id = ip_and_cred_id.credential_id;
 
         // Submit TXs with nonces 1-5 (all will queue)
         let mut handles = vec![];
@@ -1539,8 +1545,7 @@ mod tests {
                         create_test_tx(nonce),
                         TxHash::from([nonce; 32]),
                         nonce as u64,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1557,8 +1562,7 @@ mod tests {
                 create_test_tx(0),
                 TxHash::from([0; 32]),
                 0,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1590,7 +1594,9 @@ mod tests {
     async fn test_oneshot_sender_dropped_returns_error() {
         let backend = MockTxExecutionBackend::new().with_current_nonce(0);
         let queues = TxNonceQueues::new(backend.clone(), 10, 500);
-        let credential_id = CredentialId::from([1u8; 32]);
+
+        let ip_and_cred_id = ip_and_cred_id();
+        let credential_id = ip_and_cred_id.credential_id;
 
         // Submit TX with nonce 1 (will queue)
         let handle = tokio::spawn({
@@ -1601,8 +1607,7 @@ mod tests {
                         create_test_tx(1),
                         TxHash::from([1; 32]),
                         1,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1671,7 +1676,9 @@ mod tests {
             .with_db_delay(Duration::from_millis(200)); // Slow DB
 
         let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
-        let credential_id = CredentialId::from([1u8; 32]);
+
+        let ip_and_cred_id = ip_and_cred_id();
+        let credential_id = ip_and_cred_id.credential_id;
 
         // Submit TX A with nonce 0 - should execute immediately
         let handle_a = tokio::spawn({
@@ -1682,8 +1689,7 @@ mod tests {
                         create_test_tx(0),
                         TxHash::from([0; 32]),
                         0,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1708,8 +1714,7 @@ mod tests {
                         create_test_tx(1),
                         TxHash::from([1; 32]),
                         1,
-                        credential_id,
-                        SOCKET_ADDR.ip(),
+                        ip_and_cred_id,
                         0,
                     )
                     .await
@@ -1748,7 +1753,9 @@ mod tests {
             .with_db_delay(Duration::from_millis(100));
 
         let queues = TxNonceQueues::new(backend.clone(), 10, 5000);
-        let credential_id = CredentialId::from([1u8; 32]);
+
+        let ip_and_cred_id = ip_and_cred_id();
+        let credential_id = ip_and_cred_id.credential_id;
 
         // Submit TX with nonce 0
         let result = queues
@@ -1756,8 +1763,7 @@ mod tests {
                 create_test_tx(0),
                 TxHash::from([0; 32]),
                 0,
-                credential_id,
-                SOCKET_ADDR.ip(),
+                ip_and_cred_id,
                 0,
             )
             .await;
@@ -1783,5 +1789,13 @@ mod tests {
             !queues.queues.contains_key(&credential_id),
             "Queue should be pruned after API state catches up"
         );
+    }
+
+    fn ip_and_cred_id() -> IpAndCredentialId<<TestSpec as Spec>::Address> {
+        IpAndCredentialId {
+            default_address: <TestSpec as Spec>::Address::from([1; 28]),
+            credential_id: CredentialId::from([1u8; 32]),
+            ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
+        }
     }
 }
