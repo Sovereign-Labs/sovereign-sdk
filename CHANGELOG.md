@@ -1,5 +1,8 @@
+# 2025-12-15
+- #2167 Updates the internals of the nonce queue. 
+
 # 2025-12-14 
-- #2229 **Breaking DB change**: ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+- #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
 
 # 2025-12-09
 - #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
