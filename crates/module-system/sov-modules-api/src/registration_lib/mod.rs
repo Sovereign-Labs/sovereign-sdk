@@ -41,14 +41,14 @@ pub trait StakeRegistration {
     > {
         if self.get_allowed_staker(primary_address, state)?.is_some() {
             tracing::error!(staker = ?primary_address, "Staker already registered");
-            return Err(RegistrationError::AlreadyRegistered(rollup_address.clone()));
+            return Err(RegistrationError::AlreadyRegistered(*rollup_address));
         }
 
         self.transfer_bond_from_staker(rollup_address, amount, state)
             .map_err(|e| {
                 tracing::error!(staker = ?primary_address, error = ?e, "Insufficient funds to register");
                 RegistrationError::InsufficientFundsToRegister {
-                    address: rollup_address.clone(),
+                    address: *rollup_address,
                     amount,
                 }
             })?;
@@ -83,13 +83,13 @@ pub trait StakeRegistration {
     > {
         let (address, balance) = self.get_allowed_staker(staker, state)?.ok_or_else(|| {
             tracing::error!("Staker not registered");
-            RegistrationError::IsNotRegistered(staker.clone())
+            RegistrationError::IsNotRegistered(*staker)
         })?;
 
         let balance =  balance.checked_add(amount).ok_or_else(|| {
                 tracing::error!(staker = ?staker, amount = ?amount, balance = ?balance, "Topping account makes balance overflow");
                 RegistrationError::ToppingAccountMakesBalanceOverflow {
-                    address: address.clone(),
+                    address,
                     existing_balance: balance,
                     amount_to_add: amount,
                 }
@@ -99,7 +99,7 @@ pub trait StakeRegistration {
             .map_err(|e| {
                 tracing::error!(staker = ?staker, error = ?e, "Insufficient funds to top up account");
                 RegistrationError::InsufficientFundsToTopUpAccount {
-                    address: address.clone(),
+                    address,
                     amount_to_add: amount,
                 }
             })?;
@@ -134,14 +134,14 @@ pub trait StakeRegistration {
     > {
         let (address, balance) = self.get_allowed_staker(staker, state)?.ok_or_else(|| {
             tracing::error!(staker = ?staker, "Staker not registered");
-            RegistrationError::IsNotRegistered(staker.clone())
+            RegistrationError::IsNotRegistered(*staker)
         })?;
 
         self.transfer_bond_to_staker(&address, balance, state)
             .map_err(|e| {
                 tracing::error!(staker = ?staker, error = ?e, "Insufficient funds to refund stake");
                 RegistrationError::InsufficientFundsToRefundStakedAmount {
-                    address: address.clone(),
+                    address,
                     amount: balance,
                 }
             })?;

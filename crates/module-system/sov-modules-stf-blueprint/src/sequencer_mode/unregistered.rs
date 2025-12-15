@@ -199,7 +199,7 @@ where
                 tx_receipts,
                 ignored_tx_receipts,
                 inner: BatchSequencerReceipt {
-                    da_address: sequencer_da_address.clone(),
+                    da_address: *sequencer_da_address,
                     gas_price: *gas_price,
                     gas_used,
                     outcome: BatchSequencerOutcome {
@@ -332,7 +332,7 @@ where
         tx_receipts,
         ignored_tx_receipts: vec![],
         inner: BatchSequencerReceipt {
-            da_address: sequencer_da_address.clone(),
+            da_address: *sequencer_da_address,
             gas_price: *gas_price,
             gas_used,
 

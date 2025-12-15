@@ -20,11 +20,11 @@ impl<S: Spec> Accounts<S> {
             None => {
                 // 1. Add the credential -> account mapping
                 let new_account = Account {
-                    addr: default_address.clone(),
+                    addr: *default_address,
                 };
                 self.accounts.set(credential_id, &new_account, state)?;
 
-                Ok(default_address.clone())
+                Ok(*default_address)
             }
         }
     }

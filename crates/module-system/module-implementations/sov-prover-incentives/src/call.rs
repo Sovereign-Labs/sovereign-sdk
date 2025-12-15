@@ -53,7 +53,7 @@ impl<S: Spec> ProverIncentives<S> {
         self.emit_event(
             state,
             Event::<S>::Registered {
-                prover: prover_address.clone(),
+                prover: *prover_address,
                 amount: bond_amount,
             },
         );
@@ -72,7 +72,7 @@ impl<S: Spec> ProverIncentives<S> {
         self.emit_event(
             state,
             Event::<S>::Deposited {
-                prover: prover_address.clone(),
+                prover: *prover_address,
                 deposit: amount,
             },
         );
@@ -91,7 +91,7 @@ impl<S: Spec> ProverIncentives<S> {
         self.emit_event(
             state,
             Event::<S>::Exited {
-                prover: prover_address.clone(),
+                prover: *prover_address,
                 amount_withdrawn,
             },
         );

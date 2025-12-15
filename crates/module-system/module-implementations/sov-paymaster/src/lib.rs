@@ -228,7 +228,7 @@ impl<S: Spec> Paymaster<S> {
         tracing::trace!("Falling back to user balance to reserve gas");
         self.bank
             .reserve_gas(tx, gas_price, context.sender(), state)?;
-        context.set_gas_refund_recipient(context.sender().clone());
+        context.set_gas_refund_recipient(*context.sender());
         Ok(())
     }
 

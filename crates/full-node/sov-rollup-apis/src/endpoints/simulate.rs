@@ -282,14 +282,14 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
                 SimulateError::InvalidInput("failed to parse sequencer rollup address".to_owned())
             })?
         } else {
-            self.default_sequencer.rollup_address.clone()
+            self.default_sequencer.rollup_address
         };
         let da_address = if let Some(input) = partial.da_address {
             <S::Da as DaSpec>::Address::from_str(&input).map_err(|_| {
                 SimulateError::InvalidInput("failed to parse sequencer da address".to_owned())
             })?
         } else {
-            self.default_sequencer.da_address.clone()
+            self.default_sequencer.da_address
         };
         Ok({
             SequencerSimulate {

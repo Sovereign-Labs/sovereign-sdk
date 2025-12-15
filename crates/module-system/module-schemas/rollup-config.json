@@ -211,6 +211,34 @@
         }
       }
     },
+    "Limits": {
+      "type": "object",
+      "required": [
+        "max_requests_per_batch",
+        "max_threshold_per_key_to_batch_capacity_ratio",
+        "refill_rate"
+      ],
+      "properties": {
+        "max_requests_per_batch": {
+          "description": "The maximum number of requests allowed per batch.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_threshold_per_key_to_batch_capacity_ratio": {
+          "description": "Determines the threshold for rate-limiting requests. This value is used as follows:\n\nMAX_THRESHOLD_PER_KEY = MAX_BATCH_RESOURCE_CAPACITY / max_threshold_per_key_to_batch_capacity_ratio\n\nFor example, setting max_threshold_per_key_to_batch_capacity_ratio to 200 means that MAX_THRESHOLD_PER_KEY will be 0.5% of MAX_BATCH_RESOURCE_CAPACITY.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "refill_rate": {
+          "description": "Determines how quickly tokens are refilled in the token-bucket algorithm. Each user can consume, on average, only a certain percentage of the batch resources (MAX_THRESHOLD_PER_KEY). Over time, users send requests that draw from their available resources, while a constant stream of tokens refilling those resources. At refill_rate = 1, tokens regenerate at MAX_THRESHOLD_PER_KEY/100 per millisecond. Values between 1 and 20 are recommended starting points.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "MockAddress": {
       "description": "Mock address; 32 bytes in hex-encoded format",
       "type": "string",
@@ -329,7 +357,7 @@
         }
       }
     },
-    "PreferredSequencerConfig": {
+    "PreferredSequencerConfig_for_Address": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
       "required": [
@@ -419,10 +447,9 @@
         },
         "rate_limiter": {
           "description": "Configuration for rate-limiting the sequencer.",
-          "default": null,
           "anyOf": [
             {
-              "$ref": "#/definitions/SovRateLimiterConfig"
+              "$ref": "#/definitions/SovRateLimiterConfig_for_Address"
             },
             {
               "type": "null"
@@ -867,7 +894,7 @@
           ],
           "properties": {
             "preferred": {
-              "$ref": "#/definitions/PreferredSequencerConfig"
+              "$ref": "#/definitions/PreferredSequencerConfig_for_Address"
             }
           },
           "additionalProperties": false
@@ -945,24 +972,49 @@
         }
       }
     },
-    "SovRateLimiterConfig": {
+    "SovRateLimiterConfig_for_Address": {
       "type": "object",
       "required": [
-        "max_requests_per_batch",
-        "refill_rate"
+        "address_custom_limits",
+        "default_limits",
+        "ip_custom_limits"
       ],
       "properties": {
-        "max_requests_per_batch": {
-          "description": "The maximum number of requests allowed per batch.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
+        "address_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Address"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
         },
-        "refill_rate": {
-          "description": "Determines how quickly tokens are refilled in the token-bucket algorithm. Each user can consume, on average, only a certain percentage of the batch resources. Over time, users send requests that draw from their available resources, while a constant stream of tokens refilling those resources. At refill_rate = 1, tokens regenerate at 0.0005% × BatchCapacity per millisecond. Values between 1 and 20 are recommended starting points.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
+        "default_limits": {
+          "$ref": "#/definitions/Limits"
+        },
+        "ip_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string",
+                "format": "ip"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
         }
       }
     },

@@ -825,10 +825,10 @@ impl<S: Spec> BlobStorage<S> {
             let blob_id = blob.id;
             let data = match blob.inner {
                 PreferredBlobData::Batch(batch) => {
-                    BlobData::Batch((batch.data, preferred_sequencer.clone()))
+                    BlobData::Batch((batch.data, *preferred_sequencer))
                 }
                 PreferredBlobData::Proof(proof) => {
-                    BlobData::Proof((proof.data, preferred_sequencer.clone()))
+                    BlobData::Proof((proof.data, *preferred_sequencer))
                 }
             };
             let blob_with_id = data.with_id(blob_id);
@@ -856,7 +856,7 @@ impl<S: Spec> BlobStorage<S> {
 
             let Some(validated_blob) = self.validate_preferred_blob(
                 blob_with_id,
-                preferred_sender.clone(),
+                *preferred_sender,
                 available_balance,
                 visible_height_increase,
                 state,

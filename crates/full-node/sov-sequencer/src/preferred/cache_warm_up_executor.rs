@@ -150,7 +150,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     pub(crate) async fn spawn_execution_task<Rt: Runtime<S>>(
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     ) -> (Self, Vec<JoinHandle<()>>) {
         if seq_config.sequencer_kind_config.is_replica.unwrap_or(true) {
             return (Self { inner: None }, vec![]);
@@ -197,7 +197,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     fn spawn_worker<Rt: Runtime<S>>(
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         tx_receiver: TxReceiver,
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
