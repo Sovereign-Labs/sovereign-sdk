@@ -23,10 +23,10 @@ use crate::Bytes;
 pub struct FullyBakedTx {
     /// Serialized transaction.
     #[as_ref(forward)]
-    pub data: Bytes,
+    pub data: Vec<u8>,
     /// Sequencer-provided metadata for each transaction (e.g., timestamps).
     /// This data is NOT signed by users but is added by the sequencer.
-    pub sequencing_data: Option<Bytes>,
+    pub sequencing_data: Option<Vec<u8>>,
 }
 
 impl std::fmt::Debug for FullyBakedTx {
@@ -42,14 +42,19 @@ impl FullyBakedTx {
     #[must_use]
     pub fn new(data: Vec<u8>) -> Self {
         Self {
-            data: Bytes::from_owner(data),
+            data,
             sequencing_data: None,
         }
     }
 
     /// Sets sequencing metadata
     pub fn set_sequencing_metadata(&mut self, metadata: &impl BorshSerialize) {
-        self.sequencing_data = Some(borsh::to_vec(metadata).unwrap().into());
+        self.sequencing_data = Some(borsh::to_vec(metadata).unwrap());
+    }
+
+    /// Get the data as Bytes for compatibility with code expecting Bytes
+    pub fn data_as_bytes(&self) -> Bytes {
+        Bytes::from(self.data.clone())
     }
 }
 

@@ -4,7 +4,6 @@ use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
     StateProvider, TransactionReceipt, TxScratchpad, WorkingSet, *,
 };
-use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
 use tracing::{debug, info};
 
@@ -163,7 +162,7 @@ pub fn get_gas_used<S: Spec>(receipt: &TransactionReceipt<S>) -> S::Gas {
 pub(crate) fn create_tx_receipt<S: Spec>(
     skipped: SkippedTxContents<S>,
     raw_tx_hash: TxHash,
-    raw_tx_body: Bytes,
+    raw_tx_body: Vec<u8>,
 ) -> TransactionReceipt<S> {
     info!(
         error = %skipped.error,
