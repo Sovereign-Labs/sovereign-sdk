@@ -157,9 +157,9 @@ where
             token_name: token_name.clone(),
             token_decimals: None,
             initial_balance: 1000,
-            mint_to_address: minter.clone(),
+            mint_to_address: minter,
             minter_pkey: Rc::new(minter_key.clone()),
-            admins: Vec::from([minter.clone()])
+            admins: Vec::from([minter])
                 .try_into()
                 .expect("Tokens can have at least one minter"),
             supply_cap: u128::MAX,
@@ -234,7 +234,7 @@ pub(crate) fn create_token_tx<S: Spec>(input: &TokenCreateData<S>) -> CallMessag
         token_name: input.token_name.clone().try_into().unwrap(),
         token_decimals: input.token_decimals,
         initial_balance: Amount::new(input.initial_balance),
-        mint_to_address: input.mint_to_address.clone(),
+        mint_to_address: input.mint_to_address,
         admins: input.admins.clone(),
         supply_cap: Some(Amount::new(input.supply_cap)),
     }
@@ -242,7 +242,7 @@ pub(crate) fn create_token_tx<S: Spec>(input: &TokenCreateData<S>) -> CallMessag
 
 pub(crate) fn transfer_token_tx<S: Spec>(transfer_data: &TransferData<S>) -> CallMessage<S> {
     CallMessage::Transfer {
-        to: transfer_data.receiver_address.clone(),
+        to: transfer_data.receiver_address,
         coins: Coins {
             amount: Amount::new(transfer_data.transfer_amount),
             token_id: transfer_data.token_id,

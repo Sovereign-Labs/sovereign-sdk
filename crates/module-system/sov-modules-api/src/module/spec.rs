@@ -198,7 +198,7 @@ impl<S: Spec> Context<S> {
         sequencer_da_address: <S::Da as DaSpec>::Address,
     ) -> Self {
         Self::with_payer(
-            sender.clone(),
+            sender,
             sender_credentials,
             sequencer,
             sequencer_da_address,

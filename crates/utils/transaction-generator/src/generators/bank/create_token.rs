@@ -120,7 +120,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 token_name,
                 token_decimals,
                 initial_balance: amount,
-                mint_to_address: recipient_address.clone(),
+                mint_to_address: recipient_address,
                 admins: minters,
                 supply_cap: None,
             },

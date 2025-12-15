@@ -66,8 +66,8 @@ where
 
     let simulate_v2 = SovereignSimulate::<B::Spec, B::Runtime>::new(
         state_update_receiver.clone(),
-        config.sequencer.rollup_address.clone(),
-        sequencer.da_address.clone(),
+        config.sequencer.rollup_address,
+        sequencer.da_address,
     );
     endpoints.axum_router = endpoints.axum_router.merge(simulate_v2.into_router());
     // Rollup endpoint

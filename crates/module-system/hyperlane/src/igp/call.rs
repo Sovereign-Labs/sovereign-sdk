@@ -98,7 +98,7 @@ impl<S: Spec> InterchainGasPaymaster<S> {
                 );
             }
 
-            let key = RelayerWithDomainKey::new(relayer.clone(), domain);
+            let key = RelayerWithDomainKey::new(*relayer, domain);
 
             self.domain_oracle_data
                 .set(&key, &oracle_data, state)
@@ -107,7 +107,7 @@ impl<S: Spec> InterchainGasPaymaster<S> {
             self.emit_event(
                 state,
                 Event::OracleDataUpdated {
-                    relayer: relayer.clone(),
+                    relayer: *relayer,
                     domain,
                     oracle_data,
                 },
@@ -119,7 +119,7 @@ impl<S: Spec> InterchainGasPaymaster<S> {
                 bail!("Default gas for domain {domain} must be nonzero");
             }
 
-            let key = RelayerWithDomainKey::new(relayer.clone(), *domain);
+            let key = RelayerWithDomainKey::new(*relayer, *domain);
 
             self.domain_default_gas
                 .set(&key, amount, state)
@@ -133,7 +133,7 @@ impl<S: Spec> InterchainGasPaymaster<S> {
         self.emit_event(
             state,
             Event::RelayerConfigSet {
-                relayer: relayer.clone(),
+                relayer: *relayer,
                 domain_custom_gas: domain_default_gas,
                 default_gas,
                 beneficiary,
@@ -152,7 +152,7 @@ impl<S: Spec> InterchainGasPaymaster<S> {
         context: &Context<S>,
         state: &mut impl sov_modules_api::TxState<S>,
     ) -> Result<()> {
-        let key = RelayerWithDomainKey::new(context.sender().clone(), domain);
+        let key = RelayerWithDomainKey::new(*context.sender(), domain);
         self.domain_oracle_data
             .set(&key, &oracle_data, state)
             .context("set relayer oracle data")?;

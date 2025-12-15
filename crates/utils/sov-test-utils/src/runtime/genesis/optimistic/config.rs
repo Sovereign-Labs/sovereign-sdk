@@ -230,14 +230,14 @@ impl<S: Spec> MinimalOptimisticGenesisConfig<S> {
             config: BasicGenesisConfig {
                 sequencer_registry: BasicGenesisConfig::sequencer_registry(&initial_sequencer),
                 operator_incentives: BasicGenesisConfig::operator_incentives(
-                    initial_attester.as_user().address().clone(),
+                    initial_attester.as_user().address(),
                 ),
 
                 attester_incentives: AttesterIncentivesConfig {
                     minimum_attester_bond: default_user_stake,
                     minimum_challenger_bond: default_user_stake,
                     initial_attesters: vec![(
-                        initial_attester.as_user().address().clone(),
+                        initial_attester.as_user().address(),
                         initial_attester.bond,
                     )],
                     rollup_finality_period: SlotNumber::new(TEST_ROLLUP_FINALITY_PERIOD),
@@ -248,7 +248,7 @@ impl<S: Spec> MinimalOptimisticGenesisConfig<S> {
                 prover_incentives: ProverIncentivesConfig {
                     minimum_bond: default_user_stake,
                     proving_penalty: { default_user_stake.scalar_division(2) },
-                    initial_provers: vec![(placeholder.address().clone(), placeholder.balance())],
+                    initial_provers: vec![(placeholder.address(), placeholder.balance())],
                 },
 
                 bank: BasicGenesisConfig::bank(

@@ -87,8 +87,8 @@ impl<S: Spec> BasicGenesisConfig<S> {
         SequencerRegistryConfig {
             minimum_bond: TEST_MIN_SEQ_BOND,
             sequencer_config: SequencerConfig {
-                seq_rollup_address: initial_sequencer.as_user().address().clone(),
-                seq_da_address: initial_sequencer.da_address.clone(),
+                seq_rollup_address: initial_sequencer.as_user().address(),
+                seq_da_address: initial_sequencer.da_address,
                 seq_bond: initial_sequencer.bond,
                 is_preferred_sequencer: true,
             },
@@ -267,12 +267,12 @@ fn parse_token_configs<S: Spec>(test_users: &[TestUser<S>]) -> Vec<TokenConfig<S
             };
 
             if token_info.is_minter {
-                token_config.admins.push(user_address.clone());
+                token_config.admins.push(user_address);
             }
 
             token_config
                 .address_and_balances
-                .push((user_address.clone(), token_info.balance));
+                .push((user_address, token_info.balance));
         });
     });
 

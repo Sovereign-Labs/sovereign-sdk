@@ -343,8 +343,8 @@ impl<S: Spec> IncrementalBatch<S> for MaybeAsyncBatch<S> {
 
     fn sequencer_address(&self) -> S::Address {
         match self {
-            MaybeAsyncBatch::Async { address, .. } => address.clone(),
-            MaybeAsyncBatch::Sync { batch } => batch.sequencer_address.clone(),
+            MaybeAsyncBatch::Async { address, .. } => *address,
+            MaybeAsyncBatch::Sync { batch } => batch.sequencer_address,
         }
     }
 }

@@ -36,7 +36,7 @@ impl<S: Spec> Accounts<S> {
 
         // Insert the new credential id -> account mapping
         let account = Account {
-            addr: context.sender().clone(),
+            addr: *context.sender(),
         };
         self.accounts.set(&new_credential_id, &account, state)?;
 

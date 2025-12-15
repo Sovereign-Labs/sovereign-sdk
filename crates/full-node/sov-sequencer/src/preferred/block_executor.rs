@@ -590,8 +590,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 old_rollup_height: self.checkpoint.rollup_height_to_access(),
                 minimum_profit_per_tx,
                 admin_addresses: self.seq_config.admin_addresses.clone().into(),
-                sequencer_rollup_address: self.seq_config.rollup_address.clone(),
-                sequencer_da_address: self.da_address.clone(),
+                sequencer_rollup_address: self.seq_config.rollup_address,
+                sequencer_da_address: self.da_address,
                 executor_context,
                 is_responsible_for_gating_admins,
             };
@@ -918,7 +918,7 @@ where
                 is_responsible_for_gating_admins,
             )),
             reserved_gas_tokens: Some(needed_gas_escrow),
-            sender: sequencer_da_address.clone(),
+            sender: sequencer_da_address,
         };
 
         let non_preferred_blobs = kernel

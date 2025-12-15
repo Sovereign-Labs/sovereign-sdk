@@ -181,7 +181,7 @@ impl<S: Spec> TokenHolderRef<'_, S> {
     /// Converts a [`TokenHolderRef`] to an owned [`TokenHolder`].
     pub fn to_owned(&self) -> TokenHolder<S> {
         match self {
-            TokenHolderRef::User(addr) => TokenHolder::User((*addr).clone()),
+            TokenHolderRef::User(addr) => TokenHolder::User(**addr),
             TokenHolderRef::Module(id) => TokenHolder::Module(**id),
             TokenHolderRef::Derived(dh) => TokenHolder::Derived(**dh),
         }
@@ -191,7 +191,7 @@ impl<S: Spec> TokenHolderRef<'_, S> {
 impl<'a, S: Spec> From<&TokenHolderRef<'a, S>> for TokenHolder<S> {
     fn from(item: &TokenHolderRef<'a, S>) -> Self {
         match item {
-            TokenHolderRef::User(addr) => TokenHolder::User((*addr).clone()),
+            TokenHolderRef::User(addr) => TokenHolder::User(**addr),
             TokenHolderRef::Module(id) => TokenHolder::Module(**id),
             TokenHolderRef::Derived(dh) => TokenHolder::Derived(**dh),
         }

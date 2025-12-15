@@ -1,3 +1,6 @@
+# 2025-12-14 
+- #2229 **Breaking DB change**: ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+
 # 2025-12-09
 - #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
 - #2214 EVM related test utils are extracted into separate crate: `sov-evm-test-utils`. Please update if you use them.

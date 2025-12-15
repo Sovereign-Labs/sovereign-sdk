@@ -475,7 +475,7 @@ impl<S: Spec, CF: InjectedControlFlow<S> + Clone> IncrementalBatch<S>
     }
 
     fn sequencer_address(&self) -> S::Address {
-        self.sequencer_address.clone()
+        self.sequencer_address
     }
 }
 

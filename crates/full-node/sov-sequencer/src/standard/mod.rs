@@ -293,7 +293,7 @@ where
             auth_output,
             mempool_tx.tx.clone(),
             &self.da_address,
-            self.config.rollup_address.clone(),
+            self.config.rollup_address,
             execution_context,
             &NoOpControlFlow,
             operating_mode,

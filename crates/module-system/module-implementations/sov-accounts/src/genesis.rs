@@ -53,9 +53,7 @@ impl<S: Spec> Accounts<S> {
                 bail!("Account already exists")
             }
 
-            let new_account = Account {
-                addr: acc.address.clone(),
-            };
+            let new_account = Account { addr: acc.address };
 
             self.accounts.set(&acc.credential_id, &new_account, state)?;
         }

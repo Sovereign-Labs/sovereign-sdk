@@ -112,6 +112,7 @@ pub trait BasicAddress:
     + Unpin
     + Sync
     + Clone
+    + Copy
     + core::hash::Hash
     + AsRef<[u8]>
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
