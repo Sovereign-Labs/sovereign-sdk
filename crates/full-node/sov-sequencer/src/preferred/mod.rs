@@ -706,7 +706,7 @@ where
                 // After DB persistence completes, notify the nonce queue so it can clean up if needed
                 if let Some(tx_nonce) = nonce_to_mark_persisted {
                     self.nonce_buffer_input
-                        .mark_tx_persisted(credential_id, tx_nonce)
+                        .mark_tx_persisted(ip_and_addr.credential_id, tx_nonce)
                         .await;
                 }
                 Ok(result)
