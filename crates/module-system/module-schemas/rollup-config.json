@@ -61,6 +61,7 @@
       ]
     }
   },
+  "additionalProperties": false,
   "definitions": {
     "Address": {
       "description": "Address",
@@ -476,7 +477,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ProofManagerConfig_for_Address": {
       "description": "Prover service configuration.",
@@ -846,7 +848,8 @@
           "default": false,
           "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SeqConfigExtension": {
       "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
@@ -970,7 +973,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SovRateLimiterConfig_for_Address": {
       "type": "object",
@@ -1040,7 +1044,8 @@
           "format": "uint",
           "minimum": 1.0
         }
-      }
+      },
+      "additionalProperties": false
     },
     "TelegrafSocketConfig": {
       "description": "Config of receiving `inputs.socket_listener` <https://www.influxdata.com/blog/telegraf-socket-listener-input-plugin/>",

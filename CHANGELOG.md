@@ -1,5 +1,6 @@
 # 2025-12-14 
 - #2229 **Breaking DB change**: ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+- #2232 **No breaking, but important**: rollup_config.toml now will panic if there's an unknown field, preventing accidental misconfiguration.
 
 # 2025-12-09
 - #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
