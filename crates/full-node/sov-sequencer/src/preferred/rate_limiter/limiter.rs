@@ -410,7 +410,7 @@ mod tests {
                 .unwrap();
         }
 
-        // After two runs, the standard cred_id is rate limitied but special_addr has higher limits.
+        // After two runs, the standard addr is rate limitied but special_addr has higher limits.
         {
             let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
             rollup_simulator

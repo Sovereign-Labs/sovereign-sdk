@@ -640,7 +640,6 @@ where
                     .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
             let call = Rt::wrap_call(call);
             let delay_ms = self.runtime.get_transaction_delay_ms(&call);
-            // We need to destructure auth_data because it's not `Send`.
             let uniqueness = auth_data.uniqueness;
             (
                 IpAndCredentialId {
