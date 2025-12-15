@@ -121,7 +121,7 @@ where
                 let txs = txs_to_insert
                     .iter()
                     .map(|contents| {
-                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone().into());
+                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone());
                         tx.set_sequencing_metadata(&HDTimestamp::now());
                         (tx, contents.accepted_tx.tx_hash)
                     })
