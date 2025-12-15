@@ -87,7 +87,7 @@ impl SimpleStorageClient {
         self.rpc_client.eth_send_transaction(tx).await
     }
 
-    /// Wait for a transaction receipt to be available.
+    /// Wait for a transaction receipt to be available (including pending block receipts).
     pub async fn wait_for_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
         loop {
             if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
@@ -97,13 +97,34 @@ impl SimpleStorageClient {
         }
     }
 
-    /// Send a transaction and wait for its receipt.
+    /// Wait for a transaction receipt with a block hash (i.e., in a finalized block).
+    pub async fn wait_for_finalized_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
+        loop {
+            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                if receipt.block_hash.is_some() {
+                    return receipt;
+                }
+            }
+            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
+        }
+    }
+
+    /// Send a transaction and wait for its receipt (including pending block receipts).
     pub async fn send_tx_and_wait(
         &self,
         tx: TransactionRequest,
     ) -> Result<TransactionReceipt, Box<dyn std::error::Error>> {
         let tx_hash = self.send_tx(tx).await?;
         Ok(self.wait_for_receipt(tx_hash).await)
+    }
+
+    /// Send a transaction and wait for it to be in a finalized block.
+    pub async fn send_tx_and_wait_finalized(
+        &self,
+        tx: TransactionRequest,
+    ) -> Result<TransactionReceipt, Box<dyn std::error::Error>> {
+        let tx_hash = self.send_tx(tx).await?;
+        Ok(self.wait_for_finalized_receipt(tx_hash).await)
     }
 }
 
@@ -208,7 +229,8 @@ impl SimpleStorageClient {
 impl SimpleStorageClient {
     pub async fn alloy_deploy_contract(&self) -> Address {
         let tx = self.make_tx(None, Some(self.contract.byte_code()));
-        let receipt = self.send_tx_and_wait(tx).await.unwrap();
+        // Wait for finalized receipt to ensure contract deployment is in its own block
+        let receipt = self.send_tx_and_wait_finalized(tx).await.unwrap();
         receipt.contract_address.unwrap()
     }
 
