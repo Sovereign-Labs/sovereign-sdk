@@ -10,7 +10,6 @@ impl<S: Spec> BlockHooks for Warp<S> {
     }
 }
 
-#[cfg(feature = "native")]
 impl<S: Spec> Warp<S> {
     fn emit_rate_limiter_metrics(&self, state: &mut StateCheckpoint<S>) {
         let route_ids = self.get_monitored_route_ids();
