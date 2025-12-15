@@ -38,6 +38,7 @@ fn default_response_size_limit() -> usize {
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[schemars(rename = "SequencerConfig")]
+#[serde(deny_unknown_fields)]
 pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
@@ -139,6 +140,7 @@ pub struct PostgresConfig {
 
 /// Configuration for [`PreferredSequencer`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PreferredSequencerConfig<Address: Copy> {
     /// The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero.
     /// Sequencers should set this to a non-zero value if they wish to cover their DA costs.
@@ -251,6 +253,7 @@ fn default_db_event_channel_size() -> usize {
 
 /// Configuration for [`StdSequencer`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct StdSequencerConfig {
     /// Maximum number of transactions in mempool. Once this limit is reached,
     /// the batch builder will evict older transactions.

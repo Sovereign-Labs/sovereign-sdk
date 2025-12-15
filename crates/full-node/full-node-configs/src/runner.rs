@@ -13,6 +13,7 @@ pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 
 /// Configuration for StateTransitionRunner.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RunnerConfig {
     /// Polling interval for the DA service to check the sync status (in milliseconds).
     pub da_polling_interval_ms: u64,
@@ -136,6 +137,7 @@ pub struct ProofManagerConfig<Address> {
     bound = "Address: JsonSchema, Da: DaService, M: JsonSchema",
     rename = "RollupConfig"
 )]
+#[serde(deny_unknown_fields)]
 pub struct RollupConfig<Address: Copy, Da: DaService, M> {
     /// Currently rollup config runner only supports storage path parameter
     pub storage: RollupDbConfig,
