@@ -810,7 +810,7 @@ where
                 &ip_and_credential.credential_id,
                 checkpoint,
             )
-            // We don't meter StateCheckpoint.
+            // StateCheckpoint uses a no-op gas meter, which makes the expect safe.
             .expect("Impossible happend StateCheckpoint run out of gas");
 
         let token = inner
