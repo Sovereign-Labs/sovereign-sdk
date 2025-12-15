@@ -805,7 +805,7 @@ where
         let mut rt = Rt::default();
 
         let address = rt
-            .resolve_addrss(
+            .resolve_address(
                 &ip_and_credential.default_address,
                 &ip_and_credential.credential_id,
                 checkpoint,

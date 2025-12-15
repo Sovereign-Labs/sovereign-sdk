@@ -165,7 +165,7 @@ macro_rules! generate_runtime_without_capabilities {
                 }
             }
 
-            fn resolve_addrss<ST: sov_modules_api::StateAccessor>(
+            fn resolve_address<ST: sov_modules_api::StateAccessor>(
                 &mut self,
                 default_address: &S::Address,
                 credential_id: &sov_modules_api::CredentialId,

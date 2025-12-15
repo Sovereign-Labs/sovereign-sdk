@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-//#[serde(bound = "Address: Copy + serde::Serialize + serde::de::DeserializeOwned")]
 #[allow(clippy::large_enum_variant)]
 pub enum SequencerKindConfig<Address: Copy> {
     /// A "Standard" sequencer, which can post transactions to the rollup but not give soft confirmations.

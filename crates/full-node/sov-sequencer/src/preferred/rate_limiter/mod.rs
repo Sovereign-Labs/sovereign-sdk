@@ -15,7 +15,7 @@ use std::{net::IpAddr, time::Instant};
 use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
 
 #[derive(Debug)]
-pub(crate) struct Token<S: Spec> {
+pub(crate) struct LimiterToken<S: Spec> {
     address: S::Address,
     throttler_for_addr: Throttler<S::Gas>,
 
@@ -59,7 +59,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
         &mut self,
         ip: IpAddr,
         address: S::Address,
-    ) -> Result<Token<S>, ResourceLimitExceededError<S>> {
+    ) -> Result<LimiterToken<S>, ResourceLimitExceededError<S>> {
         let now = Instant::now();
         let throttler_for_addr = match self.by_addr_rate_limiter.allow(now, &address) {
             Ok(ok) => ok,
@@ -71,7 +71,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
             .allow(now, &ip)
             .map_err(|reason| ResourceLimitExceededError::Ip { ip, reason })?;
 
-        Ok(Token {
+        Ok(LimiterToken {
             address,
             throttler_for_addr,
             ip,
@@ -79,7 +79,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
         })
     }
 
-    fn update(&mut self, token: Token<S>, resource_used: ResourceUsed<S::Gas>) {
+    fn update(&mut self, token: LimiterToken<S>, resource_used: ResourceUsed<S::Gas>) {
         self.by_addr_rate_limiter
             .update(token.address, token.throttler_for_addr, resource_used);
         self.by_ip_rate_limiter
@@ -206,14 +206,18 @@ impl<S: Spec> SovRateLimiter<S> {
         &mut self,
         ip: IpAddr,
         address: S::Address,
-    ) -> Result<Option<Token<S>>, ResourceLimitExceededError<S>> {
+    ) -> Result<Option<LimiterToken<S>>, ResourceLimitExceededError<S>> {
         self.inner
             .as_mut()
             .map(|inner| inner.allow(ip, address))
             .transpose()
     }
 
-    pub(crate) fn update(&mut self, token: Option<Token<S>>, resource_used: ResourceUsed<S::Gas>) {
+    pub(crate) fn update(
+        &mut self,
+        token: Option<LimiterToken<S>>,
+        resource_used: ResourceUsed<S::Gas>,
+    ) {
         if let Some(token) = token {
             let inner = self.inner.as_mut().expect("The impossible happened: SovRateLimiter is unavailable even though a Some(Token) was provided.");
             inner.update(token, resource_used);

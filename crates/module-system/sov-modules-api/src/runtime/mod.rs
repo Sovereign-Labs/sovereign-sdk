@@ -168,7 +168,7 @@ pub trait Runtime<S: Spec>:
     }
 
     /// Resolve CredentialId to address.
-    fn resolve_addrss<ST: crate::StateAccessor>(
+    fn resolve_address<ST: crate::StateAccessor>(
         &mut self,
         default_address: &S::Address,
         credential_id: &crate::CredentialId,
