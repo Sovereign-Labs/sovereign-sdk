@@ -115,7 +115,8 @@ impl RpcClient {
         let eip1559_tx = TxEip1559 {
             chain_id: self.chain_id,
             nonce: tx.nonce.unwrap_or(0),
-            gas_limit: tx.gas.unwrap_or(21000),
+            // TODO: Check up this:
+            gas_limit: tx.gas.unwrap_or(100_000_000),
             max_fee_per_gas: tx.max_fee_per_gas.unwrap_or(0),
             max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap_or(0),
             to: tx.to.unwrap_or(TxKind::Create),
@@ -167,13 +168,6 @@ impl RpcClient {
     pub async fn eth_get_storage_at(&self, address: Address, index: U256) -> U256 {
         self.ws
             .request("eth_getStorageAt", rpc_params![address, index])
-            .await
-            .unwrap()
-    }
-
-    pub async fn alloy_get_block_by_number(&self, block_number: Option<String>) -> Block {
-        self.ws
-            .request("eth_getBlockByNumber", rpc_params![block_number, false])
             .await
             .unwrap()
     }

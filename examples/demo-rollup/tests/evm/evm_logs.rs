@@ -118,7 +118,7 @@ async fn evm_test_get_logs_range() {
 
     let start_block = rollup_and_client
         .client
-        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .eth_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
         .await
         .number();
 

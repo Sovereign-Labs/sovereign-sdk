@@ -11171,7 +11171,6 @@ dependencies = [
  "alloy-primitives",
  "alloy-provider",
  "alloy-pubsub",
- "alloy-rlp",
  "alloy-rpc-types",
  "alloy-signer",
  "anyhow",
@@ -11187,7 +11186,6 @@ dependencies = [
  "sov-modules-api",
  "sov-rpc-eth-types",
  "tokio",
- "tracing",
 ]
 
 [[package]]

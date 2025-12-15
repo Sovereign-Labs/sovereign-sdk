@@ -79,7 +79,7 @@ impl LegacySimpleStorage {
 /// Log with some additional metadata.
 #[derive(Debug, Clone)]
 pub struct SimpleStorageContractLog {
-    pub paresed: SimpleLog,
+    pub parsed: SimpleLog,
     pub original: alloy_rpc_types_eth::Log,
 }
 
@@ -93,7 +93,7 @@ impl LegacySimpleStorage {
     pub fn decode_alloy(log: alloy_rpc_types_eth::Log) -> SimpleStorageContractLog {
         let decoded_log = SimpleLog::decode_log_validate(&log.inner).unwrap();
         SimpleStorageContractLog {
-            paresed: decoded_log.data,
+            parsed: decoded_log.data,
             original: log,
         }
     }

@@ -15,7 +15,6 @@ alloy = { workspace = true, features = ["reqwest"] }
 alloy-consensus = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
-alloy-rlp = { workspace = true }
 alloy-rpc-types  = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-pubsub = "1.0"
@@ -29,7 +28,6 @@ serde = { workspace = true }
 sov-cli = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-evm-test-utils = { workspace = true }
-tracing = { workspace = true }
 sov-rpc-eth-types = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
