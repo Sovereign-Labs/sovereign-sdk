@@ -5,8 +5,8 @@ use sov_bank::Bank;
 use sov_modules_api::prelude::tracing;
 use sov_modules_api::{EncodeCall, Runtime, Spec};
 use sov_soak_testing::{
-    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SoakTestRunner, TestRT,
-    ValidityProfile,
+    spawn_throughput_watcher, CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec,
+    SoakTestRunner, TestRT, ValidityProfile, WorkerStats,
 };
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::TestSpec;
@@ -44,7 +44,7 @@ struct Args {
     /// transactions don't overlap with the previous run.
     salt: u32,
 
-    #[arg(short, long, default_value = "buzzy")]
+    #[arg(short, long, default_value = "clean")]
     /// The distribution of valid/invalid transactions to generate.
     validity_profile: ValidityProfile,
 
@@ -77,6 +77,7 @@ async fn run_soak_test_with_demo_runtime<R, S>(
     validity: Distribution<MessageValidity>,
     tx_type: TxType,
     restart_after: Option<std::time::Duration>,
+    stats_tx: tokio::sync::mpsc::UnboundedSender<WorkerStats>,
 ) -> anyhow::Result<()>
 where
     R: Runtime<S> + EncodeCall<Bank<S>> + EncodeCall<SyntheticLoad<S>> + Clone,
@@ -91,7 +92,15 @@ where
     };
 
     runner
-        .run(client, rx, worker_id, num_workers, validity, restart_after)
+        .run(
+            client,
+            rx,
+            worker_id,
+            num_workers,
+            validity,
+            restart_after,
+            stats_tx,
+        )
         .await
 }
 
@@ -104,6 +113,7 @@ async fn worker_task(
     validity_profile: ValidityProfile,
     tx_type: TxType,
     restart_after: Option<std::time::Duration>,
+    stats_tx: tokio::sync::mpsc::UnboundedSender<WorkerStats>,
 ) -> anyhow::Result<()> {
     let validity = validity_profile.get_validity();
 
@@ -117,6 +127,7 @@ async fn worker_task(
                 validity,
                 tx_type,
                 restart_after,
+                stats_tx,
             )
             .await
         }
@@ -129,6 +140,7 @@ async fn worker_task(
                 validity,
                 tx_type,
                 restart_after,
+                stats_tx,
             )
             .await
         }
@@ -141,6 +153,7 @@ async fn worker_task(
                 validity,
                 tx_type,
                 restart_after,
+                stats_tx,
             )
             .await
         }
@@ -170,7 +183,12 @@ async fn main() -> Result<(), anyhow::Error> {
         .restart_after_seconds
         .map(std::time::Duration::from_secs);
 
+    // Create stats channels for each worker
+    let mut stats_receivers = Vec::new();
     for i in 0..args.num_workers {
+        let (stats_tx, stats_rx) = tokio::sync::mpsc::unbounded_channel();
+        stats_receivers.push(stats_rx);
+
         worker_set.spawn(worker_task(
             client.clone(),
             rx.clone(),
@@ -180,8 +198,12 @@ async fn main() -> Result<(), anyhow::Error> {
             args.validity_profile,
             args.tx_type,
             restart_after,
+            stats_tx,
         ));
     }
+
+    // Spawn the throughput watcher task
+    let watcher_handle = tokio::spawn(spawn_throughput_watcher(stats_receivers, 5));
 
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
         .expect("Failed to set up SIGTERM handler");
@@ -195,6 +217,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tx.send(true)?;
     _ = worker_set.join_all();
+
+    // Wait for watcher to finish processing remaining stats
+    _ = watcher_handle.await;
 
     Ok(())
 }
