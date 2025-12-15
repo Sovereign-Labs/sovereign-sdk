@@ -262,12 +262,14 @@ pub async fn start_test_rollup(
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
+        c.aggregated_proof_block_jump = 5;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
                 * std::cmp::max(1, test_case.finalization_blocks as u64);
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
             sequencer_config.disable_state_root_consistency_checks =
                 disable_state_root_consistency_check;
+            sequencer_config.num_cache_warmup_workers = 0;
         }
     })
     .start()
