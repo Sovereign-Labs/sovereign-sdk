@@ -146,7 +146,7 @@ pub struct RollupConfig<Address: Copy, Da: DaService, M> {
     /// Proof manager configuration.
     pub proof_manager: ProofManagerConfig<Address>,
     /// Sequencer (and batch builder) configuration.
-    pub sequencer: SequencerConfig<Address, SequencerKindConfig>,
+    pub sequencer: SequencerConfig<Address, SequencerKindConfig<Address>>,
     /// Monitoring configuration.
     pub monitoring: M,
 }

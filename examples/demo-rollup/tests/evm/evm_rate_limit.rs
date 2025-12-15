@@ -16,7 +16,9 @@ use reqwest::header::HeaderValue;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_demo_rollup::MockRollupSpec;
+use sov_full_node_configs::sequencer::Limits;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::Spec;
 use sov_sequencer::SovRateLimiterConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::TestRollup;
@@ -32,7 +34,7 @@ fn make_client_with_x_forwarded_for_header(http_addr: SocketAddr, priv_key: &str
 }
 
 async fn setup_test_rollup(
-    rate_limiter: SovRateLimiterConfig,
+    rate_limiter: SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>,
 ) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
@@ -42,8 +44,13 @@ async fn setup_test_rollup(
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_test_rate_limit() -> anyhow::Result<()> {
     let rate_limiter = SovRateLimiterConfig {
-        max_requests_per_batch: 0,
-        refill_rate: 0,
+        default_limits: Limits {
+            max_threshold_per_key_to_batch_capacity_ratio: 200,
+            max_requests_per_batch: 0,
+            refill_rate: 0,
+        },
+        address_custom_limits: Vec::default(),
+        ip_custom_limits: Vec::default(),
     };
 
     let rollup = setup_test_rollup(rate_limiter).await;

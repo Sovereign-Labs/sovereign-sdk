@@ -1,5 +1,6 @@
 use crate::preferred::block_executor::RollupBlockExecutor;
 use crate::preferred::db::BatchToStore;
+use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::sync_sequencer_state::Message;
 use crate::preferred::AcceptTxError;
@@ -13,10 +14,8 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::CredentialId;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
-use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -128,8 +127,7 @@ where
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -141,8 +139,7 @@ where
             baked_tx: baked_tx.clone(),
             tx_hash,
             original_tx_queue_id,
-            credential_id,
-            ip_addr,
+            ip_and_credential,
             reason,
         })
         .await?;

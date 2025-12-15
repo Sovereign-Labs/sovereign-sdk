@@ -18,6 +18,7 @@ use sov_full_node_configs::sequencer::TimingOracleConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
+use sov_modules_api::Spec;
 use sov_risc0_adapter::Risc0;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::SovRateLimiterConfig;
@@ -41,7 +42,7 @@ pub(crate) async fn start_node(
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     timing_oracle_config: Option<TimingOracleConfig>,
-    rate_limiter: Option<SovRateLimiterConfig>,
+    rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(

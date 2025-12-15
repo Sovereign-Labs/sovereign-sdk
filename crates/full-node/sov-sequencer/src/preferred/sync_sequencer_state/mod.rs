@@ -3,6 +3,7 @@ use crate::preferred::block_executor::RollupBlockExecutor;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::ExecutorEventsSender;
+use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::rate_limiter::ResourceLimitExceededError;
 use crate::preferred::rate_limiter::SovRateLimiter;
 use crate::preferred::replica::event_handler::ReplicaError;
@@ -21,13 +22,11 @@ use sov_blob_storage::SequenceNumber;
 use sov_db::ledger_db::LedgerDb;
 use sov_full_node_configs::sequencer::{PreferredSequencerConfig, SequencerConfig};
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::CredentialId;
 use sov_modules_api::GasArray;
 use sov_modules_api::GasSpec;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::net::IpAddr;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
 pub(crate) use sync_state::*;
@@ -70,8 +69,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     },
 
@@ -150,7 +148,7 @@ pub(crate) fn create<S, Rt>(
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
     batch_execution_time_limit_micros: u64,
-    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
@@ -173,7 +171,7 @@ where
     let is_ready = Err(SequencerNotReadyDetails::Startup);
 
     let rate_limiter = SovRateLimiter::new(
-        seq_config.sequencer_kind_config.rate_limiter,
+        seq_config.sequencer_kind_config.rate_limiter.clone(),
         seq_config
             .sequencer_kind_config
             .batch_execution_time_limit_millis,
