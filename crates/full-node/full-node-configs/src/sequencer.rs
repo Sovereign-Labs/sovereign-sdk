@@ -229,7 +229,7 @@ pub const fn default_maximum_future_nonce_delta() -> u64 {
 }
 
 pub const fn default_future_nonce_transaction_timeout_millis() -> u64 {
-    2_000
+    2000
 }
 
 pub const fn default_num_cache_warmup_workers() -> usize {

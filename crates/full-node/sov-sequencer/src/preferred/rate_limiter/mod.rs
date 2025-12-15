@@ -335,7 +335,7 @@ mod tests {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct IpAndCredentialId<Address: BasicAddress> {
     pub default_address: Address,
     pub credential_id: CredentialId,
