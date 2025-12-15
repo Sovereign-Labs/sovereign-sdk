@@ -28,6 +28,7 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
@@ -810,8 +811,7 @@ where
                 &ip_and_credential.credential_id,
                 checkpoint,
             )
-            // StateCheckpoint uses a no-op gas meter, which makes the expect safe.
-            .expect("Impossible happend StateCheckpoint run out of gas");
+            .unwrap_infallible();
 
         let token = inner
             .rate_limiter
