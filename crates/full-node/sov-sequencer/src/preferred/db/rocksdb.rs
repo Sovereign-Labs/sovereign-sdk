@@ -369,12 +369,12 @@ mod tests {
 
         db.begin_rollup_block(batch).await.unwrap();
 
-        let sequencing_data = Some(vec![1, 2, 3, 4].into());
+        let sequencing_data = Some(vec![1, 2, 3, 4]);
         db.add_tx(
             SequenceNumber::from(1u64),
             0,
             FullyBakedTx {
-                data: vec![42].into(),
+                data: vec![42],
                 sequencing_data: sequencing_data.clone(),
             },
             HexString([1; 32]),
