@@ -77,11 +77,10 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(latest_state_update.storage.clone());
 
-        let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
-
-        let (db, is_replica_seq) = PreferredSequencerDb::new(
+        let is_replica = preferred_config.is_replica;
+        let db = PreferredSequencerDb::new(
             shutdown_sender.clone(),
-            preferred_config.is_replica,
+            is_replica,
             storage_path,
             &preferred_config.postgres_config,
         )
@@ -90,7 +89,8 @@ where
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
 
-        let blob_sender = if !is_replica_seq {
+        let (blob_sender, blobs_sender_channel) = if !is_replica {
+            let (channel, _) = broadcast::channel(preferred_config.events_channel_size);
             let (blob_sender, handle) = PreferredBlobSender::new(
                 self.da,
                 ledger_db.clone(),
@@ -99,13 +99,13 @@ where
                 tx_status_manager.clone(),
                 shutdown_sender.clone(),
                 Duration::from_secs(config.blob_processing_timeout_secs),
-                blobs_sender_channel.clone(),
+                channel.clone(),
             )
             .await?;
             handles.push(handle);
-            Some(blob_sender)
+            (Some(blob_sender), Some(channel))
         } else {
-            None
+            (None, None)
         };
 
         let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
@@ -155,7 +155,7 @@ where
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let (synchronized_state, synchronized_state_updator) = create(
-            is_replica_seq,
+            is_replica,
             api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
@@ -222,7 +222,7 @@ where
         }));
 
         // Launch replica sync task only for replicas.
-        if is_replica_seq {
+        if is_replica {
             if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task
                     .start(synchronized_state_updator, postgres_config)
@@ -254,7 +254,7 @@ where
         }));
 
         if let Some(oracle_config) = maybe_oracle_config {
-            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica_seq {
+            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica {
                 match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
                     Ok(handle) => handles.push(handle),
                     Err(e) => {

@@ -384,19 +384,15 @@ pub struct PreferredSequencerDb {
 impl PreferredSequencerDb {
     pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
-        is_replica: Option<bool>,
+        is_replica: bool,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
-    ) -> anyhow::Result<(Self, bool)> {
-        let is_replica = is_replica.unwrap_or(false);
+    ) -> anyhow::Result<Self> {
         if is_replica {
-            return Ok((
-                Self {
-                    backend: None,
-                    shutdown_sender: shutdown_sender.clone(),
-                },
-                is_replica,
-            ));
+            return Ok(Self {
+                backend: None,
+                shutdown_sender: shutdown_sender.clone(),
+            });
         }
 
         let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
@@ -407,13 +403,10 @@ impl PreferredSequencerDb {
             }
         };
 
-        Ok((
-            Self {
-                backend,
-                shutdown_sender: shutdown_sender.clone(),
-            },
-            is_replica,
-        ))
+        Ok(Self {
+            backend,
+            shutdown_sender: shutdown_sender.clone(),
+        })
     }
 
     pub(crate) async fn initial_data(
