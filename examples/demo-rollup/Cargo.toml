@@ -112,8 +112,6 @@ tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
-ethereum-types = { workspace = true }
-ethers = { workspace = true }
 alloy = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"

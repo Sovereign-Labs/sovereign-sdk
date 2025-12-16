@@ -1,9 +1,5 @@
-use std::path::PathBuf;
-
 use alloy::{contract::SolCallBuilder, network::Network, providers::Provider, sol_types::SolCall};
 use anyhow::Result;
-use ethers::contract::BaseContract;
-use ethers::core::abi::Abi;
 
 mod block_hash;
 mod fake_uni;
@@ -31,17 +27,4 @@ where
         let _ = self.send().await?;
         Ok(())
     }
-}
-
-fn test_data_path() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("contracts");
-    path.push("artifacts");
-    path
-}
-
-fn make_contract_from_abi(path: PathBuf) -> BaseContract {
-    let abi_json = std::fs::read_to_string(path).unwrap();
-    let abi: Abi = serde_json::from_str(&abi_json).unwrap();
-    BaseContract::from(abi)
 }

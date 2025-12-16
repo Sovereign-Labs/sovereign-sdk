@@ -3,12 +3,11 @@ use std::net::SocketAddr;
 use crate::test_helpers::test_genesis_source;
 
 use alloy::signers::local::PrivateKeySigner;
+use alloy_primitives::{Address, U256};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::WsConnect;
-use ethers::core::abi::Address;
-use futures::future::join_all;
 use reqwest::Url;
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -124,13 +123,9 @@ pub(crate) async fn deploy_contract_check(
 ) -> Result<Address, Box<dyn std::error::Error>> {
     let runtime_code = client.deploy_contract_call().await?;
 
-    let deploy_contract_req = client.deploy_contract().await?;
-
-    let contract_address = deploy_contract_req
-        .await?
-        .unwrap()
-        .contract_address
-        .unwrap();
+    let tx_hash = client.deploy_contract().await?;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+    let contract_address = receipt.contract_address.unwrap();
 
     // Assert contract deployed correctly
     let code = client.eth_get_code(contract_address).await;
@@ -146,20 +141,18 @@ pub(crate) async fn set_value_check(
     contract_address: Address,
     set_arg: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _tx_hash = {
-        let set_value_req = client.set_value(contract_address, set_arg).await;
-        set_value_req.await.unwrap().unwrap().transaction_hash
-    };
+    let tx_hash = client.set_value(contract_address, set_arg).await;
+    client.wait_for_receipt(tx_hash).await;
 
     let get_arg = client.query_contract(contract_address).await?;
-    assert_eq!(set_arg, get_arg.as_u32());
+    assert_eq!(U256::from(set_arg), get_arg);
 
     // Assert storage slot is set
     let storage_slot = 0x0;
     let storage_value = client
-        .eth_get_storage_at(contract_address, storage_slot.into())
+        .eth_get_storage_at(contract_address, U256::from(storage_slot))
         .await;
-    assert_eq!(storage_value, ethereum_types::U256::from(set_arg));
+    assert_eq!(storage_value, U256::from(set_arg));
 
     Ok(())
 }
@@ -170,15 +163,19 @@ pub(crate) async fn set_multiple_values_check(
     contract_address: Address,
     values: Vec<u32>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let requests = client.set_values(contract_address, values).await;
+    let tx_hashes = client.set_values(contract_address, values).await;
 
-    let receipts: Vec<Result<Option<_>, _>> = join_all(requests).await;
-    assert!(receipts
-        .into_iter()
-        .all(|x| x.is_ok() && x.unwrap().is_some()));
+    // Wait for all receipts
+    for tx_hash in tx_hashes {
+        client.wait_for_receipt(tx_hash).await;
+    }
 
     {
-        let get_arg = client.query_contract(contract_address).await?.as_u32();
+        let get_arg: u32 = client
+            .query_contract(contract_address)
+            .await?
+            .try_into()
+            .unwrap();
         // should be one of three values sent in a single block. 150, 151, or 152
         assert!((150..=152).contains(&get_arg));
     }

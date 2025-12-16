@@ -3,8 +3,7 @@ use std::time::Duration;
 use super::evm_test_helper;
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
-use ethereum_types::H256;
-use ethers::types::U256;
+use alloy_primitives::{B256, U256};
 use sov_eth_client::SimpleStorageClient;
 use sov_mock_da::storable::StorableMockDaService;
 use tokio::time::sleep;
@@ -49,10 +48,10 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
         .await;
 
     assert_eq!(latest_block, pending_block);
-    assert_eq!(pending_block.base_fee_per_gas, Some(U256::zero()));
-    assert_eq!(pending_block.hash, Some(H256::zero()));
-    assert_eq!(earliest_block.number.unwrap().as_u64(), 0);
-    assert!(pending_block.number > earliest_block.number);
+    assert_eq!(pending_block.header.base_fee_per_gas, Some(0));
+    assert_eq!(pending_block.header.hash, B256::ZERO);
+    assert_eq!(earliest_block.header.number, 0);
+    assert!(pending_block.header.number > earliest_block.header.number);
 
     // Nonce should be 0 before any transactions
     let nonce = test_client
@@ -62,7 +61,7 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
 
     // Balance should be > 0 in genesis and before any transactions
     let balance = test_client.eth_get_balance(test_client.address()).await;
-    assert!(balance > ethereum_types::U256::zero());
+    assert!(balance > U256::ZERO);
 }
 
 async fn execute_evm_tests(
@@ -72,9 +71,8 @@ async fn execute_evm_tests(
     let initial_block_number = client
         .eth_get_block_by_number(Some("latest".to_owned()))
         .await
-        .number
-        .unwrap()
-        .as_u64();
+        .header
+        .number;
 
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 
@@ -90,7 +88,7 @@ async fn execute_evm_tests(
         .eth_get_block_by_number(Some("latest".to_owned()))
         .await;
 
-    assert!(latest_block.number.unwrap().as_u64() > initial_block_number);
+    assert!(latest_block.header.number > initial_block_number);
 
     let set_arg = 923;
     evm_test_helper::set_value_check(client, contract_address, set_arg).await?;
@@ -117,8 +115,7 @@ async fn execute_evm_tests(
 
     // assert parent hash works correctly
     assert_eq!(
-        first_block.hash.unwrap(),
-        second_block.parent_hash,
+        first_block.header.hash, second_block.header.parent_hash,
         "Parent hash should be the hash of the previous block"
     );
 

@@ -56,9 +56,6 @@ sov-kernels = { workspace = true }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
 
-ethereum-types = { workspace = true }
-ethers = { workspace = true }
-
 [features]
 default = []
 local = []
