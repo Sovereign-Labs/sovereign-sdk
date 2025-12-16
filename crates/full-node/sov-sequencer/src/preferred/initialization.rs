@@ -67,23 +67,22 @@ where
         );
 
         let mut config = self.config;
-        let maybe_oracle_config = TimingOracleConfigWithPrivateKey::new(
-            config.sequencer_kind_config.timing_oracle.clone(),
-        )
-        .transpose()?;
+        let preferred_config = &config.sequencer_kind_config;
+        let maybe_oracle_config =
+            TimingOracleConfigWithPrivateKey::new(preferred_config.timing_oracle.clone())
+                .transpose()?;
         maybe_add_oracle_to_admins(&mut config.admin_addresses, &maybe_oracle_config);
 
-        let mut runtime: Rt = Default::default();
         let tx_status_manager = TxStatusManager::default();
 
+        let mut runtime: Rt = Default::default();
         assert!(
             accepts_preferred_batches(runtime.blob_selector()),
             "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
         );
-
-        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
-        ));
+        let checkpoint =
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(checkpoint));
         let api_state = ApiState::build(
             Arc::new(()),
             checkpoint_receiver,
@@ -92,14 +91,13 @@ where
         );
 
         let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
-        let (blobs_sender_channel, _) =
-            broadcast::channel(config.sequencer_kind_config.events_channel_size);
+        let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
         let (db, is_replica_seq) = PreferredSequencerDb::new(
             shutdown_sender.clone(),
-            config.sequencer_kind_config.is_replica,
+            preferred_config.is_replica,
             storage_path,
-            &config.sequencer_kind_config.postgres_config,
+            &preferred_config.postgres_config,
         )
         .await?;
 
@@ -126,26 +124,22 @@ where
         let (state_root_compute_handle, state_root_compute_task) =
             StateRootBackgroundTaskState::create::<Rt>(
                 block_executors_shutdown_rx,
-                !config
-                    .sequencer_kind_config
-                    .disable_state_root_consistency_checks,
+                !preferred_config.disable_state_root_consistency_checks,
             );
         handles.push(state_root_compute_handle);
 
         let cached_txs = TransactionCache::new(
             api_ledger_db.clone(),
             latest_state_update.next_tx_number,
-            config.sequencer_kind_config.events_channel_size,
+            preferred_config.events_channel_size,
         );
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
         let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
-        let batch_execution_time_limit_micros = config
-            .sequencer_kind_config
-            .batch_execution_time_limit_millis
-            * 1000;
+        let batch_execution_time_limit_micros =
+            preferred_config.batch_execution_time_limit_millis * 1000;
 
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
@@ -207,16 +201,15 @@ where
         handles.push(side_effects_task);
 
         let synchronized_state_updator = Arc::new(synchronized_state_updator);
+        let execution_backend = SequencerTxExecutionBackend {
+            api_state: api_state.clone(),
+            executor_queue_id: tx_queue_id.clone(),
+            state_updator: synchronized_state_updator.clone(),
+        };
         let (nonce_buffer_task, nonce_buffer_input) = NonceBufferTask::spawn(
-            SequencerTxExecutionBackend {
-                api_state: api_state.clone(),
-                executor_queue_id: tx_queue_id.clone(),
-                state_updator: synchronized_state_updator.clone(),
-            },
-            config.sequencer_kind_config.maximum_future_nonce_delta,
-            config
-                .sequencer_kind_config
-                .future_nonce_transaction_timeout_millis,
+            execution_backend,
+            preferred_config.maximum_future_nonce_delta,
+            preferred_config.future_nonce_transaction_timeout_millis,
             shutdown_receiver.clone(),
         );
         handles.push(nonce_buffer_task);
@@ -240,7 +233,7 @@ where
 
         // Launch replica sync task only for replicas.
         if is_replica_seq {
-            if let Some(postgres_config) = &config.sequencer_kind_config.postgres_config {
+            if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task
                     .start(synchronized_state_updator, postgres_config)
                     .await;
