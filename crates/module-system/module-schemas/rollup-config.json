@@ -215,12 +215,12 @@
     "Limits": {
       "type": "object",
       "required": [
-        "max_user_bursts_per_batch",
+        "resources_per_bucket",
         "refill_rate"
       ],
       "properties": {
-        "max_user_bursts_per_batch": {
-          "description": "Determines the threshold for rate-limiting requests. This value is used as follows:\n\nMAX_THRESHOLD_PER_KEY = MAX_BATCH_RESOURCE_CAPACITY * max_threshold_max_user_bursts\n\nFor example, setting max_user_bursts_per_batch to 5 means that MAX_THRESHOLD_PER_KEY will be 0.5% of MAX_BATCH_RESOURCE_CAPACITY.",
+        "resources_per_bucket": {
+          "description": "Determines the threshold for rate-limiting requests. This value is used as follows:\n\nMAX_THRESHOLD_PER_KEY = MAX_BATCH_RESOURCE_CAPACITY * max_threshold_max_user_bursts\n\nFor example, setting resources_per_bucket to 5 means that MAX_THRESHOLD_PER_KEY will be 0.5% of MAX_BATCH_RESOURCE_CAPACITY.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

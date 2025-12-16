@@ -325,9 +325,9 @@ mod tests {
             [sequencer.preferred.rate_limiter]
             address_custom_limits = []
             max_requests_per_second = 1000000
-            ip_custom_limits = [["157.180.14.244", { max_user_bursts_per_batch = 200, refill_rate = 2}]]
+            ip_custom_limits = [["157.180.14.244", { batch_execution_time_limit_millis = 200, refill_rate = 2}]]
             [sequencer.preferred.rate_limiter.default_limits]
-            max_user_bursts_per_batch = 5
+            resources_per_bucket = 5
             refill_rate = 2
         "#;
 

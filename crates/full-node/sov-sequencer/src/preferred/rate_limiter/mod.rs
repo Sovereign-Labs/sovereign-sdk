@@ -114,7 +114,7 @@ fn clculate_limits<S: Spec>(
 
     // A single sender is limited to 1/max_threshold_per_key_to_batch_capacity_ratio of resources of a single batch.
     let max_per_key = max_resources_per_batch
-        .saturating_mul_by_scalar(limits.max_user_bursts_per_batch)
+        .saturating_mul_by_scalar(limits.resources_per_bucket)
         .div_by_scalar(1000);
 
     // The refill rate is defined as 0.1% of max_per_key. After one second, the system refills max_per_key tokens.
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_clculate_limits() {
         let limits = Limits {
-            max_user_bursts_per_batch: 5,
+            resources_per_bucket: 5,
             refill_rate: 1,
         };
 

@@ -92,7 +92,7 @@ async fn create_test_rollup(
 async fn test_rate_limiting() {
     let sov_config = SovRateLimiterConfig {
         default_limits: Limits {
-            max_user_bursts_per_batch: 5,
+            resources_per_bucket: 5,
             refill_rate: 100,
         },
         max_requests_per_second: 1_000_000,
@@ -146,7 +146,7 @@ async fn test_rate_limiting() {
 async fn test_correct_ip() {
     let sov_config = SovRateLimiterConfig {
         default_limits: Limits {
-            max_user_bursts_per_batch: 5,
+            resources_per_bucket: 5,
             refill_rate: 0,
         },
         max_requests_per_second: 0,

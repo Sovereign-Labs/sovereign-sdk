@@ -45,7 +45,7 @@ async fn setup_test_rollup(
 async fn evm_test_rate_limit() -> anyhow::Result<()> {
     let rate_limiter = SovRateLimiterConfig {
         default_limits: Limits {
-            max_user_bursts_per_batch: 5,
+            resources_per_bucket: 5,
             refill_rate: 0,
         },
         max_requests_per_second: 0,

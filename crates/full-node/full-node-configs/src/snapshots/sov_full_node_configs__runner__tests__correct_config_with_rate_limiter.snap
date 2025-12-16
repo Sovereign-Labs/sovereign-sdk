@@ -75,7 +75,7 @@ expression: config
       "rate_limiter": {
         "max_requests_per_second": 1000000,
         "default_limits": {
-          "max_user_bursts_per_batch": 5,
+          "resources_per_bucket": 5,
           "refill_rate": 2
         },
         "address_custom_limits": [],
@@ -83,7 +83,7 @@ expression: config
           [
             "157.180.14.244",
             {
-              "max_user_bursts_per_batch": 200,
+              "resources_per_bucket": 200,
               "refill_rate": 2
             }
           ]
