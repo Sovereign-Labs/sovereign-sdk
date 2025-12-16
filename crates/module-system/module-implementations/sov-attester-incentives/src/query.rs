@@ -1,6 +1,7 @@
 //! Defines the query methods for the attester incentives module
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sov_bank::Amount;
@@ -155,7 +156,7 @@ where
         let checkpoint = StateCheckpoint::new(storage, &kernel.kernel(), None);
 
         let mut state = ApiStateAccessor::<S>::new_with_true_slot_number_dangerous(
-            &checkpoint,
+            Arc::new(checkpoint),
             kernel.kernel_with_slot_mapping(),
             slot_number,
         )

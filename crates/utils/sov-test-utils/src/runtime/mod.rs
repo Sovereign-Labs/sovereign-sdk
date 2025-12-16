@@ -346,14 +346,16 @@ where
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
+        let rollup_height = state_checkpoint.rollup_height_to_access();
+        let visible_slot_number = state_checkpoint.current_visible_slot_number();
 
         ApiStateAccessor::<S>::new_with_price_and_heights(
-            &state_checkpoint,
+            Arc::new(state_checkpoint),
             RT::default().kernel_with_slot_mapping(),
-            state_checkpoint.rollup_height_to_access(),
-            state_checkpoint.current_visible_slot_number(),
+            rollup_height,
+            visible_slot_number,
             base_fee_per_gas,
-        ).unwrap_or_else(|_| panic!("ApiStateAccessor creation failed but the requested block height {} or visible height {} is accessible. This is a bug. Please report it.", state_checkpoint.rollup_height_to_access(), state_checkpoint.current_visible_slot_number()))
+        ).unwrap_or_else(|_| panic!("ApiStateAccessor creation failed but the requested block height {rollup_height} or visible height {visible_slot_number} is accessible. This is a bug. Please report it."))
     }
 
     /// Returns the state of the rollup at the most recent version of the rollup.
@@ -369,7 +371,7 @@ where
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
 
         ApiStateAccessor::<S>::new_with_price_and_slot_number_dangerous(
-            &state_checkpoint,
+            Arc::new(state_checkpoint),
             RT::default().kernel_with_slot_mapping(),
             self.true_slot_number(),
             base_fee_per_gas,

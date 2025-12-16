@@ -39,12 +39,101 @@ fn get_slot_number(visible_slot_number: Option<VisibleSlotNumber>) -> Option<Slo
     }
 }
 
+impl<S: Spec> ApiStateAccessor<S> {
+    fn get_from_user_storage(&mut self, key: &SlotKey) -> Option<SlotValue> {
+        if let MaybePresentValue::Present(entry) = self.user_cache.get_from_cache(key) {
+            return entry
+        }
+
+        if let MaybePresentValue::Present(entry) = self.checkpoint.delta.user_cache.get_from_cache(key) {
+            return entry
+        }
+
+        if let Some(changes) = self.uncomitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::User, key) {
+                return entry
+            }
+        }
+        
+        self.checkpoint.storage().get::<namespaces::User>(key, &self.witness)
+
+    }
+
+    fn get_from_kernel_storage(&mut self, key: &SlotKey) -> Option<SlotValue> {
+        if let MaybePresentValue::Present(entry) = self.kernel_cache.get_from_cache(key) {
+            return entry
+        }
+
+        if let MaybePresentValue::Present(entry) = self.checkpoint.delta.kernel_cache.get_from_cache(key) {
+            return entry
+        }
+
+        if let Some(changes) = self.uncomitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Kernel, key) {
+                return entry
+            }
+        }
+        
+        self.checkpoint.storage().get::<namespaces::Kernel>(key, &self.witness)
+    }
+
+    fn get_from_accessory_storage(&mut self, key: &SlotKey) -> Option<SlotValue> {
+        if let Some(write) = self.accessory_writes.get(key) {
+            return write.value.clone()
+        }
+
+        if let Some(write) = self.checkpoint.delta.accessory_writes.get(key) {
+            return write.value.clone()
+        }
+
+        if let Some(changes) = self.uncomitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
+                return entry
+            }
+        }
+
+        self.checkpoint.storage().get_accessory(key)
+    }
+
+    fn get_archival_from_user_storage(&mut self, key: &SlotKey, version: Option<SlotNumber>) -> anyhow::Result<Option<SlotValue>> {
+        // First, check if the user has written this value. This allows users to write during eth_call even if they're reading historical state.
+        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
+        // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
+        if let MaybePresentValue::Present(entry) = self.user_cache.get_from_cache(key) {
+            return Ok(entry)
+        }
+        // If not, read it from storage
+        self.checkpoint.storage().get_historical::<namespaces::User>(key, version, &self.witness, )
+    }
+
+    fn get_archival_from_kernel_storage(&mut self, key: &SlotKey, version: Option<SlotNumber>) -> anyhow::Result<Option<SlotValue>> {
+        // First, check if the kernel has written this value. This allows users to write during eth_call even if they're reading historical state.
+        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
+        // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
+        if let MaybePresentValue::Present(entry) = self.kernel_cache.get_from_cache(key) {
+            return Ok(entry)
+        }
+        // If not, read it from storage
+        self.checkpoint.storage().get_historical::<namespaces::Kernel>(key, version, &self.witness, )
+    }
+
+    fn get_archival_from_accessory_storage(&mut self, key: &SlotKey, version: Option<SlotNumber>) -> anyhow::Result<Option<SlotValue>> {
+        // First, check if the accessory has written this value. This allows users to write during eth_call even if they're reading historical state.
+        if let Some(write) = self.accessory_writes.get(key) {
+            return Ok(write.value.clone())
+        }
+        // If not, read it from storage
+        self.checkpoint.storage().get_accessory_historical(key, version)
+    }
+}
+
+
 impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
     fn get_size(
         &mut self,
         namespace: sov_state::Namespace,
         key: &SlotKey,
-        metric: &mut StateAccessMetric,
+        _metric: &mut StateAccessMetric,
     ) -> Option<u32> {
         let is_archival_query = self.safe_true_slot_number_to_use.is_some();
 
@@ -52,73 +141,33 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
             Namespace::User => {
                 if let Some(number) = self.safe_true_slot_number_to_use {
                     // If we're doing an archival query, we can just use the historical storage API on `ProvableStorageCache`
-                    self.user_cache.get_size_or_fetch_historical(
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        Some(number),
-                        metric,
-                    )
+                    self.get_archival_from_user_storage(key, Some(number)).map(|v| v.map(|v|v.size()))
                 } else {
                     // Otherwise we're doing a `current_state` query, so we need to use the API which is also aware of the intermediate state
                     // generated by the sequencer.
-                    Ok(self.user_cache.get_size_or_fetch(
-                        &self.uncomitted_changes,
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        metric,
-                    ))
+                    Ok(self.get_from_user_storage(key).map(|v| v.size()))
                 }
             }
             Namespace::Kernel => {
                 if is_archival_query {
                     // If we're doing an archival query, we can just use the historical storage API on `ProvableStorageCache`
-                    self.kernel_cache.get_size_or_fetch_historical(
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        get_slot_number(self.visible_slot_number),
-                        metric,
-                    )
+                    self.get_archival_from_kernel_storage(key, get_slot_number(self.visible_slot_number)).map(|v| v.map(|v|v.size()))
+
                 } else {
                     // Otherwise we're doing a `current_state` query, so we need to use the API which is also aware of the intermediate state
                     // generated by the sequencer.
-                    Ok(self.kernel_cache.get_size_or_fetch(
-                        &self.uncomitted_changes,
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        metric,
-                    ))
+                    Ok(self.get_from_kernel_storage(key).map(|v| v.size()))
                 }
             }
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(write) => Ok(write.value.as_ref().map(|v| v.size())),
                 None => {
-                    let val = if is_archival_query {
+                    if is_archival_query {
                         // For archival queries, we always use the storage API
-                        self.storage
-                            .get_accessory_historical(key, self.safe_true_slot_number_to_use)
+                        self.get_archival_from_accessory_storage(key, self.safe_true_slot_number_to_use).map(|v| v.map(|v|v.size()))
                     } else {
-                        // For current state queries, we use the intermediate state if it's available
-                        if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
-                            if let MaybePresentValue::Present(value) =
-                                uncomitted_changes.get(Namespace::Accessory, key)
-                            {
-                                Ok(value)
-                            } else {
-                                self.storage.get_accessory_historical(
-                                    key,
-                                    self.safe_true_slot_number_to_use,
-                                )
-                            }
-                        } else {
-                            self.storage
-                                .get_accessory_historical(key, self.safe_true_slot_number_to_use)
-                        }
-                    };
-                    val.map(|opt| opt.map(|v| v.size()))
+                        Ok(self.get_from_accessory_storage(key).map(|v| v.size()))
+                    }
                 }
             },
         };
@@ -136,7 +185,7 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
         &mut self,
         namespace: sov_state::Namespace,
         key: &SlotKey,
-        metric: &mut StateAccessMetric,
+        _metric: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
         let is_archival_query = self.safe_true_slot_number_to_use.is_some();
         // For the user state, we use the self.safe_true_slot_number_to_use canary to determine if we're doing an archival query
@@ -144,46 +193,22 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
         let result = match namespace {
             Namespace::User => {
                 if let Some(number) = self.safe_true_slot_number_to_use {
-                    self.user_cache.get_or_fetch_historical(
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        Some(number),
-                        metric,
-                    )
+                   self.get_archival_from_user_storage(key, Some(number))
                 } else {
                     // Otherwise we're doing a `current_state` query, so we need to use the API which is also aware of the intermediate state
                     // generated by the sequencer.
-                    Ok(self.user_cache.get_or_fetch(
-                        &self.uncomitted_changes,
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        metric,
-                    ))
+                    Ok(self.get_from_user_storage(key))
                 }
             }
             // For the kernel state, we also use the self.safe_true_slot_number_to_use canary to determine if we're doing an archival query
             // If so, use the appropriate API on `ProvableStorageCache`
             Namespace::Kernel => {
                 if is_archival_query {
-                    self.kernel_cache.get_or_fetch_historical(
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        get_slot_number(self.visible_slot_number),
-                        metric,
-                    )
+                    self.get_archival_from_kernel_storage(key, get_slot_number(self.visible_slot_number))
                 } else {
                     // Otherwise we're doing a `current_state` query, so we need to use the API which is also aware of the intermediate state
                     // generated by the sequencer.
-                    Ok(self.kernel_cache.get_or_fetch(
-                        &self.uncomitted_changes,
-                        key,
-                        &self.storage,
-                        &self.witness,
-                        metric,
-                    ))
+                    Ok(self.get_from_kernel_storage(key))
                 }
             }
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
@@ -191,25 +216,10 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                 None => {
                     // For archival queries, we always use the storage API
                     if is_archival_query {
-                        self.storage
-                            .get_accessory_historical(key, self.safe_true_slot_number_to_use)
+                        self.get_archival_from_accessory_storage(key, self.safe_true_slot_number_to_use)
                     } else {
                         // For current state queries, we use the intermediate state if it's available
-                        if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
-                            if let MaybePresentValue::Present(value) =
-                                uncomitted_changes.get(Namespace::Accessory, key)
-                            {
-                                Ok(value)
-                            } else {
-                                self.storage.get_accessory_historical(
-                                    key,
-                                    self.safe_true_slot_number_to_use,
-                                )
-                            }
-                        } else {
-                            self.storage
-                                .get_accessory_historical(key, self.safe_true_slot_number_to_use)
-                        }
+                        Ok(self.get_from_accessory_storage(key))
                     }
                 }
             },
@@ -262,14 +272,22 @@ pub(crate) enum StateToAccess {
 /// A [`crate::StateReaderAndWriter`] designed for use within REST APIs and JSON-RPC.
 ///
 /// It can read and write accessory data as well as "user" and "kernel" data.
+/// 
+// An API State accessor contains...
+//  - An `Arc` state checkpoint containing the latest state from the sequencer.
+//  - User, kernel, and accessory caches which contain...
+//     - Any writes done by the current accessor
+//     - Cached read values from whenever we had to fall back to storage.
+
 #[derive(derive_more::Debug)]
 pub struct ApiStateAccessor<S: Spec> {
-    #[debug(skip)]
-    storage: S::Storage,
+    // #[debug(skip)]
+    // storage: S::Storage,
     #[debug(skip)]
     witness: <<S as Spec>::Storage as Storage>::Witness,
     events: Vec<TypeErasedEvent>,
     gas_meter: BasicGasMeter<S>,
+    checkpoint: Arc<StateCheckpoint<S>>,
     kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     user_cache: ProvableStorageCache<namespaces::User>,
     accessory_writes: HashMap<SlotKey, AccessoryWrite>,
@@ -328,7 +346,7 @@ impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
         self.user_cache.pinned_cache_mut()
     }
     fn storage(&self) -> &S::Storage {
-        &self.storage
+        self.checkpoint.storage()
     }
 }
 
@@ -365,7 +383,7 @@ const _: () = {
             self.safe_true_slot_number_to_use = safe_true_slot_number_to_use;
             let slot_num = slot_num?;
 
-            match self.storage.get_with_proof::<N>(key, Some(slot_num)) {
+            match self.storage().get_with_proof::<N>(key, Some(slot_num)) {
                 Ok(storage_proof) => Some(storage_proof),
                 Err(err) => {
                     tracing::debug!(error = ?err, "Error requesting storage proof");
@@ -427,13 +445,14 @@ pub enum ApiStateAccessorError {
 impl<S: Spec + 'static> ApiStateAccessor<S> {
     /// Creates a new [`ApiStateAccessor`] from a [`StateCheckpoint`] with a gas price of zero at the [`StateCheckpoint::rollup_height_to_access`].
     pub fn new(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
     ) -> Self {
+        let height = state_checkpoint.rollup_height_to_access();
         Self::new_with_price_and_state_to_access(
             state_checkpoint,
             kernel,
-            StateToAccess::RollupHeight(state_checkpoint.rollup_height_to_access()),
+            StateToAccess::RollupHeight(height),
             <S::Gas as Gas>::Price::ZEROED,
         )
         .expect("Creating an ApiStateCheckpoint without specifying a height is infallible")
@@ -441,17 +460,18 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
 
     /// Creates a new [`ApiStateAccessor`] which queries all state at the provided slot number.
     pub fn new_archival_with_true_slot_number(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         slot_number: SlotNumber,
     ) -> Result<Self, ApiStateAccessorError> {
+        let uncomitted_changes = state_checkpoint
+            .delta
+            .uncomitted_changes
+            .as_ref()
+            .map(|c| c.box_clone());
         Self::build_archival_state(
-            state_checkpoint.delta.inner.clone(),
-            state_checkpoint
-                .delta
-                .uncomitted_changes
-                .as_ref()
-                .map(|c| c.box_clone()),
+            state_checkpoint,
+            uncomitted_changes,
             kernel,
             StateToAccess::TrueSlotNumber(slot_number, None),
         )
@@ -464,17 +484,18 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     /// Note that archival state is only available *after* the requested height has been processed by the node. In other words,
     /// state that is *only* soft-confirmed is not available for archival queries.
     pub fn new_archival(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         height: RollupHeight,
     ) -> Result<Self, ApiStateAccessorError> {
+        let uncomitted_changes = state_checkpoint
+            .delta
+            .uncomitted_changes
+            .as_ref()
+            .map(|c| c.box_clone());
         Self::build_archival_state(
-            state_checkpoint.delta.inner.clone(),
-            state_checkpoint
-                .delta
-                .uncomitted_changes
-                .as_ref()
-                .map(|c| c.box_clone()),
+            state_checkpoint,
+            uncomitted_changes,
             kernel,
             StateToAccess::RollupHeight(height),
         )
@@ -482,7 +503,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
 
     /// Creates a new [`ApiStateAccessor`] from a [`StateCheckpoint`] with a gas price of zero at the [`StateCheckpoint::rollup_height_to_access`].
     pub fn new_with_true_slot_number_dangerous(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         slot_number: SlotNumber,
     ) -> Result<Self, ApiStateAccessorError> {
@@ -508,7 +529,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     /// our tests are written assuming that all assertions will execute during this miniscule instant of time, so we have to accommodate it for now.
     #[cfg(feature = "test-utils")]
     pub fn new_with_price_and_heights(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         rollup_height: RollupHeight,
         visible_slot_number: VisibleSlotNumber,
@@ -527,7 +548,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     /// Creates a new [`ApiStateAccessor`] that *queries all state at the provided slot number, regardless of whether that slot number is visible*. This should only be used
     /// when the semantics of the call necessitate it. If you're unsure, use [`ApiStateAccessor::new_archival`] and provide a rollup height instead.
     pub fn new_with_price_and_slot_number_dangerous(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         slot_number: SlotNumber,
         gas_price: <S::Gas as Gas>::Price,
@@ -542,7 +563,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
 
     /// Creates a new [`ApiStateAccessor`] from a [`StateCheckpoint`] with the provided gas price.
     fn new_with_price_and_state_to_access(
-        state_checkpoint: &StateCheckpoint<S>,
+        state_checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         state_to_access: StateToAccess,
         gas_price: <S::Gas as Gas>::Price,
@@ -551,15 +572,15 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         let gas_meter = BasicGasMeter::new_api(gas_price);
 
         let mut out = Self {
-            storage: delta.inner.clone(),
+            checkpoint: state_checkpoint.clone(),
             uncomitted_changes: delta.uncomitted_changes.as_ref().map(|g| g.box_clone()),
             witness: Default::default(),
             gas_meter,
             events: Vec::new(),
             temp_cache: TempCache::new(),
-            kernel_cache: delta.kernel_cache.clone_without_pinned_cache(),
-            user_cache: delta.user_cache.clone_without_pinned_cache(),
-            accessory_writes: delta.accessory_writes.clone(),
+            kernel_cache: Default::default(),
+            user_cache: Default::default(),
+            accessory_writes: HashMap::new(),
             kernel: kernel.clone(),
             state_to_access,
             visible_slot_number: None,
@@ -596,15 +617,16 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     }
 
     fn get_uninitialized_empty_accessor(
-        storage: S::Storage,
+        checkpoint: Arc<StateCheckpoint<S>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         state_to_access: StateToAccess,
     ) -> Self {
         let gas_meter = BasicGasMeter::new_api(<S::Gas as Gas>::Price::ZEROED);
+
         Self {
+            checkpoint,
             events: Vec::new(),
             gas_meter,
-            storage,
             uncomitted_changes: None,
             witness: Default::default(),
             kernel_cache: Default::default(),
@@ -647,14 +669,14 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     }
 
     fn build_archival_state(
-        storage: S::Storage,
+        checkpoint: Arc<StateCheckpoint<S>>,
         uncommitted_changes: Option<Box<dyn StateGetter>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         height: StateToAccess,
     ) -> Result<Self, ApiStateAccessorError> {
-        let latest_true_slot_number = storage.latest_version();
+        let latest_true_slot_number = checkpoint.storage().latest_version();
         let mut state =
-            ApiStateAccessor::get_uninitialized_empty_accessor(storage, kernel.clone(), height);
+            ApiStateAccessor::get_uninitialized_empty_accessor(checkpoint, kernel.clone(), height);
         state.uncomitted_changes = uncommitted_changes;
         let true_slot_number = match height {
             // If the caller provided a rollup height, find the associated true slot number.
@@ -748,7 +770,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         height: RollupHeight,
     ) -> Result<ApiStateAccessor<S>, ApiStateAccessorError> {
         Self::build_archival_state(
-            self.storage.clone(),
+            self.checkpoint.clone(),
             self.uncomitted_changes.as_ref().map(|c| c.box_clone()),
             self.kernel.clone(),
             StateToAccess::RollupHeight(height),

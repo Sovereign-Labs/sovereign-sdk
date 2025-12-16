@@ -39,7 +39,7 @@ fn make_user_map_proof(
     let storage = storage_manager.create_storage();
 
     let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
-    let mut state = ApiStateAccessor::new(&state_checkpoint, Arc::new(kernel));
+    let mut state = ApiStateAccessor::new(Arc::new(state_checkpoint), Arc::new(kernel));
 
     let proof = map.get_with_proof(&1, &mut state).unwrap();
     (root, proof, map)
@@ -73,7 +73,7 @@ fn make_user_value_proof(
     let storage = storage_manager.create_storage();
 
     let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
-    let mut state = ApiStateAccessor::new(&state_checkpoint, Arc::new(kernel));
+    let mut state = ApiStateAccessor::new(Arc::new(state_checkpoint), Arc::new(kernel));
 
     let proof = state_val.get_with_proof(&mut state).unwrap();
     (root, proof, state_val)
@@ -206,7 +206,7 @@ fn test_archival_proof_gen() {
     let storage = storage_manager.create_storage();
     // Generate a proof at each archival state and validate it against the root
     let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
-    let mut api_state_accessor = ApiStateAccessor::new(&state_checkpoint, Arc::new(kernel));
+    let mut api_state_accessor = ApiStateAccessor::new(Arc::new(state_checkpoint), Arc::new(kernel));
     for iter in 0..NUM_ITER {
         let mut archival_accessor = api_state_accessor
             .get_archival_state(RollupHeight::new(iter))

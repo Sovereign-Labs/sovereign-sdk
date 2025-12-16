@@ -242,7 +242,7 @@ impl<S: Spec, T> ApiState<S, T> {
         let state = match height_param {
             Some(HeightParam::RollupHeight(height)) => {
                 let mut state =
-                    ApiStateAccessor::new_archival(&checkpoint, kernel.clone(), height)?;
+                    ApiStateAccessor::new_archival(checkpoint, kernel.clone(), height)?;
                 // This is not a security isse and this code runs offchain.
                 // TODO: Move this inside the constructor
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2244>
@@ -260,14 +260,14 @@ impl<S: Spec, T> ApiState<S, T> {
             Some(HeightParam::SlotNumber(slot_number)) => {
                 // This constructor sets the gas price correctly, so we don't need to do it manually.
                 ApiStateAccessor::new_archival_with_true_slot_number(
-                    &checkpoint,
+                    checkpoint,
                     kernel.clone(),
                     slot_number,
                 )?
             }
             None => {
                 let height = checkpoint.rollup_height_to_access();
-                let mut state = ApiStateAccessor::new(&checkpoint, kernel.clone());
+                let mut state = ApiStateAccessor::new(checkpoint, kernel.clone());
                 // This is not a security isse and this code runs offchain.
                 // TODO: Move this inside the constructor
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2244>
