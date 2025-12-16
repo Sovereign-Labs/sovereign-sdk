@@ -75,20 +75,7 @@ where
 
         let tx_status_manager = TxStatusManager::default();
 
-        let mut runtime: Rt = Default::default();
-        assert!(
-            accepts_preferred_batches(runtime.blob_selector()),
-            "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
-        );
-        let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
-        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(checkpoint));
-        let api_state = ApiState::build(
-            Arc::new(()),
-            checkpoint_receiver,
-            runtime.kernel_with_slot_mapping(),
-            None,
-        );
+        let (api_state, checkpoint_sender) = Self::api_state(latest_state_update.storage.clone());
 
         let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
@@ -275,6 +262,23 @@ where
         }
 
         Ok((seq, handles))
+    }
+
+    fn api_state(storage: S::Storage) -> (ApiState<S>, watch::Sender<Arc<StateCheckpoint<S>>>) {
+        let mut runtime: Rt = Default::default();
+        assert!(
+                accepts_preferred_batches(runtime.blob_selector()),
+                "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
+            );
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(checkpoint));
+        let api_state = ApiState::build(
+            Arc::new(()),
+            checkpoint_receiver,
+            runtime.kernel_with_slot_mapping(),
+            None,
+        );
+        (api_state, checkpoint_sender)
     }
 }
 
