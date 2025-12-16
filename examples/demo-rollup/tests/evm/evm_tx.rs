@@ -23,7 +23,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
         setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
 
     sanity_checks(&test_client).await;
-    execute_evm_tests(&test_client, &test_rollup.da_service, &test_rollup)
+    execute_evm_tests(&test_client, &test_rollup.da_service)
         .await
         .unwrap();
 
@@ -67,9 +67,7 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
 async fn execute_evm_tests(
     client: &SimpleStorageClient,
     da_service: &StorableMockDaService,
-    rollup: &TestRollup<MockDemoRollup<Native>>
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let state_update_subscription = rollup.api_client().subscribe_state_updates().await?;
     let initial_block_number = client
         .eth_get_block_by_number(Some("latest".to_owned()))
         .await
@@ -79,6 +77,8 @@ async fn execute_evm_tests(
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 
     da_service.produce_n_blocks_now(1).await?;
+    // We can't use the state update subscription here because this test uses periodic block production, so the correct number of times to await to be sure that our
+    // freshly produced block has gone through is unknowable.
     sleep(Duration::from_millis(2000)).await;
 
     // Nonce should be 1 after the deployment
