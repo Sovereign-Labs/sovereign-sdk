@@ -355,7 +355,7 @@ where
             rollup_height,
             visible_slot_number,
             base_fee_per_gas,
-        ).unwrap_or_else(|_| panic!("ApiStateAccessor creation failed but the requested block height {} or visible height {} is accessible. This is a bug. Please report it.", rollup_height, visible_slot_number))
+        ).unwrap_or_else(|_| panic!("ApiStateAccessor creation failed but the requested block height {rollup_height} or visible height {visible_slot_number} is accessible. This is a bug. Please report it."))
     }
 
     /// Returns the state of the rollup at the most recent version of the rollup.

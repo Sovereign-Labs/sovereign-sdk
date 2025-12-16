@@ -2874,6 +2874,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "concread"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07fd8c4b53f0aafeec114fa1cd863f323880f790656f2d7508af83a9b5110e8d"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils",
+ "foldhash 0.1.5",
+ "lru 0.13.0",
+ "smallvec",
+ "sptr",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11601,6 +11618,7 @@ dependencies = [
  "borsh",
  "bs58",
  "clap",
+ "concread",
  "derivative",
  "derive_more 1.0.0",
  "digest 0.10.7",
@@ -13074,6 +13092,12 @@ dependencies = [
  "base64ct",
  "der",
 ]
+
+[[package]]
+name = "sptr"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "sqlx"

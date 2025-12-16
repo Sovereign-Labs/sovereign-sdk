@@ -480,7 +480,7 @@ impl<S: Spec> ApiStateAccessor<S> {
 /// We use this function because ApiStateAccessor has to be 'static for compatibility with Axum/Tokio.
 /// Our use of this function is sound because we only use it on Arc<ConcurrentStateCheckpoint<S>> while we're one of the holders of the Arc,
 /// so the resulting read txn is guaranteed to be dropped before the Concread::HashMap is.
-unsafe fn lengthen_lifetime<'a, 'b>(
+unsafe fn lengthen_lifetime<'a>(
     read_txn: HashMapReadTxn<'a, (SlotKey, Namespace), Option<SlotValue>>,
 ) -> HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>> {
     std::mem::transmute(read_txn)
