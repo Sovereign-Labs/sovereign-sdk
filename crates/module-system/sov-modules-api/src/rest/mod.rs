@@ -241,8 +241,7 @@ impl<S: Spec, T> ApiState<S, T> {
         tracing::trace!(?height_param, "Building an API state accessor");
         let state = match height_param {
             Some(HeightParam::RollupHeight(height)) => {
-                let mut state =
-                    ApiStateAccessor::new_archival(checkpoint, kernel.clone(), height)?;
+                let mut state = ApiStateAccessor::new_archival(checkpoint, kernel.clone(), height)?;
                 // This is not a security isse and this code runs offchain.
                 // TODO: Move this inside the constructor
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2244>

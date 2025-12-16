@@ -206,7 +206,8 @@ fn test_archival_proof_gen() {
     let storage = storage_manager.create_storage();
     // Generate a proof at each archival state and validate it against the root
     let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
-    let mut api_state_accessor = ApiStateAccessor::new(Arc::new(state_checkpoint), Arc::new(kernel));
+    let mut api_state_accessor =
+        ApiStateAccessor::new(Arc::new(state_checkpoint), Arc::new(kernel));
     for iter in 0..NUM_ITER {
         let mut archival_accessor = api_state_accessor
             .get_archival_state(RollupHeight::new(iter))
