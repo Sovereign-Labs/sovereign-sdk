@@ -1,12 +1,11 @@
-use std::time::Duration;
-
 use super::evm_test_helper;
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::{B256, U256};
+use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
-use sov_mock_da::storable::StorableMockDaService;
-use tokio::time::sleep;
+use sov_modules_api::execution_mode::Native;
+use sov_test_utils::test_rollup::TestRollup;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn evm_tx_tests_instant_finality() -> anyhow::Result<()> {
@@ -23,9 +22,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
         setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
 
     sanity_checks(&test_client).await;
-    execute_evm_tests(&test_client, &test_rollup.da_service)
-        .await
-        .unwrap();
+    execute_evm_tests(&test_client, &test_rollup).await.unwrap();
 
     test_rollup.shutdown_sender.send(()).unwrap();
     Ok(())
@@ -66,7 +63,7 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
 
 async fn execute_evm_tests(
     client: &SimpleStorageClient,
-    da_service: &StorableMockDaService,
+    rollup: &TestRollup<MockDemoRollup<Native>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let initial_block_number = client
         .eth_get_block_by_number(Some("latest".to_owned()))
@@ -76,10 +73,9 @@ async fn execute_evm_tests(
 
     let contract_address = evm_test_helper::deploy_contract_check(client).await?;
 
-    da_service.produce_n_blocks_now(1).await?;
-    // We can't use the state update subscription here because this test uses periodic block production, so the correct number of times to await to be sure that our
-    // freshly produced block has gone through is unknowable.
-    sleep(Duration::from_millis(2000)).await;
+    let h = rollup.height().await.get();
+    rollup.da_service.produce_n_blocks_now(1).await?;
+    rollup.wait_for_height(h + 1).await;
 
     // Nonce should be 1 after the deployment
     let nonce = client.eth_get_transaction_count(client.address()).await;
