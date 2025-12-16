@@ -302,6 +302,6 @@ pub struct Limits {
     /// Over time, users send requests that draw from their available resources, while a
     /// constant stream of tokens refilling those resources.
     /// At refill_rate = 1, tokens regenerate at MAX_THRESHOLD_PER_KEY/batch_execution_time_limit_millis.
-    /// Values between 10 and 200 are recommended starting points.
+    /// Values between 1 and 20 are recommended starting points.
     pub refill_rate: u64,
 }
