@@ -1107,7 +1107,7 @@ where
 fn rate_limit_error<S: Spec>(err: ResourceLimitExceededError<S>) -> ErrorObject {
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,
-        message: format!("The sender was rate-limited by the sequencer: {err:?}"),
+        message: format!("The sender was rate-limited by the sequencer: {err}"),
         details: Default::default(),
     }
 }

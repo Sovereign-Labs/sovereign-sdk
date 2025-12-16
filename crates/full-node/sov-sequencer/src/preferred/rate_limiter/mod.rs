@@ -25,12 +25,12 @@ pub(crate) struct LimiterToken<S: Spec> {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ResourceLimitExceededError<S: Spec> {
-    #[error("Resource limit exceeded for address: {address:?}, {reason:?}")]
+    #[error("Resource limit exceeded for address: {address}, {reason:?}")]
     Address {
         address: S::Address,
         reason: LimitExceeded<S::Gas>,
     },
-    #[error("Resource limit exceeded for IP: {ip:?}, {reason:?}")]
+    #[error("Resource limit exceeded for IP: {ip}, {reason:?}")]
     Ip {
         ip: IpAddr,
         reason: LimitExceeded<S::Gas>,
@@ -91,13 +91,16 @@ const TTL_MULTIPLIER: u64 = 20;
 
 fn clculate_limits<S: Spec>(
     limits: Limits,
+    max_requests_per_second: u64,
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
 ) -> RateLimiterConfig<S> {
     let max_gas = comfortable_gas_limit::<S>();
 
     let max_resources_per_batch = Resource {
-        req_counter: limits.max_requests_per_batch,
+        req_counter: max_requests_per_second
+            .checked_mul(batch_execution_time_limit_millis)
+            .expect("Unable to covert max_requests_per_second to req_counter"),
         // The expect is justified because we will never have batches larger than u64::MAX bytes.
         space_in_bytes: max_batch_size_bytes
             .try_into()
@@ -110,13 +113,14 @@ fn clculate_limits<S: Spec>(
     };
 
     // A single sender is limited to 1/max_threshold_per_key_to_batch_capacity_ratio of resources of a single batch.
-    let max_per_key =
-        max_resources_per_batch.div_by_scalar(limits.max_threshold_per_key_to_batch_capacity_ratio);
+    let max_per_key = max_resources_per_batch
+        .saturating_mul_by_scalar(limits.max_user_bursts_per_batch)
+        .div_by_scalar(1000);
 
     // The refill rate is defined as 0.1% of max_per_key. After one second, the system refills max_per_key tokens.
     let refill_rate = max_per_key
         .saturating_mul_by_scalar(limits.refill_rate)
-        .div_by_scalar(1000);
+        .div_by_scalar(batch_execution_time_limit_millis);
 
     RateLimiterConfig {
         max_allowed_resources: TotalResources { inner: max_per_key },
@@ -133,6 +137,7 @@ pub(crate) struct SovRateLimiter<S: Spec> {
 }
 
 fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
+    max_requests_per_second: u64,
     batch_execution_time_limit_millis: u64,
     max_batch_size_bytes: usize,
     v: Vec<(K, Limits)>,
@@ -143,6 +148,7 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
                 key,
                 clculate_limits::<S>(
                     limits,
+                    max_requests_per_second,
                     batch_execution_time_limit_millis,
                     max_batch_size_bytes,
                 ),
@@ -163,18 +169,21 @@ fn limits<S: Spec>(
 ) {
     let default_config = clculate_limits::<S>(
         sov_config.default_limits,
+        sov_config.max_requests_per_second,
         batch_execution_time_limit_millis,
         max_batch_size_bytes,
     );
 
     let addrs = to_limiter_config_map::<S::Address, S>(
         batch_execution_time_limit_millis,
+        sov_config.max_requests_per_second,
         max_batch_size_bytes,
         sov_config.address_custom_limits,
     );
 
     let ips = to_limiter_config_map::<IpAddr, S>(
         batch_execution_time_limit_millis,
+        sov_config.max_requests_per_second,
         max_batch_size_bytes,
         sov_config.ip_custom_limits,
     );
@@ -237,12 +246,13 @@ mod tests {
     #[test]
     fn test_clculate_limits() {
         let limits = Limits {
-            max_threshold_per_key_to_batch_capacity_ratio: 200,
-            max_requests_per_batch: 234000000,
+            max_user_bursts_per_batch: 5,
             refill_rate: 1,
         };
 
-        let rate_limiter_config = clculate_limits::<TestSpec>(limits, 1_000_000_000, 1000000);
+        let max_batch_exec_time = 6000;
+        let rate_limiter_config =
+            clculate_limits::<TestSpec>(limits, 10000, max_batch_exec_time, 6000000);
 
         let max_allowed_resources_per_key = rate_limiter_config.max_allowed_resources;
 
@@ -250,9 +260,12 @@ mod tests {
         let refilled = rate_limiter_config
             .refill_rate
             .token_resource_per_ms
-            .saturating_mul_by_scalar(1000);
+            .saturating_mul_by_scalar(max_batch_exec_time);
 
-        assert_eq!(max_allowed_resources_per_key.inner, refilled);
+        assert_eq!(
+            max_allowed_resources_per_key.inner.space_in_bytes,
+            refilled.space_in_bytes
+        );
     }
 
     #[test]

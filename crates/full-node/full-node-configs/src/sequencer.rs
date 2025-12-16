@@ -278,6 +278,9 @@ pub struct TimingOracleConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct SovRateLimiterConfig<Address: Copy> {
+    /// The maximum number of requests allowed per second.
+    pub max_requests_per_second: u64,
+    /// Default limits.
     pub default_limits: Limits,
     pub address_custom_limits: Vec<(Address, Limits)>,
     pub ip_custom_limits: Vec<(IpAddr, Limits)>,
@@ -289,18 +292,16 @@ pub struct Limits {
     /// This value is used as follows:
     ///
     /// MAX_THRESHOLD_PER_KEY =
-    ///     MAX_BATCH_RESOURCE_CAPACITY / max_threshold_per_key_to_batch_capacity_ratio
+    ///     MAX_BATCH_RESOURCE_CAPACITY * max_threshold_max_user_bursts
     ///
-    /// For example, setting max_threshold_per_key_to_batch_capacity_ratio to 200
+    /// For example, setting max_user_bursts_per_batch to 5
     /// means that MAX_THRESHOLD_PER_KEY will be 0.5% of MAX_BATCH_RESOURCE_CAPACITY.
-    pub max_threshold_per_key_to_batch_capacity_ratio: u64,
+    pub max_user_bursts_per_batch: u64,
     /// Determines how quickly tokens are refilled in the token-bucket algorithm.
     /// Each user can consume, on average, only a certain percentage of the batch resources (MAX_THRESHOLD_PER_KEY).
     /// Over time, users send requests that draw from their available resources, while a
     /// constant stream of tokens refilling those resources.
-    /// At refill_rate = 1, tokens regenerate at MAX_THRESHOLD_PER_KEY/100 per millisecond.
-    /// Values between 1 and 20 are recommended starting points.
+    /// At refill_rate = 1, tokens regenerate at MAX_THRESHOLD_PER_KEY/batch_execution_time_limit_millis.
+    /// Values between 10 and 200 are recommended starting points.
     pub refill_rate: u64,
-    /// The maximum number of requests allowed per batch.
-    pub max_requests_per_batch: u64,
 }

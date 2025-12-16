@@ -92,10 +92,10 @@ async fn create_test_rollup(
 async fn test_rate_limiting() {
     let sov_config = SovRateLimiterConfig {
         default_limits: Limits {
-            max_threshold_per_key_to_batch_capacity_ratio: 200,
-            max_requests_per_batch: 1_000_000,
-            refill_rate: 10,
+            max_user_bursts_per_batch: 5,
+            refill_rate: 100,
         },
+        max_requests_per_second: 1_000_000,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
@@ -146,10 +146,10 @@ async fn test_rate_limiting() {
 async fn test_correct_ip() {
     let sov_config = SovRateLimiterConfig {
         default_limits: Limits {
-            max_threshold_per_key_to_batch_capacity_ratio: 200,
-            max_requests_per_batch: 0,
+            max_user_bursts_per_batch: 5,
             refill_rate: 0,
         },
+        max_requests_per_second: 0,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
@@ -203,9 +203,10 @@ async fn test_correct_ip() {
         let err = resp.bytes().await.unwrap();
         let err_str = std::str::from_utf8(&err).unwrap().to_string();
 
+        println!("err_str: {err_str}");
         // Check that the correct IP was rate limmited.
         assert!(err_str
-            .contains("The sender was rate-limited by the sequencer: Ip { ip: 123.123.123.123"));
+            .contains("The sender was rate-limited by the sequencer: Resource limit exceeded for IP: 123.123.123.123"));
     }
 }
 
