@@ -402,7 +402,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
                     .await
                     .expect_err("Outdated transaction should have failed");
             } else {
-                client.send_tx_to_sequencer_with_retry(tx).await?;
+                client.send_tx_to_sequencer(tx).await?;
             }
             total_txns += 1;
         }
