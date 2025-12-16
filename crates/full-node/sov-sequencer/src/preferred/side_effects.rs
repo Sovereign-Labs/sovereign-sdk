@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use anyhow::Result;
 use sov_modules_api::sequencing_metadata::HDTimestamp;
-use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
@@ -26,8 +26,8 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    pub checkpoint_sender: watch::Sender<std::sync::Arc<ConcurrentStateCheckpoint<S>>>,
-    pub blob_sender: PreferredBlobSender<Da>,
+    pub checkpoint_sender: watch::Sender<std::sync::Arc<StateCheckpoint<S>>>,
+    pub blob_sender: Option<PreferredBlobSender<Da>>,
     pub db: PreferredSequencerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
@@ -43,12 +43,7 @@ where
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
-        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
-        if self
-            .checkpoint_sender
-            .send(Arc::new(concurrent_checkpoint))
-            .is_err()
-        {
+        if self.checkpoint_sender.send(Arc::new(checkpoint)).is_err() {
             debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
         }
     }
@@ -64,10 +59,10 @@ where
         self.update_api_state(checkpoint);
 
         // Publish the batch.
-        self.blob_sender
-            .add_txs(batch.blob_id, batch.tx_hashes.clone())
-            .await;
-        self.blob_sender.publish_batch(batch).await?;
+        if let Some(ref mut bs) = self.blob_sender {
+            bs.add_txs(batch.blob_id, batch.tx_hashes.clone()).await;
+            bs.publish_batch(batch).await?;
+        }
 
         Ok(())
     }
@@ -82,9 +77,9 @@ where
                 RecoveryStrategy::TryToSave => {
                     // Flush our batches to try to save them if we can
                     warn!(num_batches_to_replay = batches_to_flush.len(), "TryToSave recovery strategy has been configured. The currently pending soft confirmations will be flushed to the node. This may save some of the transactions, but if any are no longer valid, the sequencer will be penalised.");
-                    self.blob_sender
-                        .publish_blobs_for_recovery(batches_to_flush)
-                        .await?;
+                    if let Some(ref mut bs) = self.blob_sender {
+                        bs.publish_blobs_for_recovery(batches_to_flush).await?;
+                    }
                 }
                 RecoveryStrategy::None => {
                     // Shut down
@@ -131,8 +126,8 @@ where
                     .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)
                     .await?;
 
-                let checkpoint_ref = self.checkpoint_sender.borrow().clone();
-
+                let mut new_checkpoint: StateCheckpoint<_> = (*(*self.checkpoint_sender.borrow()))
+                    .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
                     self.transaction_cache
@@ -140,12 +135,12 @@ where
                         .await;
                     // If the receiver is no longer listening, just don't send the confirmation.
                     // Apply all updates in a single batch
-                    checkpoint_ref.apply_tx_changes(contents.tx_changes);
+                    new_checkpoint.apply_tx_changes(contents.tx_changes);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
                 }
-                // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
-                // relying on change notifications get one. Note, however, that change notifications are not in sync with the actual changes.
-                self.checkpoint_sender.send_modify(|_| {});
+                // Send the checkpoint once whole batch is applied to prevent lock contention
+                self.checkpoint_sender
+                    .send_replace(Arc::new(new_checkpoint));
                 // Send tx confirmations after API state is updated
                 for (oneshot, tx) in oneshot_and_txs {
                     let _ = oneshot.send(tx);
@@ -200,9 +195,9 @@ where
                 self.db
                     .insert_proof_blob(blob_id, data.clone(), sequence_number)
                     .await?;
-                self.blob_sender
-                    .publish_proof(data, sequence_number, blob_id)
-                    .await?;
+                if let Some(ref mut bs) = self.blob_sender {
+                    bs.publish_proof(data, sequence_number, blob_id).await?;
+                }
             }
             ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
                 self.update_api_state(new_checkpoint);
