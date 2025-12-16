@@ -83,7 +83,7 @@ expression: config
           [
             "157.180.14.244",
             {
-              "resources_per_bucket": 200,
+              "resources_per_bucket": 10,
               "refill_rate": 2
             }
           ]
