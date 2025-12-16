@@ -38,7 +38,6 @@ pub struct RateLimiterCapacityMetrics {
     pub remote_domain: u32,
 }
 
-#[cfg(feature = "native")]
 impl sov_metrics::Metric for RateLimiterCapacityMetrics {
     fn measurement_name(&self) -> &'static str {
         "sov_hyperlane_rate_limiter_capacity"
