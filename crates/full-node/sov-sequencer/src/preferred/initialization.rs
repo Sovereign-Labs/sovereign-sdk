@@ -77,7 +77,6 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(latest_state_update.storage.clone());
 
-        let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
         let (db, is_replica_seq) = PreferredSequencerDb::new(
@@ -108,12 +107,12 @@ where
             handles.push(handle);
         }
 
-        let (state_root_compute_handle, state_root_compute_task) =
-            StateRootBackgroundTaskState::create::<Rt>(
-                block_executors_shutdown_rx,
-                !preferred_config.disable_state_root_consistency_checks,
-            );
-        handles.push(state_root_compute_handle);
+        let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
+        let (state_root_handle, state_root_task) = StateRootTask::create::<Rt>(
+            block_executors_shutdown_rx,
+            !preferred_config.disable_state_root_consistency_checks,
+        );
+        handles.push(state_root_handle);
 
         let cached_txs = TransactionCache::new(
             api_ledger_db.clone(),
@@ -131,7 +130,7 @@ where
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
-            state_root_request_sender: state_root_compute_task.request_sender.clone(),
+            state_root_request_sender: state_root_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
         };

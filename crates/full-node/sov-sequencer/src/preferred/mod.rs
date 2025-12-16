@@ -59,7 +59,7 @@ use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
-use state_root_compute::StateRootBackgroundTaskState;
+use state_root_compute::StateRootTask;
 use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;
