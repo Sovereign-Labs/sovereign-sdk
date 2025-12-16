@@ -334,8 +334,6 @@ pub(crate) enum StateToAccess {
 
 #[derive(derive_more::Debug)]
 pub struct ApiStateAccessor<S: Spec> {
-    // #[debug(skip)]
-    // storage: S::Storage,
     #[debug(skip)]
     witness: <<S as Spec>::Storage as Storage>::Witness,
     events: Vec<TypeErasedEvent>,
