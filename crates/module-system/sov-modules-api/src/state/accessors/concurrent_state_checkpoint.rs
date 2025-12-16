@@ -44,9 +44,8 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// Apply the given `TxChangeSet` to the `ConcurrentStateCheckpoint`.
     pub fn apply_tx_changes(&self, changeset: TxChangeSet) {
         let mut writer = self.writes.write();
-        for ((key, namespace), value) in changeset.writes {
-            writer.insert((key.clone(), namespace), value.clone());
-        }
+        writer.extend(changeset.writes.into_iter().map(|(k, v)| (k, v.clone())));
+
         writer.commit();
     }
 
