@@ -10,6 +10,7 @@ mod nonce_buffer_task;
 mod preferred_blob_sender;
 mod rate_limiter;
 mod replica;
+mod rpc_errors;
 mod side_effects;
 mod state_root_compute;
 mod sync_sequencer_state;
@@ -19,12 +20,12 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
-use crate::preferred::rate_limiter::{IpAndCredentialId, ResourceLimitExceededError};
+use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
+use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use anyhow::Context;
 use async_trait::async_trait;
-use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
@@ -626,7 +627,7 @@ where
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-            return Err(shut_down_error());
+            return Err(shut_down());
         }
 
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
@@ -705,7 +706,7 @@ where
         let res = match outer_res {
             Ok(inner_res) => inner_res,
             Err(SequencerStateUpdatorError::Shutdown) => {
-                return Err(shut_down_error());
+                return Err(shut_down());
             }
             Err(SequencerStateUpdatorError::Unexpected) => {
                 return Err(internal_server_error_500(
@@ -766,16 +767,16 @@ where
                     DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
-                    } => return Err(err_cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
+                    } => return Err(cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                     DoNewTxError::ExecutorError(err) => {
                         return Err(RollupBlockExecutorError::into_http_error(err));
                     }
                     DoNewTxError::Shutdown => {
-                        return Err(shut_down_error());
+                        return Err(shut_down());
                     }
                 },
-                AcceptTxError::ReplicaMode => return Err(replica_mode_error()),
-                AcceptTxError::RateLimiter(err) => return Err(rate_limit_error(err)),
+                AcceptTxError::ReplicaMode => return Err(replica_mode()),
+                AcceptTxError::RateLimiter(err) => return Err(rate_limit(err)),
             },
         }
     }
@@ -1118,34 +1119,6 @@ where
     }
 }
 
-fn rate_limit_error<S: Spec>(err: ResourceLimitExceededError<S>) -> ErrorObject {
-    ErrorObject {
-        status: StatusCode::SERVICE_UNAVAILABLE,
-        message: format!("The sender was rate-limited by the sequencer: {err}"),
-        details: Default::default(),
-    }
-}
-
-fn replica_mode_error() -> ErrorObject {
-    ErrorObject {
-        status: StatusCode::SERVICE_UNAVAILABLE,
-        message: "The sequencer is running in replica mode and cannot accept transactions"
-            .to_string(),
-        details: Default::default(),
-    }
-}
-
-fn shut_down_error() -> ErrorObject {
-    tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-    ErrorObject {
-        status: StatusCode::SERVICE_UNAVAILABLE,
-        message: "The sequencer is shutting down".to_string(),
-        details: sov_rest_utils::json_obj!({
-            "error": "The sequencer is shutting down. Transactions cannot be accepted at this time".to_string(),
-        }),
-    }
-}
-
 #[derive(Debug)]
 pub(crate) struct PreferredBatchToReplay {
     is_in_progress: bool,
@@ -1294,20 +1267,6 @@ fn next_visible_slot_number_increase_inner(
 /// want to get an associated item from that trait implementation.
 fn accepts_preferred_batches<B: BlobSelector>(_blob_selector: B) -> bool {
     B::ACCEPTS_PREFERRED_BATCHES
-}
-
-fn err_cant_fit_tx(current_batch_size: usize, max_batch_size: usize, tx_len: usize) -> ErrorObject {
-    ErrorObject {
-        status: StatusCode::SERVICE_UNAVAILABLE,
-        message: "Transaction cannot be included in the batch due to batch size limitations"
-            .to_string(),
-        details: sov_rest_utils::json_obj!({
-            "error": "The transaction is too large.",
-            "serialized_tx_size": BatchSizeTracker::serialized_tx_size(tx_len),
-            "current_batch_size": current_batch_size,
-            "max_batch_size": max_batch_size,
-        }),
-    }
 }
 
 #[track_caller]
