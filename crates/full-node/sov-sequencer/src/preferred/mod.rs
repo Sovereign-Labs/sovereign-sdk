@@ -27,9 +27,7 @@ use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_d
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
-use db::postgres::PostgresBackend;
-use db::rocksdb::RocksDbBackend;
-use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
+use db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 use derive_more::Deref;
 use futures::Stream;
 pub use initialization::Builder;

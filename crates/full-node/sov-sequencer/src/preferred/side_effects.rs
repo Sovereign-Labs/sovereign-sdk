@@ -15,7 +15,7 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
-    exit_rollup, PreferredBlobSender, PreferredSequencerDb, PreferredSequencerReadBatch,
+    db::PreferredSequencerDb, exit_rollup, PreferredBlobSender, PreferredSequencerReadBatch,
     PreferredSequencerReadBlob, RecoveryStrategy, RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
 };
 
@@ -28,7 +28,7 @@ where
 {
     pub checkpoint_sender: watch::Sender<std::sync::Arc<StateCheckpoint<S>>>,
     pub blob_sender: Option<PreferredBlobSender<Da>>,
-    pub db: PreferredSequencerDb,
+    pub db: Box<dyn PreferredSequencerDb>,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,

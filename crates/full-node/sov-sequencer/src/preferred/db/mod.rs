@@ -10,9 +10,9 @@
 //! invariants than to have bugs that result in subtle state inconsistencies.
 
 pub mod postgres;
+mod primary;
+mod replica;
 pub mod rocksdb;
-use crate::preferred::PostgresBackend;
-use crate::preferred::RocksDbBackend;
 use anyhow::Result;
 use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -31,10 +31,9 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 
 use crate::common::WithCachedTxHashes;
+use crate::preferred::db::primary::PrimarySequencerDb;
+use crate::preferred::db::replica::ReplicaSequencerDb;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
-
-// Don’t prune the data from the database immediately — give the replica some time to read it before it is pruned.
-const PRUNING_LAG: u64 = 10;
 
 #[async_trait]
 pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
@@ -377,184 +376,52 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
-pub struct PreferredSequencerDb {
-    backend: Option<Box<dyn PreferredSequencerDbBackend>>,
-    shutdown_sender: watch::Sender<()>,
-}
+/// High-level trait for preferred sequencer database operations.
+/// Implemented differently for primary sequencers and replicas.
+#[async_trait]
+pub trait PreferredSequencerDb: Send + Sync {
+    async fn initial_data(&self) -> Result<(SequenceNumber, PreferredSequencerCache)>;
 
-impl PreferredSequencerDb {
-    pub(crate) async fn new(
-        shutdown_sender: watch::Sender<()>,
-        is_replica: bool,
-        storage_path: &Path,
-        postgres_config: &Option<PostgresConfig>,
-    ) -> Result<Self> {
-        if is_replica {
-            return Ok(Self {
-                backend: None,
-                shutdown_sender: shutdown_sender.clone(),
-            });
-        }
-
-        let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
-            if let Some(postgres_config) = &postgres_config {
-                Some(Box::new(PostgresBackend::connect(postgres_config).await?))
-            } else {
-                Some(Box::new(RocksDbBackend::new(storage_path).await?))
-            }
-        };
-
-        Ok(Self {
-            backend,
-            shutdown_sender: shutdown_sender.clone(),
-        })
-    }
-
-    pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, PreferredSequencerCache)> {
-        if let Some(backend) = &self.backend {
-            let DbSnapshotData {
-                completed_blobs,
-                in_progress_batch,
-            } = backend.current_data().await?;
-
-            let completed_blobs = VecDeque::from(completed_blobs);
-
-            let sequence_number_of_next_blob = match (completed_blobs.back(), &in_progress_batch) {
-                (Some(blob), None) => blob.sequence_number() + 1,
-                (None, Some(batch)) => batch.sequence_number + 1,
-                (Some(blob), Some(batch)) => {
-                    std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
-                }
-                (None, None) => 0,
-            };
-
-            Ok((
-                sequence_number_of_next_blob,
-                PreferredSequencerCache::new(
-                    completed_blobs,
-                    in_progress_batch,
-                    self.shutdown_sender.clone(),
-                ),
-            ))
-        } else {
-            Ok((
-                0, // TODO this will be revisited when we enable the replica sync task.
-                PreferredSequencerCache::new(
-                    VecDeque::default(),
-                    Option::None,
-                    self.shutdown_sender.clone(),
-                ),
-            ))
-        }
-    }
-
-    #[tracing::instrument(skip_all, level = "info")]
-    pub(crate) async fn bulk_insert_txs(
+    async fn bulk_insert_txs(
         &mut self,
         txs: Vec<(FullyBakedTx, TxHash)>,
         sequence_number: SequenceNumber,
         tx_idx_within_batch: u64,
-    ) -> Result<()> {
-        if let Some(backend) = &mut self.backend {
-            backend
-                .batch_add_txs(sequence_number, tx_idx_within_batch, &txs)
-                .await?;
-        }
+    ) -> Result<()>;
 
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all, level = "info")]
-    pub(crate) async fn start_batch(
+    async fn start_batch(
         &mut self,
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_slots_to_advance: NonZero<u8>,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
-    ) -> Result<SequenceNumber> {
-        if let Some(backend) = &mut self.backend {
-            Self::debug_assert_in_progress_batch_is_none(
-                "Cached in-progress batch state (None) didn't match backend db state",
-                backend,
-                &self.shutdown_sender,
-            )
-            .await;
+    ) -> Result<SequenceNumber>;
 
-            tracing::debug!(
-                sequence_number,
-                blob_id,
-                %visible_slot_number_after_increase,
-                visible_slots_to_advance,
-                "Storing new rollup block"
-            );
-
-            let batch_to_store = BatchToStore {
-                sequence_number,
-                blob_id,
-                visible_slot_number_after_increase,
-                visible_slots_to_advance,
-            };
-            backend.begin_rollup_block(batch_to_store).await?;
-        }
-
-        Ok(sequence_number)
-    }
-
-    #[tracing::instrument(skip_all, level = "info")]
-    pub(crate) async fn insert_proof_blob(
+    async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
         sequence_number: SequenceNumber,
-    ) -> Result<SequenceNumber> {
-        if let Some(backend) = &mut self.backend {
-            backend
-                .add_proof_blob(sequence_number, blob_id, data.clone())
-                .await?;
-        }
+    ) -> Result<SequenceNumber>;
 
-        Ok(sequence_number)
-    }
+    async fn terminate_batch(&mut self, batch: BatchToStore) -> Result<()>;
 
-    #[tracing::instrument(skip_all, level = "info")]
-    pub(crate) async fn terminate_batch(&mut self, batch: BatchToStore) -> Result<()> {
-        if let Some(backend) = &mut self.backend {
-            backend.end_rollup_block(batch).await?;
-            Self::debug_assert_in_progress_batch_is_none(
-                "Backend didn't remove in-progress batch from database when ending rollup block",
-                backend,
-                &self.shutdown_sender,
-            )
-            .await;
-        }
+    async fn prune_db(&mut self, prune_up_to_including: SequenceNumber) -> Result<()>;
+}
 
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all, level = "info")]
-    pub(super) async fn prune_db(&mut self, prune_up_to_including: SequenceNumber) -> Result<()> {
-        if let Some(backend) = &mut self.backend {
-            if let Some(prune_up_to_including) = prune_up_to_including.checked_sub(PRUNING_LAG) {
-                backend.prune(prune_up_to_including).await?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn debug_assert_in_progress_batch_is_none(
-        msg: &str,
-        backend: &mut Box<dyn PreferredSequencerDbBackend>,
-        shutdown_sender: &watch::Sender<()>,
-    ) {
-        if cfg!(debug_assertions) {
-            match backend.read_in_progress_batch().await {
-                Ok(None) => {}
-                other => {
-                    tracing::error!("{msg}: {other:?}");
-                    exit_rollup(shutdown_sender).await;
-                }
-            }
-        }
+/// Factory function to create the appropriate database implementation.
+pub(crate) async fn create_preferred_sequencer_db(
+    shutdown_sender: watch::Sender<()>,
+    is_replica: bool,
+    storage_path: &Path,
+    postgres_config: &Option<PostgresConfig>,
+) -> Result<Box<dyn PreferredSequencerDb>> {
+    if is_replica {
+        Ok(Box::new(ReplicaSequencerDb::new(shutdown_sender)))
+    } else {
+        Ok(Box::new(
+            PrimarySequencerDb::new(shutdown_sender, storage_path, postgres_config).await?,
+        ))
     }
 }
 
