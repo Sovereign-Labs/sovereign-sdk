@@ -6,6 +6,7 @@ mod block_executor;
 mod cache_warm_up_executor;
 mod db;
 mod executor_events;
+mod initialization;
 mod nonce_buffer_task;
 mod preferred_blob_sender;
 mod rate_limiter;
@@ -31,6 +32,7 @@ use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
 use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
 use futures::Stream;
+pub use initialization::Builder;
 use nonce_buffer_task::{NonceBufferInputSender, NonceBufferTask, SequencerTxExecutionBackend};
 use preferred_blob_sender::PreferredBlobSender;
 use serde_with::serde_as;
@@ -45,7 +47,6 @@ use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
 };
 use sov_modules_api::macros::config_value;
-use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::{
@@ -70,11 +71,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use sync_sequencer_state::*;
-use tokio::sync::mpsc::{self};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
-use tracing::{debug, error, info, trace};
+use tracing::{error, info, trace};
 use transaction_subscriptions::TransactionCache;
 
 use crate::common::{
@@ -151,13 +151,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    /// At the time of writing, the [`PreferredSequencer`] doesn't use
-    /// the [`TxStatusManager`].
-    ///
-    /// The [`Sequencer`] itself already updates the
-    /// [`TxStatusManager`] after all operations, so we'd only need it if we
-    /// ever "drop" previously-accepted transactions. The whole point of the
-    /// [`PreferredSequencer`] is that we *don't* do that.
+    /// Creates a new [`PreferredSequencer`] instance.
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
         da: Da,
@@ -169,254 +163,16 @@ where
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let mut config = config.clone();
-        let shutdown_receiver = shutdown_sender.subscribe();
-        let latest_state_update = state_update_receiver.borrow().clone();
-        let da_address = da
-            .get_signer()
-            .await
-            .context("Sequencer must have DaService configured with submit support")?;
-
-        debug!(
-            ?latest_state_update,
-            %da_address,
-            "Instantiating the preferred sequencer"
-        );
-
-        let maybe_oracle_config = TimingOracleConfigWithPrivateKey::new(
-            config.sequencer_kind_config.timing_oracle.clone(),
-        )
-        .transpose()?;
-
-        if let Some(oracle_config) = &maybe_oracle_config {
-            let oracle_address = oracle_config.address();
-
-            if !config.admin_addresses.contains(&oracle_address) {
-                tracing::info!(
-                    "Adding oracle address {} to sequencer's admin address list",
-                    oracle_address
-                );
-                config.admin_addresses.push(oracle_address);
-            }
-        }
-
-        let mut runtime: Rt = Default::default();
-        let tx_status_manager = TxStatusManager::default();
-
-        assert!(
-            accepts_preferred_batches(runtime.blob_selector()),
-            "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
-        );
-
-        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
-            ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(
-                latest_state_update.storage.clone(),
-                &runtime.kernel(),
-                None,
-            )), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
-        ));
-        let api_state = ApiState::build(
-            Arc::new(()),
-            checkpoint_receiver,
-            runtime.kernel_with_slot_mapping(),
-            None,
-        );
-
-        let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
-
-        let (blobs_sender_channel, _) =
-            broadcast::channel(config.sequencer_kind_config.events_channel_size);
-
-        let (db, is_replica_seq) = PreferredSequencerDb::new(
-            shutdown_sender.clone(),
-            config.sequencer_kind_config.is_replica,
-            storage_path,
-            &config.sequencer_kind_config.postgres_config,
-        )
-        .await?;
-
-        let (next_sequence_number, db_cache) = db.initial_data().await?;
-        let mut handles = vec![];
-
-        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
-            da,
-            ledger_db.clone(),
-            db_cache.all_completed_blobs().clone(),
-            storage_path.into(),
-            tx_status_manager.clone(),
-            shutdown_sender.clone(),
-            Duration::from_secs(config.blob_processing_timeout_secs),
-            blobs_sender_channel.clone(),
-            is_replica_seq,
-        )
-        .await?;
-
-        if let Some(blob_sender_handle) = blob_sender_handle {
-            handles.push(blob_sender_handle);
-        }
-
-        let (state_root_compute_handle, state_root_compute_task) =
-            StateRootBackgroundTaskState::create::<Rt>(
-                block_executors_shutdown_rx,
-                !config
-                    .sequencer_kind_config
-                    .disable_state_root_consistency_checks,
-            );
-        handles.push(state_root_compute_handle);
-
-        // TODO: Rename events_channel_size to transaction_channel_size
-        let cached_txs = TransactionCache::new(
-            api_ledger_db.clone(),
-            latest_state_update.next_tx_number,
-            config.sequencer_kind_config.events_channel_size,
-        );
-
-        let (executor_events_sender, executor_events_receiver) =
-            ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
-        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
-
-        // Here we need to mutliply by 1000 to convert from millis to micros.
-        let batch_execution_time_limit_micros = config
-            .sequencer_kind_config
-            .batch_execution_time_limit_millis
-            * 1000;
-
-        let rollup_exec_config = RollupBlockExecutorConfig {
-            da_address,
-            shutdown_notifier: block_executors_shutdown_notifier.clone(),
-            state_root_request_sender: state_root_compute_task.request_sender.clone(),
-            shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender: shutdown_sender.clone(),
-        };
-
-        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
-            latest_state_update.clone(),
-            rollup_exec_config.clone(),
-            config.clone(),
-        )
-        .await;
-
-        for worker in workers {
-            handles.push(worker);
-        }
-
-        let (mut replica_task, start_replica_task_notifier) =
-            ReplicaSyncTask::new(shutdown_sender.clone()).await?;
-
-        let tx_queue_id = Arc::new(AtomicU64::new(0));
-        let (synchronized_state, synchronized_state_updator) = create(
-            is_replica_seq,
-            api_ledger_db.clone(),
-            latest_state_update.clone(),
-            tx_queue_id.clone(),
-            batch_execution_time_limit_micros,
-            config.clone(),
-            shutdown_receiver.clone(),
-            shutdown_sender.clone(),
-            executor_events_sender,
-            next_sequence_number,
-            in_flight_blobs,
-            stop_at_rollup_height,
-            rollup_exec_config.clone(),
-            cached_txs.write_handle(),
-            cache_warm_up_executor,
-            start_replica_task_notifier,
-        );
-
-        let test_only_state_update_notification_receiver = synchronized_state
-            .test_only_state_update_notification_sender
-            .subscribe();
-        let synchronized_state_task = synchronized_state.start().await;
-        handles.push(synchronized_state_task);
-
-        let side_effects_task = SideEffectsTask {
-            checkpoint_sender,
-            blob_sender,
-            executor_events_receiver,
-            db,
-            shutdown_sender: shutdown_sender.clone(),
-            transaction_cache: cached_txs.write_handle(),
-        }
-        .spawn();
-        handles.push(side_effects_task);
-
-        let synchronized_state_updator = Arc::new(synchronized_state_updator);
-        let (nonce_buffer_task, nonce_buffer_input) = NonceBufferTask::spawn(
-            SequencerTxExecutionBackend {
-                api_state: api_state.clone(),
-                executor_queue_id: tx_queue_id.clone(),
-                state_updator: synchronized_state_updator.clone(),
-            },
-            config.sequencer_kind_config.maximum_future_nonce_delta,
-            config
-                .sequencer_kind_config
-                .future_nonce_transaction_timeout_millis,
-            shutdown_receiver.clone(),
-        );
-        handles.push(nonce_buffer_task);
-
-        let seq = PreferredSequencer(Arc::new(PreferredSequencerFields {
-            synchronized_state_updator: synchronized_state_updator.clone(),
-            tx_status_manager: tx_status_manager.clone(),
-            transaction_cache: cached_txs,
-            blobs_sender_channel,
-            api_state,
-            _runtime: PhantomData,
-            config: config.clone(),
-            nonce_buffer_input,
-            shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender: shutdown_sender.clone(),
-            tx_queue_id,
-            stop_at_rollup_height,
-            test_only_state_update_notification_receiver,
-            runtime: Rt::default(),
-        }));
-
-        // Launch replica sync task only for replicas.
-        if is_replica_seq {
-            if let Some(postgres_config) = &config.sequencer_kind_config.postgres_config {
-                let replica_task_handle = replica_task
-                    .start(synchronized_state_updator, postgres_config)
-                    .await;
-                handles.push(replica_task_handle.data_fetcher_handle);
-                handles.push(replica_task_handle.sync_task_handle);
-            }
-        }
-
-        handles.push(tokio::spawn({
-            update_state_task(
-                seq.clone(),
-                state_update_receiver.clone(),
-                shutdown_receiver.clone(),
+        Builder::new(da, config)
+            .build(
+                state_update_receiver,
+                storage_path,
+                ledger_db,
+                api_ledger_db,
+                shutdown_sender,
+                stop_at_rollup_height,
             )
-        }));
-        handles.push(tokio::spawn({
-            let ledger_db = ledger_db.clone();
-            let seq = seq.clone();
-            let shutdown_rx = shutdown_receiver.clone();
-            async move {
-                loop_send_tx_notifications::<S, Rt>(
-                    state_update_receiver,
-                    shutdown_rx,
-                    &ledger_db,
-                    seq.tx_status_manager(),
-                )
-                .await;
-            }
-        }));
-
-        if let Some(oracle_config) = maybe_oracle_config {
-            //  Only spawn the timestamp update task if the runtime supports it and the sequencer is the master
-            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica_seq {
-                handles.push(update_timestamp_task(
-                    seq.clone(),
-                    oracle_config,
-                    shutdown_receiver.clone(),
-                )?);
-            }
-        }
-
-        Ok((seq, handles))
+            .await
     }
 
     /// Returns a range to allow hysteresis during catchup. The first (lower) value will be the
@@ -648,18 +404,9 @@ where
             let call = Rt::wrap_call(call);
             let delay_ms = self.runtime.get_transaction_delay_ms(&call);
             let uniqueness = auth_data.uniqueness;
-            let mut state = state.api_state_accessor;
-            let address = self
-                .runtime
-                .resolve_address(
-                    &auth_data.default_address,
-                    &auth_data.credential_id,
-                    &mut state,
-                )
-                .unwrap_infallible();
             (
                 IpAndCredentialId {
-                    address,
+                    default_address: auth_data.default_address,
                     ip_addr,
                     credential_id: auth_data.credential_id,
                 },
@@ -674,7 +421,7 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let tx_len = baked_tx.len();
+        let tx_len = baked_tx.data.len();
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (
