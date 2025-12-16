@@ -90,7 +90,7 @@ where
     runtime: Rt,
     txsm: TxStatusManager<S::Da>,
     inner: Mutex<Inner<S, Rt, Da>>,
-    checkpoint_sender: watch::Sender<Arc<StateCheckpoint<S>>>,
+    checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     api_state: ApiState<S>,
     da_address: <S::Da as DaSpec>::Address,
     config: SequencerConfig<S::Address, StdSequencerConfig>,
@@ -134,10 +134,8 @@ where
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
         let latest_state_update = state_update_receiver.borrow().clone();
-        let checkpoint = Arc::new(StateCheckpoint::new(
-            latest_state_update.storage.clone(),
-            &runtime.kernel(),
-            None,
+        let checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
         ));
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
@@ -678,10 +676,10 @@ where
         {
             let mut inner = self.inner.lock().await;
             self.checkpoint_sender
-                .send(Arc::new(
+                .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
                     checkpoint
                         .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
-                ))
+                )))
                 .ok();
             inner.checkpoint = Some(checkpoint);
         }

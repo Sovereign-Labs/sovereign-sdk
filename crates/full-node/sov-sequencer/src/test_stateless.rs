@@ -6,6 +6,7 @@ use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{AuthenticationError, TransactionAuthenticator};
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::ConcurrentStateCheckpoint;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rest_utils::ErrorObject;
 use sov_rollup_interface::da::DaSpec;
@@ -45,7 +46,7 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     blob_sender: Arc<Mutex<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>>,
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
-    state_sender: watch::Sender<Arc<StateCheckpoint<S>>>,
+    state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     api_ledger_db: LedgerDb,
 }
 
@@ -72,11 +73,10 @@ where
             storage: storage.clone(),
             mempool: vec![],
         });
-        let (state_sender, _rec) = watch::channel(Arc::new(StateCheckpoint::new(
-            storage,
-            &runtime.kernel(),
-            None,
-        )));
+        let (state_sender, _rec) =
+            watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                StateCheckpoint::new(storage, &runtime.kernel(), None),
+            )));
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));

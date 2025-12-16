@@ -8,8 +8,8 @@ use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::rest::{ApiState, HasRestApi};
 use sov_modules_api::{
-    Context, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateCheckpoint, StateValue,
-    TxState,
+    ConcurrentStateCheckpoint, Context, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
+    StateCheckpoint, StateValue, TxState,
 };
 use sov_test_utils::TestSpec;
 use utoipa::openapi::path::ParameterIn;
@@ -135,11 +135,10 @@ async fn rest_api_routes() {
 
     let storage_manager = sov_test_utils::storage::SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let (_sender, receiver) = tokio::sync::watch::channel(Arc::new(StateCheckpoint::new(
-        storage,
-        &MockKernel::<TestSpec>::default(),
-        None,
-    )));
+    let (_sender, receiver) =
+        tokio::sync::watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None),
+        )));
     let runtime = MyRuntime::<TestSpec>::default();
     let state = ApiState::build(
         Arc::new(()),

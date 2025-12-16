@@ -8,6 +8,8 @@ use sov_state::Namespace;
 
 mod access_controls;
 mod checkpoints;
+#[cfg(feature = "native")]
+mod concurrent_state_checkpoint;
 mod genesis;
 mod internals;
 
@@ -34,6 +36,8 @@ mod temp_cache;
 #[cfg(feature = "native")]
 pub use checkpoints::native::AccessoryStateCheckpoint;
 pub use checkpoints::{ChangeSet, StateCheckpoint};
+#[cfg(feature = "native")]
+pub use concurrent_state_checkpoint::ConcurrentStateCheckpoint;
 pub use genesis::GenesisStateAccessor;
 pub use internals::AccessoryDelta;
 pub use kernel::{BootstrapWorkingSet, KernelStateAccessor};

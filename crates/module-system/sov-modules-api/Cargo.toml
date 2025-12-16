@@ -59,6 +59,7 @@ utoipa-swagger-ui = { workspace = true, optional = true }
 unwrap-infallible = { workspace = true }
 nearly-linear = { workspace = true }
 quick_cache = { workspace = true, optional = true }
+concread = { workspace = true }
 
 [dev-dependencies]
 sov-state = { workspace = true, features = ["native", "test-utils"] }
