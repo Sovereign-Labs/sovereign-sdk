@@ -21,14 +21,14 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
         let map = concread::hashmap::HashMap::new();
         state_checkpoint.delta.commit_revertable_storage_cache();
         let mut writer = map.write();
-        for (key, value) in state_checkpoint.delta.user_cache.get_writes() {
-            writer.insert((key.clone(), Namespace::User), value.cloned());
+        for (key, value) in state_checkpoint.delta.user_cache.take_writes() {
+            writer.insert((key.clone(), Namespace::User), value);
         }
-        for (key, value) in state_checkpoint.delta.kernel_cache.get_writes() {
-            writer.insert((key.clone(), Namespace::Kernel), value.cloned());
+        for (key, value) in state_checkpoint.delta.kernel_cache.take_writes() {
+            writer.insert((key.clone(), Namespace::Kernel), value);
         }
-        for (key, value) in state_checkpoint.delta.accessory_writes.iter() {
-            writer.insert((key.clone(), Namespace::Accessory), value.value.clone());
+        for (key, value) in state_checkpoint.delta.accessory_writes.into_iter() {
+            writer.insert((key.clone(), Namespace::Accessory), value.value);
         }
         writer.commit();
 

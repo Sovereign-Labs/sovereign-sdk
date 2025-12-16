@@ -205,6 +205,35 @@ pub(crate) enum StateToAccess {
     ),
 }
 
+#[derive(derive_more::Debug)]
+struct CheckpointAndReadTxn<S: Spec> {
+    // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
+    #[debug(skip)]
+    read_txn: HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>>,
+    // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
+    // This is undefined behavior
+    state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>,
+}
+
+impl<S: Spec> CheckpointAndReadTxn<S> {
+    pub fn new(state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>) -> Self {
+        Self {
+            read_txn: unsafe { Self::lengthen_lifetime(state_checkpoint.writes.read()) },
+            state_checkpoint,
+        }
+    }
+
+    /// A very, very unsafe function that lengthens the lifetime of a read transaction to `'static`.
+    ///
+    /// We use this function because ApiStateAccessor has to be 'static for compatibility with Axum/Tokio.
+    /// Our use of this function is sound because we only use it on Arc<ConcurrentStateCheckpoint<S>> while we're one of the holders of the Arc,
+    /// so the resulting read txn is guaranteed to be dropped before the Concread::HashMap is.
+    unsafe fn lengthen_lifetime(
+        read_txn: HashMapReadTxn<'_, (SlotKey, Namespace), Option<SlotValue>>,
+    ) -> HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>> {
+        std::mem::transmute(read_txn)
+    }
+}
 /// A [`crate::StateReaderAndWriter`] designed for use within REST APIs and JSON-RPC.
 ///
 /// It can read and write accessory data as well as "user" and "kernel" data.
@@ -219,12 +248,7 @@ pub struct ApiStateAccessor<S: Spec> {
     local_accessory_writes: HashMap<SlotKey, AccessoryWrite>,
     uncomitted_changes: Option<Box<dyn StateGetter>>,
     temp_cache: TempCache,
-    // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
-    #[debug(skip)]
-    read_txn: HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>>,
-    // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
-    // This is undefined behavior
-    state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>,
+    checkpoint_and_read_txn: CheckpointAndReadTxn<S>,
     #[debug(skip)]
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
     // The state requested by the user - either a `RollupHeight` or a `SlotNumber`
@@ -278,7 +302,7 @@ impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
         None
     }
     fn storage(&self) -> &S::Storage {
-        self.state_checkpoint.storage()
+        self.checkpoint_and_read_txn.state_checkpoint.storage()
     }
 }
 
@@ -372,7 +396,11 @@ impl<S: Spec> ApiStateAccessor<S> {
             return entry.clone();
         }
 
-        if let Some(entry) = self.read_txn.get(&(key.clone(), Namespace::User)) {
+        if let Some(entry) = self
+            .checkpoint_and_read_txn
+            .read_txn
+            .get(&(key.clone(), Namespace::User))
+        {
             return entry.clone();
         }
 
@@ -382,7 +410,8 @@ impl<S: Spec> ApiStateAccessor<S> {
             }
         }
 
-        self.state_checkpoint
+        self.checkpoint_and_read_txn
+            .state_checkpoint
             .storage()
             .get::<namespaces::User>(key, &self.witness)
     }
@@ -392,7 +421,11 @@ impl<S: Spec> ApiStateAccessor<S> {
             return entry.clone();
         }
 
-        if let Some(entry) = self.read_txn.get(&(key.clone(), Namespace::Kernel)) {
+        if let Some(entry) = self
+            .checkpoint_and_read_txn
+            .read_txn
+            .get(&(key.clone(), Namespace::Kernel))
+        {
             return entry.clone();
         }
 
@@ -402,7 +435,8 @@ impl<S: Spec> ApiStateAccessor<S> {
             }
         }
 
-        self.state_checkpoint
+        self.checkpoint_and_read_txn
+            .state_checkpoint
             .storage()
             .get::<namespaces::Kernel>(key, &self.witness)
     }
@@ -412,7 +446,11 @@ impl<S: Spec> ApiStateAccessor<S> {
             return write.value.clone();
         }
 
-        if let Some(write) = self.read_txn.get(&(key.clone(), Namespace::Accessory)) {
+        if let Some(write) = self
+            .checkpoint_and_read_txn
+            .read_txn
+            .get(&(key.clone(), Namespace::Accessory))
+        {
             return write.clone();
         }
 
@@ -422,7 +460,10 @@ impl<S: Spec> ApiStateAccessor<S> {
             }
         }
 
-        self.state_checkpoint.storage().get_accessory(key)
+        self.checkpoint_and_read_txn
+            .state_checkpoint
+            .storage()
+            .get_accessory(key)
     }
 
     fn get_archival_from_user_storage(
@@ -437,7 +478,8 @@ impl<S: Spec> ApiStateAccessor<S> {
             return Ok(entry.clone());
         }
         // If not, read it from storage
-        self.state_checkpoint
+        self.checkpoint_and_read_txn
+            .state_checkpoint
             .storage()
             .get_historical::<namespaces::User>(key, version, &self.witness)
     }
@@ -454,7 +496,8 @@ impl<S: Spec> ApiStateAccessor<S> {
             return Ok(entry.clone());
         }
         // If not, read it from storage
-        self.state_checkpoint
+        self.checkpoint_and_read_txn
+            .state_checkpoint
             .storage()
             .get_historical::<namespaces::Kernel>(key, version, &self.witness)
     }
@@ -469,21 +512,11 @@ impl<S: Spec> ApiStateAccessor<S> {
             return Ok(write.value.clone());
         }
         // If not, read it from storage
-        self.state_checkpoint
+        self.checkpoint_and_read_txn
+            .state_checkpoint
             .storage()
             .get_accessory_historical(key, version)
     }
-}
-
-/// A very, very unsafe function that lengthens the lifetime or a read transaction to `'static`.
-///
-/// We use this function because ApiStateAccessor has to be 'static for compatibility with Axum/Tokio.
-/// Our use of this function is sound because we only use it on Arc<ConcurrentStateCheckpoint<S>> while we're one of the holders of the Arc,
-/// so the resulting read txn is guaranteed to be dropped before the Concread::HashMap is.
-unsafe fn lengthen_lifetime<'a>(
-    read_txn: HashMapReadTxn<'a, (SlotKey, Namespace), Option<SlotValue>>,
-) -> HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>> {
-    std::mem::transmute(read_txn)
 }
 
 /// An error that can occur when creating an [`ApiStateAccessor`].
@@ -619,21 +652,19 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Result<Self, ApiStateAccessorError> {
         let gas_meter = BasicGasMeter::new_api(gas_price);
-        // SAFETY: We use unsafe to lengthen the lifetime of the read transaction from the lifetime of the current function to `static`. This is sound
-        // because  we're currently holding an `Arc` of the state_checkpoint, so it is guaranteed to outlive the read txn.
-        let read_txn = unsafe { lengthen_lifetime(state_checkpoint.writes.read()) };
+        let uncomitted_changes = state_checkpoint
+            .uncomitted_changes
+            .as_ref()
+            .map(|g| g.box_clone());
+        let checkpoint_and_read_txn = CheckpointAndReadTxn::new(state_checkpoint);
 
         let mut out = Self {
-            uncomitted_changes: state_checkpoint
-                .uncomitted_changes
-                .as_ref()
-                .map(|g| g.box_clone()),
+            uncomitted_changes,
             witness: Default::default(),
             gas_meter,
             events: Vec::new(),
             temp_cache: TempCache::new(),
-            state_checkpoint,
-            read_txn,
+            checkpoint_and_read_txn,
             local_kernel_writes: HashMap::new(),
             local_user_writes: HashMap::new(),
             local_accessory_writes: HashMap::new(),
@@ -681,16 +712,13 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             .uncomitted_changes
             .as_ref()
             .map(|g| g.box_clone());
-        // SAFETY: We use unsafe to lengthen the lifetime of the read transaction from the lifetime of the current function to `static`. This is sound
-        // because  we're currently holding an `Arc` of the state_checkpoint, so it is guaranteed to outlive the read txn.
-        let read_txn = unsafe { lengthen_lifetime(state_checkpoint.writes.read()) };
+        let checkpoint_and_read_txn = CheckpointAndReadTxn::new(state_checkpoint);
         let gas_meter = BasicGasMeter::new_api(<S::Gas as Gas>::Price::ZEROED);
         Self {
             events: Vec::new(),
             gas_meter,
-            state_checkpoint,
             uncomitted_changes,
-            read_txn,
+            checkpoint_and_read_txn,
             witness: Default::default(),
             local_kernel_writes: HashMap::new(),
             local_user_writes: HashMap::new(),
@@ -836,7 +864,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         height: RollupHeight,
     ) -> Result<ApiStateAccessor<S>, ApiStateAccessorError> {
         Self::build_archival_state(
-            self.state_checkpoint.clone(),
+            self.checkpoint_and_read_txn.state_checkpoint.clone(),
             self.uncomitted_changes.as_ref().map(|c| c.box_clone()),
             self.kernel.clone(),
             StateToAccess::RollupHeight(height),
