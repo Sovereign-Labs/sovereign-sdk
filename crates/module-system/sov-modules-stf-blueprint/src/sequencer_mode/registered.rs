@@ -175,7 +175,7 @@ where
         sequencer_da_address,
         sequencer_rollup_address,
         &mut pre_exec_working_set,
-        raw_tx.sequencing_data.clone().map(Into::into),
+        raw_tx.sequencing_data.clone(),
     );
     metrics.timings.resolve_context_timer.end();
     metrics.timings.resolve_context_access_metrics = pre_exec_working_set.metrics().take();

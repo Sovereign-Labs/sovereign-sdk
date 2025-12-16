@@ -483,7 +483,7 @@ impl<C> From<AcceptedTx<C>> for ApiAcceptedTx<C> {
     fn from(tx: AcceptedTx<C>) -> Self {
         Self {
             id: tx.tx_hash,
-            tx: tx.tx.data.into(),
+            tx: tx.tx.data,
             confirmation: tx.confirmation,
         }
     }

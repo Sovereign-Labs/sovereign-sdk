@@ -253,7 +253,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         };
         Ok(Some(AcceptedTx {
             tx: FullyBakedTx {
-                data: tx.body.unwrap_or_default().to_vec(),
+                data: tx.body.unwrap_or_default(),
                 sequencing_data: None, // TODO
             },
             tx_hash,
