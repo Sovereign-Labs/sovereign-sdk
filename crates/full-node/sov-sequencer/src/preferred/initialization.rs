@@ -1,5 +1,6 @@
 use super::*;
 use anyhow::Context;
+use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::rest::StateUpdateReceiver;
 use std::path::Path;
@@ -42,14 +43,14 @@ where
 
     /// Builds the sequencer instance.
     pub async fn build(
-        mut self,
+        self,
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
-    ) -> anyhow::Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
+    ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
 
@@ -65,8 +66,13 @@ where
             "Instantiating the preferred sequencer"
         );
 
-        let maybe_oracle_config = self.setup_oracle_config()?;
-        let config = self.config.clone();
+        let mut config = self.config;
+        let maybe_oracle_config = TimingOracleConfigWithPrivateKey::new(
+            config.sequencer_kind_config.timing_oracle.clone(),
+        )
+        .transpose()?;
+        maybe_add_oracle_to_admins(&mut config.admin_addresses, &maybe_oracle_config);
+
         let mut runtime: Rt = Default::default();
         let tx_status_manager = TxStatusManager::default();
 
@@ -269,7 +275,7 @@ where
                 match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
                     Ok(handle) => handles.push(handle),
                     Err(e) => {
-                        tracing::error!(error = ?e, "Failed to start timestamp oracle task");
+                        error!(error = ?e, "Failed to start timestamp oracle task");
                     }
                 }
             }
@@ -277,27 +283,20 @@ where
 
         Ok((seq, handles))
     }
+}
 
-    fn setup_oracle_config(
-        &mut self,
-    ) -> anyhow::Result<Option<TimingOracleConfigWithPrivateKey<S>>> {
-        let maybe_oracle_config = TimingOracleConfigWithPrivateKey::new(
-            self.config.sequencer_kind_config.timing_oracle.clone(),
-        )
-        .transpose()?;
-
-        if let Some(oracle_config) = &maybe_oracle_config {
-            let oracle_address = oracle_config.address();
-
-            if !self.config.admin_addresses.contains(&oracle_address) {
-                tracing::info!(
-                    "Adding oracle address {} to sequencer's admin address list",
-                    oracle_address
-                );
-                self.config.admin_addresses.push(oracle_address);
-            }
+fn maybe_add_oracle_to_admins<S: Spec>(
+    admins: &mut Vec<S::Address>,
+    oracle_config: &Option<TimingOracleConfigWithPrivateKey<S>>,
+) {
+    if let Some(oracle_config) = oracle_config {
+        let oracle = oracle_config.address();
+        if !admins.contains(&oracle) {
+            info!(
+                "Adding oracle address {} to sequencer's admin address list",
+                oracle
+            );
+            admins.push(oracle);
         }
-
-        Ok(maybe_oracle_config)
-    }
+    };
 }

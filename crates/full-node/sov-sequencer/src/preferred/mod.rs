@@ -25,12 +25,12 @@ use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
-use anyhow::Context;
 use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
 use db::{PreferredSequencerDb, PreferredSequencerReadBatch, PreferredSequencerReadBlob};
+use derive_more::Deref;
 use futures::Stream;
 pub use initialization::Builder;
 use nonce_buffer_task::{NonceBufferInputSender, NonceBufferTask, SequencerTxExecutionBackend};
@@ -64,7 +64,6 @@ use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::num::NonZero;
-use std::ops::Deref;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -98,26 +97,13 @@ type VisibleSlotNumberIncrease = NonZero<u8>;
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
 
 /// A [`Sequencer`] with instant transaction confirmation.
-#[derive(derivative::Derivative)]
+#[derive(derivative::Derivative, Deref)]
 #[derivative(Clone(bound = ""))]
 pub struct PreferredSequencer<S, Rt, Da>(Arc<PreferredSequencerFields<S, Rt, Da>>)
 where
     S: Spec,
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>;
-
-impl<S, Rt, Da> Deref for PreferredSequencer<S, Rt, Da>
-where
-    S: Spec,
-    Rt: Runtime<S>,
-    Da: DaService<Spec = S::Da>,
-{
-    type Target = PreferredSequencerFields<S, Rt, Da>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 /// The inner fields of a `PreferredSequencer`. Should be accessed through the parent struct's Arc.
 pub struct PreferredSequencerFields<S, Rt, Da>
