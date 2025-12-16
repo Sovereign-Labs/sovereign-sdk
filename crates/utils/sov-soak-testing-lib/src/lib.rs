@@ -107,6 +107,7 @@ impl ValidityProfile {
 #[derive(Default)]
 pub struct SoakTestRunner<R, S: Spec> {
     modules: Vec<BasicModuleRef<S, R>>,
+    use_retries: bool,
 }
 
 impl<R, S> SoakTestRunner<R, S>
@@ -118,7 +119,17 @@ where
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
+            use_retries: true,
         }
+    }
+
+    /// By default, all transactions that are intended to succeed are submitted with retries using
+    /// exponential backoff.
+    /// When opted out, transactions are sent using a single request and fail-fast if they're not
+    /// successful on the first try.
+    pub fn without_retries(mut self) -> Self {
+        self.use_retries = false;
+        self
     }
 
     /// Add Bank module to the soak test.
@@ -204,7 +215,8 @@ where
                         rx.clone(),
                         worker_id,
                         num_workers,
-                        validity.clone()
+                        validity.clone(),
+                        self.use_retries
                     ) => {
                         // If prepare_and_send_txs completes (likely an error), return immediately
                         return result;
@@ -225,6 +237,7 @@ where
                     worker_id,
                     num_workers,
                     validity.clone(),
+                    self.use_retries,
                 )
                 .await
             };
@@ -314,6 +327,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     worker_id: u128,
     num_workers: u32,
     validity: Distribution<MessageValidity>,
+    use_retries: bool,
 ) -> anyhow::Result<()> {
     let mut nonces: HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64> =
         Default::default();
@@ -401,6 +415,8 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
                     .send_tx_to_sequencer(tx)
                     .await
                     .expect_err("Outdated transaction should have failed");
+            } else if use_retries {
+                client.send_tx_to_sequencer_with_retry(tx).await?;
             } else {
                 client.send_tx_to_sequencer(tx).await?;
             }
