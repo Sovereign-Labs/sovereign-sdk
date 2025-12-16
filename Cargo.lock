@@ -11396,6 +11396,7 @@ dependencies = [
  "sov-api-spec",
  "sov-bank",
  "sov-hyperlane-integration",
+ "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
  "sov-sequencer",

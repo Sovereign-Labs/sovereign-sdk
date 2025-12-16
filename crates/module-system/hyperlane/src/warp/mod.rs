@@ -22,8 +22,16 @@ use crate::{HyperlaneAddress, Mailbox, Recipient};
 
 #[cfg(feature = "native")]
 mod api;
+#[cfg(feature = "native")]
+mod execution_config;
+#[cfg(feature = "native")]
+mod hooks;
+#[cfg(feature = "native")]
+mod metrics;
 mod types;
 
+#[cfg(feature = "native")]
+pub use execution_config::{WarpExecutionConfig, WARP_EXECUTION_CONFIG};
 pub use types::*;
 
 /// Implements support for Hyperlane Warp Routes
