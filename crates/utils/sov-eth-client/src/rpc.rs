@@ -1,3 +1,4 @@
+use crate::GAS;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy_eips::Encodable2718;
@@ -14,7 +15,6 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use sov_rpc_eth_types::FilterWithCursor;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
-use crate::GAS;
 
 pub struct RpcClient {
     pub ws: jsonrpsee::ws_client::WsClient,
