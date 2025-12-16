@@ -178,11 +178,10 @@ pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::R
 
 #[cfg(test)]
 mod tests {
+    use super::RollupConfig;
     use sov_metrics::MonitoringConfig;
     use sov_mock_da::MockDaService;
     use sov_modules_api::Address;
-
-    use super::RollupConfig;
 
     #[test]
     fn test_correct_config() {
@@ -270,6 +269,66 @@ mod tests {
             postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db"
             node_id = "node_1"
             time_till_leader_update_allowed_ms = 1000
+        "#;
+
+        let config =
+            toml::from_str::<RollupConfig<Address, MockDaService, MonitoringConfig>>(config_s)
+                .unwrap();
+
+        insta::assert_json_snapshot!(config);
+    }
+
+    #[test]
+    fn test_correct_config_with_rate_limiter() {
+        let config_s = r#"
+            [da]
+            connection_string = "sqlite:///tmp/mockda.sqlite?mode=rwc"
+            sender_address = "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+            [da.block_producing.periodic]
+            block_time_ms = 1_000
+            [storage]
+            path = "/tmp"
+            [runner]
+            da_polling_interval_ms = 10000
+            concurrent_sync_tasks = 18
+            [runner.http_config]
+            bind_host = "127.0.0.1"
+            bind_port = 12346
+            public_address = "https://rollup.sovereign.xyz"
+            cors = "restrictive"
+            [monitoring]
+            telegraf_address = "udp://192.168.4.5:8543"
+            max_datagram_size = 1024
+            max_pending_metrics = 2560
+            [proof_manager]
+            aggregated_proof_block_jump = 22
+            prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+            max_number_of_transitions_in_db = 1025
+            max_number_of_transitions_in_memory = 768
+            [sequencer]
+            blob_processing_timeout_secs = 60
+            max_batch_size_bytes = 1048576
+            max_concurrent_blobs = 16
+            max_allowed_node_distance_behind = 5
+            rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+            [sequencer.preferred]
+            disable_state_root_consistency_checks = true
+            recovery_strategy = "TryToSave"
+            batch_execution_time_limit_millis = 2000 
+            num_cache_warmup_workers = 0
+            ideal_lag_behind_finalized_slot = 3
+            is_replica = false
+            [sequencer.preferred.postgres_config]
+            postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db"
+            node_id = "node_1"
+            time_till_leader_update_allowed_ms = 1000
+            [sequencer.preferred.rate_limiter]
+            address_custom_limits = []
+            max_requests_per_second = 1000000
+            ip_custom_limits = [["157.180.14.244", { resources_per_bucket = 10, batch_execution_time_limit_millis = 200, refill_rate = 2}]]
+            [sequencer.preferred.rate_limiter.default_limits]
+            resources_per_bucket = 5
+            refill_rate = 2
         "#;
 
         let config =

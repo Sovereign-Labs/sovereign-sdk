@@ -278,6 +278,9 @@ pub struct TimingOracleConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct SovRateLimiterConfig<Address: Copy> {
+    /// The maximum number of requests allowed per second.
+    pub max_requests_per_second: u64,
+    /// Default limits.
     pub default_limits: Limits,
     pub address_custom_limits: Vec<(Address, Limits)>,
     pub ip_custom_limits: Vec<(IpAddr, Limits)>,
@@ -286,21 +289,9 @@ pub struct SovRateLimiterConfig<Address: Copy> {
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct Limits {
     /// Determines the threshold for rate-limiting requests.
-    /// This value is used as follows:
-    ///
-    /// MAX_THRESHOLD_PER_KEY =
-    ///     MAX_BATCH_RESOURCE_CAPACITY / max_threshold_per_key_to_batch_capacity_ratio
-    ///
-    /// For example, setting max_threshold_per_key_to_batch_capacity_ratio to 200
-    /// means that MAX_THRESHOLD_PER_KEY will be 0.5% of MAX_BATCH_RESOURCE_CAPACITY.
-    pub max_threshold_per_key_to_batch_capacity_ratio: u64,
-    /// Determines how quickly tokens are refilled in the token-bucket algorithm.
-    /// Each user can consume, on average, only a certain percentage of the batch resources (MAX_THRESHOLD_PER_KEY).
-    /// Over time, users send requests that draw from their available resources, while a
-    /// constant stream of tokens refilling those resources.
-    /// At refill_rate = 1, tokens regenerate at MAX_THRESHOLD_PER_KEY/100 per millisecond.
+    /// The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.
+    pub resources_per_bucket: u64,
+    /// The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
     /// Values between 1 and 20 are recommended starting points.
     pub refill_rate: u64,
-    /// The maximum number of requests allowed per batch.
-    pub max_requests_per_batch: u64,
 }

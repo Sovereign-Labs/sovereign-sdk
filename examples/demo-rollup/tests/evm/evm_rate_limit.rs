@@ -45,10 +45,10 @@ async fn setup_test_rollup(
 async fn evm_test_rate_limit() -> anyhow::Result<()> {
     let rate_limiter = SovRateLimiterConfig {
         default_limits: Limits {
-            max_threshold_per_key_to_batch_capacity_ratio: 200,
-            max_requests_per_batch: 0,
+            resources_per_bucket: 5,
             refill_rate: 0,
         },
+        max_requests_per_second: 0,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
