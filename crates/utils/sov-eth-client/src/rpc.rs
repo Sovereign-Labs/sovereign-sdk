@@ -14,6 +14,7 @@ use jsonrpsee::ws_client::WsClientBuilder;
 use sov_rpc_eth_types::FilterWithCursor;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
+use crate::GAS;
 
 pub struct RpcClient {
     pub ws: jsonrpsee::ws_client::WsClient,
@@ -115,8 +116,7 @@ impl RpcClient {
         let eip1559_tx = TxEip1559 {
             chain_id: self.chain_id,
             nonce: tx.nonce.unwrap_or(0),
-            // TODO: Check up this:
-            gas_limit: tx.gas.unwrap_or(100_000_000),
+            gas_limit: tx.gas.unwrap_or(GAS),
             max_fee_per_gas: tx.max_fee_per_gas.unwrap_or(0),
             max_priority_fee_per_gas: tx.max_priority_fee_per_gas.unwrap_or(0),
             to: tx.to.unwrap_or(TxKind::Create),
