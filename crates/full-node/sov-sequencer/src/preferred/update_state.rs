@@ -6,9 +6,8 @@ use sov_state::{NativeStorage, Storage};
 
 use crate::metrics::PreferredSequencerUpdateStateMetrics;
 use crate::preferred::{
-    get_next_sequence_number_according_to_node, DbEvent, FetchBatches, Flow,
-    PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
-    StateUpdateInfo,
+    get_next_sequence_number_according_to_node, Event, FetchBatches, Flow, PreferredBatchToReplay,
+    PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor, StateUpdateInfo,
 };
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
@@ -226,24 +225,24 @@ where
 #[tracing::instrument(skip_all, level = "warn", name = "update_state::do_next_event")]
 pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
     executor: &mut RollupBlockExecutor<S, Rt>,
-    event: DbEvent,
+    event: Event,
     batches_count: &mut u64,
     transactions_count: &mut usize,
     node_state_root: &<S::Storage as Storage>::Root,
     batch_is_in_progress: &mut bool,
 ) -> anyhow::Result<()> {
     match event {
-        DbEvent::TxAccepted(tx, hash) => {
+        Event::TxAccepted(tx, hash) => {
             executor.replay_tx(hash, tx).await;
             *transactions_count += 1;
             *batch_is_in_progress = true;
         }
-        DbEvent::BatchClosed(_) => {
+        Event::BatchClosed(_) => {
             tracing::trace!("Done replaying txs");
             executor.end_rollup_block().await;
             *batch_is_in_progress = false;
         }
-        DbEvent::BatchStarted {
+        Event::BatchStarted {
             sequence_number: _,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
@@ -260,7 +259,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
 
             *batch_is_in_progress = true;
         }
-        DbEvent::ProofBlobAccepted(_) => {
+        Event::ProofBlobAccepted(_) => {
             // We don't do anything with proofs yet.
             // Note that we also don't change the state of the batch_is_in_progress flag here.
             tracing::trace!("Proof blob accepted");

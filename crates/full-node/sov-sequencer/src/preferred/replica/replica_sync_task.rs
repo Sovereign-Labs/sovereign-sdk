@@ -145,7 +145,7 @@ mod tests {
     use super::*;
     use crate::preferred::db::postgres::PostgresBackend;
     use crate::preferred::db::BatchToStore;
-    use crate::preferred::db::PreferredSequencerDbBackend;
+    use crate::preferred::db::Backend;
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;

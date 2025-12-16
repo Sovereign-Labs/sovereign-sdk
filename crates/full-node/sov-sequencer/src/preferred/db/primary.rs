@@ -10,8 +10,8 @@ use tokio::sync::watch;
 
 use crate::preferred::{
     db::{
-        postgres::PostgresBackend, rocksdb::RocksDbBackend, BatchToStore, DbSnapshotData,
-        PreferredSequencerCache, PreferredSequencerDb, PreferredSequencerDbBackend,
+        postgres::PostgresBackend, rocksdb::RocksDbBackend, Backend, BatchToStore, Cache, Db,
+        SnapshotData,
     },
     exit_rollup,
 };
@@ -21,7 +21,7 @@ const PRUNING_LAG: u64 = 10;
 
 /// Primary sequencer database implementation with real storage backend.
 pub struct PrimarySequencerDb {
-    backend: Box<dyn PreferredSequencerDbBackend>,
+    backend: Box<dyn Backend>,
     shutdown_sender: watch::Sender<()>,
 }
 
@@ -31,7 +31,7 @@ impl PrimarySequencerDb {
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
     ) -> Result<Self> {
-        let backend: Box<dyn PreferredSequencerDbBackend> = {
+        let backend: Box<dyn Backend> = {
             if let Some(postgres_config) = &postgres_config {
                 Box::new(PostgresBackend::connect(postgres_config).await?)
             } else {
@@ -47,7 +47,7 @@ impl PrimarySequencerDb {
 
     async fn debug_assert_in_progress_batch_is_none(
         msg: &str,
-        backend: &mut Box<dyn PreferredSequencerDbBackend>,
+        backend: &mut Box<dyn Backend>,
         shutdown_sender: &watch::Sender<()>,
     ) {
         if cfg!(debug_assertions) {
@@ -63,9 +63,9 @@ impl PrimarySequencerDb {
 }
 
 #[async_trait]
-impl PreferredSequencerDb for PrimarySequencerDb {
-    async fn initial_data(&self) -> Result<(SequenceNumber, PreferredSequencerCache)> {
-        let DbSnapshotData {
+impl Db for PrimarySequencerDb {
+    async fn initial_data(&self) -> Result<(SequenceNumber, Cache)> {
+        let SnapshotData {
             completed_blobs,
             in_progress_batch,
         } = self.backend.current_data().await?;
@@ -83,7 +83,7 @@ impl PreferredSequencerDb for PrimarySequencerDb {
 
         Ok((
             sequence_number_of_next_blob,
-            PreferredSequencerCache::new(
+            Cache::new(
                 completed_blobs,
                 in_progress_batch,
                 self.shutdown_sender.clone(),

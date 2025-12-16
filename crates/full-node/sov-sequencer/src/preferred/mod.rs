@@ -27,7 +27,7 @@ use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_d
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
-use db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
+use db::{ReadBatch, ReadBlob};
 use derive_more::Deref;
 use futures::Stream;
 pub use initialization::Builder;
@@ -81,7 +81,7 @@ use crate::common::{
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
-use crate::preferred::db::DbEvent;
+use crate::preferred::db::Event;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;

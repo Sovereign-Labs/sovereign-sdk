@@ -9,24 +9,23 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::common::AcceptedTx;
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerExecutorEventSendingMetrics};
-use crate::preferred::db::{PreferredSequencerCache, PreferredSequencerReadBatch};
+use crate::preferred::db::{Cache, ReadBatch};
 use crate::preferred::{
-    exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, PreferredSequencerReadBlob,
-    RecoveryStrategy,
+    exit_rollup, Confirmation, Event, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
 };
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
-    cache: PreferredSequencerCache,
+    cache: Cache,
     shutdown_sender: watch::Sender<()>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     pub fn new(
         shutdown_sender: watch::Sender<()>,
-        cache: PreferredSequencerCache,
+        cache: Cache,
     ) -> (Self, mpsc::Receiver<ExecutorEvent<S, Rt>>) {
         let (sender, receiver) = mpsc::channel(MAX_EXECUTOR_EVENT_QUEUE_DEPTH);
         (
@@ -181,14 +180,14 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     }
 
     /// Fetch the in-progress batch from the database.
-    pub(crate) fn fetch_in_progress_batch(&self) -> Option<PreferredSequencerReadBatch> {
+    pub(crate) fn fetch_in_progress_batch(&self) -> Option<ReadBatch> {
         self.cache
             .in_progress_batch_opt()
             .cloned()
             .map(|b| b.into())
     }
 
-    pub(crate) fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
+    pub(crate) fn subscribe_to_events(&mut self, sender: mpsc::Sender<Event>) {
         self.cache.subscribe_to_events(sender);
     }
 
@@ -246,7 +245,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
 
         let maybe_in_progress_batch = if include_in_progress_batch {
             self.cache.in_progress_batch_opt().cloned().map(|batch| {
-                let batch: PreferredSequencerReadBatch = batch.into();
+                let batch: ReadBatch = batch.into();
                 PreferredBatchToReplay {
                     is_in_progress: true,
                     visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
@@ -260,7 +259,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         blobs_to_apply
             .into_iter()
             .filter_map(|blob| match blob {
-                PreferredSequencerReadBlob::Batch(batch) => Some(PreferredBatchToReplay {
+                ReadBlob::Batch(batch) => Some(PreferredBatchToReplay {
                     is_in_progress: false,
                     visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
                     batch: batch.into_with_cached_tx_hashes(),
@@ -307,7 +306,7 @@ where
         blob_id: BlobInternalId,
     },
     /// Close the current batch.
-    CloseBatch(PreferredSequencerReadBatch, StateCheckpoint<S>),
+    CloseBatch(ReadBatch, StateCheckpoint<S>),
     /// Publish a proof blob.
     PublishProofBlob(BlobInternalId, Arc<[u8]>, SequenceNumber),
     /// Insert an accepted transaction into the database and send out the confirmation
@@ -319,11 +318,11 @@ where
     /// Enter recovery mode.
     TriggerRecovery {
         #[allow(missing_docs)]
-        blobs_to_flush: Vec<PreferredSequencerReadBlob>,
+        blobs_to_flush: Vec<ReadBlob>,
         #[allow(missing_docs)]
         recovery_strategy: RecoveryStrategy,
         #[allow(missing_docs)]
-        batch_to_close: Option<PreferredSequencerReadBatch>,
+        batch_to_close: Option<ReadBatch>,
     },
     /// During recovery mode, we periodically update the state to the node's state.
     UpdateStateForRecovery(StateCheckpoint<S>),

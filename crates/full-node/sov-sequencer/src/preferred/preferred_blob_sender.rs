@@ -14,7 +14,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::debug;
 
-use super::db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
+use super::db::{ReadBatch, ReadBlob};
 use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
@@ -27,7 +27,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
     pub(crate) async fn new(
         da: Da,
         ledger_db: LedgerDb,
-        all_completed_blobs: Vec<PreferredSequencerReadBlob>,
+        all_completed_blobs: Vec<ReadBlob>,
         storage_path: Box<Path>,
         tx_status_manager: TxStatusManager<Da::Spec>,
         shutdown_sender: watch::Sender<()>,
@@ -82,7 +82,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 
     pub(crate) async fn publish_batch(
         &mut self,
-        batch: PreferredSequencerReadBatch,
+        batch: ReadBatch,
     ) -> anyhow::Result<()> {
         let blob_id = batch.blob_id;
         let data = batch_bytes(batch)?;
@@ -94,14 +94,14 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 
     pub async fn publish_blobs_for_recovery(
         &mut self,
-        completed_blobs: Vec<PreferredSequencerReadBlob>,
+        completed_blobs: Vec<ReadBlob>,
     ) -> anyhow::Result<()> {
         for blob in completed_blobs {
             match blob {
-                PreferredSequencerReadBlob::Batch(batch) => {
+                ReadBlob::Batch(batch) => {
                     self.publish_batch(batch).await?;
                 }
-                PreferredSequencerReadBlob::Proof {
+                ReadBlob::Proof {
                     data,
                     sequence_number,
                     blob_id,
@@ -123,18 +123,18 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 }
 
 pub fn create_blobs_to_send(
-    completed_blobs: Vec<PreferredSequencerReadBlob>,
+    completed_blobs: Vec<ReadBlob>,
 ) -> anyhow::Result<Vec<(BlobToSend, BlobInternalId)>> {
     let mut blobs_to_send = Vec::new();
 
     for blob in completed_blobs {
         match blob {
-            PreferredSequencerReadBlob::Batch(batch) => {
+            ReadBlob::Batch(batch) => {
                 let blob_id = batch.blob_id;
                 let data = batch_bytes(batch)?;
                 blobs_to_send.push((BlobToSend::Batch { data }, blob_id));
             }
-            PreferredSequencerReadBlob::Proof {
+            ReadBlob::Proof {
                 data,
                 sequence_number,
                 blob_id,
@@ -161,7 +161,7 @@ fn proof_bytes(proof_data: &[u8], sequence_number: u64) -> anyhow::Result<Arc<[u
     Ok(Arc::from(borsh::to_vec(&blob)?))
 }
 
-fn batch_bytes(batch: PreferredSequencerReadBatch) -> anyhow::Result<Arc<[u8]>> {
+fn batch_bytes(batch: ReadBatch) -> anyhow::Result<Arc<[u8]>> {
     Ok(borsh::to_vec::<PreferredBatchData>(&PreferredBatchData {
         sequence_number: batch.sequence_number,
         visible_slots_to_advance: batch.visible_slots_to_advance,

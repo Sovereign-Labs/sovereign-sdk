@@ -36,12 +36,12 @@ use crate::preferred::db::replica::ReplicaSequencerDb;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 
 #[async_trait]
-pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
+pub trait Backend: Send + Sync + 'static {
     async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<()>;
 
     /// Calls to this method MUST be "sandwiched" between
-    /// [`PreferredSequencerDbBackend::begin_rollup_block`] and
-    /// [`PreferredSequencerDbBackend::end_rollup_block`].
+    /// [`DbBackend::begin_rollup_block`] and
+    /// [`DbBackend::end_rollup_block`].
     async fn add_tx(
         &mut self,
         sequence_number_of_in_progress_batch: SequenceNumber,
@@ -76,7 +76,7 @@ pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
     /// Reads completed blobs, in-progress batch, and latest event_id.
     /// Bundling this as a single function allows the Postgres backend to do this atomically, which
     /// is necessary to support replica initialization in the presence of concurrent writes.
-    async fn current_data(&self) -> Result<DbSnapshotData>;
+    async fn current_data(&self) -> Result<SnapshotData>;
 
     async fn add_proof_blob(
         &mut self,
@@ -93,17 +93,17 @@ pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<()>;
 }
 
-/// The return type of `PreferredSequencerDbBackend::current_data()`.
+/// The return type of `DbBackend::current_data()`.
 /// Primarily used to populate in-memory caches on initialization.
 #[derive(Debug, Default, Clone)]
-pub struct DbSnapshotData {
-    pub completed_blobs: Vec<PreferredSequencerReadBlob>,
+pub struct SnapshotData {
+    pub completed_blobs: Vec<ReadBlob>,
     pub in_progress_batch: Option<InProgressBatch>,
 }
 
 /// See [`PreferredSequencerReadBlob::Batch`].
 #[derive(Debug, Clone)]
-pub struct PreferredSequencerReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = Arc<Vec<TxHash>>> {
+pub struct ReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = Arc<Vec<TxHash>>> {
     pub sequence_number: SequenceNumber,
     pub visible_slot_number_after_increase: VisibleSlotNumber,
     pub visible_slots_to_advance: NonZero<u8>,
@@ -112,11 +112,11 @@ pub struct PreferredSequencerReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = 
     pub tx_hashes: TxHashes,
 }
 
-pub type InProgressBatch = PreferredSequencerReadBatch<Vec<FullyBakedTx>, Vec<TxHash>>;
+pub type InProgressBatch = ReadBatch<Vec<FullyBakedTx>, Vec<TxHash>>;
 
-impl From<InProgressBatch> for PreferredSequencerReadBatch {
+impl From<InProgressBatch> for ReadBatch {
     fn from(batch: InProgressBatch) -> Self {
-        PreferredSequencerReadBatch {
+        ReadBatch {
             sequence_number: batch.sequence_number,
             visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
             visible_slots_to_advance: batch.visible_slots_to_advance,
@@ -127,7 +127,7 @@ impl From<InProgressBatch> for PreferredSequencerReadBatch {
     }
 }
 
-impl PreferredSequencerReadBatch {
+impl ReadBatch {
     pub(crate) fn into_with_cached_tx_hashes(self) -> WithCachedTxHashes<PreferredBatchData> {
         WithCachedTxHashes {
             tx_hashes: self.tx_hashes.clone(),
@@ -140,9 +140,9 @@ impl PreferredSequencerReadBatch {
     }
 }
 
-/// See [`PreferredSequencerDbBackend::read_completed_blobs`].
+/// See [`DbBackend::read_completed_blobs`].
 #[derive(Debug, Clone)]
-pub enum PreferredSequencerReadBlob<Inner = PreferredSequencerReadBatch> {
+pub enum ReadBlob<Inner = ReadBatch> {
     Batch(Inner),
     Proof {
         blob_id: BlobInternalId,
@@ -151,11 +151,11 @@ pub enum PreferredSequencerReadBlob<Inner = PreferredSequencerReadBatch> {
     },
 }
 
-impl PreferredSequencerReadBlob {
+impl ReadBlob {
     pub fn sequence_number(&self) -> SequenceNumber {
         match &self {
-            PreferredSequencerReadBlob::Batch(batch) => batch.sequence_number,
-            PreferredSequencerReadBlob::Proof {
+            ReadBlob::Batch(batch) => batch.sequence_number,
+            ReadBlob::Proof {
                 sequence_number, ..
             } => *sequence_number,
         }
@@ -163,7 +163,7 @@ impl PreferredSequencerReadBlob {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum DbEvent {
+pub(crate) enum Event {
     TxAccepted(FullyBakedTx, TxHash),
     BatchStarted {
         sequence_number: SequenceNumber,
@@ -174,16 +174,16 @@ pub(crate) enum DbEvent {
     ProofBlobAccepted(SequenceNumber),
 }
 
-pub struct PreferredSequencerCache {
-    completed_blobs: VecDeque<PreferredSequencerReadBlob>,
+pub struct Cache {
+    completed_blobs: VecDeque<ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
-    event_stream: Option<mpsc::Sender<DbEvent>>,
+    event_stream: Option<mpsc::Sender<Event>>,
     shutdown_sender: watch::Sender<()>,
 }
 
-impl PreferredSequencerCache {
+impl Cache {
     pub fn new(
-        completed_blobs: VecDeque<PreferredSequencerReadBlob>,
+        completed_blobs: VecDeque<ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
         shutdown_sender: watch::Sender<()>,
     ) -> Self {
@@ -199,14 +199,14 @@ impl PreferredSequencerCache {
         self.in_progress_batch.as_ref()
     }
 
-    pub fn all_completed_blobs(&self) -> Vec<PreferredSequencerReadBlob> {
+    pub fn all_completed_blobs(&self) -> Vec<ReadBlob> {
         self.completed_blobs.clone().into()
     }
 
     pub fn all_completed_blobs_greater_than_or_equal_to(
         &self,
         sequence_number: SequenceNumber,
-    ) -> Vec<PreferredSequencerReadBlob> {
+    ) -> Vec<ReadBlob> {
         self.completed_blobs
             .iter()
             .filter(|b| {
@@ -226,11 +226,11 @@ impl PreferredSequencerCache {
         batch.txs.push(tx.clone());
         batch.tx_hashes.push(hash);
         // If there are no receivers, we don't send the tx. This is as it should be.
-        self.send_event_if_necessary(DbEvent::TxAccepted(tx, hash))
+        self.send_event_if_necessary(Event::TxAccepted(tx, hash))
             .await;
     }
 
-    async fn send_event_if_necessary(&mut self, event: DbEvent) {
+    async fn send_event_if_necessary(&mut self, event: Event) {
         let Some(open_stream) = &self.event_stream else {
             return;
         };
@@ -272,7 +272,7 @@ impl PreferredSequencerCache {
             exit_rollup(&self.shutdown_sender).await;
         };
         let blob_id = new_blob_id();
-        self.in_progress_batch = Some(PreferredSequencerReadBatch {
+        self.in_progress_batch = Some(ReadBatch {
             sequence_number,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
@@ -281,7 +281,7 @@ impl PreferredSequencerCache {
             tx_hashes: vec![],
         });
 
-        self.send_event_if_necessary(DbEvent::BatchStarted {
+        self.send_event_if_necessary(Event::BatchStarted {
             sequence_number,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
@@ -301,17 +301,16 @@ impl PreferredSequencerCache {
         data: Arc<[u8]>,
         sequence_number: SequenceNumber,
     ) {
-        self.completed_blobs
-            .push_back(PreferredSequencerReadBlob::Proof {
-                blob_id,
-                sequence_number,
-                data,
-            });
-        self.send_event_if_necessary(DbEvent::ProofBlobAccepted(sequence_number))
+        self.completed_blobs.push_back(ReadBlob::Proof {
+            blob_id,
+            sequence_number,
+            data,
+        });
+        self.send_event_if_necessary(Event::ProofBlobAccepted(sequence_number))
             .await;
     }
 
-    pub async fn terminate_batch(&mut self) -> PreferredSequencerReadBatch {
+    pub async fn terminate_batch(&mut self) -> ReadBatch {
         let Some(in_progress_batch) = self.in_progress_batch.as_ref() else {
             tracing::error!("No in-progress batch; this is a bug, please report it");
             exit_rollup(&self.shutdown_sender).await;
@@ -325,12 +324,12 @@ impl PreferredSequencerCache {
             unreachable!();
         };
 
-        let batch: PreferredSequencerReadBatch = batch.into();
+        let batch: ReadBatch = batch.into();
 
         self.completed_blobs
-            .push_back(PreferredSequencerReadBlob::Batch(batch.clone()));
+            .push_back(ReadBlob::Batch(batch.clone()));
 
-        self.send_event_if_necessary(DbEvent::BatchClosed(sequence_number))
+        self.send_event_if_necessary(Event::BatchClosed(sequence_number))
             .await;
 
         // Update the metrics.
@@ -354,7 +353,7 @@ impl PreferredSequencerCache {
         }
     }
 
-    pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
+    pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<Event>) {
         self.event_stream = Some(sender);
     }
 }
@@ -379,8 +378,8 @@ impl From<BatchToStore> for StoredBlob {
 /// High-level trait for preferred sequencer database operations.
 /// Implemented differently for primary sequencers and replicas.
 #[async_trait]
-pub trait PreferredSequencerDb: Send + Sync {
-    async fn initial_data(&self) -> Result<(SequenceNumber, PreferredSequencerCache)>;
+pub trait Db: Send + Sync {
+    async fn initial_data(&self) -> Result<(SequenceNumber, Cache)>;
 
     async fn bulk_insert_txs(
         &mut self,
@@ -415,7 +414,7 @@ pub(crate) async fn create_preferred_sequencer_db(
     is_replica: bool,
     storage_path: &Path,
     postgres_config: &Option<PostgresConfig>,
-) -> Result<Box<dyn PreferredSequencerDb>> {
+) -> Result<Box<dyn Db>> {
     if is_replica {
         Ok(Box::new(ReplicaSequencerDb::new(shutdown_sender)))
     } else {

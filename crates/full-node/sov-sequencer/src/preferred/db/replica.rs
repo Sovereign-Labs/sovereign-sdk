@@ -7,7 +7,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash, VisibleSlotNumber};
 use tokio::sync::watch;
 
-use crate::preferred::db::{BatchToStore, PreferredSequencerCache, PreferredSequencerDb};
+use crate::preferred::db::{BatchToStore, Cache, Db};
 
 pub struct ReplicaSequencerDb {
     shutdown_sender: watch::Sender<()>,
@@ -22,11 +22,11 @@ impl ReplicaSequencerDb {
 }
 
 #[async_trait]
-impl PreferredSequencerDb for ReplicaSequencerDb {
-    async fn initial_data(&self) -> Result<(SequenceNumber, PreferredSequencerCache)> {
+impl Db for ReplicaSequencerDb {
+    async fn initial_data(&self) -> Result<(SequenceNumber, Cache)> {
         Ok((
             0, // TODO this will be revisited when we enable the replica sync task.
-            PreferredSequencerCache::new(
+            Cache::new(
                 VecDeque::default(),
                 Option::None,
                 self.shutdown_sender.clone(),

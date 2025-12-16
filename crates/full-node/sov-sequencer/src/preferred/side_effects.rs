@@ -15,8 +15,8 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
-    db::PreferredSequencerDb, exit_rollup, PreferredBlobSender, PreferredSequencerReadBatch,
-    PreferredSequencerReadBlob, RecoveryStrategy, RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
+    db::Db, exit_rollup, PreferredBlobSender, ReadBatch, ReadBlob, RecoveryStrategy,
+    RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
 };
 
 /// A task that runs in the background and handles side effects of accepted transactions.
@@ -28,7 +28,7 @@ where
 {
     pub checkpoint_sender: watch::Sender<std::sync::Arc<StateCheckpoint<S>>>,
     pub blob_sender: Option<PreferredBlobSender<Da>>,
-    pub db: Box<dyn PreferredSequencerDb>,
+    pub db: Box<dyn Db>,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,
@@ -52,7 +52,7 @@ where
     async fn close_and_publish_current_batch(
         &mut self,
         checkpoint: StateCheckpoint<S>,
-        batch: PreferredSequencerReadBatch,
+        batch: ReadBatch,
         info_to_store: BatchToStore,
     ) -> Result<()> {
         self.db.terminate_batch(info_to_store).await?;
@@ -69,7 +69,7 @@ where
 
     async fn trigger_recovery(
         &mut self,
-        batches_to_flush: Vec<PreferredSequencerReadBlob>,
+        batches_to_flush: Vec<ReadBlob>,
         recovery_strategy: RecoveryStrategy,
     ) -> Result<()> {
         if !batches_to_flush.is_empty() {

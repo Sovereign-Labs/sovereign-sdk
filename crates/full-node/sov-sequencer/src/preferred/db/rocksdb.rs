@@ -7,7 +7,7 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash};
 
-use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
+use super::{Backend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::{BatchToStore, InProgressBatch};
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub struct RocksDbBackend {
 }
 
 #[async_trait]
-impl PreferredSequencerDbBackend for RocksDbBackend {
+impl Backend for RocksDbBackend {
     #[tracing::instrument(skip_all, level = "trace")]
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>> {
         let Some((sequence_number, stored_blob)) =
@@ -31,7 +31,7 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         };
 
         match self.read_blob(sequence_number, stored_blob).await? {
-            PreferredSequencerReadBlob::Batch(batch) => {
+            ReadBlob::Batch(batch) => {
                 Ok(Some(batch))
             }
             _ => panic!("In-progress batch must be a batch but is a proof blob; this is a bug, please report it"),
@@ -141,11 +141,11 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         Ok(())
     }
 
-    async fn current_data(&self) -> anyhow::Result<DbSnapshotData> {
+    async fn current_data(&self) -> anyhow::Result<SnapshotData> {
         // RocksDB doesn't need atomicity, and doesn't track event_ids
         let completed_blobs = self.read_completed_blobs().await?;
         let in_progress_batch = self.read_in_progress_batch().await?;
-        Ok(DbSnapshotData {
+        Ok(SnapshotData {
             completed_blobs,
             in_progress_batch,
         })
@@ -191,7 +191,7 @@ impl RocksDbBackend {
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    async fn read_completed_blobs(&self) -> anyhow::Result<Vec<PreferredSequencerReadBlob>> {
+    async fn read_completed_blobs(&self) -> anyhow::Result<Vec<ReadBlob>> {
         let mut blobs = vec![];
 
         // Iteration might be slow, but getters are only called during
@@ -218,7 +218,7 @@ impl RocksDbBackend {
         &self,
         sequence_number: SequenceNumber,
         stored_blob: StoredBlob,
-    ) -> anyhow::Result<PreferredSequencerReadBlob<Inner>> {
+    ) -> anyhow::Result<ReadBlob<Inner>> {
         Ok(match stored_blob {
             StoredBlob::Batch {
                 visible_slot_number_after_increase,
@@ -243,7 +243,7 @@ impl RocksDbBackend {
                     tx_hashes.push(tx_hash);
                 }
 
-                PreferredSequencerReadBlob::Batch(
+                ReadBlob::Batch(
                     InProgressBatch {
                         sequence_number,
                         visible_slot_number_after_increase,
@@ -255,7 +255,7 @@ impl RocksDbBackend {
                     .into(),
                 )
             }
-            StoredBlob::Proof { data, blob_id } => PreferredSequencerReadBlob::Proof {
+            StoredBlob::Proof { data, blob_id } => ReadBlob::Proof {
                 sequence_number,
                 data,
                 blob_id,
