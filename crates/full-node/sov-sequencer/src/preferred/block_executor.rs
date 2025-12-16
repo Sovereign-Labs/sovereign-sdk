@@ -756,7 +756,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
             .shutdown()
             .await
-            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
+            .expect("Error while shutting down in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {

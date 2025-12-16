@@ -175,9 +175,9 @@ pub struct TestRunner<
     state_root: <S::Storage as Storage>::Root,
     storage_manager: Sm,
     /// A channel to send the storage over. This should be subscribed to the same channel as [`Self::checkpoint_receiver`].
-    checkpoint_sender: watch::Sender<Arc<StateCheckpoint<S>>>,
+    checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     /// The corresponding receiving end of the channel.
-    checkpoint_receiver: watch::Receiver<Arc<StateCheckpoint<S>>>,
+    checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
     axum_server: axum_server::Handle,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
@@ -342,18 +342,20 @@ where
         let kernel = runtime.kernel();
 
         let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel, None);
-
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
+        let state_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(state_checkpoint);
+        let visible_slot_number = state_checkpoint.current_visible_slot_number();
+        let rollup_height = state_checkpoint.rollup_height_to_access();
 
         ApiStateAccessor::<S>::new_with_price_and_heights(
-            &state_checkpoint,
+            Arc::new(state_checkpoint),
             RT::default().kernel_with_slot_mapping(),
-            state_checkpoint.rollup_height_to_access(),
-            state_checkpoint.current_visible_slot_number(),
+            rollup_height,
+            visible_slot_number,
             base_fee_per_gas,
-        ).unwrap_or_else(|_| panic!("ApiStateAccessor creation failed but the requested block height {} or visible height {} is accessible. This is a bug. Please report it.", state_checkpoint.rollup_height_to_access(), state_checkpoint.current_visible_slot_number()))
+        ).unwrap_or_else(|_| panic!("ApiStateAccessor creation failed but the requested block height {rollup_height} or visible height {visible_slot_number} is accessible. This is a bug. Please report it."))
     }
 
     /// Returns the state of the rollup at the most recent version of the rollup.
@@ -363,13 +365,13 @@ where
         let kernel = runtime.kernel();
 
         let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel, None);
-
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
+        let state_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(state_checkpoint);
 
         ApiStateAccessor::<S>::new_with_price_and_slot_number_dangerous(
-            &state_checkpoint,
+            Arc::new(state_checkpoint),
             RT::default().kernel_with_slot_mapping(),
             self.true_slot_number(),
             base_fee_per_gas,
@@ -456,7 +458,7 @@ where
     fn synchronize_storage_channel(&mut self) {
         let storage = self.storage_manager.create_prover_storage();
         self.checkpoint_sender
-            .send(Arc::new(StateCheckpoint::new(storage, &RT::default().kernel(), None)))
+            .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(storage, &RT::default().kernel(), None))))
             .expect("Failed to send storage, the storage channel is closed. This is a bug. Please report it.");
     }
 
@@ -478,11 +480,10 @@ where
 
         let stf_state = storage_manager.create_prover_storage();
 
-        let (sender, receiver) = watch::channel(Arc::new(StateCheckpoint::new(
-            stf_state.clone(),
-            &RT::default().kernel(),
-            None,
-        )));
+        let (sender, receiver) =
+            watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                StateCheckpoint::new(stf_state.clone(), &RT::default().kernel(), None),
+            )));
 
         let (state_root, change_set) =
             stf.init_chain(&Default::default(), stf_state, genesis_config);

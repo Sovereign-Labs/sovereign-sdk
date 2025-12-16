@@ -207,7 +207,11 @@ where
         );
 
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
+            ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(
+                latest_state_update.storage.clone(),
+                &runtime.kernel(),
+                None,
+            )), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
         ));
         let api_state = ApiState::build(
             Arc::new(()),

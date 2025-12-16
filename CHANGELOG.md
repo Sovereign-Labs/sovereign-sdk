@@ -1,3 +1,6 @@
+# 2025-12-16
+- #2239 Updates the internals of the API state for improved performance. 
+
 # 2025-12-15
 - #2167 Updates the internals of the nonce queue. 
 

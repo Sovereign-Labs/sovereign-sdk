@@ -39,8 +39,7 @@ use utoipa::openapi::OpenApi;
 
 use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
 use crate::hooks::TxHooks;
-use crate::state::VersionReader;
-use crate::{ApiStateAccessor, ModuleId, ModuleInfo, Spec, StateCheckpoint};
+use crate::{ApiStateAccessor, ConcurrentStateCheckpoint, ModuleId, ModuleInfo, Spec};
 
 /// This Rust module is **NOT** part of the public API of the crate, and can
 /// change at any time.
@@ -177,7 +176,7 @@ impl<T: ModuleInfo + Default> HasCustomRestApi for &T {
 pub struct ApiState<S: Spec, T = ()> {
     #[deref]
     inner: Arc<T>,
-    checkpoint_receiver: watch::Receiver<Arc<StateCheckpoint<S>>>,
+    checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
     /// The `height` query parameter extracted from the request, when applicable.
     requested_height: Option<HeightParam>,
@@ -188,7 +187,7 @@ impl<S: Spec, T> ApiState<S, T> {
     /// [`StateCheckpoint`]s.
     pub fn build(
         inner: Arc<T>,
-        checkpoint_receiver: watch::Receiver<Arc<StateCheckpoint<S>>>,
+        checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         requested_height: Option<HeightParam>,
     ) -> Self {
@@ -241,8 +240,7 @@ impl<S: Spec, T> ApiState<S, T> {
         tracing::trace!(?height_param, "Building an API state accessor");
         let state = match height_param {
             Some(HeightParam::RollupHeight(height)) => {
-                let mut state =
-                    ApiStateAccessor::new_archival(&checkpoint, kernel.clone(), height)?;
+                let mut state = ApiStateAccessor::new_archival(checkpoint, kernel.clone(), height)?;
                 // This is not a security isse and this code runs offchain.
                 // TODO: Move this inside the constructor
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2244>
@@ -260,14 +258,14 @@ impl<S: Spec, T> ApiState<S, T> {
             Some(HeightParam::SlotNumber(slot_number)) => {
                 // This constructor sets the gas price correctly, so we don't need to do it manually.
                 ApiStateAccessor::new_archival_with_true_slot_number(
-                    &checkpoint,
+                    checkpoint,
                     kernel.clone(),
                     slot_number,
                 )?
             }
             None => {
                 let height = checkpoint.rollup_height_to_access();
-                let mut state = ApiStateAccessor::new(&checkpoint, kernel.clone());
+                let mut state = ApiStateAccessor::new(checkpoint, kernel.clone());
                 // This is not a security isse and this code runs offchain.
                 // TODO: Move this inside the constructor
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2244>
@@ -288,7 +286,7 @@ impl<S: Spec, T> ApiState<S, T> {
     }
 
     /// Returns the checkpoint receiver.
-    pub fn checkpoint_receiver(&self) -> watch::Receiver<Arc<StateCheckpoint<S>>> {
+    pub fn checkpoint_receiver(&self) -> watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>> {
         self.checkpoint_receiver.clone()
     }
 }
