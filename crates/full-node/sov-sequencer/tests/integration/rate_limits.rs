@@ -203,7 +203,6 @@ async fn test_correct_ip() {
         let err = resp.bytes().await.unwrap();
         let err_str = std::str::from_utf8(&err).unwrap().to_string();
 
-        println!("err_str: {err_str}");
         // Check that the correct IP was rate limmited.
         assert!(err_str
             .contains("The sender was rate-limited by the sequencer: Resource limit exceeded for IP: 123.123.123.123"));

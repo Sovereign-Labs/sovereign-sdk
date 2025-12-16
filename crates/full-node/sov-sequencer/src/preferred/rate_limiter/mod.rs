@@ -89,7 +89,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
 
 const TTL_MULTIPLIER: u64 = 20;
 
-fn clculate_limits<S: Spec>(
+fn calculate_limits<S: Spec>(
     limits: Limits,
     max_requests_per_second: u64,
     batch_execution_time_limit_millis: u64,
@@ -100,7 +100,7 @@ fn clculate_limits<S: Spec>(
     let max_resources_per_batch = Resource {
         req_counter: max_requests_per_second
             .checked_mul(batch_execution_time_limit_millis)
-            .expect("Unable to covert max_requests_per_second to req_counter"),
+            .expect("Overflow converting max_requests_per_second to max requests per batch"),
         // The expect is justified because we will never have batches larger than u64::MAX bytes.
         space_in_bytes: max_batch_size_bytes
             .try_into()
@@ -146,7 +146,7 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
         .map(|(key, limits)| {
             (
                 key,
-                clculate_limits::<S>(
+                calculate_limits::<S>(
                     limits,
                     max_requests_per_second,
                     batch_execution_time_limit_millis,
@@ -167,7 +167,7 @@ fn limits<S: Spec>(
     HashMap<S::Address, RateLimiterConfig<S>>,
     HashMap<IpAddr, RateLimiterConfig<S>>,
 ) {
-    let default_config = clculate_limits::<S>(
+    let default_config = calculate_limits::<S>(
         sov_config.default_limits,
         sov_config.max_requests_per_second,
         batch_execution_time_limit_millis,
@@ -244,7 +244,7 @@ mod tests {
     type Gas = <TestSpec as Spec>::Gas;
 
     #[test]
-    fn test_clculate_limits() {
+    fn test_calculate_limits() {
         let limits = Limits {
             resources_per_bucket: 5,
             refill_rate: 1,
@@ -252,7 +252,7 @@ mod tests {
 
         let max_batch_exec_time = 6000;
         let rate_limiter_config =
-            clculate_limits::<TestSpec>(limits, 10000, max_batch_exec_time, 6000000);
+            calculate_limits::<TestSpec>(limits, 10000, max_batch_exec_time, 6000000);
 
         let max_allowed_resources_per_key = rate_limiter_config.max_allowed_resources;
 
