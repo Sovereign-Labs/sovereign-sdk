@@ -100,7 +100,6 @@ async fn execute_evm_tests(
 
     assert!(latest_block.header.number > initial_block_number);
 
-
     // This should just pass without an error
     client
         .set_value_call_and_estimate_gas(contract_address, set_arg)
