@@ -89,6 +89,10 @@ async fn execute_evm_tests(
     let nonce = client.eth_get_transaction_count(client.address()).await;
     assert_eq!(1, nonce);
 
+    // Send a transaction to ensure that the rollup block is created.
+    let set_arg = 923;
+    evm_test_helper::set_value_check(client, contract_address, set_arg).await?;
+
     // Check that a new block was published
     let latest_block = client
         .eth_get_block_by_number(Some("latest".to_owned()))
@@ -96,8 +100,6 @@ async fn execute_evm_tests(
 
     assert!(latest_block.header.number > initial_block_number);
 
-    let set_arg = 923;
-    evm_test_helper::set_value_check(client, contract_address, set_arg).await?;
 
     // This should just pass without an error
     client
