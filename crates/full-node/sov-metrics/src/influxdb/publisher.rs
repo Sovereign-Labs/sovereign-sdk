@@ -272,10 +272,16 @@ mod tests {
         telegraf_address: TelegrafSocketConfig,
         mut metrics_back_receiver: tokio::sync::mpsc::Receiver<String>,
     ) -> anyhow::Result<()> {
+        let placholder_timestamp = 1234567890;
         let sample_metric = SampleMetric(b"sov-test-metric value=1".to_vec());
+        let sample_metric_string_with_timestamp = format!(
+            "{} {}",
+            std::str::from_utf8(&sample_metric.0[..])?,
+            placholder_timestamp
+        );
         let first_chunk = 2;
         let second_chunk = 3;
-        let max_udp_size = sample_metric.0.len() * (first_chunk + second_chunk);
+        let max_udp_size = sample_metric_string_with_timestamp.len() * (first_chunk + second_chunk);
         let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
         shutdown_receiver.mark_unchanged();
 
@@ -297,7 +303,10 @@ mod tests {
         for _ in 0..first_chunk {
             let x = Box::new(sample_metric.clone());
             sender
-                .send(SubmittableMetric::now(SubmittableMetricKind::Boxed(x)))
+                .send(SubmittableMetric::new(
+                    SubmittableMetricKind::Boxed(x),
+                    placholder_timestamp,
+                ))
                 .await?;
         }
 
@@ -307,22 +316,18 @@ mod tests {
 
         for _ in 0..second_chunk {
             sender
-                .send(SubmittableMetric::now(SubmittableMetricKind::Boxed(
-                    Box::new(sample_metric.clone()),
-                )))
+                .send(SubmittableMetric::new(
+                    SubmittableMetricKind::Boxed(Box::new(sample_metric.clone())),
+                    placholder_timestamp,
+                ))
                 .await?;
         }
 
-        let metric_string = std::str::from_utf8(&sample_metric.0[..])?;
-
-        for _ in 0..total_send {
+        for i in 0..total_send {
             let metric = receive_with_timeout(&mut metrics_back_receiver)
                 .await
-                .unwrap();
-            assert!(
-                metric.starts_with(metric_string),
-                "Metric {metric} must start with {metric_string}"
-            );
+                .unwrap_or_else(|| panic!("Metric {i} not found"));
+            assert_eq!(metric, sample_metric_string_with_timestamp);
         }
 
         // Nothing is left in the channel.
