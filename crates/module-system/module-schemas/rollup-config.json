@@ -1021,6 +1021,7 @@
           }
         },
         "max_nb_of_concurrent_users_in_rate_limiter": {
+          "description": "The cache size for the rate limiter.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
