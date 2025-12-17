@@ -138,15 +138,14 @@ where
     }
 
     #[cfg(feature = "native")]
-    fn resolve_address<ST: sov_modules_api::StateAccessor>(
+    fn resolve_address<ST: sov_modules_api::StateReader<sov_modules_api::User>>(
         &mut self,
         default_address: &S::Address,
         credential_id: &sov_modules_api::CredentialId,
         state: &mut ST,
-    ) -> Result<S::Address, <ST as sov_modules_api::StateWriter<sov_modules_api::User>>::Error>
-    {
+    ) -> Result<S::Address, ST::Error> {
         self.accounts
-            .resolve_sender_address(default_address, credential_id, state)
+            .resolve_sender_address_read_only(default_address, credential_id, state)
     }
 
     #[cfg(feature = "native")]

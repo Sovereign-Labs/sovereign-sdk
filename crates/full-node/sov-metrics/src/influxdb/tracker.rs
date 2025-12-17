@@ -811,3 +811,30 @@ pub fn spawn_tokio_runtime_metrics_task(
         }
     })
 }
+
+/// Metrics for rate limiter.
+#[derive(Debug)]
+pub struct RateLimiterMetrics {
+    /// Type of the limiter
+    pub limiter_type: &'static str,
+    /// Total number of items stored in the cache.
+    pub value: u64,
+}
+
+impl Metric for RateLimiterMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_rate_limiter"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},limiter_type={:?} value={}",
+            self.measurement_name(),
+            self.limiter_type,
+            self.value,
+        )?;
+
+        Ok(())
+    }
+}

@@ -44,14 +44,27 @@ struct SovRateLimiterInner<S: Spec> {
 
 impl<S: Spec> SovRateLimiterInner<S> {
     fn new(
+        max_nb_of_concurrent_users_in_rate_limiter: u64,
         ttl_in_millis: u64,
         config: RateLimiterConfig<S>,
         addrs: HashMap<S::Address, RateLimiterConfig<S>>,
         ips: HashMap<IpAddr, RateLimiterConfig<S>>,
     ) -> Self {
         Self {
-            by_addr_rate_limiter: RateLimiter::new(ttl_in_millis, config.clone(), addrs),
-            by_ip_rate_limiter: RateLimiter::new(ttl_in_millis, config, ips),
+            by_addr_rate_limiter: RateLimiter::new(
+                "limiter_by_addr",
+                max_nb_of_concurrent_users_in_rate_limiter,
+                ttl_in_millis,
+                config.clone(),
+                addrs,
+            ),
+            by_ip_rate_limiter: RateLimiter::new(
+                "limiter_by_ip",
+                max_nb_of_concurrent_users_in_rate_limiter,
+                ttl_in_millis,
+                config,
+                ips,
+            ),
         }
     }
 
@@ -61,6 +74,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
         address: S::Address,
     ) -> Result<LimiterToken<S>, ResourceLimitExceededError<S>> {
         let now = Instant::now();
+
         let throttler_for_addr = match self.by_addr_rate_limiter.allow(now, &address) {
             Ok(ok) => ok,
             Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
@@ -87,7 +101,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
     }
 }
 
-const TTL_MULTIPLIER: u64 = 20;
+const TTL_MULTIPLIER: u64 = 5;
 
 fn calculate_limits<S: Spec>(
     limits: Limits,
@@ -200,13 +214,21 @@ impl<S: Spec> SovRateLimiter<S> {
         let inner = config.map(|sov_config| {
             // All entries older than this value are evicted from the rate limiter.
             let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
+            let max_nb_of_concurrent_users_in_rate_limiter =
+                sov_config.max_nb_of_concurrent_users_in_rate_limiter;
 
             let (config, addrs, ips) = limits(
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
             );
-            SovRateLimiterInner::new(ttl_in_millis, config, addrs, ips)
+            SovRateLimiterInner::new(
+                max_nb_of_concurrent_users_in_rate_limiter,
+                ttl_in_millis,
+                config,
+                addrs,
+                ips,
+            )
         });
         Self { inner }
     }
@@ -216,10 +238,17 @@ impl<S: Spec> SovRateLimiter<S> {
         ip: IpAddr,
         address: S::Address,
     ) -> Result<Option<LimiterToken<S>>, ResourceLimitExceededError<S>> {
-        self.inner
+        let res = self
+            .inner
             .as_mut()
             .map(|inner| inner.allow(ip, address))
-            .transpose()
+            .transpose();
+
+        if let Err(err) = &res {
+            tracing::debug!(ip = %ip, address = %address, %err, "Transaction not allowed.");
+        }
+
+        res
     }
 
     pub(crate) fn update(
@@ -310,7 +339,7 @@ mod tests {
         let ip1 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let ip2 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
 
-        let mut rate_limiter = SovRateLimiter::new_for_test(1_000_000, Some(config));
+        let mut rate_limiter = SovRateLimiter::new_for_test(1000, 1000000, Some(config));
 
         // Update rate limiter for (ip1, cred1)
         {
@@ -339,9 +368,19 @@ mod tests {
     }
 
     impl<S: Spec> SovRateLimiter<S> {
-        fn new_for_test(ttl_in_millis: u64, config: Option<RateLimiterConfig<S>>) -> Self {
+        fn new_for_test(
+            max_nb_of_concurrent_users: u64,
+            ttl_in_millis: u64,
+            config: Option<RateLimiterConfig<S>>,
+        ) -> Self {
             let inner = config.map(|c| {
-                SovRateLimiterInner::new(ttl_in_millis, c, Default::default(), Default::default())
+                SovRateLimiterInner::new(
+                    max_nb_of_concurrent_users,
+                    ttl_in_millis,
+                    c,
+                    Default::default(),
+                    Default::default(),
+                )
             });
             Self { inner }
         }
