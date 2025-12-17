@@ -86,7 +86,7 @@ arbitrary = [
 	"sov-db?/arbitrary",
 	"sov-mock-zkvm/arbitrary",
 	"sov-modules-api/arbitrary",
-	"sov-rest-utils/arbitrary",
+	"sov-rest-utils?/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-state/arbitrary",
 	"sov-sequencer-registry/arbitrary",

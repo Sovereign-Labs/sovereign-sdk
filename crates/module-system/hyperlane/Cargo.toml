@@ -17,8 +17,8 @@ workspace = true
 [dev-dependencies]
 sov-address = { workspace = true }
 sov-api-spec = { workspace = true }
-sov-hyperlane-integration = { path = ".", features = ["test-utils", "native"] }
-sov-mock-da = { workspace = true }
+sov-hyperlane-integration = { path = ".", features = ["test-utils", "native", "arbitrary"] }
+sov-mock-da = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
@@ -62,28 +62,29 @@ tracing = { workspace = true }
 
 [features]
 default = []
-evm = ["sov-address/evm"]
+evm = ["dep:sov-address", "sov-address?/evm"]
 arbitrary = [
-  "dep:proptest-derive",
-  "dep:arbitrary",
-  "dep:proptest",
-  "sov-address/arbitrary",
-  "sov-bank/arbitrary",
-  "sov-hyperlane-integration/arbitrary",
-  "sov-modules-api/arbitrary",
-  "sov-state/arbitrary",
-  "sov-test-utils/arbitrary",
-  "ruint/arbitrary",
-  "sov-mock-da/arbitrary",
+	"dep:proptest-derive",
+	"dep:arbitrary",
+	"dep:proptest",
+	"sov-address?/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-hyperlane-integration/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-state/arbitrary",
+	"ruint/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-test-utils/arbitrary"
 ]
-test-utils = ["arbitrary"]
+test-utils = []
 native = [
-  "sov-modules-api/native",
-  "sov-value-setter/native",
-  "sov-state/native",
-  "sov-address/native",
-  "sov-bank/native",
-  "sov-hyperlane-integration/native",
-  "sov-mock-da/native",
-  "sov-metrics/native",
+	"sov-modules-api/native",
+	"sov-value-setter/native",
+	"sov-state/native",
+	"sov-address?/native",
+	"sov-bank/native",
+	"sov-hyperlane-integration/native",
+	"dep:sov-metrics",
+	"sov-metrics/native",
+	"sov-mock-da/native"
 ]
