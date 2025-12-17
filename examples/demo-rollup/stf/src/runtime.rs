@@ -139,7 +139,7 @@ where
 
     #[cfg(feature = "native")]
     fn resolve_address<ST: sov_modules_api::StateReader<sov_modules_api::User>>(
-        &mut self,
+        &self,
         default_address: &S::Address,
         credential_id: &sov_modules_api::CredentialId,
         state: &mut ST,
