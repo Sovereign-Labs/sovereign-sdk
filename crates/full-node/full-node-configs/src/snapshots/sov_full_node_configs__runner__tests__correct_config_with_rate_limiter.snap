@@ -73,6 +73,7 @@ expression: config
       "num_cache_warmup_workers": 0,
       "timing_oracle": null,
       "rate_limiter": {
+        "max_nb_of_concurrent_users_in_rate_limiter": 100000,
         "max_requests_per_second": 1000000,
         "default_limits": {
           "resources_per_bucket": 5,
