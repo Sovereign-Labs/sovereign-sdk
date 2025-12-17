@@ -277,6 +277,8 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         });
 
         if entry_count >= self.max_nb_of_concurrent_users {
+            // data.entry_count() returns only approximate number of entries in this cache.
+            // Once we hit the limit we sync to get the exact number of entries.
             self.data.sync();
             let entry_count = self.data.entry_count();
             if entry_count >= self.max_nb_of_concurrent_users {
