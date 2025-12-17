@@ -21,7 +21,7 @@ use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
     get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, ErrorContext,
-    EventModuleName, FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, Spec,
+    EventModuleName, FullyBakedTx, Gas, GasArray, HDTimestamp, HexHash, HexString, Runtime, Spec,
     StateCheckpoint, StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
@@ -431,6 +431,8 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);
 
         let mut scratchpad = accessor.to_tx_scratchpad();
+        // Create sequencing metadata for simulation so modules can access timestamp data
+        let sequencing_metadata = borsh::to_vec(&HDTimestamp::now()).ok().map(Into::into);
         let context = runtime
             .transaction_authorizer()
             .resolve_context(
@@ -438,6 +440,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
                 &sequencer.da_address,
                 sequencer.rollup_address,
                 &mut scratchpad,
+                sequencing_metadata,
             )
             .map_err(SimulateError::ContextResolution)?;
 

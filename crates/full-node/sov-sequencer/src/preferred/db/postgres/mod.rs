@@ -131,7 +131,11 @@ impl PostgresBackend {
                         })?))
                     })
                     .collect::<anyhow::Result<Vec<_>>>()?;
-                let txs = txs.into_iter().map(FullyBakedTx::new).collect::<Vec<_>>();
+                // Deserialize the full FullyBakedTx (including sequencing_data)
+                let txs = txs
+                    .into_iter()
+                    .map(|data| borsh::from_slice::<FullyBakedTx>(&data))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(PreferredSequencerReadBlob::Batch(
                     InProgressBatch {
@@ -315,10 +319,12 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         let event_types = vec!["transaction"; txs.len()];
         let tx_indexes = (start..end).collect::<Vec<_>>();
         let hashes = txs.iter().map(|(_, hash)| hash.0).collect::<Vec<_>>();
+        // Serialize the full FullyBakedTx (including sequencing_data) to preserve metadata
         let txs = txs
             .iter()
-            .map(|(tx, _)| tx.data.as_ref())
+            .map(|(tx, _)| borsh::to_vec(tx).unwrap())
             .collect::<Vec<_>>();
+        let txs_refs: Vec<&[u8]> = txs.iter().map(|t| t.as_slice()).collect();
         run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
@@ -329,7 +335,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             .bind(&event_types[..])
             .bind(&tx_indexes[..])
             .bind(&hashes[..])
-            .bind(&txs[..])
+            .bind(&txs_refs[..])
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;
@@ -343,6 +349,8 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         tx: FullyBakedTx,
         hash: TxHash,
     ) -> anyhow::Result<()> {
+        // Serialize the full FullyBakedTx (including sequencing_data) to preserve metadata
+        let tx_serialized = borsh::to_vec(&tx)?;
         run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
@@ -351,7 +359,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             .bind(i64::try_from(sequence_number)?)
             .bind(i64::try_from(tx_index_within_batch)?)
             .bind::<&[u8]>(hash.as_ref())
-            .bind(tx.data.as_ref())
+            .bind(&tx_serialized)
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;

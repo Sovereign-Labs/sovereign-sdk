@@ -672,6 +672,20 @@ components:
       items:
         type: string
         format: byte
+    FullyBakedTx:
+      type: object
+      properties:
+        data:
+          type: string
+          format: byte
+          description: Serialized transaction data, in Base64
+        sequencing_data:
+          type: string
+          format: byte
+          nullable: true
+          description: Optional sequencer-provided metadata (e.g., timestamps), in Base64
+      required:
+        - data
     IntOrHash:
       oneOf:
         - type: integer
@@ -799,8 +813,7 @@ components:
         event_range:
           $ref: "#/components/schemas/Uint64Range"
         body:
-          type: string
-          format: byte
+          $ref: "#/components/schemas/FullyBakedTx"
         receipt:
           $ref: "#/components/schemas/TxReceipt"
         events:

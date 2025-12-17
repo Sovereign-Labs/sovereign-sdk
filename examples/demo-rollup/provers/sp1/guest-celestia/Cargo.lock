@@ -6180,6 +6180,7 @@ dependencies = [
  "schemars 0.8.21",
  "serde",
  "serde_json",
+ "serde_with",
  "sov-universal-wallet",
  "thiserror 1.0.64",
 ]
@@ -6262,6 +6263,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "chrono",
  "derivative",
  "hex",
  "schemars 0.8.21",

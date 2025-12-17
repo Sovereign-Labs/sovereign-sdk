@@ -663,7 +663,7 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let tx_len = baked_tx.data.len();
+        let tx_len = baked_tx.len();
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (

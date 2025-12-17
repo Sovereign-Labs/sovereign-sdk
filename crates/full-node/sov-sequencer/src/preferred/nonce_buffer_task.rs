@@ -810,6 +810,7 @@ mod tests {
             baked_tx: FullyBakedTx {
                 // Hacky fake data to help track nonces when TXs are sent through the queue
                 data: vec![nonce].into(),
+                sequencing_data: None,
             },
             tx_hash: TxHash::from(hash),
             ip_addr_and_credential: IpAndCredentialId {

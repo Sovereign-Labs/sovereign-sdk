@@ -21,6 +21,7 @@ use sov_modules_api::{
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::Bytes;
 #[cfg(feature = "native")]
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer_registry::SequencerRegistry;
@@ -265,6 +266,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
+        sequencing_data: Option<Bytes>,
     ) -> anyhow::Result<Context<S>> {
         // This should be resolved by the sequencer registry during blob selection
         let sender = self.accounts.resolve_sender_address(
@@ -277,6 +279,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             auth_data.credentials.clone(),
             sequencer_rollup_address,
             *sequencer,
+            sequencing_data,
         ))
     }
 
@@ -297,6 +300,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             auth_data.credentials.clone(),
             sender,
             *sequencer,
+            None,
         ))
     }
 }

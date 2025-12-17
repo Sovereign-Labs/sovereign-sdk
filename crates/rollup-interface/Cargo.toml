@@ -19,8 +19,8 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 async-trait = { workspace = true }
 backon = { workspace = true, optional = true }
-borsh = { workspace = true }
-bytes = { workspace = true, default-features = true }
+borsh = { workspace = true, features = ["bytes"] }
+bytes = { workspace = true, features = ["serde"] }
 derive_more = { workspace = true, features = [
     "add",
     "as_ref",
@@ -38,6 +38,7 @@ proptest-derive = { workspace = true, optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_with = { workspace = true }
 rockbound = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 sha2 = { workspace = true, optional = true }

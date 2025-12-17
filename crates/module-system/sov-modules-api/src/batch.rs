@@ -8,77 +8,10 @@ use crate::{
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::Bytes;
 
-/// `FullyBakedTx` represents a serialized signed rollup transaction that has been encoded with
-/// authentication information and is ready to be placed on the DA layer.
-#[derive(
-    PartialEq,
-    Eq,
-    Clone,
-    BorshDeserialize,
-    BorshSerialize,
-    Serialize,
-    Deserialize,
-    derive_more::AsRef,
-)]
-pub struct FullyBakedTx {
-    /// Serialized transaction.
-    #[as_ref(forward)]
-    pub data: Bytes,
-}
-
-impl std::fmt::Debug for FullyBakedTx {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FullyBakedTx")
-            .field("data", &hex::encode(&self.data))
-            .finish()
-    }
-}
-
-impl FullyBakedTx {
-    /// Construct a `FullyBakedTx` containing the given data
-    #[must_use]
-    pub fn new(data: Vec<u8>) -> Self {
-        Self {
-            data: Bytes::from_owner(data),
-        }
-    }
-}
-
-/// `RawTx` represents a serialized signed rollup transaction. A `RawTx` needs to be encoded
-/// with authentication information before being placed on the DA layer.
-#[derive(
-    PartialEq,
-    Eq,
-    Clone,
-    BorshDeserialize,
-    BorshSerialize,
-    Serialize,
-    Deserialize,
-    derive_more::AsRef,
-)]
-pub struct RawTx {
-    /// Serialized transaction.
-    #[as_ref(forward)]
-    pub data: Vec<u8>,
-}
-
-impl std::fmt::Debug for RawTx {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("RawTx")
-            .field("data", &hex::encode(&self.data))
-            .finish()
-    }
-}
-
-impl RawTx {
-    /// Construct a `RawTx` containing the given data
-    #[must_use]
-    pub fn new(data: Vec<u8>) -> Self {
-        Self { data }
-    }
-}
+// Re-export FullyBakedTx and RawTx from rollup-interface for backward compatibility
+pub use sov_rollup_interface::stf::{FullyBakedTx, RawTx};
+pub use sov_rollup_interface::Bytes;
 
 /// A blob that has been selected for execution
 pub struct SelectedBlob<S: Spec, B> {
@@ -149,7 +82,7 @@ impl<S: Spec> BatchWithId<S> {
 
     /// The total size, in bytes, of all transactions and associated batch metadata.
     pub fn batch_with_id_size(&self) -> usize {
-        let batch_size: usize = self.batch.iter().map(|tx| tx.data.len()).sum();
+        let batch_size: usize = self.batch.iter().map(|tx| tx.len()).sum();
         batch_size + ID_SIZE + self.sequencer_address.as_ref().len()
     }
 }
@@ -221,7 +154,7 @@ impl<S: Spec> BlobDataWithId<S, BatchWithId<S>> {
                 sequencer_address,
                 ..
             } => proof.len() + 32 + sequencer_address.as_ref().len(),
-            BlobDataWithId::EmergencyRegistration { tx, .. } => tx.data.len() + 32,
+            BlobDataWithId::EmergencyRegistration { tx, .. } => tx.len() + 32,
         }
     }
 
@@ -605,13 +538,13 @@ mod tests {
     #[test]
     fn test_batch_with_id_size() {
         let batch = Arc::new(vec![
-            FullyBakedTx::new(vec![1, 2, 3]), // size = 3
-            FullyBakedTx::new(vec![1]),       // size = 1
+            FullyBakedTx::new(vec![1, 2, 3]), // size = 3 + 5
+            FullyBakedTx::new(vec![1]),       // size = 1 + 5
         ]);
         let id = [11; 32]; // size = 32
         let sequencer_address = Address::new([22; 28]); // size = 28
 
-        let manually_calulated_batch_size = 3 + 1 + 32 + 28;
+        let manually_calulated_batch_size = batch[0].len() + batch[1].len() + 32 + 28;
 
         let batch_with_id = BatchWithId::<TestSpec>::new(batch, id, sequencer_address);
 

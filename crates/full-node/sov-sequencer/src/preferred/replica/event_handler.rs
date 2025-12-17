@@ -17,7 +17,7 @@ pub(crate) enum ReplicaError<S: Spec> {
     Rejected(DBDataRejected),
 
     #[error("Replica is not ready. Details: {0:?}. DbData: {1:?}")]
-    NotReady(SequencerNotReadyDetails, DbData),
+    NotReady(SequencerNotReadyDetails, Box<DbData>),
 
     #[error("Failed to create a new batch on the replica.")]
     Creation(#[from] BatchCreationError),
@@ -68,7 +68,7 @@ where
             Ok(_) => return Ok(()),
             Err(ReplicaError::Rejected(db_data_rejected)) => return Err(db_data_rejected),
             Err(ReplicaError::NotReady(_sequencer_not_ready_details, db_data_rejected)) => {
-                return Err(DBDataRejected::ExecutorBehind(db_data_rejected))
+                return Err(DBDataRejected::ExecutorBehind(*db_data_rejected))
             }
             Err(ReplicaError::Creation(batch_creation_error)) => {
                 panic!("Replica failed to create a new batch. Error: {batch_creation_error:?}");

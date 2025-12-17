@@ -59,6 +59,9 @@ pub mod state;
 /// Defines the metadata that is used to generate execution proofs.
 pub mod proof_metadata;
 
+/// Defines the metadata that is added to transactions by the sequencer but not signed by the user
+pub mod sequencing_metadata;
+
 mod reexport_macros;
 
 #[cfg(test)]
@@ -94,6 +97,7 @@ pub use reexport_macros::*;
 #[cfg(feature = "native")]
 pub use rpc::*;
 pub use runtime::*;
+pub use sequencing_metadata::*;
 pub use sov_rollup_interface::common::{
     safe_vec, HexHash, HexString, SafeString, SafeVec, SizedSafeString, VisibleSlotNumber,
 };

@@ -354,4 +354,35 @@ mod tests {
             .await
             .expect("Compaction should take less than 1 second");
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_sequencing_data_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let mut db = RocksDbBackend::new(dir.path()).await.unwrap();
+
+        let batch = BatchToStore {
+            sequence_number: SequenceNumber::from(1u64),
+            visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
+            visible_slots_to_advance: NonZero::new(1).unwrap(),
+            blob_id: BlobInternalId::from(1u64),
+        };
+
+        db.begin_rollup_block(batch).await.unwrap();
+
+        let sequencing_data = Some(vec![1, 2, 3, 4].into());
+        db.add_tx(
+            SequenceNumber::from(1u64),
+            0,
+            FullyBakedTx {
+                data: vec![42].into(),
+                sequencing_data: sequencing_data.clone(),
+            },
+            HexString([1; 32]),
+        )
+        .await
+        .unwrap();
+
+        let in_progress = db.read_in_progress_batch().await.unwrap().unwrap();
+        assert_eq!(in_progress.txs[0].sequencing_data, sequencing_data);
+    }
 }

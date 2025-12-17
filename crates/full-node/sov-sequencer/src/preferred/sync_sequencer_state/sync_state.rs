@@ -944,13 +944,13 @@ fn validate_db_data_from_replica<S: Spec>(
     if !has_finished_startup {
         return Err(ReplicaError::NotReady(
             SequencerNotReadyDetails::Startup,
-            ret,
+            ret.into(),
         ));
     }
 
     if let Err(err) = is_ready {
         tracing::debug!(?err, "Replica not ready");
-        return Err(ReplicaError::NotReady(err.clone(), ret));
+        return Err(ReplicaError::NotReady(err.clone(), ret.into()));
     }
 
     if seq_nr_for_this_executor > seq_nr_from_master {

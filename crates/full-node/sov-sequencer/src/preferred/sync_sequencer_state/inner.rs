@@ -693,7 +693,7 @@ where
             ..
         } = &mut *self;
 
-        let tx_len = baked_tx.data.len();
+        let tx_len = baked_tx.len();
         if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
             return (
                 Err(DoNewTxError::TxTooBig {

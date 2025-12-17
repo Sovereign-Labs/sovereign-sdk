@@ -3,6 +3,7 @@
 
 # 2025-12-15
 - #2167 Updates the internals of the nonce queue. 
+- #2188 **DB Breaking change**: Adds sequencer-provided metadata (timestamps, etc.) to transaction context accessible via `context.sequencing_data()`. Database schema changed - requires state wipe or resync.
 
 # 2025-12-14 
 - #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
