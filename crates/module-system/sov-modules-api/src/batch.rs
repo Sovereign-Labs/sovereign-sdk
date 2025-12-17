@@ -538,13 +538,13 @@ mod tests {
     #[test]
     fn test_batch_with_id_size() {
         let batch = Arc::new(vec![
-            FullyBakedTx::new(vec![1, 2, 3]), // size = 3
-            FullyBakedTx::new(vec![1]),       // size = 1
+            FullyBakedTx::new(vec![1, 2, 3]), // size = 3 + 5
+            FullyBakedTx::new(vec![1]),       // size = 1 + 5
         ]);
         let id = [11; 32]; // size = 32
         let sequencer_address = Address::new([22; 28]); // size = 28
 
-        let manually_calulated_batch_size = 3 + 1 + 32 + 28;
+        let manually_calulated_batch_size = batch[0].len() + batch[1].len() + 32 + 28;
 
         let batch_with_id = BatchWithId::<TestSpec>::new(batch, id, sequencer_address);
 
