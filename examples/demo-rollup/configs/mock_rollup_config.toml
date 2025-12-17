@@ -117,7 +117,7 @@ is_replica = false
 #postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
 
 # [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
-# max_nb_of_concurrent_users_in_rate_limiter = 100000 # Limit on how many concurrent users can the rate limiter handl.
+# max_nb_of_concurrent_users_in_rate_limiter = 100000 # Limit on how many concurrent users the rate limiter can handle.
 # max_requests_per_second = 10000 # Limit on requests per second.
 # address_custom_limits = [] 
 # ip_custom_limits = []

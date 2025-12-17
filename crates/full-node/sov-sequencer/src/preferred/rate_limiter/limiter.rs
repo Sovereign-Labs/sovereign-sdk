@@ -236,6 +236,7 @@ impl<G: Gas> Throttler<G> {
 /// update:
 ///   total_resource_used = 3 micros
 pub(crate) struct RateLimiter<K, S: Spec> {
+    limiter_type: &'static str,
     max_nb_of_concurrent_users: u64,
     data: Cache<K, Throttler<S::Gas>>,
     default_config: RateLimiterConfig<S>,
@@ -244,6 +245,7 @@ pub(crate) struct RateLimiter<K, S: Spec> {
 
 impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(
+        limiter_type: &'static str,
         max_nb_of_concurrent_users: u64,
         ttl_in_millis: u64,
         default_config: RateLimiterConfig<S>,
@@ -254,6 +256,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             .build();
 
         Self {
+            limiter_type,
             max_nb_of_concurrent_users,
             data,
             default_config,
@@ -265,9 +268,9 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         &mut self,
         now: Instant,
         key: &K,
-        limiter_type: &'static str,
     ) -> Result<Throttler<S::Gas>, LimitExceeded<S::Gas>> {
         let entry_count = self.data.entry_count();
+        let limiter_type = self.limiter_type;
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(RateLimiterMetrics {
@@ -636,6 +639,7 @@ mod tests {
             special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
         ) -> Self {
             let rate_limiter = RateLimiter::new(
+                "by_addr",
                 max_nb_of_concurrent_users,
                 ttl_in_millis,
                 config,
@@ -653,7 +657,7 @@ mod tests {
             addr: &<TestSpec as Spec>::Address,
             resource_used_so_far: ResourceUsed<Gas>,
         ) -> Result<(), LimitExceeded<Gas>> {
-            let throttler = self.rate_limiter.allow(now, addr, "by_addr")?;
+            let throttler = self.rate_limiter.allow(now, addr)?;
 
             let throttler = self
                 .rate_limiter

@@ -52,12 +52,14 @@ impl<S: Spec> SovRateLimiterInner<S> {
     ) -> Self {
         Self {
             by_addr_rate_limiter: RateLimiter::new(
+                "limiter_by_addr",
                 max_nb_of_concurrent_users_in_rate_limiter,
                 ttl_in_millis,
                 config.clone(),
                 addrs,
             ),
             by_ip_rate_limiter: RateLimiter::new(
+                "limiter_by_ip",
                 max_nb_of_concurrent_users_in_rate_limiter,
                 ttl_in_millis,
                 config,
@@ -73,18 +75,14 @@ impl<S: Spec> SovRateLimiterInner<S> {
     ) -> Result<LimiterToken<S>, ResourceLimitExceededError<S>> {
         let now = Instant::now();
 
-        let throttler_for_addr =
-            match self
-                .by_addr_rate_limiter
-                .allow(now, &address, "limiter_by_addr")
-            {
-                Ok(ok) => ok,
-                Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
-            };
+        let throttler_for_addr = match self.by_addr_rate_limiter.allow(now, &address) {
+            Ok(ok) => ok,
+            Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
+        };
 
         let throttler_for_ip = self
             .by_ip_rate_limiter
-            .allow(now, &ip, "limiter_by_ip")
+            .allow(now, &ip)
             .map_err(|reason| ResourceLimitExceededError::Ip { ip, reason })?;
 
         Ok(LimiterToken {
