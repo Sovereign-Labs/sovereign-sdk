@@ -30,8 +30,6 @@ impl<S: Spec> Accounts<S> {
     }
 
     /// Resolve the sender's public key to an address.
-    /// If the sender is not registered, but a fallback address if provided, immediately registers
-    /// the credential to the fallback and then returns it.
     pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
         &mut self,
         default_address: &S::Address,
