@@ -1,3 +1,6 @@
+# 2025-12-17
+- #2250 Moves address resolution for rate limiting off the critical path
+
 # 2025-12-16
 - #2239 Updates the internals of the API state for improved performance. 
 
