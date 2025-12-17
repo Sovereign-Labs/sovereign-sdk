@@ -19,7 +19,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
-use tracing::{debug, trace};
+use tracing::trace;
 
 use crate::{apply_margins, Evm};
 use std::ops::DerefMut;
