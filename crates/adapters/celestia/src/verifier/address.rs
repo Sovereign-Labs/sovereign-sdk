@@ -14,6 +14,7 @@ use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
     PartialEq,
     Eq,
     PartialOrd,
+    Copy,
     Ord,
     Serialize,
     Deserialize,

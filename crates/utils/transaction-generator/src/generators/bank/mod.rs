@@ -280,9 +280,7 @@ impl<S: Spec> ChangelogEntry for BankChangeLogEntry<S> {
     fn as_discriminant(&self) -> Self::Discriminant {
         match self {
             BankChangeLogEntry::BalanceChanged { address, .. } => {
-                BankChangeLogDiscriminant::BalanceChanged {
-                    address: address.clone(),
-                }
+                BankChangeLogDiscriminant::BalanceChanged { address: *address }
             }
             BankChangeLogEntry::SupplyChanged { token_id, .. } => {
                 BankChangeLogDiscriminant::SupplyChanged {

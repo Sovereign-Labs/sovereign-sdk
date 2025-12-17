@@ -132,18 +132,13 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
         Self {
             config: BasicGenesisConfig {
                 sequencer_registry: BasicGenesisConfig::sequencer_registry(&initial_sequencer),
-                operator_incentives: BasicGenesisConfig::operator_incentives(
-                    reward_user.address().clone(),
-                ),
+                operator_incentives: BasicGenesisConfig::operator_incentives(reward_user.address()),
 
                 // unused in operator mode
                 attester_incentives: AttesterIncentivesConfig {
                     minimum_attester_bond: default_user_stake,
                     minimum_challenger_bond: default_user_stake,
-                    initial_attesters: vec![(
-                        placeholder.as_user().address().clone(),
-                        Amount::ZERO,
-                    )],
+                    initial_attesters: vec![(placeholder.as_user().address(), Amount::ZERO)],
                     rollup_finality_period: SlotNumber::GENESIS,
                     maximum_attested_height: SlotNumber::GENESIS,
                     light_client_finalized_height: SlotNumber::GENESIS,
@@ -152,7 +147,7 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
                 prover_incentives: ProverIncentivesConfig {
                     minimum_bond: default_user_stake,
                     proving_penalty: { default_user_stake.scalar_division(2) },
-                    initial_provers: vec![(placeholder.address().clone(), placeholder.balance())],
+                    initial_provers: vec![(placeholder.address(), placeholder.balance())],
                 },
 
                 bank: BasicGenesisConfig::bank(

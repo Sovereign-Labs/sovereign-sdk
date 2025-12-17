@@ -283,7 +283,7 @@ fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResu
     };
 
     sov_metrics::track_metrics(|tracker| {
-        tracker.submit(metrics);
+        tracker.submit_known_metric(metrics);
     });
 }
 

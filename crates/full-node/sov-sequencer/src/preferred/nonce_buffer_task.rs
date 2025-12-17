@@ -11,7 +11,6 @@ use std::collections::hash_map;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,6 +22,7 @@ use crate::metrics::{
     ChannelQueueMetricName, ChannelQueueMetrics, NonceBufferMainQueueMetricName,
     NonceBufferTimeoutQueueMetricName,
 };
+use crate::preferred::rate_limiter::IpAndCredentialId;
 
 use super::block_executor::RollupBlockExecutorError;
 use super::sync_sequencer_state::{
@@ -98,7 +98,7 @@ struct TimeoutRequest {
 struct QueuedTx<S: Spec, Rt: Runtime<S>> {
     pub baked_tx: FullyBakedTx,
     pub tx_hash: TxHash,
-    pub ip_addr: IpAddr,
+    pub ip_addr_and_credential: IpAndCredentialId<S::Address>,
     pub original_tx_queue_id: u64,
     pub nonce_when_queued: u64,
     pub queued_at: Instant,
@@ -232,10 +232,9 @@ enum NonceBufferInput<S: Spec, Rt: Runtime<S>> {
     /// A tx to be executed. Either newly arrived from the API, or newly valid and popped from the
     /// head of the queue.
     NewTx {
-        credential_id: CredentialId,
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
-        ip_addr: IpAddr,
+        ip_addr_and_credential: IpAndCredentialId<S::Address>,
         tx_nonce: u64,
         original_tx_queue_id: u64,
         result_sender: oneshot::Sender<TransactionReceiverResult<S, Rt>>,
@@ -312,8 +311,7 @@ pub trait TxExecutionBackend<S: Spec, Rt: Runtime<S>>: Clone {
         &self,
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_addr_and_credential: IpAndCredentialId<S::Address>,
         original_tx_queue_id: u64,
         reason: &'static str,
     ) -> TransactionReceiverResult<S, Rt>;
@@ -356,8 +354,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
         &self,
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_addr_and_credential: IpAndCredentialId<S::Address>,
         original_tx_queue_id: u64,
         reason: &'static str,
     ) -> TransactionReceiverResult<S, Rt> {
@@ -366,8 +363,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
                 baked_tx,
                 tx_hash,
                 original_tx_queue_id,
-                credential_id,
-                ip_addr,
+                ip_addr_and_credential,
                 reason,
             )
             .await
@@ -465,19 +461,21 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         while let Some(input) = self.buffer_input.recv().await {
             match input {
                 NonceBufferInput::NewTx {
-                    credential_id,
                     baked_tx,
                     tx_hash,
-                    ip_addr,
+                    ip_addr_and_credential,
                     tx_nonce,
                     original_tx_queue_id,
                     result_sender,
                 } => {
-                    let queue = self.buffers.entry(credential_id).or_default();
+                    let queue = self
+                        .buffers
+                        .entry(ip_addr_and_credential.credential_id)
+                        .or_default();
 
                     let user_nonce = queue.non_persisted.user_nonce().unwrap_or_else(|| {
                         self.execution_backend
-                            .get_current_nonce_for_user(&credential_id)
+                            .get_current_nonce_for_user(&ip_addr_and_credential.credential_id)
                     });
 
                     match determine_action(tx_nonce, user_nonce, self.maximum_future_nonce_delta) {
@@ -497,7 +495,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                         user_nonce,
                                         old_tx.nonce_when_queued,
                                         old_tx.queued_at,
-                                        credential_id,
+                                        ip_addr_and_credential.credential_id,
                                         InvalidNonceReason::AlreadyQueued,
                                     ));
                                     continue;
@@ -509,7 +507,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                         user_nonce,
                                         old_tx.nonce_when_queued,
                                         old_tx.queued_at,
-                                        credential_id,
+                                        ip_addr_and_credential.credential_id,
                                         InvalidNonceReason::Replaced,
                                     ));
                                 }
@@ -519,15 +517,19 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 QueuedTx {
                                     baked_tx,
                                     tx_hash,
-                                    ip_addr,
+                                    ip_addr_and_credential,
                                     original_tx_queue_id,
                                     nonce_when_queued: user_nonce,
                                     queued_at: Instant::now(),
                                     result_sender,
                                 },
                             );
-                            self.schedule_timeout(credential_id, tx_nonce, tx_hash)
-                                .await;
+                            self.schedule_timeout(
+                                ip_addr_and_credential.credential_id,
+                                tx_nonce,
+                                tx_hash,
+                            )
+                            .await;
                         }
                         Action::Execute => {
                             // The executor queue ID is incremented whenever the sequencer has
@@ -549,15 +551,14 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     .execute_tx(
                                         &baked_tx,
                                         tx_hash,
-                                        credential_id,
-                                        ip_addr,
+                                        ip_addr_and_credential,
                                         original_tx_queue_id,
                                         "nonce_queue_immediate",
                                     )
                                     .await;
                                 let _ = input_sender
                                     .send_to_main_queue(NonceBufferInput::TxExecuted {
-                                        credential_id,
+                                        credential_id: ip_addr_and_credential.credential_id,
                                         tx_nonce,
                                         tx_result,
                                         result_sender,
@@ -572,7 +573,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 user_nonce,
                                 user_nonce,
                                 Instant::now(),
-                                credential_id,
+                                ip_addr_and_credential.credential_id,
                                 InvalidNonceReason::Invalid,
                             ));
                         }
@@ -637,10 +638,9 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 let _ = self
                                     .input_sender
                                     .send_to_main_queue(NonceBufferInput::NewTx {
-                                        credential_id,
                                         baked_tx: tx.baked_tx,
                                         tx_hash: tx.tx_hash,
-                                        ip_addr: tx.ip_addr,
+                                        ip_addr_and_credential: tx.ip_addr_and_credential,
                                         tx_nonce: user_nonce,
                                         original_tx_queue_id: tx.original_tx_queue_id,
                                         result_sender: tx.result_sender,
@@ -770,16 +770,14 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         tx_nonce: u64,
-        credential_id: CredentialId,
-        ip_addr: IpAddr,
+        ip_addr_and_credential: IpAndCredentialId<S::Address>,
         original_tx_queue_id: u64,
     ) -> TransactionReceiverResult<S, Rt> {
         let (queue_sender, queue_receiver) = oneshot::channel();
         self.send_to_main_queue(NonceBufferInput::NewTx {
-            credential_id,
             baked_tx,
             tx_hash,
-            ip_addr,
+            ip_addr_and_credential,
             tx_nonce,
             original_tx_queue_id,
             result_sender: queue_sender,
@@ -791,21 +789,21 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         })?;
         let nonce_when_queued = self
             .execution_backend
-            .get_current_nonce_for_user(&credential_id);
+            .get_current_nonce_for_user(&ip_addr_and_credential.credential_id);
         let queued_at = Instant::now();
         queue_receiver.await.unwrap_or_else(|_| {
             // The oneshot sender was dropped. This should normally only happen
             // on shutdown, or if there's a bug.
             let current_nonce = self
                 .execution_backend
-                .get_current_nonce_for_user(&credential_id);
+                .get_current_nonce_for_user(&ip_addr_and_credential.credential_id);
             err_invalid_nonce::<S, Rt>(
                 tx_hash,
                 tx_nonce,
                 current_nonce,
                 nonce_when_queued,
                 queued_at,
-                credential_id,
+                ip_addr_and_credential.credential_id,
                 InvalidNonceReason::EvictedBeforeExecution,
             )
         })
@@ -907,6 +905,7 @@ mod tests {
     use sov_modules_api::{SkippedTxContents, TransactionReceipt, TxProcessingError};
     use sov_test_utils::runtime::TestOptimisticRuntime;
     use sov_test_utils::TestSpec;
+    use std::net::Ipv4Addr;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
     use std::time::Duration;
@@ -933,7 +932,11 @@ mod tests {
                 data: vec![nonce].into(),
             },
             tx_hash: TxHash::from(hash),
-            ip_addr: "127.0.0.1".parse().unwrap(),
+            ip_addr_and_credential: IpAndCredentialId {
+                default_address: <TestSpec as Spec>::Address::from([1; 28]),
+                credential_id: CredentialId::from([1u8; 32]),
+                ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
+            },
             nonce_when_queued: 0,
             queued_at: Instant::now(),
             original_tx_queue_id: 0,
@@ -1151,8 +1154,7 @@ mod tests {
             &self,
             baked_tx: &FullyBakedTx,
             tx_hash: TxHash,
-            _credential_id: CredentialId,
-            _ip_addr: IpAddr,
+            _ip_addr_and_credential: IpAndCredentialId<<TestSpec as Spec>::Address>,
             _original_tx_queue_id: u64,
             _reason: &'static str,
         ) -> TransactionReceiverResult<TestSpec, TestRuntime> {
@@ -1304,8 +1306,11 @@ mod tests {
                     to_queue.baked_tx,
                     to_queue.tx_hash,
                     nonce.into(),
-                    CredentialId::from_bytes([1u8; 32]),
-                    "127.0.0.1".parse().unwrap(),
+                    IpAndCredentialId {
+                        default_address: <TestSpec as Spec>::Address::from([1; 28]),
+                        credential_id: CredentialId::from([1u8; 32]),
+                        ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
+                    },
                     to_queue.original_tx_queue_id,
                 )
                 .await

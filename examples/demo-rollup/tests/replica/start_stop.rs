@@ -207,7 +207,7 @@ async fn test_replica_start_stop() {
         send_transfers(
             3 * nb_of_txs,
             nb_of_txs,
-            key_and_address,
+            key_and_address.clone(),
             receiver_addr,
             &test_rollup,
         )

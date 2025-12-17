@@ -11,10 +11,16 @@ on:
         description: 'Branch under test - the HEAD commit will be taken from this and fast-forwarded into nightly on success'
         required: false
         default: 'dev'
+      skip_regeneration:
+        description: 'Skip automatic data regeneration on test failure (useful when debugging)'
+        required: false
+        type: boolean
+        default: true
 
 env:
   DEV_BRANCH: ${{ github.event.inputs.dev_branch || 'dev' }}
   NIGHTLY_BRANCH: 'nightly'
+  SKIP_REGENERATION: ${{ github.event.inputs.skip_regeneration || 'false' }}
 
 jobs:
   trigger:
@@ -63,7 +69,7 @@ jobs:
           if ! response=$(curl -X POST "${ACCEPTANCE_SERVER_API_URL}/start-test" \
             -H "Authorization: Bearer ${ACCEPTANCE_SERVER_API_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"commit_sha\": \"$COMMIT_SHA\"}" \
+            -d "{\"commit_sha\": \"$COMMIT_SHA\", \"skip_regeneration\": ${{ env.SKIP_REGENERATION }}}" \
             -w "\n%{http_code}" -s); then
             echo "❌ Curl command failed; unable to send request"
             exit 1

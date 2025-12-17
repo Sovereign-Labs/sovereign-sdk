@@ -2,6 +2,7 @@ use crate::utils::encode_call;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
+use sov_full_node_configs::sequencer::Limits;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
@@ -36,7 +37,7 @@ type RT = TestRuntime<TestSpec>;
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, RT>;
 
 async fn create_test_rollup(
-    rate_limiter_config: SovRateLimiterConfig,
+    rate_limiter_config: SovRateLimiterConfig<<TestSpec as Spec>::Address>,
 ) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let reward_user = TestUser::<TestSpec>::generate(TEST_DEFAULT_USER_BALANCE);
 
@@ -89,11 +90,17 @@ async fn create_test_rollup(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting() {
-    let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
-        max_requests_per_batch: 1_000_000,
-        refill_rate: 10,
-    })
-    .await;
+    let sov_config = SovRateLimiterConfig {
+        default_limits: Limits {
+            resources_per_bucket: 5,
+            refill_rate: 100,
+        },
+        max_requests_per_second: 1_000_000,
+        address_custom_limits: Vec::default(),
+        ip_custom_limits: Vec::default(),
+    };
+
+    let (test_rollup, admin) = create_test_rollup(sov_config).await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -137,11 +144,17 @@ async fn test_rate_limiting() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_correct_ip() {
-    let (test_rollup, admin) = create_test_rollup(SovRateLimiterConfig {
-        max_requests_per_batch: 0,
-        refill_rate: 0,
-    })
-    .await;
+    let sov_config = SovRateLimiterConfig {
+        default_limits: Limits {
+            resources_per_bucket: 5,
+            refill_rate: 0,
+        },
+        max_requests_per_second: 0,
+        address_custom_limits: Vec::default(),
+        ip_custom_limits: Vec::default(),
+    };
+
+    let (test_rollup, admin) = create_test_rollup(sov_config).await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -192,7 +205,7 @@ async fn test_correct_ip() {
 
         // Check that the correct IP was rate limmited.
         assert!(err_str
-            .contains("The sender was rate-limited by the sequencer: Ip { ip: 123.123.123.123"));
+            .contains("The sender was rate-limited by the sequencer: Resource limit exceeded for IP: 123.123.123.123"));
     }
 }
 

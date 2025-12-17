@@ -56,7 +56,7 @@ async fn evm_test_oracle_timestamp() {
     test_rollup.pause_preferred_batches().await;
 
     let start_block = evm_client
-        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .eth_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
         .await
         .number();
 

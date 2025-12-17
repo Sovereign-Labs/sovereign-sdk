@@ -1,6 +1,7 @@
 //! Defines the query methods for the attester incentives module
 
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sov_bank::Amount;
@@ -8,7 +9,10 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::optimistic::{BondingProofService, ProofOfBond};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::StateUpdateReceiver;
-use sov_modules_api::{ApiStateAccessor, Gas, GetGasPrice, Spec, StateCheckpoint, StateReader};
+use sov_modules_api::{
+    ApiStateAccessor, ConcurrentStateCheckpoint, Gas, GetGasPrice, Spec, StateCheckpoint,
+    StateReader,
+};
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::storage::{SlotKey, Storage, StorageProof};
 use sov_state::SlotKeyFromCodec;
@@ -153,16 +157,17 @@ where
         let storage = info.storage.clone();
         let mut kernel = K::default();
         let checkpoint = StateCheckpoint::new(storage, &kernel.kernel(), None);
+        let checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
 
         let mut state = ApiStateAccessor::<S>::new_with_true_slot_number_dangerous(
-            &checkpoint,
+            Arc::new(checkpoint),
             kernel.kernel_with_slot_mapping(),
             slot_number,
         )
         .ok()?;
         let proof = self
             .attester_incentives
-            .get_bond_proof(self.attester_address.clone(), &mut state)?;
+            .get_bond_proof(self.attester_address, &mut state)?;
 
         Some(ProofOfBond {
             claimed_slot_number: slot_number,

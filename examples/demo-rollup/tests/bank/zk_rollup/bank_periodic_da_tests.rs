@@ -21,7 +21,8 @@ use crate::test_helpers::DemoRollupSpec;
 type TestSpec = DemoRollupSpec;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
+async fn bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
+    sov_test_utils::initialize_logging();
     inner(0).await
 }
 
@@ -36,7 +37,9 @@ async fn inner(finalization_blocks: u32) -> anyhow::Result<()> {
         finalization_blocks,
     };
 
+    tracing::info!("Starting test rollup");
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Zk).await?;
+    tracing::info!("Test rollup started");
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
@@ -54,7 +57,12 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
         .get_balance::<TestSpec>(&user_address, &sov_bank::config_gas_token_id(), Some(0))
         .await?;
 
-    let mut slots_subscription = client.client.subscribe_slots().await?;
+    let mut slots_subscription = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        client.client.subscribe_slots(),
+    )
+    .await
+    .context("Failed to subscribe to slots within 10 seconds")??;
 
     // There's no guarantee that we subscribed before the first proof is published.
     // But we know that it should be less or equal rollup_height of the first published batch

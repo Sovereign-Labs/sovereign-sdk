@@ -19,7 +19,7 @@ mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
-use crate::preferred::rate_limiter::ResourceLimitExceededError;
+use crate::preferred::rate_limiter::{IpAndCredentialId, ResourceLimitExceededError};
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use anyhow::Context;
@@ -129,7 +129,8 @@ where
     blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
-    pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+    /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
     nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
@@ -160,7 +161,7 @@ where
         da: Da,
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
-        config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
@@ -206,7 +207,11 @@ where
         );
 
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
+            ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(
+                latest_state_update.storage.clone(),
+                &runtime.kernel(),
+                None,
+            )), // Api state doesn't need a pinned cache - we don't mind hitting disk in the API
         ));
         let api_state = ApiState::build(
             Arc::new(()),
@@ -275,7 +280,7 @@ where
             * 1000;
 
         let rollup_exec_config = RollupBlockExecutorConfig {
-            da_address: da_address.clone(),
+            da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_compute_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
@@ -633,14 +638,24 @@ where
             .api_state()
             .default_api_state_accessor()
             .to_provable_reader();
-        let (_, auth_data, call) = <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
-            .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
-        let call = Rt::wrap_call(call);
-        let delay_ms = self.runtime.get_transaction_delay_ms(&call);
-        // We need to destructure auth_data because it's not `Send`.
-        let uniqueness = auth_data.uniqueness;
-        let credential_id = auth_data.credential_id;
-        drop(auth_data);
+
+        let (ip_and_addr, uniqueness, delay_ms) = {
+            let (_, auth_data, call) =
+                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
+                    .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
+            let call = Rt::wrap_call(call);
+            let delay_ms = self.runtime.get_transaction_delay_ms(&call);
+            let uniqueness = auth_data.uniqueness;
+            (
+                IpAndCredentialId {
+                    default_address: auth_data.default_address,
+                    ip_addr,
+                    credential_id: auth_data.credential_id,
+                },
+                uniqueness,
+                delay_ms,
+            )
+        };
 
         if delay_ms > 0 {
             tracing::debug!(%tx_hash, delay_ms, "Delaying transaction processing");
@@ -657,8 +672,7 @@ where
                         &baked_tx,
                         tx_hash,
                         original_tx_queue_id,
-                        credential_id,
-                        ip_addr,
+                        ip_and_addr,
                         "accept_tx",
                     )
                     .await,
@@ -670,8 +684,7 @@ where
                         baked_tx,
                         tx_hash,
                         tx_nonce,
-                        credential_id,
-                        ip_addr,
+                        ip_and_addr,
                         original_tx_queue_id,
                     )
                     .await,
@@ -697,7 +710,7 @@ where
                 // After DB persistence completes, notify the nonce queue so it can clean up if needed
                 if let Some(tx_nonce) = nonce_to_mark_persisted {
                     self.nonce_buffer_input
-                        .mark_tx_persisted(credential_id, tx_nonce)
+                        .mark_tx_persisted(ip_and_addr.credential_id, tx_nonce)
                         .await;
                 }
                 Ok(result)
@@ -1098,7 +1111,7 @@ where
 fn rate_limit_error<S: Spec>(err: ResourceLimitExceededError<S>) -> ErrorObject {
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,
-        message: format!("The sender was rate-limited by the sequencer: {err:?}"),
+        message: format!("The sender was rate-limited by the sequencer: {err}"),
         details: Default::default(),
     }
 }

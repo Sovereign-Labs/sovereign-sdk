@@ -350,6 +350,11 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         })
     }
 
+    /// Takes the writes from the cache.
+    pub fn take_writes(self) -> Vec<(SlotKey, Option<SlotValue>)> {
+        self.cache.take_writes()
+    }
+
     /// Returns a mutable reference to the pinned cache backing this cache, if any exists.
     pub fn pinned_cache_mut(&mut self) -> Option<&mut crate::pinned_cache::PinnedCache> {
         #[cfg(feature = "native")]

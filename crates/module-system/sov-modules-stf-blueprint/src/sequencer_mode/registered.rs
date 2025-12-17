@@ -129,7 +129,7 @@ fn track_transaction_metrics<S: Spec>(
             gas_used: gas_used.as_ref().to_vec(),
         };
 
-        metrics_tracker.submit(transaction_metrics);
+        metrics_tracker.submit_known_metric(transaction_metrics);
         metrics_tracker.submit(processing_metrics);
     });
 }
@@ -465,7 +465,7 @@ where
             slot_gas_meter.remaining_slot_gas(sequencer_da_address),
             raw_tx,
             sequencer_da_address,
-            sequencer_address.clone(),
+            sequencer_address,
             gas_price,
             execution_context,
             sequencer_bond_per_tx,
@@ -595,7 +595,7 @@ where
         tx_receipts,
         ignored_tx_receipts,
         inner: BatchSequencerReceipt {
-            da_address: sequencer_da_address.clone(),
+            da_address: *sequencer_da_address,
             gas_price,
             gas_used: total_gas_used_in_batch,
             outcome: BatchSequencerOutcome {
@@ -816,7 +816,7 @@ where
         validated_output,
         raw_tx,
         sequencer_da_address,
-        sequencer_rollup_address.clone(),
+        sequencer_rollup_address,
         execution_context,
         injected_control_flow,
         operating_mode,

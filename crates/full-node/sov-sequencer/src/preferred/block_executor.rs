@@ -142,7 +142,7 @@ where
     Rt: Runtime<S>,
 {
     pub checkpoint: StateCheckpoint<S>,
-    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
 
@@ -181,7 +181,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub fn new(
         info: &StateUpdateInfo<S::Storage>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
@@ -199,7 +199,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         info: &StateUpdateInfo<S::Storage>,
         tx_cache_writer: TxResultWriter<S, Rt>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
@@ -217,7 +217,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         info: &StateUpdateInfo<S::Storage>,
         tx_cache_writer: Option<TxResultWriter<S, Rt>>,
         rollup_exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
         pinned_cache: Option<PinnedCache>,
     ) -> Self {
@@ -590,8 +590,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 old_rollup_height: self.checkpoint.rollup_height_to_access(),
                 minimum_profit_per_tx,
                 admin_addresses: self.seq_config.admin_addresses.clone().into(),
-                sequencer_rollup_address: self.seq_config.rollup_address.clone(),
-                sequencer_da_address: self.da_address.clone(),
+                sequencer_rollup_address: self.seq_config.rollup_address,
+                sequencer_da_address: self.da_address,
                 executor_context,
                 is_responsible_for_gating_admins,
             };
@@ -756,7 +756,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
             .shutdown()
             .await
-            .expect("No in-progress rollup block, nothing to do. This is a bug, please report it");
+            .expect("Error while shutting down in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
         for batch_receipt in batch_receipts {
@@ -918,7 +918,7 @@ where
                 is_responsible_for_gating_admins,
             )),
             reserved_gas_tokens: Some(needed_gas_escrow),
-            sender: sequencer_da_address.clone(),
+            sender: sequencer_da_address,
         };
 
         let non_preferred_blobs = kernel

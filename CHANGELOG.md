@@ -1,3 +1,14 @@
+# 2025-12-16
+- #2239 Updates the internals of the API state for improved performance. 
+
+# 2025-12-15
+- #2167 Updates the internals of the nonce queue. 
+
+# 2025-12-14 
+- #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+- #2232 **Not breaking, but important**: rollup_config.toml now will panic if there's an unknown field, preventing accidental misconfiguration.
+
 # 2025-12-09
 - #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
 - #2214 EVM related test utils are extracted into separate crate: `sov-evm-test-utils`. Please update if you use them.

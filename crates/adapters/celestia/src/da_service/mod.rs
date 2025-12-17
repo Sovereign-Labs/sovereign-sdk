@@ -3,8 +3,8 @@ mod tests;
 
 pub use crate::config::CelestiaConfig;
 use crate::metrics::client::{
-    GetBlockHeaderMeasurement, GetChainHeadMeasurement, GetNamespaceDataMeasurement,
-    SubmitPayForBlob,
+    BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
+    GetNamespaceDataMeasurement, SubmitPayForBlob,
 };
 use crate::metrics::full::{
     BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
@@ -364,17 +364,31 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
-        // TODO: follow up: timeout here
-        // TODO: follow up: metrics here
-        self.client
-            .blob()
-            .get_all(height, &[self.rollup_proof_namespace])
-            .await
-            .map_err(into_transient_with_context)
-            .map(|blobs| match blobs {
-                Some(blobs) => blobs.into_iter().map(|blob| blob.data).collect(),
-                None => vec![],
-            })
+        tracing::trace!(height, "Making call to blob.GetAll for proofs");
+        let start = std::time::Instant::now();
+        let result = tokio::time::timeout(
+            self.request_timeout,
+            self.client
+                .blob()
+                .get_all(height, &[self.rollup_proof_namespace]),
+        )
+        .await;
+        let response_time = start.elapsed();
+        let is_success = matches!(result, Ok(Ok(_)));
+        tracing::trace!(
+            is_success,
+            ?response_time,
+            height,
+            "Call to blob.GetAll is completed"
+        );
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(BlobGetAllMeasurement::new(response_time, is_success));
+        });
+
+        let blobs = flatten_timeout(result)?
+            .map(|blobs| blobs.into_iter().map(|blob| blob.data).collect())
+            .unwrap_or_default();
+        Ok(blobs)
     }
 
     /// Subscribe to finalized headers as they are finalized.
@@ -388,12 +402,6 @@ impl CelestiaService {
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
             .boxed())
     }
-}
-
-fn into_transient_with_context(error: celestia_client::Error) -> MaybeRetryable<anyhow::Error> {
-    // TODO: Follow up: Can be improved on when to retry or not
-    let error = anyhow::anyhow!("Celestia RPC node returned an error: {:?}", error);
-    MaybeRetryable::Transient(error)
 }
 
 #[async_trait]
@@ -513,7 +521,7 @@ impl DaService for CelestiaService {
     }
 
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
-        self.signer_address.clone()
+        self.signer_address
     }
 }
 

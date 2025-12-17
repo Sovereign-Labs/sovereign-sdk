@@ -149,20 +149,20 @@ impl<S: Spec> MinimalZkGenesisConfig<S> {
                 sequencer_registry: SequencerRegistryConfig {
                     minimum_bond: TEST_MIN_SEQ_BOND,
                     sequencer_config: SequencerConfig {
-                        seq_rollup_address: initial_sequencer.as_user().address().clone(),
-                        seq_da_address: initial_sequencer.da_address.clone(),
+                        seq_rollup_address: initial_sequencer.as_user().address(),
+                        seq_da_address: initial_sequencer.da_address,
                         seq_bond: initial_sequencer.bond,
                         is_preferred_sequencer: true,
                     },
                 },
                 operator_incentives: OperatorIncentivesConfig {
-                    reward_address: initial_prover.as_user().address().clone(),
+                    reward_address: initial_prover.as_user().address(),
                 },
                 // unused in zk mode
                 attester_incentives: AttesterIncentivesConfig {
                     minimum_attester_bond: default_user_stake,
                     minimum_challenger_bond: default_user_stake,
-                    initial_attesters: vec![(placeholder.address().clone(), placeholder.balance())],
+                    initial_attesters: vec![(placeholder.address(), placeholder.balance())],
                     rollup_finality_period: SlotNumber::GENESIS,
                     maximum_attested_height: SlotNumber::GENESIS,
                     light_client_finalized_height: SlotNumber::GENESIS,
@@ -171,7 +171,7 @@ impl<S: Spec> MinimalZkGenesisConfig<S> {
                     minimum_bond: default_user_stake,
                     proving_penalty: { default_user_stake.scalar_division(2) },
                     initial_provers: vec![(
-                        initial_prover.as_user().address().clone(),
+                        initial_prover.as_user().address(),
                         initial_prover.bond,
                     )],
                 },

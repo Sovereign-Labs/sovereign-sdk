@@ -80,12 +80,14 @@ proptest = { workspace = true, optional = true }
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["getrandom"] }
 alloy-consensus = { workspace = true, features = ["secp256k1"] }
+alloy-signer = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-rlp = { workspace = true }
 sov-evm = { path = ".", features = ["native"] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 tempfile = { workspace = true }
 bytes = { workspace = true }
-ethers = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
 lazy_static = { workspace = true }
 jsonschema = { workspace = true }
