@@ -72,7 +72,7 @@ arbitrary = [
   "sov-hyperlane-integration/arbitrary",
   "sov-modules-api/arbitrary",
   "sov-state/arbitrary",
-  "sov-test-utils?/arbitrary",
+  "sov-test-utils/arbitrary",
   "ruint/arbitrary",
   "sov-mock-da?/arbitrary",
 ]
