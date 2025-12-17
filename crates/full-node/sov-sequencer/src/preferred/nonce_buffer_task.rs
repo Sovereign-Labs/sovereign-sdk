@@ -814,7 +814,7 @@ mod tests {
             },
             tx_hash: TxHash::from(hash),
             ip_addr_and_credential: IpAndCredentialId {
-                default_address: <TestSpec as Spec>::Address::from([1; 28]),
+                address: <TestSpec as Spec>::Address::from([1; 28]),
                 credential_id: CredentialId::from([1u8; 32]),
                 ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
             },
@@ -1188,7 +1188,7 @@ mod tests {
                     to_queue.tx_hash,
                     nonce.into(),
                     IpAndCredentialId {
-                        default_address: <TestSpec as Spec>::Address::from([1; 28]),
+                        address: <TestSpec as Spec>::Address::from([1; 28]),
                         credential_id: CredentialId::from([1u8; 32]),
                         ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
                     },
