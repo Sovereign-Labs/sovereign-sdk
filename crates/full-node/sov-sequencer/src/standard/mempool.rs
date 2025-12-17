@@ -184,7 +184,7 @@ impl MempoolCursor {
 
     pub fn from_db_tx(tx: &MempoolTx) -> Self {
         Self {
-            tx_size_in_bytes: tx.tx.data.len(),
+            tx_size_in_bytes: tx.tx.len(),
             uuid_v7: tx.uuid_v7,
         }
     }

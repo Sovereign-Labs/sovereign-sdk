@@ -82,7 +82,7 @@ impl<S: Spec> BatchWithId<S> {
 
     /// The total size, in bytes, of all transactions and associated batch metadata.
     pub fn batch_with_id_size(&self) -> usize {
-        let batch_size: usize = self.batch.iter().map(|tx| tx.data.len()).sum();
+        let batch_size: usize = self.batch.iter().map(|tx| tx.len()).sum();
         batch_size + ID_SIZE + self.sequencer_address.as_ref().len()
     }
 }
@@ -154,7 +154,7 @@ impl<S: Spec> BlobDataWithId<S, BatchWithId<S>> {
                 sequencer_address,
                 ..
             } => proof.len() + 32 + sequencer_address.as_ref().len(),
-            BlobDataWithId::EmergencyRegistration { tx, .. } => tx.data.len() + 32,
+            BlobDataWithId::EmergencyRegistration { tx, .. } => tx.len() + 32,
         }
     }
 

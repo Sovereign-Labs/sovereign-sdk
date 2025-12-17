@@ -56,6 +56,22 @@ impl FullyBakedTx {
     pub fn set_sequencing_metadata(&mut self, metadata: &impl BorshSerialize) {
         self.sequencing_data = Some(borsh::to_vec(metadata).unwrap().into());
     }
+
+    /// Returns the total serialized length of the transaction, including both
+    /// the transaction data and sequencing metadata (if present).
+    /// This is the length that will be sent on the DA layer.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        borsh::to_vec(self)
+            .expect("Serialization to vec is infallible")
+            .len()
+    }
+
+    /// Returns true if the transaction has no data
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty() && self.sequencing_data.is_none()
+    }
 }
 
 /// `RawTx` represents a serialized signed rollup transaction. A `RawTx` needs to be encoded
@@ -89,5 +105,17 @@ impl RawTx {
     #[must_use]
     pub fn new(data: Vec<u8>) -> Self {
         Self { data }
+    }
+
+    /// Returns the length of the serialized transaction data
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    /// Returns true if the transaction has no data
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 }

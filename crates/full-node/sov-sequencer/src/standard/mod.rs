@@ -239,7 +239,7 @@ where
 
         // To fill a batch as big as possible, we only check if valid
         // tx can fit in the batch.
-        let tx_len = tx.data.len();
+        let tx_len = tx.len();
         if ctx.current_batch_size_in_bytes + tx_len > self.max_batch_size_bytes().get() {
             return (ctx, Ok(None));
         }
@@ -397,7 +397,7 @@ where
                             "Transaction has been included in the batch",
                         );
 
-                        ctx.current_batch_size_in_bytes += fully_baked_tx.data.len();
+                        ctx.current_batch_size_in_bytes += fully_baked_tx.len();
 
                         txs.push(TxWithHash {
                             fully_baked_tx,
@@ -521,13 +521,13 @@ where
             "`accept_tx` has been called"
         );
 
-        if baked_tx.data.len() > self.max_batch_size_bytes().get() {
+        if baked_tx.len() > self.max_batch_size_bytes().get() {
             return Err(ErrorObject {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
                 message: "Transaction is too big".to_string(),
                 details: json_obj!({
                     "max_allowed_size": self.max_batch_size_bytes(),
-                    "submitted_size": baked_tx.data.len(),
+                    "submitted_size": baked_tx.len(),
                 }),
             });
         }

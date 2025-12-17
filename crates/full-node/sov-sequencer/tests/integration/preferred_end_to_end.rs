@@ -1770,7 +1770,7 @@ async fn sequencer_back_pressure() {
                     // Doing larger increase to make sure we won't hit Too many transactions for credential_id
                     // Switching to nonce will fix that, but this is for later
                     generation += 1000;
-                    bytes_submitted += tx.data.len();
+                    bytes_submitted += tx.len();
                 }
                 Err(err) => {
                     let error_string = err.to_string();
