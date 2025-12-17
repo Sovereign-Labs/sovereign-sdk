@@ -79,12 +79,13 @@ testcontainers-modules = { workspace = true, features = ["postgres"] }
 [features]
 default = []
 arbitrary = [
-    "dep:arbitrary",
-    "dep:proptest",
-    "dep:proptest-derive",
-    "sov-mock-da/arbitrary",
-    "sov-rollup-interface/arbitrary",
-    "sov-test-utils/arbitrary"
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"sov-mock-da/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-test-utils/arbitrary",
+	"chrono?/arbitrary"
 ]
 native = [
     "dep:chrono",
