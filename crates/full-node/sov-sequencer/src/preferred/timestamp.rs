@@ -109,6 +109,8 @@ where
                 .try_into()
                 .expect("Converting unix timestamp to i64 number of milliseconds failed");
 
+            // Artificially inflate the generation number to reduce the number of tx hashes we need to store
+            let generation = timestamp.saturating_mul(100);
             let message = Rt::maybe_set_oracle_timestamp(&runtime, timestamp).expect(
                 "Oracle support must be checked before before spawning update_timestamp_task",
             );
@@ -122,7 +124,7 @@ where
 
             let unsigned_tx = UnsignedTransaction::<Rt, S>::new_with_details(
                 message,
-                UniquenessData::Generation(timestamp as u64),
+                UniquenessData::Generation(generation as u64),
                 details,
             );
 
