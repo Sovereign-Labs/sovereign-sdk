@@ -1,4 +1,4 @@
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateWriter};
+use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, StateWriter};
 use sov_state::User;
 
 use crate::{Account, Accounts};
@@ -26,6 +26,22 @@ impl<S: Spec> Accounts<S> {
 
                 Ok(*default_address)
             }
+        }
+    }
+
+    /// Resolve the sender's public key to an address.
+    /// If the sender is not registered, but a fallback address if provided, immediately registers
+    /// the credential to the fallback and then returns it.
+    pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
+        &mut self,
+        default_address: &S::Address,
+        credential_id: &CredentialId,
+        state: &mut ST,
+    ) -> Result<S::Address, ST::Error> {
+        let maybe_address = self.accounts.get(credential_id, state)?.map(|a| a.addr);
+        match maybe_address {
+            Some(address) => Ok(address),
+            None => Ok(*default_address),
         }
     }
 }
