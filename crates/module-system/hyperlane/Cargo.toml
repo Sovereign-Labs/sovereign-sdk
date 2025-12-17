@@ -17,12 +17,12 @@ workspace = true
 [dev-dependencies]
 sov-address = { workspace = true }
 sov-api-spec = { workspace = true }
-sov-hyperlane-integration = { path = ".", features = ["test-utils", "native"] }
-sov-mock-da = { workspace = true, features = ["native"] }
+sov-hyperlane-integration = { path = ".", features = ["test-utils", "native", "arbitrary"] }
+sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
-sov-test-utils = { workspace = true }
+sov-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-value-setter = { workspace = true, features = ["native"] }
 secp256k1 = { workspace = true, features = ["rand"] }
 
@@ -72,9 +72,7 @@ arbitrary = [
     "sov-hyperlane-integration/arbitrary",
     "sov-modules-api/arbitrary",
     "sov-state/arbitrary",
-    "sov-test-utils/arbitrary",
     "ruint/arbitrary",
-    "sov-mock-da/arbitrary",
 ]
 test-utils = ["arbitrary"]
 native = [
@@ -86,5 +84,4 @@ native = [
 	"sov-hyperlane-integration/native",
 	"dep:sov-metrics",
 	"sov-metrics/native",
-	"sov-mock-da/native"
 ]
