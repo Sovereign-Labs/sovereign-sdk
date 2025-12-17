@@ -19,6 +19,10 @@ pub(crate) enum LimitExceeded<G: Gas> {
         total_accumulated: G,
         max_allowed: G,
     },
+    TooManyConcurrentUsers {
+        nb_of_users: u64,
+        max_allowed: u64,
+    },
 }
 
 // Represents a resource that requires rate limiting.

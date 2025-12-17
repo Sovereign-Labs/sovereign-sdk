@@ -44,14 +44,25 @@ struct SovRateLimiterInner<S: Spec> {
 
 impl<S: Spec> SovRateLimiterInner<S> {
     fn new(
+        max_nb_of_concurrent_users_in_rate_limiter: u64,
         ttl_in_millis: u64,
         config: RateLimiterConfig<S>,
         addrs: HashMap<S::Address, RateLimiterConfig<S>>,
         ips: HashMap<IpAddr, RateLimiterConfig<S>>,
     ) -> Self {
         Self {
-            by_addr_rate_limiter: RateLimiter::new(ttl_in_millis, config.clone(), addrs),
-            by_ip_rate_limiter: RateLimiter::new(ttl_in_millis, config, ips),
+            by_addr_rate_limiter: RateLimiter::new(
+                max_nb_of_concurrent_users_in_rate_limiter,
+                ttl_in_millis,
+                config.clone(),
+                addrs,
+            ),
+            by_ip_rate_limiter: RateLimiter::new(
+                max_nb_of_concurrent_users_in_rate_limiter,
+                ttl_in_millis,
+                config,
+                ips,
+            ),
         }
     }
 
@@ -200,13 +211,21 @@ impl<S: Spec> SovRateLimiter<S> {
         let inner = config.map(|sov_config| {
             // All entries older than this value are evicted from the rate limiter.
             let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
+            let max_nb_of_concurrent_users_in_rate_limiter =
+                sov_config.max_nb_of_concurrent_users_in_rate_limiter;
 
             let (config, addrs, ips) = limits(
                 sov_config,
                 batch_execution_time_limit_millis,
                 max_batch_size_bytes,
             );
-            SovRateLimiterInner::new(ttl_in_millis, config, addrs, ips)
+            SovRateLimiterInner::new(
+                max_nb_of_concurrent_users_in_rate_limiter,
+                ttl_in_millis,
+                config,
+                addrs,
+                ips,
+            )
         });
         Self { inner }
     }
@@ -341,7 +360,13 @@ mod tests {
     impl<S: Spec> SovRateLimiter<S> {
         fn new_for_test(ttl_in_millis: u64, config: Option<RateLimiterConfig<S>>) -> Self {
             let inner = config.map(|c| {
-                SovRateLimiterInner::new(ttl_in_millis, c, Default::default(), Default::default())
+                SovRateLimiterInner::new(
+                    1000,
+                    ttl_in_millis,
+                    c,
+                    Default::default(),
+                    Default::default(),
+                )
             });
             Self { inner }
         }

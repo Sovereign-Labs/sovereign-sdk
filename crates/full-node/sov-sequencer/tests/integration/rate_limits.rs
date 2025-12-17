@@ -91,6 +91,7 @@ async fn create_test_rollup(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting() {
     let sov_config = SovRateLimiterConfig {
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
         default_limits: Limits {
             resources_per_bucket: 5,
             refill_rate: 100,
@@ -149,6 +150,7 @@ async fn test_correct_ip() {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
         max_requests_per_second: 0,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),

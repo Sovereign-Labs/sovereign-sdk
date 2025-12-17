@@ -234,6 +234,7 @@ impl<G: Gas> Throttler<G> {
 /// update:
 ///   total_resource_used = 3 micros
 pub(crate) struct RateLimiter<K, S: Spec> {
+    max_nb_of_concurrent_users: u64,
     data: Cache<K, Throttler<S::Gas>>,
     default_config: RateLimiterConfig<S>,
     special_configs: HashMap<K, RateLimiterConfig<S>>,
@@ -241,6 +242,7 @@ pub(crate) struct RateLimiter<K, S: Spec> {
 
 impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(
+        max_nb_of_concurrent_users: u64,
         ttl_in_millis: u64,
         default_config: RateLimiterConfig<S>,
         special_configs: HashMap<K, RateLimiterConfig<S>>,
@@ -250,6 +252,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             .build();
 
         Self {
+            max_nb_of_concurrent_users,
             data,
             default_config,
             special_configs,
@@ -261,6 +264,15 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         now: Instant,
         key: &K,
     ) -> Result<Throttler<S::Gas>, LimitExceeded<S::Gas>> {
+        let entry_count = self.data.entry_count();
+
+        if entry_count > self.max_nb_of_concurrent_users {
+            return Err(LimitExceeded::TooManyConcurrentUsers {
+                nb_of_users: entry_count,
+                max_allowed: self.max_nb_of_concurrent_users,
+            });
+        }
+
         match self.data.get(key) {
             Some(throttler) => {
                 let config = self.get_config(key);
@@ -544,7 +556,7 @@ mod tests {
             resource_used_per_run: ResourceUsed<Gas>,
             special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
         ) -> Self {
-            let rate_limiter = RateLimiter::new(ttl_in_millis, config, special_configs);
+            let rate_limiter = RateLimiter::new(1000, ttl_in_millis, config, special_configs);
             Self {
                 rate_limiter,
                 resource_used_per_run,
