@@ -63,7 +63,7 @@ bind_port = 12346
 # cors = "permissive" # CORS configuration: "permissive" or "restrictive"
 
 [monitoring]
-telegraf_address = "udp://127.0.0.1:9094"
+telegraf_address = "udp://127.0.0.1:8094"
 tokio_runtime_metrics_interval_millis = 500
 # Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
 # It is expected from the rollup node to produce metrics all the time,
