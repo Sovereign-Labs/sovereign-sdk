@@ -5780,6 +5780,7 @@ dependencies = [
  "schemars 0.8.21",
  "serde",
  "serde_json",
+ "serde_with",
  "sov-universal-wallet",
  "thiserror 1.0.64",
 ]
