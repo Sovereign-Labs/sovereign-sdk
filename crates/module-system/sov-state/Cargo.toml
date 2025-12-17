@@ -52,7 +52,7 @@ arbitrary = [
     "sov-modules-macros?/arbitrary",
     "sov-db-types/arbitrary",
 ]
-bench = ["sov-modules-macros/bench"]
+bench = ["dep:sov-modules-macros", "sov-modules-macros/bench"]
 default = []
 native = [
     "sov-db",
