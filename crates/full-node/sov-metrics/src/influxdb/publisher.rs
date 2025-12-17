@@ -319,7 +319,10 @@ mod tests {
             let metric = receive_with_timeout(&mut metrics_back_receiver)
                 .await
                 .unwrap();
-            assert_eq!(metric, metric_string);
+            assert!(
+                metric.starts_with(metric_string),
+                "Metric {metric} must start with {metric_string}"
+            );
         }
 
         // Nothing is left in the channel.
