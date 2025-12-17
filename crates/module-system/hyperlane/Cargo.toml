@@ -17,7 +17,7 @@ workspace = true
 [dev-dependencies]
 sov-address = { workspace = true }
 sov-api-spec = { workspace = true }
-sov-hyperlane-integration = { path = ".", features = ["test-utils", "native"] }
+sov-hyperlane-integration = { path = ".", features = ["test-utils", "native", "arbitrary"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
@@ -76,7 +76,7 @@ arbitrary = [
 	"sov-mock-da/arbitrary",
 	"sov-test-utils/arbitrary"
 ]
-test-utils = ["arbitrary"]
+test-utils = []
 native = [
 	"sov-modules-api/native",
 	"sov-value-setter/native",
