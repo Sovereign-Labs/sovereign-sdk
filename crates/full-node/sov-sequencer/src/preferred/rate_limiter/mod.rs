@@ -389,7 +389,7 @@ mod tests {
 
 #[derive(Clone, Copy, Debug)]
 pub struct IpAndCredentialId<Address: BasicAddress> {
-    pub default_address: Address,
+    pub address: Address,
     pub credential_id: CredentialId,
     pub ip_addr: IpAddr,
 }

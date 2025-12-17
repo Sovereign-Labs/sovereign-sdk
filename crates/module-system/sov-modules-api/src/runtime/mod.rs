@@ -171,7 +171,7 @@ pub trait Runtime<S: Spec>:
 
     /// Resolve CredentialId to address.
     fn resolve_address<ST: StateReader<User>>(
-        &mut self,
+        &self,
         default_address: &S::Address,
         credential_id: &crate::CredentialId,
         state: &mut ST,

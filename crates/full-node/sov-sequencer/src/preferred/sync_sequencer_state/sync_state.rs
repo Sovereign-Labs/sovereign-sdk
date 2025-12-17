@@ -28,7 +28,6 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
@@ -802,20 +801,9 @@ where
             });
         };
 
-        let checkpoint = &mut inner.executor.checkpoint;
-        let mut rt = Rt::default();
-
-        let address = rt
-            .resolve_address(
-                &ip_and_credential.default_address,
-                &ip_and_credential.credential_id,
-                checkpoint,
-            )
-            .unwrap_infallible();
-
         let token = inner
             .rate_limiter
-            .allow(ip_and_credential.ip_addr, address)
+            .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;

@@ -44,6 +44,7 @@ use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
 };
 use sov_modules_api::macros::config_value;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::{
@@ -646,9 +647,18 @@ where
             let call = Rt::wrap_call(call);
             let delay_ms = self.runtime.get_transaction_delay_ms(&call);
             let uniqueness = auth_data.uniqueness;
+            let mut state = state.api_state_accessor;
+            let address = self
+                .runtime
+                .resolve_address(
+                    &auth_data.default_address,
+                    &auth_data.credential_id,
+                    &mut state,
+                )
+                .unwrap_infallible();
             (
                 IpAndCredentialId {
-                    default_address: auth_data.default_address,
+                    address,
                     ip_addr,
                     credential_id: auth_data.credential_id,
                 },
