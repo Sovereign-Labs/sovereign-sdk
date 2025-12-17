@@ -975,6 +975,7 @@
         "address_custom_limits",
         "default_limits",
         "ip_custom_limits",
+        "max_nb_of_concurrent_users_in_rate_limiter",
         "max_requests_per_second"
       ],
       "properties": {
@@ -1018,6 +1019,11 @@
             "maxItems": 2,
             "minItems": 2
           }
+        },
+        "max_nb_of_concurrent_users_in_rate_limiter": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "max_requests_per_second": {
           "description": "The maximum number of requests allowed per second.",

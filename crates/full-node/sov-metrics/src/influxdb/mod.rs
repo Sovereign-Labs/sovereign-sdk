@@ -15,9 +15,9 @@ pub use config::{MonitoringConfig, TelegrafSocketConfig};
 pub use gas_constant_estimation::{GasConstantTracker, GAS_CONSTANTS};
 pub use tracker::{
     init_metrics_tracker, spawn_tokio_runtime_metrics_task, timestamp, BatchMetrics, BatchOutcome,
-    HttpMetrics, RpcMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics, SlotProcessingMetrics,
-    TransactionEffect, TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit,
-    ZkProvingTime, ZkVmExecutionChunk,
+    HttpMetrics, RateLimiterMetrics, RpcMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics,
+    SlotProcessingMetrics, TransactionEffect, TransactionProcessingMetrics,
+    UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime, ZkVmExecutionChunk,
 };
 
 pub(crate) type SerializableMetric = Box<dyn Metric>;

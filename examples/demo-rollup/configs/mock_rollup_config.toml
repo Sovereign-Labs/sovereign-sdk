@@ -63,7 +63,7 @@ bind_port = 12346
 # cors = "permissive" # CORS configuration: "permissive" or "restrictive"
 
 [monitoring]
-telegraf_address = "udp://127.0.0.1:8094"
+telegraf_address = "udp://127.0.0.1:9094"
 tokio_runtime_metrics_interval_millis = 500
 # Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
 # It is expected from the rollup node to produce metrics all the time,
@@ -116,6 +116,14 @@ is_replica = false
 #[sequencer.preferred.postgres_config]
 #postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
 
+# [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
+# max_nb_of_concurrent_users_in_rate_limiter = 100000 # Limit on how many concurrent users can the rate limiter handl.
+# max_requests_per_second = 10000 # Limit on requests per second.
+# address_custom_limits = [] 
+# ip_custom_limits = []
+# [sequencer.preferred.rate_limiter.default_limits]
+# resources_per_bucket = 20 # The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.
+# refill_rate = 5 # The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
 
 # Alternative configuration for non-preferred sequencer. This is mutually exclusive with the preferred sequencer configuration:
 # [sequencer.standard]

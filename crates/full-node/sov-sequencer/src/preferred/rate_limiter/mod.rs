@@ -72,14 +72,19 @@ impl<S: Spec> SovRateLimiterInner<S> {
         address: S::Address,
     ) -> Result<LimiterToken<S>, ResourceLimitExceededError<S>> {
         let now = Instant::now();
-        let throttler_for_addr = match self.by_addr_rate_limiter.allow(now, &address) {
-            Ok(ok) => ok,
-            Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
-        };
+
+        let throttler_for_addr =
+            match self
+                .by_addr_rate_limiter
+                .allow(now, &address, "limiter_by_addr")
+            {
+                Ok(ok) => ok,
+                Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
+            };
 
         let throttler_for_ip = self
             .by_ip_rate_limiter
-            .allow(now, &ip)
+            .allow(now, &ip, "limiter_by_ip")
             .map_err(|reason| ResourceLimitExceededError::Ip { ip, reason })?;
 
         Ok(LimiterToken {
@@ -98,7 +103,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
     }
 }
 
-const TTL_MULTIPLIER: u64 = 20;
+const TTL_MULTIPLIER: u64 = 5;
 
 fn calculate_limits<S: Spec>(
     limits: Limits,
@@ -235,10 +240,17 @@ impl<S: Spec> SovRateLimiter<S> {
         ip: IpAddr,
         address: S::Address,
     ) -> Result<Option<LimiterToken<S>>, ResourceLimitExceededError<S>> {
-        self.inner
+        let res = self
+            .inner
             .as_mut()
             .map(|inner| inner.allow(ip, address))
-            .transpose()
+            .transpose();
+
+        if let Err(err) = &res {
+            tracing::debug!(ip = %ip, address = %address, %err, "Transaction not allowed.");
+        }
+
+        res
     }
 
     pub(crate) fn update(
@@ -329,7 +341,7 @@ mod tests {
         let ip1 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let ip2 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
 
-        let mut rate_limiter = SovRateLimiter::new_for_test(1_000_000, Some(config));
+        let mut rate_limiter = SovRateLimiter::new_for_test(1000, 1000000, Some(config));
 
         // Update rate limiter for (ip1, cred1)
         {
@@ -358,10 +370,14 @@ mod tests {
     }
 
     impl<S: Spec> SovRateLimiter<S> {
-        fn new_for_test(ttl_in_millis: u64, config: Option<RateLimiterConfig<S>>) -> Self {
+        fn new_for_test(
+            max_nb_of_concurrent_users: u64,
+            ttl_in_millis: u64,
+            config: Option<RateLimiterConfig<S>>,
+        ) -> Self {
             let inner = config.map(|c| {
                 SovRateLimiterInner::new(
-                    1000,
+                    max_nb_of_concurrent_users,
                     ttl_in_millis,
                     c,
                     Default::default(),
