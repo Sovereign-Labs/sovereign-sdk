@@ -24,7 +24,8 @@
     "crates/module-system/sov-state",
     "crates/module-system/sov-modules-api",
     "crates/module-system/sov-address",
-    "crates/module-system/sov-test-utils",
+    "crates/utils/sov-test-utils",
+    "crates/utils/sov-evm-test-utils",
     "crates/module-system/module-implementations/sov-accounts",
     "crates/module-system/module-implementations/sov-bank",
     "crates/module-system/module-implementations/sov-chain-state",
@@ -47,5 +48,6 @@
     "crates/universal-wallet/macro-helpers",
     "crates/utils/workspace-hack",
     "crates/web3",
-    "python/py_sovereign_web3/rust"
+    "python/py_sovereign_web3/rust",
+    "crates/module-system/module-implementations/extern/hyperlane-solana-register"
 ]

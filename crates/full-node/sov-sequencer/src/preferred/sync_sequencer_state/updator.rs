@@ -1,5 +1,6 @@
 use crate::preferred::block_executor::RollupBlockExecutor;
 use crate::preferred::db::BatchToStore;
+use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::sync_sequencer_state::Message;
 use crate::preferred::AcceptTxError;
@@ -126,6 +127,7 @@ where
         baked_tx: &FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<
         Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>,
@@ -137,6 +139,7 @@ where
             baked_tx: baked_tx.clone(),
             tx_hash,
             original_tx_queue_id,
+            ip_and_credential,
             reason,
         })
         .await?;

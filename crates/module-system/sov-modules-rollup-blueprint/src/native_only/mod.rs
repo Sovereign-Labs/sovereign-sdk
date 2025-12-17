@@ -472,7 +472,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             if prover_config.is_some() {
-                Some(rollup_config.proof_manager.clone())
+                Some(rollup_config.proof_manager)
             } else {
                 None
             },
@@ -518,7 +518,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
             let workflow_task_handle = match operating_mode {
                 OperatingMode::Optimistic => {
-                    let prover_address = rollup_config.proof_manager.prover_address.clone();
+                    let prover_address = rollup_config.proof_manager.prover_address;
                     let bonding_proof_service = Self::Runtime::default()
                         .proof_processor()
                         .create_bonding_proof_service::<Self::Runtime>(

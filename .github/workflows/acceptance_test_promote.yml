@@ -2,7 +2,7 @@ name: Promote to Nightly
 
 on:
   repository_dispatch:
-    types: [acceptance-test-success, acceptance-test-failure]
+    types: [acceptance-test-success, acceptance-test-failure, data-regeneration-success, data-regeneration-failure]
 
 permissions:
   contents: write
@@ -78,7 +78,7 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
           payload: |
-            text: "❌ *Nightly acceptance tests failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}` failed to be promoted to nightly.\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*View details:* SSH to the build server and `less -R /opt/acceptance-server/test-runs/${{ github.event.client_payload.commit_sha }}/logs/output.log`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            text: "❌ *Nightly acceptance tests failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}` failed to be promoted to nightly.\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*View details:* SSH to the build server and `less -R /opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.commit_sha }}-*/logs/output.log`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Slack notification on fast-forward failure
         if: steps.promote.outcome == 'failure'
@@ -101,3 +101,25 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             text: "🚨 *Nightly promotion validation failed*\n\nInvalid payload or commit in repository dispatch event.\n\n*Event type:* `${{ github.event.action }}`\n*Commit ref:* `${{ github.event.client_payload.commit_sha }}`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on data regeneration success
+        if: github.event.action == 'data-regeneration-success'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "⚠️ *Acceptance test data regeneration completed*\n\nAfter the recent acceptance test failure, new candidate data has been generated for commit `${{ github.event.client_payload.commit_sha }}`.\n\n*Location:* `/mnt/data/candidate-regenerated-acceptance-test-data`\n\nTo use this data, swap it into place on the build server:\n```\nrm -rf /mnt/data/runner-acceptance-test-data\nmv /mnt/data/candidate-regenerated-acceptance-test-data /mnt/data/runner-acceptance-test-data\n```"
+
+      - name: Slack notification on data regeneration failure
+        if: github.event.action == 'data-regeneration-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "⚠️ *Acceptance test data regeneration failed*\n\nAutomatic data regeneration for commit `${{ github.event.client_payload.commit_sha }}` failed.\n\n**View logs:** `less -R /opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.commit_sha }}-*/logs/regeneration.log`"

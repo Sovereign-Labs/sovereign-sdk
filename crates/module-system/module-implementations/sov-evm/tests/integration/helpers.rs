@@ -15,10 +15,11 @@ use sov_evm::{
     AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId,
     TransactionSigned,
 };
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};
-use sov_test_utils::{LegacySimpleStorage, TransactionType, TEST_DEFAULT_USER_BALANCE};
+use sov_test_utils::{TransactionType, TEST_DEFAULT_USER_BALANCE};
 pub(crate) struct EvmAccount(SecretKey);
 
 impl EvmAccount {

@@ -33,7 +33,14 @@ async fn setup_test_rollup() -> (
         private_key_hex: Some(private_key_hex),
     };
 
-    let test_rollup = start_node(config, 0, Some(EVM_EXTENSION), Some(time_stamp_config)).await;
+    let test_rollup = start_node(
+        config,
+        0,
+        Some(EVM_EXTENSION),
+        Some(time_stamp_config),
+        None,
+    )
+    .await;
     test_rollup.wait_for_next_blocks(10).await;
     let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
 
@@ -49,7 +56,7 @@ async fn evm_test_oracle_timestamp() {
     test_rollup.pause_preferred_batches().await;
 
     let start_block = evm_client
-        .alloy_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .eth_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
         .await
         .number();
 

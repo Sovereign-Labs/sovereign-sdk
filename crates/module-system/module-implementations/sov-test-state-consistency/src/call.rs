@@ -73,7 +73,7 @@ impl<S: Spec> StateConsistency<S> {
         self.emit_event(
             state,
             Event::ValueUpdated {
-                address: sender_address.clone(),
+                address: *sender_address,
                 old_value: current_value,
                 new_value: new,
             },

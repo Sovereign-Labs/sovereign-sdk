@@ -1,6 +1,7 @@
 use crate::metrics::{PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::BatchToStore;
+use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
@@ -16,6 +17,7 @@ use crate::preferred::Inner;
 use crate::preferred::InnerGuard;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::preferred::SequencerStateUpdatorError;
+use crate::preferred::StateUpdateNotification;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, DbEvent,
@@ -26,6 +28,7 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
@@ -34,6 +37,8 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -74,6 +79,8 @@ where
     // A heap of message, ordered from low to high priority.
     pub(super) heap: BTreeMap<Priority, Message<S, Rt>>,
     pub(super) runtime: Rt,
+    pub(crate) test_only_state_update_notification_sender:
+        broadcast::Sender<StateUpdateNotification>,
 }
 
 impl<S, Rt> SynchronizedSequencerState<S, Rt>
@@ -229,10 +236,17 @@ where
                 baked_tx,
                 tx_hash,
                 original_tx_queue_id,
+                ip_and_credential,
                 reason,
             } => {
                 let ret = self
-                    .process_accept_tx(baked_tx, tx_hash, original_tx_queue_id, reason)
+                    .process_accept_tx(
+                        baked_tx,
+                        tx_hash,
+                        original_tx_queue_id,
+                        ip_and_credential,
+                        reason,
+                    )
                     .await;
                 if let Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                     RollupBlockExecutorError::UnexpectedFailure,
@@ -254,6 +268,8 @@ where
                 data,
                 reason,
             } => {
+                let slot_number = info.slot_number;
+                let finalized_slot_number = info.latest_finalized_slot_number;
                 let ret = self
                     .process_final_catchup(
                         info,
@@ -266,6 +282,14 @@ where
                     .await;
 
                 self.send_response(resp, ret, "final_catchup").await;
+                // Send a state update notification (for testing. Note that we've already released the lock at this point, so there should be no performance impact)
+                // but updates are not strictly guaranteed to be delivered in order. We discard errors because we don't care if there are no subscribers.
+                let _ =
+                    self.test_only_state_update_notification_sender
+                        .send(StateUpdateNotification {
+                            slot_number,
+                            finalized_slot_number,
+                        });
             }
             Message::PruneSequencerDb { reason } => {
                 self.process_prune_sequencer_db(reason).await;
@@ -296,7 +320,18 @@ where
                     .await;
             }
             Message::SimpleStateUpdate { info } => {
+                let slot_number = info.slot_number;
+                let finalized_slot_number = info.latest_finalized_slot_number;
+
                 self.process_new_storage(info).await;
+                // Send a state update notification (for testing. Note that we've already released the lock at this point, so there should be no performance impact)
+                // but updates are not strictly guaranteed to be delivered in order. We discard errors because we don't care if there are no subscribers.
+                let _ =
+                    self.test_only_state_update_notification_sender
+                        .send(StateUpdateNotification {
+                            slot_number,
+                            finalized_slot_number,
+                        });
             }
             Message::ReplicaBatchStartMsg {
                 resp,
@@ -726,6 +761,7 @@ where
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
@@ -766,10 +802,29 @@ where
             });
         };
 
-        let (rx, remaining_slot_gas) = inner
-            .do_new_tx(tx_hash, baked_tx)
-            .await
-            .map_err(AcceptTxError::NewTxError)?;
+        let checkpoint = &mut inner.executor.checkpoint;
+        let mut rt = Rt::default();
+
+        let address = rt
+            .resolve_address(
+                &ip_and_credential.default_address,
+                &ip_and_credential.credential_id,
+                checkpoint,
+            )
+            .unwrap_infallible();
+
+        let token = inner
+            .rate_limiter
+            .allow(ip_and_credential.ip_addr, address)
+            .map_err(|err| AcceptTxError::RateLimiter(err))?;
+
+        let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
+
+        // Do not use `?` or return early here. We must always call `rate_limiter.update`
+        // to ensure the limits are updated even for unsuccessful transactions.
+        let res = res.map_err(AcceptTxError::NewTxError);
+        inner.rate_limiter.update(token, resource_used);
+        let (rx, remaining_slot_gas) = res?;
 
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
 
@@ -838,12 +893,8 @@ where
             seq_nr_from_master,
         )?;
 
-        let _ = inner
-            .do_new_tx(tx_hash, baked_tx)
-            .await
-            .map_err(ReplicaError::NewTx)?
-            .0
-            .await;
+        let (res, _) = inner.do_new_tx(tx_hash, baked_tx).await;
+        let _ = res.map_err(ReplicaError::NewTx)?.0.await;
 
         Ok(())
     }

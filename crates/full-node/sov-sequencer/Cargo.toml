@@ -61,8 +61,6 @@ time = "0.3"
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
 arbitrary = { workspace = true }
-num_cpus = { workspace = true }
-rand = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 reltester = { workspace = true }

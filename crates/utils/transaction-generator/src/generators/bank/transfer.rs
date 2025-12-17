@@ -144,7 +144,7 @@ impl<S: Spec> BankMessageGenerator<S> {
             token_id,
         };
         let msg = CallMessage::Transfer {
-            to: to_addr.clone(),
+            to: to_addr,
             coins: coins_to_send.clone(),
         };
 
@@ -172,7 +172,7 @@ impl<S: Spec> BankMessageGenerator<S> {
             MessageOutcome::Successful {
                 changes: vec![
                     BankChangeLogEntry::BalanceChanged {
-                        address: from_addr.clone(),
+                        address: from_addr,
                         coins: Coins {
                             token_id,
                             amount: remaining_from_balance.into(),

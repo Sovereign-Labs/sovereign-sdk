@@ -115,7 +115,7 @@ impl BlobReaderTrait for BlobWithSender {
     type BlobHash = TmHash;
 
     fn sender(&self) -> CelestiaAddress {
-        self.sender.clone()
+        self.sender
     }
 
     fn hash(&self) -> Self::BlobHash {

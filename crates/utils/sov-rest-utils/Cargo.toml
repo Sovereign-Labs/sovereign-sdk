@@ -11,6 +11,7 @@ publish = true
 
 [dependencies]
 anyhow = { workspace = true }
+client-ip = "0.1.1"
 axum = { workspace = true, features = ["query", "ws", "json", "original-uri"] }
 derive_more = { workspace = true, default-features = true, features = ["deref", "display"] }
 futures = { workspace = true }

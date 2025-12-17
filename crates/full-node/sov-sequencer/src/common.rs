@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::future::Future;
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -170,6 +171,7 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
     async fn accept_tx(
         &self,
         tx: FullyBakedTx,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject>;
 
     /// Can be used to query and update the status of transactions.

@@ -85,7 +85,6 @@ impl StateDb {
                 .into_iter()
                 .chain(KernelNamespace::get_jmt_table_names())
                 .collect(),
-            cacheable_columns: vec![], // Caching is only enabled for NOMT - which is done in FlatStateDb.
         }
     }
 

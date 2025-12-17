@@ -672,7 +672,7 @@ impl<S: Spec> Module for ChainState<S> {
                     state,
                     Event::AdminModeTerminated {
                         effective_at_rollup_height: termination_height.get(),
-                        by: context.sender().clone(),
+                        by: *context.sender(),
                     },
                 );
                 tracing::debug!(

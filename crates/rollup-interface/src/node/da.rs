@@ -69,7 +69,7 @@ pub enum MaybeRetryable<E> {
     Transient(E),
 }
 
-impl<E: std::fmt::Display> MaybeRetryable<E> {
+impl<E: std::fmt::Debug> MaybeRetryable<E> {
     fn is_retryable(&self) -> bool {
         matches!(self, Self::Transient(_))
     }
@@ -259,12 +259,12 @@ pub async fn run_maybe_retryable_async_fn_with_retries<F, Fut, T, E>(
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, MaybeRetryable<E>>>,
-    E: std::fmt::Display,
+    E: std::fmt::Debug,
 {
     fxn.retry(backoff_policy)
         .notify(|err: &MaybeRetryable<E>, dur: Duration| {
             tracing::warn!(
-                method_name = da_method_name, error = %err, duration = ?dur,
+                method_name = da_method_name, error = ?err, duration = ?dur,
                 "Error in DA Service, will retry in specified duration."
             );
         })

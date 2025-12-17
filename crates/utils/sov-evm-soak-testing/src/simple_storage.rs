@@ -4,7 +4,7 @@ use alloy::{
 };
 use alloy_primitives::U256;
 use anyhow::Result;
-use sov_test_utils::SimpleStorage;
+use sov_evm_test_utils::SimpleStorage;
 
 #[allow(dead_code)]
 pub async fn run<P, N>(client: P) -> Result<()>

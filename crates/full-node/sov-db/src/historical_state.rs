@@ -3,18 +3,19 @@ use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::{VersionedDeltaReader, VersionedSchemaBatch};
-use rockbound::{SchemaBatch, SchemaKey, SchemaValue};
+use rockbound::{SchemaBatch, SchemaValue};
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::metrics::StateMaterializationMetrics;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::StateRootHashes;
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
 use crate::schema::types::StateRootHashId;
 
 const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
 
-type ArcKeyAndValueOpt = (Arc<SchemaKey>, Option<Option<SchemaValue>>);
+type KvPair = (SlotKey, Option<SlotValue>);
 
 /// A typed wrapper around the [`DeltaReader`] for reading materializing historical rollup state.
 #[derive(Debug, Clone)]
@@ -43,14 +44,8 @@ impl HistoricalStateReader {
     // Used for testing only.
     #[cfg(test)]
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
-        let kernel_version = flat_state
-            .get_kernel_db()
-            .load_latest_committed_version()
-            .unwrap();
-        let user_version = flat_state
-            .get_user_db()
-            .load_latest_committed_version()
-            .unwrap();
+        let kernel_version = flat_state.get_kernel_db().get_committed_version().unwrap();
+        let user_version = flat_state.get_user_db().get_committed_version().unwrap();
         assert_eq!(
             kernel_version, user_version,
             "Kernel and user should always have the same latest version"
@@ -136,75 +131,66 @@ impl HistoricalStateReader {
     }
 
     /// Get an optional value from the database, given a version and a key hash.
-    pub fn get_user_value_option_by_key(
-        &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.user.get_latest_borrowed(key)?.flatten())
+    pub fn get_user_value_option_by_key(&self, key: &SlotKey) -> anyhow::Result<Option<SlotValue>> {
+        self.user.get_latest_borrowed(key)
     }
 
     /// Get the very latest version of the given key from the database.
     pub fn get_user_value_option_by_key_unbound(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        self.user.get_latest_borrowed_unbound(key)
     }
 
     /// Iterate over all user values with the given prefix.
     pub fn iter_user_values_with_prefix<'a>(
         &'a self,
-        prefix: &SchemaKey,
-    ) -> anyhow::Result<Option<impl Iterator<Item = ArcKeyAndValueOpt> + 'a>> {
-        Ok(Some(self.user.iter_with_prefix(prefix)?))
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(self.user.iter_with_prefix(prefix.clone())?))
     }
 
     /// Iterate over all kernel values with the given prefix.
     pub fn iter_kernel_values_with_prefix<'a>(
         &'a self,
-        prefix: &SchemaKey,
-    ) -> anyhow::Result<Option<impl Iterator<Item = ArcKeyAndValueOpt> + 'a>> {
-        Ok(Some(self.kernel.iter_with_prefix(prefix)?))
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(self.kernel.iter_with_prefix(prefix.clone())?))
     }
 
     /// Get the very latest version of the given key from the database.
     pub fn get_kernel_value_option_by_key_unbound(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.kernel.get_latest_borrowed_unbound(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        self.kernel.get_latest_borrowed_unbound(key)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_user_value_option_by_key_historical(
         &self,
-        key: &SchemaKey,
+        key: &SlotKey,
         version: SlotNumber,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self
-            .user
-            .get_historical_borrowed(key, version.get())?
-            .flatten())
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.user.get_historical_borrowed(key, version.get())?)
     }
 
     /// Get an optional value from the database, given a version and a key hash.
     pub fn get_kernel_value_option_by_key(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.kernel.get_latest_borrowed(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        self.kernel.get_latest_borrowed(key)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_kernel_value_option_by_key_historical(
         &self,
-        key: &SchemaKey,
+        key: &SlotKey,
         version: SlotNumber,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self
-            .kernel
-            .get_historical_borrowed(key, version.get())?
-            .flatten())
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.kernel.get_historical_borrowed(key, version.get())?)
     }
 
     /// Get the serialized root hash for a given version.
@@ -227,8 +213,8 @@ impl HistoricalStateReader {
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
     pub fn materialize_values(
-        user_changes: impl IntoIterator<Item = (SchemaKey, Option<SchemaValue>)>,
-        kernel_changes: impl IntoIterator<Item = (SchemaKey, Option<SchemaValue>)>,
+        user_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+        kernel_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
         root_hash: SchemaValue,
         version: SlotNumber,
     ) -> anyhow::Result<StateChanges> {
@@ -239,17 +225,26 @@ impl HistoricalStateReader {
         let mut kernel_batch = VersionedSchemaBatch::default();
         let mut user_batch = VersionedSchemaBatch::default();
 
-        // We always .put and not .delete to keep archival data.
         for (key, value) in kernel_changes {
             metric.inc_kernel_items();
             metric.track_key_value_size(&key, &value);
-            kernel_batch.put_versioned(Arc::new(key), value);
+            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
+            if let Some(value) = value {
+                kernel_batch.put_versioned(key, value);
+            } else {
+                kernel_batch.delete_versioned(key);
+            }
             has_kernel_been_updated = true;
         }
         for (key, value) in user_changes {
             metric.inc_user_items();
             metric.track_key_value_size(&key, &value);
-            user_batch.put_versioned(Arc::new(key), value);
+            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
+            if let Some(value) = value {
+                user_batch.put_versioned(key, value);
+            } else {
+                user_batch.delete_versioned(key);
+            }
             has_user_been_updated = true;
         }
         if has_user_been_updated && !has_kernel_been_updated {
@@ -291,10 +286,10 @@ mod tests {
         let key2 = b"BBB";
 
         let writes = vec![
-            vec![(key2.to_vec(), Some(vec![1, 1, 1]))],
-            vec![(key1.to_vec(), Some(vec![2, 2, 2]))],
-            vec![(key1.to_vec(), Some(vec![3, 3, 3]))],
-            vec![(key1.to_vec(), Some(vec![4, 4, 4]))],
+            vec![(SlotKey::from_slice(key2), Some(vec![1, 1, 1].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![2, 2, 2].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![3, 3, 3].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![4, 4, 4].into()))],
         ];
         for (idx, kernel_writes) in writes.into_iter().enumerate() {
             let historical_state = HistoricalStateReader::new_empty(&rocksdb);
@@ -333,7 +328,10 @@ mod tests {
         let root_hash0 = vec![1; 32];
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key1".to_vec(), Some(b"value1".to_vec()))],
+            vec![(
+                SlotKey::from_slice(b"key1"),
+                Some(b"value1".to_vec().into()),
+            )],
             root_hash0.clone(),
             version0,
         )
@@ -357,7 +355,10 @@ mod tests {
         let root_hash1 = vec![2; 32];
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key2".to_vec(), Some(b"value2".to_vec()))],
+            vec![(
+                SlotKey::from_slice(b"key2"),
+                Some(b"value2".to_vec().into()),
+            )],
             root_hash1.clone(),
             version1,
         )
@@ -405,7 +406,10 @@ mod tests {
         let version0 = SlotNumber::new(0);
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key1".to_vec(), Some(b"value1".to_vec()))],
+            vec![(
+                SlotKey::from_slice(b"key1"),
+                Some(b"value1".to_vec().into()),
+            )],
             vec![1; 32],
             version0,
         )
@@ -424,7 +428,10 @@ mod tests {
         let version1 = SlotNumber::new(1);
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key2".to_vec(), Some(b"value2".to_vec()))],
+            vec![(
+                SlotKey::from_slice(b"key2"),
+                Some(b"value2".to_vec().into()),
+            )],
             vec![2; 32],
             version1,
         )

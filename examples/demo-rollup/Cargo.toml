@@ -41,7 +41,7 @@ sov-state = { workspace = true, features = ["native"] }
 demo-stf = { workspace = true, features = ["native"] }
 
 risc0 = { path = "./provers/risc0" }
- sp1 = { path = "./provers/sp1" }
+sp1 = { path = "./provers/sp1" }
 
 borsh = { workspace = true, features = ["bytes", "derive"] }
 async-trait = { workspace = true }
@@ -72,6 +72,7 @@ secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 
 [dev-dependencies]
 sov-eth-client = { workspace = true }
+jsonrpsee = { workspace = true }
 sov-address = { workspace = true, features = ["native", "arbitrary"] }
 sov-risc0-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
@@ -93,6 +94,7 @@ sov-api-spec = { workspace = true }
 sov-evm = { workspace = true, features = ["native", "arbitrary"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }
 sov-test-utils = { workspace = true }
+sov-evm-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
@@ -110,14 +112,12 @@ tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
-ethereum-types = { workspace = true }
-ethers = { workspace = true }
 alloy = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
 alloy-rpc-types-trace = { workspace = true }
 alloy-pubsub = "1.0"
-alloy-provider = { workspace = true, features = ["debug-api"] }
+alloy-provider = { workspace = true, features = ["debug-api", "reqwest"] }
 sov-rpc-eth-types = { workspace = true}
 strum = { workspace = true }
 

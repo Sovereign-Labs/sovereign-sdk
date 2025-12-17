@@ -160,6 +160,13 @@ where
 
     let call = CallMessage { rlp };
 
+    tracing::debug!(
+        nonce,
+        credential_id = ?auth_data.credential_id,
+        raw_tx_hash = ?tx_and_raw_hash.raw_tx_hash,
+        "Received and authenticated EVM transaction"
+    );
+
     Ok((tx_and_raw_hash, auth_data, call))
 }
 

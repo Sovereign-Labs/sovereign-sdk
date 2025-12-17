@@ -61,6 +61,7 @@
       ]
     }
   },
+  "additionalProperties": false,
   "definitions": {
     "Address": {
       "description": "Address",
@@ -211,6 +212,27 @@
         }
       }
     },
+    "Limits": {
+      "type": "object",
+      "required": [
+        "refill_rate",
+        "resources_per_bucket"
+      ],
+      "properties": {
+        "refill_rate": {
+          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch. Values between 1 and 20 are recommended starting points.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "resources_per_bucket": {
+          "description": "Determines the threshold for rate-limiting requests. The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "MockAddress": {
       "description": "Mock address; 32 bytes in hex-encoded format",
       "type": "string",
@@ -329,7 +351,7 @@
         }
       }
     },
-    "PreferredSequencerConfig": {
+    "PreferredSequencerConfig_for_Address": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
       "required": [
@@ -417,6 +439,17 @@
             }
           ]
         },
+        "rate_limiter": {
+          "description": "Configuration for rate-limiting the sequencer.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SovRateLimiterConfig_for_Address"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "recovery_strategy": {
           "description": "Strategy for handling recovery scenarios in the preferred sequencer.",
           "allOf": [
@@ -437,7 +470,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ProofManagerConfig_for_Address": {
       "description": "Prover service configuration.",
@@ -807,7 +841,8 @@
           "default": false,
           "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SeqConfigExtension": {
       "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
@@ -855,7 +890,7 @@
           ],
           "properties": {
             "preferred": {
-              "$ref": "#/definitions/PreferredSequencerConfig"
+              "$ref": "#/definitions/PreferredSequencerConfig_for_Address"
             }
           },
           "additionalProperties": false
@@ -931,6 +966,65 @@
             }
           ]
         }
+      },
+      "additionalProperties": false
+    },
+    "SovRateLimiterConfig_for_Address": {
+      "type": "object",
+      "required": [
+        "address_custom_limits",
+        "default_limits",
+        "ip_custom_limits",
+        "max_requests_per_second"
+      ],
+      "properties": {
+        "address_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Address"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "default_limits": {
+          "description": "Default limits.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Limits"
+            }
+          ]
+        },
+        "ip_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string",
+                "format": "ip"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "max_requests_per_second": {
+          "description": "The maximum number of requests allowed per second.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
       }
     },
     "StdSequencerConfig": {
@@ -955,7 +1049,8 @@
           "format": "uint",
           "minimum": 1.0
         }
-      }
+      },
+      "additionalProperties": false
     },
     "TelegrafSocketConfig": {
       "description": "Config of receiving `inputs.socket_listener` <https://www.influxdata.com/blog/telegraf-socket-listener-input-plugin/>",

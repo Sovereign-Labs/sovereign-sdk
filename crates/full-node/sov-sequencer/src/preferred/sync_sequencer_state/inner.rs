@@ -1,13 +1,16 @@
 use crate::metrics::{
     track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
 };
-use crate::preferred::block_executor::StartBlockData;
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
+use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
+use crate::preferred::comfortable_gas_limit;
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
+use crate::preferred::rate_limiter::ResourceUsed;
+use crate::preferred::rate_limiter::SovRateLimiter;
 use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
@@ -21,6 +24,7 @@ use crate::preferred::{
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::Gas;
 use sov_modules_api::{
     FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
     VersionReader, VisibleSlotNumber,
@@ -40,11 +44,6 @@ use tracing::{debug, info, warn};
 const COMFORTABLE_SIZE_LIMIT_MULTIPLIER: u64 = 99;
 const COMFORTABLE_SIZE_LIMIT_DIVISOR: u64 = 100;
 
-/// These two constants are used to calculate the comfortable gas limit.
-/// Currently, this is 95% of the initial gas limit. After the comfortable limit is reached,
-/// the sequencer will close and publish the current batch.
-const COMFORTABLE_GAS_LIMIT_MULTIPLIER: u64 = 19;
-const COMFORTABLE_GAS_LIMIT_DIVISOR: u64 = 20;
 const COMFORTABLE_IN_FLIGHT_BLOBS: usize = 5;
 
 const METRICS_BATCH_SIZE: usize = 32;
@@ -73,7 +72,7 @@ where
     // See [`LedgerDb::with_shared_notifications`] for more details.
     pub(crate) api_ledger_db: LedgerDb,
 
-    pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) shutdown_receiver: watch::Receiver<()>,
     pub(crate) shutdown_sender: watch::Sender<()>,
 
@@ -97,6 +96,7 @@ where
     pub(crate) tx_cache_writer: TxResultWriter<S, Rt>,
     pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
+    pub(crate) rate_limiter: SovRateLimiter<S>,
 }
 
 // We submit metrics when this guard is dropped.
@@ -314,16 +314,12 @@ where
         // Check if we're close to the gas limit and close the batch if we are.
         // We want to close when gas used is at least 95% of the initial gas limit.
         let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
+        let comfortable_gas_limit = comfortable_gas_limit::<S>();
+
         let gas_used = initial_gas_limit
             .checked_sub(remaining_slot_gas)
             .expect("remaining_lot_gas is always smaller than initial_gas_limit");
-        let comfortable_gas_limit = initial_gas_limit
-            .scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR)
-            .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER).unwrap_or_else(|| {
-                panic!(
-                    "Cannot overflow after dividing by {COMFORTABLE_GAS_LIMIT_DIVISOR} and multiplying by {COMFORTABLE_GAS_LIMIT_MULTIPLIER}",
-                )
-            });
+
         let close_to_gas_limit = comfortable_gas_limit.dim_is_less_or_eq(gas_used);
         if close_to_gas_limit {
             tracing::debug!(%comfortable_gas_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
@@ -663,16 +659,22 @@ where
         &mut self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
-    ) -> Result<
-        (
-            oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
-            <S as Spec>::Gas,
-        ),
-        DoNewTxError<S>,
-    > {
+    ) -> (
+        Result<
+            (
+                oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
+                <S as Spec>::Gas,
+            ),
+            DoNewTxError<S>,
+        >,
+        ResourceUsed<S::Gas>,
+    ) {
+        // Even if this method return early it uses 1 request slot.
+        let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
+
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-            return Err(DoNewTxError::Shutdown);
+            return (Err(DoNewTxError::Shutdown), request_used);
         }
 
         if !self.executor.has_in_progress_batch() {
@@ -693,10 +695,13 @@ where
 
         let tx_len = baked_tx.data.len();
         if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
-            return Err(DoNewTxError::TxTooBig {
-                current_batch_size: batch_size_tracker.current_batch_size,
-                max_batch_size: batch_size_tracker.max_batch_size,
-            });
+            return (
+                Err(DoNewTxError::TxTooBig {
+                    current_batch_size: batch_size_tracker.current_batch_size,
+                    max_batch_size: batch_size_tracker.max_batch_size,
+                }),
+                request_used,
+            );
         }
 
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
@@ -717,18 +722,27 @@ where
                 );
                 res
             }
-            Err(err) => {
+            Err(RollupBlockExecutorErrorWithBudget {
+                inner_err: err,
+                execution_time_micros,
+                gas_used,
+            }) => {
                 tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
-                return Err(DoNewTxError::ExecutorError(err));
+
+                let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
+                return (Err(DoNewTxError::ExecutorError(err)), resource_used);
             }
         };
+
+        let gas_used = accepted_tx.confirmation.gas_used();
+        let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
 
         batch_size_tracker.add_tx(tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
 
-        Ok((rx, remaining_slot_gas))
+        (Ok((rx, remaining_slot_gas)), resource_used)
     }
 
     /// Closes the current batch.

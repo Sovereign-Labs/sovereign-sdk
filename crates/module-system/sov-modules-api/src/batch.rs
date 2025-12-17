@@ -349,7 +349,7 @@ pub trait InjectedControlFlow<S: Spec> {
         provisional_outcome: ProvisionalSequencerOutcome<S>,
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
-        gas_used: &<S as Spec>::Gas,
+        gas_used: <S as Spec>::Gas,
         exec_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>);
 }
@@ -388,7 +388,7 @@ impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
         provisional_outcome: ProvisionalSequencerOutcome<S>,
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
-        _gas_used: &<S as Spec>::Gas,
+        _gas_used: <S as Spec>::Gas,
         _execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match provisional_outcome.execution_status {
@@ -475,7 +475,7 @@ impl<S: Spec, CF: InjectedControlFlow<S> + Clone> IncrementalBatch<S>
     }
 
     fn sequencer_address(&self) -> S::Address {
-        self.sequencer_address.clone()
+        self.sequencer_address
     }
 }
 

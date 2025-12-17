@@ -1,3 +1,26 @@
+# 2025-12-16
+- #2239 Updates the internals of the API state for improved performance. 
+
+# 2025-12-15
+- #2167 Updates the internals of the nonce queue. 
+
+# 2025-12-14 
+- #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+- #2232 **Not breaking, but important**: rollup_config.toml now will panic if there's an unknown field, preventing accidental misconfiguration.
+
+# 2025-12-09
+- #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
+- #2214 EVM related test utils are extracted into separate crate: `sov-evm-test-utils`. Please update if you use them.
+- #2219 Dependency tree shaking.
+- #2224 `alloy-sol-types` is behind `evm` feature in sov-modules-api. Add this feature if there's compilation errors.
+
+# 2025-12-08
+- #2197 **Breaking DB change**: Restructures the internals of the database for NOMT to eliminate most allocations. This gives a 10-40% performance boost depending on the workload. Updating to this version requires a wipe or a resync.
+
+# 2025-12-03
+ - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
+
 # 2025-11-25
 - #2124 Allows configuring EVM contracts to pin their storage in RAM.
 
@@ -32,6 +55,7 @@
 - #2070 **Breaking change**: The `MeteredSignature::charge_gas()` method signature changes from taking a `msg: &[u8]` parameter to `msg_len: usize`, as signature verification gas cost only depends on the number of bytes. This has no other impact except for direct users of the `MeteredSignature` struct.
 
 # 2025-11-11
+- #2078 Fixing the test in demo-rollup
 - #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
   - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
 - #2074 Renaming crate `full-node-configs` to `sov-full-node-configs`.

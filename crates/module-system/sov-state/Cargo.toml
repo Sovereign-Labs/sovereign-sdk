@@ -34,6 +34,7 @@ sov-metrics = { workspace = true }
 sov-modules-macros = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 serde_with = { workspace = true }
+sov-db-types = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
@@ -48,15 +49,17 @@ arbitrary = [
     "dep:proptest-derive",
     "sov-db?/arbitrary",
     "sov-rollup-interface/arbitrary",
-    "sov-modules-macros?/arbitrary"
+    "sov-modules-macros?/arbitrary",
+    "sov-db-types/arbitrary",
 ]
-bench = ["sov-modules-macros/bench"]
+bench = ["dep:sov-modules-macros", "sov-modules-macros/bench"]
 default = []
 native = [
     "sov-db",
     "sov-rollup-interface/native",
     "sov-metrics/native",
     "sov-modules-macros?/native",
+    "sov-db-types/native",
     "dep:nomt",
     "dep:tracing",
 ]

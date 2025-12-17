@@ -2,15 +2,14 @@ use crate::evm::evm_test_helper::alloy_client;
 use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
-use alloy_primitives::U256;
-use ethers::abi::Address;
-use sov_test_utils::SimpleStorage;
+use alloy_primitives::{Address, U256};
+use sov_evm_test_utils::SimpleStorage;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn simple_transfer() -> anyhow::Result<()> {
     let (_, test_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
 
-    let simple_transfer = test_client.make_tx(Some(Address::zero()), None);
+    let simple_transfer = test_client.make_tx(Some(Address::ZERO), None);
     let gas_estimation = test_client.eth_estimate_gas(simple_transfer).await;
     assert_eq!(gas_estimation, (14_710 / 2) * 3 + 100_000);
     Ok(())

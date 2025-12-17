@@ -1,9 +1,10 @@
 //! Utilities and definitions for the sequencer's REST APIs.
 
+use std::net::SocketAddr;
 use std::pin::Pin;
 
 use axum::extract::ws::WebSocket;
-use axum::extract::{ws, State, WebSocketUpgrade};
+use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::Json;
 use futures::StreamExt;
@@ -14,6 +15,7 @@ use serde_with::serde_as;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::runtime::Runtime;
 use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_rest_utils::get_client_ip;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
     PageSelection, PaginatedResponse, Pagination, Path, Query,
@@ -226,22 +228,31 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     async fn axum_accept_tx(
+        connect_info: ConnectInfo<SocketAddr>,
+        headers: axum::http::HeaderMap,
         state: State<Self>,
         tx: Json<AcceptTx>,
     ) -> ApiResult<
         TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>,
     > {
+        let ip_addr = get_client_ip(headers, Some(&connect_info))
+            .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
         let raw_tx = RawTx::new(tx.0.body.blob);
         let baked_tx = <<Seq::Rt as Runtime<Seq::Spec>>::Auth as TransactionAuthenticator<
             Seq::Spec,
         >>::encode_with_standard_auth(raw_tx);
 
-        let tx_with_hash = state.sequencer.accept_tx(baked_tx).await.map_err(|e| {
-            if e.status.is_server_error() {
-                tracing::error!(error = ?e, "Error accepting transaction");
-            }
-            IntoResponse::into_response(e)
-        })?;
+        let tx_with_hash = state
+            .sequencer
+            .accept_tx(baked_tx, ip_addr)
+            .await
+            .map_err(|e| {
+                if e.status.is_server_error() {
+                    tracing::error!(error = ?e, "Error accepting transaction");
+                }
+                IntoResponse::into_response(e)
+            })?;
 
         Ok(TxInfoWithConfirmation {
             id: tx_with_hash.tx_hash,

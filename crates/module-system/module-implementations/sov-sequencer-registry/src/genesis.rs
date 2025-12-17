@@ -65,7 +65,7 @@ impl<S: Spec> SequencerRegistry<S> {
         self.register_staker(
             &sequencer_config.seq_da_address,
             sequencer_config.seq_bond,
-            sequencer_config.seq_rollup_address.clone(),
+            sequencer_config.seq_rollup_address,
             state,
         )?;
         // Set the minimum bond to the correct value after genesis.

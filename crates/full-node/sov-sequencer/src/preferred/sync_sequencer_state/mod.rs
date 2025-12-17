@@ -3,6 +3,9 @@ use crate::preferred::block_executor::RollupBlockExecutor;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::ExecutorEventsSender;
+use crate::preferred::rate_limiter::IpAndCredentialId;
+use crate::preferred::rate_limiter::ResourceLimitExceededError;
+use crate::preferred::rate_limiter::SovRateLimiter;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
@@ -19,16 +22,19 @@ use sov_blob_storage::SequenceNumber;
 use sov_db::ledger_db::LedgerDb;
 use sov_full_node_configs::sequencer::{PreferredSequencerConfig, SequencerConfig};
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::GasArray;
+use sov_modules_api::GasSpec;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
 pub(crate) use sync_state::*;
+use tokio::sync::broadcast;
 use tokio::sync::{mpsc, oneshot, watch};
 pub(crate) use updator::*;
-mod conditions_table;
 
+mod conditions_table;
 mod inner;
 mod sync_state;
 mod updator;
@@ -63,6 +69,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
+        ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     },
 
@@ -141,7 +148,7 @@ pub(crate) fn create<S, Rt>(
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
     batch_execution_time_limit_micros: u64,
-    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+    seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
@@ -161,8 +168,15 @@ where
     Rt: Runtime<S>,
 {
     let (message_sender, message_receiver) = mpsc::channel(CHANNEL_SIZE);
-
     let is_ready = Err(SequencerNotReadyDetails::Startup);
+
+    let rate_limiter = SovRateLimiter::new(
+        seq_config.sequencer_kind_config.rate_limiter.clone(),
+        seq_config
+            .sequencer_kind_config
+            .batch_execution_time_limit_millis,
+        seq_config.max_batch_size_bytes,
+    );
 
     let inner = Inner {
         is_replica,
@@ -192,6 +206,7 @@ where
         tx_cache_writer,
         cache_warm_up_executor,
         start_replica_task_notifier,
+        rate_limiter,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -202,6 +217,7 @@ where
             message_receiver,
             heap: BTreeMap::new(),
             runtime: Default::default(),
+            test_only_state_update_notification_sender: broadcast::channel(100).0,
         },
         SequencerStateUpdator {
             message_sender,
@@ -224,6 +240,7 @@ pub(crate) enum AcceptTxError<S: Spec> {
     },
     NewTxError(DoNewTxError<S>),
     ReplicaMode,
+    RateLimiter(ResourceLimitExceededError<S>),
 }
 
 #[derive(Debug)]
@@ -257,4 +274,21 @@ impl InitialStatus {
     fn should_flush_tx_cache_and_pinned_cache(&self) -> bool {
         self.is_startup || self.is_resync || self.is_recover
     }
+}
+
+/// These two constants are used to calculate the comfortable gas limit.
+/// Currently, this is 95% of the initial gas limit. After the comfortable limit is reached,
+/// the sequencer will close and publish the current batch.
+const COMFORTABLE_GAS_LIMIT_MULTIPLIER: u64 = 19;
+const COMFORTABLE_GAS_LIMIT_DIVISOR: u64 = 20;
+
+pub(crate) fn comfortable_gas_limit<S: Spec>() -> <S as GasSpec>::Gas {
+    let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
+    initial_gas_limit
+            .scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR)
+            .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER).unwrap_or_else(|| {
+                panic!(
+                    "Cannot overflow after dividing by {COMFORTABLE_GAS_LIMIT_DIVISOR} and multiplying by {COMFORTABLE_GAS_LIMIT_MULTIPLIER}",
+                )
+            })
 }

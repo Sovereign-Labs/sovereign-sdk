@@ -49,6 +49,7 @@
 - sov-operator-incentives
 - sov-attester-incentives
 - sov-revenue-share
+- sov-hyperlane-register-module
 
 # Adapters
 - sov-risc0-adapter

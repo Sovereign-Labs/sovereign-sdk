@@ -1,0 +1,34 @@
+[package]
+name = "sov-evm-test-utils"
+description = "A sub-set of test utils for testing EVM related functionality of the Sovereign SDK"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish = false
+repository.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+hex = { workspace = true }
+alloy-contract = { workspace = true }
+alloy-sol-types = { workspace = true, features = ["json"] }
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = "1.0.30"
+alloy-dyn-abi = { version = "1.3.1", features = ["eip712"] }
+alloy = { workspace = true }
+
+
+[lints]
+workspace = true
+
+[features]
+arbitrary = [
+	"alloy-primitives/arbitrary",
+	"alloy-rpc-types-eth/arbitrary",
+	"alloy-sol-types/arbitrary",
+	"alloy/arbitrary",
+	"alloy-dyn-abi/arbitrary",
+]

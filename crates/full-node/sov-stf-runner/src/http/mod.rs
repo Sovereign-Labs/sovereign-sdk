@@ -1,6 +1,8 @@
+use crate::http::id_provider::HexIdProvider;
+use crate::CorsConfiguration;
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::Request;
+use axum::extract::{ConnectInfo, Request};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
@@ -12,6 +14,7 @@ use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
 use sov_metrics::{track_metrics, HttpMetrics};
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -19,10 +22,57 @@ use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
 use tower_layer::{Identity, Layer};
-
-use crate::http::id_provider::HexIdProvider;
-use crate::CorsConfiguration;
 mod id_provider;
+use sov_rest_utils::get_client_ip;
+use sov_rest_utils::GetIPResult;
+
+// Middleware to inject SocketAddr from axum's ConnectInfo into the request extensions
+// so that jsonrpsee RPC handlers can access it via the Extensions parameter
+#[derive(Clone)]
+struct InjectSocketAddrLayer;
+
+impl<S> Layer<S> for InjectSocketAddrLayer {
+    type Service = InjectSocketAddrService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        InjectSocketAddrService { inner }
+    }
+}
+
+#[derive(Clone)]
+struct InjectSocketAddrService<S> {
+    inner: S,
+}
+
+impl<S, B> tower::Service<axum::http::Request<B>> for InjectSocketAddrService<S>
+where
+    S: tower::Service<axum::http::Request<B>>,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: axum::http::Request<B>) -> Self::Future {
+        // Extract SocketAddr from axum's ConnectInfo and insert it directly
+        // into extensions so jsonrpsee can access it
+        let headers = req.headers();
+        let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>();
+
+        let maybe_ip = get_client_ip(headers.clone(), connect_info);
+        req.extensions_mut().insert(GetIPResult {
+            maybe_ip: Arc::new(maybe_ip),
+        });
+
+        self.inner.call(req)
+    }
+}
 
 pub(crate) async fn start_http_server(
     listen_address_http: &SocketAddr,
@@ -33,7 +83,6 @@ pub(crate) async fn start_http_server(
 ) -> anyhow::Result<(JoinHandle<anyhow::Result<()>>, SocketAddr)> {
     let listener = TcpListener::bind(listen_address_http).await?;
     let rest_address = listener.local_addr()?;
-
     let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
 
     let handle = tokio::spawn(async move {
@@ -48,7 +97,9 @@ pub(crate) async fn start_http_server(
         // TODO: Is there a way to have max_connections and other params for axum::serve?
         let result = axum::serve(
             listener,
-            ServiceExt::<axum::extract::Request>::into_make_service(router),
+            ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(
+                router,
+            ),
         )
         .with_graceful_shutdown(async move {
             shutdown_receiver.changed().await.ok();
@@ -94,6 +145,11 @@ pub fn rpc_module_to_router(
     let http_service = error_layer.layer(http_service);
     let ws_service = error_layer.layer(ws_service);
 
+    // Wrap services with the SocketAddr injection layer
+    let inject_addr_layer = InjectSocketAddrLayer;
+    let http_service = inject_addr_layer.layer(http_service);
+    let ws_service = inject_addr_layer.layer(ws_service);
+
     let router = axum::routing::get_service(ws_service)
         .post_service(http_service)
         .layer(cors_layer);
@@ -109,6 +165,7 @@ fn http_service(
         .http_only()
         .max_connections(10_000)
         .build();
+
     ServerBuilder::with_config(config)
         .to_service_builder()
         .build(methods, stop_handle)

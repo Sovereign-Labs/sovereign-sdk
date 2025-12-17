@@ -117,7 +117,7 @@ impl FullNodeBlueprint<Native> for CelestiaNomtDemoRollup<Native> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> Self::DaService {
         CelestiaService::new(
             rollup_config.da.clone(),
@@ -125,6 +125,7 @@ impl FullNodeBlueprint<Native> for CelestiaNomtDemoRollup<Native> {
                 rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
                 rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
             },
+            shutdown_receiver,
         )
         .await
     }

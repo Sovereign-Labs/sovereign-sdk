@@ -1,4 +1,4 @@
-use std::num::NonZero;
+use std::{net::IpAddr, num::NonZero};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -6,14 +6,17 @@ use serde::{Deserialize, Serialize};
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum SequencerKindConfig {
+#[allow(clippy::large_enum_variant)]
+pub enum SequencerKindConfig<Address: Copy> {
     /// A "Standard" sequencer, which can post transactions to the rollup but not give soft confirmations.
     Standard(StdSequencerConfig),
     /// A "Preferred" sequencer which is allowed to give soft confirmations.
-    Preferred(PreferredSequencerConfig),
+    Preferred(PreferredSequencerConfig<Address>),
 }
 
-impl Default for SequencerKindConfig {
+impl<Address: Copy + serde::Serialize + serde::de::DeserializeOwned> Default
+    for SequencerKindConfig<Address>
+{
     fn default() -> Self {
         SequencerKindConfig::Preferred(PreferredSequencerConfig::default())
     }
@@ -35,7 +38,8 @@ fn default_response_size_limit() -> usize {
 /// Sequencer configuration.
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[schemars(rename = "SequencerConfig")]
-pub struct SequencerConfig<Address, Sc = SequencerKindConfig> {
+#[serde(deny_unknown_fields)]
+pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     /// When enabled, submitted transactions are periodically assembled into
     /// batches and automatically posted to the DA layer. When disabled, the
     /// batch production endpoint has to be called explicitly.
@@ -76,13 +80,13 @@ fn default_automatic_batch_production() -> bool {
     true
 }
 
-impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
+impl<Addr: Copy + Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
     /// Replaces the value of [`SequencerConfig::sequencer_kind_config`].
     pub fn with_seq_config<Sc2>(&self, seq_config: Sc2) -> SequencerConfig<Addr, Sc2> {
         SequencerConfig {
             automatic_batch_production: self.automatic_batch_production,
             dropped_tx_ttl_secs: self.dropped_tx_ttl_secs,
-            rollup_address: self.rollup_address.clone(),
+            rollup_address: self.rollup_address,
             max_allowed_node_distance_behind: self.max_allowed_node_distance_behind,
             admin_addresses: self.admin_addresses.clone(),
             max_batch_size_bytes: self.max_batch_size_bytes,
@@ -94,7 +98,7 @@ impl<Addr: Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
     }
 }
 
-impl<Addr> SequencerConfig<Addr> {
+impl<Addr: Copy> SequencerConfig<Addr> {
     /// Returns true if the sequencer uses [`SequencerKindConfig::Preferred`].
     pub fn is_preferred_sequencer(&self) -> bool {
         matches!(
@@ -136,7 +140,8 @@ pub struct PostgresConfig {
 
 /// Configuration for [`PreferredSequencer`].
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub struct PreferredSequencerConfig {
+#[serde(deny_unknown_fields)]
+pub struct PreferredSequencerConfig<Address: Copy> {
     /// The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero.
     /// Sequencers should set this to a non-zero value if they wish to cover their DA costs.
     #[serde(default)]
@@ -176,6 +181,9 @@ pub struct PreferredSequencerConfig {
     /// Configuration for the timing oracle.
     #[serde(default)]
     pub timing_oracle: Option<TimingOracleConfig>,
+    /// Configuration for rate-limiting the sequencer.
+    #[serde(default = "default_rate_limiter::<Address>")]
+    pub rate_limiter: Option<SovRateLimiterConfig<Address>>,
     /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
@@ -190,7 +198,7 @@ pub struct PreferredSequencerConfig {
     pub future_nonce_transaction_timeout_millis: u64,
 }
 
-impl Default for PreferredSequencerConfig {
+impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
     fn default() -> Self {
         Self {
             minimum_profit_per_tx: 0,
@@ -207,8 +215,13 @@ impl Default for PreferredSequencerConfig {
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
             timing_oracle: None,
+            rate_limiter: None,
         }
     }
+}
+
+const fn default_rate_limiter<Address: Copy>() -> Option<SovRateLimiterConfig<Address>> {
+    None
 }
 
 pub const fn default_maximum_future_nonce_delta() -> u64 {
@@ -216,7 +229,7 @@ pub const fn default_maximum_future_nonce_delta() -> u64 {
 }
 
 pub const fn default_future_nonce_transaction_timeout_millis() -> u64 {
-    2_000
+    2000
 }
 
 pub const fn default_num_cache_warmup_workers() -> usize {
@@ -240,6 +253,7 @@ fn default_db_event_channel_size() -> usize {
 
 /// Configuration for [`StdSequencer`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct StdSequencerConfig {
     /// Maximum number of transactions in mempool. Once this limit is reached,
     /// the batch builder will evict older transactions.
@@ -254,13 +268,30 @@ pub struct StdSequencerConfig {
 pub struct TimingOracleConfig {
     /// The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.
     pub priority_fee_percentage: u8,
-
     /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
     pub max_fee: u64,
-
     /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
     pub interval_millis: u64,
-
     /// The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.
     pub private_key_hex: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct SovRateLimiterConfig<Address: Copy> {
+    /// The maximum number of requests allowed per second.
+    pub max_requests_per_second: u64,
+    /// Default limits.
+    pub default_limits: Limits,
+    pub address_custom_limits: Vec<(Address, Limits)>,
+    pub ip_custom_limits: Vec<(IpAddr, Limits)>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct Limits {
+    /// Determines the threshold for rate-limiting requests.
+    /// The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.
+    pub resources_per_bucket: u64,
+    /// The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
+    /// Values between 1 and 20 are recommended starting points.
+    pub refill_rate: u64,
 }

@@ -134,8 +134,6 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         version: Option<SlotNumber>,
     ) -> Option<SlotValue> {
         let version_to_use = self.get_version_to_use(version)?;
-        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-        let key_vec = key.as_ref().to_vec();
 
         match N::NAMESPACE {
             Namespace::User => self.read_value_namespace::<DBUserNamespace>(key, version_to_use),
@@ -144,7 +142,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             }
             Namespace::Accessory => self
                 .accessory_db
-                .get_value_option(&key_vec, version_to_use)
+                .get_value_option(key, version_to_use)
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
@@ -537,8 +535,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             }
             Namespace::Accessory => self
                 .accessory_db
-                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-                .get_value_option(&key.as_ref().to_vec(), SlotNumber::MAX)
+                .get_value_option(&key, SlotNumber::MAX)
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }

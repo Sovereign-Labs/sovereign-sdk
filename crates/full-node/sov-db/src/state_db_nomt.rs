@@ -94,9 +94,11 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let flag_prepare = flag_prepare_start.elapsed();
 
         let start_kernel = std::time::Instant::now();
-        let write_attempts_kernel = {
+        {
             let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
-            commit_nomt(&self.kernel, kernel).context("kernel namespace commit")?
+            kernel
+                .commit(&self.kernel)
+                .context("kernel namespace commit")?;
         };
         let write_kernel = start_kernel.elapsed();
 
@@ -138,9 +140,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let flag_mid = flag_mid_start.elapsed();
 
         let start_user = std::time::Instant::now();
-        let write_attempts_user = {
+        {
             let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
-            commit_nomt(&self.user, user).context("user namespace commit")?
+            user.commit(&self.user).context("user namespace commit")?;
         };
         let write_user = start_user.elapsed();
 
@@ -156,10 +158,10 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let total = start.elapsed();
         Ok(MerklizedCommitMetric {
             flag_prepare,
-            write_attempts_kernel,
+            write_attempts_kernel: 1,
             write_kernel,
             flag_mid,
-            write_attempts_user,
+            write_attempts_user: 1,
             write_user,
             flag_finish,
             total,
@@ -297,11 +299,16 @@ where
     /// Should be called only when really needed.
     /// Will hold the read lock to all snapshots.
     /// **Commiting storage will be blocked until all built sessions are deallocated.**
+    /// Returned session does not collect witness!
+    /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
-    pub fn begin_user_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
+    pub fn begin_user_session_without_witness(
+        &self,
+    ) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
-        let params = {
-            let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays_count = 0;
+        let session = {
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
@@ -311,24 +318,21 @@ where
                     continue;
                 };
                 overlays.push(&state_overlay.user);
+                overlays_count += 1;
             }
-            SessionParams::default()
-                .overlay(overlays)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to construct session params for user session: {:?}",
-                        e
-                    )
-                })?
-                .witness_mode(WitnessMode::read_write())
+            let params = SessionParams::default().overlay(overlays).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to construct session params for user session: {:?}",
+                    e
+                )
+            })?;
+            self.state_db.user.begin_session(params)
         };
-        let session = self.state_db.user.begin_session(params);
         let init_time = start.elapsed();
-        let overlays = self.relevant_snapshot_refs.len();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtBeginSessionMetric {
                 db: USER,
-                overlays,
+                overlays: overlays_count,
                 init_time,
             });
         });
@@ -339,11 +343,16 @@ where
     /// Should be called only when really needed.
     /// Will hold the read lock to all snapshots.
     /// **Commiting storage will be blocked until all built sessions are deallocated.**
+    /// Returned session does not collect witness!
+    /// Use `Self::begin_both_sessions` if witness is needed
     #[tracing::instrument(skip(self))]
-    pub fn begin_kernel_session(&self) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
+    pub fn begin_kernel_session_without_witness(
+        &self,
+    ) -> anyhow::Result<nomt::Session<BinaryHasher<H>>> {
         let start = std::time::Instant::now();
-        let params = {
-            let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays_count = 0;
+        let session = {
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
@@ -353,24 +362,21 @@ where
                     continue;
                 };
                 overlays.push(&state_overlay.kernel);
+                overlays_count += 1;
             }
-            SessionParams::default()
-                .overlay(overlays)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to construct session params for kernel session: {:?}",
-                        e
-                    )
-                })?
-                .witness_mode(WitnessMode::read_write())
+            let params = SessionParams::default().overlay(overlays).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to construct session params for kernel session: {:?}",
+                    e
+                )
+            })?;
+            self.state_db.kernel.begin_session(params)
         };
-        let session = self.state_db.kernel.begin_session(params);
         let init_time = start.elapsed();
-        let overlays = self.relevant_snapshot_refs.len();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtBeginSessionMetric {
                 db: KERNEL,
-                overlays,
+                overlays: overlays_count,
                 init_time,
             });
         });
@@ -379,11 +385,12 @@ where
 
     /// Begins both sessions at the same time.
     /// Should be used if both sessions are needed in same context. Prevents dead lock.
-    pub fn begin_both_sessions(&self) -> anyhow::Result<SessionsContainer<H>> {
+    pub fn begin_both_sessions(&self, with_witness: bool) -> anyhow::Result<SessionsContainer<H>> {
         let start = std::time::Instant::now();
-        let (kernel_params, user_params) = {
-            let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
-            let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut kernel_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut user_overlays = Vec::with_capacity(self.relevant_snapshot_refs.len());
+        let mut overlays_count = 0;
+        let (kernel_session, user_session) = {
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
@@ -394,35 +401,41 @@ where
                 };
                 kernel_overlays.push(&state_overlay.kernel);
                 user_overlays.push(&state_overlay.user);
+                overlays_count += 1;
             }
-            let kernel_params = SessionParams::default()
-                .overlay(kernel_overlays)
-                .map_err(|e| {
-                    anyhow::anyhow!(
-                        "Failed to construct session params for kernel session: {:?}",
-                        e
-                    )
-                })?
-                .witness_mode(WitnessMode::read_write());
-            let user_params = SessionParams::default()
+            let mut kernel_params =
+                SessionParams::default()
+                    .overlay(kernel_overlays)
+                    .map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to construct session params for kernel session: {:?}",
+                            e
+                        )
+                    })?;
+            if with_witness {
+                kernel_params = kernel_params.witness_mode(WitnessMode::read_write());
+            }
+            let mut user_params = SessionParams::default()
                 .overlay(user_overlays)
                 .map_err(|e| {
                     anyhow::anyhow!(
                         "Failed to construct session params for user session: {:?}",
                         e
                     )
-                })?
-                .witness_mode(WitnessMode::read_write());
-            (kernel_params, user_params)
+                })?;
+            if with_witness {
+                user_params = user_params.witness_mode(WitnessMode::read_write());
+            }
+
+            let kernel_session = self.state_db.kernel.begin_session(kernel_params);
+            let user_session = self.state_db.user.begin_session(user_params);
+            (kernel_session, user_session)
         };
-        let kernel_session = self.state_db.kernel.begin_session(kernel_params);
-        let user_session = self.state_db.user.begin_session(user_params);
         let init_time = start.elapsed();
-        let overlays = self.relevant_snapshot_refs.len();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtBeginSessionMetric {
                 db: BOTH,
-                overlays,
+                overlays: overlays_count,
                 init_time,
             });
         });
@@ -432,16 +445,6 @@ where
             kernel: kernel_session,
         })
     }
-}
-
-/// Commits an overlay to NOMT, using blocking commit in release mode and
-/// non-blocking with backoff in debug mode.
-fn commit_nomt<H>(nomt: &Nomt<BinaryHasher<H>>, overlay: Overlay) -> anyhow::Result<usize>
-where
-    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
-{
-    overlay.commit(nomt)?;
-    Ok(1)
 }
 
 /// Begin a new user and kernel session with only data that has been written to disk
@@ -494,10 +497,10 @@ mod tests {
             let (key_path, data) = from_key(this_ref);
             let writes = vec![(key_path, nomt::KeyReadWrite::Write(data))];
 
-            let user_session = builder.begin_user_session().unwrap();
+            let user_session = builder.begin_user_session_without_witness().unwrap();
             let finished_user_session = user_session.finish(writes.clone()).unwrap();
 
-            let kernel_session = builder.begin_kernel_session().unwrap();
+            let kernel_session = builder.begin_kernel_session_without_witness().unwrap();
 
             let finished_kernel_session = kernel_session.finish(writes.clone()).unwrap();
             let overlay = StateFinishedSession::new(finished_user_session, finished_kernel_session)
@@ -510,8 +513,10 @@ mod tests {
         let check_builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), overlay_refs, all_overlays.clone());
         for commiting_ref in 0..rounds {
-            let user_session = check_builder.begin_user_session().unwrap();
-            let kernel_session = check_builder.begin_kernel_session().unwrap();
+            let user_session = check_builder.begin_user_session_without_witness().unwrap();
+            let kernel_session = check_builder
+                .begin_kernel_session_without_witness()
+                .unwrap();
             for this_ref in 0..rounds {
                 let (key_path, expected_value) = from_key(this_ref);
                 let user_value = user_session.read(key_path).unwrap();
@@ -592,8 +597,8 @@ mod tests {
                 all_overlays.clone(),
             );
 
-            let user_session = builder.begin_user_session().unwrap();
-            let kernel_session = builder.begin_kernel_session().unwrap();
+            let user_session = builder.begin_user_session_without_witness().unwrap();
+            let kernel_session = builder.begin_kernel_session_without_witness().unwrap();
 
             let finished_user_session = user_session.finish(initial_user_writes).unwrap();
             let finished_kernel_session = kernel_session.finish(initial_kernel_writes).unwrap();
@@ -606,8 +611,8 @@ mod tests {
         let base_builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), Vec::new(), all_overlays.clone());
 
-        let user_session = base_builder.begin_user_session().unwrap();
-        let kernel_session = base_builder.begin_kernel_session().unwrap();
+        let user_session = base_builder.begin_user_session_without_witness().unwrap();
+        let kernel_session = base_builder.begin_kernel_session_without_witness().unwrap();
         drop(base_builder);
 
         let finished_user_session = user_session.finish(base_user_writes).unwrap();
@@ -624,8 +629,8 @@ mod tests {
         let test_builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), vec![0], all_overlays.clone());
 
-        let user_session = test_builder.begin_user_session().unwrap();
-        let kernel_session = test_builder.begin_kernel_session().unwrap();
+        let user_session = test_builder.begin_user_session_without_witness().unwrap();
+        let kernel_session = test_builder.begin_kernel_session_without_witness().unwrap();
         drop(test_builder);
 
         let finished_user_session = user_session.finish(test_user_writes).unwrap();
@@ -659,8 +664,8 @@ mod tests {
         let builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), Vec::new(), all_overlays.clone());
 
-        let user_session = builder.begin_user_session().unwrap();
-        let kernel_session = builder.begin_kernel_session().unwrap();
+        let user_session = builder.begin_user_session_without_witness().unwrap();
+        let kernel_session = builder.begin_kernel_session_without_witness().unwrap();
 
         let user_value = user_session.read(user_key_path).unwrap();
         let kernel_value = kernel_session.read(kernel_key_path).unwrap();

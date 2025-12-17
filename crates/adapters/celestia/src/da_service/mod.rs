@@ -3,10 +3,13 @@ mod tests;
 
 pub use crate::config::CelestiaConfig;
 use crate::metrics::client::{
-    GetBlockHeaderMeasurement, GetChainHeadMeasurement, GetNamespaceDataMeasurement,
-    SubmitPayForBlob,
+    BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
+    GetNamespaceDataMeasurement, SubmitPayForBlob,
 };
-use crate::metrics::full::{BlobSubmitMeasurement, GetBlockMeasurement, NamespaceDataMetrics};
+use crate::metrics::full::{
+    BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
+    NamespaceDataMetrics,
+};
 use crate::metrics::RollupNamespace;
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
@@ -39,10 +42,7 @@ type BoxError = anyhow::Error;
 
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
-    // Client is used for a submission request, where we want to have consistent ordering.
-    submit_client: Arc<tokio::sync::Mutex<celestia_client::Client>>,
-    // Client used for queries, where it is not important to have ordering
-    read_client: Arc<celestia_client::Client>,
+    client: Arc<celestia_client::Client>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
     signer_address: Option<CelestiaAddress>,
@@ -54,8 +54,7 @@ pub struct CelestiaService {
 
 impl CelestiaService {
     fn with_client(
-        read_client: celestia_client::Client,
-        submit_client: celestia_client::Client,
+        client: celestia_client::Client,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
         signer_address: Option<CelestiaAddress>,
@@ -65,8 +64,7 @@ impl CelestiaService {
         tx_priority: celestia_client::tx::TxPriority,
     ) -> Self {
         Self {
-            submit_client: Arc::new(tokio::sync::Mutex::new(submit_client)),
-            read_client: Arc::new(read_client),
+            client: Arc::new(client),
             rollup_batch_namespace,
             rollup_proof_namespace,
             signer_address,
@@ -115,13 +113,11 @@ impl CelestiaService {
             namespace = ?ns,
             commitment = %blob_hash,
             bytes,
-            data_bytes = blob.data.len(),
             "Submitting a blob"
         );
 
-        let start_lock = std::time::Instant::now();
-        let submit_client = self.submit_client.lock().await;
-        let lock_acquisition = start_lock.elapsed();
+        let lock_acquisition = std::time::Duration::from_secs(0);
+        let submit_client = self.client.clone();
 
         let start_submit = std::time::Instant::now();
         let blobs = &[blob];
@@ -181,38 +177,51 @@ impl CelestiaService {
 }
 
 impl CelestiaService {
-    pub async fn new(config: CelestiaConfig, chain_params: RollupParams) -> Self {
+    pub async fn new(
+        config: CelestiaConfig,
+        chain_params: RollupParams,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    ) -> Self {
         tracing::info!(?config, "Initializing Celestia Adapter");
         let request_timeout = Duration::from_secs(config.request_timeout_secs.get());
 
         let backoff_policy = config.get_backoff_policy();
 
-        let read_client = config
+        let client = config
             .build_client()
             .await
-            .expect("Failed to build read client");
-        let submit_client = config
-            .build_client()
-            .await
-            .expect("Failed to build submit client");
+            .expect("Failed to build celestia-client");
 
-        let fetched_signer = submit_client.address().ok().map(CelestiaAddress);
+        let fetched_signer = client.address().ok().map(CelestiaAddress);
         if fetched_signer.is_none() {
             tracing::info!(
                 "CelestiaService is configured as read-only and won't be able to submit blobs"
             );
         }
 
+        let tx_priority = config.tx_priority.clone().into();
+        if let Ok(signer) = client.address() {
+            let bg_client = config
+                .build_client()
+                .await
+                .expect("Failed to build celestia-client for background task");
+            tokio::spawn(stat_collection_task(
+                bg_client,
+                signer,
+                tx_priority,
+                shutdown_receiver,
+            ));
+        }
+
         Self::with_client(
-            read_client,
-            submit_client,
+            client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
             fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
-            config.tx_priority.into(),
+            tx_priority,
         )
     }
 }
@@ -227,7 +236,7 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         tracing::trace!(height, "Making call to header.GetByHeight");
         let start = std::time::Instant::now();
-        let client = &self.read_client;
+        let client = &self.client;
         let result =
             tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
         let response_time = start.elapsed();
@@ -251,7 +260,7 @@ impl CelestiaService {
         namespace: Namespace,
     ) -> Result<NamespaceData, MaybeRetryable<anyhow::Error>> {
         let start = std::time::Instant::now();
-        let client = &self.read_client;
+        let client = &self.client;
         let ns = self.rollup_namespace(&namespace);
         tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
         let result = tokio::time::timeout(
@@ -334,11 +343,8 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         tracing::trace!("Making call to header.NetworkHead");
         let start = std::time::Instant::now();
-        let result = tokio::time::timeout(
-            self.request_timeout,
-            self.read_client.header().network_head(),
-        )
-        .await;
+        let result =
+            tokio::time::timeout(self.request_timeout, self.client.header().network_head()).await;
         let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
         tracing::trace!(
@@ -358,17 +364,31 @@ impl CelestiaService {
         &self,
         height: u64,
     ) -> Result<Vec<Vec<u8>>, MaybeRetryable<anyhow::Error>> {
-        // TODO: follow up: timeout here
-        // TODO: follow up: metrics here
-        self.read_client
-            .blob()
-            .get_all(height, &[self.rollup_proof_namespace])
-            .await
-            .map_err(into_transient_with_context)
-            .map(|blobs| match blobs {
-                Some(blobs) => blobs.into_iter().map(|blob| blob.data).collect(),
-                None => vec![],
-            })
+        tracing::trace!(height, "Making call to blob.GetAll for proofs");
+        let start = std::time::Instant::now();
+        let result = tokio::time::timeout(
+            self.request_timeout,
+            self.client
+                .blob()
+                .get_all(height, &[self.rollup_proof_namespace]),
+        )
+        .await;
+        let response_time = start.elapsed();
+        let is_success = matches!(result, Ok(Ok(_)));
+        tracing::trace!(
+            is_success,
+            ?response_time,
+            height,
+            "Call to blob.GetAll is completed"
+        );
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(BlobGetAllMeasurement::new(response_time, is_success));
+        });
+
+        let blobs = flatten_timeout(result)?
+            .map(|blobs| blobs.into_iter().map(|blob| blob.data).collect())
+            .unwrap_or_default();
+        Ok(blobs)
     }
 
     /// Subscribe to finalized headers as they are finalized.
@@ -376,18 +396,12 @@ impl CelestiaService {
     /// Optimized version of `get_last_finalized_block_header`.
     pub async fn subscribe_finalized_header(&self) -> Result<HeaderStream, anyhow::Error> {
         Ok(self
-            .read_client
+            .client
             .header()
             .subscribe()
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
             .boxed())
     }
-}
-
-fn into_transient_with_context(error: celestia_client::Error) -> MaybeRetryable<anyhow::Error> {
-    // TODO: Follow up: Can be improved on when to retry or not
-    let error = anyhow::anyhow!("Celestia RPC node returned an error: {:?}", error);
-    MaybeRetryable::Transient(error)
 }
 
 #[async_trait]
@@ -507,7 +521,7 @@ impl DaService for CelestiaService {
     }
 
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
-        self.signer_address.clone()
+        self.signer_address
     }
 }
 
@@ -568,4 +582,71 @@ fn flatten_timeout<T>(
         Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
         Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
     }
+}
+
+async fn stat_collection_task(
+    client: celestia_client::Client,
+    signer: celestia_types::state::AccAddress,
+    priority: celestia_client::tx::TxPriority,
+    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) {
+    let chain_id = client.chain_id();
+    let period = Duration::from_secs(30);
+    tracing::info!(%chain_id, ?period, "Starting celestia stat collection task");
+
+    let mut interval = tokio::time::interval(period);
+
+    loop {
+        tokio::select! {
+            _ = shutdown_receiver.changed() => {
+                tracing::info!("Shutting down celestia stat collection task");
+                return;
+            }
+            _ = interval.tick() => {
+                match gather_stat(&client, &signer, priority).await {
+                    Ok(measurement) => {
+                        sov_metrics::track_metrics(|tracker| {
+                            tracker.submit(measurement);
+                        });
+                    }
+                    Err(error) => {
+                        tracing::info!(
+                            ?error,
+                            "Error gathering background statistics for celestia adapter"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+async fn gather_stat(
+    client: &celestia_client::Client,
+    signer: &celestia_types::state::AccAddress,
+    priority: celestia_client::tx::TxPriority,
+) -> anyhow::Result<CelestiaAdapterStateMeasurement> {
+    let balance = client
+        .state()
+        .balance_for_address(signer)
+        .await
+        .context("state.BalanceForAddress")?;
+
+    let sync_state = client
+        .header()
+        .sync_state()
+        .await
+        .context("header.SyncState")?;
+    let sync_distance = sync_state.to_height.saturating_sub(sync_state.from_height);
+    let gas_price = client
+        .state()
+        .estimate_gas_price(priority)
+        .await
+        .context("state.EstimateGasPrice")?;
+
+    Ok(CelestiaAdapterStateMeasurement {
+        balance,
+        gas_price,
+        sync_distance,
+    })
 }
