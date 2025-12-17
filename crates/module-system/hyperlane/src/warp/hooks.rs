@@ -18,39 +18,36 @@ impl<S: Spec> Warp<S> {
         for route_id in route_ids {
             if let Ok(Some(route)) = self.warp_routes.get(route_id, state) {
                 let route_id = *route_id;
+                let inbound_metrics = RateLimiterCapacityMetrics {
+                    max_capacity: route.inbound_rate_limiter.max_limit(),
+                    current_capacity: route
+                        .inbound_rate_limiter
+                        .current_limit_with_replenishment(visible_slot),
+                    replenishment_per_slot: route
+                        .inbound_rate_limiter
+                        .limit_replenishment_per_slot(),
+                    direction: RateLimiterDirection::Inbound,
+                    route_id,
+                };
 
-                for &remote_domain in &route.enrolled_destinations {
-                    let inbound_metrics = RateLimiterCapacityMetrics {
-                        max_capacity: route.inbound_rate_limiter.max_limit(),
-                        current_capacity: route
-                            .inbound_rate_limiter
-                            .current_limit_with_replenishment(visible_slot),
-                        replenishment_per_slot: route
-                            .inbound_rate_limiter
-                            .limit_replenishment_per_slot(),
-                        direction: RateLimiterDirection::Inbound,
-                        route_id,
-                        remote_domain,
-                    };
+                let outbound_metrics = RateLimiterCapacityMetrics {
+                    max_capacity: route.outbound_rate_limiter.max_limit(),
+                    current_capacity: route
+                        .outbound_rate_limiter
+                        .current_limit_with_replenishment(visible_slot),
+                    replenishment_per_slot: route
+                        .outbound_rate_limiter
+                        .limit_replenishment_per_slot(),
+                    direction: RateLimiterDirection::Outbound,
+                    route_id,
+                };
 
-                    let outbound_metrics = RateLimiterCapacityMetrics {
-                        max_capacity: route.outbound_rate_limiter.max_limit(),
-                        current_capacity: route
-                            .outbound_rate_limiter
-                            .current_limit_with_replenishment(visible_slot),
-                        replenishment_per_slot: route
-                            .outbound_rate_limiter
-                            .limit_replenishment_per_slot(),
-                        direction: RateLimiterDirection::Outbound,
-                        route_id,
-                        remote_domain,
-                    };
-
-                    sov_metrics::track_metrics(|tracker| {
-                        tracker.submit(inbound_metrics);
-                        tracker.submit(outbound_metrics);
-                    });
-                }
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(inbound_metrics);
+                    tracker.submit(outbound_metrics);
+                });
+            } else {
+                tracing::debug!(%route_id, "Warp route not found when emitting rate limiter metrics");
             }
         }
     }

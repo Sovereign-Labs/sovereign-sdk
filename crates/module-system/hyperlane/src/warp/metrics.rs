@@ -34,8 +34,6 @@ pub struct RateLimiterCapacityMetrics {
     pub direction: RateLimiterDirection,
     /// The route ID for tagging specific routes.
     pub route_id: WarpRouteId,
-    /// The remote domain for tagging specific destinations.
-    pub remote_domain: u32,
 }
 
 impl sov_metrics::Metric for RateLimiterCapacityMetrics {
@@ -47,11 +45,10 @@ impl sov_metrics::Metric for RateLimiterCapacityMetrics {
         // measurement name & tags
         write!(
             buffer,
-            "{},direction={},route_id={},remote_domain={}",
+            "{},direction={},route_id={}",
             self.measurement_name(),
             self.direction,
             self.route_id,
-            self.remote_domain
         )?;
 
         // fields
