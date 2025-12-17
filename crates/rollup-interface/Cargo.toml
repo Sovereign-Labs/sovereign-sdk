@@ -38,6 +38,7 @@ proptest-derive = { workspace = true, optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_with = { workspace = true }
 rockbound = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 sha2 = { workspace = true, optional = true }

@@ -5,11 +5,13 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 use crate::Bytes;
 
 /// `FullyBakedTx` represents a serialized signed rollup transaction that has been encoded with
 /// authentication information and is ready to be placed on the DA layer.
+#[serde_as]
 #[derive(
     PartialEq,
     Eq,
@@ -24,9 +26,11 @@ use crate::Bytes;
 pub struct FullyBakedTx {
     /// Serialized transaction.
     #[as_ref(forward)]
+    #[serde_as(as = "serde_with::base64::Base64")]
     pub data: Bytes,
     /// Sequencer-provided metadata for each transaction (e.g., timestamps).
     /// This data is NOT signed by users but is added by the sequencer.
+    #[serde_as(as = "Option<serde_with::base64::Base64>")]
     pub sequencing_data: Option<Bytes>,
 }
 

@@ -11978,6 +11978,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "serde_with",
  "sha2 0.10.9",
  "sov-rollup-interface",
  "sov-universal-wallet",
