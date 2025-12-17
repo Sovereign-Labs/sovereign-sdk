@@ -71,6 +71,6 @@ arbitrary = [
 	"proptest-derive",
 	"sov-rollup-interface/arbitrary",
 	"dep:sha2",
-	"rockbound/arbitrary"
+	"rockbound?/arbitrary"
 ]
 vec-compat = []
