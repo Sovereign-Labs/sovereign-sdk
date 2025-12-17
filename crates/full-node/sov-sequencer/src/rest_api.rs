@@ -14,7 +14,7 @@ use serde_with::base64::Base64;
 use serde_with::serde_as;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
 use sov_rest_utils::get_client_ip;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
@@ -22,7 +22,6 @@ use sov_rest_utils::{
 };
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
 use tokio::sync::watch::Receiver;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -465,15 +464,12 @@ pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
 }
 
 /// An accepted transaction, with the transaction body and confirmation data.
-#[serde_with::serde_as]
 #[derive(Clone, serde::Serialize)]
 pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,
-    /// The base64 encoded transaction body
-    #[serde_as(as = "serde_with::base64::Base64")]
-    #[serde(skip_serializing_if = "Bytes::is_empty")]
-    pub tx: Bytes,
+    /// Transaction body
+    pub tx: FullyBakedTx,
     /// The confirmation data
     #[serde(flatten)]
     pub confirmation: Confirmation,
@@ -483,7 +479,7 @@ impl<C> From<AcceptedTx<C>> for ApiAcceptedTx<C> {
     fn from(tx: AcceptedTx<C>) -> Self {
         Self {
             id: tx.tx_hash,
-            tx: tx.tx.data,
+            tx: tx.tx,
             confirmation: tx.confirmation,
         }
     }

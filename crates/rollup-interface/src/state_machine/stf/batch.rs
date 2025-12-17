@@ -18,6 +18,7 @@ use crate::Bytes;
     BorshSerialize,
     Serialize,
     Deserialize,
+    Default,
     derive_more::AsRef,
 )]
 pub struct FullyBakedTx {

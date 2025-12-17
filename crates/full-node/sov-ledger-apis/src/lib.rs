@@ -16,7 +16,7 @@ use serde_with::serde_as;
 use sov_db::schema::types::{BatchNumber, EventNumber, TxNumber};
 use sov_modules_api::da::Time;
 pub use sov_modules_api::ApiTxEffect as TxEffect;
-use sov_modules_api::{EventModuleName, RuntimeEventResponse};
+use sov_modules_api::{EventModuleName, FullyBakedTx, RuntimeEventResponse};
 use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::errors::{
     self, database_error_response_500, internal_server_error_response_500, not_found_404,
@@ -32,7 +32,6 @@ use sov_rollup_interface::node::ledger_api::{
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
 use sov_rollup_interface::stf::TxReceiptContents;
-use sov_rollup_interface::Bytes;
 use tokio::sync::watch;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
@@ -973,7 +972,6 @@ impl<B, TxReceipt: TxReceiptContents, E> Batch<B, TxReceipt, E> {
     }
 }
 
-#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     tag = "type",
@@ -984,8 +982,7 @@ struct Transaction<TxReceipt: TxReceiptContents, E> {
     pub number: u64,
     pub hash: HexHash,
     pub event_range: Range<u64>,
-    #[serde_as(as = "serde_with::base64::Base64")]
-    pub body: Bytes,
+    pub body: FullyBakedTx,
     pub receipt: TxEffect<TxReceipt>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<Vec<RuntimeEventResponse<E>>>,

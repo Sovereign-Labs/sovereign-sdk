@@ -5,7 +5,7 @@ use std::sync::Arc;
 use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt, TryStreamExt};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::{FullyBakedTx, HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
+use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -252,10 +252,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             return Ok(None);
         };
         Ok(Some(AcceptedTx {
-            tx: FullyBakedTx {
-                data: tx.body.unwrap_or_default(),
-                sequencing_data: None, // TODO
-            },
+            tx: tx.body.unwrap_or_default(),
             tx_hash,
             confirmation: Confirmation {
                 events: tx
@@ -512,8 +509,8 @@ mod tests {
     use sov_db::ledger_db::SlotCommit;
     use sov_mock_da::{MockAddress, MockBlob, MockBlock};
     use sov_modules_api::{
-        ApiTxEffect, BatchReceipt, Gas, SuccessfulTxContents, TransactionReceipt, TxEffect,
-        TxReceiptContents,
+        ApiTxEffect, BatchReceipt, FullyBakedTx, Gas, SuccessfulTxContents, TransactionReceipt,
+        TxEffect, TxReceiptContents,
     };
     use sov_test_utils::storage::SimpleLedgerStorageManager;
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};

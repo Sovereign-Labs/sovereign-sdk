@@ -6,9 +6,8 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::node::ledger_api::{BatchResponse, TxResponse};
 use sov_rollup_interface::stf::{
-    DiscardedBlob, StoredEvent, TransactionReceipt, TxReceiptContents,
+    DiscardedBlob, FullyBakedTx, StoredEvent, TransactionReceipt, TxReceiptContents,
 };
-use sov_rollup_interface::Bytes;
 
 pub use sov_db_types as slot_key;
 
@@ -140,7 +139,7 @@ pub struct StoredTransaction {
     /// The range of event-numbers emitted by this transaction.
     pub events: std::ops::Range<EventNumber>,
     /// The serialized transaction data, if the rollup decides to store it.
-    pub body: Option<Bytes>,
+    pub body: Option<FullyBakedTx>,
     /// A custom "receipt" for this transaction defined by the rollup.
     pub receipt: DbBytes,
     /// This transaction's parent batch number.
@@ -173,11 +172,7 @@ pub fn split_tx_for_storage<T: TxReceiptContents>(
     let tx_for_storage = StoredTransaction {
         hash: tx.tx_hash.into(),
         events: event_range,
-        body: tx.body_to_save.map(|ftx| {
-            borsh::to_vec(&ftx)
-                .expect("Serialization to vec is infallible")
-                .into()
-        }),
+        body: tx.body_to_save,
         receipt: DbBytes::new(
             bincode::serialize(&tx.receipt).expect("Serialization to vec is infallible"),
         ),
