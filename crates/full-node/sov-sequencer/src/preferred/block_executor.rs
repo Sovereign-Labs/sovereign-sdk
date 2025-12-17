@@ -22,6 +22,7 @@ use sov_rest_utils::{json_obj, ErrorObject};
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
+use sov_state::StateGetter;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
@@ -141,7 +142,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    pub checkpoint: StateCheckpoint<S>,
+    checkpoint: StateCheckpoint<S>,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
@@ -211,6 +212,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             uncommitted_changes,
             pinned_cache,
         )
+    }
+
+    /// Returns a reference to the checkpoint. This checkpoint matches the latest rollup height values,
+    /// but does *not* contain any state changes from the transactions that have been accepted into the current block. 
+    pub fn latest_empty_checkpoint(&self) -> &StateCheckpoint<S> {
+        &self.checkpoint
+    }
+
+    /// Replaces the underlying storage of the latest state checkpoint.
+    pub fn replace_checkpoint_storage(&mut self, storage: S::Storage, uncomitted_changes: Box<dyn StateGetter>) {
+        self.checkpoint.replace_storage(storage, uncomitted_changes);
     }
 
     fn new_helper(

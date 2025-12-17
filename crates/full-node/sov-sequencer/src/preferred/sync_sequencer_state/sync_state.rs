@@ -577,8 +577,7 @@ where
         let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor
-            .checkpoint
-            .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
+            .replace_checkpoint_storage(info.storage.clone(), Box::new(uncommitted_changes));
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
 
         Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
@@ -644,7 +643,7 @@ where
         inner.latest_info = info;
         let checkpoint = inner
             .executor
-            .checkpoint
+            .latest_empty_checkpoint()
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
         inner
             .executor_events_sender

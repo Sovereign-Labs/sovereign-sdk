@@ -361,7 +361,7 @@ where
 
         // If we're lagging less than the ideal amount, it's not convenient to create a new batch so return early
         if is_lagging_less_than_ideal_amount(
-            self.executor.checkpoint.current_visible_slot_number(),
+            self.executor.latest_empty_checkpoint().current_visible_slot_number(),
             self.latest_info.latest_finalized_slot_number,
             self.seq_config
                 .sequencer_kind_config
@@ -494,7 +494,7 @@ where
         }
 
         let visible_increase = match next_visible_slot_number_increase(
-            &self.executor.checkpoint,
+            self.executor.latest_empty_checkpoint(),
             &self.latest_info,
             leave_space_for_next_batch,
             self.seq_config
@@ -512,7 +512,7 @@ where
 
         let visible_slot_number_after_increase = self
             .executor
-            .checkpoint
+            .latest_empty_checkpoint()
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
@@ -565,7 +565,7 @@ where
     }
 
     fn current_height(&self) -> RollupHeight {
-        self.executor.checkpoint.rollup_height_to_access()
+        self.executor.latest_empty_checkpoint().rollup_height_to_access()
     }
 }
 
@@ -616,9 +616,10 @@ where
             is_responsible_for_gating_admins: !self.is_replica(),
         };
 
+        // Just Emptied by `end_rollup_block`
         let old_checkpoint = self
             .executor
-            .checkpoint
+            .latest_empty_checkpoint()
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
 
         self.executor
@@ -641,13 +642,14 @@ where
         self.cache_warm_up_executor
             .send_batch_start_notification(notification);
 
+        // Just Emptied by `end_rollup_block`
         self.executor_events_sender
             .start_batch(
                 visible_slot_number_after_increase,
                 visible_increase,
                 sequence_number,
                 self.executor
-                    .checkpoint
+                    .latest_empty_checkpoint()
                     .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
             )
             .await;
@@ -680,7 +682,7 @@ where
         if !self.executor.has_in_progress_batch() {
             panic!(
                 "No batch in progress, and no batch could be started. Please report this bug. {:?} {:?}",
-                &self.executor.checkpoint, self.latest_info
+                self.executor.latest_empty_checkpoint(), self.latest_info
             );
         }
 
@@ -759,7 +761,7 @@ where
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor
-            .checkpoint
+            .latest_empty_checkpoint()
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
         self.executor_events_sender.close_batch(checkpoint).await;
     }
