@@ -231,12 +231,12 @@ impl PostgresBackend {
     }
 
     pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
-        let time_delta: i64 = self
+        let leader_timeout: i64 = self
             .leader_timeout
             .as_millis()
             .try_into()
-            // It is ok to `expect` as time_delta should be much smaller than i64::MAX
-            .expect("PostgresBackend error: time_delta is bigger than i64::MAX");
+            // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
+            .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
 
         let res = run_with_retries!(
             &self.backoff_policy,
@@ -253,7 +253,7 @@ impl PostgresBackend {
                             OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
                         RETURNING node_id, last_updated",)
         .bind(&self.node_id)
-        .bind(time_delta)
+        .bind(leader_timeout)
         .fetch_optional(&self.pool),
             "postgres_db_backend_try_update_leader"
         )?;
@@ -521,7 +521,7 @@ mod tests {
 
         {
             db_2.leader_timeout = Duration::ZERO;
-            // Now we should be able to update db as the time_delta is zero.
+            // Now we should be able to update db as the leader_timeout is zero.
             let leader_2 = db_2.maybe_update_leader().await.unwrap();
             assert_eq!(leader_2.node_id, node_id_2);
         }
@@ -531,10 +531,27 @@ mod tests {
             let leader_1 = db_1.maybe_update_leader().await;
             assert!(leader_1.is_none());
 
-            // Wait for more than 10ms and update the leader.
+            // Wait for more than 100ms and update the leader.
             tokio::time::sleep(Duration::from_millis(200)).await;
             let leader_1 = db_1.maybe_update_leader().await.unwrap();
             assert_eq!(leader_1.node_id, node_id_1);
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_foo() {
+        let postgres = create_postgres_container().await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let mut db_1 =
+            PostgresBackend::connect_with_leader_timeout(&postgres_config_1, leader_timeout)
+                .await
+                .unwrap();
     }
 }
