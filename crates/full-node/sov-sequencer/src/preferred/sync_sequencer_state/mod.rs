@@ -210,21 +210,20 @@ where
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
-    (
-        SynchronizedSequencerState {
-            inner,
-            channel_size: channel_size.clone(),
-            message_receiver,
-            heap: BTreeMap::new(),
-            runtime: Default::default(),
-            test_only_state_update_notification_sender: broadcast::channel(100).0,
-        },
-        SequencerStateUpdator {
-            message_sender,
-            channel_size,
-            shutdown_receiver,
-        },
-    )
+    let state = SynchronizedSequencerState {
+        inner,
+        channel_size: channel_size.clone(),
+        message_receiver,
+        heap: BTreeMap::new(),
+        runtime: Default::default(),
+        test_only_state_update_notification_sender: broadcast::channel(100).0,
+    };
+    let updator = SequencerStateUpdator {
+        message_sender,
+        channel_size,
+        shutdown_receiver,
+    };
+    (state, updator)
 }
 
 type AcceptTxRet<S, Rt> =

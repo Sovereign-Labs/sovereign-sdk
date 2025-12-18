@@ -130,9 +130,6 @@ where
             .map(|b| b.nb_of_in_flight_blobs())
             .unwrap_or_default();
 
-        let batch_execution_time_limit_micros =
-            preferred_config.batch_execution_time_limit_millis * 1000;
-
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
@@ -156,6 +153,8 @@ where
             ReplicaSyncTask::new(shutdown_sender.clone()).await?;
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
+        let batch_execution_time_limit_micros =
+            preferred_config.batch_execution_time_limit_millis * 1000;
         let (synchronized_state, synchronized_state_updator) = create(
             is_replica,
             api_ledger_db.clone(),
