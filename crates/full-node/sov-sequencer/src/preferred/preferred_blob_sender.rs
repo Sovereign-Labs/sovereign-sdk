@@ -80,10 +80,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         Ok(())
     }
 
-    pub(crate) async fn publish_batch(
-        &mut self,
-        batch: ReadBatch,
-    ) -> anyhow::Result<()> {
+    pub(crate) async fn publish_batch(&mut self, batch: ReadBatch) -> anyhow::Result<()> {
         let blob_id = batch.blob_id;
         let data = batch_bytes(batch)?;
 
