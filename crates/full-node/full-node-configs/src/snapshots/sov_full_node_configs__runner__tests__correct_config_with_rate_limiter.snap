@@ -79,10 +79,25 @@ expression: config
           "resources_per_bucket": 5,
           "refill_rate": 2
         },
-        "address_custom_limits": [],
+        "address_custom_limits": [
+          [
+            "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+            {
+              "resources_per_bucket": 10,
+              "refill_rate": 2
+            }
+          ]
+        ],
         "ip_custom_limits": [
           [
             "157.180.14.244",
+            {
+              "resources_per_bucket": 10,
+              "refill_rate": 2
+            }
+          ],
+          [
+            "157.180.34.249",
             {
               "resources_per_bucket": 10,
               "refill_rate": 2
