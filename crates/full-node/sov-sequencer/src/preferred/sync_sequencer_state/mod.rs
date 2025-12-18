@@ -251,11 +251,11 @@ pub(crate) struct ProcessFinalCatchupData {
 
 #[derive(Debug)]
 struct ConditionsTable {
-    condition_nodes_sequence_number_is_fresher: bool,
-    condition_too_close_to_deferred_slots_count_for_comfort: bool,
-    condition_node_is_lagging: bool,
-    condition_are_there_batches_to_replay: bool,
-    condition_node_is_unsynced_and_doesnt_know_it: bool,
+    nodes_sequence_number_is_fresher: bool,
+    too_close_to_deferred_slots_count_for_comfort: bool,
+    node_is_lagging: bool,
+    are_there_batches_to_replay: bool,
+    node_is_unsynced_and_doesnt_know_it: bool,
 }
 
 #[derive(Debug)]

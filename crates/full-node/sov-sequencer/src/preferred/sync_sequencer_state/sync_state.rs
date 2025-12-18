@@ -478,7 +478,7 @@ where
 
         let distance = sync_status.distance();
 
-        let condition_nodes_sequence_number_is_fresher =
+        let nodes_sequence_number_is_fresher =
             next_sequence_number_according_to_node > next_sequence_number;
 
         // There's an edge case on restart where the node hasn't synced to the chain tip yet but doesn't know it. We can check for it by seeing
@@ -487,7 +487,7 @@ where
         let oldest_unfinalized_sequence_number = batches_to_replay
             .first()
             .map(|b: &PreferredBatchToReplay| b.batch.inner.sequence_number);
-        let condition_node_is_unsynced_and_doesnt_know_it = (next_sequence_number_according_to_node
+        let node_is_unsynced_and_doesnt_know_it = (next_sequence_number_according_to_node
             .saturating_add(1))
             < oldest_unfinalized_sequence_number.unwrap_or(0);
 
@@ -496,7 +496,7 @@ where
         // `update_state`. That's no good.
         let current_visible_slot_number =
             current_visible_slot_number_according_to_node::<S, Rt>(info);
-        let condition_too_close_to_deferred_slots_count_for_comfort =
+        let too_close_to_deferred_slots_count_for_comfort =
             info.slot_number.delta(current_visible_slot_number)
                 > slot_count_delta_acceptable_lower_bound(
                     inner.seq_config.max_allowed_node_distance_behind,
@@ -505,19 +505,18 @@ where
         // Resuming operations while the node is
         // lagging can cause issues e.g. during failover or after sequencer DB
         // deletion due to in-flight blobs that are not yet processed.
-        let condition_node_is_lagging =
-            distance > inner.seq_config.max_allowed_node_distance_behind;
+        let node_is_lagging = distance > inner.seq_config.max_allowed_node_distance_behind;
 
         // Are there ANY soft confirmations to replay at all?
         // Note that we're holding a lock on the sequencer, so this is guaranteed to be up to date.
-        let condition_are_there_batches_to_replay = !batches_to_replay.is_empty();
+        let are_there_batches_to_replay = !batches_to_replay.is_empty();
 
         let table = ConditionsTable {
-            condition_nodes_sequence_number_is_fresher,
-            condition_too_close_to_deferred_slots_count_for_comfort,
-            condition_node_is_lagging,
-            condition_are_there_batches_to_replay,
-            condition_node_is_unsynced_and_doesnt_know_it,
+            nodes_sequence_number_is_fresher,
+            too_close_to_deferred_slots_count_for_comfort,
+            node_is_lagging,
+            are_there_batches_to_replay,
+            node_is_unsynced_and_doesnt_know_it,
         };
 
         let initial_status = InitialStatus {
