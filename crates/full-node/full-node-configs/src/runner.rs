@@ -325,8 +325,11 @@ mod tests {
             [sequencer.preferred.rate_limiter]
             max_nb_of_concurrent_users_in_rate_limiter = 100000
             max_requests_per_second = 1000000
-            address_custom_limits = []
-            ip_custom_limits = [["157.180.14.244", { resources_per_bucket = 10, batch_execution_time_limit_millis = 200, refill_rate = 2}]]
+            address_custom_limits = [["sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf", { resources_per_bucket = 10, refill_rate = 2}]]
+            ip_custom_limits = [
+                ["157.180.14.244", { resources_per_bucket = 10, refill_rate = 2}],
+                ["157.180.34.249", { resources_per_bucket = 8, refill_rate = 2}]
+            ]
             [sequencer.preferred.rate_limiter.default_limits]
             resources_per_bucket = 5
             refill_rate = 2

@@ -241,6 +241,7 @@ pub(crate) struct RateLimiter<K, S: Spec> {
     data: Cache<K, Throttler<S::Gas>>,
     default_config: RateLimiterConfig<S>,
     special_configs: HashMap<K, RateLimiterConfig<S>>,
+    metric_counter: u64,
 }
 
 impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
@@ -261,6 +262,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             data,
             default_config,
             special_configs,
+            metric_counter: 0,
         }
     }
 
@@ -272,12 +274,18 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         let entry_count = self.data.entry_count();
         let limiter_type = self.limiter_type;
 
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(RateLimiterMetrics {
-                value: entry_count,
-                limiter_type,
+        if self.metric_counter % 500 == 0 {
+            // We don’t need precise real-time values for this metric, so we emit it once every 500 events
+            // to reduce pressure on the observability stack.
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(RateLimiterMetrics {
+                    count: entry_count,
+                    limiter_type,
+                });
             });
-        });
+        }
+
+        self.metric_counter += 1;
 
         if entry_count >= self.max_nb_of_concurrent_users {
             // data.entry_count() returns only approximate number of entries in this cache.

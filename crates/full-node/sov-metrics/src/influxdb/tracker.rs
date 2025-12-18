@@ -818,7 +818,7 @@ pub struct RateLimiterMetrics {
     /// Type of the limiter
     pub limiter_type: &'static str,
     /// Total number of items stored in the cache.
-    pub value: u64,
+    pub count: u64,
 }
 
 impl Metric for RateLimiterMetrics {
@@ -829,10 +829,10 @@ impl Metric for RateLimiterMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},limiter_type={:?} value={}",
+            "{},limiter_type={:?} count={}",
             self.measurement_name(),
             self.limiter_type,
-            self.value,
+            self.count,
         )?;
 
         Ok(())
