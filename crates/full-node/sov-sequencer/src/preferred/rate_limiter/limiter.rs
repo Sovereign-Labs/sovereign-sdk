@@ -279,7 +279,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             // to reduce pressure on the observability stack.
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(RateLimiterMetrics {
-                    value: entry_count,
+                    count: entry_count,
                     limiter_type,
                 });
             });

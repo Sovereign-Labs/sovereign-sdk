@@ -818,7 +818,7 @@ pub struct RateLimiterMetrics {
     /// Type of the limiter
     pub limiter_type: &'static str,
     /// Total number of items stored in the cache.
-    pub value: u64,
+    pub count: u64,
 }
 
 impl Metric for RateLimiterMetrics {
