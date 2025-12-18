@@ -112,7 +112,7 @@ where
 {
     synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
-    blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
+    blobs_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
     pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
@@ -390,7 +390,7 @@ where
             let uniqueness = auth_data.uniqueness;
             (
                 IpAndCredentialId {
-                    default_address: auth_data.default_address,
+                    address: auth_data.default_address,
                     ip_addr,
                     credential_id: auth_data.credential_id,
                 },
@@ -811,7 +811,7 @@ where
     async fn subscribe_blobs_from_blob_sender(
         &self,
     ) -> Option<broadcast::Receiver<BlobExecutionStatus<<Self::Da as DaService>::Spec>>> {
-        Some(self.blobs_sender_channel.subscribe())
+        self.blobs_sender_channel.as_ref().map(|bs| bs.subscribe())
     }
 
     async fn update_state(

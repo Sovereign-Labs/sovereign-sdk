@@ -269,14 +269,21 @@ where
         Ok((seq, handles))
     }
 
-    fn api_state(storage: S::Storage) -> (ApiState<S>, watch::Sender<Arc<StateCheckpoint<S>>>) {
+    fn api_state(
+        storage: S::Storage,
+    ) -> (
+        ApiState<S>,
+        watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
+    ) {
         let mut runtime: Rt = Default::default();
         assert!(
                 accepts_preferred_batches(runtime.blob_selector()),
                 "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
             );
         let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
-        let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(checkpoint));
+        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        let (checkpoint_sender, checkpoint_receiver) =
+            watch::channel(Arc::new(concurrent_checkpoint));
         let api_state = ApiState::build(
             Arc::new(()),
             checkpoint_receiver,

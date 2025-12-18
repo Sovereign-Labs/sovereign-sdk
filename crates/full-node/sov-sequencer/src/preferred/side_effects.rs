@@ -2,12 +2,12 @@ use std::collections::VecDeque;
 
 use anyhow::Result;
 use sov_modules_api::sequencing_metadata::HDTimestamp;
-use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tracing::{debug, enabled, error, instrument, warn, Level};
+use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
@@ -26,7 +26,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    pub checkpoint_sender: watch::Sender<std::sync::Arc<StateCheckpoint<S>>>,
+    pub checkpoint_sender: watch::Sender<std::sync::Arc<ConcurrentStateCheckpoint<S>>>,
     pub blob_sender: Option<PreferredBlobSender<Da>>,
     pub db: Box<dyn Db>,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
@@ -41,14 +41,19 @@ where
     Da: DaService<Spec = S::Da>,
 {
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
-    #[instrument(skip_all, level = "trace")]
+    #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
-        if self.checkpoint_sender.send(Arc::new(checkpoint)).is_err() {
+        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        if self
+            .checkpoint_sender
+            .send(Arc::new(concurrent_checkpoint))
+            .is_err()
+        {
             debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
         }
     }
 
-    #[instrument(skip_all, level = "trace")]
+    #[tracing::instrument(skip_all, level = "trace")]
     async fn close_and_publish_current_batch(
         &mut self,
         checkpoint: StateCheckpoint<S>,
@@ -126,8 +131,8 @@ where
                     .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)
                     .await?;
 
-                let mut new_checkpoint: StateCheckpoint<_> = (*(*self.checkpoint_sender.borrow()))
-                    .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+                let checkpoint_ref = self.checkpoint_sender.borrow().clone();
+
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
                     self.transaction_cache
@@ -135,12 +140,12 @@ where
                         .await;
                     // If the receiver is no longer listening, just don't send the confirmation.
                     // Apply all updates in a single batch
-                    new_checkpoint.apply_tx_changes(contents.tx_changes);
+                    checkpoint_ref.apply_tx_changes(contents.tx_changes);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
                 }
-                // Send the checkpoint once whole batch is applied to prevent lock contention
-                self.checkpoint_sender
-                    .send_replace(Arc::new(new_checkpoint));
+                // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
+                // relying on change notifications get one. Note, however, that change notifications are not in sync with the actual changes.
+                self.checkpoint_sender.send_modify(|_| {});
                 // Send tx confirmations after API state is updated
                 for (oneshot, tx) in oneshot_and_txs {
                     let _ = oneshot.send(tx);
