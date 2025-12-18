@@ -20,6 +20,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::oneshot;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
 // We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
@@ -80,24 +81,16 @@ struct TxReceiver {
 }
 
 #[derive(Clone)]
-pub(crate) struct CacheWarmUpExecutorInner<S: Spec> {
+pub(crate) struct CacheWarmUpExecutor<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
     tx_sender: flume::Sender<FullyBakedTxWithTxChangeSetSender>,
     size: Arc<AtomicU64>,
 }
 
-#[derive(Clone)]
-pub(crate) struct CacheWarmUpExecutor<S: Spec> {
-    inner: Option<CacheWarmUpExecutorInner<S>>,
-}
-
 impl<S: Spec> CacheWarmUpExecutor<S> {
     pub(crate) fn send_batch_start_notification(&self, data: StartBlockNotification<S>) {
-        let Some(inner) = &self.inner else {
-            return;
-        };
         // This `send` does not block.
-        let _ = inner.start_block_notification_sender.send(Some(data));
+        let _ = self.start_block_notification_sender.send(Some(data));
     }
 
     pub(crate) fn send_tx(
@@ -105,16 +98,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         tx: FullyBakedTx,
         sequence_number: u64,
     ) -> FullyBakedTxWithMaybeChangeSet {
-        let Some(inner) = &self.inner else {
-            return FullyBakedTxWithMaybeChangeSet { tx, receiver: None };
-        };
-
         // We need to update the `size` field before inserting the thx into tx_sender, otherwise the workers may see an outdated channel size.
-        let size = inner.size.fetch_add(1, Ordering::Relaxed);
+        let size = self.size.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
 
         // Skip update if consumer is too slow.
-        let res = inner.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
+        let res = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
             tx: tx.clone(),
             sender,
             sequence_number,
@@ -131,12 +120,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 Some(receiver)
             }
             Err(flume::TrySendError::Full(_)) => {
-                let size = inner.size.fetch_sub(1, Ordering::Relaxed);
+                let size = self.size.fetch_sub(1, Ordering::Relaxed);
                 tracing::warn!(size, "The tx queue is full. You may want to increase the number of workers for cache warmup.");
                 None
             }
             Err(flume::TrySendError::Disconnected(_)) => {
-                inner.size.fetch_sub(1, Ordering::Relaxed);
+                self.size.fetch_sub(1, Ordering::Relaxed);
                 None
             }
         };
@@ -152,10 +141,6 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        if seq_config.sequencer_kind_config.is_replica {
-            return (Self { inner: None }, vec![]);
-        }
-
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
         let size = Arc::new(AtomicU64::new(0));
         let tx_receiver = TxReceiver {
@@ -167,7 +152,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         // StartBlockNotification directly in the channel does not introduce any overhead.
         // Moreover, this is only used for the watch channel.
         let (start_block_notification_sender, start_block_notification_receiver) =
-            tokio::sync::watch::channel(None);
+            watch::channel(None);
 
         let mut handles = Vec::new();
         for _ in 0..seq_config.sequencer_kind_config.num_cache_warmup_workers {
@@ -182,16 +167,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
             handles.push(worker);
         }
 
-        (
-            Self {
-                inner: Some(CacheWarmUpExecutorInner {
-                    tx_sender,
-                    start_block_notification_sender,
-                    size,
-                }),
-            },
-            handles,
-        )
+        let executor = Self {
+            tx_sender,
+            start_block_notification_sender,
+            size,
+        };
+        (executor, handles)
     }
 
     fn spawn_worker<Rt: Runtime<S>>(
@@ -199,9 +180,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         tx_receiver: TxReceiver,
-        mut start_block_notification_receiver: tokio::sync::watch::Receiver<
-            Option<StartBlockNotification<S>>,
-        >,
+        mut start_block_notification_receiver: watch::Receiver<Option<StartBlockNotification<S>>>,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut shutdown_receiver = exec_config.shutdown_receiver.clone();

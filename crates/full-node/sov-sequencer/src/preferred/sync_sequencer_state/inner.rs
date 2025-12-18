@@ -5,7 +5,9 @@ use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
-use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
+use crate::preferred::cache_warm_up_executor::{
+    CacheWarmUpExecutor, FullyBakedTxWithMaybeChangeSet, StartBlockNotification,
+};
 use crate::preferred::comfortable_gas_limit;
 use crate::preferred::db::latest_finalized_sequence_number;
 use crate::preferred::executor_events::ExecutorEventsSender;
@@ -94,7 +96,7 @@ where
     pub(crate) stop_at_rollup_height: Option<RollupHeight>,
     pub(crate) rollup_exec_config: RollupBlockExecutorConfig<S>,
     pub(crate) tx_cache_writer: TxResultWriter<S, Rt>,
-    pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
+    pub(crate) cache_warm_up_executor: Option<CacheWarmUpExecutor<S>>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
     pub(crate) rate_limiter: SovRateLimiter<S>,
 }
@@ -638,8 +640,9 @@ where
             sequence_number,
         };
 
-        self.cache_warm_up_executor
-            .send_batch_start_notification(notification);
+        if let Some(ref e) = self.cache_warm_up_executor {
+            e.send_batch_start_notification(notification);
+        }
 
         self.executor_events_sender
             .start_batch(
@@ -704,7 +707,10 @@ where
             );
         }
 
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
+        let baked_tx = match cache_warm_up_executor {
+            Some(e) => e.send_tx(baked_tx.clone(), sequence_number),
+            None => FullyBakedTxWithMaybeChangeSet::new(baked_tx),
+        };
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (

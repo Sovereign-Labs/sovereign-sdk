@@ -24,8 +24,8 @@ pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
 }
 
 pub(crate) struct ReplicaTaskHandles {
-    pub(crate) data_fetcher_handle: JoinHandle<()>,
-    pub(crate) sync_task_handle: JoinHandle<()>,
+    pub(crate) data_fetcher: JoinHandle<()>,
+    pub(crate) sync_task: JoinHandle<()>,
 }
 
 pub(crate) struct ReplicaSyncTask {
@@ -70,16 +70,16 @@ impl ReplicaSyncTask {
         )
         .await;
 
-        let data_fetcher_handle = event_receiver.spawn_db_data_fetcher().await;
+        let data_fetcher = event_receiver.spawn_db_data_fetcher().await;
         let shutdown_receiver = self.shutdown_sender.subscribe();
 
-        let sync_task_handle = tokio::spawn(async move {
+        let sync_task = tokio::spawn(async move {
             Self::run_handler(handler, db_data_receiver, shutdown_receiver).await;
         });
 
         ReplicaTaskHandles {
-            data_fetcher_handle,
-            sync_task_handle,
+            data_fetcher,
+            sync_task,
         }
     }
 
