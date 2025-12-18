@@ -63,4 +63,15 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     pub fn rollup_height_to_access(&self) -> RollupHeight {
         self.rollup_height
     }
+
+    /// Create a new `ConcurrentStateCheckpoint` with the given storage and uncommitted changes but the same set of writes.
+    pub fn with_replaced_storage(&self, storage: S::Storage, uncomitted_changes: Box<dyn StateGetter>) -> Self {
+        Self {
+            storage: storage,
+            uncomitted_changes: Some(uncomitted_changes),
+            writes: self.writes.clone(),
+            visible_slot_num: self.visible_slot_num,
+            rollup_height: self.rollup_height,
+        }
+    }
 }

@@ -207,6 +207,7 @@ where
         cache_warm_up_executor,
         start_replica_task_notifier,
         rate_limiter,
+        temp_metrics: Default::default(),
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));

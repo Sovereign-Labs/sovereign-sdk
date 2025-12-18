@@ -4,6 +4,7 @@ use crate::metrics::{
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
+use crate::preferred::executor_events::ApiStateUpdate;
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::comfortable_gas_limit;
@@ -97,6 +98,34 @@ where
     pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
     pub(crate) rate_limiter: SovRateLimiter<S>,
+    pub(crate) temp_metrics: InnerMetrics,
+}
+
+#[derive(Default)]
+pub(crate) struct InnerMetrics {
+    pub pre_flight_time: std::time::Duration,
+    pub mid_flight_time: std::time::Duration,
+    pub apply_tx_time: std::time::Duration,
+    pub auth_and_send_tx_time: std::time::Duration,
+    pub await_tx_time: std::time::Duration,
+    pub apply_changes_time: std::time::Duration,
+    pub post_flight_time: std::time::Duration,
+    pub end_do_tx_time: std::time::Duration,
+    pub close_batch_time: std::time::Duration,
+    pub total_time: std::time::Duration,
+    pub count: u64,
+}
+
+impl InnerMetrics {
+    pub fn inc_count(&mut self) {
+        let accounted_for = self.pre_flight_time + self.mid_flight_time + self.apply_tx_time + self.post_flight_time + self.close_batch_time + self.end_do_tx_time;
+        if self.count % 10000 == 0 {
+            eprintln!("InnerMetrics: count={}. Accounted for={}, Total={}:", self.count, accounted_for.as_millis(), self.total_time.as_millis());
+            eprintln!("  Details: pre_flight_time={}, mid_flight_time={}, apply_tx_time={}, post_flight_time={}, close_batch_time={}, end_do_tx_time={}", self.pre_flight_time.as_millis(), self.mid_flight_time.as_millis(), self.apply_tx_time.as_millis(), self.post_flight_time.as_millis(), self.close_batch_time.as_millis(), self.end_do_tx_time.as_millis());
+            eprintln!("  Apply tx metrics: auth_and_send_tx_time={}, await_tx_time={}, apply_changes_time={}", self.auth_and_send_tx_time.as_millis(), self.await_tx_time.as_millis(), self.apply_changes_time.as_millis());
+        }
+        self.count += 1;
+    }
 }
 
 // We submit metrics when this guard is dropped.
@@ -124,6 +153,10 @@ where
             start_time: std::time::Instant::now(),
             channel_size,
         }
+    }
+
+    pub fn elapsed_time(&self) -> std::time::Duration {
+        self.start_time.elapsed()
     }
 }
 
@@ -248,7 +281,7 @@ where
         let mut rt = Rt::default();
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None); // The api state doesn't need a copy of the pinned cache.
         self.executor_events_sender
-            .force_update_api_state(checkpoint)
+            .force_update_api_state(ApiStateUpdate::Checkpoint(checkpoint))
             .await;
     }
 
@@ -361,7 +394,7 @@ where
 
         // If we're lagging less than the ideal amount, it's not convenient to create a new batch so return early
         if is_lagging_less_than_ideal_amount(
-            self.executor.latest_empty_checkpoint().current_visible_slot_number(),
+            self.executor.local_checkpoint_maybe_empty().current_visible_slot_number(),
             self.latest_info.latest_finalized_slot_number,
             self.seq_config
                 .sequencer_kind_config
@@ -494,7 +527,7 @@ where
         }
 
         let visible_increase = match next_visible_slot_number_increase(
-            self.executor.latest_empty_checkpoint(),
+            self.executor.local_checkpoint_maybe_empty(),
             &self.latest_info,
             leave_space_for_next_batch,
             self.seq_config
@@ -512,7 +545,7 @@ where
 
         let visible_slot_number_after_increase = self
             .executor
-            .latest_empty_checkpoint()
+            .local_checkpoint_maybe_empty()
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
@@ -565,7 +598,7 @@ where
     }
 
     fn current_height(&self) -> RollupHeight {
-        self.executor.latest_empty_checkpoint().rollup_height_to_access()
+        self.executor.local_checkpoint_maybe_empty().rollup_height_to_access()
     }
 }
 
@@ -619,7 +652,7 @@ where
         // Just Emptied by `end_rollup_block`
         let old_checkpoint = self
             .executor
-            .latest_empty_checkpoint()
+            .local_checkpoint_maybe_empty()
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
 
         self.executor
@@ -649,7 +682,7 @@ where
                 visible_increase,
                 sequence_number,
                 self.executor
-                    .latest_empty_checkpoint()
+                    .local_checkpoint_maybe_empty()
                     .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
             )
             .await;
@@ -671,6 +704,7 @@ where
         >,
         ResourceUsed<S::Gas>,
     ) {
+        let mid_flight_start = std::time::Instant::now();
         // Even if this method return early it uses 1 request slot.
         let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
 
@@ -682,7 +716,7 @@ where
         if !self.executor.has_in_progress_batch() {
             panic!(
                 "No batch in progress, and no batch could be started. Please report this bug. {:?} {:?}",
-                self.executor.latest_empty_checkpoint(), self.latest_info
+                self.executor.local_checkpoint_maybe_empty(), self.latest_info
             );
         }
 
@@ -692,6 +726,7 @@ where
             batch_size_tracker,
             executor_events_sender,
             cache_warm_up_executor,
+            temp_metrics,
             ..
         } = &mut *self;
 
@@ -707,7 +742,11 @@ where
         }
 
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+        let mid_flight_end = std::time::Instant::now();
+        temp_metrics.mid_flight_time += mid_flight_end.duration_since(mid_flight_start);
+        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx, false, temp_metrics).await;
+        let apply_tx_time = mid_flight_end.elapsed();
+        temp_metrics.apply_tx_time += apply_tx_time;
 
         let (
             AcceptedTxWithBudgetInfo {
@@ -743,6 +782,8 @@ where
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
+        let end_do_tx_time = mid_flight_end.elapsed() - apply_tx_time;
+        temp_metrics.end_do_tx_time += end_do_tx_time;
 
         (Ok((rx, remaining_slot_gas)), resource_used)
     }
@@ -761,7 +802,7 @@ where
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor
-            .latest_empty_checkpoint()
+            .local_checkpoint_maybe_empty()
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
         self.executor_events_sender.close_batch(checkpoint).await;
     }

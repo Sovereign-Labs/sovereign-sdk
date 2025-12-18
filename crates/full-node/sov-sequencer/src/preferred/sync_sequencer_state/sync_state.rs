@@ -3,6 +3,7 @@ use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorE
 use crate::preferred::db::BatchToStore;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::db_data::DbData;
+use crate::preferred::executor_events::ApiStateUpdate;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
 use crate::preferred::sync_sequencer_state::conditions_table::{
@@ -577,10 +578,11 @@ where
         let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor
-            .replace_checkpoint_storage(info.storage.clone(), Box::new(uncommitted_changes));
+            .replace_checkpoint_storage(info.storage.clone(), Box::new(uncommitted_changes.clone()));
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
 
-        Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
+        let update =  ApiStateUpdate::StorageAndUncommittedChanges(info.storage.clone(), Box::new(uncommitted_changes));
+        Self::common_for_final_catchup_and_new_storage(&mut inner, info, update).await;
 
         inner
             .executor
@@ -619,7 +621,11 @@ where
 
         // The executor is now caught up. Swap it in
         inner.executor.replace_state(*executor).await;
-        Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
+        let checkpoint = inner
+            .executor
+            .local_checkpoint_maybe_empty()
+            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+        Self::common_for_final_catchup_and_new_storage(&mut inner, info, ApiStateUpdate::Checkpoint(checkpoint)).await;
 
         drop(db_event_subscription);
         drop(inner);
@@ -630,6 +636,7 @@ where
     async fn common_for_final_catchup_and_new_storage(
         inner: &mut InnerGuard<'_, S, Rt>,
         info: StateUpdateInfo<S::Storage>,
+        api_state_update: ApiStateUpdate<S>,
     ) {
         let node_sequence_number =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
@@ -641,13 +648,10 @@ where
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
         inner.latest_info = info;
-        let checkpoint = inner
-            .executor
-            .latest_empty_checkpoint()
-            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+        
         inner
             .executor_events_sender
-            .force_update_api_state(checkpoint)
+            .force_update_api_state(api_state_update)
             .await;
 
         let info = &inner.latest_info;
@@ -805,15 +809,25 @@ where
             .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
+        let pre_flight = inner.elapsed_time();
+        inner.temp_metrics.pre_flight_time += pre_flight;
+
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
+        let post_flight_start = std::time::Instant::now();
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
         // to ensure the limits are updated even for unsuccessful transactions.
         let res = res.map_err(AcceptTxError::NewTxError);
         inner.rate_limiter.update(token, resource_used);
         let (rx, remaining_slot_gas) = res?;
+        let post_flight_end = std::time::Instant::now();
+        inner.temp_metrics.post_flight_time += post_flight_end.duration_since(post_flight_start);
 
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
+        inner.temp_metrics.close_batch_time += post_flight_end.elapsed();
+        let elapsed_time = inner.elapsed_time();
+        inner.temp_metrics.total_time += elapsed_time;
+        inner.temp_metrics.inc_count();
 
         Ok(rx)
     }

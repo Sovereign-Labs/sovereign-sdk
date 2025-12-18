@@ -4,6 +4,7 @@ use std::sync::Arc;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet, VisibleSlotNumber};
+use sov_state::StateGetter;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -174,9 +175,9 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
-    pub(crate) async fn force_update_api_state(&mut self, checkpoint: StateCheckpoint<S>) {
+    pub(crate) async fn force_update_api_state(&mut self, update: ApiStateUpdate<S>) {
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::ForceUpdateApiState(checkpoint))
+        self.send(ExecutorEvent::ForceUpdateApiState(update))
             .await;
     }
 
@@ -313,7 +314,7 @@ where
     /// Insert an accepted transaction into the database and send out the confirmation
     AcceptedTx(AcceptedTxEventContents<S, Rt>),
     /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery
-    ForceUpdateApiState(StateCheckpoint<S>),
+    ForceUpdateApiState(ApiStateUpdate<S>),
     /// Prune the database up to the given sequence number.
     PruneDb(SequenceNumber),
     /// Enter recovery mode.
@@ -332,6 +333,11 @@ where
         next_tx_number: u64,
         oneshot_sender: oneshot::Sender<()>,
     },
+}
+
+pub(crate) enum ApiStateUpdate<S: Spec> {
+    Checkpoint(StateCheckpoint<S>),
+    StorageAndUncommittedChanges(S::Storage, Box<dyn StateGetter>),
 }
 
 pub(crate) struct AcceptedTxEventContents<S: Spec, Rt: Runtime<S>> {

@@ -10,6 +10,7 @@ use tracing::{error, warn};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
+use crate::preferred::executor_events::ApiStateUpdate;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -41,14 +42,22 @@ where
 {
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[tracing::instrument(skip_all, level = "trace")]
-    fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
-        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
-        if self
-            .checkpoint_sender
-            .send(Arc::new(concurrent_checkpoint))
-            .is_err()
-        {
-            tracing::debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
+    fn update_api_state(&self, api_state_update: ApiStateUpdate<S>) {
+        match api_state_update {
+            ApiStateUpdate::Checkpoint(checkpoint) => {
+                let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+                if self
+                    .checkpoint_sender
+                    .send(Arc::new(concurrent_checkpoint))
+                    .is_err()
+                {
+                    tracing::debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
+                }
+            }
+            ApiStateUpdate::StorageAndUncommittedChanges(storage, uncommitted_changes) => {
+                let concurrent_checkpoint = (*self.checkpoint_sender.borrow()).with_replaced_storage(storage, uncommitted_changes);
+                self.checkpoint_sender.send_replace(Arc::new(concurrent_checkpoint));
+            }
         }
     }
 
@@ -60,7 +69,7 @@ where
         info_to_store: BatchToStore,
     ) -> anyhow::Result<()> {
         self.db.terminate_batch(info_to_store).await?;
-        self.update_api_state(checkpoint);
+        self.update_api_state(ApiStateUpdate::Checkpoint(checkpoint));
 
         // Publish the batch.
         self.blob_sender
@@ -175,7 +184,7 @@ where
                         blob_id,
                     )
                     .await?;
-                self.update_api_state(new_checkpoint);
+                self.update_api_state(ApiStateUpdate::Checkpoint(new_checkpoint));
             }
             ExecutorEvent::TriggerRecovery {
                 blobs_to_flush,
@@ -203,14 +212,14 @@ where
                     .publish_proof(data, sequence_number, blob_id)
                     .await?;
             }
-            ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
-                self.update_api_state(new_checkpoint);
+            ExecutorEvent::ForceUpdateApiState(api_state_update) => {
+                self.update_api_state(api_state_update);
             }
             ExecutorEvent::PruneDb(sequence_number) => {
                 self.db.prune_db(sequence_number).await?;
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
-                self.update_api_state(checkpoint);
+                self.update_api_state(ApiStateUpdate::Checkpoint(checkpoint));
             }
             ExecutorEvent::FlushTransactionsCache {
                 next_tx_number,

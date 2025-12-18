@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
+use crate::preferred::sync_sequencer_state::InnerMetrics;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{
@@ -142,7 +143,10 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    checkpoint: StateCheckpoint<S>,
+    // Contains the state changes from setting up the executor and the correct rollup height. May or may not also include state changes from transactions that have been accepted into the current block.
+    // These changes are included only when the executor is being used for replay during update_state. The rest of the time,
+    // we skip applying these changes as an optimization.
+    partial_checkpoint: StateCheckpoint<S>,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
@@ -215,14 +219,16 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     }
 
     /// Returns a reference to the checkpoint. This checkpoint matches the latest rollup height values,
-    /// but does *not* contain any state changes from the transactions that have been accepted into the current block. 
-    pub fn latest_empty_checkpoint(&self) -> &StateCheckpoint<S> {
-        &self.checkpoint
+    /// but is *not* guaranteed to contain any state changes from the transactions that have been accepted into the current block. 
+    /// We apply the changes to the checkpoint only when going through the slow path of `update_state` (that is, when we replay the transactions)
+    /// rather than just merging the state changes from the node into the current checkpoint.
+    pub fn local_checkpoint_maybe_empty(&self) -> &StateCheckpoint<S> {
+        &self.partial_checkpoint
     }
 
     /// Replaces the underlying storage of the latest state checkpoint.
     pub fn replace_checkpoint_storage(&mut self, storage: S::Storage, uncomitted_changes: Box<dyn StateGetter>) {
-        self.checkpoint.replace_storage(storage, uncomitted_changes);
+        self.partial_checkpoint.replace_storage(storage, uncomitted_changes);
     }
 
     fn new_helper(
@@ -245,7 +251,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         } = rollup_exec_config;
 
         Self {
-            checkpoint,
+            partial_checkpoint: checkpoint,
             rollup_block_task_state: None,
             next_event_number: info.next_event_number,
             next_tx_number: info.next_tx_number,
@@ -281,7 +287,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             task_state.shutdown().abort();
         }
 
-        self.checkpoint = other.checkpoint;
+        self.partial_checkpoint = other.partial_checkpoint;
         self.rollup_block_task_state = other.rollup_block_task_state;
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
@@ -299,9 +305,11 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub async fn apply_tx_to_in_progress_batch(
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
+        apply_changes_locally: bool, // During replay, we need to keep an extra local copy of the entire changeset to swap in with the new executor. 
+        temp_metrics: &mut InnerMetrics,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorErrorWithBudget<S>>
     {
-        let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
+        let result = self.apply_tx_to_in_progress_batch_inner(baked_tx, apply_changes_locally, temp_metrics).await;
 
         match result {
             Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
@@ -325,10 +333,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     async fn apply_tx_to_in_progress_batch_inner(
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
+        apply_changes_locally: bool, // During replay, we need to keep an extra local copy of the entire changeset to swap in with the new executor. 
+        temp_metrics: &mut InnerMetrics,
     ) -> Result<
         (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
         RollupBlockExecutorErrorWithBudget<S>,
     > {
+        let auth_and_send_tx_start = std::time::Instant::now();
         let Some(task_state) = self.rollup_block_task_state.as_mut() else {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
@@ -349,6 +360,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 inner_err: RollupBlockExecutorError::Overloaded,
             });
         }
+        let auth_and_send_tx_end = std::time::Instant::now();
+        temp_metrics.auth_and_send_tx_time += auth_and_send_tx_end.duration_since(auth_and_send_tx_start);
 
         let Some(result) = task_state.result_receiver.recv().await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
@@ -359,6 +372,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 inner_err: RollupBlockExecutorError::UnexpectedFailure,
             });
         };
+        temp_metrics.await_tx_time += auth_and_send_tx_end.elapsed();
+        let await_tx_end = std::time::Instant::now();
 
         let AsyncBatchResult {
             execution_time_micros,
@@ -386,8 +401,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 inner_err: RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
             });
         }
-
-        self.checkpoint.apply_tx_changes(tx_changes.clone());
+        if apply_changes_locally {
+            self.partial_checkpoint.apply_tx_changes(tx_changes.clone());
+        }
+        temp_metrics.apply_changes_time += await_tx_end.elapsed();
 
         Ok((
             receipt,
@@ -489,9 +506,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             %tx_hash,
             "Re-applying state changes for the soft-confirmed transaction"
         );
+        let mut metrics = InnerMetrics::default();
 
         let tx = FullyBakedTxWithMaybeChangeSet::new(tx);
-        match self.apply_tx_to_in_progress_batch(tx).await {
+        match self.apply_tx_to_in_progress_batch(tx, true, &mut metrics).await {
             Ok((output, _tx_changes)) => {
                 if tx_hash != output.accepted_tx.tx_hash {
                     tracing::error!(
@@ -523,7 +541,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         checkpoint: StateCheckpoint<S>,
         state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
     ) {
-        self.checkpoint = checkpoint;
+        self.partial_checkpoint = checkpoint;
 
         assert!(
             self.rollup_block_task_state.is_none(),
@@ -546,7 +564,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         trace!(
-            ?self.checkpoint,
+            ?self.partial_checkpoint,
             %start_block_data.visible_increase,
             "Beginning new rollup block and spawning background loop"
         );
@@ -571,9 +589,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             ..
         } = start_block_data;
 
-        let old_visible_slot_number = self.checkpoint.current_visible_slot_number();
+        let old_visible_slot_number = self.partial_checkpoint.current_visible_slot_number();
         let next_visible_slot_number = self
-            .checkpoint
+            .partial_checkpoint
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
@@ -590,7 +608,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let handle = tokio::runtime::Handle::current().spawn_blocking({
             let ctx = RollupBlockTaskContext {
                 checkpoint: self
-                    .checkpoint
+                    .partial_checkpoint
                     .clone_with_empty_witness_dropping_temp_cache_but_taking_pinned_cache(), // Pass the pinned cache through to the actual executor
                 tx_receiver,
                 setup_sender,
@@ -599,7 +617,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 visible_increase,
                 result_sender,
                 shutdown_notifier: self.shutdown_notifier.clone(),
-                old_rollup_height: self.checkpoint.rollup_height_to_access(),
+                old_rollup_height: self.partial_checkpoint.rollup_height_to_access(),
                 minimum_profit_per_tx,
                 admin_addresses: self.seq_config.admin_addresses.clone().into(),
                 sequencer_rollup_address: self.seq_config.rollup_address,
@@ -620,8 +638,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("The sequencer can't recover from this error; this is a bug, please report it");
         trace!("Applied setup changes");
 
-        self.checkpoint.apply_changes(setup_changes);
-        self.checkpoint
+        self.partial_checkpoint.apply_changes(setup_changes);
+        self.partial_checkpoint
             .advance_visible_slot_number(visible_increase);
 
         self.rollup_block_task_state = Some(BackgroundTaskState {
@@ -671,7 +689,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             let mut runtime = Rt::default();
             let mut kernel = runtime.kernel();
             let mut kernel_state =
-                KernelStateAccessor::from_checkpoint(&kernel, &mut self.checkpoint);
+                KernelStateAccessor::from_checkpoint(&kernel, &mut self.partial_checkpoint);
             kernel.save_user_state_root(*height, user_root, &mut kernel_state);
         }
     }
@@ -684,14 +702,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         if self.state_roots.is_empty() {
             // Figure out which rollup height this root corresponds to and save it as appropriate.
             let node_height = self
-                .checkpoint
+                .partial_checkpoint
                 .get_rollup_height_of_underlying_storage(&Rt::default().kernel());
             self.state_roots
                 .insert(node_height, node_state_root.clone());
         }
 
         // Compute the next visible root height that we need to fetch.
-        let next_rollup_height = self.checkpoint.rollup_height_to_access().saturating_add(1);
+        let next_rollup_height = self.partial_checkpoint.rollup_height_to_access().saturating_add(1);
         let next_visible_rollup_height =
             next_rollup_height.saturating_sub(config_value!("STATE_ROOT_DELAY_BLOCKS"));
 
@@ -760,7 +778,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub async fn end_rollup_block(&mut self) {
         trace!("Ending rollup block");
 
-        let rollup_height = self.checkpoint.rollup_height_to_access();
+        let rollup_height = self.partial_checkpoint.rollup_height_to_access();
         let (batch_receipts, mut new_checkpoint) = self
             .rollup_block_task_state
             .take()
@@ -799,9 +817,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .send(StateRootComputeRequest {
                 raw_state_changes: changes.clone(),
                 uncommitted_changes: self.uncommitted_changes.clone(),
-                storage: self.checkpoint.storage().clone(),
+                storage: self.partial_checkpoint.storage().clone(),
                 rollup_height,
-                max_slot_number: self.checkpoint.max_allowed_slot_number_to_access(),
+                max_slot_number: self.partial_checkpoint.max_allowed_slot_number_to_access(),
                 response_channel,
             })
             .await
@@ -812,8 +830,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         // Add the changes to the executor's local uncommitted changes and set up a fresh checkpoint that points at the latest uncommitted change.
         self.uncommitted_changes.push_front(changes);
-        self.checkpoint = StateCheckpoint::new_with_uncomitted_changes(
-            self.checkpoint.storage().clone(),
+        self.partial_checkpoint = StateCheckpoint::new_with_uncomitted_changes(
+            self.partial_checkpoint.storage().clone(),
             &Rt::default().kernel(),
             Box::new(self.uncommitted_changes.clone()),
             pinned_cache,

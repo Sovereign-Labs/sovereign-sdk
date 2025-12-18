@@ -204,6 +204,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         >,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
+            let mut metrics = Default::default();
             let mut shutdown_receiver = exec_config.shutdown_receiver.clone();
             let mut executor = RollupBlockExecutor::<_, Rt>::new(
                 &info,
@@ -255,7 +256,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             nb_of_ignored_txs = 0;
 
                             let baked_tx = FullyBakedTxWithMaybeChangeSet::new(tx_with_sender.tx);
-                            let res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+                            let res = executor.apply_tx_to_in_progress_batch(baked_tx, false, &mut metrics).await;
 
                             match res{
                                 Ok((_, tx_change_set)) => {
