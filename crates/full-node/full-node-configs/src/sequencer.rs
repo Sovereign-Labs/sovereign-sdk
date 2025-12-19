@@ -174,7 +174,7 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     /// When enabled, the sequencer runs in replica mode and cannot accept transactions.
     /// It will sync from the master sequencer's database but remain read-only.
     #[serde(default)]
-    pub is_replica: bool,
+    pub is_replica: Option<bool>,
     #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
@@ -207,7 +207,7 @@ impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
             disable_state_root_consistency_checks: false,
             ideal_lag_behind_finalized_slot: default_ideal_lag_behind_finalized_slot(),
             recovery_strategy: RecoveryStrategy::None,
-            is_replica: false,
+            is_replica: Some(false),
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
             num_cache_warmup_workers: default_num_cache_warmup_workers(),

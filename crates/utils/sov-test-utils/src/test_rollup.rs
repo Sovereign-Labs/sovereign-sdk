@@ -417,7 +417,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,
             sequencer_config: SequencerKindConfig::Preferred(PreferredSequencerConfig {
-                is_replica,
+                is_replica: Some(is_replica),
                 postgres_config,
                 ..PreferredSequencerConfig::default()
             }),

@@ -400,8 +400,11 @@
         },
         "is_replica": {
           "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
-          "default": false,
-          "type": "boolean"
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "maximum_future_nonce_delta": {
           "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly impacts the maximum \"batch\" of transactions that can be simultaneously sent to the sequencer out of order.",
