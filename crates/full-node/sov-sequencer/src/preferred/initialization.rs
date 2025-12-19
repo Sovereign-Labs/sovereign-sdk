@@ -1,5 +1,3 @@
-use crate::preferred::db::create_preferred_sequencer_db;
-
 use super::*;
 use anyhow::Context;
 use anyhow::Result;
@@ -80,7 +78,7 @@ where
         let (api_state, checkpoint_sender) = Self::api_state(latest_state_update.storage.clone());
 
         let is_replica = preferred_config.is_replica;
-        let db = create_preferred_sequencer_db(
+        let db = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             is_replica,
             storage_path,
