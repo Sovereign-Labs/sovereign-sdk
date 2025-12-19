@@ -19,8 +19,8 @@ use tokio::task::JoinHandle;
 
 use crate::common::AcceptedTx;
 use crate::metrics::{
-    ChannelQueueMetricName, ChannelQueueMetrics, NonceBufferMainQueueMetricName,
-    NonceBufferTimeoutQueueMetricName,
+    ChannelQueueMetric, ChannelQueueMetricBatch, ChannelQueueMetricName,
+    NonceBufferMainQueueMetricName, NonceBufferTimeoutQueueMetricName,
 };
 use crate::preferred::rate_limiter::IpAndCredentialId;
 
@@ -43,17 +43,20 @@ const MAX_BUFFERED_TXS: usize = 20_000;
 // value pending real-world testing.
 const MAX_BUFFER_INPUT_QUEUE: usize = 20_000;
 
+// Batches metrics together for performance instead of sending them every single message.
+const METRICS_BATCH_SIZE: usize = 32;
+
 /// Send a message to an mpsc channel with metrics tracking.
 ///
 /// Uses try_send first for the non-blocking fast path. If the channel is full, falls back to
 /// blocking send and records how long the send was blocked.
 ///
 /// Returns Ok(()) on success, or Err if the channel is closed (receiver dropped).
-async fn send_with_metrics<T, M: ChannelQueueMetricName + 'static>(
+async fn send_with_metric<T, M: ChannelQueueMetricName + 'static>(
     sender: &mpsc::Sender<T>,
     message: T,
-) -> Result<(), mpsc::error::SendError<T>> {
-    let mut metrics = ChannelQueueMetrics::<M>::default();
+) -> Result<ChannelQueueMetric<M>, mpsc::error::SendError<T>> {
+    let mut metric = ChannelQueueMetric::<M>::default();
 
     let result = match sender.try_send(message) {
         Ok(()) => Ok(()),
@@ -64,16 +67,40 @@ async fn send_with_metrics<T, M: ChannelQueueMetricName + 'static>(
             );
             let started_blocking = Instant::now();
             let result = sender.send(message).await;
-            metrics.blocked_for_us = started_blocking.elapsed().as_micros() as u64;
+            metric.blocked_for_us = started_blocking.elapsed().as_micros() as u64;
             result
         }
         Err(mpsc::error::TrySendError::Closed(message)) => Err(mpsc::error::SendError(message)),
     };
 
-    if result.is_ok() {
-        metrics.queue_depth = sender.max_capacity() - sender.capacity();
+    metric.queue_depth = sender.max_capacity() - sender.capacity();
+
+    result.map(|_| metric)
+}
+
+/// Send a message to an mpsc channel with metrics tracking and batching.
+///
+/// Uses try_send first for the non-blocking fast path. If the channel is full, falls back to
+/// blocking send and records how long the send was blocked. Batches metric into the provided Vec,
+/// and sends a whole batch at once whenever it reaches `METRICS_BATCH_SIZE`.
+///
+/// Returns Ok(()) on success, or Err if the channel is closed (receiver dropped).
+async fn send_with_metric_batched<T, M: ChannelQueueMetricName + 'static>(
+    sender: &mpsc::Sender<T>,
+    message: T,
+    metrics_batch: &mut Vec<ChannelQueueMetric<M>>,
+) -> Result<(), mpsc::error::SendError<T>> {
+    let result = send_with_metric(sender, message)
+        .await
+        .map(|metric| metrics_batch.push(metric));
+
+    // Submit a batch if we've buffered enough metrics, OR if the channel closed - because we might
+    // be shutting down imminently so flush it to be safe
+    if metrics_batch.len() >= METRICS_BATCH_SIZE || result.is_err() {
         sov_metrics::track_metrics(|t| {
-            t.submit(metrics);
+            t.submit(ChannelQueueMetricBatch {
+                metrics: std::mem::replace(metrics_batch, Vec::with_capacity(METRICS_BATCH_SIZE)),
+            });
         });
     }
 
@@ -384,6 +411,7 @@ pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>
     execution_backend: E,
     maximum_future_nonce_delta: u64,
     timeout_sender: mpsc::Sender<TimeoutRequest>,
+    timeout_metrics_batch: Vec<ChannelQueueMetric<NonceBufferTimeoutQueueMetricName>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -411,7 +439,12 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 {
     /// Schedule a timeout for a queued transaction.
     /// Sends to the timeout queue with metrics tracking.
-    async fn schedule_timeout(&self, credential_id: CredentialId, tx_nonce: u64, tx_hash: TxHash) {
+    async fn schedule_timeout(
+        &mut self,
+        credential_id: CredentialId,
+        tx_nonce: u64,
+        tx_hash: TxHash,
+    ) {
         let request = TimeoutRequest {
             credential_id,
             tx_nonce,
@@ -419,9 +452,13 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             queued_at: Instant::now(),
         };
 
-        if send_with_metrics::<_, NonceBufferTimeoutQueueMetricName>(&self.timeout_sender, request)
-            .await
-            .is_err()
+        if send_with_metric_batched::<_, NonceBufferTimeoutQueueMetricName>(
+            &self.timeout_sender,
+            request,
+            &mut self.timeout_metrics_batch,
+        )
+        .await
+        .is_err()
         {
             tracing::warn!(
                 "Nonce buffer timeout channel closed while scheduling timeout. \
@@ -738,6 +775,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             execution_backend,
             maximum_future_nonce_delta,
             timeout_sender,
+            timeout_metrics_batch: Vec::with_capacity(METRICS_BATCH_SIZE),
         };
 
         let handle = tokio::spawn(async move {
@@ -761,8 +799,15 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         &self,
         input: NonceBufferInput<S, Rt>,
     ) -> Result<(), mpsc::error::SendError<NonceBufferInput<S, Rt>>> {
-        send_with_metrics::<_, NonceBufferMainQueueMetricName>(&self.buffer_sender_channel, input)
-            .await
+        let metric = send_with_metric::<_, NonceBufferMainQueueMetricName>(
+            &self.buffer_sender_channel,
+            input,
+        )
+        .await?;
+        sov_metrics::track_metrics(|t| {
+            t.submit(metric);
+        });
+        Ok(())
     }
 
     pub async fn handle_new_tx(
