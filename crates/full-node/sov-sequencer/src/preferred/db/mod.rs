@@ -175,14 +175,14 @@ pub(crate) enum DbEvent {
     ProofBlobAccepted(SequenceNumber),
 }
 
-pub struct Cache {
+pub struct BlobsCache {
     completed_blobs: VecDeque<ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
     shutdown_sender: watch::Sender<()>,
 }
 
-impl Cache {
+impl BlobsCache {
     pub fn new(
         completed_blobs: VecDeque<ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
@@ -409,7 +409,7 @@ impl PreferredSequencerDb {
         })
     }
 
-    pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, Cache)> {
+    pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, BlobsCache)> {
         if let Some(backend) = &self.backend {
             let SnapshotData {
                 completed_blobs,
@@ -429,7 +429,7 @@ impl PreferredSequencerDb {
 
             Ok((
                 sequence_number_of_next_blob,
-                Cache::new(
+                BlobsCache::new(
                     completed_blobs,
                     in_progress_batch,
                     self.shutdown_sender.clone(),
@@ -438,7 +438,7 @@ impl PreferredSequencerDb {
         } else {
             Ok((
                 0, // TODO this will be revisited when we enable the replica sync task.
-                Cache::new(
+                BlobsCache::new(
                     VecDeque::default(),
                     Option::None,
                     self.shutdown_sender.clone(),

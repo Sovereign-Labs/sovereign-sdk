@@ -9,7 +9,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::common::AcceptedTx;
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerExecutorEventSendingMetrics};
-use crate::preferred::db::{Cache, ReadBatch};
+use crate::preferred::db::{BlobsCache, ReadBatch};
 use crate::preferred::{
     exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
 };
@@ -18,14 +18,14 @@ const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
-    cache: Cache,
+    cache: BlobsCache,
     shutdown_sender: watch::Sender<()>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     pub fn new(
         shutdown_sender: watch::Sender<()>,
-        cache: Cache,
+        cache: BlobsCache,
     ) -> (Self, mpsc::Receiver<ExecutorEvent<S, Rt>>) {
         let (sender, receiver) = mpsc::channel(MAX_EXECUTOR_EVENT_QUEUE_DEPTH);
         (
