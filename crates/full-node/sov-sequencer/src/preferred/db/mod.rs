@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 //! Database for sequencer-related data.
 //!
 //! TODO(@neysofu): Remove *all* blocking code inside async functions.
@@ -33,11 +31,6 @@ use tokio::sync::{mpsc, watch};
 
 use crate::common::WithCachedTxHashes;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
-
-pub(crate) enum DbWriteOutcome {
-    Success,
-    AbortedBecauseReplica,
-}
 
 #[derive(Debug)]
 pub(crate) enum DbReadOutcome<T> {
@@ -127,6 +120,7 @@ pub struct DbSnapshotData {
 }
 
 impl DbSnapshotData {
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.completed_blobs.is_empty() && self.in_progress_batch.is_none()
     }
