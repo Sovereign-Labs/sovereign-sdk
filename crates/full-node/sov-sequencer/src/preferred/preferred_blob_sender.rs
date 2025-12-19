@@ -14,12 +14,12 @@ use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::debug;
 
-use super::db::{PreferredSequencerReadBatch, PreferredSequencerReadBlob};
+use super::db::{ReadBatch, ReadBlob};
 use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
 pub struct PreferredBlobSender<Da: DaService> {
-    inner: Option<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>,
+    inner: BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>,
     nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
 }
 
@@ -27,52 +27,39 @@ impl<Da: DaService> PreferredBlobSender<Da> {
     pub(crate) async fn new(
         da: Da,
         ledger_db: LedgerDb,
-        all_completed_blobs: Vec<PreferredSequencerReadBlob>,
+        all_completed_blobs: Vec<ReadBlob>,
         storage_path: Box<Path>,
         tx_status_manager: TxStatusManager<Da::Spec>,
         shutdown_sender: watch::Sender<()>,
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
-        is_replica: bool,
-    ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        if is_replica {
-            Ok((
-                Self {
-                    inner: None,
-                    nb_of_concurrent_blob_submissions,
-                },
-                None,
-            ))
-        } else {
-            // It's possible that sov-blob-sender's DB might miss some blob data at
-            // node startup due to:
-            //  1. Disk failure (the sequencer can use Postgres so it's durable).
-            //  2. DB corruption.
-            //  3. Node crash at an inconvenient time.
-            // Let's restore all missing blob data to make sure they land on the DA.
-            let blobs_to_send = create_blobs_to_send(all_completed_blobs)?;
-            let (inner, blob_sender_handle) = BlobSender::new(
-                da.clone(),
-                ledger_db,
-                storage_path.as_ref(),
-                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                shutdown_sender,
-                blob_processing_timeout,
-                Some(blobs_sender_channel),
-                blobs_to_send,
-                nb_of_concurrent_blob_submissions.clone(),
-            )
-            .await?;
+        // It's possible that sov-blob-sender's DB might miss some blob data at
+        // node startup due to:
+        //  1. Disk failure (the sequencer can use Postgres so it's durable).
+        //  2. DB corruption.
+        //  3. Node crash at an inconvenient time.
+        // Let's restore all missing blob data to make sure they land on the DA.
+        let blobs_to_send = create_blobs_to_send(all_completed_blobs)?;
+        let (inner, handle) = BlobSender::new(
+            da.clone(),
+            ledger_db,
+            storage_path.as_ref(),
+            TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
+            shutdown_sender,
+            blob_processing_timeout,
+            Some(blobs_sender_channel),
+            blobs_to_send,
+            nb_of_concurrent_blob_submissions.clone(),
+        )
+        .await?;
 
-            Ok((
-                Self {
-                    inner: Some(inner),
-                    nb_of_concurrent_blob_submissions,
-                },
-                Some(blob_sender_handle),
-            ))
-        }
+        let sender = Self {
+            inner,
+            nb_of_concurrent_blob_submissions,
+        };
+        Ok((sender, handle))
     }
 
     pub(crate) async fn publish_proof(
@@ -81,10 +68,6 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         sequence_number: u64,
         blob_id: BlobInternalId,
     ) -> anyhow::Result<()> {
-        let Some(ref mut inner) = self.inner else {
-            return Ok(());
-        };
-
         let blob_bytes = proof_bytes(&proof_data, sequence_number)?;
 
         debug!(
@@ -92,37 +75,30 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             blob_id, "Dispatching proof blob for publishing"
         );
 
-        inner.publish_proof_blob(blob_bytes, blob_id).await?;
+        self.inner.publish_proof_blob(blob_bytes, blob_id).await?;
 
         Ok(())
     }
 
-    pub(crate) async fn publish_batch(
-        &mut self,
-        batch: PreferredSequencerReadBatch,
-    ) -> anyhow::Result<()> {
-        let Some(ref mut inner) = self.inner else {
-            return Ok(());
-        };
-
+    pub(crate) async fn publish_batch(&mut self, batch: ReadBatch) -> anyhow::Result<()> {
         let blob_id = batch.blob_id;
         let data = batch_bytes(batch)?;
 
-        inner.publish_batch_blob(data, blob_id).await?;
+        self.inner.publish_batch_blob(data, blob_id).await?;
 
         Ok(())
     }
 
     pub async fn publish_blobs_for_recovery(
         &mut self,
-        completed_blobs: Vec<PreferredSequencerReadBlob>,
+        completed_blobs: Vec<ReadBlob>,
     ) -> anyhow::Result<()> {
         for blob in completed_blobs {
             match blob {
-                PreferredSequencerReadBlob::Batch(batch) => {
+                ReadBlob::Batch(batch) => {
                     self.publish_batch(batch).await?;
                 }
-                PreferredSequencerReadBlob::Proof {
+                ReadBlob::Proof {
                     data,
                     sequence_number,
                     blob_id,
@@ -139,27 +115,23 @@ impl<Da: DaService> PreferredBlobSender<Da> {
     }
 
     pub(crate) async fn add_txs(&self, blob_id: BlobInternalId, tx_hashes: Arc<Vec<TxHash>>) {
-        let Some(ref inner) = self.inner else {
-            return;
-        };
-
-        inner.hooks().add_txs(blob_id, tx_hashes).await;
+        self.inner.hooks().add_txs(blob_id, tx_hashes).await;
     }
 }
 
 pub fn create_blobs_to_send(
-    completed_blobs: Vec<PreferredSequencerReadBlob>,
+    completed_blobs: Vec<ReadBlob>,
 ) -> anyhow::Result<Vec<(BlobToSend, BlobInternalId)>> {
     let mut blobs_to_send = Vec::new();
 
     for blob in completed_blobs {
         match blob {
-            PreferredSequencerReadBlob::Batch(batch) => {
+            ReadBlob::Batch(batch) => {
                 let blob_id = batch.blob_id;
                 let data = batch_bytes(batch)?;
                 blobs_to_send.push((BlobToSend::Batch { data }, blob_id));
             }
-            PreferredSequencerReadBlob::Proof {
+            ReadBlob::Proof {
                 data,
                 sequence_number,
                 blob_id,
@@ -186,7 +158,7 @@ fn proof_bytes(proof_data: &[u8], sequence_number: u64) -> anyhow::Result<Arc<[u
     Ok(Arc::from(borsh::to_vec(&blob)?))
 }
 
-fn batch_bytes(batch: PreferredSequencerReadBatch) -> anyhow::Result<Arc<[u8]>> {
+fn batch_bytes(batch: ReadBatch) -> anyhow::Result<Arc<[u8]>> {
     Ok(borsh::to_vec::<PreferredBatchData>(&PreferredBatchData {
         sequence_number: batch.sequence_number,
         visible_slots_to_advance: batch.visible_slots_to_advance,

@@ -1,8 +1,9 @@
 #![allow(dead_code)]
+use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
+use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
 use axum::async_trait;
@@ -60,7 +61,7 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    pub async fn connect(config: &PostgresConfig) -> anyhow::Result<Self> {
+    pub async fn connect(config: &PostgresConfig) -> Result<Self> {
         let backend = Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await?;
         backend.try_update_leader().await?;
         Ok(backend)
@@ -69,7 +70,7 @@ impl PostgresBackend {
     async fn connect_with_leader_timeout(
         config: &PostgresConfig,
         leader_timeout: Duration,
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self> {
         let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
@@ -107,7 +108,7 @@ impl PostgresBackend {
         stored_blob: StoredBlob,
         connection: &mut PgConnection,
         with_retries: bool,
-    ) -> anyhow::Result<PreferredSequencerReadBlob<Inner>> {
+    ) -> Result<ReadBlob<Inner>> {
         let backoff_policy = self.maybe_retry_policy(with_retries).await;
         match stored_blob {
             StoredBlob::Batch {
@@ -130,17 +131,17 @@ impl PostgresBackend {
                     .into_iter()
                     .map(|bytes| {
                         Ok(TxHash::new(bytes.try_into().map_err(|err| {
-                            anyhow::anyhow!("Invalid database data for tx hash; check your database integrity: {err:?}")
+                            anyhow!("Invalid database data for tx hash; check your database integrity: {err:?}")
                         })?))
                     })
-                    .collect::<anyhow::Result<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>>>()?;
                 // Deserialize the full FullyBakedTx (including sequencing_data)
                 let txs = txs
                     .into_iter()
                     .map(|data| borsh::from_slice::<FullyBakedTx>(&data))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                Ok(PreferredSequencerReadBlob::Batch(
+                Ok(ReadBlob::Batch(
                     InProgressBatch {
                         sequence_number,
                         visible_slot_number_after_increase,
@@ -152,7 +153,7 @@ impl PostgresBackend {
                     .into(),
                 ))
             }
-            StoredBlob::Proof { data, blob_id } => Ok(PreferredSequencerReadBlob::Proof {
+            StoredBlob::Proof { data, blob_id } => Ok(ReadBlob::Proof {
                 sequence_number,
                 blob_id,
                 data,
@@ -171,7 +172,7 @@ impl PostgresBackend {
         &self,
         connection: &mut PgConnection,
         with_retries: bool,
-    ) -> anyhow::Result<Option<InProgressBatch>> {
+    ) -> Result<Option<InProgressBatch>> {
         let backoff_policy = self.maybe_retry_policy(with_retries).await;
         let Some((sequence_number, stored_blob_serialized)): Option<(i64, Vec<u8>)> = run_with_retries!(
             &backoff_policy,
@@ -192,15 +193,15 @@ impl PostgresBackend {
             .read_blob(sequence_number, stored_blob, connection, true)
             .await?
         {
-            PreferredSequencerReadBlob::Batch(batch) => Ok(Some(batch)),
-            PreferredSequencerReadBlob::Proof { .. } => panic!(
+            ReadBlob::Batch(batch) => Ok(Some(batch)),
+            ReadBlob::Proof { .. } => panic!(
                 "Expected a batch blob, but got a proof blob. This is a bug, please report it"
             ),
         }
     }
     /// Read all the current data as a single transaction. We have to attempt the whole transaction atomically,
     /// which is why this is wrapped in a helper function and any nested helpers have their retries disabled.
-    async fn current_data_transaction(&self) -> anyhow::Result<DbReadOutcome<DbSnapshotData>> {
+    async fn current_data_transaction(&self) -> Result<DbReadOutcome<SnapshotData>> {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
 
@@ -232,7 +233,7 @@ impl PostgresBackend {
 
         tx.commit().await?;
 
-        Ok(DbReadOutcome::Success(DbSnapshotData {
+        Ok(DbReadOutcome::Success(SnapshotData {
             completed_blobs,
             in_progress_batch,
         }))
@@ -316,7 +317,7 @@ impl PostgresBackend {
 }
 
 #[async_trait]
-impl PreferredSequencerDbBackend for PostgresBackend {
+impl DbBackend for PostgresBackend {
     async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> Result<(), DbError> {
         let blob_data = borsh::to_vec(&StoredBlob::Batch {
             blob_id: batch_to_store.blob_id,
@@ -525,7 +526,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         Ok(())
     }
 
-    async fn current_data(&self) -> anyhow::Result<DbSnapshotData, DbError> {
+    async fn current_data(&self) -> anyhow::Result<SnapshotData, DbError> {
         let res = run_with_retries!(
             &self.backoff_policy,
             self.current_data_transaction(),
