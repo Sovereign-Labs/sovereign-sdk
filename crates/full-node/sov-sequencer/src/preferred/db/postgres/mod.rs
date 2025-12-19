@@ -468,9 +468,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             "postgres_db_backend_prune"
         )?;
 
+        /*
         if result.rows_affected() == 0 {
             return Err(DbError::Replica);
-        }
+        }*/
 
         Ok(())
     }
