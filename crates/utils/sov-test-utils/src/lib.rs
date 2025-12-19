@@ -32,6 +32,7 @@ use sov_rollup_interface::execution_mode::{Native, Zk};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 pub use sov_state::ProverStorage;
 use sov_state::{DefaultStorageSpec, StateAccesses, Storage};
+pub use testcontainers::ContainerAsync;
 pub use {
     sov_bank, sov_chain_state, sov_paymaster, sov_rollup_apis, sov_sequencer_registry,
     sov_universal_wallet,

@@ -1,7 +1,7 @@
 use sov_sequencer::preferred::PostgresConfig;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, ImageExt};
-use testcontainers_modules::postgres::Postgres;
+pub use testcontainers::{ContainerAsync, ImageExt};
+pub use testcontainers_modules::postgres::Postgres;
 
 #[derive(Debug, thiserror::Error)]
 /// Error indicating problems when creating a Postgres container.

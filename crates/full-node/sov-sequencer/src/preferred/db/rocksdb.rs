@@ -8,7 +8,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash};
 
 use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
-use crate::preferred::db::{BatchToStore, InProgressBatch};
+use crate::preferred::db::{BatchToStore, DbError, InProgressBatch};
 
 #[derive(Debug)]
 pub struct RocksDbBackend {
@@ -20,10 +20,8 @@ pub struct RocksDbBackend {
     first_unpruned_sequence_number: SequenceNumber,
 }
 
-#[async_trait]
-impl PreferredSequencerDbBackend for RocksDbBackend {
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>> {
+impl RocksDbBackend {
+    async fn read_in_progress_batch_inner(&self) -> anyhow::Result<Option<InProgressBatch>> {
         let Some((sequence_number, stored_blob)) =
             self.db.get_async::<tables::InProgressBatch>(&()).await?
         else {
@@ -37,9 +35,18 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
             _ => panic!("In-progress batch must be a batch but is a proof blob; this is a bug, please report it"),
         }
     }
+}
+
+#[async_trait]
+impl PreferredSequencerDbBackend for RocksDbBackend {
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
+        let res = self.read_in_progress_batch_inner().await?;
+        Ok(res)
+    }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> anyhow::Result<()> {
+    async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> Result<(), DbError> {
         self.db
             .put_async::<tables::InProgressBatch>(
                 &(),
@@ -65,7 +72,7 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         tx_idx_within_batch: u64,
         tx: FullyBakedTx,
         hash: TxHash,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), DbError> {
         self.db
             .put_async::<tables::BatchContents>(
                 &(sequence_number, tx_idx_within_batch),
@@ -77,19 +84,21 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> anyhow::Result<()> {
+    async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<(), DbError> {
         let sequence_number = stored_batch.sequence_number;
         let stored_blob: StoredBlob = stored_batch.into();
         let mut s = SchemaBatch::new();
         s.delete::<tables::InProgressBatch>(&())?;
         s.put::<tables::CompletedBlobs>(&sequence_number, &stored_blob)?;
         self.db.write_schemas_async(&s).await?;
-
         Ok(())
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    async fn prune(&mut self, prune_up_to_including: SequenceNumber) -> anyhow::Result<()> {
+    async fn prune(
+        &mut self,
+        prune_up_to_including: SequenceNumber,
+    ) -> anyhow::Result<(), DbError> {
         // We first delete blob data, and only then batch contents. We'd rather have orphaned
         // data (no harm in that, it'll just get pruned eventually) than batches
         // incorrectly marked as empty.
@@ -131,7 +140,7 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), DbError> {
         self.db
             .put_async::<tables::CompletedBlobs>(
                 &sequence_number,
@@ -141,10 +150,10 @@ impl PreferredSequencerDbBackend for RocksDbBackend {
         Ok(())
     }
 
-    async fn current_data(&self) -> anyhow::Result<DbSnapshotData> {
+    async fn current_data(&self) -> anyhow::Result<DbSnapshotData, DbError> {
         // RocksDB doesn't need atomicity, and doesn't track event_ids
         let completed_blobs = self.read_completed_blobs().await?;
-        let in_progress_batch = self.read_in_progress_batch().await?;
+        let in_progress_batch = self.read_in_progress_batch_inner().await?;
         Ok(DbSnapshotData {
             completed_blobs,
             in_progress_batch,
