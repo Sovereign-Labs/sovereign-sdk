@@ -113,6 +113,9 @@ pub(crate) struct InnerMetrics {
     pub end_do_tx_time: std::time::Duration,
     pub close_batch_time: std::time::Duration,
     pub total_time: std::time::Duration,
+    pub outbound_send_time: std::time::Duration,
+    pub execution_time: std::time::Duration,
+    pub inbound_receive_time: std::time::Duration,
     pub count: u64,
 }
 
@@ -123,6 +126,7 @@ impl InnerMetrics {
             eprintln!("InnerMetrics: count={}. Accounted for={}, Total={}:", self.count, accounted_for.as_millis(), self.total_time.as_millis());
             eprintln!("  Details: pre_flight_time={}, mid_flight_time={}, apply_tx_time={}, post_flight_time={}, close_batch_time={}, end_do_tx_time={}", self.pre_flight_time.as_millis(), self.mid_flight_time.as_millis(), self.apply_tx_time.as_millis(), self.post_flight_time.as_millis(), self.close_batch_time.as_millis(), self.end_do_tx_time.as_millis());
             eprintln!("  Apply tx metrics: auth_and_send_tx_time={}, await_tx_time={}, apply_changes_time={}", self.auth_and_send_tx_time.as_millis(), self.await_tx_time.as_millis(), self.apply_changes_time.as_millis());
+            eprintln!("  Await tx metrics detailed: outbound_send_time={}, inbound_receive_time={}, execution_time={}", self.outbound_send_time.as_millis(), self.inbound_receive_time.as_millis(), self.execution_time.as_millis());
         }
         self.count += 1;
     }
@@ -745,7 +749,7 @@ where
         let mid_flight_end = std::time::Instant::now();
         temp_metrics.mid_flight_time += mid_flight_end.duration_since(mid_flight_start);
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx, false, temp_metrics).await;
-        let apply_tx_time = mid_flight_end.elapsed();
+        let apply_tx_time: std::time::Duration = mid_flight_end.elapsed();
         temp_metrics.apply_tx_time += apply_tx_time;
 
         let (

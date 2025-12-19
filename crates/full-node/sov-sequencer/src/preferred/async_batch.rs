@@ -1,6 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use sov_modules_api::state::TxScratchpad;
@@ -12,7 +10,8 @@ use sov_modules_api::{
 };
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{Sender};
+use crossbeam_channel::Receiver;
 use tokio::sync::oneshot;
 
 use super::{RejectReason, Spec, StateCheckpoint};
@@ -53,8 +52,8 @@ impl<S: Spec> MaybeAsyncBatch<S> {
                 result_channel,
                 admins: sequencer_admins,
                 tx_profit_threshold,
-                // This will get overwritten by the pre-flight hook.
-                unix_timestamp_micros: AtomicU64::new(0),
+                // This will get overwritten when we clone the responder for each tx
+                start_time: std::time::Instant::now(),
                 is_responsible_for_gating_admins,
             },
         }
@@ -71,6 +70,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
 pub enum MaybeAsyncBatchControlFlow<S: Spec> {
     Async {
         responder: AsyncBatchResponder<S>,
+        wait_to_receive: std::time::Duration,
         // If this is the main sequencer executor, it may benefit from using a precomputed
         // transaction change set from the worker warm-up executor.
         maybe_tx_change_set: Option<oneshot::Receiver<TxChangeSet>>,
@@ -84,6 +84,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
             MaybeAsyncBatchControlFlow::Async {
                 responder: _,
                 maybe_tx_change_set,
+                ..
             } => {
                 if let Some(mut rec) = maybe_tx_change_set.take() {
                     // If the worker executor provides cache values in time, we apply them to the main executor.
@@ -109,12 +110,14 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
             Self::Async {
                 responder,
                 maybe_tx_change_set: _,
+                wait_to_receive,
             } => responder.post_tx(
                 provisional_outcome,
                 dirty_scratchpad,
                 slot_gas_meter_before_tx,
                 gas_used,
                 execution_context,
+                wait_to_receive.clone(),
             ),
             Self::Sync => <NoOpControlFlow as sov_modules_api::InjectedControlFlow<S>>::post_tx(
                 &NoOpControlFlow,
@@ -137,6 +140,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
             Self::Async {
                 responder,
                 maybe_tx_change_set: _,
+                ..
             } => responder.pre_flight(runtime, context, call),
             Self::Sync => <NoOpControlFlow as InjectedControlFlow<S>>::pre_flight(
                 &NoOpControlFlow,
@@ -161,6 +165,8 @@ pub(crate) struct ExecutedTxResponse<S: Spec> {
     pub(crate) receipt: TransactionReceipt<S>,
     pub(crate) tx_changes: TxChangeSet,
     pub(crate) remaining_slot_gas: <S as Spec>::Gas,
+    pub(crate) wait_to_receive: std::time::Duration,
+    pub(crate) sent_at: std::time::Instant,
 }
 
 /// The channel responsible for notifying an async tx submitter of the txs result
@@ -172,7 +178,7 @@ pub struct AsyncBatchResponder<S: Spec> {
     /// The timestamp of the start of the latest tx in microseconds since the UNIX epoch
     /// We use an atomic u64 to avoid requiring a mutex. Note that this is set during the pre-flight hook.
     /// and read during the post-tx hook. It may not be meaningful before the pre-flight hook is called.
-    unix_timestamp_micros: AtomicU64,
+    start_time: std::time::Instant,
     is_responsible_for_gating_admins: bool,
 }
 
@@ -204,14 +210,10 @@ impl<S: Spec> AsyncBatchResponder<S> {
             result_channel: self.result_channel.clone(),
             admins: self.admins.clone(),
             tx_profit_threshold: self.tx_profit_threshold,
-            unix_timestamp_micros: AtomicU64::new(0),
+            start_time: std::time::Instant::now(),
             is_responsible_for_gating_admins: self.is_responsible_for_gating_admins,
         }
     }
-}
-
-fn time_now_to_u64() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years")
 }
 
 impl<S: Spec> AsyncBatchResponder<S> {
@@ -221,9 +223,6 @@ impl<S: Spec> AsyncBatchResponder<S> {
         context: &Context<S>,
         call: &<RT as DispatchCall>::Decodable,
     ) -> TxControlFlow<()> {
-        let start_time: u64 = time_now_to_u64();
-        self.unix_timestamp_micros
-            .store(start_time, Ordering::SeqCst);
         if !self.is_responsible_for_gating_admins
             || sender_is_allowed(
                 runtime,
@@ -236,7 +235,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             TxControlFlow::ContinueProcessing(())
         } else {
             let execution_time_micros =
-                time_now_to_u64() - self.unix_timestamp_micros.load(Ordering::SeqCst);
+                self.start_time.elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
             self.send(
                 S::Gas::zero(),
                 execution_time_micros,
@@ -253,9 +252,10 @@ impl<S: Spec> AsyncBatchResponder<S> {
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
         gas_used: <S as Spec>::Gas,
         execution_context: ExecutionContext,
+        wait_to_receive: std::time::Duration,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let execution_time_micros =
-            time_now_to_u64() - self.unix_timestamp_micros.load(Ordering::SeqCst);
+            self.start_time.elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
         let ProvisionalSequencerOutcome {
             reward,
             penalty,
@@ -275,6 +275,8 @@ impl<S: Spec> AsyncBatchResponder<S> {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),
                 remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
+                wait_to_receive,
+                sent_at: std::time::Instant::now(),
             };
 
             self.send(gas_used, execution_time_micros, Ok(response));
@@ -303,6 +305,8 @@ impl<S: Spec> AsyncBatchResponder<S> {
             receipt: receipt.clone(),
             tx_changes: dirty_scratchpad.tx_changes(execution_context),
             remaining_slot_gas,
+            wait_to_receive,
+            sent_at: std::time::Instant::now(),
         };
 
         self.send(gas_used, execution_time_micros, Ok(response));
@@ -361,17 +365,17 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 txs_receiver,
                 responder,
                 ..
-            } => Handle::current()
-                .block_on(txs_receiver.recv())
+            } => txs_receiver.recv()
                 .map(|mut item| {
                     (
                         item.tx,
                         MaybeAsyncBatchControlFlow::Async {
                             responder: responder.clone_for_tx(),
                             maybe_tx_change_set: item.receiver.take(),
+                            wait_to_receive: item.sent_at.elapsed(),
                         },
                     )
-                }),
+                }).ok(),
             MaybeAsyncBatch::Sync { batch } => batch
                 .next()
                 .map(|(item, _)| (item, MaybeAsyncBatchControlFlow::Sync)),

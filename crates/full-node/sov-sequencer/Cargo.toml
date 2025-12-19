@@ -57,6 +57,7 @@ openapiv3 = { workspace = true }
 backon = { workspace = true }
 flume = { workspace = true }
 time = "0.3"
+crossbeam-channel = "0.5.15"
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }

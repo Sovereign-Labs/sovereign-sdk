@@ -332,7 +332,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     async fn apply_tx_to_in_progress_batch_inner(
         &mut self,
-        baked_tx: FullyBakedTxWithMaybeChangeSet,
+        mut baked_tx: FullyBakedTxWithMaybeChangeSet,
         apply_changes_locally: bool, // During replay, we need to keep an extra local copy of the entire changeset to swap in with the new executor. 
         temp_metrics: &mut InnerMetrics,
     ) -> Result<
@@ -353,7 +353,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         })?;
         let call = Rt::wrap_call(call);
 
-        if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
+        baked_tx.sent_at = std::time::Instant::now();
+
+        if let Err(crossbeam_channel::TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
                 gas_used: <S as Spec>::Gas::zero(),
@@ -385,6 +387,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             receipt,
             tx_changes,
             remaining_slot_gas,
+            wait_to_receive,
+            sent_at,
         } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
             execution_time_micros,
             gas_used,
@@ -393,6 +397,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 call: call_message_repr::<Rt>(&call),
             },
         })?;
+
+        temp_metrics.outbound_send_time += wait_to_receive;
+        temp_metrics.inbound_receive_time += sent_at.elapsed();
+        temp_metrics.execution_time += std::time::Duration::from_micros(execution_time_micros);
 
         if !receipt.receipt.is_successful() {
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -602,7 +610,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         let (setup_sender, setup_receiver) = oneshot::channel();
-        let (tx_sender, tx_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
+        let (tx_sender, tx_receiver) = crossbeam_channel::bounded(Self::MAX_BUFFERED_TXS);
         let (result_sender, result_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
 
         let handle = tokio::runtime::Handle::current().spawn_blocking({
@@ -844,7 +852,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 #[derive(Debug)]
 struct BackgroundTaskState<S: Spec> {
     handle: JoinHandle<BlockExecutionOutput<S>>,
-    tx_sender: mpsc::Sender<FullyBakedTxWithMaybeChangeSet>,
+    tx_sender: crossbeam_channel::Sender<FullyBakedTxWithMaybeChangeSet>,
     result_receiver: mpsc::Receiver<AsyncBatchResult<S>>,
 }
 
@@ -864,7 +872,7 @@ struct RollupBlockTaskContext<S: Spec> {
     visible_increase: VisibleSlotNumberIncrease,
     // Channels
     // --------
-    tx_receiver: mpsc::Receiver<FullyBakedTxWithMaybeChangeSet>,
+    tx_receiver: crossbeam_channel::Receiver<FullyBakedTxWithMaybeChangeSet>,
     setup_sender: oneshot::Sender<ChangeSet>,
     result_sender: mpsc::Sender<AsyncBatchResult<S>>,
     shutdown_notifier: mpsc::Sender<()>,

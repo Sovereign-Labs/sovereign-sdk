@@ -38,12 +38,13 @@ pub struct FullyBakedTxWithMaybeChangeSet {
     /// Then, the worker will send the computed changeset through this channel,  
     /// allowing the main sequencer executor to reuse these values before executing the transaction.
     pub receiver: Option<oneshot::Receiver<TxChangeSet>>,
+    pub sent_at: std::time::Instant,
 }
 
 impl FullyBakedTxWithMaybeChangeSet {
     /// Creates new `FullyBakedTxWithMaybeChangeSet`
     pub fn new(tx: FullyBakedTx) -> Self {
-        Self { tx, receiver: None }
+        Self { tx, receiver: None, sent_at: std::time::Instant::now() }
     }
 }
 
@@ -106,7 +107,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         sequence_number: u64,
     ) -> FullyBakedTxWithMaybeChangeSet {
         let Some(inner) = &self.inner else {
-            return FullyBakedTxWithMaybeChangeSet { tx, receiver: None };
+            return FullyBakedTxWithMaybeChangeSet { tx, receiver: None, sent_at: std::time::Instant::now() };
         };
 
         // We need to update the `size` field before inserting the thx into tx_sender, otherwise the workers may see an outdated channel size.
@@ -144,6 +145,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         FullyBakedTxWithMaybeChangeSet {
             tx,
             receiver: maybe_receiver,
+            sent_at: std::time::Instant::now(),
         }
     }
 
