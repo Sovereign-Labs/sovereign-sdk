@@ -11365,8 +11365,10 @@ dependencies = [
  "alloy-rpc-types-eth",
  "alloy-sol-types",
  "anyhow",
+ "arbitrary",
  "async-trait",
  "hex",
+ "proptest",
 ]
 
 [[package]]
