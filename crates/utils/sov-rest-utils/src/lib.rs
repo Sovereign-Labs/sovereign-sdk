@@ -37,7 +37,7 @@ use axum::extract::ws::WebSocket;
 use axum::extract::Request;
 use axum::http::{HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::{Json, Router};
+use axum::{Error, Json, Router};
 pub use axum_extractors::{Path, Query};
 pub use filter::{Filter, FilterError, FilterQuery};
 use futures::{SinkExt, StreamExt};
@@ -255,6 +255,58 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
 
     tracing::trace!("Closing websocket subscription");
     socket.close().await.ok();
+}
+
+/// A message that can be received via websocket.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct WsMessage<Contents> {
+    /// The message id.
+    pub id: u64,
+    /// The contents of the message.
+    pub contents: Contents,
+}
+
+/// Sends a JSON message over a WebSocket, panicing on serialization failure
+pub async fn send_json<Json: Serialize>(socket: &mut WebSocket, json: Json) -> Result<(), Error> {
+    let serialized = match serde_json::to_string(&json) {
+        Ok(serialized) => serialized,
+        Err(err) => {
+            error!(
+                ?err,
+                "Failed to serialize data for WebSocket; this is a bug, please report it"
+            );
+            panic!("Failed to serialize data for WebSocket; this is a bug, please report it");
+        }
+    };
+    socket.send(serialized.into()).await
+}
+
+#[derive(Debug, Clone, Copy)]
+/// An error that indicates that the client should be disconnected and the connection should be closed.
+pub struct UnrecoverableWsError;
+
+/// Sends a bad request error to the client and returns an UnrecoverableWsError if the message cannot be sent.
+pub async fn handle_bad_ws_request(
+    socket: &mut WebSocket,
+    ip_addr: std::net::IpAddr,
+    error: impl ToString,
+) -> Result<(), UnrecoverableWsError> {
+    if let Err(err) = send_json(
+        socket,
+        &ErrorObject {
+            status: StatusCode::BAD_REQUEST,
+            message: "Invalid websocket message".to_string(),
+            details: json_obj!({
+                "error": error.to_string(),
+            }),
+        },
+    )
+    .await
+    {
+        tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+        return Err(UnrecoverableWsError);
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -10,19 +10,51 @@ use backon::{ExponentialBuilder, Retryable};
 use base64::prelude::*;
 use borsh::BorshSerialize;
 use futures::stream::BoxStream;
+use futures::stream::SplitSink;
+use futures::SinkExt;
 use futures::StreamExt;
 use sov_modules_api::RawTx;
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::node::ledger_api::{FinalityStatus, IncludeChildren};
 use sov_rollup_interface::zk::aggregated_proof;
 use sov_rollup_interface::TxHash;
-use tokio_tungstenite::connect_async;
+use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use types::TxInfoWithConfirmation;
 
 pub extern crate tokio_tungstenite;
 
 pub type WsSubscription<T> = Result<BoxStream<'static, anyhow::Result<T>>, WsError>;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WsMessage<T> {
+    pub id: u64,
+    pub contents: T,
+}
+
+pub struct TxWsSender {
+    sink: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+    id: u64,
+}
+
+impl TxWsSender {
+    pub async fn send(&mut self, tx: &RawTx) -> Result<(), WsError> {
+        let message = WsMessage {
+            id: self.id,
+            contents: types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(tx),
+            },
+        };
+        self.id += 1;
+        self.sink
+            .send(Message::Text(
+                serde_json::to_string(&message).unwrap().into(),
+            ))
+            .await?;
+        Ok(())
+    }
+}
 
 progenitor::generate_api!(
     spec = "./openapi-v3.yaml",
@@ -219,6 +251,76 @@ impl Client {
                 }
             })
             .boxed())
+    }
+
+    pub async fn connect_txs_ws(
+        &self,
+    ) -> Result<
+        (
+            TxWsSender,
+            BoxStream<'static, anyhow::Result<WsMessage<types::ApiAcceptedTx>>>,
+        ),
+        anyhow::Error,
+    > {
+        let (sink, stream) = self.connect_to_ws("/sequencer/txs/submit/ws").await?;
+        Ok((TxWsSender { sink, id: 0 }, stream))
+    }
+
+    pub async fn connect_to_ws<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<
+        (
+            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+            BoxStream<'static, anyhow::Result<T>>,
+        ),
+        anyhow::Error,
+    > {
+        // The base URL can't be used for WebSocket connections; we need to
+        // change the protocol.
+        let url = format!("{}{}", self.baseurl(), path).replace("http://", "ws://");
+
+        let (ws, _) = connect_async(url).await?;
+        let (write, read) = ws.split();
+
+        Ok((
+            write,
+            read.filter_map(|msg| async {
+                match msg {
+                    Ok(Message::Text(text)) => match serde_json::from_str(&text) {
+                        Ok(tx_status) => Some(Ok(tx_status)),
+                        Err(err) => Some(Err(anyhow::anyhow!(
+                            "failed to deserialize JSON {} into type: {}",
+                            text,
+                            err
+                        ))),
+                    },
+                    Ok(Message::Binary(data)) => {
+                        // Parse binary frame as UTF-8 JSON
+                        match std::str::from_utf8(&data) {
+                            Ok(text) => match serde_json::from_str(text) {
+                                Ok(tx_status) => Some(Ok(tx_status)),
+                                Err(err) => Some(Err(anyhow::anyhow!(
+                                    "failed to deserialize JSON from binary frame: {}",
+                                    err
+                                ))),
+                            },
+                            Err(err) => Some(Err(anyhow::anyhow!(
+                                "invalid UTF-8 in binary WebSocket frame: {}",
+                                err
+                            ))),
+                        }
+                    }
+                    // All other kinds of messages are ignored because
+                    // `tokio-tungstenite` ought to handle all
+                    // meta-communication messages (ping, pong, clonse) for us anyway.
+                    Ok(_) => None,
+                    // Errors are not handled here but passed to the caller.
+                    Err(err) => Some(Err(anyhow::anyhow!("{}", err))),
+                }
+            })
+            .boxed(),
+        ))
     }
 
     pub async fn get_next_nonce(&self, credential_id: &CredentialId) -> anyhow::Result<u64> {
