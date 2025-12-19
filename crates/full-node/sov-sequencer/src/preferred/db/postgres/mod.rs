@@ -61,7 +61,9 @@ macro_rules! run_with_retries {
 
 impl PostgresBackend {
     pub async fn connect(config: &PostgresConfig) -> anyhow::Result<Self> {
-        Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await
+        let backend = Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await?;
+        backend.try_update_leader().await?;
+        Ok(backend)
     }
 
     async fn connect_with_leader_timeout(
@@ -727,7 +729,7 @@ mod tests {
             node_id: String,
         ) -> Self {
             let leader_timeout = Duration::from_millis(100_000);
-            let postgres_config = config_from_postgres_container(&postgres, node_id.clone())
+            let postgres_config = config_from_postgres_container(postgres, node_id.clone())
                 .await
                 .unwrap();
             let backend =

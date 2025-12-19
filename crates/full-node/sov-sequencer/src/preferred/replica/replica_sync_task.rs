@@ -318,6 +318,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications_start_event_id() {
+        //sov_test_utils::initialize_logging();
         let test_data = vec![
             TestCase::Transaction(6),
             TestCase::Transaction(6),
