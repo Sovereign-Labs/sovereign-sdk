@@ -157,7 +157,7 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
-    cache_warm_up_executor: Option<CacheWarmUpExecutor<S>>,
+    cache_warm_up_executor: CacheWarmUpExecutor<S>,
     start_replica_task_notifier: EventReceiverStartNotifier,
 ) -> (
     SynchronizedSequencerState<S, Rt>,

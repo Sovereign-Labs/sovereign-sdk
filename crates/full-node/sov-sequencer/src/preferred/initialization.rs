@@ -138,18 +138,16 @@ where
             shutdown_sender: shutdown_sender.clone(),
         };
 
-        let cache_warm_up_executor = if !is_replica {
-            let (executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
-                latest_state_update.clone(),
-                rollup_exec_config.clone(),
-                config.clone(),
-            )
-            .await;
-            handles.extend(workers);
-            Some(executor)
-        } else {
-            None
-        };
+        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
+            latest_state_update.clone(),
+            rollup_exec_config.clone(),
+            config.clone(),
+        )
+        .await;
+
+        for worker in workers {
+            handles.push(worker);
+        }
 
         let (mut replica_task, start_replica_task_notifier) =
             ReplicaSyncTask::new(shutdown_sender.clone()).await?;
@@ -227,11 +225,11 @@ where
         // Launch replica sync task only for replicas.
         if is_replica {
             if let Some(postgres_config) = &preferred_config.postgres_config {
-                let handle = replica_task
+                let replica_task_handle = replica_task
                     .start(synchronized_state_updator, postgres_config)
                     .await;
-                handles.push(handle.data_fetcher);
-                handles.push(handle.sync_task);
+                handles.push(replica_task_handle.data_fetcher_handle);
+                handles.push(replica_task_handle.sync_task_handle);
             }
         }
 
