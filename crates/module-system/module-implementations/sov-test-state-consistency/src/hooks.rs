@@ -26,5 +26,7 @@ impl<S: Spec> BlockHooks for StateConsistency<S> {
         self.latest_rollup_height
             .set(&rollup_height.get(), state)
             .unwrap_infallible();
+
+        self.accessory_rollup_height.set(&rollup_height.get(), state).unwrap_infallible();
     }
 }

@@ -72,6 +72,10 @@ pub struct StateConsistency<S: Spec> {
     #[state]
     pub latest_rollup_height: StateValue<u64>,
 
+    /// The latest rollup height but in accessory state.
+    #[state]
+    pub accessory_rollup_height: AccessoryStateValue<u64>,
+
     /// The count of successful state assertions
     #[state]
     pub successful_assertions_count: StateValue<u64>,
