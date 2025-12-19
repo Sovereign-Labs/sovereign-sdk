@@ -11,7 +11,7 @@ use crate::common::AcceptedTx;
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerExecutorEventSendingMetrics};
 use crate::preferred::db::{Cache, ReadBatch};
 use crate::preferred::{
-    exit_rollup, Confirmation, Event, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
+    exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
 };
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
@@ -187,7 +187,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .map(|b| b.into())
     }
 
-    pub(crate) fn subscribe_to_events(&mut self, sender: mpsc::Sender<Event>) {
+    pub(crate) fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
         self.cache.subscribe_to_events(sender);
     }
 

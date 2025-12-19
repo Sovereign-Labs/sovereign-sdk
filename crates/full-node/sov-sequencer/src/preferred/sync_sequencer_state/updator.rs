@@ -6,7 +6,7 @@ use crate::preferred::sync_sequencer_state::Message;
 use crate::preferred::AcceptTxError;
 use crate::preferred::AcceptedTx;
 use crate::preferred::Confirmation;
-use crate::preferred::Event;
+use crate::preferred::DbEvent;
 use crate::preferred::FetchBatches;
 use crate::preferred::PreferredSeqOperation;
 use crate::preferred::ProcessFinalCatchupData;
@@ -150,7 +150,7 @@ where
     pub(crate) async fn final_catchup_msg(
         &self,
         info: StateUpdateInfo<S::Storage>,
-        db_event_subscription: mpsc::Receiver<Event>,
+        db_event_subscription: mpsc::Receiver<DbEvent>,
         executor: Box<RollupBlockExecutor<S, Rt>>,
         node_state_root: <S::Storage as Storage>::Root,
         data: ProcessFinalCatchupData,

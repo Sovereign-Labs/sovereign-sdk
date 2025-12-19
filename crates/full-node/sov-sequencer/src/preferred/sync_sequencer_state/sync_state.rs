@@ -20,7 +20,7 @@ use crate::preferred::SequencerStateUpdatorError;
 use crate::preferred::StateUpdateNotification;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
-    slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, Event,
+    slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, DbEvent,
     PreferredBatchToReplay, PreferredSeqOperation, PreferredSequencerFetchBatchesToReplayMetrics,
     ReadBatch,
 };
@@ -591,7 +591,7 @@ where
     async fn process_final_catchup(
         &mut self,
         info: StateUpdateInfo<S::Storage>,
-        mut db_event_subscription: mpsc::Receiver<Event>,
+        mut db_event_subscription: mpsc::Receiver<DbEvent>,
         mut executor: Box<RollupBlockExecutor<S, Rt>>,
         node_state_root: <S::Storage as Storage>::Root,
         mut data: ProcessFinalCatchupData,
@@ -959,7 +959,7 @@ fn validate_db_data_from_replica<S: Spec>(
 pub(crate) enum Flow {
     Break {
         in_progress_batch: Option<ReadBatch>,
-        subscription: mpsc::Receiver<Event>,
+        subscription: mpsc::Receiver<DbEvent>,
         fetch_in_progress_batch_time: Duration,
     },
     Continue {

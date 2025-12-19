@@ -163,7 +163,7 @@ impl ReadBlob {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Event {
+pub(crate) enum DbEvent {
     TxAccepted(FullyBakedTx, TxHash),
     BatchStarted {
         sequence_number: SequenceNumber,
@@ -177,7 +177,7 @@ pub(crate) enum Event {
 pub struct Cache {
     completed_blobs: VecDeque<ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
-    event_stream: Option<mpsc::Sender<Event>>,
+    event_stream: Option<mpsc::Sender<DbEvent>>,
     shutdown_sender: watch::Sender<()>,
 }
 
@@ -226,11 +226,11 @@ impl Cache {
         batch.txs.push(tx.clone());
         batch.tx_hashes.push(hash);
         // If there are no receivers, we don't send the tx. This is as it should be.
-        self.send_event_if_necessary(Event::TxAccepted(tx, hash))
+        self.send_event_if_necessary(DbEvent::TxAccepted(tx, hash))
             .await;
     }
 
-    async fn send_event_if_necessary(&mut self, event: Event) {
+    async fn send_event_if_necessary(&mut self, event: DbEvent) {
         let Some(open_stream) = &self.event_stream else {
             return;
         };
@@ -281,7 +281,7 @@ impl Cache {
             tx_hashes: vec![],
         });
 
-        self.send_event_if_necessary(Event::BatchStarted {
+        self.send_event_if_necessary(DbEvent::BatchStarted {
             sequence_number,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
@@ -306,7 +306,7 @@ impl Cache {
             sequence_number,
             data,
         });
-        self.send_event_if_necessary(Event::ProofBlobAccepted(sequence_number))
+        self.send_event_if_necessary(DbEvent::ProofBlobAccepted(sequence_number))
             .await;
     }
 
@@ -329,7 +329,7 @@ impl Cache {
         self.completed_blobs
             .push_back(ReadBlob::Batch(batch.clone()));
 
-        self.send_event_if_necessary(Event::BatchClosed(sequence_number))
+        self.send_event_if_necessary(DbEvent::BatchClosed(sequence_number))
             .await;
 
         // Update the metrics.
@@ -353,7 +353,7 @@ impl Cache {
         }
     }
 
-    pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<Event>) {
+    pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
         self.event_stream = Some(sender);
     }
 }

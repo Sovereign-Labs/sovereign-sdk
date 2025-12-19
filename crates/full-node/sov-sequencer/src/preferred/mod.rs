@@ -81,7 +81,7 @@ use crate::common::{
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
-use crate::preferred::db::Event;
+use crate::preferred::db::DbEvent;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;
