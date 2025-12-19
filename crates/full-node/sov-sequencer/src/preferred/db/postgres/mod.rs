@@ -202,7 +202,7 @@ impl PostgresBackend {
     /// which is why this is wrapped in a helper function and any nested helpers have their retries disabled.
     async fn current_data_transaction(&self) -> anyhow::Result<DbReadOutcome<DbSnapshotData>> {
         let mut tx = self.pool.begin().await?;
-        let maybe_leader = self.get_sequencer_leader_inner().await?;
+        let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
 
         if !self.is_leader(maybe_leader) {
             return Ok(DbReadOutcome::AbortedBecauseReplica);
@@ -269,25 +269,41 @@ impl PostgresBackend {
         Ok(res)
     }
 
-    pub(crate) async fn get_sequencer_leader(
-        &self,
-    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
-        let res = run_with_retries!(
-            &self.backoff_policy,
-            self.get_sequencer_leader_inner(),
-            "postgres_db_get_sequencer_leader"
-        )?;
+    async fn prune_inner(&self, prune_up_to_including: SequenceNumber) -> anyhow::Result<bool> {
+        let mut tx = self.pool.begin().await?;
+        let prune_up_to_including: i64 = prune_up_to_including.saturating_add(1).try_into()?;
 
-        Ok(res)
+        let result = sqlx::query(
+            "WITH blobs_deleted AS (
+                    DELETE FROM proof_blobs
+                    WHERE sequence_number <= $1
+                    AND is_leader($2))
+                DELETE FROM events
+                    WHERE sequence_number <= $1 AND is_leader($2);",
+        )
+        .bind(prune_up_to_including)
+        .bind(&self.node_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
+            return Ok(self.is_leader(maybe_leader));
+        }
+        tx.commit().await?;
+        Ok(true)
     }
 
-    async fn get_sequencer_leader_inner(&self) -> Result<Option<SequencerLeader>, sqlx::Error> {
+    async fn get_sequencer_leader_inner(
+        &self,
+        connection: &mut PgConnection,
+    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
         sqlx::query_as::<_, SequencerLeader>(
             "SELECT node_id, last_updated
                 FROM sequencer_leader
                 WHERE singleton = 1",
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(connection)
         .await
     }
 
@@ -451,47 +467,26 @@ impl PreferredSequencerDbBackend for PostgresBackend {
     }
 
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
-        // Compound CTE statement to avoid multiple roundtrips
-        let result = run_with_retries!(
+        let is_leader = run_with_retries!(
             &self.backoff_policy,
-            sqlx::query(
-                "WITH blobs_deleted AS (
-                    DELETE FROM proof_blobs
-                    WHERE sequence_number <= $1
-                    AND is_leader($2))
-                DELETE FROM events
-                    WHERE sequence_number <= $1 AND is_leader($2);",
-            )
-            .bind(i64::try_from(up_to_including)?)
-            .bind(&self.node_id)
-            .execute(&self.pool),
+            self.prune_inner(up_to_including),
             "postgres_db_backend_prune"
         )?;
 
-        /*
-        if result.rows_affected() == 0 {
+        if !is_leader {
             return Err(DbError::Replica);
-        }*/
+        }
 
         Ok(())
     }
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
         let mut tx = self.pool.begin().await?;
-        let maybe_leader = self.get_sequencer_leader().await?;
-
+        let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
         if !self.is_leader(maybe_leader) {
             return Err(DbError::Replica);
         }
 
-        let res: Result<
-            Option<
-                super::PreferredSequencerReadBatch<
-                    Vec<FullyBakedTx>,
-                    Vec<sov_modules_api::HexString<[u8; 32]>>,
-                >,
-            >,
-            anyhow::Error,
-        > = self
+        let res = self
             .read_in_progress_batch_with_connection(&mut tx, true)
             .await;
         tx.commit().await?;
@@ -580,7 +575,7 @@ mod tests {
             let leader_2 = db_2.maybe_update_leader().await;
             assert!(leader_2.is_none());
 
-            let leader = db_2.as_ref().get_sequencer_leader().await.unwrap().unwrap();
+            let leader = db_2.get_sequencer_leader().await.unwrap().unwrap();
             assert_eq!(updated_leader_1, leader);
         }
 
@@ -652,6 +647,8 @@ mod tests {
         db.as_mut().prune(2).await.unwrap();
         let data = db.as_mut().current_data().await.unwrap();
         assert!(data.is_empty());
+
+        db.as_mut().prune(2).await.unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -747,6 +744,15 @@ mod tests {
 
         async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
             self.backend.try_update_leader().await.unwrap()
+        }
+
+        pub(crate) async fn get_sequencer_leader(
+            &self,
+        ) -> Result<Option<SequencerLeader>, sqlx::Error> {
+            let mut tx = self.backend.pool.begin().await?;
+            let res = self.backend.get_sequencer_leader_inner(&mut tx).await?;
+            tx.commit().await?;
+            Ok(res)
         }
     }
 
