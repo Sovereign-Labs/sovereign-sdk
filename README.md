@@ -9,7 +9,7 @@
 
 ## What is the Sovereign SDK?
 
-The Sovereign SDK is a flexible toolkit for building rollups. It provides real time (sub 10ms) soft-confirmations and excellent performance (thousands of TPS) while giving developers
+The Sovereign SDK is a flexible toolkit for building rollups. It provides real time (1.2 ms median, p99 < 10 ms) soft-confirmations and massive performance (30k+ of UOPS) while giving developers
 full control over their application logic.
 
 Key features include...

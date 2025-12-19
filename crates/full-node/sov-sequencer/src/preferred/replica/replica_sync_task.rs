@@ -144,8 +144,8 @@ impl ReplicaSyncTask {
 mod tests {
     use super::*;
     use crate::preferred::db::postgres::PostgresBackend;
-    use crate::preferred::db::Backend;
     use crate::preferred::db::BatchToStore;
+    use crate::preferred::db::DbBackend;
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
@@ -318,6 +318,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications_start_event_id() {
+        //sov_test_utils::initialize_logging();
         let test_data = vec![
             TestCase::Transaction(6),
             TestCase::Transaction(6),

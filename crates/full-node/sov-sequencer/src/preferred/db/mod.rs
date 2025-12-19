@@ -33,12 +33,30 @@ use tokio::sync::{mpsc, watch};
 use crate::common::WithCachedTxHashes;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 
+#[derive(Debug)]
+pub(crate) enum DbReadOutcome<T> {
+    Success(T),
+    AbortedBecauseReplica,
+}
+
+#[derive(Debug)]
+pub(crate) enum DbError {
+    Database(anyhow::Error),
+    Replica,
+}
+
+impl<T: Into<anyhow::Error>> From<T> for DbError {
+    fn from(error: T) -> Self {
+        DbError::Database(error.into())
+    }
+}
+
 // Don’t prune the data from the database immediately — give the replica some time to read it before it is pruned.
 const PRUNING_LAG: u64 = 10;
 
 #[async_trait]
-pub trait Backend: Send + Sync + 'static {
-    async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<()>;
+pub trait DbBackend: Send + Sync + 'static {
+    async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<(), DbError>;
 
     /// Calls to this method MUST be "sandwiched" between
     /// [`DbBackend::begin_rollup_block`] and
@@ -49,14 +67,14 @@ pub trait Backend: Send + Sync + 'static {
         tx_idx_within_batch: u64,
         tx: FullyBakedTx,
         hash: TxHash,
-    ) -> Result<()>;
+    ) -> anyhow::Result<(), DbError>;
 
     async fn batch_add_txs(
         &mut self,
         sequence_number_of_in_progress_batch: SequenceNumber,
         mut tx_idx_within_batch: u64,
         txs: &[(FullyBakedTx, TxHash)],
-    ) -> Result<()> {
+    ) -> anyhow::Result<(), DbError> {
         for (tx, hash) in txs {
             self.add_tx(
                 sequence_number_of_in_progress_batch,
@@ -70,28 +88,28 @@ pub trait Backend: Send + Sync + 'static {
         Ok(())
     }
 
-    async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<()>;
+    async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<(), DbError>;
 
-    async fn read_in_progress_batch(&self) -> Result<Option<InProgressBatch>>;
+    async fn read_in_progress_batch(&self) -> Result<Option<InProgressBatch>, DbError>;
 
     /// Reads completed blobs, in-progress batch, and latest event_id.
     /// Bundling this as a single function allows the Postgres backend to do this atomically, which
     /// is necessary to support replica initialization in the presence of concurrent writes.
-    async fn current_data(&self) -> Result<SnapshotData>;
+    async fn current_data(&self) -> Result<SnapshotData, DbError>;
 
     async fn add_proof_blob(
         &mut self,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
-    ) -> Result<()>;
+    ) -> Result<(), DbError>;
 
     /// Instructs the database it MAY delete all data up to the given
     /// [`SequenceNumber`] (included).
     ///
     /// This method exists because the sequencer has no use for data that is
     /// already finalized.
-    async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<()>;
+    async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError>;
 }
 
 /// The return type of `DbBackend::current_data()`.
@@ -100,6 +118,13 @@ pub trait Backend: Send + Sync + 'static {
 pub struct SnapshotData {
     pub completed_blobs: Vec<ReadBlob>,
     pub in_progress_batch: Option<InProgressBatch>,
+}
+
+impl SnapshotData {
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.completed_blobs.is_empty() && self.in_progress_batch.is_none()
+    }
 }
 
 /// See [`PreferredSequencerReadBlob::Batch`].
@@ -377,7 +402,7 @@ impl From<BatchToStore> for StoredBlob {
 }
 
 pub struct PreferredSequencerDb {
-    backend: Option<Box<dyn Backend>>,
+    backend: Option<Box<dyn DbBackend>>,
     shutdown_sender: watch::Sender<()>,
 }
 
@@ -387,7 +412,7 @@ impl PreferredSequencerDb {
         is_replica: Option<bool>,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
-    ) -> Result<(Self, bool)> {
+    ) -> anyhow::Result<(Self, bool)> {
         let is_replica = is_replica.unwrap_or(false);
         if is_replica {
             return Ok((
@@ -399,7 +424,7 @@ impl PreferredSequencerDb {
             ));
         }
 
-        let backend: Option<Box<dyn Backend>> = {
+        let backend: Option<Box<dyn DbBackend>> = {
             if let Some(postgres_config) = &postgres_config {
                 Some(Box::new(PostgresBackend::connect(postgres_config).await?))
             } else {
@@ -418,30 +443,41 @@ impl PreferredSequencerDb {
 
     pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, BlobsCache)> {
         if let Some(backend) = &self.backend {
-            let SnapshotData {
-                completed_blobs,
-                in_progress_batch,
-            } = backend.current_data().await?;
-
-            let completed_blobs = VecDeque::from(completed_blobs);
-
-            let sequence_number_of_next_blob = match (completed_blobs.back(), &in_progress_batch) {
-                (Some(blob), None) => blob.sequence_number() + 1,
-                (None, Some(batch)) => batch.sequence_number + 1,
-                (Some(blob), Some(batch)) => {
-                    std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
-                }
-                (None, None) => 0,
-            };
-
-            Ok((
-                sequence_number_of_next_blob,
-                BlobsCache::new(
+            match backend.current_data().await {
+                Ok(SnapshotData {
                     completed_blobs,
                     in_progress_batch,
-                    self.shutdown_sender.clone(),
-                ),
-            ))
+                }) => {
+                    let completed_blobs = VecDeque::from(completed_blobs);
+
+                    let sequence_number_of_next_blob =
+                        match (completed_blobs.back(), &in_progress_batch) {
+                            (Some(blob), None) => blob.sequence_number() + 1,
+                            (None, Some(batch)) => batch.sequence_number + 1,
+                            (Some(blob), Some(batch)) => {
+                                std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
+                            }
+                            (None, None) => 0,
+                        };
+
+                    Ok((
+                        sequence_number_of_next_blob,
+                        BlobsCache::new(
+                            completed_blobs,
+                            in_progress_batch,
+                            self.shutdown_sender.clone(),
+                        ),
+                    ))
+                }
+                Err(DbError::Database(err)) => Err(err),
+                Err(DbError::Replica) => {
+                    tracing::error!(
+                        "initial_data: The primary has become a replica. Shutting down."
+                    );
+                    exit_rollup(&self.shutdown_sender).await;
+                    unreachable!()
+                }
+            }
         } else {
             Ok((
                 0, // TODO this will be revisited when we enable the replica sync task.
@@ -462,9 +498,12 @@ impl PreferredSequencerDb {
         tx_idx_within_batch: u64,
     ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend
+            if let Err(err) = backend
                 .batch_add_txs(sequence_number, tx_idx_within_batch, &txs)
-                .await?;
+                .await
+            {
+                return Err(self.check_replica_err(err).await);
+            }
         }
 
         Ok(())
@@ -477,7 +516,7 @@ impl PreferredSequencerDb {
         visible_slots_to_advance: NonZero<u8>,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
-    ) -> Result<SequenceNumber> {
+    ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
             Self::debug_assert_in_progress_batch_is_none(
                 "Cached in-progress batch state (None) didn't match backend db state",
@@ -500,10 +539,24 @@ impl PreferredSequencerDb {
                 visible_slot_number_after_increase,
                 visible_slots_to_advance,
             };
-            backend.begin_rollup_block(batch_to_store).await?;
+
+            if let Err(err) = backend.begin_rollup_block(batch_to_store).await {
+                return Err(self.check_replica_err(err).await);
+            }
         }
 
-        Ok(sequence_number)
+        Ok(())
+    }
+
+    async fn check_replica_err(&self, err: DbError) -> anyhow::Error {
+        match err {
+            DbError::Database(err) => err,
+            DbError::Replica => {
+                tracing::error!("The primary has become a replica. Shutting down.");
+                exit_rollup(&self.shutdown_sender).await;
+                unreachable!()
+            }
+        }
     }
 
     #[tracing::instrument(skip_all, level = "info")]
@@ -512,20 +565,25 @@ impl PreferredSequencerDb {
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
         sequence_number: SequenceNumber,
-    ) -> Result<SequenceNumber> {
+    ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend
+            if let Err(err) = backend
                 .add_proof_blob(sequence_number, blob_id, data.clone())
-                .await?;
+                .await
+            {
+                return Err(self.check_replica_err(err).await);
+            };
         }
 
-        Ok(sequence_number)
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, level = "info")]
     pub(crate) async fn terminate_batch(&mut self, batch: BatchToStore) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend.end_rollup_block(batch).await?;
+            if let Err(err) = backend.end_rollup_block(batch).await {
+                return Err(self.check_replica_err(err).await);
+            };
             Self::debug_assert_in_progress_batch_is_none(
                 "Backend didn't remove in-progress batch from database when ending rollup block",
                 backend,
@@ -541,7 +599,9 @@ impl PreferredSequencerDb {
     pub(super) async fn prune_db(&mut self, prune_up_to_including: SequenceNumber) -> Result<()> {
         if let Some(backend) = &mut self.backend {
             if let Some(prune_up_to_including) = prune_up_to_including.checked_sub(PRUNING_LAG) {
-                backend.prune(prune_up_to_including).await?;
+                if let Err(err) = backend.prune(prune_up_to_including).await {
+                    return Err(self.check_replica_err(err).await);
+                }
             }
         }
         Ok(())
@@ -549,12 +609,12 @@ impl PreferredSequencerDb {
 
     async fn debug_assert_in_progress_batch_is_none(
         msg: &str,
-        backend: &mut Box<dyn Backend>,
+        backend: &mut Box<dyn DbBackend>,
         shutdown_sender: &watch::Sender<()>,
     ) {
         if cfg!(debug_assertions) {
             match backend.read_in_progress_batch().await {
-                Ok(None) => {}
+                Ok(_) => {}
                 other => {
                     tracing::error!("{msg}: {other:?}");
                     exit_rollup(shutdown_sender).await;
