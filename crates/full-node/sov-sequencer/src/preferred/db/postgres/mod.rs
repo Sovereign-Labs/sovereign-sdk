@@ -473,9 +473,9 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             "postgres_db_backend_prune"
         )?;
 
-        if !is_leader {
-            return Err(DbError::ReplicaDisallowed(Operation::Prune));
-        }
+        //if !is_leader {
+        return Err(DbError::ReplicaDisallowed(Operation::Prune));
+        //}
 
         Ok(())
     }
