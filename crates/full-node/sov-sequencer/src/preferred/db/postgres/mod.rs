@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
-use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
+use crate::preferred::db::{DbError, Operation};
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
@@ -348,7 +348,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::BeginBlock));
         }
         Ok(())
     }
@@ -397,7 +397,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::BatchAddTxs));
         }
 
         Ok(())
@@ -429,7 +429,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::AddTx));
         }
 
         Ok(())
@@ -460,7 +460,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::EndBlock));
         }
 
         Ok(())
@@ -474,7 +474,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if !is_leader {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::Prune));
         }
 
         Ok(())
@@ -483,7 +483,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
         if !self.is_leader(maybe_leader) {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::ReadBatch));
         }
 
         let res = self
@@ -519,7 +519,7 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed(Operation::AddProof));
         }
 
         Ok(())
@@ -534,7 +534,9 @@ impl PreferredSequencerDbBackend for PostgresBackend {
 
         match res {
             DbReadOutcome::Success(data) => Ok(data),
-            DbReadOutcome::AbortedBecauseReplica => Err(DbError::Replica),
+            DbReadOutcome::AbortedBecauseReplica => {
+                Err(DbError::ReplicaDisallowed(Operation::CurrentData))
+            }
         }
     }
 }
