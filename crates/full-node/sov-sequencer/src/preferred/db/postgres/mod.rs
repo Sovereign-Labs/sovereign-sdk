@@ -700,12 +700,9 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(matches!(
-            err,
-            DbError::ReplicaDisallowed(Operation::BeginBlock { self_node_id: _ })
-        ));
+        assert_err(err, &db_replica.node_id, &Operation::BeginBlock);
 
-        let res = db_replica
+        let err = db_replica
             .as_mut()
             .add_tx(
                 sequence_number,
@@ -713,28 +710,49 @@ mod tests {
                 FullyBakedTx::new(vec![1, 2, 3]),
                 TxHash::new([1; 32]),
             )
-            .await;
+            .await
+            .unwrap_err();
 
-        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
+        assert_err(err, &db_replica.node_id, &Operation::AddTx);
 
-        let res = db_replica
+        let err = db_replica
             .as_mut()
             .batch_add_txs(
                 sequence_number,
                 2,
                 &[(FullyBakedTx::new(vec![4, 5, 6]), TxHash::new([1; 32]))],
             )
-            .await;
-        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
+            .await
+            .unwrap_err();
 
-        let res = db_replica.as_mut().end_rollup_block(batch_to_store).await;
-        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
+        assert_err(err, &db_replica.node_id, &Operation::BatchAddTxs);
 
-        let res = db_replica.as_mut().prune(2).await;
-        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
+        let err = db_replica
+            .as_mut()
+            .end_rollup_block(batch_to_store)
+            .await
+            .unwrap_err();
 
-        let res = db_replica.as_mut().current_data().await;
-        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
+        assert_err(err, &db_replica.node_id, &Operation::EndBlock);
+
+        let err = db_replica.as_mut().prune(2).await.unwrap_err();
+        assert_err(err, &db_replica.node_id, &Operation::Prune);
+
+        let err = db_replica.as_mut().current_data().await.unwrap_err();
+        assert_err(err, &db_replica.node_id, &Operation::CurrentData);
+    }
+
+    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &Operation) -> () {
+        match &err {
+            DbError::ReplicaDisallowed {
+                self_node_id,
+                operation,
+            } => {
+                assert_eq!(self_node_id, expected_node_id);
+                assert_eq!(operation, expected_operation);
+            }
+            DbError::Database(_) => unreachable!("DbError::Database not allowed in test"),
+        }
     }
 
     struct DB {

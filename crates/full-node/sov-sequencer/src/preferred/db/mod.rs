@@ -38,7 +38,7 @@ pub(crate) enum DbReadOutcome<T> {
     AbortedBecauseReplica,
 }
 
-#[derive(Debug, strum::Display)]
+#[derive(Debug, PartialEq, strum::Display)]
 pub(crate) enum Operation {
     BeginBlock,
     BatchAddTxs,
