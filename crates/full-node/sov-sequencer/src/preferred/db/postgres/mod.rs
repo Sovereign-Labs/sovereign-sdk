@@ -737,7 +737,7 @@ mod tests {
 
         assert_err(err, &db_replica.node_id, &Operation::BatchAddTxs);
 
-        let err = db
+        let err = db_replica
             .as_mut()
             .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
             .await
