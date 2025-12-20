@@ -523,11 +523,16 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
-                "WITH blob_insert AS (
-                    INSERT INTO proof_blobs (sequence_number, borsh_value) VALUES ($1, $2)
-             )
-             INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) 
-             SELECT $1, 'new_proof', NULL, NULL, NULL",
+                "
+                WITH blob_insert AS (
+                    INSERT INTO proof_blobs (sequence_number, borsh_value)
+                    SELECT $1, $2
+                    WHERE is_leader($3)
+                    RETURNING sequence_number
+                )
+                INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+                SELECT bi.sequence_number, 'new_proof', NULL, NULL, NULL
+                FROM blob_insert bi",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
@@ -664,6 +669,11 @@ mod tests {
             .await
             .unwrap();
 
+        db.as_mut()
+            .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
+            .await
+            .unwrap();
+
         db.as_mut().end_rollup_block(batch_to_store).await.unwrap();
 
         let data = db.as_mut().current_data().await.unwrap();
@@ -726,6 +736,14 @@ mod tests {
             .unwrap_err();
 
         assert_err(err, &db_replica.node_id, &Operation::BatchAddTxs);
+
+        let err = db
+            .as_mut()
+            .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
+            .await
+            .unwrap_err();
+
+        assert_err(err, &db_replica.node_id, &Operation::AddProof);
 
         let err = db_replica
             .as_mut()
