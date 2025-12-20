@@ -324,7 +324,6 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             visible_slots_to_advance: batch_to_store.visible_slots_to_advance,
         })?;
 
-        // Compound CTE statement to avoid multiple roundtrips
         let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
@@ -348,7 +347,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::ReplicaDisallowed(Operation::BeginBlock));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::BeginBlock,
+            });
         }
         Ok(())
     }
@@ -397,7 +399,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::ReplicaDisallowed(Operation::BatchAddTxs));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::BatchAddTxs,
+            });
         }
 
         Ok(())
@@ -429,7 +434,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::ReplicaDisallowed(Operation::AddTx));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::AddTx,
+            });
         }
 
         Ok(())
@@ -460,7 +468,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::ReplicaDisallowed(Operation::EndBlock));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::EndBlock,
+            });
         }
 
         Ok(())
@@ -473,9 +484,12 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             "postgres_db_backend_prune"
         )?;
 
-        //if !is_leader {
-        return Err(DbError::ReplicaDisallowed(Operation::Prune));
-        //}
+        if !is_leader {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::Prune,
+            });
+        }
 
         Ok(())
     }
@@ -483,7 +497,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
         if !self.is_leader(maybe_leader) {
-            return Err(DbError::ReplicaDisallowed(Operation::ReadBatch));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::ReadBatch,
+            });
         }
 
         let res = self
@@ -519,7 +536,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::ReplicaDisallowed(Operation::AddProof));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: Operation::AddProof,
+            });
         }
 
         Ok(())
@@ -535,7 +555,10 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         match res {
             DbReadOutcome::Success(data) => Ok(data),
             DbReadOutcome::AbortedBecauseReplica => {
-                Err(DbError::ReplicaDisallowed(Operation::CurrentData))
+                return Err(DbError::ReplicaDisallowed {
+                    self_node_id: self.node_id.clone(),
+                    operation: Operation::CurrentData,
+                });
             }
         }
     }
@@ -671,8 +694,16 @@ mod tests {
 
         db_leader.maybe_update_leader().await.unwrap();
 
-        let res = db_replica.as_mut().begin_rollup_block(batch_to_store).await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        let err = db_replica
+            .as_mut()
+            .begin_rollup_block(batch_to_store)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            DbError::ReplicaDisallowed(Operation::BeginBlock { self_node_id: _ })
+        ));
 
         let res = db_replica
             .as_mut()
@@ -684,7 +715,7 @@ mod tests {
             )
             .await;
 
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
 
         let res = db_replica
             .as_mut()
@@ -694,16 +725,16 @@ mod tests {
                 &[(FullyBakedTx::new(vec![4, 5, 6]), TxHash::new([1; 32]))],
             )
             .await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
 
         let res = db_replica.as_mut().end_rollup_block(batch_to_store).await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
 
         let res = db_replica.as_mut().prune(2).await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
 
         let res = db_replica.as_mut().current_data().await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert!(matches!(res, Err(DbError::ReplicaDisallowed(_))));
     }
 
     struct DB {

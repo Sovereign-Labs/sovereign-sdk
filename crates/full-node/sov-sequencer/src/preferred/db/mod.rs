@@ -38,7 +38,7 @@ pub(crate) enum DbReadOutcome<T> {
     AbortedBecauseReplica,
 }
 
-#[derive(Debug)]
+#[derive(Debug, strum::Display)]
 pub(crate) enum Operation {
     BeginBlock,
     BatchAddTxs,
@@ -53,7 +53,10 @@ pub(crate) enum Operation {
 #[derive(Debug)]
 pub(crate) enum DbError {
     Database(anyhow::Error),
-    ReplicaDisallowed(Operation),
+    ReplicaDisallowed {
+        self_node_id: String,
+        operation: Operation,
+    },
 }
 
 impl<T: Into<anyhow::Error>> From<T> for DbError {
@@ -484,9 +487,13 @@ impl PreferredSequencerDb {
                     ))
                 }
                 Err(DbError::Database(err)) => Err(err),
-                Err(DbError::ReplicaDisallowed(operation)) => {
+                Err(DbError::ReplicaDisallowed {
+                    self_node_id,
+                    operation,
+                }) => {
                     tracing::error!(
-                        ?operation,
+                        %self_node_id,
+                        %operation,
                         "The primary has become a replica. Shutting down.",
                     );
                     exit_rollup(&self.shutdown_sender).await;
@@ -566,9 +573,13 @@ impl PreferredSequencerDb {
     async fn check_replica_err(&self, err: DbError) -> anyhow::Error {
         match err {
             DbError::Database(err) => err,
-            DbError::ReplicaDisallowed(operation) => {
+            DbError::ReplicaDisallowed {
+                self_node_id,
+                operation,
+            } => {
                 tracing::error!(
-                    ?operation,
+                    %self_node_id,
+                    %operation,
                     "The primary has become a replica. Shutting down.",
                 );
                 exit_rollup(&self.shutdown_sender).await;
