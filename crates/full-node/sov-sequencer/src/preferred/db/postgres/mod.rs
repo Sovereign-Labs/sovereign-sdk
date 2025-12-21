@@ -206,8 +206,10 @@ impl PostgresBackend {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
 
-        if !self.is_leader(maybe_leader) {
-            return Ok(DbReadOutcome::AbortedBecauseReplica);
+        if !self.is_leader(&maybe_leader) {
+            return Ok(DbReadOutcome::AbortedBecauseReplica {
+                db_replica: maybe_leader,
+            });
         }
 
         let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
@@ -271,7 +273,10 @@ impl PostgresBackend {
         Ok(res)
     }
 
-    async fn prune_inner(&self, prune_up_to_including: SequenceNumber) -> anyhow::Result<bool> {
+    async fn prune_inner(
+        &self,
+        prune_up_to_including: SequenceNumber,
+    ) -> anyhow::Result<DbReadOutcome<()>> {
         let mut tx = self.pool.begin().await?;
         let prune_up_to_including: i64 = prune_up_to_including.saturating_add(1).try_into()?;
 
@@ -290,28 +295,34 @@ impl PostgresBackend {
 
         if result.rows_affected() == 0 {
             let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
-            return Ok(self.is_leader(maybe_leader));
+            if self.is_leader(&maybe_leader) {
+                return Ok(DbReadOutcome::AbortedBecauseReplica {
+                    db_replica: maybe_leader,
+                });
+            }
         }
         tx.commit().await?;
-        Ok(true)
+        Ok(DbReadOutcome::Success(()))
     }
 
     async fn get_sequencer_leader_inner(
         &self,
         connection: &mut PgConnection,
-    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
-        sqlx::query_as::<_, SequencerLeader>(
+    ) -> Result<Option<String>, sqlx::Error> {
+        let maybe_leader: Option<SequencerLeader> = sqlx::query_as::<_, SequencerLeader>(
             "SELECT node_id, last_updated
                 FROM sequencer_leader
                 WHERE singleton = 1",
         )
         .fetch_optional(connection)
-        .await
+        .await?;
+
+        Ok(maybe_leader.map(|l| l.node_id))
     }
 
-    fn is_leader(&self, maybe_leader: Option<SequencerLeader>) -> bool {
-        match maybe_leader {
-            Some(leader) => leader.node_id == self.node_id,
+    fn is_leader(&self, maybe_node_id: &Option<String>) -> bool {
+        match maybe_node_id {
+            Some(node_id) => node_id == &self.node_id,
             None => false,
         }
     }
@@ -482,16 +493,16 @@ impl DbBackend for PostgresBackend {
     }
 
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
-        let is_leader = run_with_retries!(
+        let outcome = run_with_retries!(
             &self.backoff_policy,
             self.prune_inner(up_to_including),
             "postgres_db_backend_prune"
         )?;
 
-        if !is_leader {
+        if let DbReadOutcome::AbortedBecauseReplica { db_replica } = outcome {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::Prune,
+                operation: Operation::Prune { db_replica },
             });
         }
 
@@ -500,7 +511,8 @@ impl DbBackend for PostgresBackend {
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
-        if !self.is_leader(maybe_leader) {
+
+        if !self.is_leader(&maybe_leader) {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
                 operation: Operation::ReadBatch,
@@ -564,10 +576,10 @@ impl DbBackend for PostgresBackend {
 
         match res {
             DbReadOutcome::Success(data) => Ok(data),
-            DbReadOutcome::AbortedBecauseReplica => {
+            DbReadOutcome::AbortedBecauseReplica { db_replica } => {
                 return Err(DbError::ReplicaDisallowed {
                     self_node_id: self.node_id.clone(),
-                    operation: Operation::CurrentData,
+                    operation: Operation::CurrentData { db_replica },
                 });
             }
         }
