@@ -269,7 +269,10 @@ impl PostgresBackend {
         Ok(res)
     }
 
-    async fn prune_inner(&self, prune_up_to_including: SequenceNumber) -> anyhow::Result<bool> {
+    async fn prune_inner(
+        &self,
+        prune_up_to_including: SequenceNumber,
+    ) -> anyhow::Result<DbReadOutcome<()>> {
         let mut tx = self.pool.begin().await?;
         let prune_up_to_including: i64 = prune_up_to_including.saturating_add(1).try_into()?;
 
@@ -288,10 +291,12 @@ impl PostgresBackend {
 
         if result.rows_affected() == 0 {
             let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
-            return Ok(self.is_leader(maybe_leader));
+            if self.is_leader(maybe_leader) {
+                return Ok(DbReadOutcome::AbortedBecauseReplica);
+            }
         }
         tx.commit().await?;
-        Ok(true)
+        return Ok(DbReadOutcome::Success(()));
     }
 
     async fn get_sequencer_leader_inner(
@@ -478,13 +483,13 @@ impl PreferredSequencerDbBackend for PostgresBackend {
     }
 
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
-        let is_leader = run_with_retries!(
+        let outcome = run_with_retries!(
             &self.backoff_policy,
             self.prune_inner(up_to_including),
             "postgres_db_backend_prune"
         )?;
 
-        if !is_leader {
+        if let DbReadOutcome::AbortedBecauseReplica = outcome {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
                 operation: Operation::Prune,
