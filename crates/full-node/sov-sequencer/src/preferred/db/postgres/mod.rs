@@ -622,8 +622,8 @@ mod tests {
             let leader_2 = db_2.maybe_update_leader().await;
             assert!(leader_2.is_none());
 
-            let leader = db_2.get_sequencer_leader().await.unwrap().unwrap();
-            assert_eq!(updated_leader_1, leader);
+            let leader_node_id = db_2.get_sequencer_leader().await.unwrap().unwrap();
+            assert_eq!(updated_leader_1.node_id, leader_node_id);
         }
 
         {
@@ -771,10 +771,22 @@ mod tests {
         assert_err(err, &db_replica.node_id, &Operation::EndBlock);
 
         let err = db_replica.as_mut().prune(2).await.unwrap_err();
-        assert_err(err, &db_replica.node_id, &Operation::Prune);
+        assert_err(
+            err,
+            &db_replica.node_id,
+            &Operation::Prune {
+                db_replica: Some(db_leader.node_id.clone()),
+            },
+        );
 
         let err = db_replica.as_mut().current_data().await.unwrap_err();
-        assert_err(err, &db_replica.node_id, &Operation::CurrentData);
+        assert_err(
+            err,
+            &db_replica.node_id,
+            &Operation::CurrentData {
+                db_replica: Some(db_leader.node_id.clone()),
+            },
+        );
     }
 
     fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &Operation) {
@@ -832,9 +844,7 @@ mod tests {
             self.backend.try_update_leader().await.unwrap()
         }
 
-        pub(crate) async fn get_sequencer_leader(
-            &self,
-        ) -> Result<Option<SequencerLeader>, sqlx::Error> {
+        pub(crate) async fn get_sequencer_leader(&self) -> Result<Option<String>, sqlx::Error> {
             let mut tx = self.backend.pool.begin().await?;
             let res = self.backend.get_sequencer_leader_inner(&mut tx).await?;
             tx.commit().await?;
