@@ -295,7 +295,7 @@ impl PostgresBackend {
 
         if result.rows_affected() == 0 {
             let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
-            if self.is_leader(&maybe_leader) {
+            if !self.is_leader(&maybe_leader) {
                 return Ok(DbReadOutcome::AbortedBecauseReplica {
                     db_replica: maybe_leader,
                 });
