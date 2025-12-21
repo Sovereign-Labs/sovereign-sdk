@@ -765,7 +765,7 @@ mod tests {
         assert_err(err, &db_replica.node_id, &Operation::CurrentData);
     }
 
-    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &Operation) -> () {
+    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &Operation) {
         match &err {
             DbError::ReplicaDisallowed {
                 self_node_id,
