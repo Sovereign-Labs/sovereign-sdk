@@ -149,7 +149,7 @@ where
         }
 
         let (mut replica_task, start_replica_task_notifier) =
-            ReplicaSyncTask::new(shutdown_sender.clone()).await?;
+            ReplicaSyncTask::new(shutdown_sender.clone(), seq_role).await?;
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let batch_execution_time_limit_micros =

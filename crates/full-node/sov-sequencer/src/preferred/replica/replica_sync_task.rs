@@ -1,3 +1,4 @@
+use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
@@ -37,16 +38,18 @@ pub(crate) struct ReplicaSyncTask {
 impl ReplicaSyncTask {
     pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
+        seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
-        Self::new_with_page_size(shutdown_sender, PAGE_SIZE).await
+        Self::new_with_page_size(shutdown_sender, PAGE_SIZE, seq_role).await
     }
 
     pub(crate) async fn new_with_page_size(
         shutdown_sender: watch::Sender<()>,
         page_size: usize,
+        seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
         let (start_replica_task_notifier, start_replica_task_receiver) =
-            EventReceiverStartNotifier::new();
+            EventReceiverStartNotifier::new(seq_role);
         Ok((
             Self {
                 shutdown_sender,

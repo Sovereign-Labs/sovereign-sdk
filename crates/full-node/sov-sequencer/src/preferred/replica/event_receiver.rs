@@ -1,9 +1,11 @@
+use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::row_to_event;
 use crate::preferred::replica::db_data::rows;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
+use crate::SequencerNotReadyDetails;
 use sov_rollup_interface::node::future_or_shutdown;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
 use sqlx::postgres::{PgListener, PgPoolOptions};
@@ -32,30 +34,61 @@ pub(crate) enum EventReceiverError {
 pub(crate) struct EventReceiverStartNotifier {
     notify: watch::Sender<()>,
     replica_processed_first_batch: bool,
+    seq_role: SequencerRole,
 }
 
 impl EventReceiverStartNotifier {
-    pub(crate) fn new() -> (Self, watch::Receiver<()>) {
+    pub(crate) fn new(seq_role: SequencerRole) -> (Self, watch::Receiver<()>) {
         let (notify, mut receiver) = watch::channel(());
         receiver.borrow_and_update();
         (
             Self {
                 notify,
                 replica_processed_first_batch: false,
+                seq_role,
             },
             receiver,
         )
     }
 
+    /// Notifies the replica sync task that it’s time to start processing leader sequencer DB events.
+    /// This method only has an effect when called on a replica sequencer, since the leader produces
+    /// the DB events rather than consuming them.
     pub(crate) fn notify(&self) {
+        if self.seq_role == SequencerRole::Leader {
+            return;
+        }
+
         let _ = self.notify.send(());
     }
 
-    pub(crate) fn replica_processed_first_batch(&self) -> bool {
-        self.replica_processed_first_batch
+    /// If the sequencer is in replica mode, we check whether the replica sync task has processed
+    /// its first batch, which indicates that all services are up and running.
+    /// For the leader, this method always returns Ok(()).
+    pub(crate) fn check_replica_status_or_ok_for_leader(
+        &self,
+    ) -> Result<(), SequencerNotReadyDetails> {
+        if self.seq_role == SequencerRole::Leader {
+            return Ok(());
+        }
+
+        if self.replica_processed_first_batch {
+            return Ok(());
+        }
+
+        return Err(SequencerNotReadyDetails::ReplicaNotReady);
     }
 
+    /// Marks that the replica has successfully processed its first batch of events.
+    ///
+    /// # Panics
+    /// Panics if this method is called on a leader sequencer.
     pub(crate) fn set_replica_processed_first_batch(&mut self) {
+        assert_eq!(
+            self.seq_role,
+            SequencerRole::Replica,
+            "set_replica_processed_first_batch can only be called on a Replica sequencer"
+        );
         self.replica_processed_first_batch = true;
     }
 }

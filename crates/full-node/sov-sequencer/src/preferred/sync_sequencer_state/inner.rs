@@ -442,13 +442,8 @@ where
             }
         }
 
-        if self.is_replica_role()
-            && !self
-                .start_replica_task_notifier
-                .replica_processed_first_batch()
-        {
-            return Err(SequencerNotReadyDetails::ReplicaNotReady);
-        }
+        self.start_replica_task_notifier
+            .check_replica_status_or_ok_for_leader()?;
 
         self.is_ready.as_ref().map_err(|details| details.clone())?;
         Ok(())
