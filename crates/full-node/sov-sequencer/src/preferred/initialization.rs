@@ -90,7 +90,25 @@ where
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
 
-        let blob_sender = if !is_replica_seq {
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
+            self.da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            is_replica_seq,
+        )
+        .await?;
+
+        if let Some(blob_sender_handle) = blob_sender_handle {
+            handles.push(blob_sender_handle);
+        }
+
+        /*
+
             let (blob_sender, handle) = PreferredBlobSender::new(
                 self.da,
                 ledger_db.clone(),
@@ -100,6 +118,7 @@ where
                 shutdown_sender.clone(),
                 Duration::from_secs(config.blob_processing_timeout_secs),
                 blobs_sender_channel.clone(),
+                is_replica_seq,
             )
             .await?;
             handles.push(handle);
@@ -107,6 +126,7 @@ where
         } else {
             None
         };
+        */
 
         let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
         let (state_root_handle, state_root_task) = StateRootTask::create::<Rt>(
@@ -123,10 +143,8 @@ where
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
-        let in_flight_blobs = blob_sender
-            .as_ref()
-            .map(|b| b.nb_of_in_flight_blobs())
-            .unwrap_or_default();
+
+        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
