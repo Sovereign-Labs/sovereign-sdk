@@ -2,7 +2,8 @@ use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::{
     decode_borsh_serialized_message, Context, DaSpec, DispatchCall, EncodeCall, Error, Event,
-    Genesis, MessageCodec, Module, ModuleInfo, Spec, StateValue, TxState, WorkingSet,
+    Genesis, MessageCodec, Module, ModuleInfo, SequencerType, Spec, StateValue, TxState,
+    WorkingSet,
 };
 use sov_state::ZkStorage;
 use sov_test_utils::{TestSpec, ZkTestSpec};
@@ -405,7 +406,7 @@ mod derive_dispatch {
             sequencer_da,
             None,
             ExecutionContext::Node,
-            true,
+            SequencerType::Preferred,
         );
 
         let value = 11;

@@ -14,6 +14,7 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
 use sov_modules_api::ExecutionContext;
+use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
@@ -268,7 +269,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
-        is_preferred_sequencer: bool,
+        sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
         // This should be resolved by the sequencer registry during blob selection
         let sender = self.accounts.resolve_sender_address(
@@ -283,7 +284,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             *sequencer,
             sequencing_data,
             execution_context,
-            is_preferred_sequencer,
+            sequencer_type,
         ))
     }
 
@@ -307,7 +308,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             *sequencer,
             None,
             execution_context,
-            false,
+            SequencerType::NonPreferred,
         ))
     }
 }

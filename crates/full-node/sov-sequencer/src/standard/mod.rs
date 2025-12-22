@@ -296,7 +296,7 @@ where
             &NoOpControlFlow,
             operating_mode,
             metrics,
-            false,
+            SequencerType::NonPreferred,
         );
 
         match res {

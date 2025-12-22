@@ -11,7 +11,7 @@ use sov_rollup_interface::{Bytes, TxHash};
 use sov_universal_wallet::UniversalWallet;
 
 use crate::transaction::Credentials;
-use crate::{Context, Spec, StateAccessor};
+use crate::{Context, SequencerType, Spec, StateAccessor};
 
 /// Authorizes transactions to be executed.
 pub trait TransactionAuthorizer<S: Spec> {
@@ -24,7 +24,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
-        is_preferred_sequencer: bool,
+        sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>>;
 
     /// Resolves the context for an unregistered transaction.

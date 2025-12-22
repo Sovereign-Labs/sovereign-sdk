@@ -6,7 +6,7 @@ use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::{Context, CryptoSpec, Module, ModuleInfo, Spec};
+use sov_modules_api::{Context, CryptoSpec, Module, ModuleInfo, SequencerType, Spec};
 use sov_revenue_share::{CallMessage as RevenueShareCallMessage, RevenueShare};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -652,7 +652,7 @@ fn test_is_preferred_sequencer() {
             random_da_address,
             None,
             ExecutionContext::Node,
-            true,
+            SequencerType::Preferred,
         );
 
         let is_preferred = revenue_share.is_preferred_sequencer(&ctx, state);

@@ -6,8 +6,8 @@ use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
 use sov_modules_api::ExecutionContext;
 use sov_modules_api::{
     decode_borsh_serialized_message, ApiStateAccessor, Context, DaSpec, DispatchCall, EncodeCall,
-    Genesis, MessageCodec, Module, ModuleId, ModuleInfo, Spec, StateCheckpoint, StateValue,
-    TxState,
+    Genesis, MessageCodec, Module, ModuleId, ModuleInfo, SequencerType, Spec, StateCheckpoint,
+    StateValue, TxState,
 };
 use sov_state::ZkStorage;
 use sov_test_utils::ZkTestSpec;
@@ -182,7 +182,7 @@ fn associated_types_nested() {
         sequencer_da,
         None,
         ExecutionContext::Node,
-        true,
+        SequencerType::Preferred,
     );
 
     runtime

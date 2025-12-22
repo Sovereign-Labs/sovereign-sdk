@@ -8,7 +8,9 @@ use sov_hyperlane_integration::test_recipient::Event;
 use sov_hyperlane_integration::{CallMessage, Ism, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::ExecutionContext;
-use sov_modules_api::{Address, BasicGasMeter, Context, GasPrice, GasUnit, HexString, TxEffect};
+use sov_modules_api::{
+    Address, BasicGasMeter, Context, GasPrice, GasUnit, HexString, SequencerType, TxEffect,
+};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
 use crate::runtime::{
@@ -92,7 +94,7 @@ fn dummy_context() -> Context<S> {
         [1; 32].into(),
         None,
         ExecutionContext::Node,
-        false,
+        SequencerType::NonPreferred,
     )
 }
 

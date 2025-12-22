@@ -41,7 +41,7 @@ pub fn process_tx_and_reward_prover<S, R, I, C>(
     injected_control_flow: &C,
     operating_mode: OperatingMode,
     mut metrics: AuthAndProcessMetrics,
-    is_preferred_sequencer: bool,
+    sequencer_type: SequencerType,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -77,7 +77,7 @@ where
         operating_mode,
         &mut metrics,
         &execution_context,
-        is_preferred_sequencer,
+        sequencer_type,
     );
 
     #[cfg(feature = "native")]
@@ -153,7 +153,7 @@ fn process_tx_and_reward_prover_inner<S, R, I, C>(
     operating_mode: OperatingMode,
     metrics: &mut AuthAndProcessMetrics,
     execution_context: &ExecutionContext,
-    is_preferred_sequencer: bool,
+    sequencer_type: SequencerType,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -180,7 +180,7 @@ where
         &mut pre_exec_working_set,
         raw_tx.sequencing_data.clone(),
         *execution_context,
-        is_preferred_sequencer,
+        sequencer_type,
     );
     metrics.timings.resolve_context_timer.end();
     metrics.timings.resolve_context_access_metrics = pre_exec_working_set.metrics().take();
@@ -419,8 +419,11 @@ where
     let mut accumulated_penalty = Amount::ZERO;
     let sequencer_address = batch_with_id.sequencer_address();
 
-    let mut sequencer_bond_per_tx = if is_preferred_sequencer {
-        SequencerBondForTx::Preferred(sequencer_bond)
+    let (mut sequencer_bond_per_tx, sequencer_type) = if is_preferred_sequencer {
+        (
+            SequencerBondForTx::Preferred(sequencer_bond),
+            SequencerType::Preferred,
+        )
     } else {
         // Split the bond evenly across all the transactions in the batch.
         let divisor = batch_with_id
@@ -431,7 +434,10 @@ where
             .checked_div(Amount::new(divisor))
             // SAFETY: We know that `divisor` is always greater than because we call `.max(1)` immediately` above.
             .expect("Divison by zero");
-        SequencerBondForTx::Standard(amount)
+        (
+            SequencerBondForTx::Standard(amount),
+            SequencerType::NonPreferred,
+        )
     };
     let initial_slot_gas_used = slot_gas_meter.total_gas_used();
 
@@ -478,7 +484,7 @@ where
             idx,
             &injected_control_flow,
             operating_mode,
-            is_preferred_sequencer,
+            sequencer_type,
         );
 
         let provisional_outcome = match outcome {
@@ -681,7 +687,7 @@ fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     idx: usize,
     injected_control_flow: &C,
     operating_mode: OperatingMode,
-    is_preferred_sequencer: bool,
+    sequencer_type: SequencerType,
 ) -> AuthAndProcessOutput<S, I>
 where
     S: Spec,
@@ -829,7 +835,7 @@ where
         injected_control_flow,
         operating_mode,
         metrics,
-        is_preferred_sequencer,
+        sequencer_type,
     );
 
     span.exit();

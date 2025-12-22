@@ -15,7 +15,7 @@ use sov_state::{Storage, StorageProof};
 use crate::gas::Gas;
 use crate::higher_kinded_types::Generic;
 use crate::transaction::Credentials;
-use crate::{PublicKeyExt, SignatureExt};
+use crate::{PublicKeyExt, SequencerType, SignatureExt};
 
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
 /// `Spec` is almost always implemented on a Context object; since all Modules are generic
@@ -167,8 +167,8 @@ pub struct Context<S: Spec> {
     gas_refund_recipient: S::Address,
     /// The execution context of the transaction.
     execution_context: ExecutionContext,
-    /// Whether the transaction was processed by the preferred sequencer.
-    is_preferred_sequencer: bool,
+    /// The type of sequencer that published the transaction.
+    sequencer_type: SequencerType,
 }
 
 impl<S: Spec> Context<S> {
@@ -207,9 +207,14 @@ impl<S: Spec> Context<S> {
         self.execution_context
     }
 
-    /// Returns whether the sequencer is the preferred sequencer.
+    /// Returns whether the sequencer of the current batch is the preferred sequencer.
     pub fn sequencer_is_preferred(&self) -> bool {
-        self.is_preferred_sequencer
+        self.sequencer_type == SequencerType::Preferred
+    }
+
+    /// Returns the type of sequencer that published the transaction.
+    pub fn sequencer_type(&self) -> SequencerType {
+        self.sequencer_type
     }
 
     /// Constructs a new Context with the provided sender as the payer.
@@ -220,7 +225,7 @@ impl<S: Spec> Context<S> {
         sequencer_da_address: <S::Da as DaSpec>::Address,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
-        is_preferred_sequencer: bool,
+        sequencer_type: SequencerType,
     ) -> Self {
         Self::with_payer(
             sender,
@@ -230,7 +235,7 @@ impl<S: Spec> Context<S> {
             sender,
             sequencing_data,
             execution_context,
-            is_preferred_sequencer,
+            sequencer_type,
         )
     }
 
@@ -243,7 +248,7 @@ impl<S: Spec> Context<S> {
         payer: S::Address,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
-        is_preferred_sequencer: bool,
+        sequencer_type: SequencerType,
     ) -> Self {
         Self {
             sender_credentials,
@@ -253,7 +258,7 @@ impl<S: Spec> Context<S> {
             gas_refund_recipient: payer,
             sequencing_data,
             execution_context,
-            is_preferred_sequencer,
+            sequencer_type,
         }
     }
 
@@ -279,6 +284,7 @@ pub type SovStateTransitionPublicData<S> = StateTransitionPublicData<
 
 #[cfg(feature = "arbitrary")]
 mod arbitrary {
+    use crate::common::SequencerType;
     use ::arbitrary::{Arbitrary, Unstructured};
     use sov_rollup_interface::{da::DaSpec, stf::ExecutionContext};
 
@@ -302,7 +308,7 @@ mod arbitrary {
                 sequencer_da_address,
                 None,
                 ExecutionContext::Node,
-                false,
+                SequencerType::NonPreferred,
             ))
         }
     }
