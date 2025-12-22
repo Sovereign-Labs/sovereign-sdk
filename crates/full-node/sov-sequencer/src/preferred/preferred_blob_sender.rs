@@ -38,15 +38,13 @@ impl<Da: DaService> PreferredBlobSender<Da> {
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         match seq_role {
-            SequencerRole::Replica => {
-                return Ok((
-                    Self {
-                        inner: None,
-                        nb_of_concurrent_blob_submissions,
-                    },
-                    None,
-                ));
-            }
+            SequencerRole::Replica => Ok((
+                Self {
+                    inner: None,
+                    nb_of_concurrent_blob_submissions,
+                },
+                None,
+            )),
             SequencerRole::Leader => {
                 // It's possible that sov-blob-sender's DB might miss some blob data at
                 // node startup due to:
