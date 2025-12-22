@@ -76,7 +76,7 @@ impl EventReceiverStartNotifier {
             return Ok(());
         }
 
-        return Err(SequencerNotReadyDetails::ReplicaNotReady);
+        Err(SequencerNotReadyDetails::ReplicaNotReady);
     }
 
     /// Marks that the replica has successfully processed its first batch of events.
