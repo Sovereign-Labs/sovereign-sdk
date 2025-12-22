@@ -140,6 +140,7 @@ where
             latest_state_update.clone(),
             rollup_exec_config.clone(),
             config.clone(),
+            seq_role,
         )
         .await;
 

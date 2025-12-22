@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::preferred::block_executor::RollupBlockExecutorErrorWithBudget;
 use crate::preferred::block_executor::StartBlockData;
+use crate::preferred::db::SequencerRole;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
@@ -151,8 +152,9 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        seq_role: SequencerRole,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        if seq_config.sequencer_kind_config.is_replica.unwrap_or(true) {
+        if seq_role == SequencerRole::Replica {
             return (Self { inner: None }, vec![]);
         }
 
