@@ -501,6 +501,7 @@ fn on_revert<S: Spec>(
     result: &ExecutionResult,
     context: &Context<S>,
 ) -> Result<(), anyhow::Error> {
+    #[cfg(feature = "native")]
     let publish_reverted_txs = EVM_EXECUTION_CONFIG
         .get()
         .map(|conf| {
@@ -510,6 +511,8 @@ fn on_revert<S: Spec>(
                 .publish_reverted_txs
         })
         .unwrap_or(false);
+    #[cfg(not(feature = "native"))]
+    let publish_reverted_txs = false;
     tracing::debug!(
         hash = hex::encode(hash),
         gas_used = result.gas_used(),
