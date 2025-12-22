@@ -36,13 +36,28 @@ use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 #[derive(Debug)]
 pub(crate) enum DbReadOutcome<T> {
     Success(T),
-    AbortedBecauseReplica,
+    AbortedBecauseReplica { db_leader: Option<String> },
+}
+
+#[derive(Debug, PartialEq, strum::Display)]
+pub(crate) enum FailedOperation {
+    BeginBlock,
+    BatchAddTxs,
+    AddTx,
+    EndBlock,
+    Prune { db_leader: Option<String> },
+    ReadBatch,
+    AddProof,
+    CurrentData { db_leader: Option<String> },
 }
 
 #[derive(Debug)]
 pub(crate) enum DbError {
     Database(anyhow::Error),
-    Replica,
+    ReplicaDisallowed {
+        self_node_id: String,
+        operation: FailedOperation,
+    },
 }
 
 impl<T: Into<anyhow::Error>> From<T> for DbError {
@@ -470,9 +485,14 @@ impl PreferredSequencerDb {
                     ))
                 }
                 Err(DbError::Database(err)) => Err(err),
-                Err(DbError::Replica) => {
+                Err(DbError::ReplicaDisallowed {
+                    self_node_id,
+                    operation,
+                }) => {
                     tracing::error!(
-                        "initial_data: The primary has become a replica. Shutting down."
+                        %self_node_id,
+                        %operation,
+                        "The primary has become a replica. Shutting down.",
                     );
                     exit_rollup(&self.shutdown_sender).await;
                     unreachable!()
@@ -551,8 +571,15 @@ impl PreferredSequencerDb {
     async fn check_replica_err(&self, err: DbError) -> anyhow::Error {
         match err {
             DbError::Database(err) => err,
-            DbError::Replica => {
-                tracing::error!("The primary has become a replica. Shutting down.");
+            DbError::ReplicaDisallowed {
+                self_node_id,
+                operation,
+            } => {
+                tracing::error!(
+                    %self_node_id,
+                    %operation,
+                    "The primary has become a replica. Shutting down.",
+                );
                 exit_rollup(&self.shutdown_sender).await;
                 unreachable!()
             }

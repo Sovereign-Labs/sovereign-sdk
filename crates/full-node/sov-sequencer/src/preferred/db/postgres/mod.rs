@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -205,8 +206,10 @@ impl PostgresBackend {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
 
-        if !self.is_leader(maybe_leader) {
-            return Ok(DbReadOutcome::AbortedBecauseReplica);
+        if !self.is_leader(&maybe_leader) {
+            return Ok(DbReadOutcome::AbortedBecauseReplica {
+                db_leader: maybe_leader,
+            });
         }
 
         let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
@@ -270,7 +273,10 @@ impl PostgresBackend {
         Ok(res)
     }
 
-    async fn prune_inner(&self, prune_up_to_including: SequenceNumber) -> anyhow::Result<bool> {
+    async fn prune_inner(
+        &self,
+        prune_up_to_including: SequenceNumber,
+    ) -> anyhow::Result<DbReadOutcome<()>> {
         let mut tx = self.pool.begin().await?;
         let prune_up_to_including: i64 = prune_up_to_including.saturating_add(1).try_into()?;
 
@@ -289,28 +295,34 @@ impl PostgresBackend {
 
         if result.rows_affected() == 0 {
             let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
-            return Ok(self.is_leader(maybe_leader));
+            if !self.is_leader(&maybe_leader) {
+                return Ok(DbReadOutcome::AbortedBecauseReplica {
+                    db_leader: maybe_leader,
+                });
+            }
         }
         tx.commit().await?;
-        Ok(true)
+        Ok(DbReadOutcome::Success(()))
     }
 
     async fn get_sequencer_leader_inner(
         &self,
         connection: &mut PgConnection,
-    ) -> Result<Option<SequencerLeader>, sqlx::Error> {
-        sqlx::query_as::<_, SequencerLeader>(
+    ) -> Result<Option<String>, sqlx::Error> {
+        let maybe_leader: Option<SequencerLeader> = sqlx::query_as::<_, SequencerLeader>(
             "SELECT node_id, last_updated
                 FROM sequencer_leader
                 WHERE singleton = 1",
         )
         .fetch_optional(connection)
-        .await
+        .await?;
+
+        Ok(maybe_leader.map(|l| l.node_id))
     }
 
-    fn is_leader(&self, maybe_leader: Option<SequencerLeader>) -> bool {
-        match maybe_leader {
-            Some(leader) => leader.node_id == self.node_id,
+    fn is_leader(&self, maybe_leader_id: &Option<String>) -> bool {
+        match maybe_leader_id {
+            Some(leader_id) => leader_id == &self.node_id,
             None => false,
         }
     }
@@ -349,8 +361,12 @@ impl DbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::BeginBlock,
+            });
         }
+
         Ok(())
     }
 
@@ -398,7 +414,10 @@ impl DbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::BatchAddTxs,
+            });
         }
 
         Ok(())
@@ -430,7 +449,10 @@ impl DbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::AddTx,
+            });
         }
 
         Ok(())
@@ -461,21 +483,27 @@ impl DbBackend for PostgresBackend {
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::EndBlock,
+            });
         }
 
         Ok(())
     }
 
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
-        let is_leader = run_with_retries!(
+        let outcome = run_with_retries!(
             &self.backoff_policy,
             self.prune_inner(up_to_including),
             "postgres_db_backend_prune"
         )?;
 
-        if !is_leader {
-            return Err(DbError::Replica);
+        if let DbReadOutcome::AbortedBecauseReplica { db_leader } = outcome {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::Prune { db_leader },
+            });
         }
 
         Ok(())
@@ -483,8 +511,12 @@ impl DbBackend for PostgresBackend {
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
-        if !self.is_leader(maybe_leader) {
-            return Err(DbError::Replica);
+
+        if !self.is_leader(&maybe_leader) {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::ReadBatch,
+            });
         }
 
         let res = self
@@ -507,20 +539,29 @@ impl DbBackend for PostgresBackend {
         let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
-                "WITH blob_insert AS (
-                    INSERT INTO proof_blobs (sequence_number, borsh_value) VALUES ($1, $2)
-             )
-             INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) 
-             SELECT $1, 'new_proof', NULL, NULL, NULL",
+                "
+                WITH blob_insert AS (
+                    INSERT INTO proof_blobs (sequence_number, borsh_value)
+                    SELECT $1, $2
+                    WHERE is_leader($3)
+                    RETURNING sequence_number
+                )
+                INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+                SELECT bi.sequence_number, 'new_proof', NULL, NULL, NULL
+                FROM blob_insert bi",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
+            .bind(&self.node_id)
             .execute(&self.pool),
             "postgres_db_backend_add_proof_blob"
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(DbError::Replica);
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::AddProof,
+            });
         }
 
         Ok(())
@@ -535,7 +576,12 @@ impl DbBackend for PostgresBackend {
 
         match res {
             DbReadOutcome::Success(data) => Ok(data),
-            DbReadOutcome::AbortedBecauseReplica => Err(DbError::Replica),
+            DbReadOutcome::AbortedBecauseReplica { db_leader } => {
+                return Err(DbError::ReplicaDisallowed {
+                    self_node_id: self.node_id.clone(),
+                    operation: FailedOperation::CurrentData { db_leader },
+                });
+            }
         }
     }
 }
@@ -576,8 +622,8 @@ mod tests {
             let leader_2 = db_2.maybe_update_leader().await;
             assert!(leader_2.is_none());
 
-            let leader = db_2.get_sequencer_leader().await.unwrap().unwrap();
-            assert_eq!(updated_leader_1, leader);
+            let leader_node_id = db_2.get_sequencer_leader().await.unwrap().unwrap();
+            assert_eq!(updated_leader_1.node_id, leader_node_id);
         }
 
         {
@@ -640,6 +686,11 @@ mod tests {
             .await
             .unwrap();
 
+        db.as_mut()
+            .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
+            .await
+            .unwrap();
+
         db.as_mut().end_rollup_block(batch_to_store).await.unwrap();
 
         let data = db.as_mut().current_data().await.unwrap();
@@ -670,10 +721,15 @@ mod tests {
 
         db_leader.maybe_update_leader().await.unwrap();
 
-        let res = db_replica.as_mut().begin_rollup_block(batch_to_store).await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        let err = db_replica
+            .as_mut()
+            .begin_rollup_block(batch_to_store)
+            .await
+            .unwrap_err();
 
-        let res = db_replica
+        assert_err(err, &db_replica.node_id, &FailedOperation::BeginBlock);
+
+        let err = db_replica
             .as_mut()
             .add_tx(
                 sequence_number,
@@ -681,28 +737,69 @@ mod tests {
                 FullyBakedTx::new(vec![1, 2, 3]),
                 TxHash::new([1; 32]),
             )
-            .await;
+            .await
+            .unwrap_err();
 
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert_err(err, &db_replica.node_id, &FailedOperation::AddTx);
 
-        let res = db_replica
+        let err = db_replica
             .as_mut()
             .batch_add_txs(
                 sequence_number,
                 2,
                 &[(FullyBakedTx::new(vec![4, 5, 6]), TxHash::new([1; 32]))],
             )
-            .await;
-        assert!(matches!(res, Err(DbError::Replica)));
+            .await
+            .unwrap_err();
 
-        let res = db_replica.as_mut().end_rollup_block(batch_to_store).await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert_err(err, &db_replica.node_id, &FailedOperation::BatchAddTxs);
 
-        let res = db_replica.as_mut().prune(2).await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        let err = db_replica
+            .as_mut()
+            .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
+            .await
+            .unwrap_err();
 
-        let res = db_replica.as_mut().current_data().await;
-        assert!(matches!(res, Err(DbError::Replica)));
+        assert_err(err, &db_replica.node_id, &FailedOperation::AddProof);
+
+        let err = db_replica
+            .as_mut()
+            .end_rollup_block(batch_to_store)
+            .await
+            .unwrap_err();
+
+        assert_err(err, &db_replica.node_id, &FailedOperation::EndBlock);
+
+        let err = db_replica.as_mut().prune(2).await.unwrap_err();
+        assert_err(
+            err,
+            &db_replica.node_id,
+            &FailedOperation::Prune {
+                db_leader: Some(db_leader.node_id.clone()),
+            },
+        );
+
+        let err = db_replica.as_mut().current_data().await.unwrap_err();
+        assert_err(
+            err,
+            &db_replica.node_id,
+            &FailedOperation::CurrentData {
+                db_leader: Some(db_leader.node_id.clone()),
+            },
+        );
+    }
+
+    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &FailedOperation) {
+        match &err {
+            DbError::ReplicaDisallowed {
+                self_node_id,
+                operation,
+            } => {
+                assert_eq!(self_node_id, expected_node_id);
+                assert_eq!(operation, expected_operation);
+            }
+            DbError::Database(err) => unreachable!("DbError::Database not allowed in test {err:?}"),
+        }
     }
 
     struct DB {
@@ -747,9 +844,7 @@ mod tests {
             self.backend.try_update_leader().await.unwrap()
         }
 
-        pub(crate) async fn get_sequencer_leader(
-            &self,
-        ) -> Result<Option<SequencerLeader>, sqlx::Error> {
+        pub(crate) async fn get_sequencer_leader(&self) -> Result<Option<String>, sqlx::Error> {
             let mut tx = self.backend.pool.begin().await?;
             let res = self.backend.get_sequencer_leader_inner(&mut tx).await?;
             tx.commit().await?;
