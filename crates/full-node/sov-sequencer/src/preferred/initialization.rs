@@ -84,7 +84,6 @@ where
 
         let (db, seq_role) = PreferredSequencerDb::new(
             shutdown_sender.clone(),
-            preferred_config.is_replica,
             storage_path,
             &preferred_config.postgres_config,
         )
