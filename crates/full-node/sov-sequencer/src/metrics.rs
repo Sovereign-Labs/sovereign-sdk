@@ -214,27 +214,63 @@ impl Metric for PreferredSequencerExecutorEventSendingMetrics {
     }
 }
 
-/// Trait for providing the measurement name for channel queue metrics.
-/// Used with `ChannelQueueMetrics<T>` to create type-safe metric variants.
-pub trait ChannelQueueMetricName: Default + std::fmt::Debug + Send + Sync {
-    const MEASUREMENT_NAME: &'static str;
+/// Metric for main queue blocked time (sender side).
+/// Only submitted when the send was actually blocked (blocked_for_us > 0).
+#[derive(Debug)]
+pub struct NonceBufferMainQueueBlockedMetric {
+    /// How long the send was blocked waiting for capacity (microseconds).
+    pub blocked_for_us: u64,
 }
 
-/// Generic metrics for channel queue send operations.
-/// Tracks how long sends blocked and the queue depth after sending.
-#[derive(Debug, Default)]
-pub struct ChannelQueueMetric<T: ChannelQueueMetricName> {
+impl Metric for NonceBufferMainQueueBlockedMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_nonce_buffer_main_queue_blocked"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} blocked_for_us={}",
+            self.measurement_name(),
+            self.blocked_for_us,
+        )
+    }
+}
+
+/// Metric for main queue depth, meant to be used batched.
+#[derive(Debug)]
+pub struct NonceBufferMainQueueDepthMetric {
+    /// Current depth of the queue.
+    pub queue_depth: usize,
+}
+
+impl Metric for NonceBufferMainQueueDepthMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_nonce_buffer_main_queue_depth"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} queue_depth={}",
+            self.measurement_name(),
+            self.queue_depth,
+        )
+    }
+}
+
+/// Combined metric for timeout queue, meant to be used batched.
+#[derive(Debug)]
+pub struct NonceBufferTimeoutQueueMetric {
     /// How long the send was blocked waiting for capacity (microseconds).
-    /// Zero if the send was not blocked.
     pub blocked_for_us: u64,
     /// Current depth of the queue after sending.
     pub queue_depth: usize,
-    _marker: std::marker::PhantomData<T>,
 }
 
-impl<T: ChannelQueueMetricName> Metric for ChannelQueueMetric<T> {
+impl Metric for NonceBufferTimeoutQueueMetric {
     fn measurement_name(&self) -> &'static str {
-        T::MEASUREMENT_NAME
+        "sov_rollup_nonce_buffer_timeout_queue"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -248,14 +284,19 @@ impl<T: ChannelQueueMetricName> Metric for ChannelQueueMetric<T> {
     }
 }
 
+/// Generic batch wrapper for any metric type.
+/// Serializes multiple metrics separated by newlines.
 #[derive(Debug)]
-pub struct ChannelQueueMetricBatch<T: ChannelQueueMetricName> {
-    pub metrics: Vec<ChannelQueueMetric<T>>,
+pub struct MetricBatch<M: Metric> {
+    pub metrics: Vec<M>,
 }
 
-impl<T: ChannelQueueMetricName> Metric for ChannelQueueMetricBatch<T> {
+impl<M: Metric> Metric for MetricBatch<M> {
     fn measurement_name(&self) -> &'static str {
-        T::MEASUREMENT_NAME
+        // Return empty string since each metric has its own name
+        // TODO: in practice measurement names are usually static, if this is always the case then
+        // we could refactor it to not take `&self` and use `M::measurement_name()` here. #2264
+        ""
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -272,16 +313,37 @@ impl<T: ChannelQueueMetricName> Metric for ChannelQueueMetricBatch<T> {
     }
 }
 
-/// Marker type for nonce buffer main queue metrics.
-#[derive(Debug, Default)]
-pub struct NonceBufferMainQueueMetricName;
-impl ChannelQueueMetricName for NonceBufferMainQueueMetricName {
-    const MEASUREMENT_NAME: &'static str = "sov_rollup_nonce_buffer_main_queue";
+/// Helper struct for batching metrics and flushing when batch is full.
+/// Accumulates metrics and submits them in batches for efficiency.
+pub struct MetricBatcher<M: Metric> {
+    batch: Vec<M>,
+    batch_size: usize,
 }
 
-/// Marker type for nonce buffer timeout queue metrics.
-#[derive(Debug, Default)]
-pub struct NonceBufferTimeoutQueueMetricName;
-impl ChannelQueueMetricName for NonceBufferTimeoutQueueMetricName {
-    const MEASUREMENT_NAME: &'static str = "sov_rollup_nonce_buffer_timeout_queue";
+impl<M: Metric + 'static> MetricBatcher<M> {
+    /// Create a new batcher with the specified batch size.
+    pub fn new(batch_size: usize) -> Self {
+        Self {
+            batch: Vec::with_capacity(batch_size),
+            batch_size,
+        }
+    }
+
+    /// Add a metric to the batch. Flushes automatically when batch is full.
+    pub fn push(&mut self, metric: M) {
+        self.batch.push(metric);
+        if self.batch.len() >= self.batch_size {
+            self.flush();
+        }
+    }
+
+    /// Flush any accumulated metrics immediately.
+    pub fn flush(&mut self) {
+        if !self.batch.is_empty() {
+            let metrics = std::mem::replace(&mut self.batch, Vec::with_capacity(self.batch_size));
+            sov_metrics::track_metrics(|t| {
+                t.submit(MetricBatch { metrics });
+            });
+        }
+    }
 }
