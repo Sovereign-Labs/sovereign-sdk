@@ -22,7 +22,7 @@ pub static EVM_EXECUTION_CONFIG: OnceLock<RwLock<EvmExecutionConfig>> = OnceLock
 pub struct EvmExecutionConfigContents {
     /// Whether to publish reverted transactions to the DA layer.
     #[serde(default)]
-    pub publish_reverted_txs: bool,
+    pub preferred_sequencer_publish_reverted_txs: bool,
     /// The default size limit for any pinned bucket.
     #[serde(default = "default_bucket_size_limit")]
     pub default_bucket_size_limit: usize,
@@ -37,7 +37,7 @@ pub struct EvmExecutionConfigContents {
 impl Default for EvmExecutionConfigContents {
     fn default() -> Self {
         Self {
-            publish_reverted_txs: false,
+            preferred_sequencer_publish_reverted_txs: false,
             default_bucket_size_limit: default_bucket_size_limit(),
             privileged_deployer_addresses: vec![],
             known_contracts_and_limits: BTreeMap::new(),

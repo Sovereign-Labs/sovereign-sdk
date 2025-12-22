@@ -502,22 +502,22 @@ fn on_revert<S: Spec>(
     context: &Context<S>,
 ) -> Result<(), anyhow::Error> {
     #[cfg(feature = "native")]
-    let publish_reverted_txs = EVM_EXECUTION_CONFIG
+    let preferred_sequencer_publish_reverted_txs = EVM_EXECUTION_CONFIG
         .get()
         .map(|conf| {
             conf.read()
                 .expect("Mutex must not be poisoned")
                 .contents
-                .publish_reverted_txs
+                .preferred_sequencer_publish_reverted_txs
         })
         .unwrap_or(false);
     #[cfg(not(feature = "native"))]
-    let publish_reverted_txs = false;
+    let preferred_sequencer_publish_reverted_txs = false;
     tracing::debug!(
         hash = hex::encode(hash),
         gas_used = result.gas_used(),
         ?result,
-        publish = %publish_reverted_txs,
+        publish = %preferred_sequencer_publish_reverted_txs,
         "EVM execution error"
     );
     // Revert the sovereign SDK transaction only if
@@ -529,7 +529,7 @@ fn on_revert<S: Spec>(
     // will simply cause it to be excluded from the EVM's record keeping.
     if context.execution_context().is_sequencer()
         && context.sequencer_is_preferred()
-        && !publish_reverted_txs
+        && !preferred_sequencer_publish_reverted_txs
     {
         anyhow::bail!("EVM execution error: {:?}", result);
     }

@@ -65,12 +65,12 @@ async fn test_disable_publishing_reverted_txs() -> anyhow::Result<()> {
     do_revert_tx_test(false).await
 }
 
-async fn do_revert_tx_test(publish_reverted_txs: bool) -> anyhow::Result<()> {
+async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> anyhow::Result<()> {
     let temp_dir = tempfile::tempdir()?;
     let exec_config_path = temp_dir.path().join("evm_execution_config.json");
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
     let exec_config_contents = EvmExecutionConfigContents {
-        publish_reverted_txs,
+        preferred_sequencer_publish_reverted_txs,
         ..Default::default()
     };
     std::fs::write(
@@ -91,11 +91,14 @@ async fn do_revert_tx_test(publish_reverted_txs: bool) -> anyhow::Result<()> {
     assert_eq!(nonce, 1);
     let exec_config: EvmExecutionConfigContents =
         serde_json::from_str(&std::fs::read_to_string(&exec_config_path)?)?;
-    assert_eq!(exec_config.publish_reverted_txs, publish_reverted_txs,);
+    assert_eq!(
+        exec_config.preferred_sequencer_publish_reverted_txs,
+        preferred_sequencer_publish_reverted_txs,
+    );
 
     let result = contract.alwaysRevert().submit().await;
     let nonce = client.get_transaction_count(signer.address()).await?;
-    if publish_reverted_txs {
+    if preferred_sequencer_publish_reverted_txs {
         assert!(result.is_ok());
         assert_eq!(nonce, 2);
     } else {
