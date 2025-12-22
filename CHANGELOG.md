@@ -1,3 +1,6 @@
+# 2025-12-22
+- #2265 Adds a config to the EVM to allow accepting invalid transactions.
+
 # 2025-12-17
 - #2250 Moves address resolution for rate limiting off the critical path
 

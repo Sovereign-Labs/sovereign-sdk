@@ -20,6 +20,9 @@ pub static EVM_EXECUTION_CONFIG: OnceLock<RwLock<EvmExecutionConfig>> = OnceLock
 /// Any addresses specified in `known_contracts_and_limits` will be pinned with the specified size limit.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct EvmExecutionConfigContents {
+    /// Whether to publish reverted transactions to the DA layer.
+    #[serde(default)]
+    pub preferred_sequencer_publish_reverted_txs: bool,
     /// The default size limit for any pinned bucket.
     #[serde(default = "default_bucket_size_limit")]
     pub default_bucket_size_limit: usize,
@@ -34,6 +37,7 @@ pub struct EvmExecutionConfigContents {
 impl Default for EvmExecutionConfigContents {
     fn default() -> Self {
         Self {
+            preferred_sequencer_publish_reverted_txs: false,
             default_bucket_size_limit: default_bucket_size_limit(),
             privileged_deployer_addresses: vec![],
             known_contracts_and_limits: BTreeMap::new(),
