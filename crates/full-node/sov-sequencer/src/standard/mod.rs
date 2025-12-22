@@ -296,6 +296,7 @@ where
             &NoOpControlFlow,
             operating_mode,
             metrics,
+            false,
         );
 
         match res {

@@ -23,6 +23,8 @@ pub trait TransactionAuthorizer<S: Spec> {
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
+        execution_context: ExecutionContext,
+        is_preferred_sequencer: bool,
     ) -> anyhow::Result<Context<S>>;
 
     /// Resolves the context for an unregistered transaction.
@@ -31,6 +33,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         state: &mut impl StateAccessor,
+        execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>>;
 
     /// Prevents duplicate transactions from running.

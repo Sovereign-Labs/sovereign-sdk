@@ -7,6 +7,7 @@ use sov_hyperlane_integration::crypto::compute_hash_for_signatures;
 use sov_hyperlane_integration::test_recipient::Event;
 use sov_hyperlane_integration::{CallMessage, Ism, Message};
 use sov_modules_api::macros::config_value;
+use sov_modules_api::ExecutionContext;
 use sov_modules_api::{Address, BasicGasMeter, Context, GasPrice, GasUnit, HexString, TxEffect};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
@@ -90,6 +91,8 @@ fn dummy_context() -> Context<S> {
         Address::new([0; Address::LENGTH]),
         [1; 32].into(),
         None,
+        ExecutionContext::Node,
+        false,
     )
 }
 

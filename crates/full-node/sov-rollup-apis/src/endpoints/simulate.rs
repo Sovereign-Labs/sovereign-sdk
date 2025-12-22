@@ -26,6 +26,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
+use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::stf::TxEffect;
 use sov_uniqueness::Uniqueness;
 use std::str::FromStr;
@@ -441,6 +442,8 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
                 sequencer.rollup_address,
                 &mut scratchpad,
                 sequencing_metadata,
+                ExecutionContext::Sequencer,
+                true,
             )
             .map_err(SimulateError::ContextResolution)?;
 

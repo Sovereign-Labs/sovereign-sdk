@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::{CredentialId, Signature};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::optimistic::Attestation;
+use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::zk::{CryptoSpec, StateTransitionPublicData, Zkvm};
 use sov_rollup_interface::{BasicAddress, Bytes};
 use sov_state::{Storage, StorageProof};
@@ -164,6 +165,10 @@ pub struct Context<S: Spec> {
     sequencing_data: Option<Bytes>,
     /// The rollup address that pays the gas fees for the transaction.
     gas_refund_recipient: S::Address,
+    /// The execution context of the transaction.
+    execution_context: ExecutionContext,
+    /// Whether the transaction was processed by the preferred sequencer.
+    is_preferred_sequencer: bool,
 }
 
 impl<S: Spec> Context<S> {
@@ -197,6 +202,16 @@ impl<S: Spec> Context<S> {
         self.gas_refund_recipient = recipient;
     }
 
+    /// Returns the execution context of the transaction.
+    pub fn execution_context(&self) -> ExecutionContext {
+        self.execution_context
+    }
+
+    /// Returns whether the sequencer is the preferred sequencer.
+    pub fn sequencer_is_preferred(&self) -> bool {
+        self.is_preferred_sequencer
+    }
+
     /// Constructs a new Context with the provided sender as the payer.
     pub fn new(
         sender: S::Address,
@@ -204,6 +219,8 @@ impl<S: Spec> Context<S> {
         sequencer: S::Address,
         sequencer_da_address: <S::Da as DaSpec>::Address,
         sequencing_data: Option<Bytes>,
+        execution_context: ExecutionContext,
+        is_preferred_sequencer: bool,
     ) -> Self {
         Self::with_payer(
             sender,
@@ -212,6 +229,8 @@ impl<S: Spec> Context<S> {
             sequencer_da_address,
             sender,
             sequencing_data,
+            execution_context,
+            is_preferred_sequencer,
         )
     }
 
@@ -223,6 +242,8 @@ impl<S: Spec> Context<S> {
         sequencer_da_address: <S::Da as DaSpec>::Address,
         payer: S::Address,
         sequencing_data: Option<Bytes>,
+        execution_context: ExecutionContext,
+        is_preferred_sequencer: bool,
     ) -> Self {
         Self {
             sender_credentials,
@@ -231,6 +252,8 @@ impl<S: Spec> Context<S> {
             sequencer_da_address,
             gas_refund_recipient: payer,
             sequencing_data,
+            execution_context,
+            is_preferred_sequencer,
         }
     }
 
@@ -257,7 +280,7 @@ pub type SovStateTransitionPublicData<S> = StateTransitionPublicData<
 #[cfg(feature = "arbitrary")]
 mod arbitrary {
     use ::arbitrary::{Arbitrary, Unstructured};
-    use sov_rollup_interface::da::DaSpec;
+    use sov_rollup_interface::{da::DaSpec, stf::ExecutionContext};
 
     use super::{Context, Spec};
 
@@ -278,6 +301,8 @@ mod arbitrary {
                 sequencer,
                 sequencer_da_address,
                 None,
+                ExecutionContext::Node,
+                false,
             ))
         }
     }

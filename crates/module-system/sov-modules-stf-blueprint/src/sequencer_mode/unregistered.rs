@@ -33,8 +33,12 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
 
     let mut ctx = match runtime
         .transaction_authorizer()
-        .resolve_unregistered_context(&auth_data, sequencer_da_address, &mut pre_exec_working_set)
-    {
+        .resolve_unregistered_context(
+            &auth_data,
+            sequencer_da_address,
+            &mut pre_exec_working_set,
+            execution_context,
+        ) {
         Ok(ctx) => ctx,
         Err(e) => {
             let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();

@@ -358,6 +358,7 @@ mod derive_genesis {
 // Wrap the test in a module rather than declaring the struct inside of the function
 // to avoid proc-macro resolution fallback error: https://github.com/rust-lang/rust/issues/83583
 mod derive_dispatch {
+    use sov_modules_api::ExecutionContext;
     use sov_modules_api::NestedEnumUtils;
 
     use super::*;
@@ -397,8 +398,15 @@ mod derive_dispatch {
         let sender = <ZkTestSpec as Spec>::Address::from([0; 28]);
         let sequencer = <ZkTestSpec as Spec>::Address::from([1; 28]);
         let sequencer_da = <<ZkTestSpec as Spec>::Da as DaSpec>::Address::new([0; 32]);
-        let context: Context<ZkTestSpec> =
-            Context::new(sender, Default::default(), sequencer, sequencer_da, None);
+        let context: Context<ZkTestSpec> = Context::new(
+            sender,
+            Default::default(),
+            sequencer,
+            sequencer_da,
+            None,
+            ExecutionContext::Node,
+            true,
+        );
 
         let value = 11;
         {

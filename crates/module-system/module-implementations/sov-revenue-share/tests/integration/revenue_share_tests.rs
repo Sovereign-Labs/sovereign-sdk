@@ -620,6 +620,7 @@ fn test_is_preferred_sequencer() {
     use std::str::FromStr;
 
     use sov_modules_api::transaction::Credentials;
+    use sov_modules_api::ExecutionContext;
 
     let (setup, mut runner) = setup();
 
@@ -650,6 +651,8 @@ fn test_is_preferred_sequencer() {
             random_address,
             random_da_address,
             None,
+            ExecutionContext::Node,
+            true,
         );
 
         let is_preferred = revenue_share.is_preferred_sequencer(&ctx, state);

@@ -41,6 +41,7 @@ pub fn process_tx_and_reward_prover<S, R, I, C>(
     injected_control_flow: &C,
     operating_mode: OperatingMode,
     mut metrics: AuthAndProcessMetrics,
+    is_preferred_sequencer: bool,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -76,6 +77,7 @@ where
         operating_mode,
         &mut metrics,
         &execution_context,
+        is_preferred_sequencer,
     );
 
     #[cfg(feature = "native")]
@@ -151,6 +153,7 @@ fn process_tx_and_reward_prover_inner<S, R, I, C>(
     operating_mode: OperatingMode,
     metrics: &mut AuthAndProcessMetrics,
     execution_context: &ExecutionContext,
+    is_preferred_sequencer: bool,
 ) -> (
     Result<ApplyTxResult<S>, TxAndError>,
     TxScratchpad<S, I>,
@@ -176,6 +179,8 @@ where
         sequencer_rollup_address,
         &mut pre_exec_working_set,
         raw_tx.sequencing_data.clone(),
+        *execution_context,
+        is_preferred_sequencer,
     );
     metrics.timings.resolve_context_timer.end();
     metrics.timings.resolve_context_access_metrics = pre_exec_working_set.metrics().take();
@@ -473,6 +478,7 @@ where
             idx,
             &injected_control_flow,
             operating_mode,
+            is_preferred_sequencer,
         );
 
         let provisional_outcome = match outcome {
@@ -675,6 +681,7 @@ fn auth_and_process_tx_and_incentivize_sequencer<S, RT, I, C>(
     idx: usize,
     injected_control_flow: &C,
     operating_mode: OperatingMode,
+    is_preferred_sequencer: bool,
 ) -> AuthAndProcessOutput<S, I>
 where
     S: Spec,
@@ -822,6 +829,7 @@ where
         injected_control_flow,
         operating_mode,
         metrics,
+        is_preferred_sequencer,
     );
 
     span.exit();

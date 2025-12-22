@@ -267,6 +267,8 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
+        execution_context: ExecutionContext,
+        is_preferred_sequencer: bool,
     ) -> anyhow::Result<Context<S>> {
         // This should be resolved by the sequencer registry during blob selection
         let sender = self.accounts.resolve_sender_address(
@@ -280,6 +282,8 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             sequencer_rollup_address,
             *sequencer,
             sequencing_data,
+            execution_context,
+            is_preferred_sequencer,
         ))
     }
 
@@ -288,6 +292,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         state: &mut impl StateAccessor,
+        execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
         let sender = self.accounts.resolve_sender_address(
             &auth_data.default_address,
@@ -301,6 +306,8 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             sender,
             *sequencer,
             None,
+            execution_context,
+            false,
         ))
     }
 }
