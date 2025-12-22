@@ -15,6 +15,7 @@ use tokio::time::Duration;
 use tracing::debug;
 
 use super::db::{ReadBatch, ReadBlob};
+use crate::preferred::db::SequencerRole;
 use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
@@ -33,45 +34,48 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         shutdown_sender: watch::Sender<()>,
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
-        is_replica: bool,
+        seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        if is_replica {
-            Ok((
-                Self {
-                    inner: None,
-                    nb_of_concurrent_blob_submissions,
-                },
-                None,
-            ))
-        } else {
-            // It's possible that sov-blob-sender's DB might miss some blob data at
-            // node startup due to:
-            //  1. Disk failure (the sequencer can use Postgres so it's durable).
-            //  2. DB corruption.
-            //  3. Node crash at an inconvenient time.
-            // Let's restore all missing blob data to make sure they land on the DA.
-            let blobs_to_send = create_blobs_to_send(all_completed_blobs)?;
-            let (inner, blob_sender_handle) = BlobSender::new(
-                da.clone(),
-                ledger_db,
-                storage_path.as_ref(),
-                TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                shutdown_sender,
-                blob_processing_timeout,
-                Some(blobs_sender_channel),
-                blobs_to_send,
-                nb_of_concurrent_blob_submissions.clone(),
-            )
-            .await?;
+        match seq_role {
+            SequencerRole::Replica => {
+                return Ok((
+                    Self {
+                        inner: None,
+                        nb_of_concurrent_blob_submissions,
+                    },
+                    None,
+                ));
+            }
+            SequencerRole::Leader => {
+                // It's possible that sov-blob-sender's DB might miss some blob data at
+                // node startup due to:
+                //  1. Disk failure (the sequencer can use Postgres so it's durable).
+                //  2. DB corruption.
+                //  3. Node crash at an inconvenient time.
+                // Let's restore all missing blob data to make sure they land on the DA.
+                let blobs_to_send = create_blobs_to_send(all_completed_blobs)?;
+                let (inner, blob_sender_handle) = BlobSender::new(
+                    da.clone(),
+                    ledger_db,
+                    storage_path.as_ref(),
+                    TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
+                    shutdown_sender,
+                    blob_processing_timeout,
+                    Some(blobs_sender_channel),
+                    blobs_to_send,
+                    nb_of_concurrent_blob_submissions.clone(),
+                )
+                .await?;
 
-            Ok((
-                Self {
-                    inner: Some(inner),
-                    nb_of_concurrent_blob_submissions,
-                },
-                Some(blob_sender_handle),
-            ))
+                Ok((
+                    Self {
+                        inner: Some(inner),
+                        nb_of_concurrent_blob_submissions,
+                    },
+                    Some(blob_sender_handle),
+                ))
+            }
         }
     }
 

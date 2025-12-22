@@ -7,7 +7,7 @@ use crate::preferred::block_executor::{
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::comfortable_gas_limit;
-use crate::preferred::db::latest_finalized_sequence_number;
+use crate::preferred::db::{latest_finalized_sequence_number, SequencerRole};
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::rate_limiter::ResourceUsed;
 use crate::preferred::rate_limiter::SovRateLimiter;
@@ -66,7 +66,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    pub(crate) is_replica: bool,
+    pub(crate) seq_role: SequencerRole,
     // This ledgerdb is used specifically for REST API and websocket subscriptions.
     // The sequencer controls when it is updated to solve inconsistency issues,
     // See [`LedgerDb::with_shared_notifications`] for more details.
@@ -442,7 +442,7 @@ where
             }
         }
 
-        if self.is_replica()
+        if self.is_replica_role()
             && !self
                 .start_replica_task_notifier
                 .replica_processed_first_batch()
@@ -454,8 +454,8 @@ where
         Ok(())
     }
 
-    pub(crate) fn is_replica(&self) -> bool {
-        self.is_replica
+    pub(crate) fn is_replica_role(&self) -> bool {
+        self.seq_role == SequencerRole::Replica
     }
 
     pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
@@ -613,7 +613,7 @@ where
             visible_increase,
             node_state_root: node_state_root.clone(),
             minimum_profit_per_tx: min_profit_per_tx,
-            is_responsible_for_gating_admins: !self.is_replica(),
+            is_responsible_for_gating_admins: !self.is_replica_role(),
         };
 
         let old_checkpoint = self
