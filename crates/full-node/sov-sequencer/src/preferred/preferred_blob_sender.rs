@@ -15,11 +15,12 @@ use tokio::time::Duration;
 use tracing::debug;
 
 use super::db::{ReadBatch, ReadBlob};
+use crate::preferred::db::SequencerRole;
 use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
 pub struct PreferredBlobSender<Da: DaService> {
-    inner: BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>,
+    inner: Option<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>,
     nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
 }
 
@@ -33,33 +34,47 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         shutdown_sender: watch::Sender<()>,
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
-    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
+        seq_role: SequencerRole,
+    ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        // It's possible that sov-blob-sender's DB might miss some blob data at
-        // node startup due to:
-        //  1. Disk failure (the sequencer can use Postgres so it's durable).
-        //  2. DB corruption.
-        //  3. Node crash at an inconvenient time.
-        // Let's restore all missing blob data to make sure they land on the DA.
-        let blobs_to_send = create_blobs_to_send(all_completed_blobs)?;
-        let (inner, handle) = BlobSender::new(
-            da.clone(),
-            ledger_db,
-            storage_path.as_ref(),
-            TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-            shutdown_sender,
-            blob_processing_timeout,
-            Some(blobs_sender_channel),
-            blobs_to_send,
-            nb_of_concurrent_blob_submissions.clone(),
-        )
-        .await?;
+        match seq_role {
+            SequencerRole::Replica => Ok((
+                Self {
+                    inner: None,
+                    nb_of_concurrent_blob_submissions,
+                },
+                None,
+            )),
+            SequencerRole::Leader => {
+                // It's possible that sov-blob-sender's DB might miss some blob data at
+                // node startup due to:
+                //  1. Disk failure (the sequencer can use Postgres so it's durable).
+                //  2. DB corruption.
+                //  3. Node crash at an inconvenient time.
+                // Let's restore all missing blob data to make sure they land on the DA.
+                let blobs_to_send = create_blobs_to_send(all_completed_blobs)?;
+                let (inner, blob_sender_handle) = BlobSender::new(
+                    da.clone(),
+                    ledger_db,
+                    storage_path.as_ref(),
+                    TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
+                    shutdown_sender,
+                    blob_processing_timeout,
+                    Some(blobs_sender_channel),
+                    blobs_to_send,
+                    nb_of_concurrent_blob_submissions.clone(),
+                )
+                .await?;
 
-        let sender = Self {
-            inner,
-            nb_of_concurrent_blob_submissions,
-        };
-        Ok((sender, handle))
+                Ok((
+                    Self {
+                        inner: Some(inner),
+                        nb_of_concurrent_blob_submissions,
+                    },
+                    Some(blob_sender_handle),
+                ))
+            }
+        }
     }
 
     pub(crate) async fn publish_proof(
@@ -68,6 +83,10 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         sequence_number: u64,
         blob_id: BlobInternalId,
     ) -> anyhow::Result<()> {
+        let Some(ref mut inner) = self.inner else {
+            return Ok(());
+        };
+
         let blob_bytes = proof_bytes(&proof_data, sequence_number)?;
 
         debug!(
@@ -75,16 +94,20 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             blob_id, "Dispatching proof blob for publishing"
         );
 
-        self.inner.publish_proof_blob(blob_bytes, blob_id).await?;
+        inner.publish_proof_blob(blob_bytes, blob_id).await?;
 
         Ok(())
     }
 
     pub(crate) async fn publish_batch(&mut self, batch: ReadBatch) -> anyhow::Result<()> {
+        let Some(ref mut inner) = self.inner else {
+            return Ok(());
+        };
+
         let blob_id = batch.blob_id;
         let data = batch_bytes(batch)?;
 
-        self.inner.publish_batch_blob(data, blob_id).await?;
+        inner.publish_batch_blob(data, blob_id).await?;
 
         Ok(())
     }
@@ -115,7 +138,11 @@ impl<Da: DaService> PreferredBlobSender<Da> {
     }
 
     pub(crate) async fn add_txs(&self, blob_id: BlobInternalId, tx_hashes: Arc<Vec<TxHash>>) {
-        self.inner.hooks().add_txs(blob_id, tx_hashes).await;
+        let Some(ref inner) = self.inner else {
+            return;
+        };
+
+        inner.hooks().add_txs(blob_id, tx_hashes).await;
     }
 }
 

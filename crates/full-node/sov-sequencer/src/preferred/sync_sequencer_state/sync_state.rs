@@ -525,7 +525,7 @@ where
             is_recover,
         };
 
-        if inner.is_replica() {
+        if inner.is_replica_role() {
             operation_for_replica(
                 table,
                 info,
@@ -657,7 +657,7 @@ where
     async fn process_prune_sequencer_db(&mut self, reason: &'static str) {
         let start_prune = std::time::Instant::now();
         let mut inner = self.get_inner_with_timing(reason).await;
-        if !inner.is_replica() {
+        if !inner.is_replica_role() {
             inner.trigger_batch_production_if_convenient().await;
         }
         inner.prune_sequencer_db().await;
@@ -764,7 +764,7 @@ where
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        if inner.is_replica() {
+        if inner.is_replica_role() {
             // The sequencer is running in replica mode and cannot accept transactions.
             return Err(AcceptTxError::ReplicaMode);
         }

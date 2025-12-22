@@ -27,7 +27,7 @@ where
     Da: DaService<Spec = S::Da>,
 {
     pub checkpoint_sender: watch::Sender<std::sync::Arc<ConcurrentStateCheckpoint<S>>>,
-    pub blob_sender: Option<PreferredBlobSender<Da>>,
+    pub blob_sender: PreferredBlobSender<Da>,
     pub db: PreferredSequencerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
@@ -64,10 +64,10 @@ where
         self.update_api_state(checkpoint);
 
         // Publish the batch.
-        if let Some(ref mut bs) = self.blob_sender {
-            bs.add_txs(batch.blob_id, batch.tx_hashes.clone()).await;
-            bs.publish_batch(batch).await?;
-        }
+        self.blob_sender
+            .add_txs(batch.blob_id, batch.tx_hashes.clone())
+            .await;
+        self.blob_sender.publish_batch(batch).await?;
 
         Ok(())
     }
@@ -82,9 +82,9 @@ where
                 RecoveryStrategy::TryToSave => {
                     // Flush our batches to try to save them if we can
                     warn!(num_batches_to_replay = batches_to_flush.len(), "TryToSave recovery strategy has been configured. The currently pending soft confirmations will be flushed to the node. This may save some of the transactions, but if any are no longer valid, the sequencer will be penalised.");
-                    if let Some(ref mut bs) = self.blob_sender {
-                        bs.publish_blobs_for_recovery(batches_to_flush).await?;
-                    }
+                    self.blob_sender
+                        .publish_blobs_for_recovery(batches_to_flush)
+                        .await?;
                 }
                 RecoveryStrategy::None => {
                     // Shut down
@@ -200,9 +200,9 @@ where
                 self.db
                     .insert_proof_blob(blob_id, data.clone(), sequence_number)
                     .await?;
-                if let Some(ref mut bs) = self.blob_sender {
-                    bs.publish_proof(data, sequence_number, blob_id).await?;
-                }
+                self.blob_sender
+                    .publish_proof(data, sequence_number, blob_id)
+                    .await?;
             }
             ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
                 self.update_api_state(new_checkpoint);

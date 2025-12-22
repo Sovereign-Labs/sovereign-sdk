@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
 use std::sync::Arc;

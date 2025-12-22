@@ -416,6 +416,12 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SequencerRole {
+    Replica,
+    Leader,
+}
+
 pub struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
     shutdown_sender: watch::Sender<()>,
@@ -427,7 +433,7 @@ impl PreferredSequencerDb {
         is_replica: Option<bool>,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
-    ) -> anyhow::Result<(Self, bool)> {
+    ) -> anyhow::Result<(Self, SequencerRole)> {
         let is_replica = is_replica.unwrap_or(false);
         if is_replica {
             return Ok((
@@ -435,7 +441,7 @@ impl PreferredSequencerDb {
                     backend: None,
                     shutdown_sender: shutdown_sender.clone(),
                 },
-                is_replica,
+                SequencerRole::Replica,
             ));
         }
 
@@ -452,7 +458,7 @@ impl PreferredSequencerDb {
                 backend,
                 shutdown_sender: shutdown_sender.clone(),
             },
-            is_replica,
+            SequencerRole::Leader,
         ))
     }
 

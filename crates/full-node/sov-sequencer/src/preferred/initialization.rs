@@ -1,3 +1,5 @@
+use crate::preferred::db::SequencerRole;
+
 use super::*;
 use anyhow::Context;
 use anyhow::Result;
@@ -68,6 +70,7 @@ where
 
         let mut config = self.config;
         let preferred_config = &config.sequencer_kind_config;
+
         let maybe_oracle_config =
             TimingOracleConfigWithPrivateKey::new(preferred_config.timing_oracle.clone())
                 .transpose()?;
@@ -79,7 +82,7 @@ where
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
-        let (db, is_replica_seq) = PreferredSequencerDb::new(
+        let (db, seq_role) = PreferredSequencerDb::new(
             shutdown_sender.clone(),
             preferred_config.is_replica,
             storage_path,
@@ -90,23 +93,22 @@ where
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
 
-        let blob_sender = if !is_replica_seq {
-            let (blob_sender, handle) = PreferredBlobSender::new(
-                self.da,
-                ledger_db.clone(),
-                db_cache.all_completed_blobs().clone(),
-                storage_path.into(),
-                tx_status_manager.clone(),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                blobs_sender_channel.clone(),
-            )
-            .await?;
-            handles.push(handle);
-            Some(blob_sender)
-        } else {
-            None
-        };
+        let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
+            self.da,
+            ledger_db.clone(),
+            db_cache.all_completed_blobs().clone(),
+            storage_path.into(),
+            tx_status_manager.clone(),
+            shutdown_sender.clone(),
+            Duration::from_secs(config.blob_processing_timeout_secs),
+            blobs_sender_channel.clone(),
+            seq_role,
+        )
+        .await?;
+
+        if let Some(blob_sender_handle) = blob_sender_handle {
+            handles.push(blob_sender_handle);
+        }
 
         let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
         let (state_root_handle, state_root_task) = StateRootTask::create::<Rt>(
@@ -123,10 +125,8 @@ where
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
-        let in_flight_blobs = blob_sender
-            .as_ref()
-            .map(|b| b.nb_of_in_flight_blobs())
-            .unwrap_or_default();
+
+        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
@@ -140,6 +140,7 @@ where
             latest_state_update.clone(),
             rollup_exec_config.clone(),
             config.clone(),
+            seq_role,
         )
         .await;
 
@@ -148,13 +149,13 @@ where
         }
 
         let (mut replica_task, start_replica_task_notifier) =
-            ReplicaSyncTask::new(shutdown_sender.clone()).await?;
+            ReplicaSyncTask::new(shutdown_sender.clone(), seq_role).await?;
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let batch_execution_time_limit_micros =
             preferred_config.batch_execution_time_limit_millis * 1000;
         let (synchronized_state, synchronized_state_updator) = create(
-            is_replica_seq,
+            seq_role,
             api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
@@ -221,7 +222,8 @@ where
         }));
 
         // Launch replica sync task only for replicas.
-        if is_replica_seq {
+
+        if let SequencerRole::Replica = seq_role {
             if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task
                     .start(synchronized_state_updator, postgres_config)
@@ -253,11 +255,13 @@ where
         }));
 
         if let Some(oracle_config) = maybe_oracle_config {
-            if Rt::default().maybe_set_oracle_timestamp(0).is_some() && !is_replica_seq {
-                match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
-                    Ok(handle) => handles.push(handle),
-                    Err(e) => {
-                        error!(error = ?e, "Failed to start timestamp oracle task");
+            if let SequencerRole::Leader = seq_role {
+                if Rt::default().maybe_set_oracle_timestamp(0).is_some() {
+                    match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
+                        Ok(handle) => handles.push(handle),
+                        Err(e) => {
+                            error!(error = ?e, "Failed to start timestamp oracle task");
+                        }
                     }
                 }
             }
