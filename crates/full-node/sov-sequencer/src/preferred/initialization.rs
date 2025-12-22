@@ -107,27 +107,6 @@ where
             handles.push(blob_sender_handle);
         }
 
-        /*
-
-            let (blob_sender, handle) = PreferredBlobSender::new(
-                self.da,
-                ledger_db.clone(),
-                db_cache.all_completed_blobs().clone(),
-                storage_path.into(),
-                tx_status_manager.clone(),
-                shutdown_sender.clone(),
-                Duration::from_secs(config.blob_processing_timeout_secs),
-                blobs_sender_channel.clone(),
-                is_replica_seq,
-            )
-            .await?;
-            handles.push(handle);
-            Some(blob_sender)
-        } else {
-            None
-        };
-        */
-
         let (block_executors_shutdown_notifier, block_executors_shutdown_rx) = mpsc::channel(1);
         let (state_root_handle, state_root_task) = StateRootTask::create::<Rt>(
             block_executors_shutdown_rx,
