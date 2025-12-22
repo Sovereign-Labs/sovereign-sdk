@@ -36,19 +36,19 @@ use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 #[derive(Debug)]
 pub(crate) enum DbReadOutcome<T> {
     Success(T),
-    AbortedBecauseReplica { db_replica: Option<String> },
+    AbortedBecauseReplica { db_leader: Option<String> },
 }
 
 #[derive(Debug, PartialEq, strum::Display)]
-pub(crate) enum Operation {
+pub(crate) enum FailedOperation {
     BeginBlock,
     BatchAddTxs,
     AddTx,
     EndBlock,
-    Prune { db_replica: Option<String> },
+    Prune { db_leader: Option<String> },
     ReadBatch,
     AddProof,
-    CurrentData { db_replica: Option<String> },
+    CurrentData { db_leader: Option<String> },
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ pub(crate) enum DbError {
     Database(anyhow::Error),
     ReplicaDisallowed {
         self_node_id: String,
-        operation: Operation,
+        operation: FailedOperation,
     },
 }
 

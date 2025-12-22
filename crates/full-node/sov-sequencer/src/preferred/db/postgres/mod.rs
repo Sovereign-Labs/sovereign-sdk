@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::preferred::db::Operation;
+use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -208,7 +208,7 @@ impl PostgresBackend {
 
         if !self.is_leader(&maybe_leader) {
             return Ok(DbReadOutcome::AbortedBecauseReplica {
-                db_replica: maybe_leader,
+                db_leader: maybe_leader,
             });
         }
 
@@ -297,7 +297,7 @@ impl PostgresBackend {
             let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
             if !self.is_leader(&maybe_leader) {
                 return Ok(DbReadOutcome::AbortedBecauseReplica {
-                    db_replica: maybe_leader,
+                    db_leader: maybe_leader,
                 });
             }
         }
@@ -320,9 +320,9 @@ impl PostgresBackend {
         Ok(maybe_leader.map(|l| l.node_id))
     }
 
-    fn is_leader(&self, maybe_node_id: &Option<String>) -> bool {
-        match maybe_node_id {
-            Some(node_id) => node_id == &self.node_id,
+    fn is_leader(&self, maybe_leader_id: &Option<String>) -> bool {
+        match maybe_leader_id {
+            Some(leader_id) => leader_id == &self.node_id,
             None => false,
         }
     }
@@ -363,7 +363,7 @@ impl DbBackend for PostgresBackend {
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::BeginBlock,
+                operation: FailedOperation::BeginBlock,
             });
         }
 
@@ -416,7 +416,7 @@ impl DbBackend for PostgresBackend {
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::BatchAddTxs,
+                operation: FailedOperation::BatchAddTxs,
             });
         }
 
@@ -451,7 +451,7 @@ impl DbBackend for PostgresBackend {
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::AddTx,
+                operation: FailedOperation::AddTx,
             });
         }
 
@@ -485,7 +485,7 @@ impl DbBackend for PostgresBackend {
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::EndBlock,
+                operation: FailedOperation::EndBlock,
             });
         }
 
@@ -499,10 +499,10 @@ impl DbBackend for PostgresBackend {
             "postgres_db_backend_prune"
         )?;
 
-        if let DbReadOutcome::AbortedBecauseReplica { db_replica } = outcome {
+        if let DbReadOutcome::AbortedBecauseReplica { db_leader } = outcome {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::Prune { db_replica },
+                operation: FailedOperation::Prune { db_leader },
             });
         }
 
@@ -515,7 +515,7 @@ impl DbBackend for PostgresBackend {
         if !self.is_leader(&maybe_leader) {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::ReadBatch,
+                operation: FailedOperation::ReadBatch,
             });
         }
 
@@ -560,7 +560,7 @@ impl DbBackend for PostgresBackend {
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
                 self_node_id: self.node_id.clone(),
-                operation: Operation::AddProof,
+                operation: FailedOperation::AddProof,
             });
         }
 
@@ -576,10 +576,10 @@ impl DbBackend for PostgresBackend {
 
         match res {
             DbReadOutcome::Success(data) => Ok(data),
-            DbReadOutcome::AbortedBecauseReplica { db_replica } => {
+            DbReadOutcome::AbortedBecauseReplica { db_leader } => {
                 return Err(DbError::ReplicaDisallowed {
                     self_node_id: self.node_id.clone(),
-                    operation: Operation::CurrentData { db_replica },
+                    operation: FailedOperation::CurrentData { db_leader },
                 });
             }
         }
@@ -727,7 +727,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_err(err, &db_replica.node_id, &Operation::BeginBlock);
+        assert_err(err, &db_replica.node_id, &FailedOperation::BeginBlock);
 
         let err = db_replica
             .as_mut()
@@ -740,7 +740,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_err(err, &db_replica.node_id, &Operation::AddTx);
+        assert_err(err, &db_replica.node_id, &FailedOperation::AddTx);
 
         let err = db_replica
             .as_mut()
@@ -752,7 +752,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_err(err, &db_replica.node_id, &Operation::BatchAddTxs);
+        assert_err(err, &db_replica.node_id, &FailedOperation::BatchAddTxs);
 
         let err = db_replica
             .as_mut()
@@ -760,7 +760,7 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_err(err, &db_replica.node_id, &Operation::AddProof);
+        assert_err(err, &db_replica.node_id, &FailedOperation::AddProof);
 
         let err = db_replica
             .as_mut()
@@ -768,14 +768,14 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert_err(err, &db_replica.node_id, &Operation::EndBlock);
+        assert_err(err, &db_replica.node_id, &FailedOperation::EndBlock);
 
         let err = db_replica.as_mut().prune(2).await.unwrap_err();
         assert_err(
             err,
             &db_replica.node_id,
-            &Operation::Prune {
-                db_replica: Some(db_leader.node_id.clone()),
+            &FailedOperation::Prune {
+                db_leader: Some(db_leader.node_id.clone()),
             },
         );
 
@@ -783,13 +783,13 @@ mod tests {
         assert_err(
             err,
             &db_replica.node_id,
-            &Operation::CurrentData {
-                db_replica: Some(db_leader.node_id.clone()),
+            &FailedOperation::CurrentData {
+                db_leader: Some(db_leader.node_id.clone()),
             },
         );
     }
 
-    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &Operation) {
+    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &FailedOperation) {
         match &err {
             DbError::ReplicaDisallowed {
                 self_node_id,
