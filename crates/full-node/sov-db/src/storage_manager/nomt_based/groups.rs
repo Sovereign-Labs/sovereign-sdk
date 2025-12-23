@@ -50,6 +50,8 @@ where
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
+
+        // TODO DB CORRUPTION should we remove: separate_archival_state = true and always keep archival/live in the same db -> better for consistency.
         let flat_state = FlatStateDb::new(path, state_cache_size, separate_archival_state)?;
         Ok(Self {
             merklized_state: Arc::new(state_db),
