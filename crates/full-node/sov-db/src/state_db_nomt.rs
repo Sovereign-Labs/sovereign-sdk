@@ -96,6 +96,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let start_kernel = std::time::Instant::now();
         {
             let _span = tracing::debug_span!("namespace_commit", namespace = "kernel").entered();
+
+            // TODO DB CORRUPTION: SAVE CommitStatus::ComittingKernelNomt
             kernel
                 .commit(&self.kernel)
                 .context("kernel namespace commit")?;
@@ -106,6 +108,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         // Write IN-PROGRESS status after kernel committed successfully.
 
         let flag_mid_start = std::time::Instant::now();
+
+        // TODO DB CORRUPTION: REMOVE THIS
+
         // 2. Kernel commit succeeded. Try to set flag to IN-PROGRESS.
         if let Err(flag_write_err) = self.commit_flag.write_status(in_progress_commit_status) {
             // CRITICAL: Kernel committed, but couldn't write IN-PROGRESS flag.
@@ -142,6 +147,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let start_user = std::time::Instant::now();
         {
             let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
+            // TODO DB CORRUPTION: Save CommitStatus::ComittingUserNomt
             user.commit(&self.user).context("user namespace commit")?;
         };
         let write_user = start_user.elapsed();

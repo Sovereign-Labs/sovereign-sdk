@@ -82,7 +82,12 @@ where
         let merklized_commit_from_caller = merklized_start.elapsed();
         // Historical data is committed after merklized state, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
+
+        // TODO DB CORRUPTION: SAVE CommitStatus::ComittingRocksDB
         let flat_metrics = self.flat_state.commit(historical_state)?;
+
+        // TODO DB CORRUPTION: SAVE CommitStatus::Successful
+
         let accessory_start = std::time::Instant::now();
         self.accessory.write_schemas(&accessory)?;
         let accessory_commit = accessory_start.elapsed();
