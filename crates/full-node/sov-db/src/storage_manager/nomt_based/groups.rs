@@ -71,6 +71,11 @@ where
                 },
         } = group;
 
+        // TODO DB CORRUPTION: THIS IS THE VERIOSN TO USE IN CommitStatus
+        let version = self.flat_state.get_kernel_db().get_committed_version()?;
+        let user_version = self.flat_state.get_user_db().get_committed_version()?;
+        assert_eq!(version, user_version);
+
         let merklized_start = std::time::Instant::now();
         // Note: failure handling and data recovery will be implemented later.
         let merklized_commit = self.merklized_state.commit(state)?;

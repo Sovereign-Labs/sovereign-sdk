@@ -20,6 +20,8 @@ use rockbound::versioned_db::SchemaWithVersion;
 pub struct FlatStateDb {
     pub(crate) user: Arc<VersionedDB<NomtStateValues<UserNamespace>>>,
     pub(crate) kernel: Arc<VersionedDB<NomtStateValues<KernelNamespace>>>,
+
+    // TODO DB CORRUPTION: DO WE MOVE THIS TO user/live_db?
     pub(crate) other: Arc<rockbound::DB>,
     #[allow(dead_code)]
     // We don't technically need to store the archival db here - it's only accessed through the user/kernel versioned DB wrappers.
