@@ -258,6 +258,8 @@ impl HistoricalStateReader {
             root_hash = %hex::encode(&root_hash),
             "Materialized root hash"
         );
+
+        // TODO DB CORRUPTION: WHAT ABOUT THIS OTHER
         batch.put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
 
         sov_metrics::track_metrics(|tracker| {
@@ -267,6 +269,7 @@ impl HistoricalStateReader {
         Ok(StateChanges {
             user: Arc::new(user_batch),
             kernel: Arc::new(kernel_batch),
+            // TODO DB CORRUPTION: WHAT ABOUT THIS OTHER
             other: Arc::new(batch),
         })
     }

@@ -143,6 +143,8 @@ impl FlatStateDb {
         }
         self.kernel.commit(&state.kernel, version)?;
         self.user.commit(&state.user, version)?;
+
+        //  TODO DB CORRUPTION: OTHER
         self.other.write_schemas(&state.other)?;
         let write = start_write.elapsed();
         Ok(FlatStateCommitMetric { prepare, write })
