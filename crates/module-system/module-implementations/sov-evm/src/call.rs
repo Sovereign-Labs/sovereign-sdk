@@ -86,6 +86,7 @@ where
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         start_timer!(total);
+        // Note: This does *not* verify the signature
         let tx = convert_to_tx_signed(message.rlp)?;
 
         if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
@@ -202,10 +203,7 @@ where
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("TxState should have BasicGasMeter");
-        let funds = gas_meter
-            .remaining_funds
-            .expect("TxState gas meter has funds set")
-            .0;
+        let funds = gas_meter.remaining_funds.map(|funds| funds.0).unwrap_or(0);
         let gas = gas_meter.remaining_gas.as_ref()[0];
         let price = gas_meter.gas_price.as_ref()[0].0;
         match (funds, gas) {
@@ -493,6 +491,8 @@ fn on_error<S: Spec>(
         "EVM transaction error"
     );
 
+    println!("On error: {:?}", err);
+
     anyhow::bail!("EVM transaction error: {:?}", err);
 }
 
@@ -520,6 +520,7 @@ fn on_revert<S: Spec>(
         publish = %preferred_sequencer_publish_reverted_txs,
         "EVM execution error"
     );
+    println!("On revert: {:?}", result);
     // Revert the sovereign SDK transaction only if
     // 1. We're in the sequencer
     // 2. The submitter of this transaction is the preferred sequencer
