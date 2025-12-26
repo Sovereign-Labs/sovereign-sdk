@@ -491,8 +491,6 @@ fn on_error<S: Spec>(
         "EVM transaction error"
     );
 
-    println!("On error: {:?}", err);
-
     anyhow::bail!("EVM transaction error: {:?}", err);
 }
 
@@ -520,7 +518,6 @@ fn on_revert<S: Spec>(
         publish = %preferred_sequencer_publish_reverted_txs,
         "EVM execution error"
     );
-    println!("On revert: {:?}", result);
     // Revert the sovereign SDK transaction only if
     // 1. We're in the sequencer
     // 2. The submitter of this transaction is the preferred sequencer
