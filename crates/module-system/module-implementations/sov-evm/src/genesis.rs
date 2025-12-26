@@ -141,7 +141,7 @@ fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, Spec
     if spec.is_empty() {
         spec.push((0, SpecId::CANCUN));
     } else if spec[0].0 != 0u64 {
-        panic!("EVM spec must start from block 0");
+        anyhow::bail!("EVM spec must start from block 0");
     };
 
     Ok(spec)

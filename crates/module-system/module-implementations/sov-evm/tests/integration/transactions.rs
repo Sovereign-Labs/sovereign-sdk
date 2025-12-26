@@ -38,6 +38,36 @@ fn test_simple_transfer() {
 }
 
 #[test]
+fn test_simple_transfer_balance_larger_than_allowed() {
+    let (mut runner, from, to) = setup();
+
+    let transfer_tx = create_transfer_tx(
+        0,
+        &from,
+        &to,
+        TEST_DEFAULT_USER_BALANCE.0.checked_add(1).unwrap(),
+    )
+    .tx;
+
+    let evm = Evm::<S>::default();
+    runner.execute_transaction(TransactionTestCase {
+        input: transfer_tx,
+        assert: Box::new(move |ctx, state| {
+            // assert!(!ctx.tx_receipt.is_successful(), "Transaction should not be successful: {:?}", ctx.tx_receipt);
+            let mut db = evm.db(state);
+            let from_acc = db.basic(from.address()).unwrap().unwrap();
+            let to_acc = db.basic(to.address()).unwrap().unwrap();
+            // The only balance changes should be from the transfer itself and not from gas as it's disabled in SovEvm
+            assert_eq!(to_acc.balance, 0);
+            assert_eq!(
+                from_acc.balance,
+                TEST_DEFAULT_USER_BALANCE.0 - ctx.gas_value_used.0
+            );
+        }),
+    });
+}
+
+#[test]
 fn test_evm_gas_usage() {
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
