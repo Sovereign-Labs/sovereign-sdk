@@ -19,6 +19,7 @@ use sov_db::storage_manager::{
 pub use sov_db::storage_manager::{
     NativeChangeSet, NativeStorageManager, NomtChangeSet, NomtStorageManager,
 };
+use sov_db::DbCache;
 use sov_mock_da::{MockBlockHeader, MockDaSpec};
 use sov_modules_api::digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
@@ -196,16 +197,18 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         let version = HistoricalStateReader::last_version_from_reader(&other_data_reader)
             .unwrap()
             .map(|v| v.get());
-        let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
-            flat_state.get_user_db().clone(),
-            version,
-            vec![],
-        );
-        let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
-            flat_state.get_kernel_db().clone(),
-            version,
-            vec![],
-        );
+        let user_state_reader =
+            VersionedDeltaReader::<NomtStateValues<UserNamespace>, DbCache>::new(
+                flat_state.get_user_db().clone(),
+                version,
+                vec![],
+            );
+        let kernel_state_reader =
+            VersionedDeltaReader::<NomtStateValues<KernelNamespace>, DbCache>::new(
+                flat_state.get_kernel_db().clone(),
+                version,
+                vec![],
+            );
 
         let state_session_builder = get_session_builder_from_committed(self.state.clone());
         let historical_state_reader =

@@ -192,7 +192,7 @@ nearly-linear = { path = "crates/utils/nearly-linear", version = "0.3" }
 # Dependencies maintained by Sovereign
 jmt = { version = "0.12.0", default-features = false }
 reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6209abff72929f5ba41614f5cea3e4a748428c3" }
-rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "278af530b39ed11b4839cd85bc7e896037153462" }
+rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "50ad963c84226038af2a30719f21c30738b00fd0" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
 nomt-core = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
