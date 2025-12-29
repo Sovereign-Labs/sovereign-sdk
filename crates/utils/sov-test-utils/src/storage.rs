@@ -6,6 +6,7 @@ use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
 use sov_db::accessory_db::AccessoryDb;
+use sov_db::commit_flag::CommitFlag;
 use sov_db::config::RollupDbConfig;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::ledger_db::LedgerDb;
@@ -159,6 +160,7 @@ pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
     root: StorageRoot<S>,
     is_strict_mode: bool,
     pinned_cache: Mutex<Option<PinnedCache>>,
+    commit_flag: CommitFlag,
 }
 
 impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
@@ -166,7 +168,9 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
-        let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
+
+        let commit_flag = CommitFlag::new(&config.path);
+        let state_db = sov_db::state_db_nomt::NomtStateDb::new(config, &commit_flag)
             .expect("Failed to initialize StateDb for NOMT");
         let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
@@ -181,6 +185,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
             pinned_cache: Mutex::new(None),
+            commit_flag,
         }
     }
 
@@ -236,7 +241,9 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             pinned_cache,
         } = stf_change_set;
 
-        self.state.commit_change_set(state).unwrap();
+        self.state
+            .commit_change_set(state, &self.commit_flag)
+            .unwrap();
         tracing::trace!("Committed state changes to disk");
         self.accessory.write_schemas(&accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");

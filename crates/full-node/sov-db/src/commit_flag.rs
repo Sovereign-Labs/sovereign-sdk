@@ -59,13 +59,13 @@ impl CommitFlag {
                 Ok(status) => Ok(status),
                 Err(err) => {
                     tracing::warn!(error = ?err, "Commit flag file is corrupted, defaulting to completed");
-                    self.write_status(CommitStatus::Completed)?;
+                    self.write_status(&CommitStatus::Completed)?;
                     Ok(CommitStatus::Completed)
                 }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // File not found, create it with COMPLETED status
-                self.write_status(CommitStatus::Completed)?;
+                self.write_status(&CommitStatus::Completed)?;
                 Ok(CommitStatus::Completed)
             }
             Err(e) => Err(anyhow::Error::from(e).context("Failed to read commit flag file")),
@@ -87,7 +87,7 @@ impl CommitFlag {
     /// Returns `anyhow::Result<()>` which is `Ok(())` on successful write, or an error
     /// if any step of the atomic write process fails (e.g., I/O errors, permission issues,
     /// disk full).
-    pub fn write_status(&self, status: CommitStatus) -> anyhow::Result<()> {
+    pub fn write_status(&self, status: &CommitStatus) -> anyhow::Result<()> {
         let message = borsh::to_vec(&status)?;
 
         // Write to a temporary file first
@@ -120,6 +120,7 @@ impl CommitFlag {
         Ok(())
     }
 
+    /// TODO
     pub fn log_reset_instruction(&self) {
         tracing::error!(
             "To reset commit flag, please remove commit flag file: `rm {}`",
@@ -155,7 +156,7 @@ mod tests {
         let in_progress_msg = CommitStatus::InProgress(root_hash);
 
         // 2. Write InProgress
-        flag.write_status(in_progress_msg).unwrap();
+        flag.write_status(&in_progress_msg).unwrap();
         assert_eq!(flag.read_status().unwrap(), in_progress_msg);
 
         let mut f = File::open(dir.path().join(FLAG_FILE_NAME)).unwrap();
@@ -166,7 +167,7 @@ mod tests {
         drop(f);
 
         // 3. Write Completed
-        flag.write_status(CommitStatus::Completed).unwrap();
+        flag.write_status(&CommitStatus::Completed).unwrap();
         assert_eq!(flag.read_status().unwrap(), CommitStatus::Completed);
 
         let mut f = File::open(dir.path().join(FLAG_FILE_NAME)).unwrap();

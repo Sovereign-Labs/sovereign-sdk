@@ -1,3 +1,4 @@
+use crate::commit_flag::CommitFlag;
 use crate::flat_db::DbCache;
 use std::any::Any;
 use std::collections::HashMap;
@@ -21,6 +22,7 @@ use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
+use crate::schema::tables::StateRootHashes;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
 
@@ -31,6 +33,7 @@ const GIGABYTE: usize = 1024 * 1024 * 1024;
 pub(crate) const DEFAULT_MAX_PRUNING_BATCH_SIZE: usize = 300_000;
 
 pub(crate) struct DbGroup<H, K> {
+    commit_flag: CommitFlag,
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
     accessory: Arc<rockbound::DB>,
@@ -47,12 +50,20 @@ where
         let path = config.path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
         let separate_archival_state = config.separate_archival_state;
-        let state_db = NomtStateDb::<H>::new(config)?;
+
+        let commit_flag = CommitFlag::new(&config.path);
+        let state_db = NomtStateDb::<H>::new(config, &commit_flag)?;
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let flat_state = FlatStateDb::new(path, state_cache_size, separate_archival_state)?;
+
+        let root_hash_reader = DeltaReader::new(flat_state.get_db(), vec![]);
+        // TODO
+        let _last_root_hash = root_hash_reader.get_largest::<StateRootHashes>()?;
+
         Ok(Self {
+            commit_flag,
             merklized_state: Arc::new(state_db),
             flat_state,
             accessory: Arc::new(accessory_rocksdb),
@@ -74,7 +85,8 @@ where
 
         let merklized_start = std::time::Instant::now();
         // Note: failure handling and data recovery will be implemented later.
-        let merklized_commit = self.merklized_state.commit(state)?;
+
+        let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
         let merklized_commit_from_caller = merklized_start.elapsed();
         // Historical data is committed after merklized state, as in case of failure, it can be synced from the normal state,
         // as it duplicates the last written data to `self.state`.
