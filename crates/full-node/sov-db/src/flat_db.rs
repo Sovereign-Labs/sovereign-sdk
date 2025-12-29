@@ -168,7 +168,7 @@ impl FlatStateDb {
         let user_cache = &inner.user_cache;
 
         // 2. Update batches with kernel values.
-        let metrics_kernel = VersionedDB::<_, DbCache>::update_verioned_db_batch(
+        let metrics_kernel = VersionedDB::<_, DbCache>::update_versioned_db_batch(
             &mut live_db_batch,
             &mut archival_db_batch,
             &state.kernel,
@@ -182,7 +182,7 @@ impl FlatStateDb {
         let archival_serialized_size_kernel = archival_db_batch.size_in_bytes();
 
         // 3. Update batches with user values.
-        let metrics_user = VersionedDB::<_, DbCache>::update_verioned_db_batch(
+        let metrics_user = VersionedDB::<_, DbCache>::update_versioned_db_batch(
             &mut live_db_batch,
             &mut archival_db_batch,
             &state.user,
