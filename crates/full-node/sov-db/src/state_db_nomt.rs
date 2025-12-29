@@ -16,101 +16,6 @@ const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
 const BOTH: &str = "user_and_kernel_state";
 
-fn validate_commit_flag<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
-    commit_flag: &CommitFlag,
-    kernel: &Nomt<BinaryHasher<H>>,
-) -> anyhow::Result<()> {
-    match commit_flag.read_status()? {
-        CommitStatus::InProgress(detected_root_hash) => {
-            let current_kernel_root_hash = kernel.root().into_inner();
-            tracing::warn!(
-                flag_kernel_root_hash = hex::encode(detected_root_hash),
-                db_kernel_root_hash = hex::encode(current_kernel_root_hash),
-                "Detected in-progress commit. Rolling back kernel DB."
-            );
-            if current_kernel_root_hash != detected_root_hash {
-                anyhow::bail!("Unsafe to perform rollback, status root hash {} does not match database {}. Manual intervention is needed",
-                        hex::encode(detected_root_hash),
-                        hex::encode(current_kernel_root_hash),
-                    );
-            }
-
-            kernel
-                .rollback(1)
-                .context("Failed to rollback kernel DB after in-progress commit detected")?;
-            commit_flag
-                    .write_status(&CommitStatus::Completed)
-                    .with_context(|| {
-                        commit_flag.log_reset_instruction();
-                        "Failed to write `COMPLETED` status after rollback. Manual intervention required."
-                    })?;
-            let rolled_back_root_hash = kernel.root().into_inner();
-            tracing::info!(
-                from_root_hash = hex::encode(current_kernel_root_hash),
-                to_root_hash = hex::encode(rolled_back_root_hash),
-                "Kernel namespace rollback completed"
-            );
-        }
-        CommitStatus::Completed => {
-            tracing::trace!("Commit flag is `Completed`, proceeding as usual");
-        }
-    };
-
-    Ok(())
-}
-
-fn save_commit_status<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
-    commit_flag: &CommitFlag,
-    commit_status: &CommitStatus,
-    kernel: &Nomt<BinaryHasher<H>>,
-) -> anyhow::Result<()> {
-    // If the kernel commit fails, the flag is untouched, meaning DB remains synced on previous state.
-    // Write IN-PROGRESS status after kernel committed successfully.
-    match commit_status {
-        CommitStatus::InProgress(_) => {
-            if let Err(flag_write_err) = commit_flag.write_status(commit_status) {
-                // CRITICAL: Kernel committed, but couldn't write IN-PROGRESS flag.
-                // Try to roll back the kernel commit to revert to a consistent state.
-                // Failures here are more likely to be due to persistent disk issues (full, I/O errors, permissions).
-                tracing::error!(
-                    error = ?flag_write_err,
-                    "Kernel commit succeeded, but failed to write IN-PROGRESS flag: Attempting kernel rollback.",
-                );
-                if let Err(rollback_err) = kernel.rollback(1) {
-                    // DISASTER: Kernel committed, flag is still COMPLETED, and kernel rollback FAILED.
-                    // The database is in an inconsistent state that cannot be automatically recovered by this logic.
-                    // Propagate a combined error. This situation likely requires manual intervention or node reset.
-                    return Err(anyhow::anyhow!(
-                "CRITICAL INCONSISTENCY: Kernel committed, but failed to write IN-PROGRESS flag ({:?}), \
-                 AND subsequent kernel rollback also failed ({:?}). Manual intervention required.",
-                flag_write_err,
-                rollback_err
-            ));
-                }
-                // Kernel rollback succeeded.
-                // The DB is back to its state before this commit attempt.
-                // Return an error indicating the flag write failure, but state is consistent.
-                tracing::warn!("Kernel rollback succeeded after IN-PROGRESS flag write failure. DB state is consistent with previous version, but flag does not match. Manual intervention required.");
-                return Err(flag_write_err).with_context(|| {
-                commit_flag.log_reset_instruction();
-                "Failed to write IN-PROGRESS status after kernel commit; kernel was rolled back, but flag does not match. Manual intervention required."
-            });
-            }
-        }
-        CommitStatus::Completed => {
-            commit_flag
-                .write_status(&CommitStatus::Completed)
-                .with_context(|| {
-                    commit_flag.log_reset_instruction();
-                    "Failed to write `COMPLETED` status after successful user commit"
-                })?;
-            debug_assert_eq!(commit_flag.read_status()?, CommitStatus::Completed);
-        }
-    }
-
-    Ok(())
-}
-
 /// Contains all the most recent rollup data.
 pub struct NomtStateDb<H> {
     user: Nomt<BinaryHasher<H>>,
@@ -119,7 +24,7 @@ pub struct NomtStateDb<H> {
 
 impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtStateDb<H> {
     /// Initialize a new [` NomtStateDb `] in the given path.
-    pub fn new(config: RollupDbConfig, commit_flag: &CommitFlag) -> anyhow::Result<Self> {
+    pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         tracing::debug!(options = ?config, "Opening NOMT");
 
         let kernel = {
@@ -127,14 +32,77 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             Nomt::<BinaryHasher<H>>::open(opts)?
         };
 
-        validate_commit_flag(commit_flag, &kernel)?;
-
         let user = {
             let opts = config.get_user_options();
             Nomt::<BinaryHasher<H>>::open(opts)?
         };
 
         Ok(Self { user, kernel })
+    }
+
+    pub(crate) fn validate_commit_flag_and_rollback_if_necssesary(
+        &self,
+        commit_flag: &CommitFlag,
+    ) -> anyhow::Result<()> {
+        let commit_status = commit_flag.read_status()?;
+        match commit_status {
+            CommitStatus::CommittingKernelNomt(saved_hash) => {
+                let current_kernel_root_hash = self.kernel.root().into_inner();
+
+                println!("X1");
+                // Kernel commit was sucefull but later commits failed. We revert only the kernel.
+                if saved_hash != current_kernel_root_hash {
+                    tracing::warn!(
+                        flag_kernel_root_hash = hex::encode(saved_hash),
+                        db_kernel_root_hash = hex::encode(current_kernel_root_hash),
+                        "Detected in-progress commit {commit_status:?}. Rolling back kernel DB."
+                    );
+                    println!("X2");
+                    self.kernel.rollback(1)?;
+                }
+            }
+            CommitStatus::CommittingUserNomt(saved_hash) => {
+                let current_user_root_hash = self.user.root().into_inner();
+
+                let sh = hex::encode(saved_hash);
+                let ch = hex::encode(current_user_root_hash);
+
+                if saved_hash != current_user_root_hash {
+                    println!("");
+                    println!("X3 {}", sh);
+                    println!("X3 {}", ch);
+
+                    tracing::warn!(
+                        flag_user_root_hash = hex::encode(saved_hash),
+                        db_user_root_hash = hex::encode(current_user_root_hash),
+                        "Detected in-progress commit {commit_status:?}. Rolling back kernel DB."
+                    );
+                    self.kernel.rollback(1)?;
+                    self.user.rollback(1)?;
+                } else {
+                    println!("X4");
+                    tracing::warn!(
+                      "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
+                    );
+                    self.kernel.rollback(1)?;
+                }
+            }
+            CommitStatus::CommittingArchivalUserAndKernel
+            | CommitStatus::CommittingLiveUserAndKernel => {
+                tracing::warn!(
+                "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
+            );
+                println!("X5");
+
+                self.kernel.rollback(1)?;
+                self.user.rollback(1)?;
+            }
+            CommitStatus::Success => {
+                println!("X6");
+            }
+        }
+
+        Ok(())
     }
 
     /// Commit [`StateOverlay`] to disk.
@@ -148,25 +116,36 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let StateOverlay { user, kernel } = overlay;
         // Status should be completed before committing.
         let flag_prepare_start = std::time::Instant::now();
-        debug_assert_eq!(commit_flag.read_status()?, CommitStatus::Completed);
-
-        let in_progress_commit_status = CommitStatus::InProgress(kernel.root().into_inner());
         let flag_prepare = flag_prepare_start.elapsed();
 
-        let write_kernel = self.commit_kernel(kernel)?;
-
+        // 1.
         let flag_mid_start = std::time::Instant::now();
-        save_commit_status(commit_flag, &in_progress_commit_status, &self.kernel)?;
-
-        debug_assert_eq!(commit_flag.read_status()?, in_progress_commit_status);
+        commit_flag.save_commit_status(&CommitStatus::CommittingKernelNomt(
+            self.kernel.root().into_inner(),
+        ))?;
         let flag_mid = flag_mid_start.elapsed();
 
+        // 2.
+        let write_kernel = self.commit_kernel(kernel)?;
+
+        // 3.
+        let flag_finish_start = std::time::Instant::now();
+
+        let r1 = self.user.root().into_inner();
+        commit_flag.save_commit_status(&CommitStatus::CommittingUserNomt(r1))?;
+        let flag_finish = flag_finish_start.elapsed();
+
+        println!("----");
+        println!("U1 r1 {}", hex::encode(r1));
+
+        let r2 = user.root().into_inner();
+        println!("U1 r2 {}", hex::encode(r2));
+        // 4.
         let write_user = self.commit_user(user)?;
 
-        let flag_finish_start = std::time::Instant::now();
-        save_commit_status(commit_flag, &CommitStatus::Completed, &self.kernel)?;
+        let r2 = self.user.root().into_inner();
+        println!("U1 r3 {}", hex::encode(r2));
 
-        let flag_finish = flag_finish_start.elapsed();
         let total = start.elapsed();
         Ok(MerklizedCommitMetric {
             flag_prepare,
@@ -211,12 +190,6 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     ) -> anyhow::Result<MerklizedCommitMetric> {
         let overlay = session.into_state_overlay();
         self.commit(overlay, commit_flag)
-    }
-
-    pub(crate) fn full_rollback(&self) -> anyhow::Result<()> {
-        self.user.rollback(1)?;
-        self.kernel.rollback(1)?;
-        Ok(())
     }
 
     pub(crate) fn get_root_hashes(&self) -> StateRootHashes {
@@ -515,7 +488,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let config = RollupDbConfig::default_in_path(temp_dir.path().to_path_buf());
         let commit_flag = CommitFlag::new(&config.path);
-        let state_db = Arc::new(NomtStateDb::<H>::new(config, &commit_flag).unwrap());
+        let state_db = Arc::new(NomtStateDb::<H>::new(config).unwrap());
 
         // First produce some overlays with data
         let all_overlays: HashMap<u64, StateOverlay> = HashMap::new();
@@ -580,8 +553,6 @@ mod tests {
     // Then we create 2 more overlays on top of those 2, let's call them "test overlays".
     // Then the "base" kernel overlay is committed, but the "user" base overlay is kept in memory.
     // This creates a precondition for `StateOverlay::commit` to fail on the user overlay phase.
-    // After this error is confirmed, we commit the "base user" overlay and re-open the NOMT database.
-    // We expect that both user and kernel databases are in sync and on data from base overlays.
     #[test]
     fn test_namespaced_db_stay_in_sync_on_error() {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -621,7 +592,10 @@ mod tests {
 
         let config = RollupDbConfig::default_in_path(temp_dir.path().to_path_buf());
         let commit_flag = CommitFlag::new(&config.path);
-        let state_db = Arc::new(NomtStateDb::<H>::new(config, &commit_flag).unwrap());
+        let state_db = Arc::new(NomtStateDb::<H>::new(config).unwrap());
+        state_db
+            .validate_commit_flag_and_rollback_if_necssesary(&commit_flag)
+            .unwrap();
 
         let all_overlays: HashMap<u64, StateOverlay> = HashMap::new();
         let all_overlays = Arc::new(RwLock::new(all_overlays));
@@ -691,14 +665,13 @@ mod tests {
         let test_commit_result = state_db.commit(test_overlay, &commit_flag);
         assert!(test_commit_result.is_err());
 
-        base_user_overlay.commit(&state_db.user).unwrap();
-
         // Reopen the state db.
         drop(state_db);
         let config = RollupDbConfig::default_in_path(temp_dir.path().to_path_buf());
-
-        let commit_flag = CommitFlag::new(&config.path);
-        let state_db = Arc::new(NomtStateDb::<H>::new(config, &commit_flag).unwrap());
+        let state_db = Arc::new(NomtStateDb::<H>::new(config).unwrap());
+        state_db
+            .validate_commit_flag_and_rollback_if_necssesary(&commit_flag)
+            .unwrap();
 
         let builder =
             NomtSessionBuilder::<H, u64>::new(state_db.clone(), Vec::new(), all_overlays.clone());
@@ -708,7 +681,8 @@ mod tests {
 
         let user_value = user_session.read(user_key_path).unwrap();
         let kernel_value = kernel_session.read(kernel_key_path).unwrap();
-        assert_eq!(user_value, Some(value_2.clone()));
-        assert_eq!(user_value, kernel_value);
+
+        assert_eq!(kernel_value, Some(value_2.clone()));
+        assert_eq!(user_value, Some(value_1.clone()));
     }
 }

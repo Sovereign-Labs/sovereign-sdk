@@ -1,6 +1,7 @@
 //! A database to store the flat state of the rollup (i.e. the raw key-value pairs)
 //! used by NOMT.
 
+use crate::commit_flag::{CommitFlag, CommitStatus};
 use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
     historical_state::StateChanges,
@@ -140,7 +141,11 @@ impl FlatStateDb {
     }
 
     /// Coalesce all the changes into a single schema batch and write it atomically.
-    pub fn commit(&self, state: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
+    pub fn commit(
+        &self,
+        state: StateChanges,
+        commit_flag: &CommitFlag,
+    ) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
         let prepare = start_prepare.elapsed();
         let start_write = std::time::Instant::now();
@@ -203,10 +208,14 @@ impl FlatStateDb {
             &self.live_db,
         )?;
 
-        // Write batches.
+        // Write archival db batches.
+        commit_flag.save_commit_status(&CommitStatus::CommittingArchivalUserAndKernel)?;
         self.archival_db.write_db_batch(archival_db_batch)?;
+        // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
         self.user.store_committed_archival_version(version);
+        // Write live db batch.
+        commit_flag.save_commit_status(&CommitStatus::CommittingLiveUserAndKernel)?;
         self.live_db.write_db_batch(live_db_batch)?;
 
         // 5. Release caches.

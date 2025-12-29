@@ -398,7 +398,7 @@ async fn test_root_hashes_match_after_crash() {
     // Since changes for both namespaces are always provided.
     {
         let commit_flag = CommitFlag::new(&config.path);
-        let nomt = Arc::new(NomtStateDb::<H>::new(config.clone(), &commit_flag).unwrap());
+        let nomt = Arc::new(NomtStateDb::<H>::new(config.clone()).unwrap());
 
         let the_last_block = MockBlockHeader::from_height(blocks);
 
