@@ -1,3 +1,4 @@
+use crate::flat_db::DbCache;
 use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -108,7 +109,7 @@ where
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.flat_state
-            .archival
+            .archival_db
             .write_schemas(&group.historical_state.pruning_batch)?;
         self.accessory
             .write_schemas(&group.accessory.pruning_batch)?;
@@ -135,7 +136,7 @@ where
         // (in normal chronological order).
         for snapshot_ref in relevant_snapshot_refs.iter().rev() {
             let snapshot = rockbound_snapshots.get(snapshot_ref).unwrap();
-            historical_state_snapshots.push(snapshot.historical_state.other.clone());
+            historical_state_snapshots.push(snapshot.historical_state.root_hash_batch.clone());
             user_state_snapshots.push(snapshot.historical_state.user.clone());
             kernel_state_snapshots.push(snapshot.historical_state.kernel.clone());
             accessory_snapshots.push(snapshot.accessory.clone());
@@ -150,19 +151,21 @@ where
             nomt_snapshots,
         );
         let historical_state_reader =
-            DeltaReader::new(self.flat_state.other.clone(), historical_state_snapshots);
+            DeltaReader::new(self.flat_state.live_db.clone(), historical_state_snapshots);
         let version = self.flat_state.get_kernel_db().get_committed_version()?;
 
-        let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
-            self.flat_state.user.clone(),
-            version,
-            user_state_snapshots,
-        );
-        let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
-            self.flat_state.kernel.clone(),
-            version,
-            kernel_state_snapshots,
-        );
+        let user_state_reader =
+            VersionedDeltaReader::<NomtStateValues<UserNamespace>, DbCache>::new(
+                self.flat_state.user.clone(),
+                version,
+                user_state_snapshots,
+            );
+        let kernel_state_reader =
+            VersionedDeltaReader::<NomtStateValues<KernelNamespace>, DbCache>::new(
+                self.flat_state.kernel.clone(),
+                version,
+                kernel_state_snapshots,
+            );
         let historical_state_mapper = HistoricalStateReader::new(
             user_state_reader,
             kernel_state_reader,
@@ -309,7 +312,7 @@ where
 
     fn are_root_hashes_match(&self) -> anyhow::Result<bool> {
         let historical_state_delta_reader =
-            DeltaReader::new(self.flat_state.other.clone(), Vec::new());
+            DeltaReader::new(self.flat_state.live_db.clone(), Vec::new());
 
         let nomt_root_hashes = self.merklized_state.get_root_hashes();
         let last_version =

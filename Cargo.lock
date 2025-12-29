@@ -9509,7 +9509,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=a41ebf6396910ebac44d985fb89a6e67a80cb1a0#a41ebf6396910ebac44d985fb89a6e67a80cb1a0"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=e8d1cfa7402a3ab90369d664bd88a52394cd40e6#e8d1cfa7402a3ab90369d664bd88a52394cd40e6"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -11018,6 +11018,7 @@ dependencies = [
  "hex",
  "jmt",
  "nomt",
+ "parking_lot",
  "proptest",
  "proptest-derive 0.5.1",
  "rand 0.8.5",

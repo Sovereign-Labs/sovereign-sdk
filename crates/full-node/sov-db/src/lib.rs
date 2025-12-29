@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub use flat_db::DbCache;
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
