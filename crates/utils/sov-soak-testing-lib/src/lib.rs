@@ -340,8 +340,10 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     let past_transaction_generations = config_value!("PAST_TRANSACTION_GENERATIONS") + 1;
     let worker_start = std::time::Instant::now();
     let mut total_txns = 0;
+    tracing::info!(worker_id, "Starting prepare_and_send_txs loop...");
 
     while !*rx.borrow() {
+        tracing::info!(worker_id, "Start of loop iteration!");
         // Generate both values while RNG is in scope, then await after it drops.
         let (txn_count, sleep_ms) = {
             // rng must fall out of scope before awaiting anything so this fn is Send
