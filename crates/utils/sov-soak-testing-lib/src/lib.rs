@@ -343,7 +343,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     tracing::info!(worker_id, "Starting prepare_and_send_txs loop...");
 
     while !*rx.borrow() {
-        tracing::info!(worker_id, "Start of loop iteration!");
+        tracing::debug!(worker_id, "Start of loop iteration!");
         // Generate both values while RNG is in scope, then await after it drops.
         let (txn_count, sleep_ms) = {
             // rng must fall out of scope before awaiting anything so this fn is Send
@@ -410,6 +410,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
             txns.push((signed_tx, false));
         }
 
+        tracing::debug!(worker_id, "Generated transactions, starting submission...");
         let start = std::time::Instant::now();
         for (tx, is_invalid) in &txns {
             if *is_invalid {
@@ -420,7 +421,10 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
             } else if use_retries {
                 client.send_tx_to_sequencer_with_retry(tx).await?;
             } else {
-                client.send_tx_to_sequencer(tx).await?;
+                tracing::trace!("Submitting tx without retry");
+                let res = client.send_tx_to_sequencer(tx).await;
+                tracing::trace!("Submitted tx without retry. Res: {res:?}");
+                res?;
             }
             total_txns += 1;
         }
