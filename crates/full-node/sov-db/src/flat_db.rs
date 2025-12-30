@@ -210,13 +210,18 @@ impl FlatStateDb {
 
         // Write archival db batches.
         commit_flag.save_commit_status(&CommitStatus::CommittingArchivalUserAndKernel)?;
+
         self.archival_db.write_db_batch(archival_db_batch)?;
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
         self.user.store_committed_archival_version(version);
+
         // Write live db batch.
         commit_flag.save_commit_status(&CommitStatus::CommittingLiveUserAndKernel)?;
         self.live_db.write_db_batch(live_db_batch)?;
+
+        //#[cfg(feature = "test-utils")]
+        //crate::test_utils::CrashMoment::Foo.crash_if_env_set();
 
         // 5. Release caches.
         drop(inner);

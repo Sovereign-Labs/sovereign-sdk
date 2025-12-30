@@ -52,15 +52,57 @@ async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Nat
     .unwrap()
 }
 
-/// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_kernel_commit_crash() -> anyhow::Result<()> {
-    tokio::time::timeout(Duration::from_secs(30), test_start_stop_with_crash())
-        .await
-        .unwrap()
+async fn test_crash_before_saving_kernel_nomt() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        test_start_stop_with_crash(CrashMoment::BeforeSavingKernelNomt),
+    )
+    .await
+    .unwrap()
 }
 
-async fn test_start_stop_with_crash() -> anyhow::Result<()> {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_commiting_kernel_nomt() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashMoment::BeforeCommittingKernelNomt),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_saving_user_nomt() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashMoment::BeforeSavingUserlNomt),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashMoment::BeforeCommittingUserNomt),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_foo() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashMoment::Foo),
+    )
+    .await
+    .unwrap()
+}
+
+async fn test_start_stop_with_crash(crash_moment: CrashMoment) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
     let key_and_address =
         read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
@@ -88,7 +130,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         loop {
             // "Crash the node once the transactions are being processed."
             if nb_of_events == 5 {
-                CrashMoment::BeforeCommittingUserNomt.set_crash_env();
+                crash_moment.set_crash_env();
             }
 
             // The subscription is closed once the node crashes.
