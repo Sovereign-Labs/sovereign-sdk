@@ -71,38 +71,18 @@ async fn send_txs_in_bg(
     client: NodeClient,
 ) {
     tokio::spawn(async move {
-        foo(start_nonce, receiver, key_and_address, client).await;
-        /*
-        let mut n = 0;
-        loop {
-            let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
-                &key_and_address.private_key,
-                config_gas_token_id(),
-                receiver,
-                100,
-                start_nonce + n,
-            );
-
-            n += 1;
-
-            let res = client.client.send_tx_to_sequencer(&tx).await;
-            println!("XXX {res:?}");
-
-            tokio::time::sleep(Duration::from_millis(100)).await;
-
-            if n == 200 {
-                break;
-            }*/
+        send_txs(start_nonce, receiver, key_and_address, client).await;
     });
 }
 
-async fn foo(
+async fn send_txs(
     start_nonce: u64,
     receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
     key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
     client: NodeClient,
 ) {
     let mut n = 0;
+
     loop {
         let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
             &key_and_address.private_key,
@@ -114,14 +94,12 @@ async fn foo(
 
         n += 1;
 
-        let res = client.client.send_tx_to_sequencer(&tx).await.unwrap();
-        //println!("XXX {res:?}");
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        if n == 50 {
+        let res = client.client.send_tx_to_sequencer(&tx).await;
+        if res.is_err() {
             break;
         }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
@@ -133,8 +111,8 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
 
     let pub_key = key_and_address.private_key.pub_key();
-
     let receiver_addr = random_address::<MockNomtRollupSpec<Native>>();
+
     {
         let test_rollup = start_node(temp_dir.clone()).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -149,14 +127,14 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
         send_txs_in_bg(0, receiver_addr, key_and_address.clone(), client).await;
 
-        for i in 0..50 {
-            println!("X {}", i);
-            tokio::time::timeout(Duration::from_millis(200), event_subscription.next())
-                .await
-                .unwrap();
-
-            if i == 3 {
+        for i in 0.. {
+            if i == 5 {
                 std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
+            }
+
+            let next = event_subscription.next().await.unwrap();
+            if next.is_err() {
+                break;
             }
         }
     }
@@ -178,7 +156,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     {
         let test_rollup = start_node(temp_dir).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
-        test_rollup.wait_for_next_blocks(10).await.unwrap();
+        test_rollup.wait_for_next_blocks(10).await;
 
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
 
@@ -194,7 +172,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
         println!("Nonce: {n}");
 
-        foo(n + 1, receiver_addr, key_and_address.clone(), client).await;
+        send_txs(n + 1, receiver_addr, key_and_address.clone(), client).await;
 
         for i in 0..10 {
             let res = tokio::time::timeout(Duration::from_millis(500), event_subscription.next())
