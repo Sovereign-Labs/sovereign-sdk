@@ -49,7 +49,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             CommitStatus::CommittingKernelNomt(saved_hash) => {
                 let current_kernel_root_hash = self.kernel.root().into_inner();
 
-                // Kernel commit was sucefull but later commits failed. We rollback only the kernel.
+                // Kernel commit was successful but later commits failed. We rollback only the kernel.
                 if saved_hash != current_kernel_root_hash {
                     tracing::warn!(
                         flag_kernel_root_hash = hex::encode(saved_hash),
@@ -63,7 +63,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             CommitStatus::CommittingUserNomt(saved_hash) => {
                 let current_user_root_hash = self.user.root().into_inner();
 
-                // User & Kernel commit was sucefull but later commits failed. We rollback both.
+                // User & Kernel commit was successful but later commits failed. We rollback both.
                 if saved_hash != current_user_root_hash {
                     tracing::warn!(
                         flag_user_root_hash = hex::encode(saved_hash),
@@ -73,7 +73,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     self.kernel.rollback(1)?;
                     self.user.rollback(1)?;
                 } else
-                // Only Kernel commit was sucesfull. We rollback only the kernel.
+                // Only Kernel commit was successful. We rollback only the kernel.
                 {
                     tracing::warn!(
                       "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
@@ -87,7 +87,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                 tracing::warn!(
                 "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
             );
-                // User & Kernel commit was sucefull but we don't see `Success`. We rollback both User & Kernek.
+                // User & Kernel commit was sucefull but we don't see `Success`. We rollback both User & Kernel.
                 self.kernel.rollback(1)?;
                 self.user.rollback(1)?;
             }
