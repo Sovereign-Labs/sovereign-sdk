@@ -18,9 +18,9 @@ pub enum CommitStatus {
     CommittingUserNomt([u8; 32]),
     /// A commit of **archival user and kernel state** in the flat-db is in progress.
     CommittingArchivalUserAndKernel,
-    /// A commit of **live live user and kernel state** in the flat-db is in progress.
+    /// A commit of **live user and kernel state** in the flat-db is in progress.
     CommittingLiveUserAndKernel,
-    /// The commit suceeded.
+    /// The commit succeeded.
     Success,
 }
 
