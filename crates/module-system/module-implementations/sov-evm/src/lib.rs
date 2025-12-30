@@ -15,6 +15,7 @@ mod metrics;
 mod sov_evm;
 mod state_access;
 use sov_rollup_interface::da::Time;
+use sov_state::{Kernel, User};
 use std::ops::RangeInclusive;
 
 pub use call::*;
@@ -48,7 +49,7 @@ use sov_bank::Amount;
 use sov_modules_api::{
     err_detail, AccessoryStateMap, AccessoryStateValue, Context, CoreModuleError, DaSpec,
     ErrorContext, ErrorDetail, GenesisState, Module, ModuleId, ModuleInfo, Spec, StateMap,
-    StateValue, StateVec, TxState,
+    StateReader, StateValue, StateVec, TxState, VersionReader,
 };
 use sov_state::codec::BcsCodec;
 
@@ -220,8 +221,21 @@ where
 }
 
 impl<S: Spec> Evm<S> {
-    pub(crate) fn base_fee(&self) -> u64 {
-        0
+    pub(crate) fn base_fee<
+        Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
+        E,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Result<u64, E>
+    where
+        Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
+    {
+        let price = self
+            .chain_state_module
+            .base_fee_per_gas(state)?
+            .expect("Base fee per gas must be set");
+        Ok(price.as_ref()[0].0.try_into().unwrap_or(u64::MAX))
     }
 }
 

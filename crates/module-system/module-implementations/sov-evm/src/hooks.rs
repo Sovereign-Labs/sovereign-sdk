@@ -60,7 +60,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .secs() as u64;
 
         let new_pending_env = create_block_env(
-            self.base_fee(),
+            self.base_fee(state).unwrap_infallible(),
             cfg.chain_spec.block_gas_limit,
             new_timestamp,
             cfg.chain_spec.coinbase,
