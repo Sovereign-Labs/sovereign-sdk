@@ -99,7 +99,7 @@ async fn send_txs(
             break;
         }
 
-        if n == 500 {
+        if n == 50 {
             break;
         }
 
