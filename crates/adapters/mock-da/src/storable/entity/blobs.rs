@@ -2,7 +2,7 @@
 use std::convert::TryInto;
 
 use sea_orm::entity::prelude::*;
-use sea_orm::Set;
+use sea_orm::{FromQueryResult, Set};
 
 use crate::storable::entity::{BATCH_NAMESPACE, PROOF_NAMESPACE};
 use crate::utils::hash_to_array;
@@ -25,6 +25,16 @@ pub struct Model {
     pub namespace: String,
     /// Who submitted it. Converted to `Vec<u8>` [`MockAddress`]
     pub sender: Vec<u8>,
+}
+
+/// Partial model excluding the large `data` field.
+/// Used to reduce IO when only metadata is needed.
+#[derive(Clone, Debug, FromQueryResult)]
+pub struct BlobHashData {
+    pub id: i32,
+    pub hash: Vec<u8>,
+    pub sender: Vec<u8>,
+    pub namespace: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
