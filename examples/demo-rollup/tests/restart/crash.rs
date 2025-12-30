@@ -178,6 +178,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     {
         let test_rollup = start_node(temp_dir).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
+        test_rollup.wait_for_next_blocks(10).await.unwrap();
 
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
 
