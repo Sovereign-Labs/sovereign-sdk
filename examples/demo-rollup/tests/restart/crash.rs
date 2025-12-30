@@ -59,55 +59,6 @@ pub(crate) async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDem
     .unwrap()
 }
 
-fn random_address<S: Spec>() -> <S as Spec>::Address {
-    let pk = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
-    pk.pub_key().credential_id().into()
-}
-
-async fn send_txs_in_bg(
-    start_nonce: u64,
-    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
-    key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
-    client: NodeClient,
-) {
-    tokio::spawn(async move {
-        send_txs(start_nonce, receiver, key_and_address, client).await;
-    });
-}
-
-async fn send_txs(
-    start_nonce: u64,
-    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
-    key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
-    client: NodeClient,
-) {
-    let mut n = 0;
-
-    loop {
-        let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
-            &key_and_address.private_key,
-            config_gas_token_id(),
-            receiver,
-            100,
-            start_nonce + n,
-        );
-
-        n += 1;
-
-        let res = client.client.send_tx_to_sequencer(&tx).await;
-
-        if res.is_err() {
-            break;
-        }
-
-        if n == 50 {
-            break;
-        }
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-}
-
 /// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_start_stop_with_crash() -> anyhow::Result<()> {
@@ -130,7 +81,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
             .await
             .unwrap();
 
-        send_txs_in_bg(0, receiver_addr, key_and_address.clone(), client).await;
+        send_txs_in_bg(0, receiver_addr, key_and_address.clone(), None, client).await;
 
         for i in 0.. {
             if i == 5 {
@@ -141,40 +92,22 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
                 .await
                 .unwrap();
 
-            println!("NeX {:?}", next);
-
             if next.is_none() {
                 break;
             }
         }
-
-        println!("Crashed");
     }
 
-    println!("============= ");
     std::env::remove_var("SOV_CRASH_ON_COMMIT");
-
-    let lock_files = ["LOCK", "LOG", "LOG.old"];
-    let dbs = ["state-db", "archival-state-db", "accessory", "blob_sender"];
-    for lock_file in &lock_files {
-        for db in &dbs {
-            let _ = std::fs::remove_file(temp_dir.path().join(db).join(lock_file));
-        }
-    }
-
+    unlock_dbs(&temp_dir);
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    println!("START 0");
-
     {
-        println!("START 01");
         let test_rollup = start_node(temp_dir).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
         test_rollup.wait_for_next_blocks(10).await;
 
         let client = test_rollup.client.clone();
-
-        println!("START 1");
 
         let mut event_subscription = test_rollup
             .api_client()
@@ -182,21 +115,104 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
             .await
             .unwrap();
 
-        let n = 100;
-        send_txs_in_bg(n + 1, receiver_addr, key_and_address.clone(), client).await;
+        let start_nonce = 100;
 
-        for i in 0..10 {
-            let res = tokio::time::timeout(Duration::from_millis(500), event_subscription.next())
+        let max_nb_of_txs = 10;
+
+        send_txs_in_bg(
+            start_nonce + 1,
+            receiver_addr,
+            key_and_address.clone(),
+            Some(max_nb_of_txs),
+            client,
+        )
+        .await;
+
+        for i in 0..max_nb_of_txs {
+            let res = tokio::time::timeout(Duration::from_millis(200), event_subscription.next())
                 .await
                 .unwrap()
                 .unwrap()
                 .unwrap();
-
-            println!("{:?}", res.number);
         }
 
         test_rollup.shutdown().await.unwrap();
     }
 
     Ok(())
+}
+
+fn unlock_dbs(temp_dir: &TempDir) {
+    let lock_files = ["LOCK", "LOG", "LOG.old"];
+    let dbs = ["state-db", "archival-state-db", "accessory", "blob_sender"];
+    for lock_file in &lock_files {
+        for db in &dbs {
+            let _ = std::fs::remove_file(temp_dir.path().join(db).join(lock_file));
+        }
+    }
+}
+
+fn random_address<S: Spec>() -> <S as Spec>::Address {
+    let pk = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+    pk.pub_key().credential_id().into()
+}
+
+async fn send_txs_in_bg(
+    start_nonce: u64,
+    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
+    key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
+    max_nb_of_txs: Option<u64>,
+    client: NodeClient,
+) {
+    tokio::spawn(async move {
+        send_txs(
+            start_nonce,
+            receiver,
+            key_and_address,
+            max_nb_of_txs,
+            client,
+        )
+        .await;
+    });
+}
+
+async fn send_txs(
+    start_nonce: u64,
+    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
+    key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
+    max_nb_of_txs: Option<u64>,
+    client: NodeClient,
+) {
+    let mut nb_of_txs = 0;
+    loop {
+        let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
+            &key_and_address.private_key,
+            config_gas_token_id(),
+            receiver,
+            100,
+            start_nonce + nb_of_txs,
+        );
+
+        let res = client.client.send_tx_to_sequencer(&tx).await;
+
+        println!("XXX {max_nb_of_txs:?}");
+        if max_nb_of_txs.is_some() {
+            println!("XXX {res:?}");
+        }
+
+        if res.is_err() {
+            assert!(std::env::var("SOV_CRASH_ON_COMMIT").is_ok());
+        }
+
+        if max_nb_of_txs < Some(nb_of_txs) {
+            println!();
+            println!("OO {max_nb_of_txs:?}  {nb_of_txs:?}");
+
+            println!("Nonce: {res:?}");
+            break;
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        nb_of_txs += 1;
+    }
 }
