@@ -63,16 +63,6 @@ pub(crate) async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDem
     .unwrap()
 }
 
-async fn subscribe_to_bank_events(
-    test_rollup: &TestRollup<MockNomtDemoRollup<Native>>,
-) -> BoxStream<'static, anyhow::Result<types::LedgerEvent>> {
-    test_rollup
-        .api_client()
-        .subscribe_to_events_with_filter("Bank/*")
-        .await
-        .unwrap()
-}
-
 /// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_start_stop_with_crash() -> anyhow::Result<()> {
@@ -90,6 +80,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         let client = test_rollup.client.clone();
 
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
+
         send_txs_in_bg(0, receiver_addr, key_and_address.clone(), None, client).await;
 
         for i in 0.. {
@@ -105,6 +96,8 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
                 break;
             }
         }
+
+        assert!(!test_rollup.is_sequencer_ready().await);
     }
 
     std::env::remove_var("SOV_CRASH_ON_COMMIT");
@@ -135,7 +128,6 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         for i in 0..max_nb_of_txs {
             let res = event_subscription.next().await.unwrap().unwrap();
         }
-
         test_rollup.shutdown().await.unwrap();
     }
 
@@ -183,6 +175,7 @@ async fn send_txs(
     max_nb_of_txs: Option<u64>,
     client: NodeClient,
 ) {
+    let api_client = client.client.clone();
     let mut nb_of_txs = 0;
     loop {
         let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
@@ -193,27 +186,25 @@ async fn send_txs(
             start_nonce + nb_of_txs,
         );
 
-        let res = client.client.send_tx_to_sequencer(&tx).await;
+        let res = api_client.send_tx_to_sequencer(&tx).await;
 
-        println!("XXX {max_nb_of_txs:?}");
-        if max_nb_of_txs.is_some() {
-            println!("XXX {res:?}");
-        }
-
+        // If the transaction failed it should be because we crashed the
         if res.is_err() {
             assert!(std::env::var("SOV_CRASH_ON_COMMIT").is_ok());
-        }
-
-        if let Some(max_nb_of_txs) = max_nb_of_txs {
-            if nb_of_txs >= max_nb_of_txs {
-                println!();
-                println!("OO {max_nb_of_txs:?}  {nb_of_txs:?}");
-
-                println!("Nonce: {res:?}");
-            }
+            break;
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;
         nb_of_txs += 1;
     }
+}
+
+async fn subscribe_to_bank_events(
+    test_rollup: &TestRollup<MockNomtDemoRollup<Native>>,
+) -> BoxStream<'static, anyhow::Result<types::LedgerEvent>> {
+    test_rollup
+        .api_client()
+        .subscribe_to_events_with_filter("Bank/*")
+        .await
+        .unwrap()
 }
