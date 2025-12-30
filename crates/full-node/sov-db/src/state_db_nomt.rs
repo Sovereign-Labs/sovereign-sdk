@@ -160,7 +160,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let start_user = std::time::Instant::now();
         {
             let _span = tracing::debug_span!("namespace_commit", namespace = "user").entered();
-            user.commit(&self.user).context("kernel namespace commit")?;
+            user.commit(&self.user).context("user namespace commit")?;
         };
         let write_user = start_user.elapsed();
         Ok(write_user)
