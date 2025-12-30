@@ -131,20 +131,13 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         // 3.
         let flag_finish_start = std::time::Instant::now();
 
-        let r1 = self.user.root().into_inner();
-        commit_flag.save_commit_status(&CommitStatus::CommittingUserNomt(r1))?;
+        commit_flag.save_commit_status(&CommitStatus::CommittingUserNomt(
+            self.user.root().into_inner(),
+        ))?;
         let flag_finish = flag_finish_start.elapsed();
 
-        println!("----");
-        println!("U1 r1 {}", hex::encode(r1));
-
-        let r2 = user.root().into_inner();
-        println!("U1 r2 {}", hex::encode(r2));
         // 4.
         let write_user = self.commit_user(user)?;
-
-        let r2 = self.user.root().into_inner();
-        println!("U1 r3 {}", hex::encode(r2));
 
         let total = start.elapsed();
         Ok(MerklizedCommitMetric {
