@@ -99,6 +99,10 @@ async fn send_txs(
             break;
         }
 
+        if n == 500 {
+            break;
+        }
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
