@@ -86,9 +86,9 @@ async fn send_txs_in_bg(
             n += 1;
 
             client.client.send_tx_to_sequencer(&tx).await.unwrap();
-            tokio::time::sleep(Duration::from_millis(5)).await;
+            tokio::time::sleep(Duration::from_millis(50)).await;
 
-            if n == 20 {
+            if n == 200 {
                 break;
             }
         }
@@ -121,7 +121,13 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
             .unwrap()
             .unwrap()
             .unwrap();
+
+        if i == 3 {
+            std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
+        }
     }
+
+    std::env::remove_var("SOV_CRASH_ON_COMMIT");
 
     Ok(())
 }
