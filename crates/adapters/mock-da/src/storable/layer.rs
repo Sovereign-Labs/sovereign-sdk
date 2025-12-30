@@ -101,10 +101,11 @@ impl StorableMockDaLayer {
         &mut self,
         timestamp: sov_rollup_interface::da::Time,
     ) -> anyhow::Result<()> {
-        tracing::trace!(
+        let start = std::time::Instant::now();
+        tracing::debug!(
             next_height = self.next_height,
             ?timestamp,
-            "Start producing a new block at"
+            "Start producing a new block"
         );
         if self.next_height >= i32::MAX as u32 {
             anyhow::bail!("Due to database limitation cannot produce anymore blocks: {} is more than max supported height {}", self.next_height, i32::MAX);
@@ -150,11 +151,12 @@ impl StorableMockDaLayer {
         let block_model = block_headers::ActiveModel::from(new_head.clone());
         block_model.insert(&self.conn).await?;
         let _ = self.head_header_sender.send_replace(new_head);
-        tracing::trace!(
+        tracing::debug!(
             blobs_count,
             height = self.next_height,
             prev_hash = %HexHash::new(prev_block_hash),
             hash = %HexHash::new(this_block_hash),
+            producing_time = ?start.elapsed(),
             "New block has been produced"
         );
 
@@ -194,11 +196,12 @@ impl StorableMockDaLayer {
 
     /// Saves new block header into a database.
     pub async fn produce_block(&mut self) -> anyhow::Result<()> {
+        let timestamp = sov_rollup_interface::da::Time::now();
         tracing::trace!(
             next_height = self.next_height,
+            ?timestamp,
             "Produce block has been called"
         );
-        let timestamp = sov_rollup_interface::da::Time::now();
 
         // Temporarily remove the randomizer from `self` so it won't collide
         // with the &mut borrow needed in `produce_block`:
@@ -240,20 +243,22 @@ impl StorableMockDaLayer {
         batch_data: &[u8],
         sender: &MockAddress,
     ) -> anyhow::Result<MockHash> {
-        tracing::trace!(
+        tracing::debug!(
             batch_bytes = batch_data.len(),
             %sender,
             next_da_height = self.next_height,
             "Submitting batch is received"
         );
+        let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_batch_blob(self.next_height as i32, batch_data, sender);
         blob.insert(&self.conn).await?;
         let include_at = self.next_height + self.delay_blobs_by;
-        tracing::trace!(
+        tracing::debug!(
             %hash,
             %sender,
             next_da_height = self.next_height,
             include_at = %include_at,
+            time = ?start.elapsed(),
             "Submitted batch is saved"
         );
         Ok(hash)
@@ -264,18 +269,20 @@ impl StorableMockDaLayer {
         proof_data: &[u8],
         sender: &MockAddress,
     ) -> anyhow::Result<MockHash> {
-        tracing::trace!(
+        tracing::debug!(
             proof_bytes = proof_data.len(),
             %sender,
             next_da_height = self.next_height,
             "Submitting proof is received"
         );
+        let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_proof_blob(self.next_height as i32, proof_data, sender);
         blob.insert(&self.conn).await?;
         tracing::trace!(
             %hash,
             %sender,
             next_da_height = self.next_height,
+            time = ?start.elapsed(),
             "Submitted proof is saved"
         );
         Ok(hash)
