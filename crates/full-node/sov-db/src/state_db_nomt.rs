@@ -54,7 +54,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     tracing::warn!(
                         flag_kernel_root_hash = hex::encode(saved_hash),
                         db_kernel_root_hash = hex::encode(current_kernel_root_hash),
-                        "Detected in-progress commit {commit_status:?}. Rolling back kernel DB."
+                        ?commit_status,
+                        "Detected in-progress commit. Rolling back kernel DB."
                     );
 
                     self.kernel.rollback(1)?;
@@ -68,7 +69,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     tracing::warn!(
                         flag_user_root_hash = hex::encode(saved_hash),
                         db_user_root_hash = hex::encode(current_user_root_hash),
-                        "Detected in-progress commit {commit_status:?}. Rolling back kernel DB."
+                        ?commit_status,
+                        "Detected in-progress commit. Rolling back kernel DB."
                     );
                     self.kernel.rollback(1)?;
                     self.user.rollback(1)?;
@@ -76,7 +78,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                 // Only Kernel commit was successful. We rollback only the kernel.
                 {
                     tracing::warn!(
-                      "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
+                        ?commit_status,
+                        "Detected in-progress commit. Rolling back kernel & user DBs."
                     );
                     self.kernel.rollback(1)?;
                 }
@@ -85,8 +88,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             CommitStatus::CommittingArchivalUserAndKernel
             | CommitStatus::CommittingLiveUserAndKernel => {
                 tracing::warn!(
-                "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
-            );
+                    ?commit_status,
+                    "Detected in-progress commit. Rolling back kernel & user DBs."
+                );
                 // User & Kernel commit was sucefull but we don't see `Success`. We rollback both User & Kernel.
                 self.kernel.rollback(1)?;
                 self.user.rollback(1)?;
