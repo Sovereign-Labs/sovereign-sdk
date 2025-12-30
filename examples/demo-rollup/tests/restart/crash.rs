@@ -1,32 +1,20 @@
-use std::path::PathBuf;
-
 use crate::test_helpers::build_transfer_token_tx;
-use alloy::rpc::client;
-use alloy::signers::local::PrivateKeySigner;
-use alloy_provider::Provider;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_api_spec::types;
-use sov_api_spec::WsSubscription;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_demo_rollup::MockNomtRollupSpec;
-use sov_evm::execution_config::EvmExecutionConfigContents;
-use sov_evm_test_utils::SimpleStorage;
-use sov_evm_test_utils::Submit;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
-use sov_risc0_adapter::Risc0;
 use sov_sequencer::SeqConfigExtension;
-use sov_sequencer::SequencerKindConfig;
-use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use std::sync::Arc;
@@ -36,7 +24,7 @@ use tokio::time::Duration;
 use crate::test_helpers::test_genesis_source;
 
 /// Starts test rollup node.  
-pub(crate) async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Native>> {
+async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
@@ -74,7 +62,6 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     let key_and_address =
         read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
 
-    let pub_key = key_and_address.private_key.pub_key();
     let receiver_addr = random_address::<MockNomtRollupSpec<Native>>();
 
     {
@@ -120,8 +107,8 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         send_txs_in_bg(start_nonce, receiver_addr, key_and_address.clone(), client).await;
 
         // Wait for all events to be received.
-        for i in 0..max_nb_of_txs {
-            let res = event_subscription.next().await.unwrap().unwrap();
+        for _ in 0..10 {
+            let _res = event_subscription.next().await.unwrap().unwrap();
         }
         test_rollup.shutdown().await.unwrap();
     }
