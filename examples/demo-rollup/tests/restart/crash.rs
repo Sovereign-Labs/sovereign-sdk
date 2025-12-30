@@ -95,6 +95,7 @@ async fn send_txs(
         n += 1;
 
         let res = client.client.send_tx_to_sequencer(&tx).await;
+
         if res.is_err() {
             break;
         }
@@ -132,16 +133,22 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         send_txs_in_bg(0, receiver_addr, key_and_address.clone(), client).await;
 
         for i in 0.. {
-            println!("X {}", i);
             if i == 5 {
                 std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
             }
 
-            let next = event_subscription.next().await;
+            let next = tokio::time::timeout(Duration::from_millis(200), event_subscription.next())
+                .await
+                .unwrap();
+
+            println!("NeX {:?}", next);
+
             if next.is_none() {
                 break;
             }
         }
+
+        println!("Crashed");
     }
 
     println!("============= ");
@@ -151,21 +158,23 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     let dbs = ["state-db", "archival-state-db", "accessory", "blob_sender"];
     for lock_file in &lock_files {
         for db in &dbs {
-            // Ignore any errors
             let _ = std::fs::remove_file(temp_dir.path().join(db).join(lock_file));
         }
     }
 
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
+    println!("START 0");
+
     {
+        println!("START 01");
         let test_rollup = start_node(temp_dir).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
         test_rollup.wait_for_next_blocks(10).await;
 
-        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-
         let client = test_rollup.client.clone();
+
+        println!("START 1");
 
         let mut event_subscription = test_rollup
             .api_client()
@@ -174,10 +183,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
             .unwrap();
 
         let n = 100;
-
-        println!("Nonce: {n}");
-
-        send_txs(n + 1, receiver_addr, key_and_address.clone(), client).await;
+        send_txs_in_bg(n + 1, receiver_addr, key_and_address.clone(), client).await;
 
         for i in 0..10 {
             let res = tokio::time::timeout(Duration::from_millis(500), event_subscription.next())
