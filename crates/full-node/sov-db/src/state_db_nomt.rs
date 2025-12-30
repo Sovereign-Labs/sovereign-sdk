@@ -49,29 +49,22 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             CommitStatus::CommittingKernelNomt(saved_hash) => {
                 let current_kernel_root_hash = self.kernel.root().into_inner();
 
-                println!("X1");
-                // Kernel commit was sucefull but later commits failed. We revert only the kernel.
+                // Kernel commit was sucefull but later commits failed. We rollback only the kernel.
                 if saved_hash != current_kernel_root_hash {
                     tracing::warn!(
                         flag_kernel_root_hash = hex::encode(saved_hash),
                         db_kernel_root_hash = hex::encode(current_kernel_root_hash),
                         "Detected in-progress commit {commit_status:?}. Rolling back kernel DB."
                     );
-                    println!("X2");
+
                     self.kernel.rollback(1)?;
                 }
             }
             CommitStatus::CommittingUserNomt(saved_hash) => {
                 let current_user_root_hash = self.user.root().into_inner();
 
-                let sh = hex::encode(saved_hash);
-                let ch = hex::encode(current_user_root_hash);
-
+                // User & Kernel commit was sucefull but later commits failed. We rollback both.
                 if saved_hash != current_user_root_hash {
-                    println!("");
-                    println!("X3 {}", sh);
-                    println!("X3 {}", ch);
-
                     tracing::warn!(
                         flag_user_root_hash = hex::encode(saved_hash),
                         db_user_root_hash = hex::encode(current_user_root_hash),
@@ -79,27 +72,26 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     );
                     self.kernel.rollback(1)?;
                     self.user.rollback(1)?;
-                } else {
-                    println!("X4");
+                } else
+                // Only Kernel commit was sucesfull. We rollback only the kernel.
+                {
                     tracing::warn!(
                       "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
                     );
                     self.kernel.rollback(1)?;
                 }
             }
+
             CommitStatus::CommittingArchivalUserAndKernel
             | CommitStatus::CommittingLiveUserAndKernel => {
                 tracing::warn!(
                 "Detected in-progress commit {commit_status:?}. Rolling back kernel & user DBs."
             );
-                println!("X5");
-
+                // User & Kernel commit was sucefull but we don't see `Success`. We rollback both User & Kernek.
                 self.kernel.rollback(1)?;
                 self.user.rollback(1)?;
             }
-            CommitStatus::Success => {
-                println!("X6");
-            }
+            CommitStatus::Success => {}
         }
 
         Ok(())

@@ -91,8 +91,6 @@ where
 
         let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
         let merklized_commit_from_caller = merklized_start.elapsed();
-        // Historical data is committed after merklized state, as in case of failure, it can be synced from the normal state,
-        // as it duplicates the last written data to `self.state`.
 
         let flat_metrics = self
             .flat_state
