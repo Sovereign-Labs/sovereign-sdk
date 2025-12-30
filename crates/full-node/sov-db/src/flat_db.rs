@@ -234,6 +234,8 @@ impl FlatStateDb {
             archival_serialized_size_user,
         );
 
+        //panic!("FOOOO");
+
         let write = start_write.elapsed();
         Ok(FlatStateCommitMetric { prepare, write })
     }
