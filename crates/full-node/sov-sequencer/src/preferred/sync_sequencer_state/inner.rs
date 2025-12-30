@@ -418,7 +418,6 @@ where
         // is AT LEAST 1. Meaning, as long as we're stuck at genesis, we can't
         // accept any transactions.
         if self.latest_info.latest_finalized_slot_number == SlotNumber::GENESIS {
-            tracing::error!("Timed out while waiting for the node to progress beyond genesis. The sequencer can't accept transactions until that happens");
             return Err(SequencerNotReadyDetails::WaitingOnDa {
                 finalized_slot_number: SlotNumber::GENESIS,
                 needed_finalized_slot_number: SlotNumber::new(1),
