@@ -102,7 +102,7 @@ impl StorableMockDaLayer {
         timestamp: sov_rollup_interface::da::Time,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
-        tracing::debug!(
+        tracing::trace!(
             next_height = self.next_height,
             ?timestamp,
             "Start producing a new block"
@@ -250,8 +250,9 @@ impl StorableMockDaLayer {
         batch_data: &[u8],
         sender: &MockAddress,
     ) -> anyhow::Result<MockHash> {
-        tracing::debug!(
-            batch_bytes = batch_data.len(),
+        let bytes = batch_data.len();
+        tracing::trace!(
+            bytes,
             %sender,
             next_da_height = self.next_height,
             "Submitting batch is received"
@@ -265,6 +266,7 @@ impl StorableMockDaLayer {
             %sender,
             next_da_height = self.next_height,
             include_at = %include_at,
+            bytes,
             time = ?start.elapsed(),
             "Submitted batch is saved"
         );
@@ -276,8 +278,9 @@ impl StorableMockDaLayer {
         proof_data: &[u8],
         sender: &MockAddress,
     ) -> anyhow::Result<MockHash> {
-        tracing::debug!(
-            proof_bytes = proof_data.len(),
+        let bytes = proof_data.len();
+        tracing::trace!(
+            bytes,
             %sender,
             next_da_height = self.next_height,
             "Submitting proof is received"
@@ -289,6 +292,7 @@ impl StorableMockDaLayer {
             %hash,
             %sender,
             next_da_height = self.next_height,
+            bytes,
             time = ?start.elapsed(),
             "Submitted proof is saved"
         );
