@@ -5,6 +5,8 @@ use sov_api_spec::types;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
+use sov_db::test_utils::CrashMoment;
+use sov_db::test_utils::CRASH_ENV_NAME;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_demo_rollup::MockNomtRollupSpec;
@@ -86,7 +88,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         loop {
             // "Crash the node once the transactions are being processed."
             if nb_of_events == 5 {
-                std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
+                CrashMoment::BeforeCommittingUserNomt.set_crash_env();
             }
 
             // The subscription is closed once the node crashes.
@@ -101,9 +103,10 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         }
     }
 
-    std::env::remove_var("SOV_CRASH_ON_COMMIT");
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    std::env::remove_var(CRASH_ENV_NAME);
     unlock_dbs(&temp_dir);
-    //tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     {
         let test_rollup = start_node(temp_dir).await;
@@ -193,7 +196,9 @@ async fn send_txs(
         if res.is_err() {
             println!("res {:?}", res);
             // If the transaction fails, it should be due to the rollup crash.
-            assert!(std::env::var("SOV_CRASH_ON_COMMIT").is_ok());
+            let x = std::env::var(CRASH_ENV_NAME);
+            println!("=== XXXXX {x:?}");
+            assert!(std::env::var(CRASH_ENV_NAME).is_ok());
             break;
         }
 
