@@ -45,12 +45,19 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         commit_flag: &CommitFlag,
     ) -> anyhow::Result<()> {
         let commit_status = commit_flag.read_status()?;
+
+        println!("Commit status: {commit_status:?}");
+
         match commit_status {
             CommitStatus::CommittingKernelNomt(saved_hash) => {
                 let current_kernel_root_hash = self.kernel.root().into_inner();
 
+                println!("current_kernel_root_hash: {current_kernel_root_hash:?}");
+
                 // Kernel commit was sucefull but later commits failed. We rollback only the kernel.
                 if saved_hash != current_kernel_root_hash {
+                    println!("Diff");
+
                     tracing::warn!(
                         flag_kernel_root_hash = hex::encode(saved_hash),
                         db_kernel_root_hash = hex::encode(current_kernel_root_hash),
@@ -58,6 +65,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     );
 
                     self.kernel.rollback(1)?;
+                } else {
+                    println!("Same");
                 }
             }
             CommitStatus::CommittingUserNomt(saved_hash) => {
@@ -117,15 +126,15 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         ))?;
         let flag_mid = flag_mid_start.elapsed();
 
+        // 2.
+        let write_kernel = self.commit_kernel(kernel)?;
+
         #[cfg(feature = "test-utils")]
         if cfg!(debug_assertions) {
             if std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
                 panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
             }
         }
-
-        // 2.
-        let write_kernel = self.commit_kernel(kernel)?;
 
         // 3.
         let flag_finish_start = std::time::Instant::now();

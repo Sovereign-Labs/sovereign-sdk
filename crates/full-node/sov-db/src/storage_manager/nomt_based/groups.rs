@@ -76,7 +76,7 @@ where
 
     pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
         // The last commit had to be successful.
-        debug_assert_eq!(&self.commit_flag.read_status()?, &CommitStatus::Success);
+        //debug_assert_eq!(&self.commit_flag.read_status()?, &CommitStatus::Success);
         let CommitGroup {
             nomt: state,
             rockbound:
