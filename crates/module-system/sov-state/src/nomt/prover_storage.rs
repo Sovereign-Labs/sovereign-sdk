@@ -270,7 +270,6 @@ where
 }
 
 fn to_nomt_accesses<S: MerkleProofSpec>(
-    session: &NomtSession<S::Hasher>,
     sov_accesses: &OrderedReadsAndWrites,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
     let mut merged_accesses: BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite> = BTreeMap::new();
@@ -284,11 +283,6 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
     for (key, read_node_leaf) in ordered_reads {
         // Reads are warmed up during normal `get/get_leaf`
         let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-        // From documentation:
-        // > This should be called for every logical write within the session, as well as every
-        // > logical read if you expect to generate a merkle proof for the session.
-        // So warming up all reads.
-        session.warm_up(key_hash);
 
         let combined_hash_and_size =
             read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
@@ -303,7 +297,6 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
     // Writes
     for (key, original_write) in ordered_writes {
         let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-        session.warm_up(key_hash);
 
         let authenticated_write = original_write
             .as_ref()
@@ -312,7 +305,6 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         match merged_accesses.entry(key_hash) {
             Entry::Vacant(vacant) => {
                 // Also warming up all writes. `ReadThenWrite` has been warmed up during reads collection.
-                session.warm_up(key_hash);
                 vacant.insert(nomt::KeyReadWrite::Write(authenticated_write));
             }
             Entry::Occupied(occupied) => match occupied.remove() {
@@ -334,17 +326,12 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
 
 fn compute_state_update_namespace<S: MerkleProofSpec>(
     session: NomtSession<S::Hasher>,
-    accesses: &OrderedReadsAndWrites,
+    accesses: Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>,
     witness: &S::Witness,
     write_witness: bool,
 ) -> anyhow::Result<FinishedSession> {
-    tracing::trace!(
-        reads = accesses.ordered_reads.len(),
-        writes = accesses.ordered_writes.len(),
-        "compute state update"
-    );
-    let nomt_accesses = to_nomt_accesses::<S>(&session, accesses)?;
-    let mut finished = session.finish(nomt_accesses)?;
+    tracing::trace!(accesses = accesses.len(), "compute state update");
+    let mut finished = session.finish(accesses)?;
     if write_witness {
         let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
         let nomt::Witness {
@@ -477,7 +464,13 @@ where
         pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
+        let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user)?;
+        let nomt_accesses_kernel = to_nomt_accesses::<S>(&state_accesses.kernel)?;
+        let accesses_build_time = start.elapsed();
+        tracing::trace!(time = ?accesses_build_time, "Nomt accesses are computed");
+
         let next_version = self.historical_state.get_next_version();
+        let start_session = std::time::Instant::now();
         // Open 2 sessions at the same time
         let SessionsContainer {
             user: user_session,
@@ -485,7 +478,7 @@ where
         } = self
             .state_session_builder
             .begin_both_sessions(self.strict_with_witness)?;
-        let starting_session_time = start.elapsed();
+        let starting_session_time = start_session.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
         let current_prev_user_root = user_session.prev_root().into_inner();
@@ -501,11 +494,12 @@ where
             );
         }
 
+        let sessions_start = std::time::Instant::now();
         let user_finished_session = {
             let _span = tracing::debug_span!("compute_state_update", namespace = "user").entered();
             compute_state_update_namespace::<S>(
                 user_session,
-                &state_accesses.user,
+                nomt_accesses_user,
                 witness,
                 self.strict_with_witness,
             )
@@ -516,12 +510,13 @@ where
                 tracing::debug_span!("compute_state_update", namespace = "kernel").entered();
             compute_state_update_namespace::<S>(
                 kernel_session,
-                &state_accesses.kernel,
+                nomt_accesses_kernel,
                 witness,
                 self.strict_with_witness,
             )
             .context("kernel state")?
         };
+        let finishing_session_time = sessions_start.elapsed();
 
         let user_reads = state_accesses.user.ordered_reads.len();
         let user_writes = state_accesses.user.ordered_writes.len();
@@ -559,7 +554,7 @@ where
         let kernel_root = kernel_finished_session.root();
         let root = StorageRoot::new(user_root.into_inner(), kernel_root.into_inner());
 
-        tracing::debug!(state_root = %root, %next_version, time = ?start.elapsed(), "computed next state root");
+        tracing::debug!(state_root = %root, %next_version, time = ?start.elapsed(), ?accesses_build_time, ?finishing_session_time, "computed next state root");
 
         let state_update = NomtStateUpdate {
             user: user_finished_session,
