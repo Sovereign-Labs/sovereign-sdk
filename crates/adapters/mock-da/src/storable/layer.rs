@@ -6,7 +6,7 @@ use rand::prelude::{SliceRandom, SmallRng};
 use rand::{Rng, SeedableRng};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder,
+    QueryOrder, QuerySelect,
 };
 use sha2::Digest;
 use sov_rollup_interface::common::{HexHash, HexString};
@@ -128,18 +128,25 @@ impl StorableMockDaLayer {
             GENESIS_HEADER.hash.0
         };
 
-        let blobs = Blobs::find()
+        let blobs_for_hash = Blobs::find()
             .filter(blobs::Column::BlockHeight.eq(self.next_height + self.delay_blobs_by))
+            .select_only()
+            .column(blobs::Column::Id)
+            .column(blobs::Column::Hash)
+            .column(blobs::Column::Sender)
+            .column(blobs::Column::Namespace)
+            .into_model::<blobs::BlobHashData>()
             .all(&self.conn)
             .await?;
-        let blobs_count = blobs.len();
+        let blobs_count = blobs_for_hash.len();
         tracing::trace!(
             blobs_count,
             height = self.next_height,
             "Extracted blobs for this block"
         );
 
-        let this_block_hash = self.calculate_block_hash(self.next_height, &prev_block_hash, &blobs);
+        let this_block_hash =
+            self.calculate_block_hash(self.next_height, &prev_block_hash, &blobs_for_hash);
 
         let new_head = MockBlockHeader {
             height: self.next_height as u64,
@@ -426,9 +433,15 @@ impl StorableMockDaLayer {
         );
 
         let start_reading = std::time::Instant::now();
-        // Query 1: Read a lot: all blobs data.
+        // Query 1: Read blob metadata (excluding large data field).
         let non_finalized_blobs = Blobs::find()
             .filter(blobs::Column::BlockHeight.gt(last_finalized_height))
+            .select_only()
+            .column(blobs::Column::Id)
+            .column(blobs::Column::Hash)
+            .column(blobs::Column::Sender)
+            .column(blobs::Column::Namespace)
+            .into_model::<blobs::BlobHashData>()
             .all(&self.conn)
             .await?;
         tracing::trace!(
@@ -456,7 +469,7 @@ impl StorableMockDaLayer {
 
         let updating_start = std::time::Instant::now();
         // This is going to be layout of new non-finalized blocks.
-        let mut new_non_finalised_order: Vec<Vec<blobs::Model>> = (last_finalized_height
+        let mut new_non_finalised_order: Vec<Vec<blobs::BlobHashData>> = (last_finalized_height
             ..self.next_height)
             .map(|_height| Vec::new())
             .collect();
@@ -566,7 +579,7 @@ impl StorableMockDaLayer {
         &self,
         height: u32,
         prev_block_hash: &[u8; 32],
-        blobs: &[blobs::Model],
+        blobs: &[blobs::BlobHashData],
     ) -> [u8; 32] {
         let mut hasher = sha2::Sha256::new();
 
