@@ -656,7 +656,7 @@ mod tests {
             overlays.remove(&0).unwrap()
         };
         let StateOverlay {
-            user: base_user_overlay,
+            user: _,
             kernel: base_kernel_overlay,
         } = base_overlay;
 
