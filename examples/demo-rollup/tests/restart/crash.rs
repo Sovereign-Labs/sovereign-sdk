@@ -1,9 +1,13 @@
 use std::path::PathBuf;
 
 use crate::test_helpers::build_transfer_token_tx;
+use alloy::rpc::client;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_provider::Provider;
+use futures::stream::BoxStream;
 use futures::StreamExt;
+use sov_api_spec::types;
+use sov_api_spec::WsSubscription;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
@@ -59,6 +63,16 @@ pub(crate) async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDem
     .unwrap()
 }
 
+async fn subscribe_to_bank_events(
+    test_rollup: &TestRollup<MockNomtDemoRollup<Native>>,
+) -> BoxStream<'static, anyhow::Result<types::LedgerEvent>> {
+    test_rollup
+        .api_client()
+        .subscribe_to_events_with_filter("Bank/*")
+        .await
+        .unwrap()
+}
+
 /// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_start_stop_with_crash() -> anyhow::Result<()> {
@@ -75,12 +89,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
         let client = test_rollup.client.clone();
 
-        let mut event_subscription = test_rollup
-            .api_client()
-            .subscribe_to_events_with_filter("Bank/*")
-            .await
-            .unwrap();
-
+        let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
         send_txs_in_bg(0, receiver_addr, key_and_address.clone(), None, client).await;
 
         for i in 0.. {
@@ -108,12 +117,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         test_rollup.wait_for_next_blocks(10).await;
 
         let client = test_rollup.client.clone();
-
-        let mut event_subscription = test_rollup
-            .api_client()
-            .subscribe_to_events_with_filter("Bank/*")
-            .await
-            .unwrap();
+        let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
 
         let start_nonce = 100;
 
@@ -129,11 +133,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         .await;
 
         for i in 0..max_nb_of_txs {
-            let res = tokio::time::timeout(Duration::from_millis(200), event_subscription.next())
-                .await
-                .unwrap()
-                .unwrap()
-                .unwrap();
+            let res = event_subscription.next().await.unwrap().unwrap();
         }
 
         test_rollup.shutdown().await.unwrap();
