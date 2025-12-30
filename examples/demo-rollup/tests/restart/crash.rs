@@ -65,6 +65,10 @@ pub(crate) async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDem
 
 /// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
 #[tokio::test(flavor = "multi_thread")]
+async fn test_kernel_commit_crash() -> anyhow::Result<()> {
+    test_start_stop_with_crash().await
+}
+
 async fn test_start_stop_with_crash() -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
     let key_and_address =
@@ -80,8 +84,7 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         let client = test_rollup.client.clone();
 
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
-
-        send_txs_in_bg(0, receiver_addr, key_and_address.clone(), None, client).await;
+        send_txs_in_bg(0, receiver_addr, key_and_address.clone(), client).await;
 
         for i in 0.. {
             if i == 5 {
@@ -112,19 +115,11 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         let client = test_rollup.client.clone();
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
 
-        let start_nonce = 100;
+        let start_nonce = 1000;
 
-        let max_nb_of_txs = 10;
+        send_txs_in_bg(start_nonce, receiver_addr, key_and_address.clone(), client).await;
 
-        send_txs_in_bg(
-            start_nonce + 1,
-            receiver_addr,
-            key_and_address.clone(),
-            Some(max_nb_of_txs),
-            client,
-        )
-        .await;
-
+        // Wait for all events to be received.
         for i in 0..max_nb_of_txs {
             let res = event_subscription.next().await.unwrap().unwrap();
         }
@@ -153,18 +148,10 @@ async fn send_txs_in_bg(
     start_nonce: u64,
     receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
     key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
-    max_nb_of_txs: Option<u64>,
     client: NodeClient,
 ) {
     tokio::spawn(async move {
-        send_txs(
-            start_nonce,
-            receiver,
-            key_and_address,
-            max_nb_of_txs,
-            client,
-        )
-        .await;
+        send_txs(start_nonce, receiver, key_and_address, client).await;
     });
 }
 
@@ -172,7 +159,6 @@ async fn send_txs(
     start_nonce: u64,
     receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
     key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
-    max_nb_of_txs: Option<u64>,
     client: NodeClient,
 ) {
     let api_client = client.client.clone();
@@ -188,7 +174,7 @@ async fn send_txs(
 
         let res = api_client.send_tx_to_sequencer(&tx).await;
 
-        // If the transaction failed it should be because we crashed the
+        // If the transaction failed it should be because we crashed the rollup.
         if res.is_err() {
             assert!(std::env::var("SOV_CRASH_ON_COMMIT").is_ok());
             break;
