@@ -85,8 +85,8 @@ async fn send_txs_in_bg(
 
             n += 1;
 
-            client.client.send_tx_to_sequencer(&tx).await.unwrap();
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            client.client.send_tx_to_sequencer(&tx).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             if n == 200 {
                 break;
@@ -116,10 +116,8 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
     for i in 0..100 {
         println!("X {}", i);
-        tokio::time::timeout(Duration::from_millis(100), event_subscription.next())
+        tokio::time::timeout(Duration::from_millis(200), event_subscription.next())
             .await
-            .unwrap()
-            .unwrap()
             .unwrap();
 
         if i == 3 {

@@ -119,8 +119,6 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         #[cfg(feature = "test-utils")]
         if cfg!(debug_assertions) {
-            println!("FOOOOO");
-
             if std::env::var("SOV_CRASH_ON_COMMIT").is_ok() {
                 panic!("SOV_CRASH_ON_COMMIT is set, crashing the node");
             }
