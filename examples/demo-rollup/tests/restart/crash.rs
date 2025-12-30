@@ -128,12 +128,13 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
         send_txs_in_bg(0, receiver_addr, key_and_address.clone(), client).await;
 
         for i in 0.. {
+            println!("X {}", i);
             if i == 5 {
                 std::env::set_var("SOV_CRASH_ON_COMMIT", "1");
             }
 
-            let next = event_subscription.next().await.unwrap();
-            if next.is_err() {
+            let next = event_subscription.next().await;
+            if next.is_none() {
                 break;
             }
         }
