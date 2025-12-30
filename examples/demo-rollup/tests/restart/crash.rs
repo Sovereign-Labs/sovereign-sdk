@@ -3,8 +3,10 @@ use std::path::PathBuf;
 use crate::test_helpers::build_transfer_token_tx;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_provider::Provider;
+use futures::StreamExt;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
+use sov_cli::NodeClient;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_demo_rollup::MockNomtRollupSpec;
@@ -24,6 +26,7 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use tempfile::TempDir;
+use tokio::time::Duration;
 
 use crate::test_helpers::test_genesis_source;
 
@@ -61,22 +64,35 @@ fn random_address<S: Spec>() -> <S as Spec>::Address {
     pk.pub_key().credential_id().into()
 }
 
-fn send_txs_in_bg(start_nonce: u64, receiver: <MockNomtRollupSpec<Native> as Spec>::Address) {
+async fn send_txs_in_bg(
+    start_nonce: u64,
+    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
+    client: NodeClient,
+) {
     let key_and_address =
         read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
-    let mut n = 0;
 
-    println!("X {:?}", key_and_address.address);
+    tokio::spawn(async move {
+        let mut n = 0;
+        loop {
+            let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
+                &key_and_address.private_key,
+                config_gas_token_id(),
+                receiver,
+                100,
+                start_nonce + n,
+            );
 
-    let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
-        &key_and_address.private_key,
-        config_gas_token_id(),
-        receiver,
-        100,
-        start_nonce + n,
-    );
+            n += 1;
 
-    n += 1;
+            client.client.send_tx_to_sequencer(&tx).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(5)).await;
+
+            if n == 20 {
+                break;
+            }
+        }
+    });
 }
 
 /// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
@@ -88,7 +104,24 @@ async fn test_start_stop_with_crash() -> anyhow::Result<()> {
 
     let receiver_addr = random_address::<MockNomtRollupSpec<Native>>();
 
-    send_txs_in_bg(0, receiver_addr);
+    let client = test_rollup.client.clone();
+
+    let mut event_subscription = test_rollup
+        .api_client()
+        .subscribe_to_events_with_filter("Bank/*")
+        .await
+        .unwrap();
+
+    send_txs_in_bg(0, receiver_addr, client).await;
+
+    for i in 0..100 {
+        println!("X {}", i);
+        tokio::time::timeout(Duration::from_millis(100), event_subscription.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
 
     Ok(())
 }
