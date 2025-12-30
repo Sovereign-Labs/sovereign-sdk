@@ -204,12 +204,13 @@ async fn send_txs(
             assert!(std::env::var("SOV_CRASH_ON_COMMIT").is_ok());
         }
 
-        if max_nb_of_txs < Some(nb_of_txs) {
-            println!();
-            println!("OO {max_nb_of_txs:?}  {nb_of_txs:?}");
+        if let Some(max_nb_of_txs) = max_nb_of_txs {
+            if nb_of_txs >= max_nb_of_txs {
+                println!();
+                println!("OO {max_nb_of_txs:?}  {nb_of_txs:?}");
 
-            println!("Nonce: {res:?}");
-            break;
+                println!("Nonce: {res:?}");
+            }
         }
 
         tokio::time::sleep(Duration::from_millis(100)).await;
