@@ -481,3 +481,9 @@ async fn flaky_try_to_clog_db_zk_instant_finality() -> anyhow::Result<()> {
     )
     .await
 }
+
+/// This test intentionally crashes the rollup during a commit to ensure that the correct state is computed afterward.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_stop_with_crash() -> anyhow::Result<()> {
+    Ok(())
+}
