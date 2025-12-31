@@ -290,3 +290,41 @@ fn is_version_selected_for_key(
     // This is an approximation, but much more efficient than the exact method
     random_value < selection_probability
 }
+
+use strum::{Display, EnumString};
+
+/// TODO
+pub const CRASH_ENV_NAME: &str = "SOV_CRASH_ON_COMMIT";
+
+/// TODO
+#[derive(Debug, Clone, Display, EnumString, Eq, PartialEq)]
+pub enum CrashMoment {
+    /// TODO
+    BeforeSavingKernelNomt,
+    /// TODO
+    BeforeCommittingKernelNomt,
+    /// TODO
+    BeforeSavingUserlNomt,
+    /// TODO
+    BeforeCommittingUserNomt,
+}
+
+impl CrashMoment {
+    /// TODO
+    pub fn set_crash_env(&self) {
+        std::env::set_var(CRASH_ENV_NAME, self.to_string());
+    }
+
+    ///
+    pub fn crash_if_env_set(&self) {
+        if cfg!(debug_assertions) {
+            if let Ok(env) = std::env::var(CRASH_ENV_NAME) {
+                let c: CrashMoment = env.parse().unwrap();
+
+                if &c == self {
+                    panic!("{CRASH_ENV_NAME} is set to: {c}, crashing the node");
+                }
+            }
+        }
+    }
+}
