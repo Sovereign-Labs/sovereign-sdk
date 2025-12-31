@@ -22,12 +22,13 @@ type TestSpec = DemoRollupSpec;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
+    sov_test_utils::initialize_logging();
     inner(0).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_bank_tx_tests_periodic_da_non_instant_finality() -> anyhow::Result<()> {
-    inner(2).await
+    inner(3).await
 }
 
 async fn inner(finalization_blocks: u32) -> anyhow::Result<()> {
@@ -36,7 +37,9 @@ async fn inner(finalization_blocks: u32) -> anyhow::Result<()> {
         finalization_blocks,
     };
 
+    tracing::info!("Starting test rollup");
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Zk).await?;
+    tracing::info!("Test rollup started");
 
     // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
@@ -54,7 +57,12 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
         .get_balance::<TestSpec>(&user_address, &sov_bank::config_gas_token_id(), Some(0))
         .await?;
 
-    let mut slots_subscription = client.client.subscribe_slots().await?;
+    let mut slots_subscription = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        client.client.subscribe_slots(),
+    )
+    .await
+    .context("Failed to subscribe to slots within 10 seconds")??;
 
     // There's no guarantee that we subscribed before the first proof is published.
     // But we know that it should be less or equal rollup_height of the first published batch
@@ -115,6 +123,9 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     let transfer_amounts: Vec<u128> = (10u128..20).collect();
     let txs = build_multiple_transfers(&transfer_amounts, &key, token_id, recipient_address, 3);
     let slot_batch_n = send_tx_and_wait_for_status(&txs, client).await?;
+    while processed_slot.number < slot_batch_n {
+        processed_slot = slots_subscription.next().await.unwrap()?;
+    }
     assert_slot_finality(client, slot_batch_n, test_case.expected_head_finality()).await;
 
     // FIXME(@neysofu,
@@ -152,6 +163,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
                 amount: Amount::new(100),
                 token_id,
             },
+            memo: None,
         },
     )
     .await?;
@@ -166,6 +178,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
                 amount: Amount::new(200),
                 token_id,
             },
+            memo: None,
         },
     )
     .await?;
@@ -194,6 +207,11 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
         assert_aggregated_proof(1, 1, client).await?;
     }
 
+    // Due to polling nature of finalized header, we cannot know for sure that this slot is finalized now.
+    // So we wait 2 more slots
+    for _ in 0..2 {
+        let _slot = slots_subscription.next().await.unwrap()?;
+    }
     if let Some(finalized_rollup_height) = test_case.get_latest_finalized_slot_after(slot_batch_n) {
         assert_slot_finality(client, finalized_rollup_height, FinalityStatus::Finalized).await;
     }

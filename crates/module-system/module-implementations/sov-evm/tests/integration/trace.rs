@@ -5,7 +5,8 @@ use alloy_rpc_types_trace::geth::{
     CallFrame, GethDebugBuiltInTracerType, GethDebugTracingOptions, GethTrace,
 };
 use sov_evm::Evm;
-use sov_test_utils::{BatchTestCase, LegacySimpleStorage};
+use sov_evm_test_utils::LegacySimpleStorage;
+use sov_test_utils::BatchTestCase;
 
 #[test]
 fn test_tracing() {

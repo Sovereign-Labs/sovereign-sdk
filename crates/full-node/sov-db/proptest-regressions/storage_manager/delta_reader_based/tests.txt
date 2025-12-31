@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 10660b2fe24b492dd9b4a6f21d7314edc95d74f4f6eb0d7f437f87d73f19aa03 # shrinks to input = _ProptestForksExplorationArgs { fork: ForkDescription { start_height: 1, length: 5, child_forks: [] } }

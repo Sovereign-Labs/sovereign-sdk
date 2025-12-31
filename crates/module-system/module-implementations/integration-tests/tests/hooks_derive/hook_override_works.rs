@@ -23,6 +23,7 @@ impl<S: Spec> Module for CorrectHooksOverride<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,
@@ -39,7 +40,7 @@ impl<S: Spec> Module for CorrectHooksOverride<S> {
         _msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }

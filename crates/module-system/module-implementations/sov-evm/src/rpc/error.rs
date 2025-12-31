@@ -1,6 +1,6 @@
 //! Place where [`RlpConversionError`] is converted to [`EthApiError`]
 
-use std::error::Error;
+use std::fmt::Display;
 
 use alloy_primitives::Bytes;
 use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
@@ -43,6 +43,6 @@ impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
 }
 
 /// Converts internal error into rpc error
-pub fn into_rpc_error(err: impl Error) -> ErrorObjectOwned {
+pub fn into_rpc_error(err: impl Display) -> ErrorObjectOwned {
     ErrorObject::owned(500, format!("{err}"), None::<()>)
 }

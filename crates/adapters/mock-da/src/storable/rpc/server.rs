@@ -2,7 +2,7 @@ use super::types::*;
 use crate::storable::StorableMockDaService;
 use crate::{MockBlock, MockDaSpec};
 use axum::{
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::StatusCode,
     response::Json,
     routing::{get, post},
@@ -190,7 +190,11 @@ pub(crate) async fn get_proofs_at_handler(
 pub(crate) async fn get_signer_handler(
     State(state): State<AppState>,
 ) -> Result<Json<SignerResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let address = state.da_service.get_signer().await;
+    let address = state
+        .da_service
+        .get_signer()
+        .await
+        .expect("MockDa always has signer");
     Ok(Json(SignerResponse { address }))
 }
 
@@ -214,6 +218,7 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
         .route("/send-proof", post(send_proof_handler))
         .route("/proofs/:height", get(get_proofs_at_handler))
         .route("/signer", get(get_signer_handler))
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .with_state(state)
 }
 

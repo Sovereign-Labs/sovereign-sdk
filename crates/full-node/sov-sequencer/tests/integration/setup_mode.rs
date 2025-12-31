@@ -13,6 +13,7 @@ use base64::Engine;
 use sov_api_spec::types::{self as api_types};
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PriorityFeeBips;
 use sov_modules_api::transaction::TxDetails;
@@ -159,7 +160,7 @@ where
 
     let dir = tempdir_inside_codebase_dir();
 
-    let rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
         dir.clone(),
         genesis_params
             .runtime
@@ -173,21 +174,16 @@ where
         BlockProducingConfig::Manual,
         None,
         TEST_BLOB_PROCESSING_TIMEOUT,
-        1,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,
         TEST_FINALIZATION_BLOCKS,
     )
-    .await
-    .map(|v| v.into_iter().next().unwrap());
+    .await;
 
-    let Some(test_rollup) = rollup else {
-        return;
-    };
-
+    test_rollup.produce_enough_finalized_slots().await;
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    let da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     // Send a transaction with a non-zero fee. Should fail, because we have no balance.
@@ -345,7 +341,7 @@ fn encode_zero_gas_tx(
     let tx = test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce,
+        UniquenessData::Generation(nonce),
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
         details,
     );

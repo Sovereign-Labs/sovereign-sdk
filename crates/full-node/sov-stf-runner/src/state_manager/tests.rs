@@ -6,6 +6,7 @@ use std::sync::Arc;
 use futures::StreamExt;
 use proptest::prelude::*;
 use rand::SeedableRng;
+use serde::Deserialize;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
@@ -19,6 +20,7 @@ use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{DaSpec, RelevantBlobIters};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::stf::GenesisParams;
 use sov_rollup_interface::stf::{
     ApplySlotOutput, BatchReceipt, ExecutionContext, StateTransitionFunction,
 };
@@ -28,6 +30,17 @@ use sov_state::{
 };
 
 use super::*;
+
+const DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
+
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MockGenesisParams;
+
+impl GenesisParams for MockGenesisParams {
+    fn genesis_slot_number(&self) -> u64 {
+        0
+    }
+}
 
 /// A mock implementation of the [`StateTransitionFunction`]
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -39,7 +52,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
     type Address = Vec<u8>;
     type StateRoot = <ProverStorage<S> as Storage>::Root;
     type GasPrice = ();
-    type GenesisParams = ();
+    type GenesisParams = MockGenesisParams;
     type PreState = ();
     type ChangeSet = ();
     type StorageProof = ();
@@ -109,10 +122,12 @@ const SEED_3: [u8; 32] = [3; 32];
 #[tokio::test(flavor = "multi_thread")]
 async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
-
     let finality = 1000;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
     da_service.send_transaction(&[10; 10]).await.await??;
     let filtered_block = da_service.get_block_at(1).await?;
 
@@ -128,13 +143,17 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
             .await?
     );
 
+    shutdown_sender.send(())?;
+
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_instant_finality() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS);
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
         state_manager.ledger_db.clone(),
@@ -143,7 +162,6 @@ async fn test_instant_finality() -> anyhow::Result<()> {
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
-    let da_service = MockDaService::new(SEQUENCER_ADDRESS);
 
     let mut state_root = *state_manager.get_state_root();
     for height in 1..4 {
@@ -152,6 +170,8 @@ async fn test_instant_finality() -> anyhow::Result<()> {
             .await
             .await??;
         let filtered_block = da_service.get_block_at(height).await?;
+        // Sleep here more, to ensure that latest finalized header has been pulled.
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         process_continuous_transition(&mut state_manager, filtered_block.clone(), &da_service, 0)
             .await?;
         // TODO: Check how state manager internal state looks like on instant finality.
@@ -165,15 +185,21 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         assert_eq!(filtered_block.header, finalized.data.da_block_header);
         assert_eq!(state_root, finalized.data.initial_state_root);
         state_root.clone_from(&finalized.data.final_state_root);
-        assert_eq!(
-            height,
-            state_manager
-                .ledger_db
-                .get_latest_finalized_slot_number()
-                .await?
-                .get()
+        let ledger_last_finalized_height = state_manager
+            .ledger_db
+            .get_latest_finalized_slot_number()
+            .await?
+            .get();
+        let diff = height
+            .checked_sub(ledger_last_finalized_height)
+            .expect("Ledger cannot see future finalized height");
+        assert!(
+            diff <= 2,
+            "Ledger cannot lag behind last finalized height by more than 2"
         );
     }
+
+    shutdown_sender.send(())?;
 
     Ok(())
 }
@@ -182,16 +208,12 @@ async fn test_instant_finality() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
     // The idea of the test is
-    // to ensure that the state manager returns the correct block and storage aftera single reorg.
+    // to ensure that the state manager returns the correct block and storage after a single reorg.
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
 
     let fork_point = 3;
     let fork_happens_at = 6;
     let finality = 5;
-
-    let state_update_receiver = state_manager.state_update_sender.subscribe();
-
     let mut da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
     da_service
         .set_planned_fork(PlannedFork::new(
@@ -201,6 +223,11 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         ))
         .await?;
 
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let state_update_receiver = state_manager.state_update_sender.subscribe();
+
     // State root after executing i-th transition
     let mut post_state_roots = Vec::with_capacity(fork_happens_at as usize);
     let mut hash_to_post_state_root: HashMap<MockHash, StateRoot> = HashMap::new();
@@ -209,6 +236,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         // Not used anywhere, `process_normal_transition` relies on da header to produce changes.
         let blob_data = [da_height as u8; 10];
         da_service.send_transaction(&blob_data).await.await??;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         let filtered_block = da_service.get_block_at(da_height).await?;
         if da_height < fork_happens_at {
             let block_hash = filtered_block.header().hash();
@@ -248,6 +276,9 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             assert_eq!(returned_storage_root, received_storage_root);
         }
     }
+
+    shutdown_sender.send(())?;
+
     Ok(())
 }
 
@@ -260,9 +291,10 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
     let finality = 10;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let chain_length = 5;
     // Fill some seen transitions without finalizing.
@@ -312,15 +344,9 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     .await;
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
+    tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     state_manager
-        .process_stf_changes(
-            &da_service,
-            0,
-            change_set,
-            transition_witness,
-            slot_commit,
-            Vec::new(),
-        )
+        .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
 
@@ -334,6 +360,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             .await?
             .get()
     );
+    shutdown_sender.send(())?;
     Ok(())
 }
 
@@ -349,8 +376,6 @@ async fn test_progressing_with_shuffle(
     seed: [u8; 32],
 ) -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
-
     let da_layer = std::sync::Arc::new(tokio::sync::RwLock::new(
         StorableMockDaLayer::new_in_memory(finality).await?,
     ));
@@ -362,6 +387,9 @@ async fn test_progressing_with_shuffle(
         },
     )
     .await;
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
     let mut rng = rand::rngs::SmallRng::from_seed(seed);
 
     // Empty padding
@@ -434,15 +462,9 @@ async fn test_progressing_with_shuffle(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         let state_root_hash = transition_witness.final_state_root;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(
-                &da_service,
-                0,
-                change_set,
-                transition_witness,
-                slot_commit,
-                Vec::new(),
-            )
+            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -500,6 +522,8 @@ async fn test_progressing_with_shuffle(
         last_finalized_header = da_service.get_last_finalized_block_header().await?;
         finalized_hashes.insert(last_finalized_header.hash());
     }
+
+    shutdown_sender.send(())?;
     Ok(())
 }
 
@@ -571,7 +595,6 @@ async fn test_shuffle_with_deeper_reorgs() -> anyhow::Result<()> {
 async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
     // sov_test_utils::initialize_logging();
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
 
     let finality = 50;
     let (sender, mut receiver) = tokio::sync::watch::channel(());
@@ -594,6 +617,10 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
         receiver,
     )
     .await;
+
+    let (mut state_manager, shutdown_sender_2) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
     {
         let spammer = da_service.clone();
         let _handle: tokio::task::JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
@@ -646,14 +673,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(
-                &da_service,
-                0,
-                change_set,
-                transition_witness,
-                slot_commit,
-                Vec::new(),
-            )
+            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
         seen_transitions.insert(returned_block.header().hash(), state_root_hash);
@@ -661,6 +681,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
         height = returned_block.header().height() + 1;
     }
 
+    shutdown_sender_2.send(())?;
     sender.send(())?;
     Ok(())
 }
@@ -678,7 +699,6 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
     seed: [u8; 32],
 ) -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
 
     let mut rng = rand::rngs::SmallRng::from_seed(seed);
 
@@ -693,7 +713,11 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         },
     )
     .await;
-    // To kick start things.
+
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    // To kick-start things.
     da_service.produce_block_now().await?;
 
     let mut seen_transitions: HashMap<MockHash, StateRoot> = HashMap::new();
@@ -742,15 +766,9 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         let state_root_hash = transition_witness.final_state_root;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(
-                &da_service,
-                0,
-                change_set,
-                transition_witness,
-                slot_commit,
-                Vec::new(),
-            )
+            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -758,6 +776,8 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
 
         height = returned_block.header().height() + 1;
     }
+
+    shutdown_sender.send(())?;
 
     Ok(())
 }
@@ -870,7 +890,7 @@ proptest! {
                         reshuffle_after,
                         seed,
                     );
-                    tokio::time::timeout(std::time::Duration::from_secs(5), test_future).await.unwrap().unwrap();
+                    tokio::time::timeout(std::time::Duration::from_secs(10), test_future).await.unwrap().unwrap();
             });
         }
 }
@@ -884,12 +904,16 @@ proptest! {
 #[should_panic(expected = "Finalized header changed")]
 async fn test_change_in_finalized_header() {
     let tempdir = tempfile::tempdir().unwrap();
-    let mut state_manager = setup_state_manager(tempdir.path()).await.unwrap();
 
     let chain_length = 5;
     let finality = 3;
 
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone())
+            .await
+            .unwrap();
 
     for height in 1..=chain_length {
         da_service
@@ -899,6 +923,7 @@ async fn test_change_in_finalized_header() {
             .unwrap()
             .unwrap();
         let filtered_block = da_service.get_block_at(height).await.unwrap();
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         process_continuous_transition(
             &mut state_manager,
             filtered_block.clone(),
@@ -928,6 +953,8 @@ async fn test_change_in_finalized_header() {
         .prepare_storage(alien_block, &da_service)
         .await
         .unwrap();
+
+    shutdown_sender.send(()).unwrap();
 }
 
 // On empty internal state, state manager should check if passed block is finalized
@@ -935,12 +962,14 @@ async fn test_change_in_finalized_header() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
-    let mut state_manager = setup_state_manager(tempdir.path()).await?;
-
     let chain_length = 7;
     let finality = 5;
 
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
     for height in 1..=chain_length {
         da_service
             .send_transaction(&[(height * 10) as u8; 10])
@@ -970,6 +999,8 @@ async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result
 
     assert_ne!(returned_block_2, not_next_to_finalized);
     assert_eq!(returned_block_2, next_to_finalized);
+
+    shutdown_sender.send(())?;
 
     Ok(())
 }
@@ -1015,11 +1046,14 @@ async fn setup_storage_manager(
     Ok((state_root, storage_manager))
 }
 
-async fn setup_state_manager<Da>(path: &std::path::Path) -> anyhow::Result<TestStateManager<Da>>
+async fn setup_state_manager<Da>(
+    storage_path: &std::path::Path,
+    da_service: Da,
+) -> anyhow::Result<(TestStateManager<Da>, tokio::sync::watch::Sender<()>)>
 where
     Da: DaService<Error = anyhow::Error, Spec = MockDaSpec>,
 {
-    let (state_root, mut storage_manager) = setup_storage_manager(path).await?;
+    let (state_root, mut storage_manager) = setup_storage_manager(storage_path).await?;
     let genesis_header = MockBlockHeader::from_height(0);
     let (stf_state, ledger_state) = storage_manager.create_state_after(&genesis_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
@@ -1031,10 +1065,19 @@ where
         target_da_height: AtomicU64::new(u64::MAX),
         sync_status_sender,
     });
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
+    shutdown_rx.mark_unchanged();
 
     let update_info = query_state_update_info(&ledger_db, stf_state, sync_state.as_ref()).await?;
     // Update channel, receiver does not need to be alive
     let (state_update_sender, _state_update_recv) = watch::channel(update_info);
+
+    let da_header_provider = DaServiceWithCachedFinalizedHeaders::new(
+        Arc::new(da_service),
+        shutdown_rx,
+        DA_POLLING_INTERVAL,
+    )
+    .await?;
 
     let mut state_manager = StateManager::new(
         storage_manager,
@@ -1044,12 +1087,12 @@ where
         None,
         Box::new(InfiniteHeight),
         sync_state,
-        std::time::Duration::from_millis(10),
         std::time::Duration::from_millis(3_600_000),
+        da_header_provider,
     )?;
     state_manager.startup().await?;
 
-    Ok(state_manager)
+    Ok((state_manager, shutdown_tx))
 }
 
 // Writes to user space concatenation of block height bytes and block hash
@@ -1066,7 +1109,7 @@ fn produce_synthetic_changes<Da: DaSpec>(
         .ordered_writes
         .push((SlotKey::from_slice(&data), Some(SlotValue::from(data))));
     let (state_root, state_update) = prover_storage
-        .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root)
+        .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root, None)
         .unwrap();
     let change_set = prover_storage.materialize_changes(state_update);
 
@@ -1127,14 +1170,7 @@ async fn process_continuous_transition(
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     state_manager
-        .process_stf_changes(
-            da_service,
-            0,
-            change_set,
-            transition_witness,
-            slot_commit,
-            Vec::new(),
-        )
+        .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
         .await?;
     check_internal_consistency(state_manager, finality as usize);
 

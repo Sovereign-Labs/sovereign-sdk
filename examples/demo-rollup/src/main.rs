@@ -6,10 +6,12 @@ use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use sov_address::MultiAddressEvm;
 use sov_celestia_adapter::CelestiaService;
+use sov_demo_rollup::ExternalMockNomtDemoRollup;
 use sov_demo_rollup::{
     celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, CelestiaNomtDemoRollup,
-    MockDemoRollup, MockNomtDemoRollup,
+    ExternalMockDemoRollup, MockDemoRollup, MockNomtDemoRollup,
 };
+use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::execution_mode::Native;
@@ -35,7 +37,7 @@ struct Args {
     storage: SupportedStorage,
 
     /// The path to the rollup config.
-    #[arg(long, default_value = "mock_rollup_config.toml")]
+    #[arg(long, default_value = "configs/mock_rollup_config.toml")]
     rollup_config_path: String,
 
     /// The path to the genesis configs.
@@ -59,6 +61,7 @@ struct Args {
 enum SupportedDaLayer {
     Celestia,
     Mock,
+    ExternalMock,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -87,6 +90,10 @@ async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
     prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
         .context("Prometheus exporter start failed")?;
+
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|e| anyhow::anyhow!("Failed to setup ring crypto provider: {e:?}"))?;
 
     let rollup_config_path = args.rollup_config_path.as_str();
 
@@ -126,6 +133,35 @@ async fn run() -> anyhow::Result<()> {
             )
             .await
             .context("Failed to initialize NOMT based MockDa rollup")?;
+            rollup.run().await
+        }
+        (SupportedDaLayer::ExternalMock, SupportedStorage::Jmt) => {
+            let prover_config = prover_config_disc
+                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+
+            let rollup = new_rollup_with_external_mock_da_and_jmt(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+                start_at_rollup_height,
+                stop_at_rollup_height,
+            )
+            .await
+            .context("Failed to initialize JMT based ExternalMockDa rollup")?;
+            rollup.run().await
+        }
+        (SupportedDaLayer::ExternalMock, SupportedStorage::Nomt) => {
+            let prover_config = prover_config_disc
+                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+            let rollup = new_rollup_with_external_mock_da_and_nomt(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+                start_at_rollup_height,
+                stop_at_rollup_height,
+            )
+            .await
+            .context("Failed to initialize NOMT based ExternalMockDa rollup")?;
             rollup.run().await
         }
         (SupportedDaLayer::Celestia, SupportedStorage::Jmt) => {
@@ -198,6 +234,7 @@ async fn new_rollup_with_celestia_da(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -224,6 +261,7 @@ async fn new_rollup_with_celestia_da_and_nomt(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -253,6 +291,37 @@ async fn new_rollup_with_mock_da_and_jmt(
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            None,
+        )
+        .await
+}
+
+async fn new_rollup_with_external_mock_da_and_jmt(
+    rt_genesis_paths: &GenesisPaths,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig<Risc0>>,
+    start_at_rollup_height: Option<RollupHeight>,
+    stop_at_rollup_height: Option<RollupHeight>,
+) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {
+    debug!(
+        config_path = rollup_config_path,
+        "Starting rollup on external-mock DA"
+    );
+
+    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaClient> =
+        from_toml_path(rollup_config_path).with_context(|| {
+            format!("Failed to read rollup configuration from {rollup_config_path}")
+        })?;
+
+    let mock_rollup = ExternalMockDemoRollup::<Native>::default();
+    mock_rollup
+        .create_new_rollup(
+            rt_genesis_paths,
+            rollup_config,
+            prover_config,
+            start_at_rollup_height,
+            stop_at_rollup_height,
+            None,
         )
         .await
 }
@@ -282,6 +351,37 @@ async fn new_rollup_with_mock_da_and_nomt(
             prover_config,
             stop_at_rollup_height,
             start_at_rollup_height,
+            None,
+        )
+        .await
+}
+
+async fn new_rollup_with_external_mock_da_and_nomt(
+    rt_genesis_paths: &GenesisPaths,
+    rollup_config_path: &str,
+    prover_config: Option<RollupProverConfig<Risc0>>,
+    start_at_rollup_height: Option<RollupHeight>,
+    stop_at_rollup_height: Option<RollupHeight>,
+) -> anyhow::Result<Rollup<ExternalMockNomtDemoRollup<Native>, Native>> {
+    debug!(
+        config_path = rollup_config_path,
+        "Starting NOMT rollup on external-mock DA"
+    );
+
+    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaClient> =
+        from_toml_path(rollup_config_path).with_context(|| {
+            format!("Failed to read rollup configuration from {rollup_config_path}")
+        })?;
+
+    let mock_rollup = ExternalMockNomtDemoRollup::<Native>::default();
+    mock_rollup
+        .create_new_rollup(
+            rt_genesis_paths,
+            rollup_config,
+            prover_config,
+            start_at_rollup_height,
+            stop_at_rollup_height,
+            None,
         )
         .await
 }

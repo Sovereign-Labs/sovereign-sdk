@@ -32,7 +32,6 @@ fn test_outcomes(outcomes: Vec<Arc<TransactionOutcome>>, txs_count: usize) {
         "RUST_LOG",
         "info,sov_metrics=error,sov_modules_stf_blueprint=debug,sov_bank=trace",
     );
-    sov_test_utils::initialize_logging();
     use sov_bank::CallMessageDiscriminants::*;
     let user = TestUser::<S>::generate_with_default_balance();
 

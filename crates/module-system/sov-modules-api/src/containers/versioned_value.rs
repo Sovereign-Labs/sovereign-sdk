@@ -146,7 +146,7 @@ mod tests {
         let storage = storage_manager.create_storage();
 
         let kernel = MockKernel::<TestSpec>::new(4, 1);
-        let mut state = StateCheckpoint::new(storage, &kernel);
+        let mut state = StateCheckpoint::new(storage, &kernel, None);
 
         let prefix = Prefix::new(1, 1);
         let mut value = VersionedStateValue::<RollupHeight>::with_codec(prefix, BorshCodec);
@@ -180,7 +180,7 @@ mod tests {
         let storage = storage_manager.create_storage();
 
         let kernel = MockKernel::<TestSpec>::new(4, 1);
-        let mut state = StateCheckpoint::new(storage, &kernel);
+        let mut state = StateCheckpoint::new(storage, &kernel, None);
 
         let prefix = Prefix::new(1, 1);
         let mut value = VersionedStateValue::<RollupHeight>::with_codec(prefix, BorshCodec);

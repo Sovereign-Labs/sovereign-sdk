@@ -285,12 +285,14 @@ impl<S: Spec> Module for AccessPattern<S> {
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         // The initialization logic
         self.admin.set(&config.admin, state).map_err(Into::into)
     }
@@ -300,7 +302,7 @@ impl<S: Spec> Module for AccessPattern<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         let admin = self
             .admin
             .get(state)

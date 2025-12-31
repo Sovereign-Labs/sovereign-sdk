@@ -14,17 +14,11 @@ readme = "README.md"
 workspace = true
 
 [dependencies]
-jsonrpsee = { workspace = true, features = [
-    "macros",
-    "server",
-], optional = true }
+jsonrpsee = { workspace = true, features = ["server-core"], optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 axum = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
-alloy-sol-types = { workspace = true }
-alloy-primitives = { workspace = true }
-alloy-eips = { workspace = true }
 derive_more = { workspace = true, default-features = true, features = [
     "deref",
     "debug",
@@ -64,6 +58,8 @@ utoipa = { workspace = true, optional = true }
 utoipa-swagger-ui = { workspace = true, optional = true }
 unwrap-infallible = { workspace = true }
 nearly-linear = { workspace = true }
+quick_cache = { workspace = true, optional = true }
+concread = { workspace = true, optional = true }
 
 [dev-dependencies]
 sov-state = { workspace = true, features = ["native", "test-utils"] }
@@ -90,7 +86,7 @@ arbitrary = [
 	"sov-db?/arbitrary",
 	"sov-mock-zkvm/arbitrary",
 	"sov-modules-api/arbitrary",
-	"sov-rest-utils/arbitrary",
+	"sov-rest-utils?/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-state/arbitrary",
 	"sov-sequencer-registry/arbitrary",
@@ -98,9 +94,6 @@ arbitrary = [
 	"sov-mock-da/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-modules-macros/arbitrary",
-	"alloy-primitives/arbitrary",
-	"alloy-sol-types/arbitrary",
-	"alloy-eips/arbitrary"
 ]
 expensive-observability = ["native"]
 bench = ["sov-modules-api/bench", "sov-state/bench", "sov-modules-macros/bench"]
@@ -108,8 +101,10 @@ native = [
     "async-trait",
     "axum",
     "clap",
+    "concread",
     "jsonrpsee",
     "heck",
+    "quick_cache",
     "serde_yaml",
     "sov-bank/native",
     "sov-db",

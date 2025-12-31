@@ -1,30 +1,30 @@
+use alloy::{
+    network::{Network, ReceiptResponse},
+    providers::Provider,
+};
+use alloy_primitives::U256;
 use anyhow::Result;
-use sov_eth_client::SimpleStorageClient;
+use sov_evm_test_utils::SimpleStorage;
 
 #[allow(dead_code)]
-pub async fn run(client: SimpleStorageClient) -> Result<()> {
-    let deploy_receipt = client
-        .deploy_contract()
-        .await
-        .map_err(|e| anyhow::anyhow!("Deploy contract failed: {:?}", e))?
-        .await?
-        .unwrap();
-    let contract_address = deploy_receipt.contract_address.unwrap();
+pub async fn run<P, N>(client: P) -> Result<()>
+where
+    P: Provider<N> + Clone + Send + Sync,
+    N: Network + Send + Sync,
+{
+    let contract = SimpleStorage::deploy(client).await?;
 
-    println!("Contract deployed at: {contract_address:?}");
+    println!("Contract deployed at: {:?}", contract.address());
 
     for i in 1..=1000 {
-        let pending_tx = client.set_value(contract_address, i).await;
-        match pending_tx.await {
-            Ok(Some(receipt)) => println!(
-                "TX {}: Gas: {:?} Block: {:?}",
-                i,
-                receipt.gas_used.unwrap(),
-                receipt.block_number.unwrap()
-            ),
-            Ok(None) => println!("TX {i}: No receipt received"),
-            Err(e) => println!("TX {i}: Error - {e:?}"),
-        }
+        let tx = contract.set(U256::from(i)).send().await?;
+        let receipt = tx.get_receipt().await?;
+        println!(
+            "TX: {} Gas: {:?} Block: {:?}",
+            i,
+            receipt.gas_used(),
+            receipt.block_number()
+        );
     }
     Ok(())
 }

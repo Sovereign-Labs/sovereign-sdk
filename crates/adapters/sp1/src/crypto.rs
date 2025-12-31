@@ -4,10 +4,10 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ed25519_consensus::{Signature, VerificationKey};
+use ed25519_consensus::{Error, Signature, VerificationKey};
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
 use sov_rollup_interface::reexports::schemars::{self, JsonSchema};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema;
 
 /// Defines private key types and operations
 #[cfg(feature = "native")]
@@ -69,9 +69,8 @@ pub mod private_key {
         }
 
         fn sign(&self, msg: &[u8]) -> Self::Signature {
-            SP1Signature {
-                msg_sig: self.key_pair.sign(msg),
-            }
+            let s = self.key_pair.sign(msg);
+            SP1Signature::new(s)
         }
     }
 
@@ -162,14 +161,13 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, PartialOrd, Ord)]
 pub struct SP1PublicKey {
     #[schemars(
         flatten,
         with = "String",
         length(equal = "ed25519_consensus::VerificationKey::LENGTH * 2")
     )]
-    #[sov_wallet(as_ty = "[u8; 32]")] // the LENGTH property doesn't seem to exist
     pub(crate) pub_key: VerificationKey,
 }
 
@@ -180,12 +178,31 @@ impl SP1PublicKey {
     }
 }
 
+impl TryFrom<Vec<u8>> for SP1PublicKey {
+    type Error = Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let pub_key = VerificationKey::try_from(value.as_slice())?;
+        Ok(Self { pub_key })
+    }
+}
+
+impl AsRef<[u8]> for SP1PublicKey {
+    fn as_ref(&self) -> &[u8] {
+        self.pub_key.as_ref()
+    }
+}
+
 impl sov_rollup_interface::crypto::PublicKey for SP1PublicKey {
     fn credential_id(&self) -> sov_rollup_interface::crypto::CredentialId {
         // The pub key is already 32 bytes, so we don't hash it.
         let data = sov_rollup_interface::common::HexString(*self.bytes());
         sov_rollup_interface::crypto::CredentialId(data)
     }
+}
+
+impl OverrideSchema for SP1PublicKey {
+    type Output = [u8; 32];
 }
 
 impl BorshDeserialize for SP1PublicKey {
@@ -206,9 +223,7 @@ impl BorshSerialize for SP1PublicKey {
 }
 
 /// An ed25519 signature. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(
-    PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema, UniversalWallet,
-)]
+#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema)]
 pub struct SP1Signature {
     /// The inner signature.
     #[schemars(
@@ -216,18 +231,31 @@ pub struct SP1Signature {
         with = "String",
         length(equal = "ed25519_consensus::Signature::LENGTH * 2")
     )]
-    #[sov_wallet(as_ty = "[u8; 64]")] // the LENGTH property doesn't seem to exist
     pub msg_sig: Signature,
+    bytes: Vec<u8>,
+}
+
+impl SP1Signature {
+    /// Create a new instance
+    pub fn new(s: Signature) -> Self {
+        Self {
+            msg_sig: s,
+            bytes: s.to_bytes().to_vec(),
+        }
+    }
+}
+
+impl OverrideSchema for SP1Signature {
+    type Output = [u8; 64];
 }
 
 impl BorshDeserialize for SP1Signature {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0u8; 64];
         reader.read_exact(&mut buffer)?;
+        let s = Signature::try_from(buffer.as_slice()).map_err(map_error)?;
 
-        Ok(Self {
-            msg_sig: Signature::try_from(buffer.as_slice()).map_err(map_error)?,
-        })
+        Ok(Self::new(s))
     }
 }
 
@@ -241,9 +269,23 @@ impl TryFrom<&[u8]> for SP1Signature {
     type Error = anyhow::Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self {
-            msg_sig: Signature::try_from(value).map_err(anyhow::Error::msg)?,
-        })
+        let s = Signature::try_from(value).map_err(anyhow::Error::msg)?;
+        Ok(Self::new(s))
+    }
+}
+
+impl TryFrom<Vec<u8>> for SP1Signature {
+    type Error = ed25519_consensus::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let msg_sig = Signature::try_from(value.as_slice())?;
+        Ok(Self::new(msg_sig))
+    }
+}
+
+impl AsRef<[u8]> for SP1Signature {
+    fn as_ref(&self) -> &[u8] {
+        self.bytes.as_slice()
     }
 }
 
@@ -290,9 +332,7 @@ impl FromStr for SP1Signature {
             .try_into()
             .map_err(|_| anyhow::anyhow!("Invalid signature size"))?;
 
-        Ok(SP1Signature {
-            msg_sig: Signature::from(byte_slice),
-        })
+        Ok(SP1Signature::new(byte_slice.into()))
     }
 }
 

@@ -21,7 +21,7 @@ sov-modules-api = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
-full-node-configs = { workspace = true }
+sov-full-node-configs = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
 
 # Modules

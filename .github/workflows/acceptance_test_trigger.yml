@@ -1,25 +1,26 @@
 name: Trigger Acceptance Tests
 
 on:
-  # schedule:
-  #   # Nightly at 5am UTC
-  #   - cron: "0 5 * * *"
-  # Allow manual triggering for testing
+  schedule:
+    # Nightly at 5am UTC
+    - cron: "0 5 * * *"
+  # Can be triggered manually
   workflow_dispatch:
     inputs:
       dev_branch:
-        description: 'Dev branch to test'
+        description: 'Branch under test - the HEAD commit will be taken from this and fast-forwarded into nightly on success'
         required: false
-        default: 'theodore/acceptance-dev-testing'
-      nightly_branch:
-        description: 'Nightly branch to merge into'
+        default: 'dev'
+      skip_regeneration:
+        description: 'Skip automatic data regeneration on test failure (useful when debugging)'
         required: false
-        default: 'theodore/acceptance-nightly-testing'
+        type: boolean
+        default: true
 
 env:
-  # Use test branches for now, will change to dev/nightly later
-  DEV_BRANCH: ${{ github.event.inputs.dev_branch || 'theodore/acceptance-dev-testing' }}
-  NIGHTLY_BRANCH: ${{ github.event.inputs.nightly_branch || 'theodore/acceptance-nightly-testing' }}
+  DEV_BRANCH: ${{ github.event.inputs.dev_branch || 'dev' }}
+  NIGHTLY_BRANCH: 'nightly'
+  SKIP_REGENERATION: ${{ github.event.inputs.skip_regeneration || 'false' }}
 
 jobs:
   trigger:
@@ -68,7 +69,7 @@ jobs:
           if ! response=$(curl -X POST "${ACCEPTANCE_SERVER_API_URL}/start-test" \
             -H "Authorization: Bearer ${ACCEPTANCE_SERVER_API_TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"commit_sha\": \"$COMMIT_SHA\"}" \
+            -d "{\"commit_sha\": \"$COMMIT_SHA\", \"skip_regeneration\": ${{ env.SKIP_REGENERATION }}}" \
             -w "\n%{http_code}" -s); then
             echo "❌ Curl command failed; unable to send request"
             exit 1

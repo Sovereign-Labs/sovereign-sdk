@@ -1,4 +1,5 @@
 - sov-rollup-interface
+- nearly-linear
 - sov-universal-wallet
 - sov-universal-wallet-macros
 - sov-universal-wallet-macro-helpers
@@ -10,7 +11,11 @@
 - sov-state
 - sov-modules-macros # Requires --no-verify because it writes outside of OUT_DIR.
 - sov-modules-api
+# Release modules here:
+- sov-kernels
+- sov-capabilities
 - sov-metrics
+- sov-full-node-configs
 - sov-sequencer
 - sov-modules-stf-blueprint
 - sov-stf-runner
@@ -22,6 +27,13 @@
 - sov-zkvm-utils
 - sov-build
 - full-node-configs
+- sovereign-web3
+- sov-ethereum #TODO: Find correct spot in order
+- sov-eip-712 #TODO: Find correct spot in order
+- sov-eip-712-auth #TODO: Find correct spot in order
+- sov-solana-offchain-auth #TODO: Find correct spot in order
+- sov-rpc-eth-types #TODO: Find correct spot in order
+- sov-address #TODO: Find correct spot in order
 
 # Modules
 - sov-accounts
@@ -32,6 +44,12 @@
 - sov-blob-storage
 - sov-solana-offchain-auth
 - sov-uniqueness
+- sov-evm
+- sov-paymaster
+- sov-operator-incentives
+- sov-attester-incentives
+- sov-revenue-share
+- sov-hyperlane-register-module
 
 # Adapters
 - sov-risc0-adapter

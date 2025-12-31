@@ -304,13 +304,13 @@ impl<S: Spec> Paymaster<S> {
         self.emit_event(
             state,
             Event::<S>::RegisteredPaymaster {
-                address: new_payer.clone(),
+                address: *new_payer,
             },
         );
         self.emit_event(
             state,
             Event::SetDefaultPayeePolicy {
-                payer: new_payer.clone(),
+                payer: *new_payer,
                 policy: policy.default_payee_policy.clone(),
             },
         );
@@ -331,8 +331,8 @@ impl<S: Spec> Paymaster<S> {
                 self.emit_event(
                     state,
                     Event::<S>::SetPayerForSequencer {
-                        payer: new_payer.clone(),
-                        sequencer: sequencer.clone(),
+                        payer: *new_payer,
+                        sequencer: *sequencer,
                     },
                 );
             } else {
@@ -373,7 +373,7 @@ impl<S: Spec> Paymaster<S> {
             state,
             Event::<S>::SetPayerForSequencer {
                 payer,
-                sequencer: context.sequencer_da_address().clone(),
+                sequencer: *context.sequencer_da_address(),
             },
         );
 
@@ -419,7 +419,7 @@ impl<S: Spec> Paymaster<S> {
             self.emit_event(
                 state,
                 Event::SetDefaultPayeePolicy {
-                    payer: payer.clone(),
+                    payer: *payer,
                     policy: default_policy.clone(),
                 },
             );
@@ -442,7 +442,7 @@ impl<S: Spec> Paymaster<S> {
             self.emit_event(
                 state,
                 Event::AddedPayeePolicy {
-                    payer: payer.clone(),
+                    payer: *payer,
                     payee: address,
                     policy,
                 },
@@ -469,7 +469,7 @@ impl<S: Spec> Paymaster<S> {
                 self.emit_event(
                     state,
                     Event::RemovedPayeePolicy {
-                        payer: payer.clone(),
+                        payer: *payer,
                         payee,
                     },
                 );
@@ -531,8 +531,8 @@ impl<S: Spec> Paymaster<S> {
                             self.emit_event(
                                 state,
                                 Event::<S>::RemovedPayerForSequencer {
-                                    sequencer: seq_address_to_remove.clone(),
-                                    payer: payer.clone(),
+                                    sequencer: *seq_address_to_remove,
+                                    payer: *payer,
                                 },
                             );
                         } else {
@@ -570,8 +570,8 @@ impl<S: Spec> Paymaster<S> {
                             self.emit_event(
                                 state,
                                 Event::<S>::SetPayerForSequencer {
-                                    sequencer: context.sequencer_da_address().clone(),
-                                    payer: payer.clone(),
+                                    sequencer: *context.sequencer_da_address(),
+                                    payer: *payer,
                                 },
                             );
                         }

@@ -2,7 +2,7 @@ use alloy::{network::Network, providers::Provider};
 use alloy_primitives::{utils::parse_ether, Address, U256};
 use anyhow::Result;
 use rand::Rng;
-use sov_test_utils::{Erc20, Router, Submit};
+use sov_evm_test_utils::{Erc20, Router, Submit};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Default)]

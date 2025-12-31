@@ -96,7 +96,6 @@ impl Metric for NomtBeginSessionMetric {
 
 #[derive(Debug)]
 pub struct StorageManagerFinalizationMetric {
-    pub da_height: u64,
     pub preparation_time: std::time::Duration,
     pub commit_time: std::time::Duration,
     pub pruning_commit_time: Option<std::time::Duration>,
@@ -110,9 +109,8 @@ impl Metric for StorageManagerFinalizationMetric {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},da_height={} prep_time_us={},commit_time_us={}",
+            "{} prep_time_us={},commit_time_us={}",
             self.measurement_name(),
-            self.da_height,
             self.preparation_time.as_micros(),
             self.commit_time.as_micros(),
         )?;
@@ -158,15 +156,38 @@ impl Metric for PrunerMetric {
 #[derive(Debug)]
 pub struct MerklizedCommitMetric {
     pub flag_prepare: std::time::Duration,
-    pub write_attempts_kernel: usize,
-    // How much time in total it took to write overlay
-    pub write_kernel: std::time::Duration,
     pub flag_mid: std::time::Duration,
+    pub flag_finish: std::time::Duration,
+    // How much time in total it took to write overlay
+    pub write_user: std::time::Duration,
+    pub write_kernel: std::time::Duration,
     // How many attempts it took to write
     pub write_attempts_user: usize,
-    pub write_user: std::time::Duration,
-    pub flag_finish: std::time::Duration,
+    pub write_attempts_kernel: usize,
     pub total: std::time::Duration,
+}
+
+impl MerklizedCommitMetric {
+    fn serialize_values_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        // Flag
+        let flag_prepare_us = self.flag_prepare.as_micros();
+        let flag_mid_us = self.flag_mid.as_micros();
+        let flag_finish_us = self.flag_finish.as_micros();
+        write!(buffer,
+               "merklized_flag_prepare_us={flag_prepare_us},merklized_flag_mid_us={flag_mid_us},merklized_flag_finish={flag_finish_us}")?;
+        // Times
+        let write_user_us = self.write_user.as_micros();
+        let write_kernel_us = self.write_kernel.as_micros();
+        let total_us = self.total.as_micros();
+        write!(buffer,
+               ",merklized_write_user_us={write_user_us},merklized_write_kernel_us={write_kernel_us},merklized_total_us={total_us}")?;
+
+        // Attempts
+        let write_attempts_user = self.write_attempts_user;
+        let write_attempts_kernel = self.write_attempts_kernel;
+        write!(buffer,
+               ",merklized_attempts_write_user={write_attempts_user},merklized_write_attempts_kernel={write_attempts_kernel}")
+    }
 }
 
 #[derive(Debug)]
@@ -190,23 +211,14 @@ impl Metric for CommitDetailedMetric {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        write!(
-            buffer,
-            "{} merklized_flag_prepare_us={},write_attempts_kernel={},write_kernel_us={},write_attempts_user={},write_user_us={},flag_mid_us={},flag_finish_us={},merklized_total_us={},merklized_from_caller_us={},flat_prepare_us={},flat_write_us={},accessory_commit_us={},ledger_commit_us={}",
-            self.measurement_name(),
-            self.merklized_commit_from_caller.as_micros(),
-            self.merklized_commit.flag_prepare.as_micros(),
-            self.merklized_commit.write_attempts_kernel,
-            self.merklized_commit.write_kernel.as_micros(),
-            self.merklized_commit.write_attempts_user,
-            self.merklized_commit.write_user.as_micros(),
-            self.merklized_commit.flag_mid.as_micros(),
-            self.merklized_commit.flag_finish.as_micros(),
-            self.merklized_commit.total.as_micros(),
-            self.flat.prepare.as_micros(),
-            self.flat.write.as_micros(),
-            self.accessory_commit.as_micros(),
-            self.ledger_commit.as_micros(),
-        )
+        write!(buffer, "{} ", self.measurement_name())?;
+        self.merklized_commit
+            .serialize_values_for_telegraf(buffer)?;
+        let merklized_commit_from_caller_us = self.merklized_commit_from_caller.as_micros();
+        let flat_prepare_us = self.flat.prepare.as_micros();
+        let flat_write_us = self.flat.write.as_micros();
+        let accessory_commit_us = self.accessory_commit.as_micros();
+        let ledger_commit_us = self.ledger_commit.as_micros();
+        write!(buffer, ",merklized_from_caller_us={merklized_commit_from_caller_us},flat_prepare_us={flat_prepare_us},flat_write_us={flat_write_us},accessory_commit_us={accessory_commit_us},ledger_commit_us={ledger_commit_us}")
     }
 }

@@ -7,14 +7,21 @@ use std::io;
 use borsh::{BorshDeserialize, BorshSerialize};
 use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native")]
+use sov_rollup_interface::stf::GenesisParams;
+#[cfg(feature = "native")]
+use sov_state::pinned_cache::PinnedCache;
+#[cfg(feature = "native")]
+use sov_state::User;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
 use crate::transaction::TransactionCallable;
-#[cfg(feature = "native")]
-use crate::FullyBakedTx;
+use crate::Context;
 use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
+#[cfg(feature = "native")]
+use crate::{FullyBakedTx, StateReader};
 
 /// Flag indicating what mode the rollup is operating in.
 #[derive(
@@ -28,6 +35,35 @@ pub enum OperatingMode {
     Zk,
     /// The rollup is currently executing in operator mode.
     Operator,
+}
+
+/// This trait defines an interface to pass runtime configuration values for modules.
+/// This is configuration that is ran off-chain, for example metric gathering configuration.
+/// This is distinct from genesis configuration, which is passed to the runtime at genesis time
+/// and stored on-chain.
+///
+/// This configuration and function does not need to be deterministic, as it is not executed
+/// on-chain.
+pub trait ModuleExecutionConfig {
+    /// Input type for configuration.
+    /// This could be a config struct that holds sub configuration for each runtime module
+    /// that requires such configuration.
+    type Input: Clone + Send + Sync;
+
+    /// Execute configuration for modules.
+    /// This function is called once at runtime startup and will typically pass specific module
+    /// configuration values to each module that requires it.
+    fn configure(_input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
+// Allow assigning `()` as the ModuleExecutionConfig when no configuration is needed.
+// Acts as a no-op implementation.
+impl ModuleExecutionConfig for () {
+    type Input = ();
+
+    fn configure(_input: &Self::Input) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Ok(())
+    }
 }
 
 #[cfg(feature = "native")]
@@ -52,10 +88,13 @@ pub trait Runtime<S: Spec>:
     const CHAIN_HASH: [u8; 32];
 
     /// GenesisConfig type.
-    type GenesisConfig: Clone + Send + Sync;
+    type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
     /// GenesisInput type.
     type GenesisInput: std::fmt::Debug + Clone + Send + Sync;
+
+    /// ModuleExecutionConfiguration type.
+    type ModuleExecutionConfig: ModuleExecutionConfig;
 
     /// Responsible for authenticating transactions.
     type Auth: TransactionAuthenticator<S>;
@@ -102,10 +141,41 @@ pub trait Runtime<S: Spec>:
     /// Messages with equal priority are processed in the order they are received. If messages have a delay configured in [`Runtime::get_transaction_delay_ms`],
     /// they are considered to be "received" after the delay period has elapsed.
     // Returns a u32 so that the sequencer can represent priority as a u64 and have some reserved values that are greater than the maximum priority level of any transaction.
-    #[cfg(feature = "native")]
     fn get_transaction_priority(&self, _call: &FullyBakedTx) -> u32 {
         0
     }
+
+    /// Returns a call message to set the oracle timestamp if the runtime supports it.
+    fn maybe_set_oracle_timestamp(
+        &self,
+        _millis_since_epoch: i64,
+    ) -> Option<<Self as DispatchCall>::Decodable> {
+        None
+    }
+
+    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
+    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    fn is_unauthorized_system_tx(
+        &self,
+        _call: &Self::Decodable,
+        _context: &Context<S>,
+        _state: &mut impl crate::TxState<S>,
+    ) -> bool {
+        false
+    }
+
+    /// Populates the pinned state cache for the given storage if supported
+    fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
+        None
+    }
+
+    /// Resolve CredentialId to address.
+    fn resolve_address<ST: StateReader<User>>(
+        &self,
+        default_address: &S::Address,
+        credential_id: &crate::CredentialId,
+        state: &mut ST,
+    ) -> Result<S::Address, ST::Error>;
 }
 
 #[cfg(feature = "native")]
@@ -164,6 +234,17 @@ pub trait Runtime<S: Spec>:
     /// This is a low level security mechanism. Your runtime SHOULD only allow
     /// `sov_sequencer_registry::CallMessage::Register` transactions here.
     fn allow_unregistered_tx(call: &Self::Decodable) -> bool;
+
+    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
+    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    fn is_unauthorized_system_tx(
+        &self,
+        _call: &Self::Decodable,
+        _context: &Context<S>,
+        _state: &mut impl crate::TxState<S>,
+    ) -> bool {
+        false
+    }
 }
 
 /// The return type of [`Runtime::endpoints`].

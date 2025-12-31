@@ -64,14 +64,11 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
             //BlockProducingConfig::Manual,
             None,
             TEST_BLOB_PROCESSING_TIMEOUT,
-            1,
             MAX_BATCH_EXECUTION_TIME_MILLIS,
             None,
             0,
         )
-        .await
-        .map(|v| v.into_iter().next().unwrap())
-        .unwrap(),
+        .await,
         admin,
     )
 }
@@ -114,11 +111,11 @@ async fn test_blobs_are_send_after_rollup_resync() {
     sov_test_utils::initialize_logging();
     let (test_rollup, _) = create_test_rollup().await;
     let da = test_rollup.da_service.clone();
-    let mut header_subscrition = da.subscribe_finalized_header().await.unwrap();
+    let mut header_subscription = da.subscribe_finalized_header().await.unwrap();
 
     for _ in 0..10 {
         da.produce_block_now().await.unwrap();
-        header_subscrition.next().await.unwrap().unwrap();
+        header_subscription.next().await.unwrap().unwrap();
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
 
@@ -127,7 +124,7 @@ async fn test_blobs_are_send_after_rollup_resync() {
     // Generate a block while Rollup is offline to trigger resync logic.
     for _ in 0..20 {
         da.produce_block_now().await.unwrap();
-        header_subscrition.next().await.unwrap().unwrap();
+        header_subscription.next().await.unwrap().unwrap();
     }
 
     // The new rollup has pending blobs in the BlobSender DB and completed blobs in the Preferred Sequencer state.

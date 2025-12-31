@@ -58,7 +58,13 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         chain_id: tx.chain_id(),
         // We don't set gas_price nor the gas_priority_fee.
         // We disable the EVM logic charging gas at the beginning of the TX and instead rely on sov gas metering
-        ..Default::default()
+        // Default values
+        gas_price: 0,
+        access_list: vec![].into(),
+        gas_priority_fee: None,
+        blob_hashes: vec![],
+        max_fee_per_blob_gas: 0,
+        authorization_list: vec![],
     }
 }
 
@@ -122,7 +128,8 @@ pub(crate) fn create_block_env(
             excess_blob_gas: EXCESS_BLOB_GAS,
             blob_gasprice: BLOB_GAS_PRICE,
         }),
-        ..Default::default()
+        // Default values
+        difficulty: U256::ZERO,
     }
 }
 

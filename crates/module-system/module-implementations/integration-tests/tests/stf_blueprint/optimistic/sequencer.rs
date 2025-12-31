@@ -45,7 +45,7 @@ fn create_runner_and_blobs(
 // The sequencer should see only the effects of successful transactions.
 // This test verifies that unsuccessful transactions do not consume any gas.
 #[test]
-fn test_sequencer_process_only_sucessfull_tx() {
+fn test_sequencer_process_only_successful_txs() {
     // This sequence consumes the same amount of gas in the SEQUENCER, as a single TxStatus::Success in the NODE, so the cache after the initial revert is invalidated.
     check_seq_and_node_gas(vec![TxStatus::Reverted, TxStatus::Success]);
     // This sequence consumes the same amount of gas in the SEQUENCER as two TxStatus::Success in the NODE, so the revert doesn’t overly invalidate the cache
@@ -74,24 +74,24 @@ fn test_sequencer_process_only_sucessfull_tx() {
     ]);
 }
 
-fn check_seq_and_node_gas(txs: Vec<TxStatus>) {
+fn check_seq_and_node_gas(tx_statuses: Vec<TxStatus>) {
     // Each successful tx in txs has a different generation number.
     // Gas used in sequencer
     let gas_used_by_sequencer = {
-        let (mut runner, blobs) = create_runner_and_blobs(&txs);
+        let (mut runner, blobs) = create_runner_and_blobs(&tx_statuses);
         let result = runner.execute_as_sequencer::<RelevantBlobs<MockBlob>>(blobs.clone());
         let batch_receipt_1 = result.0.batch_receipts[0].clone();
         get_gas_from_txs(&batch_receipt_1.tx_receipts)
     };
 
     // Gas used in node only for successful transactions.
-    let sucess_txs: Vec<_> = txs
+    let successful_txs: Vec<_> = tx_statuses
         .into_iter()
         .filter(|tx| matches!(tx, TxStatus::Success))
         .collect();
 
     let gas_used_by_node = {
-        let (mut runner, blobs) = create_runner_and_blobs(&sucess_txs);
+        let (mut runner, blobs) = create_runner_and_blobs(&successful_txs);
         let result = runner.execute::<RelevantBlobs<MockBlob>>(blobs.clone());
         let batch_receipt_1 = result.0.batch_receipts[0].clone();
         get_gas_from_txs(&batch_receipt_1.tx_receipts)
@@ -99,9 +99,9 @@ fn check_seq_and_node_gas(txs: Vec<TxStatus>) {
     assert_eq!(gas_used_by_node, gas_used_by_sequencer);
 }
 
-/// Check if reverted tx is ignored by the sequecner.
+/// Check if reverted tx is ignored by the sequencer.
 #[test]
-fn test_sequencer_inores_reverted_tx() {
+fn test_sequencer_ignores_reverted_tx() {
     let (mut runner, blobs) = create_runner_and_blobs(&[TxStatus::Reverted]);
     let result = runner.execute_as_sequencer::<RelevantBlobs<MockBlob>>(blobs);
     let batch_receipt_1 = result.0.batch_receipts[0].clone();

@@ -66,8 +66,6 @@ impl DaService for StorableMockDaClient {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
-
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let url = self.url(&format!("/blocks/{height}"))?;
         let response = self.client.get(url).send().await?;
@@ -190,7 +188,7 @@ impl DaService for StorableMockDaClient {
         Ok(proofs)
     }
 
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         let url = self.url("/signer").expect("Bad url");
         let response = self
             .client
@@ -202,6 +200,6 @@ impl DaService for StorableMockDaClient {
         let signer_response: SignerResponse = handle_response(response)
             .await
             .expect("Failed to parse signer response");
-        signer_response.address
+        Some(signer_response.address)
     }
 }

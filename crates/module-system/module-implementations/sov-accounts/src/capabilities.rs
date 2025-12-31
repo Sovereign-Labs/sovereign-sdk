@@ -1,4 +1,4 @@
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateWriter};
+use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, StateWriter};
 use sov_state::User;
 
 use crate::{Account, Accounts};
@@ -20,12 +20,26 @@ impl<S: Spec> Accounts<S> {
             None => {
                 // 1. Add the credential -> account mapping
                 let new_account = Account {
-                    addr: default_address.clone(),
+                    addr: *default_address,
                 };
                 self.accounts.set(credential_id, &new_account, state)?;
 
-                Ok(default_address.clone())
+                Ok(*default_address)
             }
+        }
+    }
+
+    /// Resolve the sender's public key to an address.
+    pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
+        &self,
+        default_address: &S::Address,
+        credential_id: &CredentialId,
+        state: &mut ST,
+    ) -> Result<S::Address, ST::Error> {
+        let maybe_address = self.accounts.get(credential_id, state)?.map(|a| a.addr);
+        match maybe_address {
+            Some(address) => Ok(address),
+            None => Ok(*default_address),
         }
     }
 }

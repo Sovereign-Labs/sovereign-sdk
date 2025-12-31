@@ -10,7 +10,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
-use sov_rollup_apis::{DefaultRollupStateProvider, RollupTxRouter};
+use sov_rollup_apis::rollup_tx_router;
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
 use super::SequencerCreationReceipt;
@@ -66,20 +66,14 @@ where
 
     let simulate_v2 = SovereignSimulate::<B::Spec, B::Runtime>::new(
         state_update_receiver.clone(),
-        config.sequencer.rollup_address.clone(),
-        sequencer.da_address.clone(),
+        config.sequencer.rollup_address,
+        sequencer.da_address,
     );
     endpoints.axum_router = endpoints.axum_router.merge(simulate_v2.into_router());
     // Rollup endpoint
     {
-        let rollup_router = RollupTxRouter::<
-            std::sync::Arc<DefaultRollupStateProvider<B::Spec, B::Runtime>>,
-        >::axum_router(
-            state_update_receiver,
-            sequencer.da_address.clone(),
-            config.sequencer.rollup_address.clone(),
-            sync_status_receiver,
-        );
+        let rollup_router =
+            rollup_tx_router::<B::Spec, B::Runtime>(state_update_receiver, sync_status_receiver);
         endpoints.axum_router = endpoints.axum_router.merge(rollup_router);
     }
 
@@ -237,6 +231,7 @@ mod tests {
     use openapiv3::{
         IntegerType, OpenAPI, Operation, PathItem, ReferenceOr, Schema, SchemaKind, Type,
     };
+    use std::num::NonZero;
 
     use super::*;
 
@@ -351,8 +346,7 @@ mod tests {
         public_address: Option<&str>,
     ) -> RunnerConfig {
         RunnerConfig {
-            genesis_height: 0,
-            da_polling_interval_ms: 0,
+            da_polling_interval_ms: 30,
             da_total_timeout_secs: 0,
             http_config: sov_stf_runner::HttpServerConfig {
                 bind_host: bind_host.to_string(),
@@ -361,7 +355,8 @@ mod tests {
                 cors: sov_stf_runner::CorsConfiguration::Permissive,
             },
             save_tx_bodies: false,
-            concurrent_sync_tasks: None,
+            concurrent_sync_tasks: 1,
+            pre_fetched_blocks_capacity: NonZero::new(1).unwrap(),
         }
     }
 

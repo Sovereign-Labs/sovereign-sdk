@@ -7,9 +7,10 @@ use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
 use revm::Database;
 use sov_evm::Evm;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::GasArray;
+use sov_test_utils::BatchTestCase;
 use sov_test_utils::TransactionType;
-use sov_test_utils::{BatchTestCase, LegacySimpleStorage};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
@@ -112,7 +113,7 @@ fn test_executing_eth_transactions() {
 
                 assert_eq!(evm.tx_index(&tx_hash, state), Some(nonce));
 
-                assert!(evm.receipt(nonce, state).unwrap().receipt.success);
+                assert!(evm.receipt(nonce, state).unwrap().0.receipt.success);
 
                 let nonce_from_module = evm
                     .get_transaction_count(address, None, state)
@@ -151,7 +152,10 @@ fn test_executing_eth_transactions_several_blocks() {
             input: block.batch_txs().into(),
             assert: Box::new(move |_result, state| {
                 assert_eq!(block.nr, evm.block_number(state).unwrap().to::<u64>());
-                let block_from_evm = evm.get_block_by_number(None, None, state).unwrap().unwrap();
+                let block_from_evm = evm
+                    .get_block_by_number(Some(format!("{:x}", block.nr)), None, state)
+                    .unwrap()
+                    .unwrap();
 
                 if let BlockTransactions::Hashes(hashes) = &block_from_evm.transactions {
                     assert_eq!(hashes, &block.tx_hashes());
@@ -315,10 +319,10 @@ fn test_evm_logs() {
     runner.execute_batch(BatchTestCase {
         input: txs.into(),
         assert: Box::new(move |_result, state| {
-            let logs_1 = evm.receipt(1, state).unwrap().receipt.logs;
+            let logs_1 = evm.receipt(1, state).unwrap().0.receipt.logs;
             check_logs(&logs_1, 1);
 
-            let logs_2 = evm.receipt(2, state).unwrap().receipt.logs;
+            let logs_2 = evm.receipt(2, state).unwrap().0.receipt.logs;
             check_logs(&logs_2, 2);
         }),
     });

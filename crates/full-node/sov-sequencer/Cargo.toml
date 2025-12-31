@@ -21,13 +21,14 @@ axum = { workspace = true, features = ["http1", "http2", "ws", "json", "query"] 
 base64 = { workspace = true }
 bincode = { workspace = true }
 borsh = { workspace = true }
+dashmap = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["client", "server"] }
+jsonrpsee = { workspace = true, default-features = false, features = ["client", "server"] }
 mini-moka = "0.10"
-full-node-configs = { workspace = true }
+sov-full-node-configs = { workspace = true }
 rockbound = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -36,7 +37,7 @@ serde_yaml = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
 sov-blob-sender = { workspace = true }
 sov-blob-storage = { workspace = true, features = ["native"] }
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate", "time"] }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-metrics = { workspace = true }
 sov-rest-utils = { workspace = true }
@@ -44,22 +45,22 @@ sov-rollup-interface = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-state = { workspace = true }
+sov-uniqueness = { workspace = true }
 sov-db = { workspace = true }
 strum = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt"] }
 tokio-stream = { workspace = true }
-uuid = { workspace = true, features = ["std", "v7"] }
+uuid = { workspace = true, features = ["std", "v7", "serde",] }
 utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 openapiv3 = { workspace = true }
 backon = { workspace = true }
 flume = { workspace = true }
+time = "0.3"
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
 arbitrary = { workspace = true }
-num_cpus = { workspace = true }
-rand = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 reltester = { workspace = true }

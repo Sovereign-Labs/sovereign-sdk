@@ -24,6 +24,7 @@ use crate::{
 const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
 // Time to accommodate rare cases of lock waiting time or latency to the database.
 const EXTRA_TIME_FOR_MAX_BLOCK: Duration = Duration::from_secs(10);
+const GET_BLOCK_ATTEMPTS: usize = 10;
 
 impl BlockProducingConfig {
     fn get_max_waiting_time_for_block(&self) -> Duration {
@@ -228,29 +229,6 @@ impl StorableMockDaService {
         .await
     }
 
-    /// Creates new [`StorableMockDaService`] with a given address.
-    /// - Periodic block production.
-    /// - Data is stored only in memory.
-    pub async fn new_in_memory_periodic(
-        block_time_ms: u64,
-        sequencer_da_address: MockAddress,
-    ) -> (Self, watch::Sender<()>) {
-        let config = MockDaConfig {
-            connection_string: MockDaConfig::sqlite_in_memory(),
-            sender_address: sequencer_da_address,
-            finalization_blocks: 0,
-            block_producing: BlockProducingConfig::Periodic { block_time_ms },
-            da_layer: None,
-            randomization: None,
-        };
-
-        let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-        (
-            StorableMockDaService::from_config(config, shutdown_receiver).await,
-            shutdown_sender,
-        )
-    }
-
     /// Creates new in memory [`StorableMockDaService`] from [`MockDaConfig`].
     pub async fn from_config(config: MockDaConfig, shutdown_receiver: watch::Receiver<()>) -> Self {
         let da_layer = match config.da_layer.as_ref() {
@@ -391,15 +369,27 @@ impl StorableMockDaService {
 
         let height = height as u32;
 
-        self.wait_for_height(height).await?;
+        for _ in 0..GET_BLOCK_ATTEMPTS {
+            self.wait_for_height(height).await?;
+            let block = {
+                let da_layer = self.da_layer.read().await;
+                match da_layer.get_block_at(height).await {
+                    Ok(block) => block,
+                    Err(err) => {
+                        tracing::trace!(error = ?err, "Error from DaLayer");
+                        let error_string = err.to_string();
+                        if error_string.contains("has not been produced yet") {
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!(err));
+                    }
+                }
+            };
 
-        let block = {
-            let da_layer = self.da_layer.read().await;
-            da_layer.get_block_at(height).await?
-        };
-
-        tracing::trace!(block_header = %block.header().display(), "Block retrieved");
-        Ok(block)
+            tracing::trace!(block_header = %block.header().display(), "Block retrieved");
+            return Ok(block);
+        }
+        anyhow::bail!("Failed to get block after {GET_BLOCK_ATTEMPTS} attempts");
     }
 
     pub(crate) async fn get_block_header_at_inner(

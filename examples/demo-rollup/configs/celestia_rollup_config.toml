@@ -1,0 +1,133 @@
+[da]
+# The address of the Celestia RPC server to interact with.
+# Example for local: ws://127.0.0.1:26658
+# Example for QuickNode: wss://a-b-c.celestia-mocha.quiknode.pro/YOUR_ENDPOINT_ID
+# Default value: ws://127.0.0.1:26658
+rpc_url = "ws://127.0.0.1:26658"
+
+# JWT token for RPC server.
+# If not specified in the config, will be pulled from `SOV_CELESTIA_RPC_AUTH_TOKEN` environment variable.
+# Optional.
+#rpc_auth_token = "MY.SECRET.TOKEN"
+
+# The address of the Celestia gRPC server for submitting blobs.
+# Example: http://127.0.0.1:9090
+# Optional. Set only if DaService needs to submit blobs.
+grpc_url = "http://127.0.0.1:9090"
+
+# The token for accessing Celestia gRPC server.
+# If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_AUTH_TOKEN` environment variable.
+# Optional, used only if `grpc_url` is set.
+# For QuickNode, use X-token header.
+#grpc_auth_token = ""
+
+# The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
+# If not specified in the config, will be pulled from `SOV_CELESTIA_SIGNER_KEY` environment variable.
+# Can be exported from celestia-appd:
+#   celestia-appd keys export --unsafe --unarmored-hex key-name --keyring-backend test
+# Or from cel-key (light/bridge node):
+#   cel-key export key-name --unarmored-hex --unsafe --node.type light --p2p.network=mocha
+# This one is from ../../docker/credentials/bridge-0.key
+signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
+
+# The maximum time to wait for a response to an RPC query against Celestia node.
+# Default: 37 seconds
+#request_timeout_secs = 37
+
+# Options are "Low", "Medium" and "High"
+# Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
+# Default: High for better blob inclusion.
+#tx_priority = "High"
+
+# Exponential backoff configuration for retrying failed requests to Celestia node
+# Minimal time to wait before reattempting to request to celestia node.
+# Default: 100 milliseconds
+backoff_min_delay_ms = 200
+# Maximal time between reattempting to request to the celestia node.
+# Default: 12000 milliseconds (12 seconds)
+backoff_max_delay_ms = 6_000
+# Number of requests attempted on the celestia node before returning an error.
+# Default: 60
+backoff_max_times = 10
+# Exponential factor for reattempting failed requests
+# Default: 2.0
+# backoff_factor = 2.0
+
+
+# WITH CURRENT UNCOMMENTED VALUES:
+# Timeout per request: 18 seconds
+# Backoff: min=200ms, max=6s, attempts=10, factor=2.0
+# Retry pattern: 200ms, 400ms, 800ms, 1.6s, 3.2s, 6s, 6s, 6s, 6s, 6s (last 5 capped at max)
+# Total backoff waiting: 200ms + 400ms + 800ms + 1.6s + 3.2s + 6s + 6s + 6s + 6s + 6s = ~36.2s
+# Total request timeouts: 10 * 18s = 180s
+# Maximum total time: ~216s (3.6 minutes)
+#
+# Default values result in the following retry pattern:
+# Attempts 1-9: 100ms, 200ms, 400ms, 800ms, 1.6s, 3.2s, 6.4s, 12s, 12s (capped)
+# Attempts 10-60: 12s each (51 more attempts)
+# Total backoff waiting time with defaults: ~51s (first 9) + 612s (remaining 51) = ~663s (11 minutes)
+# Total time with defaults including timeouts: 60 * 60s = 3600s (60 minutes) for all request timeouts
+
+[storage]
+# The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
+path = "demo_data"
+state_cache_size = 4294967296 # 4GB. Default is 1GB.
+separate_archival_state = true
+
+[runner]
+# 3 times per regular celestia block
+da_polling_interval_ms = 2_000
+# Celestia configured to give ~216s to retry, so we limit it at 300 to eliminate any locks or slow read.
+# This field is the safeguard against any long blocking in DaService.
+# The default value is: 600
+da_total_timeout_secs = 300
+
+[runner.http_config]
+bind_host = "127.0.0.1"
+bind_port = 12346
+# In case the rollup is running behind a proxy
+# public_address = "http://rollup.sovereign.xyz"
+
+[monitoring]
+telegraf_address = "udp://127.0.0.1:8094"
+# Defines how many measurements a rollup node will accumulate before sending it to the Telegraf.
+# It is expected from the rollup node to produce metrics all the time,
+# so measurements are buffered by size and not sent by time.
+# and below 67 KB, which is the maximal UDP packet size.
+# It also means that if a single serialized metric is larger than this value, a UDP packet will be larger.
+# The default value is 508.
+# max_datagram_size = 508
+# How many metrics are allowed to be in pending state, before new metrics will be dropped.
+# This is a number of metrics, not serialized bytes.
+# The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
+# max_pending_metrics = 100
+
+[proof_manager]
+aggregated_proof_block_jump = 10
+prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+max_number_of_transitions_in_db = 100
+max_number_of_transitions_in_memory = 30
+
+[sequencer]
+# This value is counted between sequencer receiving receipt from DA about inclusion till node has processed this blob.
+blob_processing_timeout_secs = 600
+max_batch_size_bytes = 1048576
+max_concurrent_blobs = 128
+max_allowed_node_distance_behind = 10
+rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+[sequencer.preferred]
+# TODO: Remove it when https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2814 is resolved
+disable_state_root_consistency_checks = true
+# Strategy for handling recovery scenarios when the sequencer is too far behind.
+# "None" - Shutdown the sequencer instead of attempting recovery (default)
+# "TryToSave" - Attempt to recover by flushing batches and catching up with the chain
+recovery_strategy = "TryToSave"
+batch_execution_time_limit_millis = 12000 # Do no more than 12 seconds worth of work per batch, even if the DA layer isn't producing blocks regularly
+# The sequencer optimistically pre-executes transactions across multiple worker threads.
+# This warms up caches so the main transaction executor can run with ready-to-use data.
+# This variable determines the number of worker threads.
+
+is_replica = false
+num_cache_warmup_workers = 0
+[sequencer.extension]
+max_log_limit = 20000

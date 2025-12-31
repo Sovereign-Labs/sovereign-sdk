@@ -1,0 +1,36 @@
+{
+  "name": "@sovereign-sdk/indexer",
+  "version": "0.4.13",
+  "description": "A simple indexer for Sovereign SDK rollups",
+  "scripts": {
+    "build": "bun build ./src/cli.ts --compile --outfile bin/sov-indexer",
+    "cli": "pnpm run build && DATABASE_URL=postgres://postgres:admin123@localhost:5432/postgres ./bin/sov-indexer --rollup-url http://localhost:12346",
+    "dev": "DATABASE_URL=postgres://postgres:admin123@localhost:5432/postgres bun run ./src/cli.ts --rollup-url http://localhost:12346",
+    "ci": "biome ci",
+    "fix": "biome check --write",
+    "lint": "biome lint",
+    "test:integration": "vitest run"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "bin": {
+    "indexer": "./bin/sov-indexer"
+  },
+  "files": ["package.json", "bin"],
+  "dependencies": {
+    "@sovereign-sdk/web3": "workspace:^",
+    "pg": "^8.14.1",
+    "winston": "3",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^10.24.2",
+    "@types/pg": "^8.11.13",
+    "@types/yargs": "^17.0.33",
+    "bun": "^1.0.0",
+    "testcontainers": "^10.24.2",
+    "vitest": "4.0.7"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

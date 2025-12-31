@@ -7,6 +7,7 @@ use std::hash;
 use derive_more::derive::Display;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::schema::UniversalWallet as UniversalWalletSchema;
+use sov_universal_wallet::ty::ByteDisplayable;
 use sov_universal_wallet::UniversalWallet;
 
 use super::CredentialId;
@@ -23,6 +24,8 @@ pub struct SigVerificationError {
 /// A digital signature.
 pub trait Signature:
     for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
     + Eq
     + Clone
     + Debug
@@ -31,6 +34,7 @@ pub trait Signature:
     + Serialize
     + for<'a> Deserialize<'a>
     + UniversalWalletSchema
+    + ByteDisplayable
 {
     /// The public key associated with the signature.
     type PublicKey;
@@ -48,8 +52,13 @@ pub trait PublicKey:
     + Send
     + Sync
     + Serialize
+    + PartialOrd
+    + Ord
     + for<'a> Deserialize<'a>
+    + TryFrom<Vec<u8>>
+    + AsRef<[u8]>
     + UniversalWalletSchema
+    + ByteDisplayable
 {
     /// Returns hashed public key.
     fn credential_id(&self) -> CredentialId;

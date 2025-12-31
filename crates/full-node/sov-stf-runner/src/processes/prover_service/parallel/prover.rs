@@ -115,8 +115,6 @@ where
                 prover_address: self.prover_address.clone(),
             };
 
-            let prover_address = self.prover_address.clone();
-
             inner_vm.add_hint(&data);
 
             self.pool.spawn(move || {
@@ -125,14 +123,18 @@ where
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
-                    let StateTransitionWitness {
-                        initial_state_root,
-                        final_state_root,
-                        da_block_header,
-                        relevant_proofs,
-                        relevant_blobs: blobs,
-                        ..
-                    } = data.stf_witness;
+                    let StateTransitionWitnessWithAddress {
+                        stf_witness:
+                            StateTransitionWitness {
+                                initial_state_root,
+                                final_state_root,
+                                da_block_header,
+                                relevant_proofs,
+                                relevant_blobs: blobs,
+                                ..
+                            },
+                        prover_address,
+                    } = data;
 
                     verifier
                         .da_verifier

@@ -27,10 +27,10 @@ use sov_solana_offchain_auth::authentication::{
     SolanaOffchainSimpleMessage, SolanaOffchainSpecCompliantMessage,
     SolanaOffchainUnsignedTransaction,
 };
-use sov_solana_offchain_auth::capabilities::{
+use sov_solana_offchain_auth::utils::make_preamble_for_message;
+use sov_solana_offchain_auth::{
     SolanaOffchainAuthenticator, SolanaOffchainAuthenticatorInput, SolanaOffchainAuthenticatorTrait,
 };
-use sov_solana_offchain_auth::utils::make_preamble_for_message;
 use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{BankConfig, Runtime as _};

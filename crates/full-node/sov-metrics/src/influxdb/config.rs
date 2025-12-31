@@ -120,6 +120,13 @@ pub struct MonitoringConfig {
     /// This is a number of metrics, not serialized bytes.
     /// The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
     pub max_pending_metrics: Option<u32>,
+    /// How often to collect tokio runtime metrics. Defaults to 500ms.
+    #[serde(default = "default_tokio_runtime_metrics_interval_millis")]
+    pub tokio_runtime_metrics_interval_millis: u64,
+}
+
+const fn default_tokio_runtime_metrics_interval_millis() -> u64 {
+    500
 }
 
 impl MonitoringConfig {
@@ -136,6 +143,7 @@ impl MonitoringConfig {
             )),
             max_datagram_size: None,
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: default_tokio_runtime_metrics_interval_millis(),
         }
     }
 

@@ -1,6 +1,4 @@
 use std::marker::PhantomData;
-#[cfg(feature = "native")]
-use std::sync::LazyLock;
 
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::Decodable2718;
@@ -23,21 +21,17 @@ use sov_modules_api::{
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 
-mod eip712;
-pub use eip712::{
-    Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
-};
-
 use crate::conversions::RlpConversionError;
 use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};
 
-/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry - which is about 17.5 MB). This should be long enough that signatures almost always
-/// last until the node has processed the block.
 #[cfg(feature = "native")]
-static SIGNATURE_CACHE: LazyLock<
-    quick_cache::sync::Cache<TxHash, Result<Address, AuthenticationError>>,
-> = LazyLock::new(|| quick_cache::sync::Cache::new(250_000));
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+/// At default size, and ~70 bytes per entry, this costs about 17.5 MB at the default size.
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(
@@ -70,7 +64,7 @@ fn create_auth_tx_and_hash<S: Spec>(
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
-    let gas_limit = tx.gas_limit();
+    let gas_limit = tx.gas_limit().saturating_mul(100);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
     let max_fee = gas_limit
         .checked_value(gas_price)
@@ -165,6 +159,13 @@ where
     let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
     let call = CallMessage { rlp };
+
+    tracing::debug!(
+        nonce,
+        credential_id = ?auth_data.credential_id,
+        raw_tx_hash = ?tx_and_raw_hash.raw_tx_hash,
+        "Received and authenticated EVM transaction"
+    );
 
     Ok((tx_and_raw_hash, auth_data, call))
 }
@@ -313,34 +314,16 @@ where
         };
 
         let (tx_and_raw_hash, auth_data, runtime_call) =
-            sov_modules_api::capabilities::authenticate::<_, S, Rt>(
+            sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
                 &input.data,
-                &Rt::CHAIN_HASH,
                 state,
-            )
-            .map_err(|e| match e {
-                AuthenticationError::FatalError(err, hash) => {
-                    UnregisteredAuthenticationError::FatalError(err, hash)
-                }
-                AuthenticationError::OutOfGas(err) => {
-                    UnregisteredAuthenticationError::OutOfGas(err)
-                }
-            })?;
+            )?;
 
-        if Rt::allow_unregistered_tx(&runtime_call) {
-            Ok((
-                tx_and_raw_hash,
-                auth_data,
-                EvmAuthenticatorInput::Standard(runtime_call),
-            ))
-        } else {
-            Err(UnregisteredAuthenticationError::FatalError(
-                FatalError::Other(
-                    "The runtime call included in the transaction was invalid.".to_string(),
-                ),
-                tx_and_raw_hash.raw_tx_hash,
-            ))?
-        }
+        Ok((
+            tx_and_raw_hash,
+            auth_data,
+            EvmAuthenticatorInput::Standard(runtime_call),
+        ))
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {

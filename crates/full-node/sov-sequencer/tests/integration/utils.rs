@@ -6,10 +6,11 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_mock_zkvm::MockZkvm;
-use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::prelude::*;
 use sov_modules_api::rest::HasRestApi;
+use sov_modules_api::transaction::TransactionCallable;
 use sov_modules_api::transaction::{Transaction, TxDetails};
 use sov_modules_api::{
     Amount, BlockHooks, CryptoSpec, DispatchCall, FullyBakedTx, GasUnit, Module, ModuleId,
@@ -177,13 +178,14 @@ impl<S: Spec> Module for ModuleWithVersionedStateAccessInSlotHook<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         _msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -228,18 +230,10 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     block_producing_config: BlockProducingConfig,
     rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
     blob_processing_timeout_secs: u64,
-    num_replicas: u64,
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
-) -> Option<Vec<TestRollup<RtAgnosticBlueprint<TestSpec, RT>>>> {
-    // We skip all docker (i.e. postgres) tests on our dev server due to firewall false positives
-    // bricking the machine.
-    // The dev machine has 96 threads, which we detect to disable postgres. Currently no dev or CI
-    // setup uses a machine of exactly this size, though if this ever changes this will cause
-    // false positives.
-    const DEV_SERVER_CPUS: usize = 96;
-
+) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
     let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
         GenesisSource::CustomParams(genesis_params),
         block_producing_config,
@@ -264,36 +258,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
     .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave);
 
-    let builder_res = if num_cpus::get() != DEV_SERVER_CPUS {
-        builder.with_postgres_sequencer().await
-    } else {
-        tracing::warn!("Running tests with postgres disabled in the sequencer! Detected machine with {DEV_SERVER_CPUS} threads, assuming we are running on the dev server.");
-        if num_replicas > 1 {
-            tracing::warn!(
-                "Replica test cannot run, postgres is disabled due to detecting the dev server"
-            );
-            return None;
-        } else {
-            Ok(builder)
-        }
-    };
-
-    match builder_res {
-        Ok(builder) => match num_replicas {
-            0 => panic!("At least one node needs to be started"),
-            1 => Some(vec![builder.start().await.unwrap()]),
-            2.. => Some(builder.start_with_replicas(num_replicas).await.unwrap()),
-        },
-        Err(e) => {
-            if std::env::var("SOV_TEST_SKIP_DOCKER") == Ok("1".to_string()) {
-                None
-            } else {
-                eprintln!("Error starting rollup builder: {e:?}");
-                eprintln!("To skip docker based tests run with the env var SOV_TEST_SKIP_DOCKER=1");
-                panic!("Unable to proceed without docker");
-            }
-        }
-    }
+    builder.start().await.unwrap()
 }
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
@@ -307,7 +272,7 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     let tx = test_signed_transaction::<RT, TestSpec>(
         key,
         call_message,
-        generation,
+        UniquenessData::Generation(generation),
         &<RT as Runtime<TestSpec>>::CHAIN_HASH,
         tx_details,
     );
@@ -335,4 +300,21 @@ pub fn tx_set_value_with_gas<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<Test
 // This allows for easily setting file sharing when using Docker Desktop.
 pub fn tempdir_inside_codebase_dir() -> Arc<tempfile::TempDir> {
     Arc::new(tempfile::tempdir_in(std::env!("CARGO_TARGET_TMPDIR")).unwrap())
+}
+
+pub(crate) fn encode_call<
+    RT: Runtime<TestSpec> + TransactionCallable<Call = <RT as DispatchCall>::Decodable>,
+>(
+    key: &Ed25519PrivateKey,
+    generation: u64,
+    call_message: &<RT as DispatchCall>::Decodable,
+) -> RawTx {
+    let tx = default_test_signed_transaction::<RT, TestSpec>(
+        key,
+        call_message,
+        generation,
+        &RT::CHAIN_HASH,
+    );
+
+    RawTx::new(borsh::to_vec(&tx).unwrap())
 }

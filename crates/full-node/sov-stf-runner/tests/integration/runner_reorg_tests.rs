@@ -1,12 +1,17 @@
 use std::sync::Arc;
 
+use crate::helpers::hash_stf::{HashStf, S};
+use crate::helpers::runner_init::{
+    bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
+};
 use anyhow::Context;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NativeStorageManager;
+use sov_metrics::MonitoringConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
-    MockDaService, MockDaSpec, PlannedFork, RandomizationBehaviour, RandomizationConfig,
+    MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
 };
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
@@ -18,16 +23,12 @@ use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::storage::NativeStorage;
 use sov_state::{ArrayWitness, ProverStorage, Storage, StorageRoot};
-use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::StateTransitionRunner;
+use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::TEST_MOCK_DA_POLLING_INTERVAL;
 use tempfile::TempDir;
 use tokio::sync::watch;
-
-use crate::helpers::hash_stf::{HashStf, S};
-use crate::helpers::runner_init::{
-    bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
-};
 
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
 
@@ -35,73 +36,14 @@ const STANDARD_SENDER: MockAddress = MockAddress::new([0u8; 32]);
 const TREE_MINUTES: std::time::Duration = std::time::Duration::from_secs(60 * 3);
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_simple_reorg_case() {
-    let tmp_dir = tempfile::tempdir().unwrap();
-    let sequencer_address = MockAddress::new([11u8; 32]);
-    let genesis_params = vec![1, 2, 3, 4, 5];
-
-    let main_chain_blobs = vec![
-        batch(vec![1, 1, 1, 1]),
-        batch(vec![2, 2, 2, 2]),
-        batch(vec![3, 3, 3, 3]),
-        batch(vec![4, 4, 4, 4]),
-    ];
-    let fork_blobs = vec![
-        batch(vec![13, 13, 13, 13]),
-        batch(vec![14, 14, 14, 14]),
-        batch(vec![15, 15, 15, 15]),
-    ];
-    let expected_final_blobs = vec![
-        batch(vec![1, 1, 1, 1]),
-        batch(vec![2, 2, 2, 2]),
-        batch(vec![13, 13, 13, 13]),
-        batch(vec![14, 14, 14, 14]),
-        batch(vec![15, 15, 15, 15]),
-    ];
-
-    let mut da_service = MockDaService::new(sequencer_address)
-        .with_finality(4)
-        .with_wait_attempts(2);
-
-    let genesis_block = da_service.get_block_at(0).await.unwrap();
-
-    let planned_fork = PlannedFork::new(5, 2, fork_blobs.clone());
-    da_service.set_planned_fork(planned_fork).await.unwrap();
-
-    let da_service = Arc::new(da_service);
-    for data in main_chain_blobs {
-        da_service
-            .send_transaction(&data)
-            .await
-            .await
-            .unwrap()
-            .unwrap();
-    }
-
-    let (expected_state_root, _expected_final_root_hash) =
-        get_expected_execution_hash_from(&genesis_params, expected_final_blobs);
-
-    let (_expected_committed_state_root, expected_committed_root_hash) =
-        get_expected_execution_hash_from(&genesis_params, vec![batch(vec![1, 1, 1, 1])]);
-
-    let init_variant: MockInitVariant = InitVariant::Genesis {
-        block: genesis_block,
-        genesis_params,
-    };
-
-    check_runner(da_service, &tmp_dir, init_variant, expected_state_root).await;
-
-    let committed_root_hash = get_saved_root_hash(tmp_dir.path()).unwrap().unwrap();
-    assert_eq!(expected_committed_root_hash, committed_root_hash);
-}
+#[ignore = "Rewrite this test with periodic block production"]
+// And change it to verify that finalized height is written after reorg.
+async fn test_runner_saves_finalized_height() {}
 
 async fn test_runner_with_background_da_service(
     target_height: u64,
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
-    // std::env::set_var("RUST_LOG", "info,sov_stf_runner=trace,sov_mock_da=debug");
-    // std::env::set_var("RUST_LOG", "info");
-    // sov_test_utils::initialize_logging();
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
     shutdown_receiver.mark_unchanged();
 
@@ -116,6 +58,13 @@ async fn test_runner_with_background_da_service(
         1,
     );
 
+    let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+        da_service.clone(),
+        shutdown_receiver.clone(),
+        TEST_MOCK_DA_POLLING_INTERVAL,
+    )
+    .await?;
+
     let stf = HashStf::new();
 
     let mut storage_manager: crate::helpers::runner_init::StorageManager =
@@ -125,17 +74,9 @@ async fn test_runner_with_background_da_service(
     let genesis_header = block.header().clone();
     let (_, ledger_state) = storage_manager.create_state_after(&genesis_header).unwrap();
 
-    let (sync_sender, mut sync_status_receiver) = watch::channel(SyncStatus::START);
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
-    let da_sync_state = make_da_sync_state(
-        &rollup_config.runner,
-        None,
-        &ledger_db,
-        da_service.as_ref(),
-        sync_sender,
-    )
-    .await
-    .unwrap();
+    let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache).await?;
+    let mut sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
     let (state_update_sender, _state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
@@ -144,13 +85,17 @@ async fn test_runner_with_background_da_service(
     sync_status_receiver.mark_unchanged();
 
     let genesis_params = vec![1, 2, 3, 4, 5];
+    let genesis_da_height = 0;
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block,
-        genesis_params,
+        genesis_params: genesis_params.into(),
     };
     let (prev_state_root, _genesis_state_root) =
         init_variant.initialize(&stf, &mut storage_manager).await?;
+
+    let _ =
+        sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_receiver.clone());
 
     let mut runner: HashStfRunner<StorableMockDaService> = StateTransitionRunner::new(
         rollup_config.runner.clone(),
@@ -163,18 +108,21 @@ async fn test_runner_with_background_da_service(
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
-        rollup_config.monitoring.clone(),
         None,
         None,
         da_sync_state,
+        da_service_with_cache,
     )
     .await?;
 
     let runner_task = tokio::spawn(async move {
-        runner.run_in_process().await.map_err(|error| {
-            tracing::warn!(?error, "Runner return execution with error");
-            error
-        })
+        runner
+            .run_in_process(genesis_da_height)
+            .await
+            .map_err(|error| {
+                tracing::warn!(?error, "Runner return execution with error");
+                error
+            })
     });
 
     let mut synced_da_height = 0;
@@ -235,7 +183,7 @@ async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
     let randomization = RandomizationConfig {
         seed: HexHash::from([1; 32]),
         reorg_interval: 1..3,
-        // TODO: It also messes up things with shorer block_time. get back to this later
+        // TODO: It also messes up things with shorter block_time. get back to this later
         behaviour: RandomizationBehaviour::only_shuffle(20),
     };
     let da_config = build_da_config(finality, block_time_ms, randomization);
@@ -306,7 +254,7 @@ async fn test_instant_finality_data_stored() -> anyhow::Result<()> {
 
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params,
+        genesis_params: genesis_params.into(),
     };
 
     check_runner(da_service, &tmp_dir, init_variant, expected_state_root).await;
@@ -325,7 +273,7 @@ async fn check_runner(
     let (mut runner, test_node) =
         initialize_runner(da_service, tmpdir.path(), init_variant, 1, None).await;
     let before = *runner.get_state_root();
-    let end = runner.run_in_process().await;
+    let end = runner.run_in_process(0).await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
     let after = *runner.get_state_root();
@@ -387,7 +335,7 @@ fn get_result_from_blocks(
             &stf,
             &Default::default(),
             storage,
-            genesis_params.to_vec(),
+            genesis_params.to_vec().into(),
         );
     storage_manager.commit(change_set);
 

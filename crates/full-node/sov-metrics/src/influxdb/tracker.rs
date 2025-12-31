@@ -6,51 +6,37 @@ use std::sync::OnceLock;
 
 use sov_rollup_interface::common::VisibleSlotNumber;
 
-use crate::influxdb::{publisher, safe_telegraf_string, Metric, DROPPED_METRICS_COUNT};
+use crate::influxdb::KnownMetric;
+use crate::influxdb::{
+    publisher, safe_telegraf_string, Metric, SubmittableMetric, SubmittableMetricKind,
+    DROPPED_METRICS_COUNT,
+};
 use crate::{MetricsTracker, MonitoringConfig};
 
 pub(crate) static METRICS_TRACKER: OnceLock<MetricsTracker> = OnceLock::new();
-
-/// Alias for number of nano-seconds since unix epoch.
-pub(crate) type Timestamp = u128;
 
 /// Spawns task that published metrics in the background.
 pub fn init_metrics_tracker(
     config: &MonitoringConfig,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) -> Option<tokio::task::JoinHandle<()>> {
+    let (sender, receiver) = tokio::sync::mpsc::channel(config.get_max_pending_metrics() as usize);
+    let config_for_task = config.clone();
     if METRICS_TRACKER.get().is_none() {
-        let (sender, receiver) =
-            tokio::sync::mpsc::channel(config.get_max_pending_metrics() as usize);
-        let config_for_task = config.clone();
         let handle = tokio::spawn(async move {
             publisher::metrics_publisher_task(receiver, &config_for_task, shutdown_receiver).await;
         });
         tracing::debug!(?config, "Metrics tracker initialized");
-        OnceLock::set(&METRICS_TRACKER, MetricsTracker { sender })
-            .expect("Metrics tracker failed to set metrics");
-        Some(handle)
+        match OnceLock::set(&METRICS_TRACKER, MetricsTracker { sender }) {
+            Ok(_) => Some(handle),
+            Err(_) => {
+                tracing::trace!("Metrics have been initialized in another thread already, terminating this task");
+                handle.abort();
+                None
+            }
+        }
     } else {
         None
-    }
-}
-
-#[derive(Debug)]
-struct MetricWithTimestamp(Box<dyn Metric>, Timestamp);
-
-impl Metric for MetricWithTimestamp {
-    fn measurement_name(&self) -> &'static str {
-        self.0.measurement_name()
-    }
-
-    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        self.0.serialize_for_telegraf(buffer)?;
-        write!(buffer, " {}", self.1)
-    }
-
-    #[cfg(feature = "gas-constant-estimation")]
-    fn write_to_csv(&self, writers: &mut super::csv_helper::CsvWriters) -> std::io::Result<()> {
-        self.0.write_to_csv(writers)
     }
 }
 
@@ -79,12 +65,22 @@ impl MetricsTracker {
     }
 
     /// Submits a metric with a timestamp.
-    pub fn submit_with_time(&self, timestamp: u128, measurement: impl Metric + 'static) {
-        tracing::trace!(?measurement, "Submitting a measurement");
-        let metric = MetricWithTimestamp(Box::new(measurement), timestamp);
+    pub fn submit_known_metric(&self, measurement: impl KnownMetric + 'static) {
+        let metric = measurement.to_known_submittable();
 
-        if let Err(e) = self.sender.try_send(Box::new(metric)) {
-            tracing::trace!(error = ?e, "Dropped measurement");
+        if self.sender.try_send(metric).is_err() {
+            DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        };
+    }
+
+    /// Submits a metric with a timestamp.
+    pub fn submit_with_time(&self, timestamp: u128, measurement: impl Metric + 'static) {
+        let metric = SubmittableMetric::new(
+            super::SubmittableMetricKind::Boxed(Box::new(measurement)),
+            timestamp,
+        );
+
+        if self.sender.try_send(metric).is_err() {
             DROPPED_METRICS_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         };
     }
@@ -392,11 +388,9 @@ impl Metric for RunnerProcessStfChangesMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},da_height={} proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
+            "{} da_height={},proofs_count={},finalized_transitions_count={},total_time_us={},processing_finalized_transitions_time_us={},ledger_materializing_time_us={},saving_to_storage_time={},committing_storage_time={},update_api_storage_time={},sending_stf_to_prover_time={}",
             self.measurement_name(),
-            // Tags
             self.da_height,
-            // Fields
             self.aggregated_proofs_count,
             self.finalized_transitions_count,
             self.total_time.as_micros(),
@@ -438,6 +432,12 @@ impl Metric for TransactionProcessingMetrics {
         }
 
         Ok(())
+    }
+}
+
+impl KnownMetric for TransactionProcessingMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::TransactionProcessing(self))
     }
 }
 
@@ -536,6 +536,48 @@ impl Metric for BatchMetrics {
     }
 }
 
+impl KnownMetric for BatchMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::Batch(self))
+    }
+}
+
+/// Metrics for an WebSocket request with a single response - for example `eth_sendRawTransaction`.
+#[derive(Debug)]
+pub struct RpcMetrics {
+    /// HTTP method.
+    pub request_name: &'static str,
+    /// Time it took for the inner handler to finish processing.
+    /// Does not include request reading and response writing.
+    pub handler_processing_time: std::time::Duration,
+    /// The status code of the response.
+    pub status: i32,
+}
+
+impl Metric for RpcMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_rpc_handlers"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        // TODO: Avoid allocating with safe_telegraf_string if needed for perf.
+        let request_name = safe_telegraf_string(self.request_name);
+        let status = self.status;
+        let processing_time_us = self.handler_processing_time.as_micros();
+        write!(
+            buffer,
+            "{},request_name={request_name},status={status} processing_time_us={processing_time_us}",
+            self.measurement_name(),
+        )
+    }
+}
+
+impl KnownMetric for RpcMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::Rpc(self))
+    }
+}
+
 /// Metrics for an HTTP subsystem.
 /// Can be applied to REST API or JSON RPC.
 #[derive(Debug)]
@@ -571,6 +613,12 @@ impl Metric for HttpMetrics {
             self.handler_processing_time.as_micros(),
             self.response_body_size,
         )
+    }
+}
+
+impl KnownMetric for HttpMetrics {
+    fn to_known_submittable(self) -> SubmittableMetric {
+        SubmittableMetric::now(SubmittableMetricKind::Http(self))
     }
 }
 
@@ -695,5 +743,98 @@ impl Metric for DroppedMetrics {
             self.measurement_name(),
             self.dropped_metrics
         )
+    }
+}
+
+// See https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html for an up to date list of available fields and their descriptions.
+impl Metric for tokio_metrics::RuntimeMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_tokio_runtime"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let workers_count = self.workers_count;
+        let total_park_count = self.total_park_count;
+        let total_busy_duration = self.total_busy_duration.as_micros();
+        let global_queue_depth = self.global_queue_depth;
+
+        write!(buffer, "{} workers_count={workers_count},total_park_count={total_park_count},total_busy_duration_us={total_busy_duration},global_queue_depth={global_queue_depth}", self.measurement_name())?;
+
+        #[cfg(tokio_unstable)]
+        {
+            let mean_poll_duration_us = self.mean_poll_duration.as_micros();
+            let mean_poll_duration_worker_max_us = self.mean_poll_duration_worker_max.as_micros();
+            let mean_poll_duration_worker_min_us = self.mean_poll_duration_worker_min.as_micros();
+            let total_noop_count = self.total_noop_count;
+            let max_noop_count = self.max_noop_count;
+            let num_remote_schedules = self.num_remote_schedules;
+            let total_local_schedule_count = self.total_local_schedule_count;
+            let max_local_schedule_count = self.max_local_schedule_count;
+            let total_polls_count = self.total_polls_count;
+            let min_polls_count = self.min_polls_count;
+            let max_polls_count = self.max_polls_count;
+            let total_local_queue_depth = self.total_local_queue_depth;
+            let max_local_queue_depth = self.max_local_queue_depth;
+            let blocking_queue_depth = self.blocking_queue_depth;
+            let blocking_threads_count = self.blocking_threads_count;
+            let idle_blocking_threads_count = self.idle_blocking_threads_count;
+            let live_tasks_count = self.live_tasks_count;
+            let budget_forced_yield_count = self.budget_forced_yield_count;
+            let io_driver_ready_count = self.io_driver_ready_count;
+            write!(buffer, ",mean_poll_duration_us={mean_poll_duration_us},mean_poll_duration_worker_max_us={mean_poll_duration_worker_max_us},mean_poll_duration_worker_min_us={mean_poll_duration_worker_min_us},total_noop_count={total_noop_count},max_noop_count={max_noop_count},num_remote_schedules={num_remote_schedules},total_local_schedule_count={total_local_schedule_count},max_local_schedule_count={max_local_schedule_count},total_polls_count={total_polls_count},min_polls_count={min_polls_count},max_polls_count={max_polls_count},total_local_queue_depth={total_local_queue_depth},max_local_queue_depth={max_local_queue_depth},blocking_queue_depth={blocking_queue_depth},blocking_threads_count={blocking_threads_count},idle_blocking_threads_count={idle_blocking_threads_count},live_tasks_count={live_tasks_count},budget_forced_yield_count={budget_forced_yield_count},io_driver_ready_count={io_driver_ready_count}")?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Spawns a task to monitor tokio runtime metrics and submit them to the metrics tracker.
+pub fn spawn_tokio_runtime_metrics_task(
+    metrics_interval: std::time::Duration,
+    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) -> tokio::task::JoinHandle<()> {
+    let handle = tokio::runtime::Handle::current();
+    let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+
+    // print runtime metrics every metrics_interval
+    tokio::spawn(async move {
+        for interval in runtime_monitor.intervals() {
+            crate::track_metrics(|tracker| {
+                tracker.submit(interval);
+            });
+            tokio::select! {
+                _ = tokio::time::sleep(metrics_interval) => {},
+                _ = shutdown_receiver.changed() => {
+                    break;
+                }
+            }
+        }
+    })
+}
+
+/// Metrics for rate limiter.
+#[derive(Debug)]
+pub struct RateLimiterMetrics {
+    /// Type of the limiter
+    pub limiter_type: &'static str,
+    /// Total number of items stored in the cache.
+    pub count: u64,
+}
+
+impl Metric for RateLimiterMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_rate_limiter"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},limiter_type={:?} count={}",
+            self.measurement_name(),
+            self.limiter_type,
+            self.count,
+        )?;
+
+        Ok(())
     }
 }

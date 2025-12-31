@@ -1,5 +1,4 @@
 use crate::utils::{new_test_rollup, MAX_BATCH_EXECUTION_TIME_MILLIS};
-use futures::StreamExt;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::UniquenessData;
@@ -61,14 +60,11 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
             BlockProducingConfig::Manual,
             None,
             TEST_BLOB_PROCESSING_TIMEOUT,
-            1,
             MAX_BATCH_EXECUTION_TIME_MILLIS,
             None,
             1,
         )
-        .await
-        .map(|v| v.into_iter().next().unwrap())
-        .unwrap(),
+        .await,
         admin,
     )
 }
@@ -82,30 +78,15 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
 /// 5. Both mechanisms can be used interchangeably for the same account
 #[tokio::test(flavor = "multi_thread")]
 async fn test_mixed_nonce_and_generation_transactions() {
-    // Keep it commented out in case of debug.
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "warn,sov_metrics=error,sov=debug,integration=debug",
-    );
-
     let (test_rollup, test_user) = create_test_rollup().await;
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(3)
-        .await
-        .unwrap();
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.client.client.clone();
 
-    // let addr1 = test_user.address();
-    let pub_key_hex = hex::encode(test_user.private_key.pub_key().bytes());
-    tracing::info!("PUB KEY HEX: {}", pub_key_hex);
     let credential_id = test_user.private_key.pub_key().credential_id();
     let default_nonce = client.get_next_nonce(&credential_id).await.unwrap();
     assert_eq!(0, default_nonce);
-
-    let mut finalized_slots = client.subscribe_finalized_slots().await.unwrap();
-    let _ = finalized_slots.next().await;
-    let _ = finalized_slots.next().await;
 
     // Create a simple burn message for all transactions
     let msg = <RT as EncodeCall<Bank<TestSpec>>>::to_decodable(BankCallMessage::Burn {

@@ -19,7 +19,7 @@ use sov_test_utils::runtime::{config_gas_token_id, Payable, TestRunner};
 
 type S = sov_test_utils::TestSpec;
 
-use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, VersionedTx};
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{PrivateKey, RawTx};
 use sov_test_utils::{EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::ValueSetter;
@@ -245,13 +245,13 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         None,
     );
 
-    let signed_tx = Transaction::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
+    let signed_tx = Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
 
     // Create a signature for a different message so it won't verify in the stf.
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
 
-    match signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => Transaction::new_with_details_v0(
+    match signed_tx {
+        Transaction::V0(inner) => Transaction::new_with_details_v0(
             inner.pub_key,
             inner.runtime_call,
             bad_signature,
@@ -263,6 +263,9 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
                 chain_id,
             },
         ),
+        Transaction::V1(_inner) => {
+            todo!("Bad signature generation for multisig transactions is not yet supported");
+        }
     }
 }
 
@@ -336,7 +339,8 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
     admin: &TestUser<S>,
     not_admin: &TestUser<S>,
 ) -> Vec<FullyBakedTx> {
-    let mut generation = 10;
+    let original_generation = config_value!("PAST_TRANSACTION_GENERATIONS") + 10;
+    let mut generation = original_generation;
     let mut txs: Vec<FullyBakedTx> = Vec::new();
     for status in statuses {
         match status {
@@ -352,7 +356,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                 generation += 1;
             }
             TxStatus::BadGeneration => {
-                if generation == 10 {
+                if generation == original_generation {
                     panic!("The first transaction will always have a valid generation");
                 } else {
                     let tx = create_tx_valid::<RT>(

@@ -6,7 +6,7 @@ use sov_cli::workflows::transactions::{TransactionLoadWorkflow, TransactionWorkf
 use sov_cli::UnsignedTransactionWithoutUniqueness;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction, VersionedTx};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{
     Amount, CryptoSpec, DispatchCall, MeteredBorshDeserialize, PrivateKey, Spec,
 };
@@ -14,9 +14,7 @@ use sov_test_utils::runtime::{
     Runtime as RuntimeTrait, RuntimeSubcommand as TestRuntimeSubcommand, TestOptimisticRuntime,
     TestOptimisticRuntimeCall,
 };
-use sov_test_utils::{
-    new_test_gas_meter, TestSpec, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
-};
+use sov_test_utils::{TestSpec, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 
 type Runtime = TestOptimisticRuntime<TestSpec>;
 type RuntimeCall = TestOptimisticRuntimeCall<TestSpec>;
@@ -107,7 +105,7 @@ fn transaction_is_serialized_correctly() {
             ),
         );
 
-        tx.verify(&chain_hash, &mut new_test_gas_meter())
+        tx.verify_signature_unmetered(&tx.serialized_with_chain_hash(&chain_hash).unwrap())
             .expect("the computed signature is incorrect");
 
         assert_eq!(
@@ -194,18 +192,22 @@ fn transaction_signed_properly_from_file() {
     let signed_tx: Transaction<Runtime, TestSpec> =
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
-        .verify(
-            &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+        .verify_signature_unmetered(
+            &signed_tx
+                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
+                .unwrap(),
         )
         .unwrap();
 
     let default_pubkey = &wallet_state.addresses.default_address().unwrap().pub_key;
 
-    match &signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => {
+    match &signed_tx {
+        Transaction::V0(inner) => {
             assert_eq!(default_pubkey, &inner.pub_key);
             assert_eq!(UniquenessData::Generation(generation), inner.uniqueness);
+        }
+        Transaction::V1(_inner) => {
+            panic!("V1 (multisig) transactions are not yet supported by the CLI tests");
         }
     };
 
@@ -246,9 +248,10 @@ fn transaction_signed_properly_from_json_string() {
     let signed_tx: Transaction<Runtime, TestSpec> =
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
-        .verify(
-            &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+        .verify_signature_unmetered(
+            &signed_tx
+                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
+                .unwrap(),
         )
         .unwrap();
     assert_eq!(&runtime_call, signed_tx.runtime_call());
@@ -307,9 +310,10 @@ fn transaction_signed_by_account_nickname() {
     let signed_tx: Transaction<Runtime, TestSpec> =
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
-        .verify(
-            &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+        .verify_signature_unmetered(
+            &signed_tx
+                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
+                .unwrap(),
         )
         .unwrap();
 
@@ -321,9 +325,12 @@ fn transaction_signed_by_account_nickname() {
         })
         .unwrap();
 
-    match signed_tx.versioned_tx {
-        VersionedTx::V0(inner) => {
+    match signed_tx {
+        Transaction::V0(inner) => {
             assert_eq!(&key2.pub_key, &inner.pub_key);
+        }
+        Transaction::V1(_inner) => {
+            panic!("V1 (multisig) transactions are not yet supported by the CLI tests");
         }
     }
 }
@@ -363,9 +370,10 @@ fn transaction_outputs_json() {
     let signed_tx: Transaction<Runtime, TestSpec> =
         Transaction::unmetered_deserialize(&mut raw_signed_tx).unwrap();
     signed_tx
-        .verify(
-            &<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
-            &mut new_test_gas_meter(),
+        .verify_signature_unmetered(
+            &signed_tx
+                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
+                .unwrap(),
         )
         .unwrap();
 }

@@ -1,7 +1,9 @@
-use alloy_eips::eip1559::{ETHEREUM_BLOCK_GAS_LIMIT_30M, MIN_PROTOCOL_BASE_FEE};
+use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
+use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
+use std::collections::BTreeSet;
 
 use crate::AccountData;
 
@@ -29,6 +31,8 @@ pub struct EvmGenesisConfig {
     pub genesis_timestamp: u64,
     /// Core chain parameters
     pub chain_spec: EvmChainSpec,
+    /// Policy - who can create contracts. Everyone or allowlist
+    pub contract_creation_policy: ContractCreationPolicy,
 }
 
 impl Default for EvmChainSpec {
@@ -36,7 +40,7 @@ impl Default for EvmChainSpec {
         Self {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT_30M,
+            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
             hardforks: vec![(0, SpecId::CANCUN)],
         }
     }
@@ -49,6 +53,28 @@ impl Default for EvmGenesisConfig {
             initial_base_fee: MIN_PROTOCOL_BASE_FEE,
             genesis_timestamp: 0,
             chain_spec: EvmChainSpec::default(),
+            contract_creation_policy: Default::default(),
+        }
+    }
+}
+
+/// Policy - who can create contracts. Everyone or allowlist
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ContractCreationPolicy {
+    /// No restrictions on contract creation
+    #[default]
+    Everyone,
+    /// Only allowed addresses can create contracts
+    Allowlist(BTreeSet<Address>),
+}
+
+impl ContractCreationPolicy {
+    /// Returns true if address is allowed to deploy contracts by the policy. False otherwise
+    pub fn allows(&self, address: &Address) -> bool {
+        match self {
+            Self::Everyone => true,
+            Self::Allowlist(allowlist) => allowlist.contains(address),
         }
     }
 }
@@ -61,6 +87,8 @@ pub struct EvmRuntimeConfig {
     /// Sorted hard fork schedule for efficient runtime lookup
     /// (block number, fork ID) ordered by block number
     pub hardforks: Vec<(u64, SpecId)>,
+    /// Policy - who can create contracts. Everyone or allowlist
+    pub contract_creation_policy: ContractCreationPolicy,
 }
 
 impl Default for EvmRuntimeConfig {
@@ -72,6 +100,7 @@ impl Default for EvmRuntimeConfig {
         EvmRuntimeConfig {
             chain_spec,
             hardforks,
+            contract_creation_policy: ContractCreationPolicy::Everyone,
         }
     }
 }
@@ -143,9 +172,10 @@ mod tests {
                 "chain_spec":{
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
-                    "block_gas_limit":30000000,
+                    "block_gas_limit":1000000000,
                     "hardforks":[[0,"CANCUN"]]
-                }
+                },
+                "contract_creation_policy": "everyone"
         }"#;
 
         let parsed_config: EvmGenesisConfig = serde_json::from_str(data).unwrap();

@@ -5,11 +5,10 @@ use digest::consts::U32;
 use digest::Digest;
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::crypto::{CredentialId, SigVerificationError, Signature};
-use sov_rollup_interface::zk::CryptoSpec;
 use thiserror::Error;
 
 use crate::gas::traits::{Gas, GasMeter};
-use crate::{as_u32_or_panic, GasMeteringError, GasSpec, PublicKey, Spec};
+use crate::{as_u32_or_panic, CryptoSpecExt, GasMeteringError, GasSpec, PublicKey, Spec};
 
 /// A metered hasher that charges gas for each operation.
 /// This data structure should be used in the module system to charge gas when hashing data.
@@ -138,15 +137,11 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         }
     }
 
-    /// Verifies a signature with the provided gas meter. This method is a wrapper around [`Signature::verify`].
-    ///
-    /// # Errors
-    /// Returns an error if charging gas for the verification operation fails.
-    pub fn verify<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
+    /// Charges gas for the signature verification.
+    pub fn charge_gas<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
         &self,
-        pub_key: &Sign::PublicKey,
-        msg: &[u8],
         meter: &mut Meter,
+        msg_len: usize,
     ) -> Result<(), MeteredSigVerificationError<GU>> {
         meter
             .charge_gas(self.fixed_gas_to_charge_per_verification)
@@ -155,7 +150,7 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         meter
             .charge_linear_gas(
                 self.gas_to_charge_per_byte_for_verification,
-                as_u32_or_panic(msg.len()),
+                as_u32_or_panic(msg_len),
             )
             .map_err(MeteredSigVerificationError::GasError)?;
 
@@ -166,13 +161,28 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         meter
             .charge_linear_gas(
                 <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
-                msg.len().try_into().map_err(|e: TryFromIntError| {
+                msg_len.try_into().map_err(|e: TryFromIntError| {
                     MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
                         e.to_string(),
                     ))
                 })?,
             )
             .map_err(MeteredSigVerificationError::GasError)?;
+
+        Ok(())
+    }
+
+    /// Verifies a signature with the provided gas meter. This method is a wrapper around [`Signature::verify`].
+    ///
+    /// # Errors
+    /// Returns an error if charging gas for the verification operation fails.
+    pub fn verify<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
+        &self,
+        pub_key: &Sign::PublicKey,
+        msg: &[u8],
+        meter: &mut Meter,
+    ) -> Result<(), MeteredSigVerificationError<GU>> {
+        self.charge_gas(meter, msg.len())?;
 
         self.inner
             .verify(pub_key, msg)
@@ -271,8 +281,8 @@ pub fn charge_gas_to_deserialize_json<S: Spec>(
 }
 
 /// Calculates `CredentialId`
-pub fn metered_credential<S: Spec>(
-    pub_key: &<S::CryptoSpec as CryptoSpec>::PublicKey,
+pub fn metered_credential<S: Spec, C: CryptoSpecExt>(
+    pub_key: &C::PublicKey,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<CredentialId, GasMeteringError<S::Gas>> {
     let cost = S::gas_to_charge_for_credential();

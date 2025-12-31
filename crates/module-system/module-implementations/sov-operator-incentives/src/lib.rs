@@ -29,12 +29,14 @@ impl<S: Spec> sov_modules_api::Module for OperatorIncentives<S> {
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         self.init_module(config, state)
     }
 
@@ -43,7 +45,7 @@ impl<S: Spec> sov_modules_api::Module for OperatorIncentives<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::UpdateRewardAddress { new_reward_address } => {
                 Ok(self.update_address(new_reward_address, context, state)?)

@@ -7,6 +7,7 @@ use sov_modules_api::{DispatchCall, Event, Genesis, MessageCodec, Spec};
 #[event(no_default_attrs)]
 struct Runtime<S: Spec> {
     pub bank: sov_bank::Bank<S>,
+    pub chain_state: sov_chain_state::ChainState<S>,
 }
 
 fn main() {}

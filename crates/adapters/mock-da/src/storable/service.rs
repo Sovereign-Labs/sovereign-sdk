@@ -18,8 +18,6 @@ impl DaService for StorableMockDaService {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
-
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         self.get_block_at_inner(height).await
     }
@@ -94,7 +92,7 @@ impl DaService for StorableMockDaService {
         self.block_producer_handle.lock().await.take()
     }
 
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
-        self.sequencer_da_address
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
+        Some(self.sequencer_da_address)
     }
 }

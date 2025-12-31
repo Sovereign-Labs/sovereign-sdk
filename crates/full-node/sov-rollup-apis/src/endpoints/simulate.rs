@@ -11,7 +11,7 @@ use axum::{extract::State, response::IntoResponse, routing::post, Json, Router};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::{
-    AuthorizationData, ChainState, HasCapabilities, TransactionAuthorizer, UniquenessData,
+    AuthorizationData, ChainState, TransactionAuthorizer, UniquenessData,
 };
 use sov_modules_api::common::Amount;
 use sov_modules_api::macros::config_value;
@@ -20,12 +20,13 @@ use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
-    get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, EventModuleName,
-    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, RuntimeEventProcessor, Spec,
-    StateCheckpoint, StateProvider as _, WorkingSet,
+    get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, ErrorContext,
+    EventModuleName, FullyBakedTx, Gas, GasArray, HDTimestamp, HexHash, HexString, Runtime,
+    SequencerType, Spec, StateCheckpoint, StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
+use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::stf::TxEffect;
 use sov_uniqueness::Uniqueness;
 use std::str::FromStr;
@@ -64,14 +65,14 @@ pub trait SimulateEndpoint: Send + Sync + 'static {
 
     /// Returns a configured axum router for the endpoint.
     ///
-    /// Creates an axum router with the `/rollup/simulate-v2` endpoint that accepts POST requests.
+    /// Creates an axum router with the `/rollup/simulate` endpoint that accepts POST requests.
     /// The router calls the implemented [`Self::handler`] and returns the result as JSON.
     /// If [`Self::handler`] returns an error, it will be converted to an [`ErrorObject`] and
     /// returned with the appropriate HTTP status code.
     ///
     /// # Warning
     ///
-    /// If you override this method, you should ensure you provide the standard `/rollup/simulate-v2` path.
+    /// If you override this method, you should ensure you provide the standard `/rollup/simulate` path.
     /// If the path is different, then external tooling like web3 SDKs won't be able to consume the
     /// functionality and will fail to work.
     ///
@@ -81,7 +82,7 @@ pub trait SimulateEndpoint: Send + Sync + 'static {
         preconfigured_router_layers(
             Router::new()
                 .route(
-                    "/rollup/simulate-v2",
+                    "/rollup/simulate",
                     post(
                         |State(state): State<Self::State>, Json(body): Json<Self::Parameters>| async move {
                             match Self::handler(state, body) {
@@ -184,6 +185,8 @@ struct SimulatedEvent<E> {
 pub struct SuccessOutcome<E> {
     /// The amount of gas consumed by the transaction.
     gas_used: Amount,
+    /// The priority fee reward of the transaction expressed as a gas token amount.
+    priority_fee: Amount,
     /// Events emitted during transaction execution.
     events: Vec<SimulatedEvent<E>>,
 }
@@ -193,6 +196,13 @@ pub struct SuccessOutcome<E> {
 pub struct FailOutcome {
     /// The reason why the transaction failed.
     pub reason: String,
+}
+
+/// Reverted simulation outcome with details.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevertOutcome {
+    /// Details about the revert reason.
+    pub detail: ErrorContext,
 }
 
 /// The outcome of a transaction simulation.
@@ -205,12 +215,12 @@ pub enum SimulateOutcome<E> {
     /// The transaction executed successfully.
     Success(SuccessOutcome<E>),
     /// The transaction was reverted during execution.
-    Reverted(FailOutcome),
+    Reverted(RevertOutcome),
     /// The transaction was skipped due to pre-execution errors.
     Skipped(FailOutcome),
 }
 
-impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> SovereignSimulate<S, R> {
+impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
     /// Creates a new simulation endpoint instance.
     ///
     /// # Arguments
@@ -243,7 +253,7 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Sovere
     /// to serve the simulation endpoint.
     ///
     /// # Returns
-    /// An axum [`Router`] configured with the `/rollup/simulate-v2` endpoint.
+    /// An axum [`Router`] configured with the `/rollup/simulate` endpoint.
     pub fn into_router(self) -> Router<()> {
         Self::axum_router(std::sync::Arc::new(self))
     }
@@ -273,14 +283,14 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Sovere
                 SimulateError::InvalidInput("failed to parse sequencer rollup address".to_owned())
             })?
         } else {
-            self.default_sequencer.rollup_address.clone()
+            self.default_sequencer.rollup_address
         };
         let da_address = if let Some(input) = partial.da_address {
             <S::Da as DaSpec>::Address::from_str(&input).map_err(|_| {
                 SimulateError::InvalidInput("failed to parse sequencer da address".to_owned())
             })?
         } else {
-            self.default_sequencer.da_address.clone()
+            self.default_sequencer.da_address
         };
         Ok({
             SequencerSimulate {
@@ -337,10 +347,11 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Sovere
             TxEffect::Skipped(e) => SimulateOutcome::Skipped(FailOutcome {
                 reason: e.error.to_string(),
             }),
-            TxEffect::Reverted(e) => SimulateOutcome::Reverted(FailOutcome {
-                reason: e.reason.to_string(),
+            TxEffect::Reverted(e) => SimulateOutcome::Reverted(RevertOutcome {
+                detail: e.reason.error_detail().unwrap_or(json_obj!({})),
             }),
             TxEffect::Successful(_) => SimulateOutcome::Success(SuccessOutcome {
+                priority_fee: result.transaction_consumption.priority_fee().0,
                 gas_used: gas_used.value(gas_price),
                 events,
             }),
@@ -392,9 +403,7 @@ pub struct SimulateParameters {
     pub uniqueness: Option<UniquenessData>,
 }
 
-impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> SimulateEndpoint
-    for SovereignSimulate<S, R>
-{
+impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
     type State = std::sync::Arc<Self>;
 
     type Parameters = SimulateParameters;
@@ -411,6 +420,7 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Simula
         let mut accessor = StateCheckpoint::new(
             state.state_receiver.borrow().storage.clone(),
             &runtime.kernel(),
+            None,
         );
         let gas_price = runtime
             .chain_state()
@@ -422,6 +432,8 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Simula
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);
 
         let mut scratchpad = accessor.to_tx_scratchpad();
+        // Create sequencing metadata for simulation so modules can access timestamp data
+        let sequencing_metadata = borsh::to_vec(&HDTimestamp::now()).ok().map(Into::into);
         let context = runtime
             .transaction_authorizer()
             .resolve_context(
@@ -429,6 +441,9 @@ impl<S: Spec, R: Runtime<S> + HasCapabilities<S> + RuntimeEventProcessor> Simula
                 &sequencer.da_address,
                 sequencer.rollup_address,
                 &mut scratchpad,
+                sequencing_metadata,
+                ExecutionContext::Sequencer,
+                SequencerType::Preferred,
             )
             .map_err(SimulateError::ContextResolution)?;
 

@@ -102,12 +102,12 @@ fn check_malicious_case(native_case: TestCase, zk_case: TestCase, expected_error
         let witness = ArrayWitness::default();
 
         let (native_root, change_set) = prover_storage
-            .compute_state_update(native_state_accesses, &witness, prev_state_root)
+            .compute_state_update(native_state_accesses, &witness, prev_state_root, None)
             .expect("state update computation must succeed");
 
         let zk_storage = NomtVerifierStorage::<StorageSpec>::new();
 
-        match zk_storage.compute_state_update(zk_state_accesses, &witness, prev_state_root) {
+        match zk_storage.compute_state_update(zk_state_accesses, &witness, prev_state_root, None) {
             Ok((zk_root, _)) => {
                 // If the update is correct, do normal operations.
                 // This allows having a more sophisticated error case to be detected.

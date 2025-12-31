@@ -1,0 +1,37 @@
+[package]
+name = "sov-eip712-auth"
+description = "Sovereign authenticator for transactions signed using EIP712"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sov-address = { workspace = true, features = ["evm"] } # to implement the compatibility marker on EvmCryptoSpec
+sov-modules-api = { workspace = true }
+sov-state = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["eip712"] }
+anyhow = { workspace = true }
+borsh = { workspace = true }
+derive_more = { workspace = true, default-features = true, features = [ "debug" ] }
+jsonrpsee = { workspace = true, features = ["jsonrpsee-types"] }
+serde = { workspace = true }
+tracing = { workspace = true }
+# For the stub RPC for chains not using EVM. Not needed for those using EVM,
+# but in that case the dependency is almost certainly already present:
+serde_json = { workspace = true } 
+
+[features]
+native = [
+	"sov-modules-api/native",
+	"sov-state/native",
+	"sov-address/native"
+]

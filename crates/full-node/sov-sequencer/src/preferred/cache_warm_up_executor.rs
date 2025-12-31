@@ -1,8 +1,11 @@
 #![allow(dead_code)]
+use crate::preferred::block_executor::RollupBlockExecutorErrorWithBudget;
 use crate::preferred::block_executor::StartBlockData;
+use crate::preferred::db::SequencerRole;
 use crate::preferred::PreferredSequencerConfig;
 use crate::preferred::RollupBlockExecutor;
 use crate::preferred::RollupBlockExecutorConfig;
+use crate::preferred::SequenceNumber;
 use crate::RollupHeight;
 use crate::SequencerConfig;
 use sov_metrics::Metric;
@@ -23,6 +26,9 @@ use tokio::task::JoinHandle;
 // We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
 // Even if it does, the sender uses a non-blocking method, meaning a few updates may simply be skipped.
 const TX_CHANNEL_SIZE: usize = 16;
+
+// Maximum number of transactions ignored by an executor because they are too new or too old.
+const MAX_NB_OF_IGNORED_TXS: u64 = 16;
 
 /// A transaction with a way to retrieve the corresponding state changes it may produce.
 pub struct FullyBakedTxWithMaybeChangeSet {
@@ -46,6 +52,7 @@ pub(crate) struct StartBlockNotification<S: Spec> {
     pub(crate) data: StartBlockData<S>,
     pub(crate) checkpoint: StateCheckpoint<S>,
     pub(crate) state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
+    pub(crate) sequence_number: SequenceNumber,
 }
 
 impl<S: Spec> Clone for StartBlockNotification<S> {
@@ -55,7 +62,8 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
             data: self.data.clone(),
             checkpoint: self
                 .checkpoint
-                .clone_with_empty_witness_dropping_temp_cache(),
+                .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
+            sequence_number: self.sequence_number,
         }
     }
 }
@@ -63,6 +71,7 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
 struct FullyBakedTxWithTxChangeSetSender {
     tx: FullyBakedTx,
     sender: oneshot::Sender<TxChangeSet>,
+    sequence_number: SequenceNumber,
 }
 
 #[derive(Clone)]
@@ -72,27 +81,44 @@ struct TxReceiver {
 }
 
 #[derive(Clone)]
-pub(crate) struct CacheWarmUpExecutor<S: Spec> {
+pub(crate) struct CacheWarmUpExecutorInner<S: Spec> {
     start_block_notification_sender: tokio::sync::watch::Sender<Option<StartBlockNotification<S>>>,
     tx_sender: flume::Sender<FullyBakedTxWithTxChangeSetSender>,
     size: Arc<AtomicU64>,
 }
 
+#[derive(Clone)]
+pub(crate) struct CacheWarmUpExecutor<S: Spec> {
+    inner: Option<CacheWarmUpExecutorInner<S>>,
+}
+
 impl<S: Spec> CacheWarmUpExecutor<S> {
     pub(crate) fn send_batch_start_notification(&self, data: StartBlockNotification<S>) {
+        let Some(inner) = &self.inner else {
+            return;
+        };
         // This `send` does not block.
-        let _ = self.start_block_notification_sender.send(Some(data));
+        let _ = inner.start_block_notification_sender.send(Some(data));
     }
 
-    pub(crate) fn send_tx(&self, tx: FullyBakedTx) -> FullyBakedTxWithMaybeChangeSet {
+    pub(crate) fn send_tx(
+        &self,
+        tx: FullyBakedTx,
+        sequence_number: u64,
+    ) -> FullyBakedTxWithMaybeChangeSet {
+        let Some(inner) = &self.inner else {
+            return FullyBakedTxWithMaybeChangeSet { tx, receiver: None };
+        };
+
         // We need to update the `size` field before inserting the thx into tx_sender, otherwise the workers may see an outdated channel size.
-        let size = self.size.fetch_add(1, Ordering::Relaxed);
+        let size = inner.size.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = oneshot::channel();
 
         // Skip update if consumer is too slow.
-        let res = self.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
+        let res = inner.tx_sender.try_send(FullyBakedTxWithTxChangeSetSender {
             tx: tx.clone(),
             sender,
+            sequence_number,
         });
 
         let maybe_receiver = match res {
@@ -106,12 +132,12 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 Some(receiver)
             }
             Err(flume::TrySendError::Full(_)) => {
-                let size = self.size.fetch_sub(1, Ordering::Relaxed);
+                let size = inner.size.fetch_sub(1, Ordering::Relaxed);
                 tracing::warn!(size, "The tx queue is full. You may want to increase the number of workers for cache warmup.");
                 None
             }
             Err(flume::TrySendError::Disconnected(_)) => {
-                self.size.fetch_sub(1, Ordering::Relaxed);
+                inner.size.fetch_sub(1, Ordering::Relaxed);
                 None
             }
         };
@@ -125,8 +151,13 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     pub(crate) async fn spawn_execution_task<Rt: Runtime<S>>(
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        seq_role: SequencerRole,
     ) -> (Self, Vec<JoinHandle<()>>) {
+        if seq_role == SequencerRole::Replica {
+            return (Self { inner: None }, vec![]);
+        }
+
         let (tx_sender, tx_receiver) = flume::bounded(TX_CHANNEL_SIZE);
         let size = Arc::new(AtomicU64::new(0));
         let tx_receiver = TxReceiver {
@@ -155,9 +186,11 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
 
         (
             Self {
-                tx_sender,
-                start_block_notification_sender,
-                size,
+                inner: Some(CacheWarmUpExecutorInner {
+                    tx_sender,
+                    start_block_notification_sender,
+                    size,
+                }),
             },
             handles,
         )
@@ -166,7 +199,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     fn spawn_worker<Rt: Runtime<S>>(
         info: StateUpdateInfo<S::Storage>,
         exec_config: RollupBlockExecutorConfig<S>,
-        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig>,
+        seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         tx_receiver: TxReceiver,
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
@@ -179,18 +212,17 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 exec_config,
                 seq_config.clone(),
                 Default::default(),
+                None, // TODO: Consider adding a pinned cache to the warmup executors
             );
 
-            let mut is_started = false;
+            let mut maybe_executor_sequence_number = None;
+            let mut nb_of_ignored_txs = 0;
             loop {
                 tokio::select! {
                     _ = start_block_notification_receiver.changed() => {
-
                         let notify = start_block_notification_receiver.borrow().clone();
                         if let Some(notify) = notify {
-                              let _ = executor.shutdown().await;
-                              Self::start_block(notify, &mut executor).await;
-                              is_started = true;
+                              maybe_executor_sequence_number = Some(Self::start_block(notify, &mut executor).await);
                         }
                     }
 
@@ -207,7 +239,23 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             },
                         };
 
-                        if is_started {
+                        if let Some(executor_sequence_number) = maybe_executor_sequence_number {
+                            if tx_with_sender.sequence_number != executor_sequence_number {
+                                // Due to timing issues, the received transaction may have either older or newer sequence number than the executor.
+                                // In this case, we simply continue the loop until the executor and the transactions received from the `accept_tx` task are synchronized.
+                                // If this occurs too frequently, we escalate the log level from warning to error.
+                                if nb_of_ignored_txs > MAX_NB_OF_IGNORED_TXS {
+                                    tracing::error!(%tx_with_sender.sequence_number, %executor_sequence_number, %nb_of_ignored_txs, "Cache warm up task: Transaction could not be applied on the executor.");
+                                }else{
+                                    tracing::warn!(%tx_with_sender.sequence_number, %executor_sequence_number, %nb_of_ignored_txs, "Cache warm up task: Transaction could not be applied on the executor.");
+                                }
+
+                                nb_of_ignored_txs += 1;
+                                continue;
+                            }
+
+                            nb_of_ignored_txs = 0;
+
                             let baked_tx = FullyBakedTxWithMaybeChangeSet::new(tx_with_sender.tx);
                             let res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
@@ -217,7 +265,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                                     // This can happen if the transaction on the main executor has already finished.
                                     let _ = tx_with_sender.sender.send(tx_change_set);
                                 },
-                                Err(err) => {
+                                Err(RollupBlockExecutorErrorWithBudget{inner_err:err, ..}) => {
                                     tracing::trace!(%err, "WarmUp worker task failed to execute transaction.");
                                     continue;
                                 }
@@ -237,7 +285,10 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
     async fn start_block<Rt: Runtime<S>>(
         notify: StartBlockNotification<S>,
         executor: &mut RollupBlockExecutor<S, Rt>,
-    ) {
+    ) -> SequenceNumber {
+        let _ = executor.shutdown().await;
+        let seq_nr_from_start_block = notify.sequence_number;
+
         executor
             .start_rollup_block_with_provided_state_roots(
                 notify.data,
@@ -245,6 +296,8 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 notify.state_roots,
             )
             .await;
+
+        seq_nr_from_start_block
     }
 }
 

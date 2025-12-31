@@ -12,18 +12,20 @@ pub use accessors::{
     StateMetricsProvider, StateProvider, TxChangeSet, TxScratchpad, WorkingSet,
 };
 #[cfg(feature = "native")]
-pub use accessors::{AccessoryStateCheckpoint, ApiStateAccessor, ApiStateAccessorError};
+pub use accessors::{
+    AccessoryStateCheckpoint, ApiStateAccessor, ApiStateAccessorError, ConcurrentStateCheckpoint,
+};
 #[cfg(feature = "native")]
 use sov_rollup_interface::ProvableHeightTracker;
 pub use sov_state::TypeErasedEvent;
 #[cfg(feature = "native")]
 pub use traits::ProvenStateAccessor;
 pub use traits::{
-    AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateWriter, GenesisState,
-    InfallibleKernelStateAccessor, InfallibleStateAccessor, InfallibleStateReaderAndWriter,
-    PerBlockCache, PrivilegedKernelAccessor, ProvableStateReader, ProvableStateWriter,
-    StateAccessor, StateAccessorError, StateReader, StateReaderAndWriter, StateWriter, TxState,
-    VersionReader,
+    charge_write, AccessoryStateReader, AccessoryStateReaderAndWriter, AccessoryStateWriter,
+    GenesisState, InfallibleKernelStateAccessor, InfallibleStateAccessor,
+    InfallibleStateReaderAndWriter, PerBlockCache, PrivilegedKernelAccessor, ProvableStateReader,
+    ProvableStateWriter, StateAccessor, StateAccessorError, StateReader, StateReaderAndWriter,
+    StateWriter, TxState, VersionReader,
 };
 
 #[cfg(feature = "native")]

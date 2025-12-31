@@ -1,12 +1,12 @@
 use crate::test_helpers::build_transfer_token_tx;
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::TokenId;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
@@ -165,10 +165,11 @@ pub(crate) async fn assert_slot_finality(
         .await
         .unwrap();
 
+    let actual_finality = slot.finality_status.into();
     assert_eq!(
         expected_finality,
-        slot.finality_status.into(),
-        "Wrong finality status for rollup height {rollup_height}"
+        actual_finality,
+        "Wrong finality status for rollup height {rollup_height}: expected: {expected_finality:?} got: {actual_finality:?}"
     );
 }
 
@@ -195,18 +196,24 @@ pub(crate) async fn assert_bank_event<S: Spec>(
     Ok(())
 }
 
+/// Submits all transactions to the sequencers, blocks till the last transaction is processed.
+/// Returns slot number, where the result of the last transaction should be visible.
 pub(crate) async fn send_tx_and_wait_for_status(
     txs: &[Transaction<Runtime<TestSpec>, TestSpec>],
     client: &NodeClient,
 ) -> anyhow::Result<u64> {
-    let rsps = client.client.send_txs_to_sequencer(txs).await?;
+    assert!(!txs.is_empty(),);
+    let responses = client.client.send_txs_to_sequencer(txs).await?;
 
     // Wait for the last transaction.
-    let tx_hash = &rsps[rsps.len() - 1].id;
+    let last_tx_hash = responses
+        .last()
+        .map(|response| &response.id)
+        .expect("There should be at least one response");
 
     let mut tx_subscription = client
         .client
-        .subscribe_to_tx_status_updates(tx_hash.parse()?)
+        .subscribe_to_tx_status_updates(last_tx_hash.parse()?)
         .await
         .context("Failed to subscribe to tx status")?;
 
@@ -219,7 +226,7 @@ pub(crate) async fn send_tx_and_wait_for_status(
         // The condition below is never met, but it's included as a sanity check
         // in case something goes terribly wrong and we receive an unexpectedly large number of status updates (which should be impossible).
         if c > 5 {
-            panic!("Invalid status {info:?}")
+            panic!("Invalid status {info:?}, too many status transitions!")
         }
         c += 1;
     }
@@ -255,12 +262,14 @@ pub async fn start_test_rollup(
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
+        c.aggregated_proof_block_jump = 5;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
                 * std::cmp::max(1, test_case.finalization_blocks as u64);
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
             sequencer_config.disable_state_root_consistency_checks =
                 disable_state_root_consistency_check;
+            sequencer_config.num_cache_warmup_workers = 0;
         }
     })
     .start()

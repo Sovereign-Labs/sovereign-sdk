@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::future::Future;
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -16,6 +17,7 @@ use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::*;
 use sov_modules_stf_blueprint::{PreExecError, Runtime};
+use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::{json_obj, to_json_object};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
@@ -28,14 +30,59 @@ use tracing::{info, trace};
 use crate::rest_api::ApiAcceptedTx;
 use crate::{SequencerNotReadyDetails, SlotNumber, TxHash, TxStatus, TxStatusManager};
 
-pub(crate) type SequencerTxStream<Confirmation> =
-    Pin<Box<dyn futures::Stream<Item = Result<ApiAcceptedTx<Confirmation>, anyhow::Error>> + Send>>;
+#[derive(Debug, Error, Clone, serde::Serialize, serde::Deserialize)]
+pub enum SubscriptionStreamError {
+    #[error("Subscription data was produced faster than it could be sent. Try again later.")]
+    Lagged,
+    #[error("Requested future data. The next available item is {next_available}")]
+    RequestedFutureData { next_available: u64 },
+    #[error("Internal server error")]
+    Internal,
+}
+
+impl ReportableWsError for SubscriptionStreamError {
+    fn to_json(&self) -> String {
+        serde_json::to_string(&match self {
+            SubscriptionStreamError::Lagged => {
+                json_obj!({
+                    "error": "LAGGED",
+                    "description": "Subscription data was produced faster than it could be sent. Try again later.",
+                    "details": {},
+                })
+            },
+            SubscriptionStreamError::RequestedFutureData { next_available } => {
+                json_obj!({
+                    "error": "REQUESTED_FUTURE_DATA",
+                    "description": "Attempted to subscribe to data that hasn't been produced yet.",
+                    "details": {
+                        "next_available": *next_available,
+                    },
+                })
+            },
+            SubscriptionStreamError::Internal => {
+                json_obj!({
+                    "error": "INTERNAL_SERVER_ERROR",
+                    "description": "An internal server error occurred.",
+                    "details": {},
+                })
+            },
+        }).expect("Failed to serialize SubscriptionStreamError literal to JSON. This is a bug, please report it.")
+    }
+}
+
+pub(crate) type SequencerTxStream<Confirmation> = Pin<
+    Box<
+        dyn futures::Stream<Item = Result<ApiAcceptedTx<Confirmation>, SubscriptionStreamError>>
+            + Send,
+    >,
+>;
 
 pub(crate) type SequencerEventStream<Rt> = Pin<
     Box<
         dyn futures::Stream<
-                Item = anyhow::Result<
+                Item = Result<
                     RuntimeEventResponse<<Rt as RuntimeEventProcessor>::RuntimeEvent>,
+                    SubscriptionStreamError,
                 >,
             > + Send,
     >,
@@ -44,7 +91,7 @@ pub(crate) type SequencerEventStream<Rt> = Pin<
 /// The [`Sequencer`] trait is responsible for accepting transactions and
 /// assembling them into batches.
 #[async_trait]
-pub trait Sequencer: Send + Sync + 'static {
+pub trait Sequencer: Clone + Send + Sync + 'static {
     /// What data is returned to clients when a transaction is accepted.
     type Confirmation: Clone + serde::Serialize + Send + Sync + 'static;
     /// The rollup spec.
@@ -63,7 +110,7 @@ pub trait Sequencer: Send + Sync + 'static {
     async fn subscribe_transactions(
         &self,
         _starting_from: Option<u64>,
-    ) -> Option<anyhow::Result<SequencerTxStream<Self::Confirmation>>> {
+    ) -> Option<Result<SequencerTxStream<Self::Confirmation>, SubscriptionStreamError>> {
         None
     }
 
@@ -117,9 +164,14 @@ pub trait Sequencer: Send + Sync + 'static {
     /// implementation itself is responsible for "encoding" the transaction.
     ///
     /// Can return an error if transaction is invalid or mempool is full.
+    ///
+    /// Safe for use in cancellable APIs, but the actual transaction submission cannot safely be
+    /// cancelled and will continue executing even if the thread `accept_tx()` was called on is
+    /// killed.
     async fn accept_tx(
         &self,
         tx: FullyBakedTx,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject>;
 
     /// Can be used to query and update the status of transactions.
@@ -139,12 +191,10 @@ pub trait Sequencer: Send + Sync + 'static {
 }
 
 /// A transaction that has been accepted by the batch builder.
-#[serde_with::serde_as]
 #[derive(Clone, serde::Serialize, derivative::Derivative)]
 #[derivative(Debug)]
 pub struct AcceptedTx<C> {
     /// Encoded transaction, as will appear on-chain.
-    #[serde_as(as = "serde_with::base64::Base64")]
     pub tx: FullyBakedTx,
     /// Hash of the transaction.
     pub tx_hash: TxHash,
@@ -345,7 +395,7 @@ pub async fn react_to_state_updates<S, Fut>(
 }
 
 pub async fn loop_call_update_state<Seq: Sequencer>(
-    seq: Arc<Seq>,
+    seq: Seq,
     state_update_receiver: StateUpdateReceiver<<Seq::Spec as Spec>::Storage>,
     shutdown_receiver: watch::Receiver<()>,
 ) {
@@ -496,17 +546,17 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
                 details: Default::default(),
             };
         }
-        SequencerNotReadyDetails::ReplicaMode => {
-            return ErrorObject {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                message: "Sequencer is replica and cannot accept transactions".to_string(),
-                details: Default::default(),
-            };
-        }
         SequencerNotReadyDetails::Shutdown => {
             return ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "The sequencer is shutting down and cannot accept transactions".to_string(),
+                details: Default::default(),
+            };
+        }
+        SequencerNotReadyDetails::ReplicaNotReady => {
+            return ErrorObject {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "The replica is waiting for the first batch from master".to_string(),
                 details: Default::default(),
             };
         }

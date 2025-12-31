@@ -1,12 +1,9 @@
 use sov_api_spec::types;
 use sov_bank::{config_gas_token_id, Bank};
-use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::prelude::tokio::{self};
-use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
-use sov_modules_api::{Amount, Gas, GasArray, GasSpec, PrivateKey, Spec, SyncStatus, TxEffect};
+use sov_modules_api::{Amount, Gas, GasArray, GasSpec, Spec, SyncStatus};
 use sov_rest_utils::json_obj;
-use sov_rollup_apis::{PartialTransaction, SimulateExecutionContainer};
-use sov_test_utils::{AsUser, EncodeCall, TestUser, TransactionTestCase, TEST_DEFAULT_MAX_FEE};
+use sov_test_utils::{AsUser, TestUser, TransactionTestCase};
 
 use crate::{TestData, RT, S};
 
@@ -116,86 +113,7 @@ async fn test_get_base_fee_per_gas_latest_with_updates() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_simulation() {
-    let mut data = TestData::setup().await;
-
-    let partial_tx: types::PartialTransaction = PartialTransaction::<S> {
-        sender_pub_key: data.user.private_key().pub_key(),
-        details: TxDetails {
-            max_priority_fee_bips: PriorityFeeBips::ZERO,
-            max_fee: TEST_DEFAULT_MAX_FEE,
-            gas_limit: None,
-            chain_id: config_chain_id(),
-        },
-        encoded_call_message: <RT as EncodeCall<Bank<S>>>::encode_call(
-            sov_bank::CallMessage::Burn {
-                coins: sov_bank::Coins {
-                    amount: Amount::new(1000),
-                    token_id: config_gas_token_id(),
-                },
-            },
-        ),
-        generation: 0,
-        gas_price: None,
-        sequencer: None,
-        sequencer_rollup_address: None,
-    }
-    .try_into()
-    .unwrap();
-
-    let simulation_result = data
-        .client()
-        .simulate(&types::SimulateBody { body: partial_tx })
-        .await
-        .unwrap()
-        .clone();
-
-    let simulation_result_parsed: SimulateExecutionContainer<S> =
-        simulation_result.try_into().unwrap();
-
-    let query_apply_tx_receipt = simulation_result_parsed.apply_tx_result.receipt;
-
-    let result = data
-        .runner
-        .execute(
-            data.user
-                .create_plain_message::<RT, Bank<S>>(sov_bank::CallMessage::Burn {
-                    coins: sov_bank::Coins {
-                        amount: Amount::new(1000),
-                        token_id: config_gas_token_id(),
-                    },
-                }),
-        );
-
-    let tx_receipt = result
-        .0
-        .batch_receipts
-        .last()
-        .unwrap()
-        .tx_receipts
-        .last()
-        .unwrap();
-
-    assert_eq!(query_apply_tx_receipt.events.len(), tx_receipt.events.len());
-
-    for (simulation_event, tx_event) in query_apply_tx_receipt
-        .events
-        .iter()
-        .zip(tx_receipt.events.iter())
-    {
-        assert_eq!(simulation_event.key(), tx_event.key());
-        assert_eq!(simulation_event.value(), tx_event.value());
-    }
-
-    assert!(
-        matches!(query_apply_tx_receipt.receipt, TxEffect::Successful(..)),
-        "The queries receipt isn't successful. Instead, the receipt is {:?}",
-        query_apply_tx_receipt.receipt
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_simulation_v2_success() {
+async fn test_simulation_success() {
     let data = TestData::setup().await;
 
     let sender = data.user.credential_id().to_string();
@@ -216,7 +134,7 @@ async fn test_simulation_v2_success() {
     let client = reqwest::Client::new();
 
     let response = client
-        .post(format!("http://{}/rollup/simulate-v2", data.axum_addr))
+        .post(format!("http://{}/rollup/simulate", data.axum_addr))
         .json(&params)
         .send()
         .await
@@ -249,7 +167,7 @@ async fn test_simulation_v2_success() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_simulation_v2_fail() {
+async fn test_simulation_fail() {
     let data = TestData::setup().await;
 
     let sender = TestUser::<S>::generate_with_default_balance();
@@ -270,18 +188,21 @@ async fn test_simulation_v2_fail() {
     let client = reqwest::Client::new();
 
     let response = client
-        .post(format!("http://{}/rollup/simulate-v2", data.axum_addr))
+        .post(format!("http://{}/rollup/simulate", data.axum_addr))
         .json(&params)
         .send()
         .await
         .unwrap();
     let actual = response.json::<serde_json::Value>().await.unwrap();
-    // Test raw JSON to ensure it's acutally usable
     let expected = serde_json::json!({
         "outcome": "reverted",
-        // we lose the context because of how module errors are currently implemented
-        // the actual reason for the failure is the sender doesnt have enough balance
-        "reason": "Failed to transfer token_id=token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
+        "detail": {
+            "call": "transfer_token",
+            "error_code": "underflow",
+            "base": "0",
+            "subtrahend": "1000",
+            "message": format!("Insufficient balance for account {}", sender.address()),
+        },
     });
 
     assert_eq!(actual, expected);
