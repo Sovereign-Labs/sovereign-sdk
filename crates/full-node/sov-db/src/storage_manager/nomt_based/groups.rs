@@ -1,9 +1,11 @@
+use crate::commit_flag::{CommitFlag, CommitStatus};
 use crate::flat_db::DbCache;
 use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
@@ -31,6 +33,7 @@ const GIGABYTE: usize = 1024 * 1024 * 1024;
 pub(crate) const DEFAULT_MAX_PRUNING_BATCH_SIZE: usize = 300_000;
 
 pub(crate) struct DbGroup<H, K> {
+    commit_flag: CommitFlag,
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
     accessory: Arc<rockbound::DB>,
@@ -47,13 +50,25 @@ where
         let path = config.path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
         let separate_archival_state = config.separate_archival_state;
-        let state_db = NomtStateDb::<H>::new(config)?;
+
+        let commit_flag = CommitFlag::new(&config.path);
+        let merklized_state = NomtStateDb::<H>::new(config)?;
+        let flat_state = FlatStateDb::new(path.clone(), state_cache_size, separate_archival_state)?;
+
+        // Validate the commit state.
+        merklized_state.validate_commit_flag_and_rollback_if_necessesary(&commit_flag)?;
+
+        // Validate root hashes.
+        Self::are_root_hashes_match(&merklized_state, &flat_state)?;
+        commit_flag.save_commit_status(&CommitStatus::Success)?;
+
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let flat_state = FlatStateDb::new(path, state_cache_size, separate_archival_state)?;
+
         Ok(Self {
-            merklized_state: Arc::new(state_db),
+            commit_flag,
+            merklized_state: Arc::new(merklized_state),
             flat_state,
             accessory: Arc::new(accessory_rocksdb),
             ledger: Arc::new(ledger_rocksdb),
@@ -62,6 +77,8 @@ where
     }
 
     pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
+        // The last commit had to be successful.
+        debug_assert_eq!(&self.commit_flag.read_status()?, &CommitStatus::Success);
         let CommitGroup {
             nomt: state,
             rockbound:
@@ -72,23 +89,19 @@ where
                 },
         } = group;
 
-        let merklized_start = std::time::Instant::now();
-        // Note: failure handling and data recovery will be implemented later.
-        let merklized_commit = self.merklized_state.commit(state)?;
-        let merklized_commit_from_caller = merklized_start.elapsed();
-        // Historical data is committed after merklized state, as in case of failure, it can be synced from the normal state,
-        // as it duplicates the last written data to `self.state`.
-        let flat_metrics = self.flat_state.commit(historical_state)?;
-        let accessory_start = std::time::Instant::now();
-        self.accessory.write_schemas(&accessory)?;
-        let accessory_commit = accessory_start.elapsed();
+        let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
 
-        let ledger_start = std::time::Instant::now();
-        // Ledger goes after last, as its data is used during the start.
-        // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(&ledger)?;
-        let ledger_commit = ledger_start.elapsed();
+        let flat_metrics = self
+            .flat_state
+            .commit(historical_state, &self.commit_flag)?;
 
+        self.commit_flag
+            .save_commit_status(&CommitStatus::Success)?;
+
+        let accessory_commit = self.commit_accessory(&accessory)?;
+        let ledger_commit = self.commit_ledger(&ledger)?;
+
+        let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
             merklized_commit,
             merklized_commit_from_caller,
@@ -104,6 +117,20 @@ where
         self.merklized_state.send_metrics();
 
         Ok(())
+    }
+
+    fn commit_accessory(&self, accessory: &SchemaBatch) -> anyhow::Result<Duration> {
+        let accessory_start = std::time::Instant::now();
+        self.accessory.write_schemas(accessory)?;
+        Ok(accessory_start.elapsed())
+    }
+
+    fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<Duration> {
+        let ledger_start = std::time::Instant::now();
+        // Ledger goes after last, as its data is used during the start.
+        // So if ledger save failed, state and accessory will be synced from DA
+        self.ledger.write_schemas(ledger)?;
+        Ok(ledger_start.elapsed())
     }
 
     // Flush pruning schema batches to disk.
@@ -310,11 +337,14 @@ where
         }
     }
 
-    fn are_root_hashes_match(&self) -> anyhow::Result<bool> {
+    fn are_root_hashes_match(
+        merklized_state: &NomtStateDb<H>,
+        flat_state: &FlatStateDb,
+    ) -> anyhow::Result<bool> {
         let historical_state_delta_reader =
-            DeltaReader::new(self.flat_state.live_db.clone(), Vec::new());
+            DeltaReader::new(flat_state.live_db.clone(), Vec::new());
 
-        let nomt_root_hashes = self.merklized_state.get_root_hashes();
+        let nomt_root_hashes = merklized_state.get_root_hashes();
         let last_version =
             HistoricalStateReader::last_version_from_reader(&historical_state_delta_reader)?;
 
@@ -349,20 +379,6 @@ where
                 Ok(nomt_root_hashes.included_in_raw(&state_root_rocksdb))
             }
         }
-    }
-
-    pub(crate) fn verify_and_fix_commited_root_hashes(&self) -> anyhow::Result<()> {
-        if !self.are_root_hashes_match()? {
-            tracing::warn!("Historical state root hashes are not equal to NOMT state root hashes, attempt to fix it");
-            self.merklized_state.full_rollback()?;
-            if !self.are_root_hashes_match()? {
-                return Err(anyhow::anyhow!("Fix didn't help, historical state root hashes are not equal to NOMT state root hashes. Manual intervention is required."));
-            }
-            tracing::info!(
-                "Historical state root hashes are equal to NOMT state root hashes, fix applied"
-            );
-        }
-        Ok(())
     }
 }
 

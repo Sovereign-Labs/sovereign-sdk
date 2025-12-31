@@ -10,6 +10,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
+use crate::commit_flag::CommitFlag;
 use crate::config::RollupDbConfig;
 use crate::historical_state::HistoricalStateReader;
 use crate::schema::types::slot_key::{SlotKey, SlotValue};
@@ -396,6 +397,7 @@ async fn test_root_hashes_match_after_crash() {
     // Writing extra data to NOMT, both namespaces.
     // Since changes for both namespaces are always provided.
     {
+        let commit_flag = CommitFlag::new(&config.path);
         let nomt = Arc::new(NomtStateDb::<H>::new(config.clone()).unwrap());
 
         let the_last_block = MockBlockHeader::from_height(blocks);
@@ -418,7 +420,8 @@ async fn test_root_hashes_match_after_crash() {
 
         let state_finished_session =
             StateFinishedSession::new(finished_user_session, finished_kernel_session);
-        nomt.commit_change_set(state_finished_session).unwrap();
+        nomt.commit_change_set(state_finished_session, &commit_flag)
+            .unwrap();
     }
 
     let mut storage_manager =
