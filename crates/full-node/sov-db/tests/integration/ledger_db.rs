@@ -210,3 +210,191 @@ async fn test_rollback() {
         .rollback_last_slot(storage_manager.get_db())
         .unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rollback_with_data() {
+    use sov_rollup_interface::common::IntoSlotNumber;
+    use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, TxEffect};
+    use sov_rollup_interface::TxHash;
+    use sov_test_utils::TestTxReceiptContents;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Create slots with actual data (batches, transactions, events)
+    for slot_num in 0..3 {
+        let mut block = MockBlock::default();
+        block.header.height = slot_num;
+        let mut slot_commit = SlotCommit::<_, i32, TestTxReceiptContents>::new(block, vec![]);
+
+        // Add 2 batches per slot
+        for batch_num in 0..2 {
+            let mut tx_receipts = vec![];
+
+            // Add 3 transactions per batch
+            for tx_num in 0..3 {
+                let tx_hash = TxHash::new([
+                    (slot_num * 100 + batch_num * 10 + tx_num) as u8,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ]);
+
+                let events = vec![
+                    sov_rollup_interface::stf::StoredEvent::new(
+                        format!("event_key_slot{}_batch{}_tx{}_evt0", slot_num, batch_num, tx_num)
+                            .as_bytes(),
+                        format!("event_value_{}_{}_{}_0", slot_num, batch_num, tx_num).as_bytes(),
+                        [0u8; 32],
+                    ),
+                    sov_rollup_interface::stf::StoredEvent::new(
+                        format!("event_key_slot{}_batch{}_tx{}_evt1", slot_num, batch_num, tx_num)
+                            .as_bytes(),
+                        format!("event_value_{}_{}_{}_1", slot_num, batch_num, tx_num).as_bytes(),
+                        [0u8; 32],
+                    ),
+                ];
+
+                tx_receipts.push(TransactionReceipt {
+                    tx_hash,
+                    body_to_save: None,
+                    events,
+                    receipt: TxEffect::Successful((slot_num * 100 + batch_num * 10 + tx_num) as u32),
+                });
+            }
+
+            let batch_receipt = BatchReceipt {
+                batch_hash: [
+                    (slot_num * 100 + batch_num * 10) as u8,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                ],
+                tx_receipts,
+                ignored_tx_receipts: vec![],
+                inner: batch_num as i32,
+            };
+
+            slot_commit.add_batch(batch_receipt);
+        }
+
+        let schema_batch = ledger_db
+            .materialize_slot(slot_commit, b"state-root")
+            .unwrap();
+        storage_manager.commit(&schema_batch);
+    }
+
+    // Verify we have 3 slots with data
+    let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number, 2.to_slot_number());
+    assert_eq!(head_slot.batches.start.0, 4); // Slots 0 and 1 each have 2 batches
+    assert_eq!(head_slot.batches.end.0, 6); // Slot 2 has batches 4 and 5
+
+    // Verify item numbers before rollback
+    let item_numbers_before_rollback = ledger_db.get_next_items_numbers().unwrap();
+    assert_eq!(item_numbers_before_rollback.slot_number, 3.to_slot_number());
+    assert_eq!(item_numbers_before_rollback.batch_number, 6); // 3 slots × 2 batches
+    assert_eq!(item_numbers_before_rollback.tx_number, 18); // 6 batches × 3 txs
+    assert_eq!(item_numbers_before_rollback.event_number, 36); // 18 txs × 2 events
+
+    // Rollback slot 2
+    ledger_db
+        .rollback_last_slot(storage_manager.get_db())
+        .unwrap();
+
+    // Verify slot 2 is gone
+    let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number, 1.to_slot_number());
+    assert_eq!(head_slot.batches.start.0, 2); // Slot 1 starts at batch 2
+    assert_eq!(head_slot.batches.end.0, 4); // Slot 1 ends at batch 4
+
+    // Verify the item numbers reflect the rollback
+    let item_numbers_after_rollback = ledger_db.get_next_items_numbers().unwrap();
+    assert_eq!(item_numbers_after_rollback.slot_number, 2.to_slot_number());
+    assert_eq!(item_numbers_after_rollback.batch_number, 4); // 2 slots × 2 batches
+    assert_eq!(item_numbers_after_rollback.tx_number, 12); // 4 batches × 3 txs
+    assert_eq!(item_numbers_after_rollback.event_number, 24); // 12 txs × 2 events
+
+    // Verify slot 1 data is intact by checking item numbers
+    let item_numbers_slot_1 = ledger_db.get_next_items_numbers().unwrap();
+    assert_eq!(item_numbers_slot_1.slot_number, 2.to_slot_number());
+    assert_eq!(item_numbers_slot_1.batch_number, 4); // 2 slots × 2 batches
+
+    // Rollback slot 1
+    ledger_db
+        .rollback_last_slot(storage_manager.get_db())
+        .unwrap();
+
+    // Verify slot 1 is gone but slot 0 remains
+    let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number, 0.to_slot_number());
+    assert_eq!(head_slot.batches.start.0, 0);
+    assert_eq!(head_slot.batches.end.0, 2);
+
+    let item_numbers_after_second_rollback = ledger_db.get_next_items_numbers().unwrap();
+    assert_eq!(
+        item_numbers_after_second_rollback.slot_number,
+        1.to_slot_number()
+    );
+    assert_eq!(item_numbers_after_second_rollback.batch_number, 2);
+    assert_eq!(item_numbers_after_second_rollback.tx_number, 6);
+    assert_eq!(item_numbers_after_second_rollback.event_number, 12);
+}
