@@ -107,7 +107,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         let client = test_rollup.client.clone();
 
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
-        let max_nb_of_txs = 1000;
+        let max_nb_of_txs = 200;
 
         send_txs_in_background(
             0,
@@ -120,7 +120,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
 
         let mut nb_of_events = 0;
         loop {
-            // Crash the node once the transactions are being processed.
+            // Crash the node after 5 txs.
             if nb_of_events == 5 {
                 crash_moment.set_crash_env();
             }
@@ -133,13 +133,17 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
             }
 
             nb_of_events += 1;
-            assert!(nb_of_events < max_nb_of_txs);
+            assert!(
+                nb_of_events < max_nb_of_txs,
+                "The node didn't crash, but it was expected to."
+            );
         }
     }
 
+    // Give the OS time to clean up file handles after the crash.
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     std::env::remove_var(CRASH_ENV_NAME);
     unlock_dbs(&temp_dir);
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
     // Start the rollup with the existing DBs and check whether it is able to receive transactions.
     {
@@ -225,8 +229,10 @@ async fn send_txs(
             start_generation + nb_of_txs,
         );
 
+        // It's fine not to check the result here — it will be verified later via subscription.
         let _ = api_client.send_tx_to_sequencer(&tx).await;
 
+        // Send transactions continuously every 100ms to maintain steady TX traffic during the test.
         tokio::time::sleep(Duration::from_millis(100)).await;
         nb_of_txs += 1;
 
