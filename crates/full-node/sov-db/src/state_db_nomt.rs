@@ -112,6 +112,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let flag_prepare_start = std::time::Instant::now();
         let flag_prepare = flag_prepare_start.elapsed();
 
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeSavingKernelNomt.crash_if_env_set();
+
         // 1.
         let flag_mid_start = std::time::Instant::now();
         commit_flag.save_commit_status(&CommitStatus::CommittingKernelNomt(
@@ -119,8 +122,14 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         ))?;
         let flag_mid = flag_mid_start.elapsed();
 
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeCommittingKernelNomt.crash_if_env_set();
+
         // 2.
         let write_kernel = self.commit_kernel(kernel)?;
+
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeSavingUserlNomt.crash_if_env_set();
 
         // 3.
         let flag_finish_start = std::time::Instant::now();
@@ -129,6 +138,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             self.user.root().into_inner(),
         ))?;
         let flag_finish = flag_finish_start.elapsed();
+
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeCommittingUserNomt.crash_if_env_set();
 
         // 4.
         let write_user = self.commit_user(user)?;

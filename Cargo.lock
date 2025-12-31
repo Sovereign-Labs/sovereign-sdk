@@ -11064,6 +11064,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-rollup-interface",
  "sov-test-utils",
+ "strum 0.26.3",
  "tempfile",
  "test-log",
  "test-strategy",

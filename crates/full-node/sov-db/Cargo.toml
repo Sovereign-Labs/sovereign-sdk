@@ -44,6 +44,7 @@ serde_with = { workspace = true }
 derivative = { workspace = true }
 digest = { workspace = true }
 sov-db-types = { workspace = true, features = ["native"] }
+strum = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
 test-strategy = { workspace = true }
@@ -75,7 +76,7 @@ arbitrary = [
 	"uuid/arbitrary",
 	"sov-db-types/arbitrary"
 ]
-test-utils = ["dep:rand"]
+test-utils = ["dep:rand", "strum"]
 
 [[bench]]
 name = "state_db_single_snapshot"
