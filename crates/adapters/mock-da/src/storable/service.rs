@@ -9,10 +9,8 @@ use tokio::task::JoinHandle;
 
 use crate::storable::StorableMockDaService;
 
-use crate::{
-    BlockProducingConfig, MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier,
-    DEFAULT_BLOCK_WAITING_TIME_MS,
-};
+use crate::config::SENSIBLE_BLOCK_PULL_TIME;
+use crate::{BlockProducingConfig, MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier};
 
 #[async_trait]
 impl DaService for StorableMockDaService {
@@ -103,19 +101,11 @@ impl DaService for StorableMockDaService {
     async fn get_approximate_block_time(&self) -> Duration {
         match self.block_producing {
             BlockProducingConfig::Periodic { block_time_ms } => {
-                std::time::Duration::from_millis(block_time_ms)
+                Duration::from_millis(block_time_ms)
             }
-            BlockProducingConfig::OnBatchSubmit {
-                block_wait_timeout_ms,
-            }
-            | BlockProducingConfig::OnAnySubmit {
-                block_wait_timeout_ms,
-            } => std::time::Duration::from_millis(
-                block_wait_timeout_ms.unwrap_or(DEFAULT_BLOCK_WAITING_TIME_MS),
-            ),
-            BlockProducingConfig::Manual => {
-                std::time::Duration::from_secs(DEFAULT_BLOCK_WAITING_TIME_MS)
-            }
+            BlockProducingConfig::OnBatchSubmit { .. }
+            | BlockProducingConfig::OnAnySubmit { .. }
+            | BlockProducingConfig::Manual => SENSIBLE_BLOCK_PULL_TIME,
         }
     }
 }

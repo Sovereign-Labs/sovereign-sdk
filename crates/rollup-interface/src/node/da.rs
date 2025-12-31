@@ -251,6 +251,7 @@ pub trait DaService: Clone + Send + Sync + 'static {
 
     /// Method that should give an approximate block time of this DaService.
     /// It helps other components to better arrange polling, timeouts or other operations.
+    /// If unclear it is better to return lower value.
     async fn get_approximate_block_time(&self) -> std::time::Duration;
 }
 
