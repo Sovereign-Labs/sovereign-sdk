@@ -293,19 +293,19 @@ fn is_version_selected_for_key(
 
 use strum::{Display, EnumString};
 
-/// TODO
+/// This environment variable sets the crash location for rollup and is used only in tests.
 pub const CRASH_ENV_NAME: &str = "SOV_CRASH_ON_COMMIT";
 
-/// TODO
+/// The crash location.
 #[derive(Debug, Clone, Display, EnumString, Eq, PartialEq)]
 pub enum CrashLocation {
-    /// TODO
+    /// Rollup crashes before saving `the CommittingKernelNomt` flag.
     BeforeSavingKernelNomt,
-    /// TODO
+    /// Rollup crashes before committing the kernel.
     BeforeCommittingKernelNomt,
-    /// TODO
+    /// Rollup crashes before saving the `CommittingUserNomt` flag.
     BeforeSavingUserlNomt,
-    /// TODO
+    /// Rollup crashes before committing the user nomt.
     BeforeCommittingUserNomt,
 }
 
