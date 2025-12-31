@@ -40,7 +40,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         Ok(Self { user, kernel })
     }
 
-    pub(crate) fn validate_commit_flag_and_rollback_if_necssesary(
+    pub(crate) fn validate_commit_flag_and_rollback_if_necessesary(
         &self,
         commit_flag: &CommitFlag,
     ) -> anyhow::Result<()> {
@@ -583,7 +583,7 @@ mod tests {
         let commit_flag = CommitFlag::new(&config.path);
         let state_db = Arc::new(NomtStateDb::<H>::new(config).unwrap());
         state_db
-            .validate_commit_flag_and_rollback_if_necssesary(&commit_flag)
+            .validate_commit_flag_and_rollback_if_necessesary(&commit_flag)
             .unwrap();
 
         let all_overlays: HashMap<u64, StateOverlay> = HashMap::new();
@@ -659,7 +659,7 @@ mod tests {
         let config = RollupDbConfig::default_in_path(temp_dir.path().to_path_buf());
         let state_db = Arc::new(NomtStateDb::<H>::new(config).unwrap());
         state_db
-            .validate_commit_flag_and_rollback_if_necssesary(&commit_flag)
+            .validate_commit_flag_and_rollback_if_necessesary(&commit_flag)
             .unwrap();
 
         let builder =

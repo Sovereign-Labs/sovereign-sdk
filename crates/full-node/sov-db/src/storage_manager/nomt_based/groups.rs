@@ -55,7 +55,7 @@ where
         let flat_state = FlatStateDb::new(path.clone(), state_cache_size, separate_archival_state)?;
 
         // Validate the commit state.
-        merklized_state.validate_commit_flag_and_rollback_if_necssesary(&commit_flag)?;
+        merklized_state.validate_commit_flag_and_rollback_if_necessesary(&commit_flag)?;
 
         // Validate root hashes.
         Self::are_root_hashes_match(&merklized_state, &flat_state)?;
