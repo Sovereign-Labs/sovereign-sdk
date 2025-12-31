@@ -42,8 +42,10 @@ impl<S: Spec> ProverIncentives<S> {
         );
 
         anyhow::ensure!(
-            config.proving_penalty.dim_is_less_than(config.minimum_bond),
-            "The penalty should be less than the minimum bond"
+            config
+                .proving_penalty
+                .dim_is_less_or_eq(config.minimum_bond),
+            "The penalty should be less than or equal to the minimum bond"
         );
 
         // Set bonds to zero for genesis registration; This way, we can register without any bond only during genesis.
