@@ -91,9 +91,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     ?commit_status,
                     "Detected in-progress commit. Rolling back kernel & user DBs."
                 );
-                // User & Kernel commit was sucefull but we don't see `Success`. We rollback both User & Kernel.
-                self.kernel.rollback(1)?;
-                self.user.rollback(1)?;
+                // TODO: Requires careful consideration.
             }
             CommitStatus::Success => {}
         }
