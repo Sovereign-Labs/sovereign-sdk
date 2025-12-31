@@ -56,3 +56,8 @@ pub(crate) struct SignerResponse {
 pub(crate) struct ErrorResponse {
     pub(crate) error: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct BlockTimeResponse {
+    pub(crate) approximate_block_time_ms: u64,
+}

@@ -14,8 +14,10 @@ pub const WAIT_ATTEMPT_PAUSE: Duration = Duration::from_millis(10);
 /// The max time for the requested block to be produced.
 pub const DEFAULT_BLOCK_WAITING_TIME_MS: u64 = 120_000;
 
-/// How often we expect blocks to be produced, even if it is manual or on-batch submit
-pub(crate) const SENSIBLE_BLOCK_PULL_TIME: std::time::Duration = std::time::Duration::from_millis(30);
+/// How often we expect blocks to be produced, even if it is manual or on-batch submit.
+/// It is based on expected time of node processing single block in debug build mode
+pub(crate) const SENSIBLE_BLOCK_PULL_TIME: std::time::Duration =
+    std::time::Duration::from_millis(200);
 
 pub(crate) const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
     prev_hash: MockHash([0; 32]),

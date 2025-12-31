@@ -204,6 +204,18 @@ impl DaService for StorableMockDaClient {
     }
 
     async fn get_approximate_block_time(&self) -> Duration {
-        todo!("Implent endpoint on the server and query it")
+        let url = self.url("/approximate-block-time").expect("Bad url");
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .expect("Failed to fetch approximate block time");
+
+        let block_time_response: BlockTimeResponse = handle_response(response)
+            .await
+            .expect("Failed to parse approximate block time response");
+
+        std::time::Duration::from_millis(block_time_response.approximate_block_time_ms)
     }
 }
