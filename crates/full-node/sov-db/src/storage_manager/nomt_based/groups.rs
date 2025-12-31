@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
@@ -88,28 +89,19 @@ where
                 },
         } = group;
 
-        let merklized_start = std::time::Instant::now();
-
         let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
-        let merklized_commit_from_caller = merklized_start.elapsed();
 
         let flat_metrics = self
             .flat_state
             .commit(historical_state, &self.commit_flag)?;
 
-        let accessory_start = std::time::Instant::now();
-        self.accessory.write_schemas(&accessory)?;
-        let accessory_commit = accessory_start.elapsed();
-
-        let ledger_start = std::time::Instant::now();
-        // Ledger goes after last, as its data is used during the start.
-        // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(&ledger)?;
-        let ledger_commit = ledger_start.elapsed();
+        let accessory_commit = self.commit_accessory(&accessory)?;
+        let ledger_commit = self.commit_ledger(&ledger)?;
 
         self.commit_flag
             .save_commit_status(&CommitStatus::Success)?;
 
+        let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
             merklized_commit,
             merklized_commit_from_caller,
@@ -125,6 +117,20 @@ where
         self.merklized_state.send_metrics();
 
         Ok(())
+    }
+
+    fn commit_accessory(&self, accessory: &SchemaBatch) -> anyhow::Result<Duration> {
+        let accessory_start = std::time::Instant::now();
+        self.accessory.write_schemas(&accessory)?;
+        Ok(accessory_start.elapsed())
+    }
+
+    fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<Duration> {
+        let ledger_start = std::time::Instant::now();
+        // Ledger goes after last, as its data is used during the start.
+        // So if ledger save failed, state and accessory will be synced from DA
+        self.ledger.write_schemas(&ledger)?;
+        Ok(ledger_start.elapsed())
     }
 
     // Flush pruning schema batches to disk.
