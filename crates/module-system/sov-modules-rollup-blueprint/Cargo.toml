@@ -41,12 +41,12 @@ tracing = { workspace = true, optional = true }
 tracing-panic = { version = "0.1.2", optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 hex = { workspace = true, optional = true }
-opentelemetry = { version = "0.30", default-features = false, features = ["trace"], optional = true }
-opentelemetry_sdk = { version = "0.30", default-features = false, features = ["trace", "rt-tokio"], optional = true }
-opentelemetry-otlp = { version = "0.30", default-features = false, features = ["grpc-tonic", "trace", "logs"], optional = true }
-opentelemetry-appender-tracing = { version = "0.30", optional = true }
-opentelemetry-semantic-conventions = { version = "0.30", features = ["semconv_experimental"], optional = true }
-tracing-opentelemetry = { version = "0.31", default-features = false, features = ["tracing-log"], optional = true }
+opentelemetry = { version = "0.31", default-features = false, features = ["trace"], optional = true }
+opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace", "logs"], optional = true }
+opentelemetry-appender-tracing = { version = "0.31", optional = true }
+opentelemetry-semantic-conventions = { version = "0.31", features = ["semconv_experimental"], optional = true }
+tracing-opentelemetry = { version = "0.32", default-features = false, features = ["tracing-log"], optional = true }
 
 [features]
 default = ["native"]
