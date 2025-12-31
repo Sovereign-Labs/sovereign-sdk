@@ -15,8 +15,10 @@ impl BatchSizeTracker {
         + 4;
 
     /// Each transaction is inserted into a vector of transactions in the batch.
-    /// BORSH overhead for this is 4 bytes.
-    const PER_TX_BORSH_OVERHEAD: usize = 4;
+    /// BORSH overhead includes:
+    /// - 4 bytes for the Vec length prefix
+    /// - 1 byte for the Option<Bytes> discriminant in FullyBakedTx.sequencing_data
+    const PER_TX_BORSH_OVERHEAD: usize = 5;
 
     pub fn new(max_batch_size: usize) -> Self {
         Self {

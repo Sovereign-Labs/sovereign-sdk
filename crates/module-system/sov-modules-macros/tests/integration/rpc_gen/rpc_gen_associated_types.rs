@@ -3,10 +3,11 @@ use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::macros::{expose_rpc, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
+use sov_modules_api::ExecutionContext;
 use sov_modules_api::{
     decode_borsh_serialized_message, ApiStateAccessor, Context, DaSpec, DispatchCall, EncodeCall,
-    Genesis, MessageCodec, Module, ModuleId, ModuleInfo, Spec, StateCheckpoint, StateValue,
-    TxState,
+    Genesis, MessageCodec, Module, ModuleId, ModuleInfo, SequencerType, Spec, StateCheckpoint,
+    StateValue, TxState,
 };
 use sov_state::ZkStorage;
 use sov_test_utils::ZkTestSpec;
@@ -153,7 +154,15 @@ fn associated_types() {
     let sender = <S as Spec>::Address::from([11; 28]);
     let sequencer = <S as Spec>::Address::from([12; 28]);
     let sequencer_da = <<ZkTestSpec as Spec>::Da as DaSpec>::Address::new([0; 32]);
-    let context = Context::<S>::new(sender, Default::default(), sequencer, sequencer_da);
+    let context = Context::<S>::new(
+        sender,
+        Default::default(),
+        sequencer,
+        sequencer_da,
+        None,
+        ExecutionContext::Node,
+        SequencerType::Preferred,
+    );
 
     runtime
         .dispatch_call(module, &mut working_set, &context)

@@ -28,11 +28,11 @@ pub(crate) async fn operation_for_master<S: Spec, Rt: Runtime<S>>(
     let distance = sync_status.distance();
 
     let operation = match (
-        table.condition_nodes_sequence_number_is_fresher,
-        table.condition_too_close_to_deferred_slots_count_for_comfort,
-        table.condition_node_is_lagging,
-        table.condition_are_there_batches_to_replay,
-        table.condition_node_is_unsynced_and_doesnt_know_it,
+        table.nodes_sequence_number_is_fresher,
+        table.too_close_to_deferred_slots_count_for_comfort,
+        table.node_is_lagging,
+        table.are_there_batches_to_replay,
+        table.node_is_unsynced_and_doesnt_know_it,
     ) {
         (true, _, _, true, _) => PreferredSeqOperation::Unreachable,
         (true, _, false, false, _) => {
@@ -104,11 +104,11 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
     );
 
     let operation = match (
-        table.condition_nodes_sequence_number_is_fresher,
-        table.condition_too_close_to_deferred_slots_count_for_comfort,
-        table.condition_node_is_lagging,
-        table.condition_are_there_batches_to_replay,
-        table.condition_node_is_unsynced_and_doesnt_know_it,
+        table.nodes_sequence_number_is_fresher,
+        table.too_close_to_deferred_slots_count_for_comfort,
+        table.node_is_lagging,
+        table.are_there_batches_to_replay,
+        table.node_is_unsynced_and_doesnt_know_it,
     ) {
         (true, _, _, true, _) => {
             // The node is ahead of the replica sequencer, which still has batches to replay.

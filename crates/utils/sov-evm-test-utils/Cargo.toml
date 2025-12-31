@@ -17,8 +17,12 @@ alloy-contract = { workspace = true }
 alloy-sol-types = { workspace = true, features = ["json"] }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
-alloy-dyn-abi = { version = "1.3.1", features = ["eip712"] }
 alloy = { workspace = true }
+
+arbitrary = { workspace = true, optional = true }
+proptest = { workspace = true, optional = true }
+
+alloy-dyn-abi = { workspace = true, features = ["eip712", "std"] }
 
 
 [lints]
@@ -26,9 +30,11 @@ workspace = true
 
 [features]
 arbitrary = [
+	"dep:arbitrary",
+	"dep:proptest",
 	"alloy-primitives/arbitrary",
 	"alloy-rpc-types-eth/arbitrary",
 	"alloy-sol-types/arbitrary",
 	"alloy/arbitrary",
-	"alloy-dyn-abi/arbitrary",
+	"alloy-dyn-abi/arbitrary"
 ]

@@ -635,6 +635,7 @@ mod tests {
             tx: FullyBakedTx {
                 // Hacky fake data to help track nonces when TXs are sent through the queue
                 data: vec![nonce].into(),
+                sequencing_data: None,
             },
             tx_hash: TxHash::from([0u8; 32]),
             original_tx_queue_id: 0,
@@ -1154,6 +1155,7 @@ mod tests {
         FullyBakedTx {
             // Use nonce as data to track it
             data: vec![nonce].into(),
+            sequencing_data: None,
         }
     }
 

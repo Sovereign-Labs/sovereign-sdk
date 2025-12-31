@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub use flat_db::DbCache;
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
@@ -34,6 +35,9 @@ pub mod accessory_db;
 pub mod namespaces;
 
 /// Implements commit flag logic for state_db_nomt.
+#[cfg(feature = "test-utils")]
+pub mod commit_flag;
+#[cfg(not(feature = "test-utils"))]
 pub(crate) mod commit_flag;
 /// Configuration for `sov-db`
 pub mod config;

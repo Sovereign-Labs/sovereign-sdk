@@ -280,7 +280,7 @@ async fn test_failed_transaction_aborts_drain() {
     // Nonce 2 will fail, which should result in 0 and 1 executed, 2 rejected and 3, 4 timing out
     // as a consequence
 
-    let nonces = (2..5).rev().collect::<Vec<_>>(); // 4, 3: will fail
+    let nonces = (3..5).rev().collect::<Vec<_>>(); // 4, 3: will fail
     let mut handles = vec![];
     for nonce in nonces {
         let client = client.clone();

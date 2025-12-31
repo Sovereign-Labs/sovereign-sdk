@@ -278,6 +278,8 @@ pub struct TimingOracleConfig {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct SovRateLimiterConfig<Address: Copy> {
+    /// The cache size for the rate limiter.
+    pub max_nb_of_concurrent_users_in_rate_limiter: u64,
     /// The maximum number of requests allowed per second.
     pub max_requests_per_second: u64,
     /// Default limits.

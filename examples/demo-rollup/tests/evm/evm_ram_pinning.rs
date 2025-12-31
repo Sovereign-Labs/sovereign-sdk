@@ -66,6 +66,7 @@ async fn test_ram_pinning_config_updates() -> anyhow::Result<()> {
         default_bucket_size_limit: 100 * 1024 * 1024, // 100MB
         privileged_deployer_addresses: vec![signer.address()],
         known_contracts_and_limits: Default::default(),
+        preferred_sequencer_publish_reverted_txs: false,
     };
     std::fs::write(
         &exec_config_path,
@@ -106,6 +107,7 @@ async fn test_contract_not_pinned_on_touch() -> anyhow::Result<()> {
         default_bucket_size_limit: 100 * 1024 * 1024, // 100MB
         privileged_deployer_addresses: vec![privileged_signer.address()],
         known_contracts_and_limits: Default::default(),
+        preferred_sequencer_publish_reverted_txs: false,
     };
     std::fs::write(
         &exec_config_path,

@@ -191,12 +191,10 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
 }
 
 /// A transaction that has been accepted by the batch builder.
-#[serde_with::serde_as]
 #[derive(Clone, serde::Serialize, derivative::Derivative)]
 #[derivative(Debug)]
 pub struct AcceptedTx<C> {
     /// Encoded transaction, as will appear on-chain.
-    #[serde_as(as = "serde_with::base64::Base64")]
     pub tx: FullyBakedTx,
     /// Hash of the transaction.
     pub tx_hash: TxHash,

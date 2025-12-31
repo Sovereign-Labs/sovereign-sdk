@@ -1,6 +1,8 @@
 use crate::preferred::rate_limiter::resource::LimitExceeded;
 use crate::preferred::rate_limiter::resource::Resource;
 use mini_moka::sync::Cache;
+use mini_moka::sync::ConcurrentCacheExt;
+use sov_metrics::RateLimiterMetrics;
 use sov_modules_api::Gas;
 use sov_modules_api::Spec;
 use std::collections::HashMap;
@@ -234,25 +236,33 @@ impl<G: Gas> Throttler<G> {
 /// update:
 ///   total_resource_used = 3 micros
 pub(crate) struct RateLimiter<K, S: Spec> {
+    limiter_type: &'static str,
+    max_nb_of_concurrent_users: u64,
     data: Cache<K, Throttler<S::Gas>>,
     default_config: RateLimiterConfig<S>,
     special_configs: HashMap<K, RateLimiterConfig<S>>,
+    metric_counter: u64,
 }
 
 impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(
+        limiter_type: &'static str,
+        max_nb_of_concurrent_users: u64,
         ttl_in_millis: u64,
         default_config: RateLimiterConfig<S>,
         special_configs: HashMap<K, RateLimiterConfig<S>>,
     ) -> Self {
-        let data = Cache::builder()
+        let data: Cache<K, Throttler<<S as Spec>::Gas>> = Cache::builder()
             .time_to_live(Duration::from_millis(ttl_in_millis))
             .build();
 
         Self {
+            limiter_type,
+            max_nb_of_concurrent_users,
             data,
             default_config,
             special_configs,
+            metric_counter: 0,
         }
     }
 
@@ -261,6 +271,35 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         now: Instant,
         key: &K,
     ) -> Result<Throttler<S::Gas>, LimitExceeded<S::Gas>> {
+        let entry_count = self.data.entry_count();
+        let limiter_type = self.limiter_type;
+
+        if self.metric_counter % 500 == 0 {
+            // We don’t need precise real-time values for this metric, so we emit it once every 500 events
+            // to reduce pressure on the observability stack.
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(RateLimiterMetrics {
+                    count: entry_count,
+                    limiter_type,
+                });
+            });
+        }
+
+        self.metric_counter += 1;
+
+        if entry_count >= self.max_nb_of_concurrent_users {
+            // data.entry_count() returns only approximate number of entries in this cache.
+            // Once we hit the limit we sync to get the exact number of entries.
+            self.data.sync();
+            let entry_count = self.data.entry_count();
+            if entry_count >= self.max_nb_of_concurrent_users {
+                return Err(LimitExceeded::TooManyConcurrentUsers {
+                    nb_of_users: entry_count,
+                    max_allowed: self.max_nb_of_concurrent_users,
+                });
+            }
+        }
+
         match self.data.get(key) {
             Some(throttler) => {
                 let config = self.get_config(key);
@@ -296,6 +335,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use sov_modules_api::Spec;
     use sov_test_utils::TestSpec;
     use std::thread::sleep;
@@ -306,6 +346,7 @@ mod tests {
     const MAX_SPACE_IN_BYTES: u64 = 100_0000;
     const MAX_EXECUTION_TIME_MICROS: u64 = 1_000_000;
     const TTL_IN_MILLIS: u64 = 1_000_000;
+    const MAX_NB_OF_CONCURRENT_USERS: u64 = 10_000;
 
     #[test]
     fn test_rate_limiter_happy_path() {
@@ -319,6 +360,7 @@ mod tests {
         };
 
         let mut rollup_simulator = Simulator::new(
+            MAX_NB_OF_CONCURRENT_USERS,
             TTL_IN_MILLIS,
             config,
             resource_used_per_run,
@@ -391,6 +433,7 @@ mod tests {
         )]);
 
         let mut rollup_simulator = Simulator::new(
+            MAX_NB_OF_CONCURRENT_USERS,
             TTL_IN_MILLIS,
             default_config,
             resource_used_per_run,
@@ -435,6 +478,7 @@ mod tests {
         };
 
         let mut rollup_simulator = Simulator::new(
+            MAX_NB_OF_CONCURRENT_USERS,
             TTL_IN_MILLIS,
             config,
             resource_used_per_run,
@@ -514,8 +558,13 @@ mod tests {
             refill_rate,
         };
 
-        let mut rollup_simulator =
-            Simulator::new(2, config, resource_used_per_run, Default::default());
+        let mut rollup_simulator = Simulator::new(
+            MAX_NB_OF_CONCURRENT_USERS,
+            2,
+            config,
+            resource_used_per_run,
+            Default::default(),
+        );
 
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
         let now = Instant::now();
@@ -532,6 +581,58 @@ mod tests {
         assert!(throttler.is_none());
     }
 
+    #[test]
+    fn test_rate_limiter_max_concurrent_users() {
+        let resource_used_per_run = big_resource_used_per_run();
+        let max_allowed_resources = max_allowed_resources();
+        let refill_rate = refill_rate();
+
+        let config = RateLimiterConfig::<TestSpec> {
+            max_allowed_resources,
+            refill_rate,
+        };
+
+        let max_nb_of_concurrent_users = 5;
+        let ttl_in_millis = 50;
+
+        let mut rollup_simulator = Simulator::new(
+            max_nb_of_concurrent_users,
+            2,
+            config,
+            resource_used_per_run,
+            Default::default(),
+        );
+
+        // Attempt to insert 20 entries into the rate limiter.
+        for i in 0..20 {
+            let addr = <TestSpec as Spec>::Address::from([i; 28]);
+            let now = Instant::now();
+
+            let res = rollup_simulator.run_and_assert_limits(
+                now,
+                &addr,
+                rollup_simulator.resource_used_per_run,
+            );
+
+            // mini-mocka does not track the exact number of entries. After about five entries, we should encounter a rate limiter error.
+            if let Err(err) = res {
+                if matches!(err, LimitExceeded::TooManyConcurrentUsers { .. }) {
+                    // Wait for some entries to expire. At this point, we should be able to insert another entry.
+                    sleep(Duration::from_millis(5 * ttl_in_millis));
+                    rollup_simulator
+                        .run_and_assert_limits(now, &addr, rollup_simulator.resource_used_per_run)
+                        .unwrap();
+
+                    return;
+                }
+            }
+        }
+
+        panic!(
+            "Test failed: The rate limiter did not apply the max_nb_of_concurrent_users parameter."
+        );
+    }
+
     struct Simulator {
         rate_limiter: RateLimiter<<TestSpec as Spec>::Address, TestSpec>,
         resource_used_per_run: ResourceUsed<Gas>,
@@ -539,12 +640,19 @@ mod tests {
 
     impl Simulator {
         fn new(
+            max_nb_of_concurrent_users: u64,
             ttl_in_millis: u64,
             config: RateLimiterConfig<TestSpec>,
             resource_used_per_run: ResourceUsed<Gas>,
             special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
         ) -> Self {
-            let rate_limiter = RateLimiter::new(ttl_in_millis, config, special_configs);
+            let rate_limiter = RateLimiter::new(
+                "by_addr",
+                max_nb_of_concurrent_users,
+                ttl_in_millis,
+                config,
+                special_configs,
+            );
             Self {
                 rate_limiter,
                 resource_used_per_run,
@@ -643,7 +751,7 @@ mod tests {
     }
 
     impl RefillRatePerMillis<Gas> {
-        fn zero() -> Self {
+        pub(crate) fn zero() -> Self {
             Self {
                 token_resource_per_ms: Resource::zero(),
             }

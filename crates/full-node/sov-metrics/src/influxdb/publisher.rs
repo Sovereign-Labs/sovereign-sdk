@@ -7,7 +7,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
 use crate::influxdb::tracker::DroppedMetrics;
-use crate::influxdb::SerializableMetric;
+use crate::influxdb::SubmittableMetric;
 use crate::{Metric, TelegrafSocketConfig};
 
 const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
@@ -81,7 +81,7 @@ impl MetricsPublisher {
 }
 
 pub(crate) async fn metrics_publisher_task(
-    mut metrics_receiver: tokio::sync::mpsc::Receiver<SerializableMetric>,
+    mut metrics_receiver: tokio::sync::mpsc::Receiver<SubmittableMetric>,
     config: &MonitoringConfig,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) {
@@ -250,7 +250,7 @@ pub(crate) async fn receive_with_timeout(
 mod tests {
     use super::*;
     use crate::influxdb::config::TelegrafSocketConfig;
-    use crate::influxdb::Metric;
+    use crate::influxdb::{Metric, SubmittableMetricKind};
     use tokio::io::AsyncReadExt;
     use tokio::sync::watch;
 
@@ -272,10 +272,16 @@ mod tests {
         telegraf_address: TelegrafSocketConfig,
         mut metrics_back_receiver: tokio::sync::mpsc::Receiver<String>,
     ) -> anyhow::Result<()> {
+        let placholder_timestamp = 1234567890;
         let sample_metric = SampleMetric(b"sov-test-metric value=1".to_vec());
+        let sample_metric_string_with_timestamp = format!(
+            "{} {}",
+            std::str::from_utf8(&sample_metric.0[..])?,
+            placholder_timestamp
+        );
         let first_chunk = 2;
         let second_chunk = 3;
-        let max_udp_size = sample_metric.0.len() * (first_chunk + second_chunk);
+        let max_udp_size = sample_metric_string_with_timestamp.len() * (first_chunk + second_chunk);
         let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
         shutdown_receiver.mark_unchanged();
 
@@ -296,7 +302,12 @@ mod tests {
 
         for _ in 0..first_chunk {
             let x = Box::new(sample_metric.clone());
-            sender.send(x).await?;
+            sender
+                .send(SubmittableMetric::new(
+                    SubmittableMetricKind::Boxed(x),
+                    placholder_timestamp,
+                ))
+                .await?;
         }
 
         assert!(receive_with_timeout(&mut metrics_back_receiver)
@@ -304,16 +315,19 @@ mod tests {
             .is_none());
 
         for _ in 0..second_chunk {
-            sender.send(Box::new(sample_metric.clone())).await?;
+            sender
+                .send(SubmittableMetric::new(
+                    SubmittableMetricKind::Boxed(Box::new(sample_metric.clone())),
+                    placholder_timestamp,
+                ))
+                .await?;
         }
 
-        let metric_string = std::str::from_utf8(&sample_metric.0[..])?;
-
-        for _ in 0..total_send {
+        for i in 0..total_send {
             let metric = receive_with_timeout(&mut metrics_back_receiver)
                 .await
-                .unwrap();
-            assert_eq!(metric, metric_string);
+                .unwrap_or_else(|| panic!("Metric {i} not found"));
+            assert_eq!(metric, sample_metric_string_with_timestamp);
         }
 
         // Nothing is left in the channel.
@@ -391,7 +405,11 @@ mod tests {
             metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
         });
 
-        sender.send(Box::new(sample_metric)).await?;
+        sender
+            .send(SubmittableMetric::now(SubmittableMetricKind::Boxed(
+                Box::new(sample_metric),
+            )))
+            .await?;
 
         assert!(receive_with_timeout(&mut metrics_back_receiver)
             .await

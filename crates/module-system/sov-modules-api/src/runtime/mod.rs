@@ -11,15 +11,17 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::stf::GenesisParams;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
+#[cfg(feature = "native")]
+use sov_state::User;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
 use crate::transaction::TransactionCallable;
 use crate::Context;
-#[cfg(feature = "native")]
-use crate::FullyBakedTx;
 use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
+#[cfg(feature = "native")]
+use crate::{FullyBakedTx, StateReader};
 
 /// Flag indicating what mode the rollup is operating in.
 #[derive(
@@ -168,12 +170,12 @@ pub trait Runtime<S: Spec>:
     }
 
     /// Resolve CredentialId to address.
-    fn resolve_address<ST: crate::StateAccessor>(
-        &mut self,
+    fn resolve_address<ST: StateReader<User>>(
+        &self,
         default_address: &S::Address,
         credential_id: &crate::CredentialId,
         state: &mut ST,
-    ) -> Result<S::Address, <ST as crate::StateWriter<crate::User>>::Error>;
+    ) -> Result<S::Address, ST::Error>;
 }
 
 #[cfg(feature = "native")]

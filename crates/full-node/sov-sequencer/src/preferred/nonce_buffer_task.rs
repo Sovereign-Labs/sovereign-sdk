@@ -18,6 +18,10 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
 use crate::common::AcceptedTx;
+use crate::metrics::{
+    MetricBatcher, NonceBufferMainQueueBlockedMetric, NonceBufferMainQueueDepthMetric,
+    NonceBufferTimeoutQueueMetric,
+};
 use crate::preferred::rate_limiter::IpAndCredentialId;
 
 use super::block_executor::RollupBlockExecutorError;
@@ -33,11 +37,57 @@ use super::Confirmation;
 // large TXs. Perhaps we should consider enforcing batch size limits before the nonce check in accept_tx()?
 const MAX_BUFFERED_TXS: usize = 20_000;
 
+// Maximum depth of the main input queue for the nonce buffer task.
+// This is separate from MAX_BUFFERED_TXS because the main input queue handles more than just
+// buffered transactions (e.g., TxExecuted, TxPersisted messages). Currently set to the same
+// value pending real-world testing.
+const MAX_BUFFER_INPUT_QUEUE: usize = 20_000;
+
+// Batches metrics together for performance instead of sending them every single message.
+const METRICS_BATCH_SIZE: usize = 32;
+
+/// Send a message to an mpsc channel, returning how long the send was blocked.
+///
+/// Uses try_send first for the non-blocking fast path. If the channel is full, falls back to
+/// blocking send and records how long the send was blocked.
+///
+/// Returns Ok(blocked_time_us) on success (0 if not blocked), or Err if the channel is closed.
+async fn send_and_measure_block_time<T>(
+    sender: &mpsc::Sender<T>,
+    message: T,
+    trace_name: &'static str,
+) -> Result<u64, mpsc::error::SendError<T>> {
+    match sender.try_send(message) {
+        Ok(()) => Ok(0),
+        Err(mpsc::error::TrySendError::Full(message)) => {
+            tracing::trace!("{trace_name} is full. Blocking until capacity available.");
+            let started_blocking = Instant::now();
+            sender.send(message).await?;
+            Ok(started_blocking.elapsed().as_micros() as u64)
+        }
+        Err(mpsc::error::TrySendError::Closed(message)) => Err(mpsc::error::SendError(message)),
+    }
+}
+
+/// Get the current depth of an mpsc channel from its sender.
+fn queue_depth<T>(sender: &mpsc::Sender<T>) -> usize {
+    sender.max_capacity() - sender.capacity()
+}
+
 pub(crate) type TransactionExecutorResult<S, Rt> =
     Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>>;
 
 pub(crate) type TransactionReceiverResult<S, Rt> =
     Result<TransactionExecutorResult<S, Rt>, SequencerStateUpdatorError>;
+
+/// Request to schedule a timeout for a queued transaction.
+/// Sent from the main nonce buffer task to the dedicated timeout queue task.
+struct TimeoutRequest {
+    credential_id: CredentialId,
+    tx_nonce: u64,
+    tx_hash: TxHash,
+    queued_at: Instant,
+}
 
 struct QueuedTx<S: Spec, Rt: Runtime<S>> {
     pub baked_tx: FullyBakedTx,
@@ -206,6 +256,45 @@ enum NonceBufferInput<S: Spec, Rt: Runtime<S>> {
     },
 }
 
+/// Time out transactions using an mpsc channel as a FIFO queue.
+struct TimeoutQueueTask<S: Spec, Rt: Runtime<S>> {
+    /// Receives timeout requests from the main nonce buffer task.
+    input: mpsc::Receiver<TimeoutRequest>,
+    /// Sends TxTimedOut notifications back to the main nonce buffer task.
+    output: mpsc::Sender<NonceBufferInput<S, Rt>>,
+    /// The timeout duration for all transactions.
+    timeout_duration: Duration,
+}
+
+impl<S: Spec, Rt: Runtime<S>> TimeoutQueueTask<S, Rt> {
+    async fn run(mut self) {
+        while let Some(req) = self.input.recv().await {
+            let elapsed = req.queued_at.elapsed();
+            let remaining = self.timeout_duration.saturating_sub(elapsed);
+
+            // Sleep until timeout is due
+            if !remaining.is_zero() {
+                tokio::time::sleep(remaining).await;
+            }
+
+            // Send timeout notification to main task
+            // If the channel is closed (main task shut down), exit the loop
+            if self
+                .output
+                .send(NonceBufferInput::TxTimedOut {
+                    credential_id: req.credential_id,
+                    tx_nonce: req.tx_nonce,
+                    tx_hash: req.tx_hash,
+                })
+                .await
+                .is_err()
+            {
+                return;
+            }
+        }
+    }
+}
+
 /// This trait encodes the functionality that the buffer task needs for handling submission of
 /// queued transactions.
 #[async_trait]
@@ -288,7 +377,11 @@ pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>
     input_sender: NonceBufferInputSender<E, S, Rt>,
     execution_backend: E,
     maximum_future_nonce_delta: u64,
-    future_nonce_transaction_timeout_millis: u64,
+    timeout_sender: mpsc::Sender<TimeoutRequest>,
+    /// Batches metrics for the timeout queue (sender side, combined blocked time + depth).
+    timeout_metrics_batcher: MetricBatcher<NonceBufferTimeoutQueueMetric>,
+    /// Batches metrics for main queue depth (receiver side, only depth - block time is tracked by sender).
+    main_queue_depth_batcher: MetricBatcher<NonceBufferMainQueueDepthMetric>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -314,20 +407,44 @@ fn determine_action(tx_nonce: u64, user_nonce: u64, maximum_future_nonce_delta: 
 impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: Runtime<S>>
     NonceBufferTask<E, S, Rt>
 {
-    fn schedule_timeout(&self, credential_id: CredentialId, tx_nonce: u64, tx_hash: TxHash) {
-        let input_sender = self.input_sender.clone();
-        let timeout = self.future_nonce_transaction_timeout_millis;
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(timeout)).await;
-            let _ = input_sender
-                .buffer_sender_channel
-                .send(NonceBufferInput::TxTimedOut {
-                    credential_id,
-                    tx_nonce,
-                    tx_hash,
-                })
-                .await;
-        });
+    /// Schedule a timeout for a queued transaction.
+    /// Sends to the timeout queue with metrics tracking.
+    async fn schedule_timeout(
+        &mut self,
+        credential_id: CredentialId,
+        tx_nonce: u64,
+        tx_hash: TxHash,
+    ) {
+        let request = TimeoutRequest {
+            credential_id,
+            tx_nonce,
+            tx_hash,
+            queued_at: Instant::now(),
+        };
+
+        match send_and_measure_block_time(
+            &self.timeout_sender,
+            request,
+            "Nonce buffer timeout queue",
+        )
+        .await
+        {
+            Ok(blocked_for_us) => {
+                self.timeout_metrics_batcher
+                    .push(NonceBufferTimeoutQueueMetric {
+                        blocked_for_us,
+                        queue_depth: queue_depth(&self.timeout_sender),
+                    });
+            }
+            Err(_) => {
+                // Flush metrics on shutdown since we might not get another chance
+                self.timeout_metrics_batcher.flush();
+                tracing::warn!(
+                    "Nonce buffer timeout channel closed while scheduling timeout. \
+                     Shutdown likely in progress. tx_hash={tx_hash}"
+                );
+            }
+        }
     }
 
     /// Wipe the entire queue, e.g. because the sequencer had to resync so the queued transactions
@@ -353,12 +470,18 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         for m in keep_messages {
             // Try to keep and process all Executed messages.
             // If the receiver has been dropped the sequencer is likely shutting down.
-            let _ = self.input_sender.buffer_sender_channel.send(m).await;
+            let _ = self.input_sender.send_to_main_queue(m).await;
         }
     }
 
     async fn run(&mut self) {
         while let Some(input) = self.buffer_input.recv().await {
+            // Track main queue depth on receive side with batching
+            self.main_queue_depth_batcher
+                .push(NonceBufferMainQueueDepthMetric {
+                    queue_depth: queue_depth(&self.input_sender.buffer_sender_channel),
+                });
+
             match input {
                 NonceBufferInput::NewTx {
                     baked_tx,
@@ -428,7 +551,8 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 ip_addr_and_credential.credential_id,
                                 tx_nonce,
                                 tx_hash,
-                            );
+                            )
+                            .await;
                         }
                         Action::Execute => {
                             // The executor queue ID is incremented whenever the sequencer has
@@ -456,8 +580,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     )
                                     .await;
                                 let _ = input_sender
-                                    .buffer_sender_channel
-                                    .send(NonceBufferInput::TxExecuted {
+                                    .send_to_main_queue(NonceBufferInput::TxExecuted {
                                         credential_id: ip_addr_and_credential.credential_id,
                                         tx_nonce,
                                         tx_result,
@@ -537,8 +660,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                 queue.non_persisted.mark_inflight(user_nonce);
                                 let _ = self
                                     .input_sender
-                                    .buffer_sender_channel
-                                    .send(NonceBufferInput::NewTx {
+                                    .send_to_main_queue(NonceBufferInput::NewTx {
                                         baked_tx: tx.baked_tx,
                                         tx_hash: tx.tx_hash,
                                         ip_addr_and_credential: tx.ip_addr_and_credential,
@@ -618,25 +740,36 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         future_nonce_transaction_timeout_millis: u64,
         mut shutdown_receiver: watch::Receiver<()>,
     ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
-        let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFERED_TXS);
+        let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
+        let (timeout_sender, timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
+
+        let timeout_task = TimeoutQueueTask {
+            input: timeout_receiver,
+            output: buffer_sender_channel.clone(),
+            timeout_duration: Duration::from_millis(future_nonce_transaction_timeout_millis),
+        };
+
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel,
             execution_backend: execution_backend.clone(),
         };
-        let mut task = NonceBufferTask {
+
+        let mut main_task = NonceBufferTask {
             buffers: Default::default(),
             buffer_input,
             input_sender: input_sender.clone(),
             execution_backend,
             maximum_future_nonce_delta,
-            future_nonce_transaction_timeout_millis,
+            timeout_sender,
+            timeout_metrics_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
+            main_queue_depth_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
         };
 
         let handle = tokio::spawn(async move {
             tokio::select! {
-                _ = task.run() => {},
+                _ = main_task.run() => {}
+                _ = timeout_task.run() => {}
                 _ = shutdown_receiver.changed() => {}
-
             }
         });
         (handle, input_sender)
@@ -646,6 +779,31 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
     NonceBufferInputSender<E, S, Rt>
 {
+    /// Send a message to the main input queue with metrics tracking.
+    /// Uses try_send first, falling back to blocking send if the channel is full.
+    /// Returns Err if the channel is closed (shutdown in progress).
+    async fn send_to_main_queue(
+        &self,
+        input: NonceBufferInput<S, Rt>,
+    ) -> Result<(), mpsc::error::SendError<NonceBufferInput<S, Rt>>> {
+        let blocked_for_us = send_and_measure_block_time(
+            &self.buffer_sender_channel,
+            input,
+            "Nonce buffer main queue",
+        )
+        .await?;
+
+        // On the sender side, only submit a metric when we were blocked.
+        // This should happen pretty seldom, so we won't be spamming telegraf too much.
+        // Queue depth is tracked on the receiver side with batching.
+        if blocked_for_us > 0 {
+            sov_metrics::track_metrics(|t| {
+                t.submit(NonceBufferMainQueueBlockedMetric { blocked_for_us });
+            });
+        }
+        Ok(())
+    }
+
     pub async fn handle_new_tx(
         &self,
         baked_tx: FullyBakedTx,
@@ -655,14 +813,16 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         original_tx_queue_id: u64,
     ) -> TransactionReceiverResult<S, Rt> {
         let (queue_sender, queue_receiver) = oneshot::channel();
-        self.buffer_sender_channel.send(NonceBufferInput::NewTx {
+        self.send_to_main_queue(NonceBufferInput::NewTx {
             baked_tx,
             tx_hash,
             ip_addr_and_credential,
             tx_nonce,
             original_tx_queue_id,
             result_sender: queue_sender,
-        }).await.map_err(|e| {
+        })
+        .await
+        .map_err(|e| {
             tracing::warn!("Sequencer nonce buffer input receiver dropped. Assuming sequencer shutdown. Error: {e:?}");
             SequencerStateUpdatorError::Shutdown
         })?;
@@ -690,8 +850,7 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
 
     pub async fn mark_tx_persisted(&self, credential_id: CredentialId, tx_nonce: u64) {
         let _ = self
-            .buffer_sender_channel
-            .send(NonceBufferInput::TxPersisted {
+            .send_to_main_queue(NonceBufferInput::TxPersisted {
                 credential_id,
                 tx_nonce,
             })
@@ -810,10 +969,11 @@ mod tests {
             baked_tx: FullyBakedTx {
                 // Hacky fake data to help track nonces when TXs are sent through the queue
                 data: vec![nonce].into(),
+                sequencing_data: None,
             },
             tx_hash: TxHash::from(hash),
             ip_addr_and_credential: IpAndCredentialId {
-                default_address: <TestSpec as Spec>::Address::from([1; 28]),
+                address: <TestSpec as Spec>::Address::from([1; 28]),
                 credential_id: CredentialId::from([1u8; 32]),
                 ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
             },
@@ -1187,7 +1347,7 @@ mod tests {
                     to_queue.tx_hash,
                     nonce.into(),
                     IpAndCredentialId {
-                        default_address: <TestSpec as Spec>::Address::from([1; 28]),
+                        address: <TestSpec as Spec>::Address::from([1; 28]),
                         credential_id: CredentialId::from([1u8; 32]),
                         ip_addr: std::net::IpAddr::V4(Ipv4Addr::LOCALHOST),
                     },

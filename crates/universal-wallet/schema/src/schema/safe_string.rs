@@ -26,9 +26,7 @@ pub enum SchemaStringError {
 /// `String`s if possible.
 /// If an actual `String` is absolutely necessary, then a newtype wrapper can be used, on which
 /// `UniversalWallet` is derived manually.
-#[derive(
-    Default, Hash, Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Default, Hash, Clone, PartialEq, Eq, PartialOrd, Ord, BorshSerialize)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)
@@ -83,6 +81,33 @@ impl<const MAX_LEN: usize> SizedSafeString<MAX_LEN> {
     /// Returns true if the character is a valid member of `SizedSafeString`
     pub const fn is_valid_char(c: char) -> bool {
         c.is_ascii() && !c.is_ascii_control()
+    }
+}
+
+impl<const MAX_LEN: usize> BorshDeserialize for SizedSafeString<MAX_LEN> {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let len = u32::deserialize_reader(reader)? as usize;
+        if len > MAX_LEN {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Unexpected length of input",
+            ));
+        }
+        let mut output = Vec::with_capacity(len);
+        for _ in 0..len {
+            output.push(u8::deserialize_reader(reader)?);
+        }
+        let string = String::from_utf8(output)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "Invalid UTF-8"))?;
+        for c in string.chars() {
+            if !Self::is_valid_char(c) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid character",
+                ));
+            }
+        }
+        Ok(Self(string))
     }
 }
 
@@ -233,6 +258,49 @@ mod tests {
         assert_eq!(
             de.unwrap_err().to_string(),
             "String contained invalid character: •. Only printable ASCII characters are allowed."
+        );
+    }
+
+    #[test]
+    fn test_safe_string_borsh_invalid_char() {
+        use borsh::{to_vec, BorshDeserialize};
+        // the SafeString does not accept ascii control chars and is limited to 128 chars
+        let input = String::from_utf8(vec![b'\n'; 1]).unwrap();
+        assert_eq!(None, SafeString::try_from(input.clone()).ok());
+        let encoded = to_vec(&input).unwrap();
+        let output = SafeString::try_from_slice(&encoded);
+        assert!(output.is_err());
+    }
+
+    #[test]
+    fn test_safe_string_borsh_too_long() {
+        use borsh::{to_vec, BorshDeserialize};
+        // the SafeString does not accept ascii control chars and is limited to 128 chars
+        let large_input = String::from_utf8(vec![b'a'; 300]).unwrap();
+        assert_eq!(None, SafeString::try_from(large_input.clone()).ok());
+        let encoded = to_vec(&large_input).unwrap();
+        let output = SafeString::try_from_slice(&encoded);
+        assert!(output.is_err());
+    }
+
+    #[test]
+    fn test_safe_string_serde_invalid_char() {
+        let de: Result<SafeString, _> = serde_json::from_str("\"\\n\"");
+        assert!(de.is_err());
+        assert_eq!(
+            de.unwrap_err().to_string(),
+            "String contained invalid character: \n. Only printable ASCII characters are allowed."
+        );
+    }
+
+    #[test]
+    fn test_safe_string_serde_too_long() {
+        let large_input = String::from_utf8(vec![b'a'; 300]).unwrap();
+        let de: Result<SafeString, _> = serde_json::from_str(&format!("\"{large_input}\""));
+        assert!(de.is_err());
+        assert_eq!(
+            de.unwrap_err().to_string(),
+            "String was too long: 300, maximum: 128"
         );
     }
 }

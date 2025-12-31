@@ -6,6 +6,7 @@ use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
 use sov_db::accessory_db::AccessoryDb;
+use sov_db::commit_flag::CommitFlag;
 use sov_db::config::RollupDbConfig;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::ledger_db::LedgerDb;
@@ -19,6 +20,7 @@ use sov_db::storage_manager::{
 pub use sov_db::storage_manager::{
     NativeChangeSet, NativeStorageManager, NomtChangeSet, NomtStorageManager,
 };
+use sov_db::DbCache;
 use sov_mock_da::{MockBlockHeader, MockDaSpec};
 use sov_modules_api::digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
@@ -158,6 +160,7 @@ pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
     root: StorageRoot<S>,
     is_strict_mode: bool,
     pinned_cache: Mutex<Option<PinnedCache>>,
+    commit_flag: CommitFlag,
 }
 
 impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
@@ -165,6 +168,8 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
+
+        let commit_flag = CommitFlag::new(&config.path);
         let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
             .expect("Failed to initialize StateDb for NOMT");
         let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
@@ -180,6 +185,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
             pinned_cache: Mutex::new(None),
+            commit_flag,
         }
     }
 
@@ -196,16 +202,18 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         let version = HistoricalStateReader::last_version_from_reader(&other_data_reader)
             .unwrap()
             .map(|v| v.get());
-        let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
-            flat_state.get_user_db().clone(),
-            version,
-            vec![],
-        );
-        let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
-            flat_state.get_kernel_db().clone(),
-            version,
-            vec![],
-        );
+        let user_state_reader =
+            VersionedDeltaReader::<NomtStateValues<UserNamespace>, DbCache>::new(
+                flat_state.get_user_db().clone(),
+                version,
+                vec![],
+            );
+        let kernel_state_reader =
+            VersionedDeltaReader::<NomtStateValues<KernelNamespace>, DbCache>::new(
+                flat_state.get_kernel_db().clone(),
+                version,
+                vec![],
+            );
 
         let state_session_builder = get_session_builder_from_committed(self.state.clone());
         let historical_state_reader =
@@ -233,11 +241,16 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
             pinned_cache,
         } = stf_change_set;
 
-        self.state.commit_change_set(state).unwrap();
+        self.state
+            .commit_change_set(state, &self.commit_flag)
+            .unwrap();
         tracing::trace!("Committed state changes to disk");
         self.accessory.write_schemas(&accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");
-        self.historical_state.commit(historical_state).unwrap();
+        self.historical_state
+            .commit(historical_state, &self.commit_flag)
+            .unwrap();
+
         *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
         tracing::trace!("Committed historical state changes to disk");
         tracing::trace!("Committed all changes to disk");

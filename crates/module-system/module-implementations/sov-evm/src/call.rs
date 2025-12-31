@@ -116,7 +116,7 @@ where
             &tx.signer,
             &mut db,
         )
-        .inspect_err(|err| tracing::debug!(error = ?err, "Ran out of gas while getting checking pinned contract list updates"))
+        .inspect_err(|err| tracing::debug!(error = ?err, "Ran out of gas while getting pinned contract list updates"))
         .map_err(|err| anyhow::anyhow!("EVM transaction error: {err:?}"))?;
 
         // We don't use transact_commit as it does not support returning an error
@@ -126,7 +126,7 @@ where
         save_elapsed!(state_commit_time SINCE state_commit);
 
         if !result.is_success() {
-            return on_revert(*tx.signed_transaction.hash(), result);
+            on_revert(*tx.signed_transaction.hash(), &result, context)?;
         }
         #[cfg(feature = "native")]
         let db_metrics = db.metrics();
@@ -492,17 +492,49 @@ fn on_error<S: Spec>(
         error = ?err,
         "EVM transaction error"
     );
+
     anyhow::bail!("EVM transaction error: {:?}", err);
 }
 
-fn on_revert(hash: B256, result: ExecutionResult) -> Result<(), anyhow::Error> {
+fn on_revert<S: Spec>(
+    hash: B256,
+    result: &ExecutionResult,
+    context: &Context<S>,
+) -> Result<(), anyhow::Error> {
+    #[cfg(feature = "native")]
+    let preferred_sequencer_publish_reverted_txs = EVM_EXECUTION_CONFIG
+        .get()
+        .map(|conf| {
+            conf.read()
+                .expect("Mutex must not be poisoned")
+                .contents
+                .preferred_sequencer_publish_reverted_txs
+        })
+        .unwrap_or(false);
+    #[cfg(not(feature = "native"))]
+    let preferred_sequencer_publish_reverted_txs = false;
     tracing::debug!(
         hash = hex::encode(hash),
         gas_used = result.gas_used(),
         ?result,
+        publish = %preferred_sequencer_publish_reverted_txs,
         "EVM execution error"
     );
-    anyhow::bail!("EVM execution error: {:?}", &result);
+    // Revert the sovereign SDK transaction only if
+    // 1. We're in the sequencer
+    // 2. The submitter of this transaction is the preferred sequencer
+    // 3. The preferred seuqencer is not configured to publish reverted transactions
+    //
+    // Reverting the tx *in the preferred sequencer* will cause it to be rejected and excluded from the batch. Reverting it in any other context
+    // will simply cause it to be excluded from the EVM's record keeping.
+    if context.execution_context().is_sequencer()
+        && context.sequencer_is_preferred()
+        && !preferred_sequencer_publish_reverted_txs
+    {
+        anyhow::bail!("EVM execution error: {:?}", result);
+    }
+
+    Ok(())
 }
 
 /// Get spec id for a given block number

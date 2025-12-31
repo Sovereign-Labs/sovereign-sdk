@@ -1,8 +1,15 @@
+# 2025-12-22
+- #2265 Adds a config to the EVM to allow accepting invalid transactions.
+
+# 2025-12-17
+- #2250 Moves address resolution for rate limiting off the critical path
+
 # 2025-12-16
 - #2239 Updates the internals of the API state for improved performance. 
 
 # 2025-12-15
 - #2167 Updates the internals of the nonce queue. 
+- #2188 **DB Breaking change**: Adds sequencer-provided metadata (timestamps, etc.) to transaction context accessible via `context.sequencing_data()`. Database schema changed - requires state wipe or resync.
 
 # 2025-12-14 
 - #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.

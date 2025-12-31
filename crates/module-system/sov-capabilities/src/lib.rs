@@ -14,6 +14,7 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
 use sov_modules_api::ExecutionContext;
+use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
@@ -21,6 +22,7 @@ use sov_modules_api::{
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::Bytes;
 #[cfg(feature = "native")]
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer_registry::SequencerRegistry;
@@ -265,6 +267,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
+        sequencing_data: Option<Bytes>,
+        execution_context: ExecutionContext,
+        sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
         // This should be resolved by the sequencer registry during blob selection
         let sender = self.accounts.resolve_sender_address(
@@ -277,6 +282,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             auth_data.credentials.clone(),
             sequencer_rollup_address,
             *sequencer,
+            sequencing_data,
+            execution_context,
+            sequencer_type,
         ))
     }
 
@@ -285,6 +293,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         state: &mut impl StateAccessor,
+        execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
         let sender = self.accounts.resolve_sender_address(
             &auth_data.default_address,
@@ -297,6 +306,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             auth_data.credentials.clone(),
             sender,
             *sequencer,
+            None,
+            execution_context,
+            SequencerType::NonPreferred,
         ))
     }
 }

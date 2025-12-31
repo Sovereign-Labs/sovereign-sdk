@@ -1384,23 +1384,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fd119d74b830634cea2a0f58bbd0d54540518a14397557951e79340abc28c0"
 
 [[package]]
-name = "concread"
-version = "0.5.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07fd8c4b53f0aafeec114fa1cd863f323880f790656f2d7508af83a9b5110e8d"
-dependencies = [
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
- "foldhash 0.1.5",
- "lru 0.13.0",
- "smallvec",
- "sptr",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "console"
 version = "0.15.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1545,15 +1528,6 @@ name = "crossbeam-epoch"
 version = "0.9.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f58bbc28f91df819d0aa2a2c00cd19754769c2fad90579b3592b1c9ba7a3115"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -3307,15 +3281,6 @@ name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234cf4f4a04dc1f57e24b96cc0cd600cf2af460d4161ac5ecdd0af8e1f3b2a38"
-dependencies = [
- "hashbrown 0.15.5",
-]
-
-[[package]]
-name = "lru"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "227748d55f2f0ab4735d87fd623798cb6b664512fe979705f829c9f81c934465"
 dependencies = [
  "hashbrown 0.15.5",
 ]
@@ -6089,7 +6054,6 @@ dependencies = [
  "bech32",
  "borsh",
  "bs58",
- "concread",
  "derivative",
  "derive_more 1.0.0",
  "digest 0.10.7",
@@ -6216,6 +6180,7 @@ dependencies = [
  "schemars 0.8.21",
  "serde",
  "serde_json",
+ "serde_with",
  "sov-universal-wallet",
  "thiserror 1.0.64",
 ]
@@ -6298,6 +6263,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "chrono",
  "derivative",
  "hex",
  "schemars 0.8.21",
@@ -6602,7 +6568,7 @@ dependencies = [
  "hashbrown 0.14.5",
  "hex",
  "itertools 0.13.0",
- "lru 0.12.5",
+ "lru",
  "num-bigint 0.4.6",
  "p3-baby-bear",
  "p3-bn254-fr",
@@ -6871,12 +6837,6 @@ dependencies = [
  "base64ct",
  "der",
 ]
-
-[[package]]
-name = "sptr"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b9b39299b249ad65f3b7e96443bad61c02ca5cd3589f46cb6d610a0fd6c0d6a"
 
 [[package]]
 name = "stable_deref_trait"

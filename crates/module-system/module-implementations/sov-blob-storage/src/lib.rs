@@ -11,6 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_bank::derived_holder::DerivedHolder;
+pub use sov_modules_api::common::SequencerType;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
@@ -32,18 +33,6 @@ pub fn config_deferred_slots_count() -> u64 {
 /// this serves as protection against spam.
 pub fn config_unregistered_blobs_per_slot() -> u64 {
     config_value!("UNREGISTERED_BLOBS_PER_SLOT")
-}
-
-/// The type of sequencer that published a blob.
-#[derive(
-    Debug, PartialEq, Eq, Copy, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
-pub enum SequencerType {
-    /// The preferred sequencer with non-deferred execution privileges.
-    Preferred,
-    /// Any other sequencer, either registered with a standard registration or
-    /// via emergency registration.
-    NonPreferred,
 }
 
 /// An escrow account for storing the reserved gas for a blob.

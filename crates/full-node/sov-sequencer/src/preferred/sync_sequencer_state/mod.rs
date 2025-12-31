@@ -2,6 +2,7 @@ use super::batch_size_tracker::BatchSizeTracker;
 use crate::preferred::block_executor::RollupBlockExecutor;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::db::BatchToStore;
+use crate::preferred::db::SequencerRole;
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::rate_limiter::ResourceLimitExceededError;
@@ -143,7 +144,7 @@ impl<S: Spec, Rt: Runtime<S>> Message<S, Rt> {
 }
 
 pub(crate) fn create<S, Rt>(
-    is_replica: bool,
+    seq_role: SequencerRole,
     api_ledger_db: LedgerDb,
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
@@ -179,7 +180,7 @@ where
     );
 
     let inner = Inner {
-        is_replica,
+        seq_role,
         api_ledger_db,
         executor: RollupBlockExecutor::new(
             &latest_info,
@@ -210,21 +211,20 @@ where
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
-    (
-        SynchronizedSequencerState {
-            inner,
-            channel_size: channel_size.clone(),
-            message_receiver,
-            heap: BTreeMap::new(),
-            runtime: Default::default(),
-            test_only_state_update_notification_sender: broadcast::channel(100).0,
-        },
-        SequencerStateUpdator {
-            message_sender,
-            channel_size,
-            shutdown_receiver,
-        },
-    )
+    let state = SynchronizedSequencerState {
+        inner,
+        channel_size: channel_size.clone(),
+        message_receiver,
+        heap: BTreeMap::new(),
+        runtime: Default::default(),
+        test_only_state_update_notification_sender: broadcast::channel(100).0,
+    };
+    let updator = SequencerStateUpdator {
+        message_sender,
+        channel_size,
+        shutdown_receiver,
+    };
+    (state, updator)
 }
 
 type AcceptTxRet<S, Rt> =
@@ -252,11 +252,11 @@ pub(crate) struct ProcessFinalCatchupData {
 
 #[derive(Debug)]
 struct ConditionsTable {
-    condition_nodes_sequence_number_is_fresher: bool,
-    condition_too_close_to_deferred_slots_count_for_comfort: bool,
-    condition_node_is_lagging: bool,
-    condition_are_there_batches_to_replay: bool,
-    condition_node_is_unsynced_and_doesnt_know_it: bool,
+    nodes_sequence_number_is_fresher: bool,
+    too_close_to_deferred_slots_count_for_comfort: bool,
+    node_is_lagging: bool,
+    are_there_batches_to_replay: bool,
+    node_is_unsynced_and_doesnt_know_it: bool,
 }
 
 #[derive(Debug)]

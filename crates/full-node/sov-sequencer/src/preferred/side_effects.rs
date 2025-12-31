@@ -1,11 +1,13 @@
 use std::collections::VecDeque;
 
-use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
+use anyhow::Result;
+use sov_modules_api::sequencing_metadata::HDTimestamp;
+use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tracing::{error, warn};
+use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
@@ -13,8 +15,8 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
-    exit_rollup, PreferredBlobSender, PreferredSequencerDb, PreferredSequencerReadBatch,
-    PreferredSequencerReadBlob, RecoveryStrategy, RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
+    exit_rollup, PreferredBlobSender, PreferredSequencerDb, ReadBatch, ReadBlob, RecoveryStrategy,
+    RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
 };
 
 /// A task that runs in the background and handles side effects of accepted transactions.
@@ -47,7 +49,7 @@ where
             .send(Arc::new(concurrent_checkpoint))
             .is_err()
         {
-            tracing::debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
+            debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
         }
     }
 
@@ -55,9 +57,9 @@ where
     async fn close_and_publish_current_batch(
         &mut self,
         checkpoint: StateCheckpoint<S>,
-        batch: PreferredSequencerReadBatch,
+        batch: ReadBatch,
         info_to_store: BatchToStore,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         self.db.terminate_batch(info_to_store).await?;
         self.update_api_state(checkpoint);
 
@@ -72,9 +74,9 @@ where
 
     async fn trigger_recovery(
         &mut self,
-        batches_to_flush: Vec<PreferredSequencerReadBlob>,
+        batches_to_flush: Vec<ReadBlob>,
         recovery_strategy: RecoveryStrategy,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         if !batches_to_flush.is_empty() {
             match recovery_strategy {
                 RecoveryStrategy::TryToSave => {
@@ -100,7 +102,7 @@ where
     async fn handle_executor_event(
         &mut self,
         event_queue: &mut VecDeque<ExecutorEvent<S, Rt>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         let queue_size_before = event_queue.len();
         let next_event = event_queue
             .pop_front()
@@ -112,25 +114,21 @@ where
                 let sequence_number = contents.sequence_number;
                 let tx_idx_within_batch = contents.tx_idx_within_batch;
                 let txs_to_insert = drain_consecutive_accepted_txs(contents, event_queue);
-                if tracing::enabled!(tracing::Level::DEBUG) {
+                if enabled!(Level::DEBUG) {
                     for tx in txs_to_insert.iter() {
-                        tracing::debug!(tx_hash = %tx.accepted_tx.tx_hash, "Transaction was accepted by the sequencer");
+                        debug!(tx_hash = %tx.accepted_tx.tx_hash, "Transaction was accepted by the sequencer");
                     }
                 }
+                let txs = txs_to_insert
+                    .iter()
+                    .map(|contents| {
+                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone().into());
+                        tx.set_sequencing_metadata(&HDTimestamp::now());
+                        (tx, contents.accepted_tx.tx_hash)
+                    })
+                    .collect();
                 self.db
-                    .bulk_insert_txs(
-                        txs_to_insert
-                            .iter()
-                            .map(|contents| {
-                                (
-                                    contents.accepted_tx.tx.clone(),
-                                    contents.accepted_tx.tx_hash,
-                                )
-                            })
-                            .collect(),
-                        sequence_number,
-                        tx_idx_within_batch,
-                    )
+                    .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)
                     .await?;
 
                 let checkpoint_ref = self.checkpoint_sender.borrow().clone();

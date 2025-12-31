@@ -6,6 +6,7 @@ use rockbound::versioned_db::{VersionedDeltaReader, VersionedSchemaBatch};
 use rockbound::{SchemaBatch, SchemaValue};
 use sov_rollup_interface::common::SlotNumber;
 
+use crate::flat_db::DbCache;
 use crate::metrics::StateMaterializationMetrics;
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::schema::namespace::NomtStateValues;
@@ -18,13 +19,13 @@ const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
 type KvPair = (SlotKey, Option<SlotValue>);
 
 /// A typed wrapper around the [`DeltaReader`] for reading materializing historical rollup state.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HistoricalStateReader {
     /// The underlying [`DeltaReader`] correctly routes requests to previous snapshots and/or [`rockbound::DB`]
-    user: VersionedDeltaReader<NomtStateValues<UserNamespace>>,
+    user: VersionedDeltaReader<NomtStateValues<UserNamespace>, DbCache>,
     /// The underlying [`DeltaReader`] correctly routes requests to previous snapshots and/or [`rockbound::DB`]
-    kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>>,
-    other: DeltaReader,
+    kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>, DbCache>,
+    root_hash_reader: DeltaReader,
 
     /// The [`SlotNumber`] that will be used for the next batch of writes to the DB
     /// This [`SlotNumber`] is also used for querying data,
@@ -37,7 +38,7 @@ pub struct HistoricalStateReader {
 pub struct StateChanges {
     pub(crate) user: Arc<VersionedSchemaBatch<NomtStateValues<UserNamespace>>>,
     pub(crate) kernel: Arc<VersionedSchemaBatch<NomtStateValues<KernelNamespace>>>,
-    pub(crate) other: Arc<SchemaBatch>,
+    pub(crate) root_hash_batch: Arc<SchemaBatch>,
 }
 
 impl HistoricalStateReader {
@@ -54,7 +55,7 @@ impl HistoricalStateReader {
             VersionedDeltaReader::new(flat_state.get_kernel_db().clone(), kernel_version, vec![]);
         let user =
             VersionedDeltaReader::new(flat_state.get_user_db().clone(), user_version, vec![]);
-        let other = DeltaReader::new(flat_state.get_db(), vec![]);
+        let root_hash_reader = DeltaReader::new(flat_state.get_db(), vec![]);
         let next_version = match user.latest_version() {
             Some(latest_version) => SlotNumber::new(
                 latest_version
@@ -66,16 +67,16 @@ impl HistoricalStateReader {
         Self {
             user,
             kernel,
-            other,
+            root_hash_reader,
             next_version,
         }
     }
 
     /// Create a new instance of [`HistoricalStateReader`].
     pub fn new(
-        user: VersionedDeltaReader<NomtStateValues<UserNamespace>>,
-        kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>>,
-        other: DeltaReader,
+        user: VersionedDeltaReader<NomtStateValues<UserNamespace>, DbCache>,
+        kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>, DbCache>,
+        root_hash_reader: DeltaReader,
     ) -> Self {
         // Cross check the versions across all three dbs
         assert_eq!(
@@ -85,7 +86,7 @@ impl HistoricalStateReader {
         );
         assert_eq!(
             user.latest_version(),
-            Self::last_version_from_reader(&other)
+            Self::last_version_from_reader(&root_hash_reader)
                 .expect("Failed to get last version from db")
                 .map(|v| v.get()),
             "Other must have the same last version as user"
@@ -101,7 +102,7 @@ impl HistoricalStateReader {
         Self {
             user,
             kernel,
-            other,
+            root_hash_reader,
             next_version,
         }
     }
@@ -127,7 +128,8 @@ impl HistoricalStateReader {
     /// The last version committed to the database.
     /// Can differ from [`Self::last_version`] in case if a newer version has been written to the underlying database.
     pub fn last_version_unbound(&self) -> anyhow::Result<SlotNumber> {
-        Self::last_version_from_reader(&self.other).map(|v| v.unwrap_or(SlotNumber::GENESIS))
+        Self::last_version_from_reader(&self.root_hash_reader)
+            .map(|v| v.unwrap_or(SlotNumber::GENESIS))
     }
 
     /// Get an optional value from the database, given a version and a key hash.
@@ -208,7 +210,7 @@ impl HistoricalStateReader {
         &self,
         version: SlotNumber,
     ) -> anyhow::Result<Option<SchemaValue>> {
-        Self::get_serialized_root_hash_from_reader(&self.other, version)
+        Self::get_serialized_root_hash_from_reader(&self.root_hash_reader, version)
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
@@ -218,7 +220,7 @@ impl HistoricalStateReader {
         root_hash: SchemaValue,
         version: SlotNumber,
     ) -> anyhow::Result<StateChanges> {
-        let mut batch = SchemaBatch::default();
+        let mut root_hash_batch = SchemaBatch::default();
         let mut has_kernel_been_updated = false;
         let mut has_user_been_updated = false;
         let mut metric = StateMaterializationMetrics::new();
@@ -258,7 +260,8 @@ impl HistoricalStateReader {
             root_hash = %hex::encode(&root_hash),
             "Materialized root hash"
         );
-        batch.put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
+        root_hash_batch
+            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(metric);
@@ -267,7 +270,7 @@ impl HistoricalStateReader {
         Ok(StateChanges {
             user: Arc::new(user_batch),
             kernel: Arc::new(kernel_batch),
-            other: Arc::new(batch),
+            root_hash_batch: Arc::new(root_hash_batch),
         })
     }
 }
@@ -275,12 +278,15 @@ impl HistoricalStateReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commit_flag::CommitFlag;
     use crate::storage_manager::FlatStateDb;
 
     #[test]
     fn verify_last_version_bumped_properly() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
+        let db_path = tempdir.path();
+        let commit_flag = CommitFlag::new(db_path);
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
 
         let key1 = b"AAA";
         let key2 = b"BBB";
@@ -306,7 +312,7 @@ mod tests {
                 slot_number,
             )
             .unwrap();
-            rocksdb.commit(changes).unwrap();
+            rocksdb.commit(changes, &commit_flag).unwrap();
         }
     }
 
@@ -314,6 +320,8 @@ mod tests {
     fn test_no_bound_on_passed_version() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
+        let commit_flag = CommitFlag::new(db_path);
+
         let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
 
         // Create two independent readers on the same database.
@@ -336,7 +344,7 @@ mod tests {
             version0,
         )
         .unwrap();
-        rocksdb.commit(changes0).unwrap();
+        rocksdb.commit(changes0, &commit_flag).unwrap();
         assert_eq!(reader1.get_next_version(), version0);
         assert_eq!(reader2.get_next_version(), version0);
 
@@ -363,7 +371,7 @@ mod tests {
             version1,
         )
         .unwrap();
-        rocksdb.commit(changes1).unwrap();
+        rocksdb.commit(changes1, &commit_flag).unwrap();
         assert_eq!(reader1.get_next_version(), version0);
         assert_eq!(reader2.get_next_version(), version0);
 
@@ -391,7 +399,10 @@ mod tests {
     #[test]
     fn test_unbound_last_version() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
+        let db_path = tempdir.path();
+        let commit_flag = CommitFlag::new(db_path);
+
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
 
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
         let reader2 = HistoricalStateReader::new_empty(&rocksdb);
@@ -414,7 +425,7 @@ mod tests {
             version0,
         )
         .unwrap();
-        rocksdb.commit(changes0).unwrap();
+        rocksdb.commit(changes0, &commit_flag).unwrap();
 
         // Reader1's bound version stays the same, but unbound sees the update
         assert_eq!(reader1.last_version(), None);
@@ -436,7 +447,7 @@ mod tests {
             version1,
         )
         .unwrap();
-        rocksdb.commit(changes1).unwrap();
+        rocksdb.commit(changes1, &commit_flag).unwrap();
 
         // Both readers see the latest version through unbound
         assert_eq!(reader1.last_version_unbound().unwrap(), version1);
