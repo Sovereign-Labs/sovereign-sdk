@@ -202,4 +202,8 @@ impl DaService for StorableMockDaClient {
             .expect("Failed to parse signer response");
         Some(signer_response.address)
     }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        todo!("Implent endpoint on the server and query it")
+    }
 }

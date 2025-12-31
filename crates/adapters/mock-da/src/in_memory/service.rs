@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -432,6 +432,10 @@ impl DaService for MockDaService {
 
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         Some(self.sequencer_da_address)
+    }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        std::time::Duration::from_millis(self.wait_attempts * WAIT_ATTEMPT_PAUSE.as_millis() as u64)
     }
 }
 

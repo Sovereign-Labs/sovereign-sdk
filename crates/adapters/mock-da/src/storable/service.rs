@@ -3,12 +3,16 @@
 use async_trait::async_trait;
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use crate::storable::StorableMockDaService;
 
-use crate::{MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier};
+use crate::{
+    BlockProducingConfig, MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier,
+    DEFAULT_BLOCK_WAITING_TIME_MS,
+};
 
 #[async_trait]
 impl DaService for StorableMockDaService {
@@ -94,5 +98,24 @@ impl DaService for StorableMockDaService {
 
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         Some(self.sequencer_da_address)
+    }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        match self.block_producing {
+            BlockProducingConfig::Periodic { block_time_ms } => {
+                std::time::Duration::from_millis(block_time_ms)
+            }
+            BlockProducingConfig::OnBatchSubmit {
+                block_wait_timeout_ms,
+            }
+            | BlockProducingConfig::OnAnySubmit {
+                block_wait_timeout_ms,
+            } => std::time::Duration::from_millis(
+                block_wait_timeout_ms.unwrap_or(DEFAULT_BLOCK_WAITING_TIME_MS),
+            ),
+            BlockProducingConfig::Manual => {
+                std::time::Duration::from_secs(DEFAULT_BLOCK_WAITING_TIME_MS)
+            }
+        }
     }
 }
