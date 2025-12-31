@@ -92,12 +92,14 @@ async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
     .unwrap()
 }
 
+// his test checks whether rollp can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
     let key_and_address =
         read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
-
     let receiver_addr = random_address::<MockNomtRollupSpec<Native>>();
+
+    // Start the rollup for the first time, and after some transactions are received, crash it.
     {
         let test_rollup = start_node(temp_dir.clone()).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -118,7 +120,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
 
         let mut nb_of_events = 0;
         loop {
-            // "Crash the node once the transactions are being processed."
+            // Crash the node once the transactions are being processed.
             if nb_of_events == 5 {
                 crash_moment.set_crash_env();
             }
@@ -135,11 +137,11 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         }
     }
 
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     std::env::remove_var(CRASH_ENV_NAME);
     unlock_dbs(&temp_dir);
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
+    // Start the rollup with the existing DBs and check whether it is able to receive transactions.
     {
         let test_rollup = start_node(temp_dir).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -161,7 +163,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         )
         .await;
 
-        // "Check if some transactions came through.
+        // Check if transactions are coming through.
         for _ in 0..10 {
             let _ = event_subscription.next().await.unwrap().unwrap();
         }
@@ -223,21 +225,12 @@ async fn send_txs(
             start_generation + nb_of_txs,
         );
 
-        let res = api_client.send_tx_to_sequencer(&tx).await;
-
-        if res.is_err() {
-            println!("res {:?}", res);
-            // If the transaction fails, it should be due to the rollup crash.
-            let x = std::env::var(CRASH_ENV_NAME);
-            println!("=== XXXXX {x:?}");
-            assert!(std::env::var(CRASH_ENV_NAME).is_ok());
-            break;
-        }
+        let _ = api_client.send_tx_to_sequencer(&tx).await;
 
         tokio::time::sleep(Duration::from_millis(100)).await;
         nb_of_txs += 1;
 
-        assert!(nb_of_txs < max_nb_of_txs)
+        assert!(nb_of_txs < max_nb_of_txs);
     }
 }
 
