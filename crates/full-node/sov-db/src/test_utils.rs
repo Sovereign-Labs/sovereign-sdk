@@ -310,7 +310,7 @@ pub enum CrashLocation {
 }
 
 impl CrashLocation {
-    /// Sets `CRASH_ENV_NAME` to `self
+    /// Sets `CRASH_ENV_NAME` to `self`.
     pub fn set_crash_env(&self) {
         std::env::set_var(CRASH_ENV_NAME, self.to_string());
     }

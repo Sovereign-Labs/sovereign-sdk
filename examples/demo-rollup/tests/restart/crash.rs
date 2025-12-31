@@ -92,7 +92,7 @@ async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
     .unwrap()
 }
 
-// his test checks whether rollp can recover from different kinds of crashes, see `CrashLocation` enum.
+// This test checks whether rollp can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
     let key_and_address =
