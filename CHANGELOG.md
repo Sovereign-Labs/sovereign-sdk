@@ -1,3 +1,6 @@
+# 2025-12-31
+- #2281 Breaking change for DaService implementations: new method `DaService::get_approximate_block_time`
+
 # 2025-12-22
 - #2265 Adds a config to the EVM to allow accepting invalid transactions.
 
