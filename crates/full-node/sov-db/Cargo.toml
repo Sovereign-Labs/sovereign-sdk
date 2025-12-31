@@ -44,7 +44,7 @@ serde_with = { workspace = true }
 derivative = { workspace = true }
 digest = { workspace = true }
 sov-db-types = { workspace = true, features = ["native"] }
-strum = { workspace = true, features = ["derive"], optional = true}
+strum = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
 test-strategy = { workspace = true }
