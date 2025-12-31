@@ -153,3 +153,60 @@ async fn next_slot_number_to_receive_is_none_at_startup() {
         .unwrap()
         .is_none());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rollback() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Initially, there should be no slots
+    assert!(ledger_db.get_head_slot().unwrap().is_none());
+
+    // Add a few slots
+    for i in 0..3 {
+        let mut block = MockBlock::default();
+        block.header.height = i;
+        let slot_commit = SlotCommit::<_, MockBlob, ()>::new(block, Default::default());
+        let schema_batch = ledger_db
+            .materialize_slot(slot_commit, b"state-root")
+            .unwrap();
+        storage_manager.commit(&schema_batch);
+    }
+
+    // Verify we have 3 slots (slots 0, 1, 2)
+    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number, 2.to_slot_number());
+
+    // Rollback the last slot (slot 2)
+    ledger_db
+        .rollback_last_slot(storage_manager.get_db())
+        .unwrap();
+
+    // Verify the head slot is now slot 1
+    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number, 1.to_slot_number());
+
+    // Rollback another slot (slot 1)
+    ledger_db
+        .rollback_last_slot(storage_manager.get_db())
+        .unwrap();
+
+    // Verify the head slot is now slot 0
+    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number, 0.to_slot_number());
+
+    // Rollback the last slot (slot 0)
+    ledger_db
+        .rollback_last_slot(storage_manager.get_db())
+        .unwrap();
+
+    // Verify there are no more slots
+    assert!(ledger_db.get_head_slot().unwrap().is_none());
+
+    // Try to rollback when there are no slots (should succeed without error)
+    ledger_db
+        .rollback_last_slot(storage_manager.get_db())
+        .unwrap();
+}

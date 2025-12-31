@@ -147,6 +147,11 @@ impl SimpleLedgerStorageManager {
     pub fn commit(&mut self, ledger_change_set: &SchemaBatch) {
         self.db.write_schemas(ledger_change_set).unwrap();
     }
+
+    /// Get a reference to the underlying database
+    pub fn get_db(&self) -> &Arc<rockbound::DB> {
+        &self.db
+    }
 }
 
 /// Implementation of [`HierarchicalStorageManager`] that provides [`NomtProverStorage`]

@@ -618,4 +618,120 @@ impl LedgerDb {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get_async::<DiscardedBlobByHash>(&blob_hash.0).await
     }
+
+    /// Rolls back the last committed slot from the ledger database.
+    ///
+    /// This method deletes the most recent slot and all its associated data
+    /// (batches, transactions, events, and discarded blobs).
+    ///
+    /// # Arguments
+    ///
+    /// * `ledger_db` - The underlying RocksDB database to write the rollback changes to.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the rollback was successful, or an error if any database operation failed.
+    /// If there are no slots in the database, this method returns `Ok(())` without doing anything.
+    pub fn rollback_last_slot(&self, ledger_db: &Arc<rockbound::DB>) -> anyhow::Result<()> {
+        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
+
+        // Get the current head slot
+        let Some((head_slot_number, head_slot)) = db.get_largest::<SlotByNumber>()? else {
+            tracing::debug!("No slots in database, nothing to rollback");
+            return Ok(());
+        };
+
+        tracing::info!(
+            slot_number = %head_slot_number,
+            "Rolling back last slot from ledger database"
+        );
+
+        let mut schema_batch = SchemaBatch::new();
+        let mut batches_deleted = 0;
+        let mut txs_deleted = 0;
+        let mut events_deleted = 0;
+
+        // Delete all batches in this slot
+        let mut current_batch = head_slot.batches.start;
+        while current_batch < head_slot.batches.end {
+            if let Some(batch) = db.get::<BatchByNumber>(&current_batch)? {
+                // Delete all transactions in this batch
+                let mut current_tx = batch.txs.start;
+                while current_tx < batch.txs.end {
+                    if let Some(tx) = db.get::<TxByNumber>(&current_tx)? {
+                        // Delete all events in this transaction
+                        let mut current_event = tx.events.start;
+                        while current_event < tx.events.end {
+                            if let Some(event) = db.get::<EventByNumber>(&current_event)? {
+                                // Delete event by number
+                                schema_batch.delete::<EventByNumber>(&current_event)?;
+                                // Delete event by key
+                                schema_batch.delete::<EventByKey>(&(
+                                    event.key().clone(),
+                                    current_tx,
+                                    current_event,
+                                ))?;
+                                events_deleted += 1;
+                            }
+                            current_event = EventNumber(current_event.0 + 1);
+                        }
+
+                        // Delete transaction by number
+                        schema_batch.delete::<TxByNumber>(&current_tx)?;
+                        // Delete transaction by hash
+                        schema_batch.delete::<TxByHash>(&(tx.hash, current_tx))?;
+                        txs_deleted += 1;
+                    }
+                    current_tx = TxNumber(current_tx.0 + 1);
+                }
+
+                // Delete batch by number
+                schema_batch.delete::<BatchByNumber>(&current_batch)?;
+                // Delete batch by hash
+                schema_batch.delete::<BatchByHash>(&batch.hash)?;
+                batches_deleted += 1;
+            }
+            current_batch = BatchNumber(current_batch.0 + 1);
+        }
+
+        // Delete slot by number
+        schema_batch.delete::<SlotByNumber>(&head_slot_number)?;
+        // Delete slot by hash
+        schema_batch.delete::<SlotByHash>(&head_slot.hash)?;
+
+        // Check if we need to update the finalized slot
+        if let Some(finalized_slot) = db.get::<FinalizedSlots>(&LatestFinalizedSlotSingleton)? {
+            if finalized_slot >= head_slot_number {
+                // Find the previous slot number (if any)
+                let new_finalized_slot = if head_slot_number > SlotNumber::GENESIS {
+                    // Get the previous slot
+                    let mut prev_slot = head_slot_number;
+                    prev_slot.decr();
+                    prev_slot
+                } else {
+                    SlotNumber::GENESIS
+                };
+                tracing::info!(
+                    old_finalized_slot = %finalized_slot,
+                    new_finalized_slot = %new_finalized_slot,
+                    "Updating finalized slot during rollback"
+                );
+                schema_batch.put::<FinalizedSlots>(&LatestFinalizedSlotSingleton, &new_finalized_slot)?;
+            }
+        }
+
+        // Commit the deletions
+        drop(db);
+        ledger_db.write_schemas(&schema_batch)?;
+
+        tracing::info!(
+            slot_number = %head_slot_number,
+            batches_deleted = %batches_deleted,
+            txs_deleted = %txs_deleted,
+            events_deleted = %events_deleted,
+            "Ledger database rollback completed"
+        );
+
+        Ok(())
+    }
 }
