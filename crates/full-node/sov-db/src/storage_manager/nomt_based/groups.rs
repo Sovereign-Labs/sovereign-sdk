@@ -95,11 +95,11 @@ where
             .flat_state
             .commit(historical_state, &self.commit_flag)?;
 
-        let accessory_commit = self.commit_accessory(&accessory)?;
-        let ledger_commit = self.commit_ledger(&ledger)?;
-
         self.commit_flag
             .save_commit_status(&CommitStatus::Success)?;
+
+        let accessory_commit = self.commit_accessory(&accessory)?;
+        let ledger_commit = self.commit_ledger(&ledger)?;
 
         let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
@@ -121,7 +121,7 @@ where
 
     fn commit_accessory(&self, accessory: &SchemaBatch) -> anyhow::Result<Duration> {
         let accessory_start = std::time::Instant::now();
-        self.accessory.write_schemas(&accessory)?;
+        self.accessory.write_schemas(accessory)?;
         Ok(accessory_start.elapsed())
     }
 
@@ -129,7 +129,7 @@ where
         let ledger_start = std::time::Instant::now();
         // Ledger goes after last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(&ledger)?;
+        self.ledger.write_schemas(ledger)?;
         Ok(ledger_start.elapsed())
     }
 
