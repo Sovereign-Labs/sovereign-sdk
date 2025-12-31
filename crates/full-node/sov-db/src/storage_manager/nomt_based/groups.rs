@@ -59,6 +59,7 @@ where
 
         // Validate root hashes.
         Self::are_root_hashes_match(&merklized_state, &flat_state)?;
+        commit_flag.save_commit_status(&CommitStatus::Success)?;
 
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
