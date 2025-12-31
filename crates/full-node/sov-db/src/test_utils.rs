@@ -310,19 +310,19 @@ pub enum CrashLocation {
 }
 
 impl CrashLocation {
-    /// TODO
+    /// Sets `CRASH_ENV_NAME` to `self
     pub fn set_crash_env(&self) {
         std::env::set_var(CRASH_ENV_NAME, self.to_string());
     }
 
-    ///
+    /// if `CRASH_ENV_NAME` is set to self, the method will panic.
     pub fn crash_if_env_set(&self) {
         if cfg!(debug_assertions) {
             if let Ok(env) = std::env::var(CRASH_ENV_NAME) {
-                let c: CrashLocation = env.parse().unwrap();
+                let crash_location: CrashLocation = env.parse().unwrap();
 
-                if &c == self {
-                    panic!("{CRASH_ENV_NAME} is set to: {c}, crashing the node");
+                if &crash_location == self {
+                    panic!("{CRASH_ENV_NAME} is set to: {crash_location}, crashing the node");
                 }
             }
         }
