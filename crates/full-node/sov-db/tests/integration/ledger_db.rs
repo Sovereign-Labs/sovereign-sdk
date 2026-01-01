@@ -177,31 +177,37 @@ async fn test_rollback() {
     }
 
     // Verify we have 3 slots (slots 0, 1, 2)
-    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number, 2.to_slot_number());
 
-    // Rollback the last slot (slot 2)
-    LedgerDb::rollback_last_slot(db.clone()).unwrap();
-
-    // Verify the head slot is now slot 1
     let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number, 1.to_slot_number());
+    assert_eq!(head_slot_number.get(), 2);
+
+    {
+        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+
+        // Verify the head slot is now slot 1
+        let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), 1);
+    }
 
     // Rollback another slot (slot 1)
-    LedgerDb::rollback_last_slot(db.clone()).unwrap();
+    {
+        LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
-    // Verify the head slot is now slot 0
-    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number, 0.to_slot_number());
+        // Verify the head slot is now slot 0
+        let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), 0);
+    }
 
     // Rollback the last slot (slot 0)
-    LedgerDb::rollback_last_slot(db.clone()).unwrap();
+    {
+        LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
-    // Verify there are no more slots
-    assert!(ledger_db.get_head_slot().unwrap().is_none());
+        // Verify there are no more slots
+        assert!(ledger_db.get_head_slot().unwrap().is_none());
 
-    // Try to rollback when there are no slots (should succeed without error)
-    LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        // Try to rollback when there are no slots (should succeed without error)
+        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
