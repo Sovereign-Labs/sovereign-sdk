@@ -620,25 +620,22 @@ impl LedgerDb {
     }
 
     /// Rolls back the last committed slot from the ledger database.
-    ///
-    /// This method deletes the most recent slot and all its associated data
-    /// (batches, transactions, events, and discarded blobs).
-    ///
-    /// # Arguments
-    ///
-    /// * `ledger_db` - The underlying RocksDB database to write the rollback changes to.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the rollback was successful, or an error if any database operation failed.
     /// If there are no slots in the database, this method returns `Ok(())` without doing anything.
     pub fn rollback_last_slot(&self, ledger_db: &Arc<rockbound::DB>) -> anyhow::Result<()> {
+        let schema_batch = self.create_schema_batch_for_rollback()?;
+        ledger_db.write_schemas(&schema_batch)?;
+        Ok(())
+    }
+
+    fn create_schema_batch_for_rollback(&self) -> anyhow::Result<SchemaBatch> {
+        // Hold the same lock for the entire duration of this method.
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
+        let mut schema_batch = SchemaBatch::new();
 
         // Get the current head slot
         let Some((head_slot_number, head_slot)) = db.get_largest::<SlotByNumber>()? else {
             tracing::debug!("No slots in database, nothing to rollback");
-            return Ok(());
+            return Ok(schema_batch);
         };
 
         tracing::info!(
@@ -646,58 +643,41 @@ impl LedgerDb {
             "Rolling back last slot from ledger database"
         );
 
-        let mut schema_batch = SchemaBatch::new();
-        let mut batches_deleted = 0;
-        let mut txs_deleted = 0;
-        let mut events_deleted = 0;
+        let mut current_batch_number = head_slot.batches.start;
 
         // Delete all batches in this slot
-        let mut current_batch = head_slot.batches.start;
-        while current_batch < head_slot.batches.end {
-            if let Some(batch) = db.get::<BatchByNumber>(&current_batch)? {
+        while current_batch_number < head_slot.batches.end {
+            if let Some(batch) = db.get::<BatchByNumber>(&current_batch_number)? {
                 // Delete all transactions in this batch
                 let mut current_tx = batch.txs.start;
+
                 while current_tx < batch.txs.end {
                     if let Some(tx) = db.get::<TxByNumber>(&current_tx)? {
                         // Delete all events in this transaction
-                        let mut current_event = tx.events.start;
-                        while current_event < tx.events.end {
-                            if let Some(event) = db.get::<EventByNumber>(&current_event)? {
-                                // Delete event by number
-                                schema_batch.delete::<EventByNumber>(&current_event)?;
-                                // Delete event by key
-                                schema_batch.delete::<EventByKey>(&(
-                                    event.key().clone(),
-                                    current_tx,
-                                    current_event,
-                                ))?;
-                                events_deleted += 1;
-                            }
-                            current_event = EventNumber(current_event.0 + 1);
-                        }
+                        let mut current_event_number = tx.events.start;
 
-                        // Delete transaction by number
-                        schema_batch.delete::<TxByNumber>(&current_tx)?;
-                        // Delete transaction by hash
-                        schema_batch.delete::<TxByHash>(&(tx.hash, current_tx))?;
-                        txs_deleted += 1;
+                        while current_event_number < tx.events.end {
+                            if let Some(event) = db.get::<EventByNumber>(&current_event_number)? {
+                                Self::delete_event(
+                                    &mut schema_batch,
+                                    current_tx,
+                                    &event,
+                                    current_event_number,
+                                )?;
+                            }
+                            current_event_number = EventNumber(current_event_number.0 + 1);
+                        }
+                        Self::delete_tx(&mut schema_batch, &tx, current_tx)?;
                     }
                     current_tx = TxNumber(current_tx.0 + 1);
                 }
 
-                // Delete batch by number
-                schema_batch.delete::<BatchByNumber>(&current_batch)?;
-                // Delete batch by hash
-                schema_batch.delete::<BatchByHash>(&batch.hash)?;
-                batches_deleted += 1;
+                Self::delete_batch(&mut schema_batch, &batch, &current_batch_number)?;
             }
-            current_batch = BatchNumber(current_batch.0 + 1);
+            current_batch_number = BatchNumber(current_batch_number.0 + 1);
         }
 
-        // Delete slot by number
-        schema_batch.delete::<SlotByNumber>(&head_slot_number)?;
-        // Delete slot by hash
-        schema_batch.delete::<SlotByHash>(&head_slot.hash)?;
+        Self::delete_slot(&mut schema_batch, &head_slot, &head_slot_number)?;
 
         // Check if we need to update the finalized slot
         if let Some(finalized_slot) = db.get::<FinalizedSlots>(&LatestFinalizedSlotSingleton)? {
@@ -721,18 +701,51 @@ impl LedgerDb {
             }
         }
 
-        // Commit the deletions
-        drop(db);
-        ledger_db.write_schemas(&schema_batch)?;
+        Ok(schema_batch)
+    }
 
-        tracing::info!(
-            slot_number = %head_slot_number,
-            batches_deleted = %batches_deleted,
-            txs_deleted = %txs_deleted,
-            events_deleted = %events_deleted,
-            "Ledger database rollback completed"
-        );
+    fn delete_event(
+        schema_batch: &mut SchemaBatch,
+        current_tx: TxNumber,
+        event: &StoredEvent,
+        current_event_number: EventNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<EventByNumber>(&current_event_number)?;
+        schema_batch.delete::<EventByKey>(&(
+            event.key().clone(),
+            current_tx,
+            current_event_number,
+        ))?;
+        Ok(())
+    }
 
+    fn delete_tx(
+        schema_batch: &mut SchemaBatch,
+        tx: &StoredTransaction,
+        current_tx: TxNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<TxByNumber>(&current_tx)?;
+        schema_batch.delete::<TxByHash>(&(tx.hash, current_tx))?;
+        Ok(())
+    }
+
+    fn delete_batch(
+        schema_batch: &mut SchemaBatch,
+        batch: &StoredBatch,
+        current_batch_number: &BatchNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<BatchByNumber>(current_batch_number)?;
+        schema_batch.delete::<BatchByHash>(&batch.hash)?;
+        Ok(())
+    }
+
+    fn delete_slot(
+        schema_batch: &mut SchemaBatch,
+        slot: &StoredSlot,
+        slot_number: &SlotNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<SlotByNumber>(slot_number)?;
+        schema_batch.delete::<SlotByHash>(&slot.hash)?;
         Ok(())
     }
 }
