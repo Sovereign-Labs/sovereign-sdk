@@ -221,13 +221,7 @@ where
 }
 
 impl<S: Spec> Evm<S> {
-    pub(crate) fn base_fee<
-        Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
-        E,
-    >(
-        &self,
-        state: &mut Reader,
-    ) -> Result<u64, E>
+    pub(crate) fn base_fee<Reader, E>(&self, state: &mut Reader) -> Result<u64, E>
     where
         Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
     {
