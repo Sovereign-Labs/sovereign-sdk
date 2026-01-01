@@ -225,58 +225,38 @@ async fn test_rollback_with_data() {
         storage_manager.commit(&schema_batch);
     }
 
-    // Verify we have 3 slots with data
-    let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number, 2.to_slot_number());
-
-    assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
-
-    let n = 3;
     // Verify item numbers before rollback
-    let item_numbers_before_rollback = ledger_db.get_next_items_numbers().unwrap();
-    assert_eq!(item_numbers_before_rollback.slot_number.get(), n);
-    assert_eq!(item_numbers_before_rollback.batch_number, n * 2); // n slots × 2 batches
-    assert_eq!(item_numbers_before_rollback.tx_number, n * 6); // batch_number × 3 txs
-    assert_eq!(item_numbers_before_rollback.event_number, 36); // tx_number × 2 events
+    {
+        let expected_slot_number = 2;
+        let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), expected_slot_number);
+        assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+        assert_next_items_numbers(expected_slot_number, &ledger_db);
+    }
 
     // Rollback slot 2
-    LedgerDb::rollback_last_slot(db.clone()).unwrap();
+    {
+        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        let expected_slot_number = 1;
 
-    // Verify slot 2 is gone
-    let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number, 1.to_slot_number());
-    assert_eq!(head_slot.batches.start.0, 2); // Slot 1 starts at batch 2
-    assert_eq!(head_slot.batches.end.0, 4); // Slot 1 ends at batch 4
+        // Verify slot 2 is gone
+        let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), expected_slot_number);
+        assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+        assert_next_items_numbers(expected_slot_number, &ledger_db);
+    }
 
-    // Verify the item numbers reflect the rollback
-    let item_numbers_after_rollback = ledger_db.get_next_items_numbers().unwrap();
-    assert_eq!(item_numbers_after_rollback.slot_number, 2.to_slot_number());
-    assert_eq!(item_numbers_after_rollback.batch_number, 4); // 2 slots × 2 batches
-    assert_eq!(item_numbers_after_rollback.tx_number, 12); // 4 batches × 3 txs
-    assert_eq!(item_numbers_after_rollback.event_number, 24); // 12 txs × 2 events
+    {
+        // Rollback slot 1
+        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        let expected_slot_number = 0;
 
-    // Verify slot 1 data is intact by checking item numbers
-    let item_numbers_slot_1 = ledger_db.get_next_items_numbers().unwrap();
-    assert_eq!(item_numbers_slot_1.slot_number, 2.to_slot_number());
-    assert_eq!(item_numbers_slot_1.batch_number, 4); // 2 slots × 2 batches
-
-    // Rollback slot 1
-    LedgerDb::rollback_last_slot(db.clone()).unwrap();
-
-    // Verify slot 1 is gone but slot 0 remains
-    let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number, 0.to_slot_number());
-    assert_eq!(head_slot.batches.start.0, 0);
-    assert_eq!(head_slot.batches.end.0, 2);
-
-    let item_numbers_after_second_rollback = ledger_db.get_next_items_numbers().unwrap();
-    assert_eq!(
-        item_numbers_after_second_rollback.slot_number,
-        1.to_slot_number()
-    );
-    assert_eq!(item_numbers_after_second_rollback.batch_number, 2);
-    assert_eq!(item_numbers_after_second_rollback.tx_number, 6);
-    assert_eq!(item_numbers_after_second_rollback.event_number, 12);
+        // Verify slot 1 is gone but slot 0 remains
+        let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), expected_slot_number);
+        assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+        assert_next_items_numbers(expected_slot_number, &ledger_db);
+    }
 }
 
 async fn assert_slot_numbers(n: u64, ledger_db: &LedgerDb) {
@@ -285,6 +265,25 @@ async fn assert_slot_numbers(n: u64, ledger_db: &LedgerDb) {
     assert_eq!(
         head_slot_number,
         ledger_db.get_latest_finalized_slot_number().await.unwrap()
+    );
+}
+
+fn assert_next_items_numbers(slot_number: u64, ledger_db: &LedgerDb) {
+    let next_slot_number = slot_number + 1;
+    // Verify item numbers before rollback
+    let item_numbers_before_rollback = ledger_db.get_next_items_numbers().unwrap();
+    assert_eq!(
+        item_numbers_before_rollback.slot_number.get(),
+        next_slot_number
+    );
+    assert_eq!(
+        item_numbers_before_rollback.batch_number,
+        next_slot_number * 2
+    ); // n slots × 2 batches
+    assert_eq!(item_numbers_before_rollback.tx_number, next_slot_number * 6); // batch_number × 3 txs
+    assert_eq!(
+        item_numbers_before_rollback.event_number,
+        next_slot_number * 12
     );
 }
 
@@ -329,9 +328,7 @@ fn create_slot_schema_batch(slot_num: u64, ledger_db: &LedgerDb) -> SchemaBatch 
         slot_commit.add_batch(batch_receipt);
     }
 
-    let schema_batch = ledger_db
+    ledger_db
         .materialize_slot(slot_commit, b"state-root")
-        .unwrap();
-
-    schema_batch
+        .unwrap()
 }
