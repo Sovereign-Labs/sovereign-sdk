@@ -2,6 +2,7 @@ use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_primitives::{Address, Bloom, B256, B64, U256};
 use alloy_primitives::{BlockNumber, Bytes};
+use anyhow::bail;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -141,7 +142,7 @@ fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, Spec
     if spec.is_empty() {
         spec.push((0, SpecId::CANCUN));
     } else if spec[0].0 != 0u64 {
-        anyhow::bail!("EVM spec must start from block 0");
+        bail!("EVM spec must start from block 0");
     };
 
     Ok(spec)

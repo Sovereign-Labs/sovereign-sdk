@@ -53,7 +53,6 @@ fn test_simple_transfer_balance_larger_than_allowed() {
     runner.execute_transaction(TransactionTestCase {
         input: transfer_tx,
         assert: Box::new(move |ctx, state| {
-            // assert!(!ctx.tx_receipt.is_successful(), "Transaction should not be successful: {:?}", ctx.tx_receipt);
             let mut db = evm.db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
