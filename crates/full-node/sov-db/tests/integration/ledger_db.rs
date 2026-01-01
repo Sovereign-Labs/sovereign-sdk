@@ -272,14 +272,20 @@ async fn test_rollback_with_data() {
 
                 let events = vec![
                     sov_rollup_interface::stf::StoredEvent::new(
-                        format!("event_key_slot{}_batch{}_tx{}_evt0", slot_num, batch_num, tx_num)
-                            .as_bytes(),
+                        format!(
+                            "event_key_slot{}_batch{}_tx{}_evt0",
+                            slot_num, batch_num, tx_num
+                        )
+                        .as_bytes(),
                         format!("event_value_{}_{}_{}_0", slot_num, batch_num, tx_num).as_bytes(),
                         [0u8; 32],
                     ),
                     sov_rollup_interface::stf::StoredEvent::new(
-                        format!("event_key_slot{}_batch{}_tx{}_evt1", slot_num, batch_num, tx_num)
-                            .as_bytes(),
+                        format!(
+                            "event_key_slot{}_batch{}_tx{}_evt1",
+                            slot_num, batch_num, tx_num
+                        )
+                        .as_bytes(),
                         format!("event_value_{}_{}_{}_1", slot_num, batch_num, tx_num).as_bytes(),
                         [0u8; 32],
                     ),
@@ -289,7 +295,9 @@ async fn test_rollback_with_data() {
                     tx_hash,
                     body_to_save: None,
                     events,
-                    receipt: TxEffect::Successful((slot_num * 100 + batch_num * 10 + tx_num) as u32),
+                    receipt: TxEffect::Successful(
+                        (slot_num * 100 + batch_num * 10 + tx_num) as u32,
+                    ),
                 });
             }
 

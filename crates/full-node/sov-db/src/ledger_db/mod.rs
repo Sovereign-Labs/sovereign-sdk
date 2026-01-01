@@ -716,7 +716,8 @@ impl LedgerDb {
                     new_finalized_slot = %new_finalized_slot,
                     "Updating finalized slot during rollback"
                 );
-                schema_batch.put::<FinalizedSlots>(&LatestFinalizedSlotSingleton, &new_finalized_slot)?;
+                schema_batch
+                    .put::<FinalizedSlots>(&LatestFinalizedSlotSingleton, &new_finalized_slot)?;
             }
         }
 
