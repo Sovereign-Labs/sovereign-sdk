@@ -159,6 +159,7 @@ async fn test_rollback() {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
     let ledger_storage = storage_manager.create_ledger_storage();
+    let db = storage_manager.get_db();
     let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
 
     // Initially, there should be no slots
@@ -180,35 +181,27 @@ async fn test_rollback() {
     assert_eq!(head_slot_number, 2.to_slot_number());
 
     // Rollback the last slot (slot 2)
-    ledger_db
-        .rollback_last_slot(storage_manager.get_db())
-        .unwrap();
+    LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
     // Verify the head slot is now slot 1
     let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
     assert_eq!(head_slot_number, 1.to_slot_number());
 
     // Rollback another slot (slot 1)
-    ledger_db
-        .rollback_last_slot(storage_manager.get_db())
-        .unwrap();
+    LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
     // Verify the head slot is now slot 0
     let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
     assert_eq!(head_slot_number, 0.to_slot_number());
 
     // Rollback the last slot (slot 0)
-    ledger_db
-        .rollback_last_slot(storage_manager.get_db())
-        .unwrap();
+    LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
     // Verify there are no more slots
     assert!(ledger_db.get_head_slot().unwrap().is_none());
 
     // Try to rollback when there are no slots (should succeed without error)
-    ledger_db
-        .rollback_last_slot(storage_manager.get_db())
-        .unwrap();
+    LedgerDb::rollback_last_slot(db.clone()).unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -221,6 +214,7 @@ async fn test_rollback_with_data() {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
     let ledger_storage = storage_manager.create_ledger_storage();
+    let db = storage_manager.get_db();
     let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
 
     // Create slots with actual data (batches, transactions, events)
@@ -364,9 +358,7 @@ async fn test_rollback_with_data() {
     assert_eq!(item_numbers_before_rollback.event_number, 36); // 18 txs × 2 events
 
     // Rollback slot 2
-    ledger_db
-        .rollback_last_slot(storage_manager.get_db())
-        .unwrap();
+    LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
     // Verify slot 2 is gone
     let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
@@ -387,9 +379,7 @@ async fn test_rollback_with_data() {
     assert_eq!(item_numbers_slot_1.batch_number, 4); // 2 slots × 2 batches
 
     // Rollback slot 1
-    ledger_db
-        .rollback_last_slot(storage_manager.get_db())
-        .unwrap();
+    LedgerDb::rollback_last_slot(db.clone()).unwrap();
 
     // Verify slot 1 is gone but slot 0 remains
     let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();

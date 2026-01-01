@@ -621,16 +621,17 @@ impl LedgerDb {
 
     /// Rolls back the last committed slot from the ledger database.
     /// If there are no slots in the database, this method returns `Ok(())` without doing anything.
-    pub fn rollback_last_slot(&self, ledger_db: &Arc<rockbound::DB>) -> anyhow::Result<()> {
-        let schema_batch = self.create_schema_batch_for_rollback()?;
+    pub fn rollback_last_slot(ledger_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
+        let schema_batch = Self::create_schema_batch_for_rollback(ledger_db.clone())?;
         ledger_db.write_schemas(&schema_batch)?;
         Ok(())
     }
 
-    fn create_schema_batch_for_rollback(&self) -> anyhow::Result<SchemaBatch> {
+    fn create_schema_batch_for_rollback(db: Arc<rockbound::DB>) -> anyhow::Result<SchemaBatch> {
         // Hold the same lock for the entire duration of this method.
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
+
         let mut schema_batch = SchemaBatch::new();
+        let db = DeltaReader::new(db, Vec::new());
 
         // Get the current head slot
         let Some((head_slot_number, head_slot)) = db.get_largest::<SlotByNumber>()? else {

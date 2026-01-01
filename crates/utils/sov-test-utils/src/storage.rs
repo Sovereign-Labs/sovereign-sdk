@@ -149,8 +149,8 @@ impl SimpleLedgerStorageManager {
     }
 
     /// Get a reference to the underlying database
-    pub fn get_db(&self) -> &Arc<rockbound::DB> {
-        &self.db
+    pub fn get_db(&self) -> Arc<rockbound::DB> {
+        self.db.clone()
     }
 }
 
