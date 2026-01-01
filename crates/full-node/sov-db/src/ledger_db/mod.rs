@@ -643,38 +643,35 @@ impl LedgerDb {
             "Rolling back last slot from ledger database"
         );
 
-        let mut current_batch_number = head_slot.batches.start;
-
         // Delete all batches in this slot
-        while current_batch_number < head_slot.batches.end {
+        for current_batch_number in head_slot.batches.start.0..head_slot.batches.end.0 {
+            let current_batch_number = BatchNumber(current_batch_number);
+
             if let Some(batch) = db.get::<BatchByNumber>(&current_batch_number)? {
                 // Delete all transactions in this batch
-                let mut current_tx = batch.txs.start;
+                for current_tx_number in batch.txs.start.0..batch.txs.end.0 {
+                    let current_tx_number = TxNumber(current_tx_number);
 
-                while current_tx < batch.txs.end {
-                    if let Some(tx) = db.get::<TxByNumber>(&current_tx)? {
+                    if let Some(tx) = db.get::<TxByNumber>(&current_tx_number)? {
                         // Delete all events in this transaction
-                        let mut current_event_number = tx.events.start;
+                        for current_event_number in tx.events.start.0..tx.events.end.0 {
+                            let current_event_number = EventNumber(current_event_number);
 
-                        while current_event_number < tx.events.end {
                             if let Some(event) = db.get::<EventByNumber>(&current_event_number)? {
                                 Self::delete_event(
                                     &mut schema_batch,
-                                    current_tx,
+                                    current_tx_number,
                                     &event,
                                     current_event_number,
                                 )?;
                             }
-                            current_event_number = EventNumber(current_event_number.0 + 1);
                         }
-                        Self::delete_tx(&mut schema_batch, &tx, current_tx)?;
+                        Self::delete_tx(&mut schema_batch, &tx, current_tx_number)?;
                     }
-                    current_tx = TxNumber(current_tx.0 + 1);
                 }
 
                 Self::delete_batch(&mut schema_batch, &batch, &current_batch_number)?;
             }
-            current_batch_number = BatchNumber(current_batch_number.0 + 1);
         }
 
         Self::delete_slot(&mut schema_batch, &head_slot, &head_slot_number)?;
