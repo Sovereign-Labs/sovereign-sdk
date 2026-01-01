@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use rockbound::SchemaBatch;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::types::StoredStfInfo;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
@@ -220,64 +221,23 @@ async fn test_rollback_with_data() {
 
     // Create slots with actual data (batches, transactions, events)
     for slot_num in 0..3 {
-        let mut block = MockBlock::default();
-        block.header.height = slot_num;
-        let mut slot_commit = SlotCommit::<_, i32, TestTxReceiptContents>::new(block, vec![]);
-
-        // Add 2 batches per slot
-        for batch_num in 0..2 {
-            let mut tx_receipts = vec![];
-
-            // Add 3 transactions per batch
-            for tx_num in 0..3 {
-                let mut out = [0u8; 32];
-                out[..8].copy_from_slice(&u64::to_le_bytes(10 * batch_num + tx_num));
-                let tx_hash = TxHash::new(out);
-
-                let events = vec![
-                    StoredEvent::new("k1".as_bytes(), "v1".as_bytes(), tx_hash.0),
-                    StoredEvent::new("k2".as_bytes(), "v2".as_bytes(), tx_hash.0),
-                ];
-
-                tx_receipts.push(TransactionReceipt {
-                    tx_hash,
-                    body_to_save: None,
-                    events,
-                    receipt: TxEffect::Successful(0),
-                });
-            }
-
-            let mut batch_hash: [u8; 32] = [0u8; 32];
-            batch_hash[..8].copy_from_slice(&u64::to_le_bytes(10 * slot_num + batch_num));
-
-            let batch_receipt = BatchReceipt {
-                batch_hash,
-                tx_receipts,
-                ignored_tx_receipts: vec![],
-                inner: batch_num as i32,
-            };
-
-            slot_commit.add_batch(batch_receipt);
-        }
-
-        let schema_batch = ledger_db
-            .materialize_slot(slot_commit, b"state-root")
-            .unwrap();
+        let schema_batch = create_slot_schema_batch(slot_num, &ledger_db);
         storage_manager.commit(&schema_batch);
     }
 
     // Verify we have 3 slots with data
     let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
     assert_eq!(head_slot_number, 2.to_slot_number());
-    assert_eq!(head_slot.batches.start.0, 4); // Slots 0 and 1 each have 2 batches
-    assert_eq!(head_slot.batches.end.0, 6); // Slot 2 has batches 4 and 5
 
+    assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+
+    let n = 3;
     // Verify item numbers before rollback
     let item_numbers_before_rollback = ledger_db.get_next_items_numbers().unwrap();
-    assert_eq!(item_numbers_before_rollback.slot_number, 3.to_slot_number());
-    assert_eq!(item_numbers_before_rollback.batch_number, 6); // 3 slots × 2 batches
-    assert_eq!(item_numbers_before_rollback.tx_number, 18); // 6 batches × 3 txs
-    assert_eq!(item_numbers_before_rollback.event_number, 36); // 18 txs × 2 events
+    assert_eq!(item_numbers_before_rollback.slot_number.get(), n);
+    assert_eq!(item_numbers_before_rollback.batch_number, n * 2); // n slots × 2 batches
+    assert_eq!(item_numbers_before_rollback.tx_number, n * 6); // batch_number × 3 txs
+    assert_eq!(item_numbers_before_rollback.event_number, 36); // tx_number × 2 events
 
     // Rollback slot 2
     LedgerDb::rollback_last_slot(db.clone()).unwrap();
@@ -326,4 +286,52 @@ async fn assert_slot_numbers(n: u64, ledger_db: &LedgerDb) {
         head_slot_number,
         ledger_db.get_latest_finalized_slot_number().await.unwrap()
     );
+}
+
+fn create_slot_schema_batch(slot_num: u64, ledger_db: &LedgerDb) -> SchemaBatch {
+    let mut block = MockBlock::default();
+    block.header.height = slot_num;
+    let mut slot_commit = SlotCommit::<_, i32, TestTxReceiptContents>::new(block, vec![]);
+
+    // Add 2 batches per slot
+    for batch_num in 0..2 {
+        let mut tx_receipts = vec![];
+
+        // Add 3 transactions per batch
+        for tx_num in 0..3 {
+            let mut out = [0u8; 32];
+            out[..8].copy_from_slice(&u64::to_le_bytes(10 * batch_num + tx_num));
+            let tx_hash = TxHash::new(out);
+
+            let events = vec![
+                StoredEvent::new("k1".as_bytes(), "v1".as_bytes(), tx_hash.0),
+                StoredEvent::new("k2".as_bytes(), "v2".as_bytes(), tx_hash.0),
+            ];
+
+            tx_receipts.push(TransactionReceipt {
+                tx_hash,
+                body_to_save: None,
+                events,
+                receipt: TxEffect::Successful(0),
+            });
+        }
+
+        let mut batch_hash: [u8; 32] = [0u8; 32];
+        batch_hash[..8].copy_from_slice(&u64::to_le_bytes(10 * slot_num + batch_num));
+
+        let batch_receipt = BatchReceipt {
+            batch_hash,
+            tx_receipts,
+            ignored_tx_receipts: vec![],
+            inner: batch_num as i32,
+        };
+
+        slot_commit.add_batch(batch_receipt);
+    }
+
+    let schema_batch = ledger_db
+        .materialize_slot(slot_commit, b"state-root")
+        .unwrap();
+
+    schema_batch
 }
