@@ -5,12 +5,16 @@ use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
 use sov_mock_zkvm::MockZkvmHost;
 use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
+use sov_rollup_interface::stf::StoredEvent;
+use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, TxEffect};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
 };
+use sov_rollup_interface::TxHash;
 use sov_test_utils::ledger_db::sov_api_spec::types::IntOrHash;
 use sov_test_utils::ledger_db::{LedgerTestService, LedgerTestServiceData};
 use sov_test_utils::storage::SimpleLedgerStorageManager;
+use sov_test_utils::TestTxReceiptContents;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_filtered_slot_events() {
@@ -208,11 +212,6 @@ async fn test_rollback() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rollback_with_data() {
-    use sov_rollup_interface::common::IntoSlotNumber;
-    use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, TxEffect};
-    use sov_rollup_interface::TxHash;
-    use sov_test_utils::TestTxReceiptContents;
-
     let temp_dir = tempfile::tempdir().unwrap();
     let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
     let ledger_storage = storage_manager.create_ledger_storage();
@@ -231,107 +230,28 @@ async fn test_rollback_with_data() {
 
             // Add 3 transactions per batch
             for tx_num in 0..3 {
-                let tx_hash = TxHash::new([
-                    (slot_num * 100 + batch_num * 10 + tx_num) as u8,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                ]);
+                let mut out = [0u8; 32];
+                out[..8].copy_from_slice(&u64::to_le_bytes(10 * batch_num + tx_num));
+                let tx_hash = TxHash::new(out);
 
                 let events = vec![
-                    sov_rollup_interface::stf::StoredEvent::new(
-                        format!(
-                            "event_key_slot{}_batch{}_tx{}_evt0",
-                            slot_num, batch_num, tx_num
-                        )
-                        .as_bytes(),
-                        format!("event_value_{}_{}_{}_0", slot_num, batch_num, tx_num).as_bytes(),
-                        [0u8; 32],
-                    ),
-                    sov_rollup_interface::stf::StoredEvent::new(
-                        format!(
-                            "event_key_slot{}_batch{}_tx{}_evt1",
-                            slot_num, batch_num, tx_num
-                        )
-                        .as_bytes(),
-                        format!("event_value_{}_{}_{}_1", slot_num, batch_num, tx_num).as_bytes(),
-                        [0u8; 32],
-                    ),
+                    StoredEvent::new("k1".as_bytes(), "v1".as_bytes(), tx_hash.0),
+                    StoredEvent::new("k2".as_bytes(), "v2".as_bytes(), tx_hash.0),
                 ];
 
                 tx_receipts.push(TransactionReceipt {
                     tx_hash,
                     body_to_save: None,
                     events,
-                    receipt: TxEffect::Successful(
-                        (slot_num * 100 + batch_num * 10 + tx_num) as u32,
-                    ),
+                    receipt: TxEffect::Successful(0),
                 });
             }
 
+            let mut batch_hash: [u8; 32] = [0u8; 32];
+            batch_hash[..8].copy_from_slice(&u64::to_le_bytes(10 * slot_num + batch_num));
+
             let batch_receipt = BatchReceipt {
-                batch_hash: [
-                    (slot_num * 100 + batch_num * 10) as u8,
-                    1,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                ],
+                batch_hash,
                 tx_receipts,
                 ignored_tx_receipts: vec![],
                 inner: batch_num as i32,
