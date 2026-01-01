@@ -4,7 +4,8 @@ use alloy_primitives::{Address, Bytes, U256};
 use revm::state::AccountInfo;
 use revm::Database;
 use sov_evm::{
-    AccountData, ContractCreationPolicy, Evm, EvmGenesisConfig, EvmRuntimeConfig, SpecId,
+    AccountData, ContractCreationPolicy, Evm, EvmChainSpec, EvmGenesisConfig, EvmRuntimeConfig,
+    SpecId,
 };
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
@@ -47,11 +48,11 @@ fn test_genesis_cfg() {
         assert_eq!(
             evm.cfg_infallible(state),
             EvmRuntimeConfig {
-                chain_spec: sov_evm::EvmChainSpec {
-                    block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+                chain_spec: EvmChainSpec {
                     coinbase: Address::from([3u8; 20]),
                     limit_contract_code_size: Some(5000),
                     hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
+                    ..Default::default()
                 },
                 hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
                 contract_creation_policy: ContractCreationPolicy::Everyone
@@ -116,11 +117,11 @@ fn default_config() -> EvmGenesisConfig {
         }],
         initial_base_fee: 70,
         genesis_timestamp: 50,
-        chain_spec: sov_evm::EvmChainSpec {
-            block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+        chain_spec: EvmChainSpec {
             coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000),
             hardforks: vec![(0, SpecId::BERLIN), (1, SpecId::CANCUN)],
+            ..Default::default()
         },
         contract_creation_policy: ContractCreationPolicy::Everyone,
     }

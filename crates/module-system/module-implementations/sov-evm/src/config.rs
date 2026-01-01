@@ -2,7 +2,7 @@ use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::Address;
 use revm::primitives::hardfork::SpecId;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::ETHEREUM_BLOCK_GAS_LIMIT;
+use sov_modules_api::{ETHEREUM_BLOCK_GAS_LIMIT, ETHEREUM_TX_GAS_LIMIT};
 use std::collections::BTreeSet;
 
 use crate::AccountData;
@@ -16,6 +16,8 @@ pub struct EvmChainSpec {
     pub coinbase: Address,
     /// Maximum gas allowed per block
     pub block_gas_limit: u64,
+    /// Maximum gas allowed per tx
+    pub tx_gas_limit: u64,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
 }
@@ -41,6 +43,7 @@ impl Default for EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+            tx_gas_limit: ETHEREUM_TX_GAS_LIMIT,
             hardforks: vec![(0, SpecId::CANCUN)],
         }
     }
@@ -83,7 +86,7 @@ impl ContractCreationPolicy {
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct EvmRuntimeConfig {
     /// Core chain parameters
-    pub chain_spec: crate::EvmChainSpec,
+    pub chain_spec: EvmChainSpec,
     /// Sorted hard fork schedule for efficient runtime lookup
     /// (block number, fork ID) ordered by block number
     pub hardforks: Vec<(u64, SpecId)>,
@@ -93,7 +96,7 @@ pub struct EvmRuntimeConfig {
 
 impl Default for EvmRuntimeConfig {
     fn default() -> EvmRuntimeConfig {
-        let chain_spec = crate::EvmChainSpec::default();
+        let chain_spec = EvmChainSpec::default();
         // Clone hardforks from chain_spec for runtime use
         let hardforks = chain_spec.hardforks.clone();
 
@@ -139,7 +142,7 @@ mod tests {
     use revm::primitives::hardfork::SpecId;
     use sov_modules_api::prelude::serde_json;
 
-    use crate::{AccountData, EvmGenesisConfig};
+    use crate::{AccountData, EvmChainSpec, EvmGenesisConfig};
 
     #[test]
     fn test_config_serialization() {
@@ -150,7 +153,7 @@ mod tests {
                 code_hash: AccountData::empty_code(),
                 code: Bytes::default(),
             }],
-            chain_spec: crate::EvmChainSpec {
+            chain_spec: EvmChainSpec {
                 limit_contract_code_size: None,
                 hardforks: vec![(0, SpecId::CANCUN)],
                 ..Default::default()
@@ -173,6 +176,7 @@ mod tests {
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":1000000000,
+                    "tx_gas_limit":100000000,
                     "hardforks":[[0,"CANCUN"]]
                 },
                 "contract_creation_policy": "everyone"
