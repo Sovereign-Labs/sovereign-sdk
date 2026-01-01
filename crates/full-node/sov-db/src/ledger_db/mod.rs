@@ -676,10 +676,10 @@ impl LedgerDb {
 
         Self::delete_slot(&mut schema_batch, &head_slot, &head_slot_number)?;
 
-        // Check if we need to update the finalized slot
+        // Check if we need to update the finalized slot.
         if let Some(finalized_slot) = db.get::<FinalizedSlots>(&LatestFinalizedSlotSingleton)? {
             if finalized_slot >= head_slot_number {
-                // Find the previous slot number (if any)
+                // Find the previous slot number.
                 let new_finalized_slot = if head_slot_number > SlotNumber::GENESIS {
                     // Get the previous slot
                     let mut prev_slot = head_slot_number;
