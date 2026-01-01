@@ -162,49 +162,45 @@ async fn test_rollback() {
     let db = storage_manager.get_db();
     let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
 
-    // Initially, there should be no slots
-    assert!(ledger_db.get_head_slot().unwrap().is_none());
-
     // Add a few slots
     for i in 0..3 {
         let mut block = MockBlock::default();
         block.header.height = i;
         let slot_commit = SlotCommit::<_, MockBlob, ()>::new(block, Default::default());
-        let schema_batch = ledger_db
-            .materialize_slot(slot_commit, b"state-root")
+        let mut schema_batch = ledger_db
+            .materialize_slot(slot_commit, &i.to_be_bytes())
             .unwrap();
+
+        let finalized_slot_number = ledger_db
+            .materialize_latest_finalize_slot(SlotNumber::new(i), SlotNumber::new(i))
+            .unwrap();
+
+        schema_batch.merge(finalized_slot_number);
         storage_manager.commit(&schema_batch);
     }
 
     // Verify we have 3 slots (slots 0, 1, 2)
+    assert_slot_numbers(2, &ledger_db).await;
 
-    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
-    assert_eq!(head_slot_number.get(), 2);
-
+    // Rollback slot 2
     {
         LedgerDb::rollback_last_slot(db.clone()).unwrap();
-
         // Verify the head slot is now slot 1
-        let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
-        assert_eq!(head_slot_number.get(), 1);
+        assert_slot_numbers(1, &ledger_db).await;
     }
 
     // Rollback another slot (slot 1)
     {
         LedgerDb::rollback_last_slot(db.clone()).unwrap();
-
         // Verify the head slot is now slot 0
-        let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
-        assert_eq!(head_slot_number.get(), 0);
+        assert_slot_numbers(0, &ledger_db).await;
     }
 
     // Rollback the last slot (slot 0)
     {
         LedgerDb::rollback_last_slot(db.clone()).unwrap();
-
         // Verify there are no more slots
         assert!(ledger_db.get_head_slot().unwrap().is_none());
-
         // Try to rollback when there are no slots (should succeed without error)
         LedgerDb::rollback_last_slot(db.clone()).unwrap();
     }
@@ -401,4 +397,13 @@ async fn test_rollback_with_data() {
     assert_eq!(item_numbers_after_second_rollback.batch_number, 2);
     assert_eq!(item_numbers_after_second_rollback.tx_number, 6);
     assert_eq!(item_numbers_after_second_rollback.event_number, 12);
+}
+
+async fn assert_slot_numbers(n: u64, ledger_db: &LedgerDb) {
+    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number.get(), n);
+    assert_eq!(
+        head_slot_number,
+        ledger_db.get_latest_finalized_slot_number().await.unwrap()
+    );
 }
