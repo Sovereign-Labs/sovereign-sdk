@@ -63,18 +63,18 @@ Additional variants:
 - **KernelStateMap/Vec/Value**: For kernel-level state access
 - **Borrowed/BorrowedMut**: Lifetime-managed state borrowing
 
-## State Access Traits
+## State Access Traits and Types
 
-### GenesisState
+### GenesisState Trait
 For one-time module initialization during rollup genesis.
 
-### TxState  
+### TxState Trait 
 Transaction-scoped state access:
 - Read/write state containers
 - Automatic gas metering
 - Witness tracking for ZK proving
 
-### WorkingSet
+### WorkingSet Type
 Concrete implementation providing:
 - Merkle tree-backed storage
 - Atomic transaction semantics

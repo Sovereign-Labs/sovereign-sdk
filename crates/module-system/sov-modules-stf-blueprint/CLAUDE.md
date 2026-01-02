@@ -2,6 +2,8 @@
 
 Implementation of the StateTransitionFunction trait that orchestrates transaction processing for module-based rollups.
 
+STOP: Read [TRANSACTION_PROCESSING.md](../../../docs/TRANSACTION_PROCESSING.md) before continuing.
+
 ## Core Structure
 
 ### StfBlueprint<S, RT>

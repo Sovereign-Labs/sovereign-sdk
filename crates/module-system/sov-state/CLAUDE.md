@@ -21,7 +21,7 @@ Authenticated state storage interface:
 2. **JMT (Jellyfish Merkle Tree)**:
    - Re-exported from `jmt` crate
    - Standard sparse merkle tree implementation
-   - Good baseline performance
+   - On deprecation path. Not used in production.
 
 ### Core Types
 
@@ -47,7 +47,7 @@ Authenticated state storage interface:
 ### Caching and Performance
 
 - **`cache`**: State caching layer for performance
-- **`pinned_cache`**: Persistent cache with pinning
+- **`pinned_cache`**: Advanced cache which guarantees all-or-nothing caching for related key/value pairs. Either all pairs are cached, or none are.
 - **`DEFAULT_CACHE_CAPACITY`**: 32 entries initial capacity
 
 ### Namespaces
@@ -56,7 +56,7 @@ State isolation system:
 - Each module gets unique namespace prefix
 - Prevents cross-module state conflicts
 - Supports state organization and migration
-- Compile-time namespace safety
+- Compile-time namespace safety separating system ("Kernel") from User state.
 
 ## Key Traits
 
@@ -80,5 +80,3 @@ State containers are defined in `sov-modules-api/containers/`:
 - **StateVec**: Ordered list storage  
 - **StateValue**: Single value storage
 - **VersionedStateValue**: Versioned single values
-
-Note: No `StateQueue` or `StateOption` containers exist - only the above four types.
