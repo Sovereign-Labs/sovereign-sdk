@@ -1,8 +1,7 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use nomt::trie::KeyPath;
-use rockbound::{SchemaBatch, SchemaValue};
+use rockbound::SchemaBatch;
 use sha2::Digest;
 use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
 use sov_rollup_interface::common::SlotNumber;
@@ -13,7 +12,6 @@ use crate::accessory_db::AccessoryDb;
 use crate::config::RollupDbConfig;
 use crate::historical_state::HistoricalStateReader;
 use crate::schema::types::slot_key::{SlotKey, SlotValue};
-use crate::state_db_nomt::{get_session_builder_from_committed, NomtStateDb, StateRootHashes};
 use crate::storage_manager::tests::arbitrary::ForkDescription;
 use crate::storage_manager::tests::data_helpers::verify_accessory_db;
 use crate::storage_manager::tests::generic_tests::{
@@ -280,168 +278,6 @@ fn test_snapshots_ordering() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_ledger_finalized_height_is_updated_on_start() {
     ledger_finalized_height_is_updated_on_start::<Sm>().await;
-}
-
-/// This grey box test. It relies on knowledge that historical storage is committed the last.
-/// It emulates "crash" of historical state commit, by commiting another set of changes to NOMT,
-/// So historical state is "lagging behind".
-#[tokio::test(flavor = "multi_thread")]
-async fn test_root_hashes_match_after_crash() {
-    // Create a temporary directory for the test
-    let temp_dir = tempfile::TempDir::new().unwrap();
-    let db_path = temp_dir.path().to_path_buf();
-
-    // Initialize storage manager
-    let config = RollupDbConfig::default_in_path(db_path.clone());
-    let mut storage_manager =
-        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone()).unwrap();
-
-    let blocks: u64 = 10;
-
-    let get_root_hashes = |stf_storage: TestNomtStorage| -> (SchemaValue, StateRootHashes) {
-        let last_version = stf_storage.historical_state.last_version().unwrap();
-        let historical_root_hash = stf_storage
-            .historical_state
-            .get_serialized_root_hash(last_version)
-            .unwrap()
-            .unwrap();
-        let (user_session, kernel_session) = stf_storage.begin_sessions();
-        let user = user_session.prev_root();
-        let kernel = kernel_session.prev_root();
-        let state_root_hash = StateRootHashes { user, kernel };
-        (historical_root_hash, state_root_hash)
-    };
-
-    // Just write (blocks - 1) versions.
-    for height in 1u64..blocks {
-        let da_header = MockBlockHeader::from_height(height);
-
-        // Create state for the block
-        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
-
-        // Materialize some test data
-        let user_key = height.to_be_bytes().to_vec();
-        let kernel_key = height.to_le_bytes().to_vec();
-        let raw_value = da_header.hash.0.to_vec();
-
-        let user_key_path = KeyPath::from(sha2::Sha256::digest(user_key.clone()));
-        let kernel_key_path = KeyPath::from(sha2::Sha256::digest(kernel_key.clone()));
-        let value = nomt::KeyReadWrite::Write(Some(raw_value.clone()));
-        let user_nomt_values = vec![(user_key_path, value.clone())];
-        let user_historical_values = [(user_key, Some(raw_value.clone()))];
-        let kernel_nomt_values = vec![(kernel_key_path, value.clone())];
-        let kernel_historical_values = [(kernel_key, Some(raw_value.clone()))];
-
-        let (user_session, kernel_session) = stf_storage.begin_sessions();
-
-        let user_finished_session = user_session.finish(user_nomt_values).unwrap();
-        let kernel_finished_session = kernel_session.finish(kernel_nomt_values).unwrap();
-
-        let user_root_hash = user_finished_session.root().into_inner();
-        let kernel_root_hash = kernel_finished_session.root().into_inner();
-
-        // Mimic prover storage.
-        // It intentionally not important in which order they are passed,
-        // As sov-db remains oblivious about it.
-        let root_hash = [user_root_hash, kernel_root_hash].concat();
-
-        let historical_change_set = HistoricalStateReader::materialize_values(
-            user_historical_values
-                .iter()
-                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
-            kernel_historical_values
-                .iter()
-                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
-            root_hash,
-            SlotNumber::new(height - 1),
-        )
-        .unwrap();
-
-        let stf_changes = NomtChangeSet {
-            state: StateFinishedSession {
-                user: user_finished_session,
-                kernel: kernel_finished_session,
-            },
-            historical_state: historical_change_set,
-            accessory: SchemaBatch::default(),
-            pinned_cache: None,
-        };
-        // Does not matter in this test
-        let ledger_changes = SchemaBatch::default();
-
-        // Save the change set
-        storage_manager
-            .save_change_set(&da_header, stf_changes, ledger_changes)
-            .unwrap();
-
-        storage_manager.finalize(&da_header).unwrap();
-    }
-
-    let (historical_root_hash, state_root_hashes) = {
-        let prev_block = MockBlockHeader::from_height(blocks - 1);
-        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&prev_block).unwrap();
-        get_root_hashes(stf_storage)
-    };
-
-    drop(storage_manager);
-
-    assert!(
-        state_root_hashes.included_in_raw(&historical_root_hash),
-        "Historical root hash {} does not contain state root hashes {} {}",
-        hex::encode(historical_root_hash),
-        hex::encode(state_root_hashes.user),
-        hex::encode(state_root_hashes.kernel),
-    );
-
-    // Writing extra data to NOMT, both namespaces.
-    // Since changes for both namespaces are always provided.
-    {
-        let nomt = Arc::new(NomtStateDb::<H>::new(config.clone()).unwrap());
-
-        let the_last_block = MockBlockHeader::from_height(blocks);
-
-        let session_builder = get_session_builder_from_committed::<H, MockHash>(nomt.clone());
-        let user_session = session_builder
-            .begin_user_session_without_witness()
-            .unwrap();
-        let kernel_session = session_builder
-            .begin_kernel_session_without_witness()
-            .unwrap();
-
-        let nomt_key = KeyPath::from(the_last_block.hash.0);
-        let nomt_value = Some(the_last_block.hash.0.to_vec());
-
-        let actuals = vec![(nomt_key, nomt::KeyReadWrite::Write(nomt_value.clone()))];
-
-        let finished_user_session = user_session.finish(actuals.clone()).unwrap();
-        let finished_kernel_session = kernel_session.finish(actuals).unwrap();
-
-        let state_finished_session =
-            StateFinishedSession::new(finished_user_session, finished_kernel_session);
-        nomt.commit_change_set(state_finished_session).unwrap();
-    }
-
-    let mut storage_manager =
-        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone()).unwrap();
-
-    // Verifying that storage is consistent after our little trick above
-    let (historical_root_hash_after, state_root_hashes_after) = {
-        let prev_block = MockBlockHeader::from_height(blocks - 1);
-        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&prev_block).unwrap();
-        get_root_hashes(stf_storage)
-    };
-
-    assert!(
-        state_root_hashes_after.included_in_raw(&historical_root_hash_after),
-        "Historical root hash {} does not contain state root hashes {} {}",
-        hex::encode(historical_root_hash_after),
-        hex::encode(state_root_hashes_after.user),
-        hex::encode(state_root_hashes_after.kernel),
-    );
-
-    assert_eq!(historical_root_hash, historical_root_hash_after);
-    assert_eq!(state_root_hashes.kernel, state_root_hashes_after.kernel);
-    assert_eq!(state_root_hashes.user, state_root_hashes_after.user);
 }
 
 /// Test the pruning behavior of the historical state. We want to check that...

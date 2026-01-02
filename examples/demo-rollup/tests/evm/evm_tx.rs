@@ -45,7 +45,6 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
         .await;
 
     assert_eq!(latest_block, pending_block);
-    assert_eq!(pending_block.header.base_fee_per_gas, Some(0));
     assert_eq!(pending_block.header.hash, B256::ZERO);
     assert_eq!(earliest_block.header.number, 0);
     assert!(pending_block.header.number > earliest_block.header.number);

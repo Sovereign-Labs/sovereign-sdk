@@ -138,8 +138,6 @@ where
             "Pruner versions to keep should be at least 1, got {pruner_versions_to_keep}",
         );
         let db_group = DbGroup::new(config)?;
-
-        db_group.verify_and_fix_commited_root_hashes()?;
         db_group.update_ledger_finalized_height()?;
 
         Ok(Self {

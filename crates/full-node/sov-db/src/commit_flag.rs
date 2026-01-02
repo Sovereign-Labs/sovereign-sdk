@@ -7,14 +7,23 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 const FLAG_FILE_NAME: &str = "commit_status.flag";
 
-/// Represents the status of a two-phase commit operation.
+/// Represents the current state of a commit operation.
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Clone, Copy)]
 pub enum CommitStatus {
-    /// Indicates that the first phase of a commit is done, but the second is pending.
-    /// Write root hash that has been written while in progress.
-    InProgress([u8; 32]),
-    /// Indicates that a commit operation is fully completed, or no operation is in progress.
-    Completed,
+    /// A commit of **kernel state** is in progress.
+    /// Stores the previous `kernel` root hash before the commit began.
+    CommittingKernelNomt([u8; 32]),
+    /// A commit of **user state** is in progress.
+    /// Stores the previous `user` root hash before the commit began.
+    CommittingUserNomt([u8; 32]),
+    /// /// A commit of **LedgerDB** is in progress.
+    CommittingLedger([u8; 64]),
+    /// A commit of **archival user and kernel state** in the flat-db is in progress.
+    CommittingArchivalUserAndKernel,
+    /// A commit of **live user and kernel state** in the flat-db is in progress.
+    CommittingLiveUserAndKernel,
+    /// The commit succeeded.
+    Success,
 }
 
 /// Manages a persistent flag file to track the state of two-phase commits.
@@ -59,14 +68,14 @@ impl CommitFlag {
                 Ok(status) => Ok(status),
                 Err(err) => {
                     tracing::warn!(error = ?err, "Commit flag file is corrupted, defaulting to completed");
-                    self.write_status(CommitStatus::Completed)?;
-                    Ok(CommitStatus::Completed)
+                    self.write_status(&CommitStatus::Success)?;
+                    Ok(CommitStatus::Success)
                 }
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // File not found, create it with COMPLETED status
-                self.write_status(CommitStatus::Completed)?;
-                Ok(CommitStatus::Completed)
+                self.write_status(&CommitStatus::Success)?;
+                Ok(CommitStatus::Success)
             }
             Err(e) => Err(anyhow::Error::from(e).context("Failed to read commit flag file")),
         }
@@ -87,7 +96,7 @@ impl CommitFlag {
     /// Returns `anyhow::Result<()>` which is `Ok(())` on successful write, or an error
     /// if any step of the atomic write process fails (e.g., I/O errors, permission issues,
     /// disk full).
-    pub fn write_status(&self, status: CommitStatus) -> anyhow::Result<()> {
+    pub fn write_status(&self, status: &CommitStatus) -> anyhow::Result<()> {
         let message = borsh::to_vec(&status)?;
 
         // Write to a temporary file first
@@ -120,80 +129,12 @@ impl CommitFlag {
         Ok(())
     }
 
-    pub fn log_reset_instruction(&self) {
-        tracing::error!(
-            "To reset commit flag, please remove commit flag file: `rm {}`",
-            self.file_path.display()
-        );
-    }
-}
+    pub(crate) fn save_commit_status(&self, commit_status: &CommitStatus) -> anyhow::Result<()> {
+        self.write_status(commit_status).with_context(|| {
+            format!("Failed to write {commit_status:?} status after successful user commit")
+        })?;
 
-#[cfg(test)]
-mod tests {
-    use std::io::Read;
-
-    use tempfile::tempdir;
-
-    use super::*;
-
-    #[test]
-    fn test_commit_flag_flow() {
-        let dir = tempdir().unwrap();
-        let flag = CommitFlag::new(dir.path());
-
-        // 1. Initial read: file doesn't exist, should create and return Completed
-        assert_eq!(flag.read_status().unwrap(), CommitStatus::Completed);
-        assert!(dir.path().join(FLAG_FILE_NAME).exists());
-
-        let mut f = File::open(dir.path().join(FLAG_FILE_NAME)).unwrap();
-        let mut contents = Vec::new();
-        f.read_to_end(&mut contents).unwrap();
-        assert_eq!(contents, borsh::to_vec(&CommitStatus::Completed).unwrap());
-        drop(f);
-
-        let root_hash = [128u8; 32];
-        let in_progress_msg = CommitStatus::InProgress(root_hash);
-
-        // 2. Write InProgress
-        flag.write_status(in_progress_msg).unwrap();
-        assert_eq!(flag.read_status().unwrap(), in_progress_msg);
-
-        let mut f = File::open(dir.path().join(FLAG_FILE_NAME)).unwrap();
-        contents.clear();
-        f.read_to_end(&mut contents).unwrap();
-        assert_eq!(contents, borsh::to_vec(&in_progress_msg).unwrap());
-        assert!(!dir.path().join(format!("{FLAG_FILE_NAME}.tmp")).exists());
-        drop(f);
-
-        // 3. Write Completed
-        flag.write_status(CommitStatus::Completed).unwrap();
-        assert_eq!(flag.read_status().unwrap(), CommitStatus::Completed);
-
-        let mut f = File::open(dir.path().join(FLAG_FILE_NAME)).unwrap();
-        contents.clear();
-        f.read_to_end(&mut contents).unwrap();
-        assert_eq!(contents, borsh::to_vec(&CommitStatus::Completed).unwrap());
-        assert!(!dir.path().join(format!("{FLAG_FILE_NAME}.tmp")).exists());
-    }
-
-    #[test]
-    fn test_corrupted_file() {
-        let dir = tempdir().unwrap();
-        let flag_path = dir.path().join(FLAG_FILE_NAME);
-
-        // Create a corrupted file
-        let mut file = File::create(&flag_path).unwrap();
-        file.write_all(b"CORRUPTED_DATA").unwrap();
-        drop(file);
-
-        let commit_flag = CommitFlag::new(dir.path());
-        // Should detect corruption, fix the file, and return Completed
-        assert_eq!(commit_flag.read_status().unwrap(), CommitStatus::Completed);
-
-        // Verify the file content is now COMPLETED
-        let mut f = File::open(&flag_path).unwrap();
-        let mut contents = Vec::new();
-        f.read_to_end(&mut contents).unwrap();
-        assert_eq!(contents, borsh::to_vec(&CommitStatus::Completed).unwrap());
+        debug_assert_eq!(&self.read_status()?, commit_status);
+        Ok(())
     }
 }

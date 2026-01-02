@@ -1,16 +1,21 @@
 use futures::StreamExt;
+use rockbound::SchemaBatch;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::types::StoredStfInfo;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
 use sov_mock_zkvm::MockZkvmHost;
-use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
+use sov_rollup_interface::common::{HexHash, IntoSlotNumber, SlotNumber};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
+use sov_rollup_interface::stf::{BatchReceipt, BlobDiscardReason, TransactionReceipt, TxEffect};
+use sov_rollup_interface::stf::{DiscardedBlob, StoredEvent};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
 };
+use sov_rollup_interface::TxHash;
 use sov_test_utils::ledger_db::sov_api_spec::types::IntOrHash;
 use sov_test_utils::ledger_db::{LedgerTestService, LedgerTestServiceData};
 use sov_test_utils::storage::SimpleLedgerStorageManager;
+use sov_test_utils::TestTxReceiptContents;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_filtered_slot_events() {
@@ -152,4 +157,214 @@ async fn next_slot_number_to_receive_is_none_at_startup() {
         .await
         .unwrap()
         .is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rollback() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let db = storage_manager.get_db();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Add a few slots
+    for i in 0..3 {
+        let mut block = MockBlock::default();
+        block.header.height = i;
+        let slot_commit = SlotCommit::<_, MockBlob, ()>::new(block, Default::default());
+        let mut schema_batch = ledger_db
+            .materialize_slot(slot_commit, &[i as u8; 64])
+            .unwrap();
+
+        let finalized_slot_number = ledger_db
+            .materialize_latest_finalize_slot(SlotNumber::new(i), SlotNumber::new(i))
+            .unwrap();
+
+        schema_batch.merge(finalized_slot_number);
+        storage_manager.commit(&schema_batch);
+    }
+
+    // Verify we have 3 slots (slots 0, 1, 2)
+    assert_slot_numbers(2, &ledger_db).await;
+
+    // Rollback slot 2
+    {
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+        // Verify the head slot is now slot 1
+        let slot_nr_after_rollback = 1;
+        assert_slot_numbers(slot_nr_after_rollback, &ledger_db).await;
+
+        let state_root_hash_from_ledger =
+            LedgerDb::get_head_root_hash(db.clone()).unwrap().unwrap();
+        assert_eq!(
+            state_root_hash_from_ledger,
+            [slot_nr_after_rollback as u8; 64]
+        );
+    }
+
+    // Rollback another slot (slot 1)
+    {
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+        // Verify the head slot is now slot 0
+        let slot_nr_after_rollback = 0;
+        assert_slot_numbers(slot_nr_after_rollback, &ledger_db).await;
+
+        let state_root_hash_from_ledger =
+            LedgerDb::get_head_root_hash(db.clone()).unwrap().unwrap();
+        assert_eq!(
+            state_root_hash_from_ledger,
+            [slot_nr_after_rollback as u8; 64]
+        );
+    }
+
+    // Rollback the last slot (slot 0)
+    {
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+        // Verify there are no more slots
+        assert!(ledger_db.get_head_slot().unwrap().is_none());
+        // Try to rollback when there are no slots (should succeed without error)
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+
+        let state_root_hash_from_ledger = LedgerDb::get_head_root_hash(db.clone()).unwrap();
+        assert!(state_root_hash_from_ledger.is_none());
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rollback_with_data() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let db = storage_manager.get_db();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Create slots with actual data (batches, transactions, events)
+    for slot_num in 0..3 {
+        let schema_batch = create_slot_schema_batch(slot_num, &ledger_db);
+        storage_manager.commit(&schema_batch);
+    }
+
+    // Verify item numbers before rollback
+    {
+        let expected_slot_number = 2;
+        let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), expected_slot_number);
+        assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+        assert_next_items_numbers(expected_slot_number, &ledger_db);
+    }
+
+    // Rollback slot 2
+    {
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+        let expected_slot_number = 1;
+
+        // Verify slot 2 is gone
+        let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), expected_slot_number);
+        assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+        assert_next_items_numbers(expected_slot_number, &ledger_db);
+    }
+
+    {
+        // Rollback slot 1
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+        let expected_slot_number = 0;
+
+        // Verify slot 1 is gone but slot 0 remains
+        let (head_slot_number, head_slot) = ledger_db.get_head_slot().unwrap().unwrap();
+        assert_eq!(head_slot_number.get(), expected_slot_number);
+        assert_eq!(head_slot.batches.end.0 - head_slot.batches.start.0, 2);
+        assert_next_items_numbers(expected_slot_number, &ledger_db);
+    }
+}
+
+async fn assert_slot_numbers(n: u64, ledger_db: &LedgerDb) {
+    let (head_slot_number, _) = ledger_db.get_head_slot().unwrap().unwrap();
+    assert_eq!(head_slot_number.get(), n);
+    assert_eq!(
+        head_slot_number,
+        ledger_db.get_latest_finalized_slot_number().await.unwrap()
+    );
+}
+
+fn assert_next_items_numbers(slot_number: u64, ledger_db: &LedgerDb) {
+    let next_slot_number = slot_number + 1;
+    // Verify item numbers before rollback
+    let item_numbers_before_rollback = ledger_db.get_next_items_numbers().unwrap();
+    assert_eq!(
+        item_numbers_before_rollback.slot_number.get(),
+        next_slot_number
+    );
+    assert_eq!(
+        item_numbers_before_rollback.batch_number,
+        next_slot_number * 2
+    ); // n slots × 2 batches
+
+    assert_eq!(
+        item_numbers_before_rollback.discarded_batch_number,
+        next_slot_number * 3
+    );
+
+    assert_eq!(item_numbers_before_rollback.tx_number, next_slot_number * 6); // batch_number × 3 txs
+    assert_eq!(
+        item_numbers_before_rollback.event_number,
+        next_slot_number * 12
+    );
+}
+
+fn create_slot_schema_batch(slot_num: u64, ledger_db: &LedgerDb) -> SchemaBatch {
+    let mut block = MockBlock::default();
+    block.header.height = slot_num;
+
+    let mut discarded_blobs = Vec::new();
+
+    for i in 0..3 {
+        let discarded_blob = DiscardedBlob {
+            hash: HexHash::new([(slot_num + i) as u8; 32]),
+            reason: BlobDiscardReason::OutOfCapacity,
+        };
+        discarded_blobs.push(discarded_blob);
+    }
+
+    let mut slot_commit = SlotCommit::<_, i32, TestTxReceiptContents>::new(block, discarded_blobs);
+
+    // Add 2 batches per slot
+    for batch_num in 0..2 {
+        let mut tx_receipts = vec![];
+
+        // Add 3 transactions per batch
+        for tx_num in 0..3 {
+            let mut out = [0u8; 32];
+            out[..8].copy_from_slice(&u64::to_le_bytes(10 * batch_num + tx_num));
+            let tx_hash = TxHash::new(out);
+
+            let events = vec![
+                StoredEvent::new("k1".as_bytes(), "v1".as_bytes(), tx_hash.0),
+                StoredEvent::new("k2".as_bytes(), "v2".as_bytes(), tx_hash.0),
+            ];
+
+            tx_receipts.push(TransactionReceipt {
+                tx_hash,
+                body_to_save: None,
+                events,
+                receipt: TxEffect::Successful(0),
+            });
+        }
+
+        let mut batch_hash: [u8; 32] = [0u8; 32];
+        batch_hash[..8].copy_from_slice(&u64::to_le_bytes(10 * slot_num + batch_num));
+
+        let batch_receipt = BatchReceipt {
+            batch_hash,
+            tx_receipts,
+            ignored_tx_receipts: vec![],
+            inner: batch_num as i32,
+        };
+
+        slot_commit.add_batch(batch_receipt);
+    }
+
+    ledger_db
+        .materialize_slot(slot_commit, b"state-root")
+        .unwrap()
 }

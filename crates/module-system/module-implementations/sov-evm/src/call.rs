@@ -27,7 +27,9 @@ use crate::execution_config::EVM_EXECUTION_CONFIG;
 use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
-use crate::{gas_metering_mode, Evm, EvmRuntimeConfig, GasMeteringMode, PendingTransaction};
+use crate::{
+    gas_metering_mode, Evm, EvmChainSpec, EvmRuntimeConfig, GasMeteringMode, PendingTransaction,
+};
 use anyhow::{bail, Context as _};
 
 /// EVM call message.
@@ -55,7 +57,8 @@ where
         TxSignedAndRecovered,
         u64,
     )> {
-        let block_env = self.block_env(state)?;
+        let mut block_env = self.block_env(state)?;
+        block_env.basefee = 0; // Set fee to zero for evm execution. Gas is paid for by the sov gas meter instead
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -70,11 +73,11 @@ where
         // Inside the EVM, we use nonces only for the CREATE operation.
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
-        let gas_limit = self.gas_limit(state);
-        let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
-        let tx = TxSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());
         let cfg = self.cfg(state)?;
         let cfg_env = get_cfg_env(&block_env, &cfg, None);
+        let gas_limit = self.gas_limit(state, &cfg.chain_spec);
+        let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
+        let tx = TxSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());
 
         Ok((cfg, cfg_env, block_env, tx_env, tx, pending_len))
     }
@@ -86,6 +89,7 @@ where
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         start_timer!(total);
+        // Note: This does *not* verify the signature
         let tx = convert_to_tx_signed(message.rlp)?;
 
         if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
@@ -95,6 +99,7 @@ where
         start_timer!(fetch_state);
         let (cfg, cfg_env, block, tx_env, tx, pending_len) =
             self.fetch_state(context, state, tx)?;
+
         save_elapsed!(fetch_state_time SINCE fetch_state);
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
@@ -108,6 +113,7 @@ where
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
 
+        // Subtract the gas balance from the caller's account here. If balance is subzero, revert the SDK transaction
         save_elapsed!(execution_time SINCE execution);
         verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg, &mut db)?;
         #[cfg(feature = "native")]
@@ -198,24 +204,22 @@ where
         Ok(())
     }
 
-    fn gas_limit(&self, state: &mut impl TxState<S>) -> u64 {
+    fn gas_limit(&self, state: &mut impl TxState<S>, spec: &EvmChainSpec) -> u64 {
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("TxState should have BasicGasMeter");
-        let funds = gas_meter
-            .remaining_funds
-            .expect("TxState gas meter has funds set")
-            .0;
+        let funds = gas_meter.remaining_funds.map(|funds| funds.0).unwrap_or(0);
         let gas = gas_meter.remaining_gas.as_ref()[0];
         let price = gas_meter.gas_price.as_ref()[0].0;
-        match (funds, gas) {
+        let gas_limit = match (funds, gas) {
             (0, 0) => 0,
             (_, 0) => u64::MAX,
             (funds, gas) => {
                 let gas_from_funds = (funds / price).min(u64::MAX as u128) as u64;
                 gas.min(gas_from_funds)
             }
-        }
+        };
+        gas_limit.min(spec.tx_gas_limit.unwrap_or(u64::MAX))
     }
 
     fn sequencer_gas_used(&self, state: &mut impl TxState<S>) -> u64 {

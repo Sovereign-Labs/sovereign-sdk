@@ -74,7 +74,8 @@ where
         };
         let state = maybe_archival_state.deref_mut();
 
-        let block_env = self.block_env(state)?;
+        let mut block_env = self.block_env(state)?;
+        block_env.basefee = 0; // Set the base fee to zero for evm execution. Gas is paid for by the sov gas meter instead
         let cfg = self.cfg(state)?;
         let cfg_env = get_cfg_env(&block_env, &cfg, None);
 

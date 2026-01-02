@@ -202,7 +202,7 @@ concread = { version = "0.5.7" }
 anyhow = { version = "1.0.95" }
 async-trait = "0.1.81"
 arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
-console-subscriber = "0.4"
+console-subscriber = "0.5"
 
 axum = { version = "0.7.9", default-features = false }
 axum-server = { version = "0.7", features = ["tls-rustls"] }
