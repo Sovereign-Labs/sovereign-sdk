@@ -12184,7 +12184,6 @@ dependencies = [
  "serde",
  "sov-api-spec",
  "sov-bank",
- "sov-mock-da",
  "sov-modules-api",
  "sov-synthetic-load",
  "sov-test-state-consistency",
