@@ -45,10 +45,10 @@ impl AllDBsStateRoots {
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<AllDBsStateRoots> {
         let root_hash_from_live_db =
-            root_hash_from_life_db(flat_state_db)?.unwrap_or_else(|| pre_genesis_root());
+            root_hash_from_life_db(flat_state_db)?.unwrap_or_else(pre_genesis_root);
 
         let root_hash_from_ledger_db =
-            LedgerDb::get_head_root_hash(ledger_db.clone())?.unwrap_or_else(|| pre_genesis_root());
+            LedgerDb::get_head_root_hash(ledger_db.clone())?.unwrap_or_else(pre_genesis_root);
 
         let root_hash_nomt = merkelized_state.get_root_hashes();
 
