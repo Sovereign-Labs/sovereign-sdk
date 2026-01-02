@@ -201,13 +201,18 @@ where
             bail!("Hardfork activation block number must be greater than the current rollup block. Got {activation_block_number} but expected greater than {current_rollup_block}");
         }
 
-        let current_spec_id = cfg
+        let (last_hardfork_activation_block, current_spec_id) = cfg
             .hardforks
             .last()
-            .map(|(_, id)| id)
-            .unwrap_or(&SpecId::CANCUN);
-        if spec_id <= *current_spec_id {
+            .cloned()
+            .unwrap_or((current_rollup_block, SpecId::CANCUN));
+
+        if spec_id <= current_spec_id {
             bail!("Hardfork spec ID must be greater than the current spec ID. Got {spec_id} but expected greater than {current_spec_id}");
+        }
+
+        if activation_block_number <= last_hardfork_activation_block {
+            bail!("Hardfork activation block number must be greater than the activation block of the newest hardfork. Got {activation_block_number} but expected greater than {last_hardfork_activation_block}");
         }
 
         Ok(())

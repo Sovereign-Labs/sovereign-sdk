@@ -240,6 +240,15 @@ impl<S: Spec> Evm<S> {
             .expect("Base fee per gas must be set");
         Ok(price.as_ref()[0].0.try_into().unwrap_or(u64::MAX))
     }
+
+    /// Get the admin address.
+    pub fn admin<Reader, E>(&self, state: &mut Reader) -> Result<S::Address, E>
+    where
+        Reader: StateReader<User, Error = E>,
+    {
+        let admin = self.admin.get(state)?;
+        Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
+    }
 }
 
 pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
