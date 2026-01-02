@@ -188,7 +188,7 @@ where
                 let current_root_hash = LedgerDb::get_head_root_hash(ledger_db.clone())?
                     .expect("Error: The ledger database does not contain the state root hash.");
 
-                // User, Kernel & LedgerDb commit was successful but later commits failed. We rollback both.
+                // User, Kernel & LedgerDb commit was successful but later commits failed. We rollback all of them.
                 if current_root_hash != ledger_root_hash {
                     merkelized_state.kernel.rollback(1)?;
                     merkelized_state.user.rollback(1)?;

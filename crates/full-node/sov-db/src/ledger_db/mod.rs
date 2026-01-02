@@ -641,7 +641,7 @@ impl LedgerDb {
         db.get_async::<DiscardedBlobByHash>(&blob_hash.0).await
     }
 
-    /// Geht the head state root hash.
+    /// Get the head state root hash.
     pub fn get_head_root_hash(db: Arc<rockbound::DB>) -> anyhow::Result<Option<[u8; 64]>> {
         let db = DeltaReader::new(db, Vec::new());
         let state_root = db
@@ -664,8 +664,6 @@ impl LedgerDb {
     }
 
     fn create_schema_batch_for_rollback(db: Arc<rockbound::DB>) -> anyhow::Result<SchemaBatch> {
-        // Hold the same lock for the entire duration of this method.
-
         let mut schema_batch = SchemaBatch::new();
         let db = DeltaReader::new(db, Vec::new());
 
@@ -685,12 +683,12 @@ impl LedgerDb {
             head_slot.discarded_blobs.start.0..head_slot.discarded_blobs.end.0
         {
             let current_discarded_blob_number = DiscardedBlobNumber(current_discarded_blob_number);
-            if let Some(discarded_blob_hash) =
+            if let Some(current_discarded_blob_hash) =
                 db.get::<DiscardedBlobHahsByNumber>(&current_discarded_blob_number)?
             {
                 Self::delete_discarded_blob(
                     &mut schema_batch,
-                    discarded_blob_hash,
+                    current_discarded_blob_hash,
                     &current_discarded_blob_number,
                 )?;
             }
