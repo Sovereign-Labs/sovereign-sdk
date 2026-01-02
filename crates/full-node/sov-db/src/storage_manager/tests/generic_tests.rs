@@ -831,7 +831,7 @@ where
 
         let slot_to_store = StoredSlot {
             hash: da_header.hash().into(),
-            state_root: Default::default(),
+            state_root: [0u8; 64].to_vec().into(),
             extra_data: vec![].into(),
             batches: BatchNumber(0)..BatchNumber(0),
             discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
