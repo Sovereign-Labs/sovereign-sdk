@@ -176,7 +176,7 @@ mod tests {
                     "limit_contract_code_size":null,
                     "coinbase":"0x0000000000000000000000000000000000000000",
                     "block_gas_limit":1000000000,
-                    "tx_gas_limit":100000000,
+                    "tx_gas_limit":30000000,
                     "hardforks":[[0,"CANCUN"]]
                 },
                 "contract_creation_policy": "everyone"
