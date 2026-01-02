@@ -41,6 +41,8 @@ The SDK provides a modular system for building rollups that can:
 5. **State Commitment**: Changes committed to merkle tree
 6. **Proof Generation**: Optional ZK proof creation
 
+For detailed transaction processing pipeline, security guarantees, and economic incentives, see [Transaction Processing Documentation](docs/TRANSACTION_PROCESSING.md).
+
 ## Key Design Principles
 
 - **Modularity**: Pluggable DA layers, storage backends, and ZK systems
