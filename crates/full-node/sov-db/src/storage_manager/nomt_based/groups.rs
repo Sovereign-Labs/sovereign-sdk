@@ -52,11 +52,17 @@ where
         let separate_archival_state = config.separate_archival_state;
 
         let commit_flag = CommitFlag::new(&config.path);
-        let merklized_state = NomtStateDb::<H>::new(config)?;
+        let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
         let flat_state = FlatStateDb::new(path.clone(), state_cache_size, separate_archival_state)?;
+        let ledger_rocksdb =
+            Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
 
         // Validate the commit state.
-        merklized_state.validate_commit_flag_and_rollback_if_necessesary(&commit_flag)?;
+        Self::validate_commit_flag_and_rollback_if_necessesary(
+            &commit_flag,
+            merklized_state.clone(),
+            ledger_rocksdb.clone(),
+        )?;
 
         // Validate root hashes.
         Self::are_root_hashes_match(&merklized_state, &flat_state)?;
@@ -64,14 +70,13 @@ where
 
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
 
         Ok(Self {
             commit_flag,
-            merklized_state: Arc::new(merklized_state),
+            merklized_state,
             flat_state,
             accessory: Arc::new(accessory_rocksdb),
-            ledger: Arc::new(ledger_rocksdb),
+            ledger: ledger_rocksdb,
             phantom_ref: Default::default(),
         })
     }
@@ -91,6 +96,21 @@ where
 
         let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
 
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeSavingLedger.crash_if_env_set();
+
+        // Immediately after genesis, the ledger contains no entries, and the root hash is initialized to [0; 64].
+        let root_hash = LedgerDb::get_head_root_hash(self.ledger.clone())?.unwrap_or([0; 64]);
+        self.commit_flag
+            .save_commit_status(&CommitStatus::CommittingLedger(root_hash))?;
+
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
+        let ledger_commit = self.commit_ledger(&ledger)?;
+
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeSavingArchival.crash_if_env_set();
+
         let flat_metrics = self
             .flat_state
             .commit(historical_state, &self.commit_flag)?;
@@ -99,7 +119,6 @@ where
             .save_commit_status(&CommitStatus::Success)?;
 
         let accessory_commit = self.commit_accessory(&accessory)?;
-        let ledger_commit = self.commit_ledger(&ledger)?;
 
         let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
@@ -115,6 +134,83 @@ where
         });
 
         self.merklized_state.send_metrics();
+
+        Ok(())
+    }
+
+    fn validate_commit_flag_and_rollback_if_necessesary(
+        commit_flag: &CommitFlag,
+        merkelized_state: Arc<NomtStateDb<H>>,
+        ledger_db: Arc<rockbound::DB>,
+    ) -> anyhow::Result<()> {
+        let commit_status = commit_flag.read_status()?;
+        match commit_status {
+            CommitStatus::CommittingKernelNomt(saved_hash) => {
+                let current_kernel_root_hash = merkelized_state.kernel.root().into_inner();
+
+                // Kernel commit was successful but later commits failed. We rollback only the kernel.
+                if saved_hash != current_kernel_root_hash {
+                    tracing::warn!(
+                        flag_kernel_root_hash = hex::encode(saved_hash),
+                        db_kernel_root_hash = hex::encode(current_kernel_root_hash),
+                        ?commit_status,
+                        "Detected in-progress commit. Rolling back kernel DB."
+                    );
+
+                    merkelized_state.kernel.rollback(1)?;
+                }
+            }
+            CommitStatus::CommittingUserNomt(saved_hash) => {
+                let current_user_root_hash = merkelized_state.user.root().into_inner();
+
+                // User & Kernel commit was successful but later commits failed. We rollback both.
+                if saved_hash != current_user_root_hash {
+                    tracing::warn!(
+                        flag_user_root_hash = hex::encode(saved_hash),
+                        db_user_root_hash = hex::encode(current_user_root_hash),
+                        ?commit_status,
+                        "Detected in-progress commit. Rolling back kernel DB."
+                    );
+                    merkelized_state.kernel.rollback(1)?;
+                    merkelized_state.user.rollback(1)?;
+                } else
+                // Only Kernel commit was successful. We rollback only the kernel.
+                {
+                    tracing::warn!(
+                        ?commit_status,
+                        "Detected in-progress commit. Rolling back kernel & user DBs."
+                    );
+                    merkelized_state.kernel.rollback(1)?;
+                }
+            }
+
+            CommitStatus::CommittingLedger(ledger_root_hash) => {
+                let current_root_hash = LedgerDb::get_head_root_hash(ledger_db.clone())?
+                    .expect("Error: The ledger database does not contain the state root hash.");
+
+                // User, Kernel & LedgerDb commit was successful but later commits failed. We rollback both.
+                if current_root_hash != ledger_root_hash {
+                    merkelized_state.kernel.rollback(1)?;
+                    merkelized_state.user.rollback(1)?;
+                    LedgerDb::rollback_head_slot(ledger_db)?;
+                } else
+                // We rollback kernel & user.
+                {
+                    merkelized_state.kernel.rollback(1)?;
+                    merkelized_state.user.rollback(1)?;
+                }
+            }
+
+            CommitStatus::CommittingArchivalUserAndKernel
+            | CommitStatus::CommittingLiveUserAndKernel => {
+                tracing::warn!(
+                    ?commit_status,
+                    "Detected in-progress commit. Rolling back kernel & user DBs."
+                );
+                // TODO: Requires careful consideration.
+            }
+            CommitStatus::Success => {}
+        }
 
         Ok(())
     }

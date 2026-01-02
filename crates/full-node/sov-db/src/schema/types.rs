@@ -77,7 +77,7 @@ pub struct StoredSlot {
     pub extra_data: DbBytes,
     /// The range of batches which occurred in this slot.
     pub batches: std::ops::Range<BatchNumber>,
-    /// TODO
+    /// The range of discarded blobs which occurred in this slot.
     pub discarded_blobs: std::ops::Range<DiscardedBlobNumber>,
     /// The timestamp of the slot.
     pub timestamp: Time,

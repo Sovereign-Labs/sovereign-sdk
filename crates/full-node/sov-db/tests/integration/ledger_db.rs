@@ -173,7 +173,7 @@ async fn test_rollback() {
         block.header.height = i;
         let slot_commit = SlotCommit::<_, MockBlob, ()>::new(block, Default::default());
         let mut schema_batch = ledger_db
-            .materialize_slot(slot_commit, &i.to_be_bytes())
+            .materialize_slot(slot_commit, &[i as u8; 64])
             .unwrap();
 
         let finalized_slot_number = ledger_db
@@ -189,25 +189,44 @@ async fn test_rollback() {
 
     // Rollback slot 2
     {
-        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
         // Verify the head slot is now slot 1
-        assert_slot_numbers(1, &ledger_db).await;
+        let slot_nr_after_rollback = 1;
+        assert_slot_numbers(slot_nr_after_rollback, &ledger_db).await;
+
+        let state_root_hash_from_ledger =
+            LedgerDb::get_head_root_hash(db.clone()).unwrap().unwrap();
+        assert_eq!(
+            state_root_hash_from_ledger,
+            [slot_nr_after_rollback as u8; 64]
+        );
     }
 
     // Rollback another slot (slot 1)
     {
-        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
         // Verify the head slot is now slot 0
-        assert_slot_numbers(0, &ledger_db).await;
+        let slot_nr_after_rollback = 0;
+        assert_slot_numbers(slot_nr_after_rollback, &ledger_db).await;
+
+        let state_root_hash_from_ledger =
+            LedgerDb::get_head_root_hash(db.clone()).unwrap().unwrap();
+        assert_eq!(
+            state_root_hash_from_ledger,
+            [slot_nr_after_rollback as u8; 64]
+        );
     }
 
     // Rollback the last slot (slot 0)
     {
-        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
         // Verify there are no more slots
         assert!(ledger_db.get_head_slot().unwrap().is_none());
         // Try to rollback when there are no slots (should succeed without error)
-        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
+
+        let state_root_hash_from_ledger = LedgerDb::get_head_root_hash(db.clone()).unwrap();
+        assert!(state_root_hash_from_ledger.is_none())
     }
 }
 
@@ -236,7 +255,7 @@ async fn test_rollback_with_data() {
 
     // Rollback slot 2
     {
-        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
         let expected_slot_number = 1;
 
         // Verify slot 2 is gone
@@ -248,7 +267,7 @@ async fn test_rollback_with_data() {
 
     {
         // Rollback slot 1
-        LedgerDb::rollback_last_slot(db.clone()).unwrap();
+        LedgerDb::rollback_head_slot(db.clone()).unwrap();
         let expected_slot_number = 0;
 
         // Verify slot 1 is gone but slot 0 remains

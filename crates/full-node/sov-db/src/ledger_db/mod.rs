@@ -641,19 +641,23 @@ impl LedgerDb {
         db.get_async::<DiscardedBlobByHash>(&blob_hash.0).await
     }
 
-    /// TODO
-    pub fn get_head_root_hast(db: Arc<rockbound::DB>) -> anyhow::Result<Option<[u8; 64]>> {
+    /// Geht the head state root hash.
+    pub fn get_head_root_hash(db: Arc<rockbound::DB>) -> anyhow::Result<Option<[u8; 64]>> {
         let db = DeltaReader::new(db, Vec::new());
-        Ok(db.get_largest::<SlotByNumber>()?.map(|s| {
-            let r = s.1.state_root.as_ref().to_vec();
-            let arr: [u8; 64] = r.try_into().expect("Slice must be exactly 64 bytes");
-            arr
-        }))
+        let state_root = db
+            .get_largest::<SlotByNumber>()?
+            .map(|(_, stored_slot)| {
+                let root = stored_slot.state_root.as_ref();
+                root.try_into()
+            })
+            .transpose()?;
+
+        Ok(state_root)
     }
 
     /// Rolls back the last committed slot from the ledger database.
     /// If there are no slots in the database, this method returns `Ok(())` without doing anything.
-    pub fn rollback_last_slot(ledger_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
+    pub fn rollback_head_slot(ledger_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
         let schema_batch = Self::create_schema_batch_for_rollback(ledger_db.clone())?;
         ledger_db.write_schemas(&schema_batch)?;
         Ok(())

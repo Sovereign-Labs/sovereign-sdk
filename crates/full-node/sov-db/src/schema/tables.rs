@@ -243,7 +243,7 @@ define_table_with_default_codec!(
 );
 
 define_table_with_seek_key_codec!(
-    /// The primary source for batch data
+     /// A "secondary index" for discarded blobs.
     (DiscardedBlobHahsByNumber) DiscardedBlobNumber => DbHash
 );
 
