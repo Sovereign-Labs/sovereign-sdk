@@ -84,6 +84,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                     self.kernel.rollback(1)?;
                 }
             }
+            CommitStatus::CommittingLedgerDb => {
+                todo!()
+            }
 
             CommitStatus::CommittingArchivalUserAndKernel
             | CommitStatus::CommittingLiveUserAndKernel => {
