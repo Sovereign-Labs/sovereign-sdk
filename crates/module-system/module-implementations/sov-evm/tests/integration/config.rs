@@ -330,7 +330,7 @@ fn test_update_admin() {
 			let TxEffect::Reverted(reverted) = ctx.tx_receipt else {
 				panic!("Expected a reverted transaction");
 			};
-			assert!(reverted.reason.to_string().contains("Only the admin can update the runtime configuration"), "Expected a revert reason containing 'Only the admin can update the runtime configuration' got {}", reverted.reason.to_string());
+			assert!(reverted.reason.to_string().contains("Only the admin can update the runtime configuration"), "Expected a revert reason containing 'Only the admin can update the runtime configuration' got {}", reverted.reason);
         }),
     });
 }
