@@ -3,8 +3,8 @@ use crate::{
     sov_evm::{SovEvm, StorageAccessInspector},
     EvmRuntimeConfig,
 };
-use revm::context::TxEnv;
 use revm::InspectEvm;
+use revm::{context::TxEnv, inspector::InspectorEvmTr};
 use revm::{
     context::{
         result::{EVMError, ExecResultAndState, ExecutionResult},
@@ -70,7 +70,14 @@ where
     let context = context(db, block_env, cfg);
     let storage_inspector = StorageAccessInspector::new();
     let mut evm = SovEvm::new(context, (inspector, storage_inspector));
-    evm.inspect_tx(tx)
+    let mut exec_result = evm.inspect_tx(tx)?;
+    // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
+    // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
+    rebate_gas(
+        &mut exec_result,
+        evm.inspector().1.gas_spent_on_storage_access(),
+    );
+    Ok(exec_result)
 }
 
 /// Execute ethereum transaction
@@ -82,7 +89,14 @@ pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = context(db, block_env, cfg);
     let mut evm = SovEvm::new(context, StorageAccessInspector::new());
-    evm.inspect_tx(tx)
+    let mut exec_result = evm.inspect_tx(tx)?;
+    // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
+    // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
+    rebate_gas(
+        &mut exec_result,
+        evm.inspector().gas_spent_on_storage_access(),
+    );
+    Ok(exec_result)
 }
 
 fn context<DB: Database<Error = E>, E: DBErrorMarker>(
@@ -94,6 +108,20 @@ fn context<DB: Database<Error = E>, E: DBErrorMarker>(
         .with_db(db)
         .with_block(block_env)
         .with_cfg(cfg)
+}
+
+fn rebate_gas(exec_result: &mut ExecResultAndState<ExecutionResult>, gas_to_rebate: u64) {
+    match &mut exec_result.result {
+        ExecutionResult::Success { gas_used, .. } => {
+            *gas_used = gas_used.saturating_sub(gas_to_rebate);
+        }
+        ExecutionResult::Revert { gas_used, .. } => {
+            *gas_used = gas_used.saturating_sub(gas_to_rebate);
+        }
+        ExecutionResult::Halt { gas_used, .. } => {
+            *gas_used = gas_used.saturating_sub(gas_to_rebate);
+        }
+    }
 }
 
 #[cfg(test)]
