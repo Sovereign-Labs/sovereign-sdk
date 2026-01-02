@@ -197,7 +197,7 @@ where
 {
     type Spec = S;
 
-    type Config = EvmGenesisConfig;
+    type Config = EvmGenesisConfig<S>;
 
     type CallMessage = CallMessage<S>;
 

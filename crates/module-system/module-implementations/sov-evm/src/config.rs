@@ -1,4 +1,3 @@
-use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use revm::primitives::hardfork::SpecId;
@@ -28,7 +27,7 @@ pub struct EvmChainSpec {
 
 /// Genesis configuration for EVM module initialization
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
-pub struct EvmGenesisConfig {
+pub struct EvmGenesisConfig<S: Spec> {
     /// Initial account states
     pub accounts: Vec<AccountData>,
     /// Initial base fee for first block
@@ -39,6 +38,8 @@ pub struct EvmGenesisConfig {
     pub chain_spec: EvmChainSpec,
     /// Policy - who can create contracts. Everyone or allowlist
     pub contract_creation_policy: ContractCreationPolicy,
+    /// The address which is allowed to modify the config.
+    pub admin: S::Address,
 }
 
 impl Default for EvmChainSpec {
@@ -49,18 +50,6 @@ impl Default for EvmChainSpec {
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
             tx_gas_limit: Some(ETHEREUM_TX_GAS_LIMIT),
             hardforks: vec![(0, SpecId::CANCUN)],
-        }
-    }
-}
-
-impl Default for EvmGenesisConfig {
-    fn default() -> Self {
-        Self {
-            accounts: vec![],
-            initial_base_fee: MIN_PROTOCOL_BASE_FEE,
-            genesis_timestamp: 0,
-            chain_spec: EvmChainSpec::default(),
-            contract_creation_policy: Default::default(),
         }
     }
 }
@@ -256,13 +245,14 @@ mod tests {
     use alloy_primitives::{Address, Bytes};
     use revm::primitives::hardfork::SpecId;
     use sov_modules_api::prelude::serde_json;
+    use sov_test_utils::TestSpec;
 
     use crate::{AccountData, EvmChainSpec, EvmGenesisConfig};
 
     #[test]
     fn test_config_serialization() {
         let address = Address::from_str("0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266").unwrap();
-        let config = EvmGenesisConfig {
+        let config = EvmGenesisConfig::<TestSpec> {
             accounts: vec![AccountData {
                 address,
                 code_hash: AccountData::empty_code(),
@@ -273,7 +263,13 @@ mod tests {
                 hardforks: vec![(0, SpecId::CANCUN)],
                 ..Default::default()
             },
-            ..Default::default()
+            genesis_timestamp: 0,
+            contract_creation_policy: Default::default(),
+            initial_base_fee: 7,
+            admin: sov_modules_api::Address::from_str(
+                "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+            )
+            .unwrap(),
         };
 
         let data = r#"
@@ -294,10 +290,11 @@ mod tests {
                     "tx_gas_limit":30000000,
                     "hardforks":[[0,"CANCUN"]]
                 },
-                "contract_creation_policy": "everyone"
+                "contract_creation_policy": "everyone",
+                "admin": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
         }"#;
 
-        let parsed_config: EvmGenesisConfig = serde_json::from_str(data).unwrap();
+        let parsed_config: EvmGenesisConfig<TestSpec> = serde_json::from_str(data).unwrap();
         assert_eq!(config, parsed_config);
     }
 }
