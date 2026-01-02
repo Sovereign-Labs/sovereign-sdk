@@ -60,7 +60,7 @@ where
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessesary(
             &commit_flag,
-            merklized_state.clone(),
+            &merklized_state,
             ledger_rocksdb.clone(),
             &flat_state,
         )?;
@@ -137,12 +137,12 @@ where
 
     fn validate_commit_flag_and_rollback_if_necessesary(
         commit_flag: &CommitFlag,
-        merkelized_state: Arc<NomtStateDb<H>>,
+        merkelized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<()> {
         let state_roots =
-            AllDBsStateRoots::from_dbs(merkelized_state.clone(), ledger_db.clone(), flat_state_db)?;
+            AllDBsStateRoots::from_dbs(merkelized_state, ledger_db.clone(), flat_state_db)?;
 
         let commit_status = commit_flag.read_status()?;
 
@@ -194,8 +194,7 @@ where
             CommitStatus::Success => {}
         }
 
-        let state_roots =
-            AllDBsStateRoots::from_dbs(merkelized_state.clone(), ledger_db, flat_state_db)?;
+        let state_roots = AllDBsStateRoots::from_dbs(&merkelized_state, ledger_db, flat_state_db)?;
         state_roots.validate_all();
 
         Ok(())
@@ -518,7 +517,7 @@ struct AllDBsStateRoots {
 
 impl AllDBsStateRoots {
     fn from_dbs<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
-        merkelized_state: Arc<NomtStateDb<H>>,
+        merkelized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<AllDBsStateRoots> {
@@ -568,10 +567,10 @@ impl AllDBsStateRoots {
 
     fn warning_on_rollback(&self, commit_status: &CommitStatus) {
         tracing::warn!(
-            live_db_kernel_root_hash = hex(&self.root_hash_from_live_db),
-            root_hash_ledger_db = hex(&self.root_hash_from_ledger_db),
-            user_nomt_db_root_hash = hex(&self.root_hash_nomt.user),
-            kernel_nomt_db_root_hash = hex(&self.root_hash_nomt.kernel),
+            live_db_kernel_root_hash = hex::encode(&self.root_hash_from_live_db),
+            root_hash_ledger_db = hex::encode(&self.root_hash_from_ledger_db),
+            user_nomt_db_root_hash = hex::encode(&self.root_hash_nomt.user),
+            kernel_nomt_db_root_hash = hex::encode(&self.root_hash_nomt.kernel),
             ?commit_status,
             "Detected in-progress commit. Rolling back DBs"
         );
