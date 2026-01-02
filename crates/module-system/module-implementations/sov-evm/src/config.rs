@@ -16,8 +16,8 @@ pub struct EvmChainSpec {
     pub coinbase: Address,
     /// Maximum gas allowed per block
     pub block_gas_limit: u64,
-    /// Maximum gas allowed per tx
-    pub tx_gas_limit: u64,
+    /// Maximum gas allowed per tx. Defaults to block gas limit if none is provided.
+    pub tx_gas_limit: Option<u64>,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
 }

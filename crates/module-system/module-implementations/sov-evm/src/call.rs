@@ -218,7 +218,7 @@ where
                 gas.min(gas_from_funds)
             }
         };
-        gas_limit.min(spec.tx_gas_limit)
+        gas_limit.min(spec.tx_gas_limit.unwrap_or(u64::MAX))
     }
 
     fn sequencer_gas_used(&self, state: &mut impl TxState<S>) -> u64 {
