@@ -4,10 +4,10 @@ use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::types::StoredStfInfo;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
 use sov_mock_zkvm::MockZkvmHost;
-use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
+use sov_rollup_interface::common::{HexHash, IntoSlotNumber, SlotNumber};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::stf::StoredEvent;
-use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, TxEffect};
+use sov_rollup_interface::stf::{BatchReceipt, BlobDiscardReason, TransactionReceipt, TxEffect};
+use sov_rollup_interface::stf::{DiscardedBlob, StoredEvent};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
 };
@@ -280,6 +280,12 @@ fn assert_next_items_numbers(slot_number: u64, ledger_db: &LedgerDb) {
         item_numbers_before_rollback.batch_number,
         next_slot_number * 2
     ); // n slots × 2 batches
+
+    assert_eq!(
+        item_numbers_before_rollback.discarded_batch_number,
+        next_slot_number * 3
+    );
+
     assert_eq!(item_numbers_before_rollback.tx_number, next_slot_number * 6); // batch_number × 3 txs
     assert_eq!(
         item_numbers_before_rollback.event_number,
@@ -290,7 +296,18 @@ fn assert_next_items_numbers(slot_number: u64, ledger_db: &LedgerDb) {
 fn create_slot_schema_batch(slot_num: u64, ledger_db: &LedgerDb) -> SchemaBatch {
     let mut block = MockBlock::default();
     block.header.height = slot_num;
-    let mut slot_commit = SlotCommit::<_, i32, TestTxReceiptContents>::new(block, vec![]);
+
+    let mut discarded_blobs = Vec::new();
+
+    for i in 0..3 {
+        let discarded_blob = DiscardedBlob {
+            hash: HexHash::new([(slot_num + i) as u8; 32]),
+            reason: BlobDiscardReason::OutOfCapacity,
+        };
+        discarded_blobs.push(discarded_blob);
+    }
+
+    let mut slot_commit = SlotCommit::<_, i32, TestTxReceiptContents>::new(block, discarded_blobs);
 
     // Add 2 batches per slot
     for batch_num in 0..2 {
