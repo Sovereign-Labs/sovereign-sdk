@@ -32,74 +32,6 @@ const GIGABYTE: usize = 1024 * 1024 * 1024;
 // without consuming excessive memory.
 pub(crate) const DEFAULT_MAX_PRUNING_BATCH_SIZE: usize = 300_000;
 
-struct AllDBsStateRoots {
-    root_hash_from_live_db: [u8; 64],
-    root_hash_from_ledger_db: [u8; 64],
-    root_hash_nomt: StateRootHashes,
-}
-
-impl AllDBsStateRoots {
-    fn from_dbs<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
-        merkelized_state: Arc<NomtStateDb<H>>,
-        ledger_db: Arc<rockbound::DB>,
-        flat_state_db: &FlatStateDb,
-    ) -> anyhow::Result<AllDBsStateRoots> {
-        let root_hash_from_live_db =
-            root_hash_from_life_db(flat_state_db)?.unwrap_or_else(pre_genesis_root);
-
-        let root_hash_from_ledger_db =
-            LedgerDb::get_head_root_hash(ledger_db.clone())?.unwrap_or_else(pre_genesis_root);
-
-        let root_hash_nomt = merkelized_state.get_root_hashes();
-
-        Ok(AllDBsStateRoots {
-            root_hash_from_live_db,
-            root_hash_from_ledger_db,
-            root_hash_nomt,
-        })
-    }
-
-    fn is_kerner_nomt_root_newer(&self) -> bool {
-        self.root_hash_nomt.kernel != self.root_hash_from_live_db[32..]
-    }
-
-    fn is_user_nomt_root_newer(&self) -> bool {
-        self.root_hash_nomt.user != self.root_hash_from_live_db[0..32]
-    }
-
-    fn is_ledger_db_root_newer(&self) -> bool {
-        self.root_hash_from_ledger_db != self.root_hash_from_live_db
-    }
-
-    fn validate_all(&self) {
-        assert_eq!(
-            hex(&self.root_hash_nomt.user),
-            hex(&self.root_hash_from_live_db[0..32])
-        );
-
-        assert_eq!(
-            hex(&self.root_hash_nomt.kernel),
-            hex(&self.root_hash_from_live_db[32..])
-        );
-
-        assert_eq!(
-            hex(&self.root_hash_from_ledger_db),
-            hex(&self.root_hash_from_live_db)
-        );
-    }
-
-    fn warning_on_rollback(&self, commit_status: &CommitStatus) {
-        tracing::warn!(
-            live_db_kernel_root_hash = hex(&self.root_hash_from_live_db),
-            root_hash_ledger_db = hex(&self.root_hash_from_ledger_db),
-            user_nomt_db_root_hash = hex(&self.root_hash_nomt.user),
-            kernel_nomt_db_root_hash = hex(&self.root_hash_nomt.kernel),
-            ?commit_status,
-            "Detected in-progress commit. Rolling back DBs"
-        );
-    }
-}
-
 pub(crate) struct DbGroup<H, K> {
     commit_flag: CommitFlag,
     merklized_state: Arc<NomtStateDb<H>>,
@@ -563,7 +495,7 @@ fn root_hash_from_life_db(flat_state: &FlatStateDb) -> anyhow::Result<Option<[u8
         last_version,
     )?
     .unwrap_or_else(|| {
-        // If `last_version`` is persent we must always have root hash.
+        // If `last_version` is present we must always have root hash.
         panic!("Root hash missing for the latest LiveDB version {last_version}",);
     });
 
@@ -578,6 +510,70 @@ fn pre_genesis_root() -> [u8; 64] {
     pre_genesis_root
 }
 
-fn hex(data: &[u8]) -> String {
-    hex::encode(data)
+struct AllDBsStateRoots {
+    root_hash_from_live_db: [u8; 64],
+    root_hash_from_ledger_db: [u8; 64],
+    root_hash_nomt: StateRootHashes,
+}
+
+impl AllDBsStateRoots {
+    fn from_dbs<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
+        merkelized_state: Arc<NomtStateDb<H>>,
+        ledger_db: Arc<rockbound::DB>,
+        flat_state_db: &FlatStateDb,
+    ) -> anyhow::Result<AllDBsStateRoots> {
+        let root_hash_from_live_db =
+            root_hash_from_life_db(flat_state_db)?.unwrap_or_else(pre_genesis_root);
+
+        let root_hash_from_ledger_db =
+            LedgerDb::get_head_root_hash(ledger_db.clone())?.unwrap_or_else(pre_genesis_root);
+
+        let root_hash_nomt = merkelized_state.get_root_hashes();
+
+        Ok(AllDBsStateRoots {
+            root_hash_from_live_db,
+            root_hash_from_ledger_db,
+            root_hash_nomt,
+        })
+    }
+
+    fn is_kerner_nomt_root_newer(&self) -> bool {
+        self.root_hash_nomt.kernel != self.root_hash_from_live_db[32..]
+    }
+
+    fn is_user_nomt_root_newer(&self) -> bool {
+        self.root_hash_nomt.user != self.root_hash_from_live_db[0..32]
+    }
+
+    fn is_ledger_db_root_newer(&self) -> bool {
+        self.root_hash_from_ledger_db != self.root_hash_from_live_db
+    }
+
+    fn validate_all(&self) {
+        assert_eq!(
+            hex::encode(&self.root_hash_nomt.user),
+            hex::encode(&self.root_hash_from_live_db[0..32])
+        );
+
+        assert_eq!(
+            hex::encode(&self.root_hash_nomt.kernel),
+            hex::encode(&self.root_hash_from_live_db[32..])
+        );
+
+        assert_eq!(
+            hex::encode(&self.root_hash_from_ledger_db),
+            hex::encode(&self.root_hash_from_live_db)
+        );
+    }
+
+    fn warning_on_rollback(&self, commit_status: &CommitStatus) {
+        tracing::warn!(
+            live_db_kernel_root_hash = hex(&self.root_hash_from_live_db),
+            root_hash_ledger_db = hex(&self.root_hash_from_ledger_db),
+            user_nomt_db_root_hash = hex(&self.root_hash_nomt.user),
+            kernel_nomt_db_root_hash = hex(&self.root_hash_nomt.kernel),
+            ?commit_status,
+            "Detected in-progress commit. Rolling back DBs"
+        );
+    }
 }
