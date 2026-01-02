@@ -17,6 +17,7 @@ pub struct EvmChainSpec {
     /// Maximum gas allowed per block
     pub block_gas_limit: u64,
     /// Maximum gas allowed per tx. Defaults to block gas limit if none is provided.
+    #[serde(default)]
     pub tx_gas_limit: Option<u64>,
     /// Hard fork activation schedule (block number -> fork ID)
     pub hardforks: Vec<(u64, SpecId)>,
@@ -43,7 +44,7 @@ impl Default for EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
             block_gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
-            tx_gas_limit: ETHEREUM_TX_GAS_LIMIT,
+            tx_gas_limit: Some(ETHEREUM_TX_GAS_LIMIT),
             hardforks: vec![(0, SpecId::CANCUN)],
         }
     }
