@@ -194,7 +194,7 @@ where
             CommitStatus::Success => {}
         }
 
-        let state_roots = AllDBsStateRoots::from_dbs(&merkelized_state, ledger_db, flat_state_db)?;
+        let state_roots = AllDBsStateRoots::from_dbs(merkelized_state, ledger_db, flat_state_db)?;
         state_roots.validate_all();
 
         Ok(())
@@ -550,27 +550,27 @@ impl AllDBsStateRoots {
 
     fn validate_all(&self) {
         assert_eq!(
-            hex::encode(&self.root_hash_nomt.user),
+            hex::encode(self.root_hash_nomt.user),
             hex::encode(&self.root_hash_from_live_db[0..32])
         );
 
         assert_eq!(
-            hex::encode(&self.root_hash_nomt.kernel),
+            hex::encode(self.root_hash_nomt.kernel),
             hex::encode(&self.root_hash_from_live_db[32..])
         );
 
         assert_eq!(
             hex::encode(&self.root_hash_from_ledger_db),
-            hex::encode(&self.root_hash_from_live_db)
+            hex::encode(self.root_hash_from_live_db)
         );
     }
 
     fn warning_on_rollback(&self, commit_status: &CommitStatus) {
         tracing::warn!(
-            live_db_kernel_root_hash = hex::encode(&self.root_hash_from_live_db),
-            root_hash_ledger_db = hex::encode(&self.root_hash_from_ledger_db),
-            user_nomt_db_root_hash = hex::encode(&self.root_hash_nomt.user),
-            kernel_nomt_db_root_hash = hex::encode(&self.root_hash_nomt.kernel),
+            live_db_kernel_root_hash = hex::encode(self.root_hash_from_live_db),
+            root_hash_ledger_db = hex::encode(self.root_hash_from_ledger_db),
+            user_nomt_db_root_hash = hex::encode(self.root_hash_nomt.user),
+            kernel_nomt_db_root_hash = hex::encode(self.root_hash_nomt.kernel),
             ?commit_status,
             "Detected in-progress commit. Rolling back DBs"
         );
