@@ -13,7 +13,7 @@ Authenticated state storage interface:
 
 ### Key Storage Implementations
 
-1. **NOMT (New Optimized Merkle Tree)** (`nomt/`):
+1. **NOMT (Nearly Optimal Merkle Tree)** (`nomt/`):
    - High-performance merkle tree optimized for rollups
    - Efficient for frequent updates
    - Located in separate `nomt` module
