@@ -5,7 +5,6 @@ use std::time::Duration;
 use rand::Rng;
 use sov_bank::Bank;
 use sov_bank::CallMessageDiscriminants::Transfer;
-use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::arbitrary::{self, Unstructured};
@@ -47,13 +46,6 @@ fn is_stop_height_error(err: &sov_api_spec::Error<sov_api_spec::types::ApiError>
     }
     false
 }
-
-pub const DEFAULT_BLOCK_TIME_MS: u64 = 200;
-pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
-    block_time_ms: DEFAULT_BLOCK_TIME_MS,
-};
-
-pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 5;
 
 pub const BUFFER_SIZE: usize = 100_000;
 // The minimum randomness needed to guarantee successful transaction generation
