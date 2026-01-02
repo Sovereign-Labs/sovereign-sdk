@@ -16,6 +16,8 @@ pub enum CommitStatus {
     /// A commit of **user state** is in progress.
     /// Stores the previous `user` root hash before the commit began.
     CommittingUserNomt([u8; 32]),
+    /// /// A commit of **LedgerDB** is in progress.
+    CommittingLedger([u8; 64]),
     /// A commit of **archival user and kernel state** in the flat-db is in progress.
     CommittingArchivalUserAndKernel,
     /// A commit of **live user and kernel state** in the flat-db is in progress.

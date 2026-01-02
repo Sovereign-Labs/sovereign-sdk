@@ -17,7 +17,7 @@ use super::data_helpers::{
     get_expected_chain_values, materialize_ledger_changes, verify_ledger_storage,
 };
 use crate::ledger_db::LedgerDb;
-use crate::schema::types::{BatchNumber, StoredSlot};
+use crate::schema::types::{BatchNumber, DiscardedBlobNumber, StoredSlot};
 use crate::storage_manager::tests::arbitrary::{get_block_hash, ForkDescription, ForkMap};
 
 pub trait TestableStorage: Sized {
@@ -831,9 +831,10 @@ where
 
         let slot_to_store = StoredSlot {
             hash: da_header.hash().into(),
-            state_root: Default::default(),
+            state_root: [0u8; 64].to_vec().into(),
             extra_data: vec![].into(),
             batches: BatchNumber(0)..BatchNumber(0),
+            discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
             timestamp: da_header.time(),
         };
 

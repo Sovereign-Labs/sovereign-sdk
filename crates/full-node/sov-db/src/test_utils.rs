@@ -307,6 +307,12 @@ pub enum CrashLocation {
     BeforeSavingUserlNomt,
     /// Rollup crashes before committing the user nomt.
     BeforeCommittingUserNomt,
+    /// Rollup crashes before saving the `CommittingLedger` flag.
+    BeforeSavingLedger,
+    /// Rollup crashes before committing the ledger.
+    BeforeCommittingLedger,
+    /// Rollup crashes before saving the `CommittingArchival` flag.
+    BeforeSavingArchival,
 }
 
 impl CrashLocation {

@@ -57,7 +57,8 @@ where
         TxSignedAndRecovered,
         u64,
     )> {
-        let block_env = self.block_env(state)?;
+        let mut block_env = self.block_env(state)?;
+        block_env.basefee = 0; // Set fee to zero for evm execution. Gas is paid for by the sov gas meter instead
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -88,6 +89,7 @@ where
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         start_timer!(total);
+        // Note: This does *not* verify the signature
         let tx = convert_to_tx_signed(message.rlp)?;
 
         if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
@@ -97,6 +99,7 @@ where
         start_timer!(fetch_state);
         let (cfg, cfg_env, block, tx_env, tx, pending_len) =
             self.fetch_state(context, state, tx)?;
+
         save_elapsed!(fetch_state_time SINCE fetch_state);
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
@@ -110,6 +113,7 @@ where
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
 
+        // Subtract the gas balance from the caller's account here. If balance is subzero, revert the SDK transaction
         save_elapsed!(execution_time SINCE execution);
         verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg, &mut db)?;
         #[cfg(feature = "native")]
@@ -204,10 +208,7 @@ where
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("TxState should have BasicGasMeter");
-        let funds = gas_meter
-            .remaining_funds
-            .expect("TxState gas meter has funds set")
-            .0;
+        let funds = gas_meter.remaining_funds.map(|funds| funds.0).unwrap_or(0);
         let gas = gas_meter.remaining_gas.as_ref()[0];
         let price = gas_meter.gas_price.as_ref()[0].0;
         let gas_limit = match (funds, gas) {

@@ -92,6 +92,36 @@ async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
     .unwrap()
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_saving_ledger() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeSavingLedger),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_commiting_ledger() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeCommittingLedger),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_saving_archival() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeSavingArchival),
+    )
+    .await
+    .unwrap()
+}
+
 // This test checks whether rollp can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);

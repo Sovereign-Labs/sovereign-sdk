@@ -10,15 +10,16 @@ use sov_rollup_interface::node::ledger_api::AggregatedProofResponse;
 use sov_rollup_interface::stf::{BatchReceipt, DiscardedBlob, StoredEvent, TxReceiptContents};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 
+use crate::schema::tables::DiscardedBlobHahsByNumber;
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, FinalizedSlots,
     ProofByUniqueId, SlotByHash, SlotByNumber, StfInfoByNumber, StfInfoMetadata, TxByHash,
     TxByNumber, LEDGER_TABLES,
 };
 use crate::schema::types::{
-    split_tx_for_storage, BatchNumber, EventNumber, LatestFinalizedSlotSingleton, ProofUniqueId,
-    StfInfoUniqueId, StoredBatch, StoredDiscardedBlob, StoredSlot, StoredStfInfo,
-    StoredTransaction, TxNumber,
+    split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventNumber,
+    LatestFinalizedSlotSingleton, ProofUniqueId, StfInfoUniqueId, StoredBatch, StoredDiscardedBlob,
+    StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
 use crate::DbOptions;
 
@@ -38,6 +39,8 @@ pub struct ItemNumbers {
     pub slot_number: SlotNumber,
     /// The batch number
     pub batch_number: u64,
+    /// The discarded batch number
+    pub discarded_batch_number: u64,
     /// The transaction number
     pub tx_number: u64,
     /// The event number
@@ -327,6 +330,9 @@ impl LedgerDb {
             batch_number: Self::last_version_written(&db, BatchByNumber)?
                 .map(|x| x.0 + 1)
                 .unwrap_or_default(),
+            discarded_batch_number: Self::last_version_written(&db, DiscardedBlobHahsByNumber)?
+                .map(|x| x.0 + 1)
+                .unwrap_or_default(),
             tx_number: Self::last_version_written(&db, TxByNumber)?
                 .map(|x| x.0 + 1)
                 .unwrap_or_default(),
@@ -359,8 +365,13 @@ impl LedgerDb {
     fn put_discarded_blob(
         &self,
         blob: StoredDiscardedBlob,
+        discarded_batch_number: DiscardedBlobNumber,
         schema_batch: &mut SchemaBatch,
     ) -> anyhow::Result<()> {
+        schema_batch.put::<DiscardedBlobHahsByNumber>(
+            &discarded_batch_number,
+            &blob.discarded_blob.hash.0,
+        )?;
         schema_batch.put::<DiscardedBlobByHash>(&blob.discarded_blob.hash.0, &blob)
     }
 
@@ -440,12 +451,21 @@ impl LedgerDb {
             current_item_numbers.batch_number += 1;
         }
 
-        for discarded_blob in data_to_commit.discarded_blobs.into_iter() {
+        let first_discarded_blob_number = current_item_numbers.discarded_batch_number;
+
+        let last_discarded_blob_number =
+            first_discarded_blob_number + data_to_commit.discarded_blobs.len() as u64;
+
+        for (discarded_blob_index, discarded_blob) in
+            data_to_commit.discarded_blobs.into_iter().enumerate()
+        {
+            let discarded_blob_index = discarded_blob_index as u64;
             self.put_discarded_blob(
                 StoredDiscardedBlob {
                     discarded_blob,
                     slot_number,
                 },
+                DiscardedBlobNumber(first_discarded_blob_number + discarded_blob_index),
                 &mut schema_batch,
             )?;
         }
@@ -457,6 +477,8 @@ impl LedgerDb {
             // TODO: Add a method to the slot data trait allowing additional data to be stored
             extra_data: vec![].into(),
             batches: BatchNumber(first_batch_number)..BatchNumber(last_batch_number),
+            discarded_blobs: DiscardedBlobNumber(first_discarded_blob_number)
+                ..DiscardedBlobNumber(last_discarded_blob_number),
             timestamp: data_to_commit.slot_data.timestamp(),
         };
         self.put_slot(&slot_to_store, &slot_number, &mut schema_batch)?;
@@ -617,5 +639,167 @@ impl LedgerDb {
     ) -> anyhow::Result<Option<StoredDiscardedBlob>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get_async::<DiscardedBlobByHash>(&blob_hash.0).await
+    }
+
+    /// Get the head state root hash.
+    pub fn get_head_root_hash(db: Arc<rockbound::DB>) -> anyhow::Result<Option<[u8; 64]>> {
+        let db = DeltaReader::new(db, Vec::new());
+        let state_root = db
+            .get_largest::<SlotByNumber>()?
+            .map(|(_, stored_slot)| {
+                let root = stored_slot.state_root.as_ref();
+                root.try_into()
+            })
+            .transpose()?;
+
+        Ok(state_root)
+    }
+
+    /// Rolls back the last committed slot from the ledger database.
+    /// If there are no slots in the database, this method returns `Ok(())` without doing anything.
+    pub fn rollback_head_slot(ledger_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
+        let schema_batch = Self::create_schema_batch_for_rollback(ledger_db.clone())?;
+        ledger_db.write_schemas(&schema_batch)?;
+        Ok(())
+    }
+
+    fn create_schema_batch_for_rollback(db: Arc<rockbound::DB>) -> anyhow::Result<SchemaBatch> {
+        let mut schema_batch = SchemaBatch::new();
+        let db = DeltaReader::new(db, Vec::new());
+
+        // Get the current head slot
+        let Some((head_slot_number, head_slot)) = db.get_largest::<SlotByNumber>()? else {
+            tracing::warn!("No slots in database, nothing to rollback");
+            return Ok(schema_batch);
+        };
+
+        tracing::info!(
+            slot_number = %head_slot_number,
+            "Rolling back last slot from ledger database"
+        );
+
+        // Delete all discarded blobs
+        for current_discarded_blob_number in
+            head_slot.discarded_blobs.start.0..head_slot.discarded_blobs.end.0
+        {
+            let current_discarded_blob_number = DiscardedBlobNumber(current_discarded_blob_number);
+            if let Some(current_discarded_blob_hash) =
+                db.get::<DiscardedBlobHahsByNumber>(&current_discarded_blob_number)?
+            {
+                Self::delete_discarded_blob(
+                    &mut schema_batch,
+                    current_discarded_blob_hash,
+                    &current_discarded_blob_number,
+                )?;
+            }
+        }
+
+        // Delete all batches in this slot
+        for current_batch_number in head_slot.batches.start.0..head_slot.batches.end.0 {
+            let current_batch_number = BatchNumber(current_batch_number);
+
+            if let Some(batch) = db.get::<BatchByNumber>(&current_batch_number)? {
+                // Delete all transactions in this batch
+                for current_tx_number in batch.txs.start.0..batch.txs.end.0 {
+                    let current_tx_number = TxNumber(current_tx_number);
+
+                    if let Some(tx) = db.get::<TxByNumber>(&current_tx_number)? {
+                        // Delete all events in this transaction
+                        for current_event_number in tx.events.start.0..tx.events.end.0 {
+                            let current_event_number = EventNumber(current_event_number);
+
+                            if let Some(event) = db.get::<EventByNumber>(&current_event_number)? {
+                                Self::delete_event(
+                                    &mut schema_batch,
+                                    current_tx_number,
+                                    &event,
+                                    current_event_number,
+                                )?;
+                            }
+                        }
+                        Self::delete_tx(&mut schema_batch, &tx, current_tx_number)?;
+                    }
+                }
+
+                Self::delete_batch(&mut schema_batch, &batch, &current_batch_number)?;
+            }
+        }
+
+        Self::delete_slot(&mut schema_batch, &head_slot, &head_slot_number)?;
+
+        // Check if we need to update the finalized slot.
+        if let Some(finalized_slot) = db.get::<FinalizedSlots>(&LatestFinalizedSlotSingleton)? {
+            if finalized_slot >= head_slot_number {
+                // Find the previous slot number.
+                let new_finalized_slot = if head_slot_number > SlotNumber::GENESIS {
+                    // Get the previous slot
+                    let mut prev_slot = head_slot_number;
+                    prev_slot.decr();
+                    prev_slot
+                } else {
+                    SlotNumber::GENESIS
+                };
+                tracing::info!(
+                    old_finalized_slot = %finalized_slot,
+                    new_finalized_slot = %new_finalized_slot,
+                    "Updating finalized slot during rollback"
+                );
+                schema_batch
+                    .put::<FinalizedSlots>(&LatestFinalizedSlotSingleton, &new_finalized_slot)?;
+            }
+        }
+
+        Ok(schema_batch)
+    }
+
+    fn delete_event(
+        schema_batch: &mut SchemaBatch,
+        tx_number: TxNumber,
+        event: &StoredEvent,
+        event_number: EventNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<EventByNumber>(&event_number)?;
+        schema_batch.delete::<EventByKey>(&(event.key().clone(), tx_number, event_number))?;
+        Ok(())
+    }
+
+    fn delete_tx(
+        schema_batch: &mut SchemaBatch,
+        tx: &StoredTransaction,
+        tx_number: TxNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<TxByNumber>(&tx_number)?;
+        schema_batch.delete::<TxByHash>(&(tx.hash, tx_number))?;
+        Ok(())
+    }
+
+    fn delete_batch(
+        schema_batch: &mut SchemaBatch,
+        batch: &StoredBatch,
+        batch_number: &BatchNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<BatchByNumber>(batch_number)?;
+        schema_batch.delete::<BatchByHash>(&batch.hash)?;
+        Ok(())
+    }
+
+    fn delete_discarded_blob(
+        schema_batch: &mut SchemaBatch,
+        discarded_blob_hash: [u8; 32],
+        discarded_blob_number: &DiscardedBlobNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<DiscardedBlobHahsByNumber>(discarded_blob_number)?;
+        schema_batch.delete::<DiscardedBlobByHash>(&discarded_blob_hash)?;
+        Ok(())
+    }
+
+    fn delete_slot(
+        schema_batch: &mut SchemaBatch,
+        slot: &StoredSlot,
+        slot_number: &SlotNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<SlotByNumber>(slot_number)?;
+        schema_batch.delete::<SlotByHash>(&slot.hash)?;
+        Ok(())
     }
 }
