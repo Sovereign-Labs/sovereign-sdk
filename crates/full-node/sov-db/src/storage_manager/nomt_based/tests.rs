@@ -1,8 +1,7 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use nomt::trie::KeyPath;
-use rockbound::{SchemaBatch, SchemaValue};
+use rockbound::SchemaBatch;
 use sha2::Digest;
 use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
 use sov_rollup_interface::common::SlotNumber;
@@ -10,11 +9,9 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
-use crate::commit_flag::CommitFlag;
 use crate::config::RollupDbConfig;
 use crate::historical_state::HistoricalStateReader;
 use crate::schema::types::slot_key::{SlotKey, SlotValue};
-use crate::state_db_nomt::{get_session_builder_from_committed, NomtStateDb, StateRootHashes};
 use crate::storage_manager::tests::arbitrary::ForkDescription;
 use crate::storage_manager::tests::data_helpers::verify_accessory_db;
 use crate::storage_manager::tests::generic_tests::{
