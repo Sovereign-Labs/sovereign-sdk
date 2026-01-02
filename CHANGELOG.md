@@ -1,3 +1,6 @@
+# 2026-01-01
+- #2279 Propagates fee information to ethereum block responses
+
 # 2025-12-22
 - #2265 Adds a config to the EVM to allow accepting invalid transactions.
 

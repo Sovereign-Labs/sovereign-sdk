@@ -55,7 +55,8 @@ where
         TxSignedAndRecovered,
         u64,
     )> {
-        let block_env = self.block_env(state)?;
+        let mut block_env = self.block_env(state)?;
+        block_env.basefee = 0; // Set fee to zero for evm execution. Gas is paid for by the sov gas meter instead
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -96,6 +97,7 @@ where
         start_timer!(fetch_state);
         let (cfg, cfg_env, block, tx_env, tx, pending_len) =
             self.fetch_state(context, state, tx)?;
+
         save_elapsed!(fetch_state_time SINCE fetch_state);
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
@@ -109,6 +111,7 @@ where
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
 
+        // Subtract the gas balance from the caller's account here. If balance is subzero, revert the SDK transaction
         save_elapsed!(execution_time SINCE execution);
         verify_contract_creation_allowlist(&state_changes, &tx.signer, &cfg, &mut db)?;
         #[cfg(feature = "native")]

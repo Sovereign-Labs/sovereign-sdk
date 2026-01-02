@@ -50,13 +50,13 @@ where
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
 
-        let block = init_block(config, self.base_fee());
+        let block = init_block(config);
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
 
         let block_env = create_block_env(
-            self.base_fee(),
+            0,
             block.header.gas_limit,
             block.header.timestamp,
             block.header.beneficiary,
@@ -101,7 +101,7 @@ where
     }
 }
 
-fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
+fn init_block(config: &EvmGenesisConfig) -> Block {
     let header = alloy_consensus::Header {
         beneficiary: config.chain_spec.coinbase,
         // This will be set in finalize_hook or in the next begin_rollup_block_hook
@@ -109,7 +109,7 @@ fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
         excess_blob_gas: Some(EXCESS_BLOB_GAS),
-        base_fee_per_gas: Some(base_fee),
+        base_fee_per_gas: Some(0),
         // Default values
         parent_hash: B256::ZERO,
         ommers_hash: EMPTY_OMMER_ROOT_HASH,
