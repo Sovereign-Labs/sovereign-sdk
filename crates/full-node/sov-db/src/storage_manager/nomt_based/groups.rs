@@ -564,10 +564,7 @@ fn root_hash_from_life_db(flat_state: &FlatStateDb) -> anyhow::Result<Option<[u8
     )?
     .unwrap_or_else(|| {
         // If `last_version`` is persent we must always have root hash.
-        panic!(
-            "Root hash missing for the latest LiveDB version {}",
-            last_version
-        );
+        panic!("Root hash missing for the latest LiveDB version {last_version}",);
     });
 
     Ok(Some(state_root_hash.try_into().unwrap()))
