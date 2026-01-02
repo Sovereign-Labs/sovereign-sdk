@@ -787,10 +787,11 @@ where
 
         let (stf_storage, _) = storage_manager.create_state_for(&da_header).unwrap();
 
-        let stf_changes = stf_storage.materialize_from_key_values(&expected_values, height - 1);
+        let (stf_changes, _) =
+            stf_storage.materialize_from_key_values(&expected_values, height - 1);
 
         storage_manager
-            .save_change_set(&da_header, stf_changes.0, SchemaBatch::default())
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
             .unwrap();
     }
 

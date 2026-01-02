@@ -342,13 +342,13 @@ async fn test_historical_state_with_pruning() {
             let value = height.to_be_bytes().to_vec();
             values.push((user_key, Some(value)));
         }
-        let stf_changes = stf_storage.materialize_from_key_values(&values, height);
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
 
         // Does not matter in this test
         let ledger_changes = SchemaBatch::default();
         // Save the change set
         storage_manager
-            .save_change_set(&da_header, stf_changes.0, ledger_changes)
+            .save_change_set(&da_header, stf_changes, ledger_changes)
             .unwrap();
         storage_manager.finalize(&da_header).unwrap();
     }
