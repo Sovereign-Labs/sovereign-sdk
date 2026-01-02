@@ -117,7 +117,7 @@ where
 
     let genesis = GenesisConfig::from_minimal_config(
         genesis_config.clone().into(),
-        EvmGenesisConfig::default(),
+        EvmGenesisConfig::default_with_admin(admin_account.address()),
         PaymasterConfig {
             payers: [PayerGenesisConfig {
                 payer_address: payer.address(),

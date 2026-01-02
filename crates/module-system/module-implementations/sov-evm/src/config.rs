@@ -42,6 +42,20 @@ pub struct EvmGenesisConfig<S: Spec> {
     pub admin: S::Address,
 }
 
+impl<S: Spec> EvmGenesisConfig<S> {
+    /// Creates a default configuration with the given admin address.
+    pub fn default_with_admin(admin: S::Address) -> Self {
+        Self {
+            accounts: vec![],
+            initial_base_fee: 0,
+            genesis_timestamp: 0,
+            chain_spec: EvmChainSpec::default(),
+            contract_creation_policy: ContractCreationPolicy::Everyone,
+            admin,
+        }
+    }
+}
+
 impl Default for EvmChainSpec {
     fn default() -> Self {
         Self {
