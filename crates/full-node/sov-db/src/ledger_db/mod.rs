@@ -641,6 +641,16 @@ impl LedgerDb {
         db.get_async::<DiscardedBlobByHash>(&blob_hash.0).await
     }
 
+    /// TODO
+    pub fn get_head_root_hast(db: Arc<rockbound::DB>) -> anyhow::Result<Option<[u8; 64]>> {
+        let db = DeltaReader::new(db, Vec::new());
+        Ok(db.get_largest::<SlotByNumber>()?.map(|s| {
+            let r = s.1.state_root.as_ref().to_vec();
+            let arr: [u8; 64] = r.try_into().expect("Slice must be exactly 64 bytes");
+            arr
+        }))
+    }
+
     /// Rolls back the last committed slot from the ledger database.
     /// If there are no slots in the database, this method returns `Ok(())` without doing anything.
     pub fn rollback_last_slot(ledger_db: Arc<rockbound::DB>) -> anyhow::Result<()> {

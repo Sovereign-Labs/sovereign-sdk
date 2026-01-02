@@ -89,12 +89,33 @@ where
                 },
         } = group;
 
+        {
+            println!("---");
+            println!("");
+            let nomt_root_hashes = self.merklized_state.get_root_hashes();
+            println!("nomt_root_hashes before {:?}", nomt_root_hashes);
+        }
         let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
+
+        {
+            let nomt_root_hashes = self.merklized_state.get_root_hashes();
+            println!("nomt_root_hashes after {:?}", nomt_root_hashes);
+        }
+
+        {
+            let root_hash = LedgerDb::get_head_root_hast(self.ledger.clone())?;
+            println!("root_hash before {:?}", root_hash);
+        }
 
         self.commit_flag
             .save_commit_status(&CommitStatus::CommittingLedgerDb)?;
 
         let ledger_commit = self.commit_ledger(&ledger)?;
+
+        {
+            let root_hash = LedgerDb::get_head_root_hast(self.ledger.clone())?;
+            println!("root_hash after {:?}", root_hash);
+        }
 
         let flat_metrics = self
             .flat_state
