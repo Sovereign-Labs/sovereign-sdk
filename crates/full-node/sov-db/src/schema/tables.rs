@@ -40,7 +40,7 @@ use super::types::{
     LatestFinalizedSlotSingleton, ProofUniqueId, StateRootHashId, StfInfoUniqueId, StoredBatch,
     StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
-use crate::schema::types::StoredDiscardedBlob;
+use crate::schema::types::{DiscardedBlobNumber, StoredDiscardedBlob};
 
 /* Other tables used by the Rollup */
 
@@ -50,8 +50,9 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
     SlotByNumber::table_name(),
     SlotByHash::table_name(),
     BatchByHash::table_name(),
-    DiscardedBlobByHash::table_name(),
     BatchByNumber::table_name(),
+    DiscardedBlobByHash::table_name(),
+    DiscardedBlobHahsByNumber::table_name(),
     TxByHash::table_name(),
     TxByNumber::table_name(),
     EventByKey::table_name(),
@@ -236,14 +237,19 @@ define_table_with_seek_key_codec!(
     (BatchByNumber) BatchNumber => StoredBatch
 );
 
-define_table_with_seek_key_codec!(
-    /// The primary source for discarded blobs
-    (DiscardedBlobByHash) DbHash => StoredDiscardedBlob
-);
-
 define_table_with_default_codec!(
     /// A "secondary index" for batch data by hash
     (BatchByHash) DbHash => BatchNumber
+);
+
+define_table_with_seek_key_codec!(
+    /// The primary source for batch data
+    (DiscardedBlobHahsByNumber) DiscardedBlobNumber => DbHash
+);
+
+define_table_with_seek_key_codec!(
+    /// The primary source for discarded blobs
+    (DiscardedBlobByHash) DbHash => StoredDiscardedBlob
 );
 
 define_table_with_seek_key_codec!(

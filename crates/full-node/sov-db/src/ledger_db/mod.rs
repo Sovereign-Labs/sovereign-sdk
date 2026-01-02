@@ -10,15 +10,16 @@ use sov_rollup_interface::node::ledger_api::AggregatedProofResponse;
 use sov_rollup_interface::stf::{BatchReceipt, DiscardedBlob, StoredEvent, TxReceiptContents};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 
+use crate::schema::tables::DiscardedBlobHahsByNumber;
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, FinalizedSlots,
     ProofByUniqueId, SlotByHash, SlotByNumber, StfInfoByNumber, StfInfoMetadata, TxByHash,
     TxByNumber, LEDGER_TABLES,
 };
 use crate::schema::types::{
-    split_tx_for_storage, BatchNumber, EventNumber, LatestFinalizedSlotSingleton, ProofUniqueId,
-    StfInfoUniqueId, StoredBatch, StoredDiscardedBlob, StoredSlot, StoredStfInfo,
-    StoredTransaction, TxNumber,
+    split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventNumber,
+    LatestFinalizedSlotSingleton, ProofUniqueId, StfInfoUniqueId, StoredBatch, StoredDiscardedBlob,
+    StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
 use crate::DbOptions;
 
@@ -38,6 +39,8 @@ pub struct ItemNumbers {
     pub slot_number: SlotNumber,
     /// The batch number
     pub batch_number: u64,
+    /// The discarded batch number
+    pub discarded_batch_number: u64,
     /// The transaction number
     pub tx_number: u64,
     /// The event number
@@ -327,6 +330,9 @@ impl LedgerDb {
             batch_number: Self::last_version_written(&db, BatchByNumber)?
                 .map(|x| x.0 + 1)
                 .unwrap_or_default(),
+            discarded_batch_number: Self::last_version_written(&db, DiscardedBlobHahsByNumber)?
+                .map(|x| x.0 + 1)
+                .unwrap_or_default(),
             tx_number: Self::last_version_written(&db, TxByNumber)?
                 .map(|x| x.0 + 1)
                 .unwrap_or_default(),
@@ -359,8 +365,13 @@ impl LedgerDb {
     fn put_discarded_blob(
         &self,
         blob: StoredDiscardedBlob,
+        discarded_batch_number: DiscardedBlobNumber,
         schema_batch: &mut SchemaBatch,
     ) -> anyhow::Result<()> {
+        schema_batch.put::<DiscardedBlobHahsByNumber>(
+            &discarded_batch_number,
+            &blob.discarded_blob.hash.0,
+        )?;
         schema_batch.put::<DiscardedBlobByHash>(&blob.discarded_blob.hash.0, &blob)
     }
 
@@ -440,12 +451,21 @@ impl LedgerDb {
             current_item_numbers.batch_number += 1;
         }
 
-        for discarded_blob in data_to_commit.discarded_blobs.into_iter() {
+        let first_discarded_blob_number = current_item_numbers.discarded_batch_number;
+
+        let last_discarded_blob_number =
+            first_discarded_blob_number + data_to_commit.discarded_blobs.len() as u64;
+
+        for (discarded_blob_index, discarded_blob) in
+            data_to_commit.discarded_blobs.into_iter().enumerate()
+        {
+            let discarded_blob_index = discarded_blob_index as u64;
             self.put_discarded_blob(
                 StoredDiscardedBlob {
                     discarded_blob,
                     slot_number,
                 },
+                DiscardedBlobNumber(first_discarded_blob_number + discarded_blob_index),
                 &mut schema_batch,
             )?;
         }
@@ -457,6 +477,8 @@ impl LedgerDb {
             // TODO: Add a method to the slot data trait allowing additional data to be stored
             extra_data: vec![].into(),
             batches: BatchNumber(first_batch_number)..BatchNumber(last_batch_number),
+            discarded_blobs: DiscardedBlobNumber(first_discarded_blob_number)
+                ..DiscardedBlobNumber(last_discarded_blob_number),
             timestamp: data_to_commit.slot_data.timestamp(),
         };
         self.put_slot(&slot_to_store, &slot_number, &mut schema_batch)?;
@@ -644,6 +666,22 @@ impl LedgerDb {
             "Rolling back last slot from ledger database"
         );
 
+        // Delete all discarded blobs
+        for current_discarded_blob_number in
+            head_slot.discarded_blobs.start.0..head_slot.discarded_blobs.end.0
+        {
+            let current_discarded_blob_number = DiscardedBlobNumber(current_discarded_blob_number);
+            if let Some(discarded_blob_hash) =
+                db.get::<DiscardedBlobHahsByNumber>(&current_discarded_blob_number)?
+            {
+                Self::delete_discarded_blob(
+                    &mut schema_batch,
+                    discarded_blob_hash,
+                    &current_discarded_blob_number,
+                )?;
+            }
+        }
+
         // Delete all batches in this slot
         for current_batch_number in head_slot.batches.start.0..head_slot.batches.end.0 {
             let current_batch_number = BatchNumber(current_batch_number);
@@ -704,36 +742,42 @@ impl LedgerDb {
 
     fn delete_event(
         schema_batch: &mut SchemaBatch,
-        current_tx: TxNumber,
+        tx_number: TxNumber,
         event: &StoredEvent,
-        current_event_number: EventNumber,
+        event_number: EventNumber,
     ) -> anyhow::Result<()> {
-        schema_batch.delete::<EventByNumber>(&current_event_number)?;
-        schema_batch.delete::<EventByKey>(&(
-            event.key().clone(),
-            current_tx,
-            current_event_number,
-        ))?;
+        schema_batch.delete::<EventByNumber>(&event_number)?;
+        schema_batch.delete::<EventByKey>(&(event.key().clone(), tx_number, event_number))?;
         Ok(())
     }
 
     fn delete_tx(
         schema_batch: &mut SchemaBatch,
         tx: &StoredTransaction,
-        current_tx: TxNumber,
+        tx_number: TxNumber,
     ) -> anyhow::Result<()> {
-        schema_batch.delete::<TxByNumber>(&current_tx)?;
-        schema_batch.delete::<TxByHash>(&(tx.hash, current_tx))?;
+        schema_batch.delete::<TxByNumber>(&tx_number)?;
+        schema_batch.delete::<TxByHash>(&(tx.hash, tx_number))?;
         Ok(())
     }
 
     fn delete_batch(
         schema_batch: &mut SchemaBatch,
         batch: &StoredBatch,
-        current_batch_number: &BatchNumber,
+        batch_number: &BatchNumber,
     ) -> anyhow::Result<()> {
-        schema_batch.delete::<BatchByNumber>(current_batch_number)?;
+        schema_batch.delete::<BatchByNumber>(batch_number)?;
         schema_batch.delete::<BatchByHash>(&batch.hash)?;
+        Ok(())
+    }
+
+    fn delete_discarded_blob(
+        schema_batch: &mut SchemaBatch,
+        discarded_blob_hash: [u8; 32],
+        discarded_blob_number: &DiscardedBlobNumber,
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<DiscardedBlobHahsByNumber>(discarded_blob_number)?;
+        schema_batch.delete::<DiscardedBlobByHash>(&discarded_blob_hash)?;
         Ok(())
     }
 

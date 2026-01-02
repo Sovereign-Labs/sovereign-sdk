@@ -77,6 +77,8 @@ pub struct StoredSlot {
     pub extra_data: DbBytes,
     /// The range of batches which occurred in this slot.
     pub batches: std::ops::Range<BatchNumber>,
+    /// TODO
+    pub discarded_blobs: std::ops::Range<DiscardedBlobNumber>,
     /// The timestamp of the slot.
     pub timestamp: Time,
 }
@@ -270,6 +272,7 @@ macro_rules! u64_wrapper {
 
 u64_wrapper!(TxIncrId);
 u64_wrapper!(BatchNumber);
+u64_wrapper!(DiscardedBlobNumber);
 u64_wrapper!(TxNumber);
 u64_wrapper!(EventNumber);
 u64_wrapper!(ProofUniqueId);
