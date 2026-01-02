@@ -91,6 +91,11 @@ where
 
         let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
 
+        self.commit_flag
+            .save_commit_status(&CommitStatus::CommittingLedgerDb)?;
+
+        let ledger_commit = self.commit_ledger(&ledger)?;
+
         let flat_metrics = self
             .flat_state
             .commit(historical_state, &self.commit_flag)?;
@@ -99,7 +104,6 @@ where
             .save_commit_status(&CommitStatus::Success)?;
 
         let accessory_commit = self.commit_accessory(&accessory)?;
-        let ledger_commit = self.commit_ledger(&ledger)?;
 
         let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
