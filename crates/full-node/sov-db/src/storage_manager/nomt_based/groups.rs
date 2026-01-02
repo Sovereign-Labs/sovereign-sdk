@@ -62,6 +62,7 @@ where
             &commit_flag,
             merklized_state.clone(),
             ledger_rocksdb.clone(),
+            &flat_state,
         )?;
 
         // Validate root hashes.
@@ -144,31 +145,41 @@ where
         commit_flag: &CommitFlag,
         merkelized_state: Arc<NomtStateDb<H>>,
         ledger_db: Arc<rockbound::DB>,
+        flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<()> {
+        let root_hash_from_life_db = Self::root_hash_from_life_db(flat_state_db)?
+            .unwrap_or_else(|| Self::pre_genesis_root());
+
+        let root_hash_from_life_db_kernel = &root_hash_from_life_db[32..];
+        let root_hash_from_life_db_user = &root_hash_from_life_db[..31];
+
         let commit_status = commit_flag.read_status()?;
+
         match commit_status {
-            CommitStatus::CommittingKernelNomt(saved_hash) => {
-                let current_kernel_root_hash = merkelized_state.kernel.root().into_inner();
+            CommitStatus::CommittingKernelNomt(_) => {
+                let mut current_kernel_root_hash = merkelized_state.kernel.root().into_inner();
 
                 // Kernel commit was successful but later commits failed. We rollback only the kernel.
-                if saved_hash != current_kernel_root_hash {
+                if root_hash_from_life_db_kernel != current_kernel_root_hash {
                     tracing::warn!(
-                        flag_kernel_root_hash = hex::encode(saved_hash),
+                        flag_kernel_root_hash = hex::encode(root_hash_from_life_db_kernel),
                         db_kernel_root_hash = hex::encode(current_kernel_root_hash),
                         ?commit_status,
                         "Detected in-progress commit. Rolling back kernel DB."
                     );
 
                     merkelized_state.kernel.rollback(1)?;
+                    current_kernel_root_hash = merkelized_state.kernel.root().into_inner();
+                    assert_eq!(root_hash_from_life_db_kernel, current_kernel_root_hash)
                 }
             }
-            CommitStatus::CommittingUserNomt(saved_hash) => {
+            CommitStatus::CommittingUserNomt(_) => {
                 let current_user_root_hash = merkelized_state.user.root().into_inner();
 
                 // User & Kernel commit was successful but later commits failed. We rollback both.
-                if saved_hash != current_user_root_hash {
+                if root_hash_from_life_db_user != current_user_root_hash {
                     tracing::warn!(
-                        flag_user_root_hash = hex::encode(saved_hash),
+                        flag_user_root_hash = hex::encode(root_hash_from_life_db_user),
                         db_user_root_hash = hex::encode(current_user_root_hash),
                         ?commit_status,
                         "Detected in-progress commit. Rolling back kernel DB."
@@ -186,13 +197,13 @@ where
                 }
             }
 
-            CommitStatus::CommittingLedger(ledger_root_hash) => {
+            CommitStatus::CommittingLedger(_) => {
                 let current_root_hash = LedgerDb::get_head_root_hash(ledger_db.clone())?
                     // This can be empty only during genesis startup; when that happens, we initialize CommitStatus to Succes.
                     .expect("Error: The ledger database does not contain the state root hash.");
 
                 // User, Kernel & LedgerDb commit was successful but later commits failed. We rollback all of them.
-                if current_root_hash != ledger_root_hash {
+                if current_root_hash != root_hash_from_life_db {
                     merkelized_state.kernel.rollback(1)?;
                     merkelized_state.user.rollback(1)?;
                     LedgerDb::rollback_head_slot(ledger_db)?;
@@ -435,6 +446,31 @@ where
             historical_state,
             accessory_state,
         }
+    }
+
+    fn root_hash_from_life_db(flat_state: &FlatStateDb) -> anyhow::Result<Option<[u8; 64]>> {
+        let historical_state_delta_reader =
+            DeltaReader::new(flat_state.live_db.clone(), Vec::new());
+
+        let Some(last_version) =
+            HistoricalStateReader::last_version_from_reader(&historical_state_delta_reader)?
+        else {
+            return Ok(None);
+        };
+
+        let state_root_hash = HistoricalStateReader::get_serialized_root_hash_from_reader(
+            &historical_state_delta_reader,
+            last_version,
+        )?
+        .unwrap_or_else(|| {
+            // If `last_version`` is persent we must always have root hash.
+            panic!(
+                "Root hash missing for the latest LiveDB version {}",
+                last_version
+            );
+        });
+
+        Ok(Some(state_root_hash.try_into().unwrap()))
     }
 
     fn are_root_hashes_match(
