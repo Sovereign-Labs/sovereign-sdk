@@ -1,8 +1,11 @@
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::Address;
+use borsh::{BorshDeserialize, BorshSerialize};
 use revm::primitives::hardfork::SpecId;
+use schemars::JsonSchema;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{ETHEREUM_BLOCK_GAS_LIMIT, ETHEREUM_TX_GAS_LIMIT};
+use sov_modules_api::{HexString, SafeVec, Spec, ETHEREUM_BLOCK_GAS_LIMIT, ETHEREUM_TX_GAS_LIMIT};
+use sov_universal_wallet::UniversalWallet;
 use std::collections::BTreeSet;
 
 use crate::AccountData;
@@ -81,6 +84,14 @@ impl ContractCreationPolicy {
             Self::Allowlist(allowlist) => allowlist.contains(address),
         }
     }
+
+    /// Returns the allowlist, leaving an empty list in its place. If the policy is Everyone, returns an empty list.
+    pub fn take_allowlist(&mut self) -> BTreeSet<Address> {
+        match self {
+            Self::Allowlist(allowlist) => std::mem::take(allowlist),
+            Self::Everyone => BTreeSet::new(),
+        }
+    }
 }
 
 /// Runtime configuration for EVM execution
@@ -107,6 +118,109 @@ impl Default for EvmRuntimeConfig {
             contract_creation_policy: ContractCreationPolicy::Everyone,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(transparent)]
+/// A wrapper around `SpecId` that implements Borsh serialization and deserialization.
+pub struct BorshSpecId(#[schemars(with = "String")] pub SpecId);
+
+impl BorshSerialize for BorshSpecId {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+        let id = self.0 as u8;
+        id.serialize(writer)
+    }
+}
+
+impl BorshDeserialize for BorshSpecId {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
+        let id = u8::deserialize_reader(reader)?;
+        Ok(Self(SpecId::try_from(id).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?))
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Deserialize,
+    serde::Serialize,
+    BorshSerialize,
+    BorshDeserialize,
+    UniversalWallet,
+    JsonSchema,
+)]
+#[serde(bound = "S: Spec")]
+#[schemars(bound = "S: Spec", rename = "evm_runtime_config_update")]
+/// An update to the runtime configuration.
+pub struct EvmRuntimeConfigUpdate<S: Spec> {
+    // Validation: ensure SpecId > current_spec_id and activation block number is greater than the current block number
+    /// A new hardfork to activate and the block number at which it activates
+    #[sov_wallet(as_ty = "Option<(u64, u8)>")]
+    pub new_hardfork: Option<(u64, BorshSpecId)>,
+    /// A new contract creation policy to apply. None means "no change"
+    pub new_contract_creation_policy: Option<ContractCreationPolicyUpdate>,
+    /// A new chain spec to apply. None means "no change"
+    pub chain_spec_update: Option<ChainSpecUpdate>,
+    /// A new admin address to set. None means "no change"
+    pub new_admin: Option<S::Address>,
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Deserialize,
+    serde::Serialize,
+    borsh::BorshSerialize,
+    borsh::BorshDeserialize,
+    UniversalWallet,
+    JsonSchema,
+)]
+/// An update to the chain spec.
+pub struct ChainSpecUpdate {
+    /// The new limit for contract code size. None means "no change"
+    // Check that the limit is less than 10MB
+    pub new_limit_contract_code_size: Option<usize>,
+    /// The new block gas limit. Must be greater than 5M to avoid censorship. None means "no change"
+    /// Check that the limit is greater than 5M to avoid accidental complete shutdown.
+    pub new_block_gas_limit: Option<u64>,
+    /// The new tx gas limit. Must be less than or equal to the effective block gas limit after applying the update. None means "no change"
+    pub new_tx_gas_limit: Option<u64>,
+}
+
+/// Policy - who can create contracts. Everyone or allowlist
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Deserialize,
+    serde::Serialize,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    UniversalWallet,
+    JsonSchema,
+)]
+#[serde(rename = "contract_creation_policy_update")] // rename_all isn't supported in UniversalWallet yet
+pub enum ContractCreationPolicyUpdate {
+    /// No restrictions on contract creation
+    #[default]
+    #[serde(rename = "everyone")]
+    Everyone,
+    /// Only allowed addresses can create contracts
+    #[serde(rename = "allowlist")]
+    Allowlist {
+        /// Addresses to add to the allowlist
+        add: SafeVec<HexString<[u8; 20]>, 32>,
+        /// Addresses to remove from the allowlist
+        remove: SafeVec<HexString<[u8; 20]>, 32>,
+    },
 }
 
 #[derive(Debug, Copy, Clone, Default, serde::Serialize, serde::Deserialize, Eq, PartialEq)]

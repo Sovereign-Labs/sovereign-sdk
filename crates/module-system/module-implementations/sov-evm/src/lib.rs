@@ -81,6 +81,10 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) accounts: StateMap<Address, DbAccount, BcsCodec>,
 
+    /// The address allowed to make changes to the `cfg`.
+    #[state]
+    pub(crate) admin: StateValue<S::Address, BcsCodec>,
+
     /// Storage for accounts.
     #[state]
     pub(crate) account_storage: StateMap<AccountStorageKey, U256, BcsCodec>,
@@ -195,7 +199,7 @@ where
 
     type Config = EvmGenesisConfig;
 
-    type CallMessage = CallMessage;
+    type CallMessage = CallMessage<S>;
 
     type Event = ();
 
@@ -216,7 +220,12 @@ where
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error> {
-        Ok(self.execute_call(msg, context, state)?)
+        match msg {
+            CallMessage::Call(tx) => Ok(self.execute_call(tx, context, state)?),
+            CallMessage::UpdateRuntimeConfig(update) => {
+                Ok(self.update_runtime_config(update, context, state)?)
+            }
+        }
     }
 }
 

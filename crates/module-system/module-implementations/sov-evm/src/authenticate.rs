@@ -141,7 +141,7 @@ pub fn authenticate<
 >(
     raw_tx: &[u8],
     state: &mut Accessor,
-) -> Result<AuthenticationOutput<S, CallMessage>, AuthenticationError>
+) -> Result<AuthenticationOutput<S, CallMessage<S>>, AuthenticationError>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
@@ -158,7 +158,7 @@ where
     let nonce = tx.nonce();
     let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
-    let call = CallMessage { rlp };
+    let call = CallMessage::<S>::Call(rlp);
 
     tracing::debug!(
         nonce,
@@ -221,7 +221,7 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
 {
-    type Decodable = EvmAuthenticatorInput<call::CallMessage, <Rt as DispatchCall>::Decodable>;
+    type Decodable = EvmAuthenticatorInput<call::CallMessage<S>, <Rt as DispatchCall>::Decodable>;
     type Input = EvmAuthenticatorInput;
 
     #[cfg(feature = "native")]
@@ -235,7 +235,9 @@ where
         match auth_variant {
             EvmAuthenticatorInput::Evm(raw_tx) => {
                 let (call, _tx) = decode_evm_tx(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }))
+                Ok(EvmAuthenticatorInput::Evm(call::CallMessage::<S>::Call(
+                    call,
+                )))
             }
             EvmAuthenticatorInput::Standard(raw_tx) => {
                 let call = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;

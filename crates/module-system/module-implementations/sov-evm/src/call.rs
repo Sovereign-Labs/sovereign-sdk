@@ -1,5 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256};
+use anyhow::ensure;
 use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
@@ -21,23 +22,37 @@ use std::convert::Infallible;
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
 use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
-use crate::evm::RlpEvmTransaction;
 #[cfg(feature = "native")]
 use crate::execution_config::EVM_EXECUTION_CONFIG;
 use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
 use crate::{
-    gas_metering_mode, Evm, EvmChainSpec, EvmRuntimeConfig, GasMeteringMode, PendingTransaction,
+    gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
+    ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
+    GasMeteringMode, PendingTransaction, RlpEvmTransaction,
 };
 use anyhow::{bail, Context as _};
+
+/// The maximum contract code size is 2MB
+const MAX_CONTRACT_CODE_SIZE: usize = 2 * 1024 * 1024;
+/// Don't let the admin lower the gas limit below 5M to avoid censorship. Setting the gas limit to 0 is censorship.
+const MIN_BLOCK_GAS_LIMIT: u64 = 5_000_000;
+/// The largest value that the admin can set for the tx gas limit.
+/// Setting an infinitely high gas limit would allow DOS by the sequencer/operator.
+const MAX_TX_GAS_LIMIT: u64 = 10_000_000_000;
 
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
 #[serialize(Borsh, Serde)]
-pub struct CallMessage {
+#[serde(rename_all = "snake_case")]
+#[serde(bound = "S: Spec")]
+#[schemars(bound = "S: Spec", rename = "call_message")]
+pub enum CallMessage<S: Spec> {
     /// RLP encoded transaction.
-    pub rlp: RlpEvmTransaction,
+    Call(RlpEvmTransaction),
+    /// Update the runtime configuration
+    UpdateRuntimeConfig(EvmRuntimeConfigUpdate<S>),
 }
 
 impl<S: Spec> Evm<S>
@@ -82,15 +97,131 @@ where
         Ok((cfg, cfg_env, block_env, tx_env, tx, pending_len))
     }
 
+    pub(crate) fn update_runtime_config(
+        &mut self,
+        update: EvmRuntimeConfigUpdate<S>,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let Some(admin) = self.admin.get(state)? else {
+            bail!("No EVM admin is configured. The config cannot be updated without an admin.");
+        };
+        ensure!(
+            context.sender() == &admin,
+            "Only the admin can update the runtime configuration. Got {} but expected {admin}",
+            context.sender()
+        );
+        let mut cfg = self.cfg(state)?;
+
+        // Update admin (no validation required)
+        if let Some(new_admin) = update.new_admin {
+            self.admin.set(&new_admin, state)?;
+        }
+
+        // Add hardfork activation, validating that it has a future height and is greater than the current spec id
+        if let Some((activation_block_number, BorshSpecId(spec_id))) = update.new_hardfork {
+            self.validate_new_hardfork(activation_block_number, spec_id, &cfg, state)?;
+            cfg.hardforks.push((activation_block_number, spec_id));
+            cfg.chain_spec
+                .hardforks
+                .push((activation_block_number, spec_id));
+        }
+
+        // Update contract creation policy
+        if let Some(new_contract_creation_policy) = update.new_contract_creation_policy {
+            match new_contract_creation_policy {
+                ContractCreationPolicyUpdate::Everyone => {
+                    cfg.contract_creation_policy = ContractCreationPolicy::Everyone;
+                }
+                ContractCreationPolicyUpdate::Allowlist { add, remove } => {
+                    let mut allowlist = cfg.contract_creation_policy.take_allowlist();
+                    for address in add {
+                        allowlist.insert(address.0.into());
+                    }
+                    for address in remove {
+                        let address: Address = address.0.into();
+                        allowlist.remove(&address);
+                    }
+                    cfg.contract_creation_policy = ContractCreationPolicy::Allowlist(allowlist);
+                }
+            }
+        }
+
+        // Update the chain spec
+        if let Some(chain_spec_update) = update.chain_spec_update {
+            self.apply_chain_spec_update(chain_spec_update, &mut cfg)?;
+        }
+
+        self.cfg.set(&cfg, state)?;
+        Ok(())
+    }
+
+    fn apply_chain_spec_update(
+        &mut self,
+        chain_spec_update: ChainSpecUpdate,
+        cfg: &mut EvmRuntimeConfig,
+    ) -> anyhow::Result<()> {
+        // Update the contract size limit
+        if let Some(new_limit) = chain_spec_update.new_limit_contract_code_size {
+            ensure!(
+                new_limit < MAX_CONTRACT_CODE_SIZE,
+                "Contract code size limit must be less than 2MB"
+            );
+            cfg.chain_spec.limit_contract_code_size = Some(new_limit);
+        }
+
+        // Update the block gas limit
+        if let Some(new_block_gas_limit) = chain_spec_update.new_block_gas_limit {
+            ensure!(
+                new_block_gas_limit > MIN_BLOCK_GAS_LIMIT,
+                "Block gas limit must be greater than 5M to avoid censorship"
+            );
+            cfg.chain_spec.block_gas_limit = new_block_gas_limit;
+        }
+
+        // Update the tx gas limit
+        if let Some(new_tx_gas_limit) = chain_spec_update.new_tx_gas_limit {
+            ensure!(new_tx_gas_limit <= cfg.chain_spec.block_gas_limit, "Tx gas limit must be less than or equal to the effective block gas limit after applying the update");
+            ensure!(new_tx_gas_limit <= MAX_TX_GAS_LIMIT, "Tx gas limit must be less than or equal to 10B to avoid DOS by the sequencer/operator");
+            cfg.chain_spec.tx_gas_limit = Some(new_tx_gas_limit);
+        }
+
+        Ok(())
+    }
+
+    fn validate_new_hardfork(
+        &self,
+        activation_block_number: u64,
+        spec_id: SpecId,
+        cfg: &EvmRuntimeConfig,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let current_rollup_block = state.rollup_height_to_access().get();
+        if current_rollup_block >= activation_block_number {
+            bail!("Hardfork activation block number must be greater than the current rollup block. Got {activation_block_number} but expected greater than {current_rollup_block}");
+        }
+
+        let current_spec_id = cfg
+            .hardforks
+            .last()
+            .map(|(_, id)| id)
+            .unwrap_or(&SpecId::CANCUN);
+        if spec_id <= *current_spec_id {
+            bail!("Hardfork spec ID must be greater than the current spec ID. Got {spec_id} but expected greater than {current_spec_id}");
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn execute_call(
         &mut self,
-        message: CallMessage,
+        message: RlpEvmTransaction,
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         start_timer!(total);
         // Note: This does *not* verify the signature
-        let tx = convert_to_tx_signed(message.rlp)?;
+        let tx = convert_to_tx_signed(message)?;
 
         if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
             anyhow::bail!("Eip4844 not supported");
