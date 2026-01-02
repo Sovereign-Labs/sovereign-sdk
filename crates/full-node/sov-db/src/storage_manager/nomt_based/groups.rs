@@ -510,6 +510,8 @@ fn pre_genesis_root() -> [u8; 64] {
 }
 
 struct AllDBsStateRoots {
+    // The `live_db` is committed last. We can use `root_hash_from_live_db` to verify
+    // whether all other databases were committed in the previous run.
     root_hash_from_live_db: [u8; 64],
     root_hash_from_ledger_db: [u8; 64],
     root_hash_nomt: StateRootHashes,
