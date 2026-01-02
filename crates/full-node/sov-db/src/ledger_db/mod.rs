@@ -669,7 +669,7 @@ impl LedgerDb {
 
         // Get the current head slot
         let Some((head_slot_number, head_slot)) = db.get_largest::<SlotByNumber>()? else {
-            tracing::debug!("No slots in database, nothing to rollback");
+            tracing::warn!("No slots in database, nothing to rollback");
             return Ok(schema_batch);
         };
 

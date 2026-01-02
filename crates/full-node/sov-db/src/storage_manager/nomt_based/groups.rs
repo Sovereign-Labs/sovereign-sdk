@@ -100,7 +100,9 @@ where
         crate::test_utils::CrashLocation::BeforeSavingLedger.crash_if_env_set();
 
         // Immediately after genesis, the ledger contains no entries, and the root hash is initialized to [0; 64].
-        let root_hash = LedgerDb::get_head_root_hash(self.ledger.clone())?.unwrap_or([0; 64]);
+        let root_hash = LedgerDb::get_head_root_hash(self.ledger.clone())?
+            .unwrap_or_else(|| Self::pre_genesis_root());
+
         self.commit_flag
             .save_commit_status(&CommitStatus::CommittingLedger(root_hash))?;
 
@@ -186,6 +188,7 @@ where
 
             CommitStatus::CommittingLedger(ledger_root_hash) => {
                 let current_root_hash = LedgerDb::get_head_root_hash(ledger_db.clone())?
+                    // This can be empty only during genesis startup; when that happens, we initialize CommitStatus to Succes.
                     .expect("Error: The ledger database does not contain the state root hash.");
 
                 // User, Kernel & LedgerDb commit was successful but later commits failed. We rollback all of them.
@@ -208,6 +211,7 @@ where
                     "Detected in-progress commit. Rolling back kernel & user DBs."
                 );
                 // TODO: Requires careful consideration.
+                todo!("Rollback is not yet supported for archival and LiveDB.")
             }
             CommitStatus::Success => {}
         }
@@ -475,6 +479,14 @@ where
                 Ok(nomt_root_hashes.included_in_raw(&state_root_rocksdb))
             }
         }
+    }
+
+    // Root hash for empty nomt state.
+    fn pre_genesis_root() -> [u8; 64] {
+        let mut pre_genesis_root = [0u8; 64];
+        pre_genesis_root[..32].copy_from_slice(&nomt::trie::TERMINATOR);
+        pre_genesis_root[32..].copy_from_slice(&nomt::trie::TERMINATOR);
+        pre_genesis_root
     }
 }
 
