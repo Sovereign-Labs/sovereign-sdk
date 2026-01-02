@@ -562,7 +562,7 @@ impl AllDBsStateRoots {
         );
 
         assert_eq!(
-            hex::encode(&self.root_hash_from_ledger_db),
+            hex::encode(self.root_hash_from_ledger_db),
             hex::encode(self.root_hash_from_live_db)
         );
     }
