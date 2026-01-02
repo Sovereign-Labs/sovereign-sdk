@@ -29,6 +29,7 @@ pub trait TestableStorage: Sized {
         let height = da_header.height().to_be_bytes().to_vec();
         let hash_bytes = da_header.hash().0.to_vec();
         self.materialize_from_key_value(height, Some(hash_bytes), da_header.height() - 1)
+            .0
     }
 
     fn materialize_from_key_value(
@@ -36,7 +37,7 @@ pub trait TestableStorage: Sized {
         key: Vec<u8>,
         value: Option<Vec<u8>>,
         version: u64,
-    ) -> Self::ChangeSet {
+    ) -> (Self::ChangeSet, [u8; 64]) {
         let items = [(key, value)];
         self.materialize_from_key_values(&items, version)
     }
@@ -44,7 +45,8 @@ pub trait TestableStorage: Sized {
         self,
         items: &[(Vec<u8>, Option<Vec<u8>>)],
         version: u64,
-    ) -> Self::ChangeSet;
+    ) -> (Self::ChangeSet, [u8; 64]);
+
     fn get_value(&self, key: &[u8]) -> Option<Vec<u8>>;
     fn get_value_without_consistency_checks(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
@@ -716,7 +718,7 @@ where
     let (storage, _) = storage_manager.create_state_for(&block_a).unwrap();
     let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()), 0);
     storage_manager
-        .save_change_set(&block_a, stf_changes, SchemaBatch::default())
+        .save_change_set(&block_a, stf_changes.0, SchemaBatch::default())
         .unwrap();
     storage_manager.finalize(&block_a).unwrap();
     assert!(storage_manager.is_empty());
@@ -734,7 +736,7 @@ where
     let stf_changes =
         stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()), 1);
     storage_manager
-        .save_change_set(&block_b, stf_changes, SchemaBatch::default())
+        .save_change_set(&block_b, stf_changes.0, SchemaBatch::default())
         .unwrap();
     assert!(!storage_manager.is_empty());
 
@@ -788,7 +790,7 @@ where
         let stf_changes = stf_storage.materialize_from_key_values(&expected_values, height - 1);
 
         storage_manager
-            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .save_change_set(&da_header, stf_changes.0, SchemaBatch::default())
             .unwrap();
     }
 
@@ -817,7 +819,8 @@ where
         let da_header = MockBlockHeader::from_height(height);
 
         let (stf_state, ledger_reader) = storage_manager.create_state_for(&da_header).unwrap();
-        let changes = {
+
+        let (changes, state_root) = {
             let height = da_header.height().to_be_bytes().to_vec();
             let hash_bytes = da_header.hash().0.to_vec();
             stf_state.materialize_from_key_value(height, Some(hash_bytes), da_header.height())
@@ -831,7 +834,7 @@ where
 
         let slot_to_store = StoredSlot {
             hash: da_header.hash().into(),
-            state_root: [0u8; 64].to_vec().into(),
+            state_root: state_root.to_vec().into(),
             extra_data: vec![].into(),
             batches: BatchNumber(0)..BatchNumber(0),
             discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
