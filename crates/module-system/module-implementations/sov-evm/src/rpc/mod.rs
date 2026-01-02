@@ -196,7 +196,7 @@ where
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let block_env = self.resolve_block_env_for_call(block_number, state)?;
+        let block_env = self.resolve_block_env(block_number, state)?;
         let tx_env = prepare_call_env(&block_env, request.clone())?;
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
@@ -363,21 +363,19 @@ where
         }
     }
 
-    fn resolve_block_env_for_call(
+    fn resolve_block_env(
         &self,
         block_number: Option<String>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockEnv, EthApiError> {
-        let maybe_block = self
+        let maybe_blcok = self
             .get_sealed_block_by_number(block_number, state)?
             .ok_or(EthApiError::UnknownBlock)?;
-        let mut block_env = match maybe_block {
+
+        Ok(match maybe_blcok {
             MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
-        };
-        // Set the base fee to zero for evm execution. Gas is paid for by the sov gas meter instead
-        block_env.basefee = 0;
-        Ok(block_env)
+        })
     }
 }
 
@@ -390,6 +388,7 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env.disable_base_fee = true;
     cfg_env.chain_id = config_value!("CHAIN_ID");
     cfg_env.limit_contract_code_size = None;
+    cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
     cfg_env
 }
 
