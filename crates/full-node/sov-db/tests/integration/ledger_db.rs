@@ -226,7 +226,7 @@ async fn test_rollback() {
         LedgerDb::rollback_head_slot(db.clone()).unwrap();
 
         let state_root_hash_from_ledger = LedgerDb::get_head_root_hash(db.clone()).unwrap();
-        assert!(state_root_hash_from_ledger.is_none())
+        assert!(state_root_hash_from_ledger.is_none());
     }
 }
 
