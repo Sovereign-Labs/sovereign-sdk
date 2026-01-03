@@ -23,7 +23,7 @@ use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
-use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
+use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay, StateRootHashes};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;
@@ -60,12 +60,11 @@ where
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessesary(
             &commit_flag,
-            merklized_state.clone(),
+            &merklized_state,
             ledger_rocksdb.clone(),
+            &flat_state,
         )?;
 
-        // Validate root hashes.
-        Self::are_root_hashes_match(&merklized_state, &flat_state)?;
         commit_flag.save_commit_status(&CommitStatus::Success)?;
 
         let accessory_rocksdb =
@@ -99,12 +98,8 @@ where
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeSavingLedger.crash_if_env_set();
 
-        // Immediately after genesis, the ledger contains no entries, and the root hash is initialized to [0; 64].
-        let root_hash = LedgerDb::get_head_root_hash(self.ledger.clone())?
-            .unwrap_or_else(|| Self::pre_genesis_root());
-
         self.commit_flag
-            .save_commit_status(&CommitStatus::CommittingLedger(root_hash))?;
+            .save_commit_status(&CommitStatus::CommittingLedger)?;
 
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
@@ -142,60 +137,43 @@ where
 
     fn validate_commit_flag_and_rollback_if_necessesary(
         commit_flag: &CommitFlag,
-        merkelized_state: Arc<NomtStateDb<H>>,
+        merkelized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
+        flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<()> {
+        let state_roots =
+            AllDBsStateRoots::from_dbs(merkelized_state, ledger_db.clone(), flat_state_db)?;
+
         let commit_status = commit_flag.read_status()?;
+
         match commit_status {
-            CommitStatus::CommittingKernelNomt(saved_hash) => {
-                let current_kernel_root_hash = merkelized_state.kernel.root().into_inner();
-
+            CommitStatus::CommittingKernelNomt => {
                 // Kernel commit was successful but later commits failed. We rollback only the kernel.
-                if saved_hash != current_kernel_root_hash {
-                    tracing::warn!(
-                        flag_kernel_root_hash = hex::encode(saved_hash),
-                        db_kernel_root_hash = hex::encode(current_kernel_root_hash),
-                        ?commit_status,
-                        "Detected in-progress commit. Rolling back kernel DB."
-                    );
-
+                if state_roots.is_kerner_nomt_root_newer() {
+                    state_roots.warning_on_rollback(&commit_status);
                     merkelized_state.kernel.rollback(1)?;
                 }
             }
-            CommitStatus::CommittingUserNomt(saved_hash) => {
-                let current_user_root_hash = merkelized_state.user.root().into_inner();
-
+            CommitStatus::CommittingUserNomt => {
+                state_roots.warning_on_rollback(&commit_status);
                 // User & Kernel commit was successful but later commits failed. We rollback both.
-                if saved_hash != current_user_root_hash {
-                    tracing::warn!(
-                        flag_user_root_hash = hex::encode(saved_hash),
-                        db_user_root_hash = hex::encode(current_user_root_hash),
-                        ?commit_status,
-                        "Detected in-progress commit. Rolling back kernel DB."
-                    );
+                if state_roots.is_user_nomt_root_newer() {
                     merkelized_state.kernel.rollback(1)?;
                     merkelized_state.user.rollback(1)?;
                 } else
                 // Only Kernel commit was successful. We rollback only the kernel.
                 {
-                    tracing::warn!(
-                        ?commit_status,
-                        "Detected in-progress commit. Rolling back kernel & user DBs."
-                    );
                     merkelized_state.kernel.rollback(1)?;
                 }
             }
 
-            CommitStatus::CommittingLedger(ledger_root_hash) => {
-                let current_root_hash = LedgerDb::get_head_root_hash(ledger_db.clone())?
-                    // This can be empty only during genesis startup; when that happens, we initialize CommitStatus to Succes.
-                    .expect("Error: The ledger database does not contain the state root hash.");
-
+            CommitStatus::CommittingLedger => {
+                state_roots.warning_on_rollback(&commit_status);
                 // User, Kernel & LedgerDb commit was successful but later commits failed. We rollback all of them.
-                if current_root_hash != ledger_root_hash {
+                if state_roots.is_ledger_db_root_newer() {
                     merkelized_state.kernel.rollback(1)?;
                     merkelized_state.user.rollback(1)?;
-                    LedgerDb::rollback_head_slot(ledger_db)?;
+                    LedgerDb::rollback_head_slot(ledger_db.clone())?;
                 } else
                 // We rollback kernel & user.
                 {
@@ -215,6 +193,9 @@ where
             }
             CommitStatus::Success => {}
         }
+
+        let state_roots = AllDBsStateRoots::from_dbs(merkelized_state, ledger_db, flat_state_db)?;
+        state_roots.validate_all();
 
         Ok(())
     }
@@ -436,60 +417,7 @@ where
             accessory_state,
         }
     }
-
-    fn are_root_hashes_match(
-        merklized_state: &NomtStateDb<H>,
-        flat_state: &FlatStateDb,
-    ) -> anyhow::Result<bool> {
-        let historical_state_delta_reader =
-            DeltaReader::new(flat_state.live_db.clone(), Vec::new());
-
-        let nomt_root_hashes = merklized_state.get_root_hashes();
-        let last_version =
-            HistoricalStateReader::last_version_from_reader(&historical_state_delta_reader)?;
-
-        match last_version {
-            None => {
-                let is_kernel_empty = nomt_root_hashes.kernel.is_empty();
-                let is_user_empty = nomt_root_hashes.user.is_empty();
-                tracing::trace!(
-                    ?is_kernel_empty,
-                    ?is_user_empty,
-                    "Historical root hash is empty, user and kernel must be too"
-                );
-                Ok(is_kernel_empty && is_user_empty)
-            }
-            Some(latest_version) => {
-                let Some(state_root_rocksdb) =
-                    HistoricalStateReader::get_serialized_root_hash_from_reader(
-                        &historical_state_delta_reader,
-                        latest_version,
-                    )?
-                else {
-                    anyhow::bail!(
-                        "Missing root hash for the latest version {}",
-                        latest_version
-                    );
-                };
-                tracing::trace!(
-                    histrocial_root_hash = %hex::encode(&state_root_rocksdb),
-                    nomt_state_roots = ?nomt_root_hashes,
-                    %latest_version,
-                    "Historical root hash is not empty");
-                Ok(nomt_root_hashes.included_in_raw(&state_root_rocksdb))
-            }
-        }
-    }
-
-    // Root hash for empty nomt state.
-    fn pre_genesis_root() -> [u8; 64] {
-        let mut pre_genesis_root = [0u8; 64];
-        pre_genesis_root[..32].copy_from_slice(&nomt::trie::TERMINATOR);
-        pre_genesis_root[32..].copy_from_slice(&nomt::trie::TERMINATOR);
-        pre_genesis_root
-    }
 }
-
 pub(crate) struct SnapshotGroup {
     pub(crate) historical_state: StateChanges,
     pub(crate) accessory: Arc<SchemaBatch>,
@@ -549,5 +477,104 @@ impl PrunerJob {
             historical_state,
             accessory: accessory_state,
         })
+    }
+}
+
+fn root_hash_from_life_db(flat_state: &FlatStateDb) -> anyhow::Result<Option<[u8; 64]>> {
+    let historical_state_delta_reader = DeltaReader::new(flat_state.live_db.clone(), Vec::new());
+
+    let Some(last_version) =
+        HistoricalStateReader::last_version_from_reader(&historical_state_delta_reader)?
+    else {
+        return Ok(None);
+    };
+
+    let state_root_hash = HistoricalStateReader::get_serialized_root_hash_from_reader(
+        &historical_state_delta_reader,
+        last_version,
+    )?
+    .unwrap_or_else(|| {
+        // If `last_version` is present we must always have root hash.
+        panic!("Root hash missing for the latest LiveDB version {last_version}",);
+    });
+
+    Ok(Some(state_root_hash.try_into().unwrap()))
+}
+
+// Root hash for empty nomt state.
+fn pre_genesis_root() -> [u8; 64] {
+    let mut pre_genesis_root = [0u8; 64];
+    pre_genesis_root[..32].copy_from_slice(&nomt::trie::TERMINATOR);
+    pre_genesis_root[32..].copy_from_slice(&nomt::trie::TERMINATOR);
+    pre_genesis_root
+}
+
+struct AllDBsStateRoots {
+    // The `live_db` is committed last. We can use `root_hash_from_live_db` to verify
+    // whether all other databases were committed in the previous run.
+    root_hash_from_live_db: [u8; 64],
+    root_hash_from_ledger_db: [u8; 64],
+    root_hash_nomt: StateRootHashes,
+}
+
+impl AllDBsStateRoots {
+    fn from_dbs<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
+        merkelized_state: &NomtStateDb<H>,
+        ledger_db: Arc<rockbound::DB>,
+        flat_state_db: &FlatStateDb,
+    ) -> anyhow::Result<AllDBsStateRoots> {
+        let root_hash_from_live_db =
+            root_hash_from_life_db(flat_state_db)?.unwrap_or_else(pre_genesis_root);
+
+        let root_hash_from_ledger_db =
+            LedgerDb::get_head_root_hash(ledger_db.clone())?.unwrap_or_else(pre_genesis_root);
+
+        let root_hash_nomt = merkelized_state.get_root_hashes();
+
+        Ok(AllDBsStateRoots {
+            root_hash_from_live_db,
+            root_hash_from_ledger_db,
+            root_hash_nomt,
+        })
+    }
+
+    fn is_kerner_nomt_root_newer(&self) -> bool {
+        self.root_hash_nomt.kernel != self.root_hash_from_live_db[32..]
+    }
+
+    fn is_user_nomt_root_newer(&self) -> bool {
+        self.root_hash_nomt.user != self.root_hash_from_live_db[0..32]
+    }
+
+    fn is_ledger_db_root_newer(&self) -> bool {
+        self.root_hash_from_ledger_db != self.root_hash_from_live_db
+    }
+
+    fn validate_all(&self) {
+        assert_eq!(
+            hex::encode(self.root_hash_nomt.user),
+            hex::encode(&self.root_hash_from_live_db[0..32])
+        );
+
+        assert_eq!(
+            hex::encode(self.root_hash_nomt.kernel),
+            hex::encode(&self.root_hash_from_live_db[32..])
+        );
+
+        assert_eq!(
+            hex::encode(self.root_hash_from_ledger_db),
+            hex::encode(self.root_hash_from_live_db)
+        );
+    }
+
+    fn warning_on_rollback(&self, commit_status: &CommitStatus) {
+        tracing::warn!(
+            live_db_kernel_root_hash = hex::encode(self.root_hash_from_live_db),
+            root_hash_ledger_db = hex::encode(self.root_hash_from_ledger_db),
+            user_nomt_db_root_hash = hex::encode(self.root_hash_nomt.user),
+            kernel_nomt_db_root_hash = hex::encode(self.root_hash_nomt.kernel),
+            ?commit_status,
+            "Detected in-progress commit. Rolling back DBs"
+        );
     }
 }
