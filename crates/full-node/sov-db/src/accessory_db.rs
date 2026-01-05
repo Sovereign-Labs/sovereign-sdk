@@ -156,7 +156,7 @@ impl AccessoryDb {
 #[cfg(test)]
 mod tests {
     use sov_rollup_interface::common::IntoSlotNumber;
-    use std::{collections::HashMap, sync::Arc};
+    use std::{collections::HashMap, sync::Arc, u64};
 
     use super::*;
 
@@ -256,7 +256,6 @@ mod tests {
     const VERSION_ZERO: SlotNumber = SlotNumber::new(0);
     const VERSION_ONE: SlotNumber = SlotNumber::new(1);
     const VERSION_TWO: SlotNumber = SlotNumber::new(2);
-    const VERSION_MAX: SlotNumber = SlotNumber::new(u64::MAX);
 
     #[test]
     fn secondary_index_populated() {
@@ -306,18 +305,15 @@ mod tests {
     }
 
     struct TestData {
-        map: HashMap<SlotNumber, Vec<(AccessoryKey, AccessoryStateValue)>>,
+        map: HashMap<u64, Vec<(AccessoryKey, AccessoryStateValue)>>,
     }
 
     impl TestData {
         fn new() -> Self {
             let mut map = HashMap::new();
+            map.insert(0, vec![(b"key0".to_vec(), Some(b"value0".to_vec()))]);
             map.insert(
-                VERSION_ZERO,
-                vec![(b"key0".to_vec(), Some(b"value0".to_vec()))],
-            );
-            map.insert(
-                VERSION_ONE,
+                1,
                 vec![
                     (b"key1".to_vec(), Some(b"value1".to_vec())),
                     (b"key11".to_vec(), Some(b"value11".to_vec())),
@@ -325,7 +321,7 @@ mod tests {
             );
 
             map.insert(
-                VERSION_TWO,
+                2,
                 vec![
                     (b"key2".to_vec(), Some(b"value12".to_vec())),
                     (b"key11".to_vec(), Some(b"value12".to_vec())),
@@ -336,7 +332,7 @@ mod tests {
             Self { map }
         }
 
-        fn for_version(&self, version: SlotNumber) -> Vec<(AccessoryKey, AccessoryStateValue)> {
+        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, AccessoryStateValue)> {
             self.map.get(&version).unwrap().clone()
         }
     }
@@ -344,9 +340,10 @@ mod tests {
     fn commit(
         accessory_db: &rockbound::DB,
         accessory_bach: &SchemaBatch,
-        root_hash: Vec<u8>,
-        version: SlotNumber,
+        version: u64,
     ) -> anyhow::Result<()> {
+        let root_hash = [version as u8; 64].to_vec();
+        let version = SlotNumber::new(u64::from(version));
         let mut root_hash_batch = SchemaBatch::default();
         root_hash_batch
             .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
@@ -367,30 +364,32 @@ mod tests {
 
         let data = TestData::new();
 
-        // Write data at version 0
+        let version = 0;
         let changes =
-            AccessoryDb::materialize_values(data.for_version(VERSION_ZERO), VERSION_ZERO).unwrap();
-        //rocksdb.write_schemas(&changes).unwrap();
+            AccessoryDb::materialize_values(data.for_version(version), version.to_slot_number())
+                .unwrap();
 
-        commit(&rocksdb, &changes, [0u8; 64].to_vec(), VERSION_ZERO).unwrap();
+        commit(&rocksdb, &changes, version).unwrap();
 
-        // Write data at version 1
+        let version = 1;
         let changes =
-            AccessoryDb::materialize_values(data.for_version(VERSION_ONE), VERSION_ONE).unwrap();
-        //rocksdb.write_schemas(&changes).unwrap();
+            AccessoryDb::materialize_values(data.for_version(version), version.to_slot_number())
+                .unwrap();
 
-        commit(&rocksdb, &changes, [1u8; 64].to_vec(), VERSION_ONE).unwrap();
+        commit(&rocksdb, &changes, version).unwrap();
 
-        // Write data at version 2
+        let version = 2;
         let changes =
-            AccessoryDb::materialize_values(data.for_version(VERSION_TWO), VERSION_TWO).unwrap();
-        //rocksdb.write_schemas(&changes).unwrap();
+            AccessoryDb::materialize_values(data.for_version(version), version.to_slot_number())
+                .unwrap();
 
-        commit(&rocksdb, &changes, [2u8; 64].to_vec(), VERSION_TWO).unwrap();
+        commit(&rocksdb, &changes, version).unwrap();
 
-        for (k, v) in data.for_version(VERSION_TWO) {
+        let max = u64::MAX;
+
+        for (k, v) in data.for_version(version) {
             assert_eq!(
-                db.get_value_option(&SlotKey::from_slice(&k), VERSION_MAX)
+                db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
                     .unwrap(),
                 v
             );
@@ -399,9 +398,9 @@ mod tests {
         // Rollback version 2
         AccessoryDb::rollback_version(rocksdb.clone(), VERSION_TWO).unwrap();
 
-        for (k, v) in data.for_version(VERSION_ONE) {
+        for (k, v) in data.for_version(1) {
             assert_eq!(
-                db.get_value_option(&SlotKey::from_slice(&k), VERSION_MAX)
+                db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
                     .unwrap(),
                 v
             );
@@ -410,9 +409,9 @@ mod tests {
         // Rollback version 1
         AccessoryDb::rollback_version(rocksdb.clone(), VERSION_ONE).unwrap();
 
-        for (k, v) in data.for_version(VERSION_ZERO) {
+        for (k, v) in data.for_version(0) {
             assert_eq!(
-                db.get_value_option(&SlotKey::from_slice(&k), VERSION_MAX)
+                db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
                     .unwrap(),
                 v
             );
