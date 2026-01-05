@@ -30,6 +30,7 @@ pub(crate) fn get_cfg_env(
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = config_value!("CHAIN_ID");
+    cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
     cfg_env.limit_contract_code_size = Some(
         cfg.chain_spec
             .limit_contract_code_size
@@ -160,6 +161,7 @@ mod tests {
         expected_cfg_env.disable_base_fee = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
         expected_cfg_env.spec = SpecId::CANCUN;
+        expected_cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
 
         assert_eq!(expected_cfg_env, cfg_env);
     }

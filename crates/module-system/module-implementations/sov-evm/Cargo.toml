@@ -63,6 +63,7 @@ revm = { workspace = true, features = [
 	"optional_eip3607",
 	"optional_no_base_fee",
 	"optional_balance_check",
+	"memory_limit",
 	"std",
 ] }
 revm-database-interface = { workspace = true }
