@@ -7,16 +7,23 @@ use revm::{
 
 use crate::{gas_metering_mode, GasMeteringMode};
 
-/// An Inspector that erases the costs of storage access
+/// An Inspector that tracks the costs of storage access
 #[derive(Clone, Debug, Default)]
 pub struct StorageAccessInspector {
     /// Keep track of the remaining gas before opcode execution
     last_gas_remaining: Option<u64>,
+    /// Gas spent on storage access
+    gas_spent_on_storage_access: u64,
 }
 
 impl StorageAccessInspector {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The amount of gas spent on storage access
+    pub fn gas_spent_on_storage_access(&self) -> u64 {
+        self.gas_spent_on_storage_access
     }
 }
 
@@ -45,7 +52,7 @@ where
                 if opcode == Some(OpCode::SSTORE) || opcode == Some(OpCode::SLOAD) {
                     // compute gas usage for the opcode
                     let gas_cost = gas_remaining.saturating_sub(interp.gas.remaining());
-                    interp.gas.erase_cost(gas_cost);
+                    self.gas_spent_on_storage_access += gas_cost;
                 }
             }
             GasMeteringMode::Evm => (),
