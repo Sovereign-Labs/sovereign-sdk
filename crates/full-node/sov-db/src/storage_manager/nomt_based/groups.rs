@@ -134,7 +134,7 @@ where
 
         state_roots.info("before validation");
 
-        if state_roots.is_kerner_nomt_root_newer() {
+        if state_roots.is_kernel_nomt_root_newer() {
             merkelized_state.kernel.rollback(1)?;
         }
 
@@ -524,7 +524,7 @@ impl AllDBsStateRoots {
         })
     }
 
-    fn is_kerner_nomt_root_newer(&self) -> bool {
+    fn is_kernel_nomt_root_newer(&self) -> bool {
         self.root_hash_nomt.kernel != self.root_hash_from_live_db[32..]
     }
 
