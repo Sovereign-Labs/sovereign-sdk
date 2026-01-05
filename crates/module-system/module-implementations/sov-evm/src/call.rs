@@ -113,13 +113,20 @@ where
         );
         let mut cfg = self.cfg(state)?;
 
+        let EvmRuntimeConfigUpdate {
+            new_hardfork,
+            new_contract_creation_policy,
+            chain_spec_update,
+            new_admin,
+        } = update;
+
         // Update admin (no validation required)
-        if let Some(new_admin) = update.new_admin {
+        if let Some(new_admin) = new_admin {
             self.admin.set(&new_admin, state)?;
         }
 
         // Add hardfork activation, validating that it has a future height and is greater than the current spec id
-        if let Some((activation_block_number, BorshSpecId(spec_id))) = update.new_hardfork {
+        if let Some((activation_block_number, BorshSpecId(spec_id))) = new_hardfork {
             self.validate_new_hardfork(activation_block_number, spec_id, &cfg, state)?;
             cfg.hardforks.push((activation_block_number, spec_id));
             cfg.chain_spec
@@ -128,7 +135,7 @@ where
         }
 
         // Update contract creation policy
-        if let Some(new_contract_creation_policy) = update.new_contract_creation_policy {
+        if let Some(new_contract_creation_policy) = new_contract_creation_policy {
             match new_contract_creation_policy {
                 ContractCreationPolicyUpdate::Everyone => {
                     cfg.contract_creation_policy = ContractCreationPolicy::Everyone;
@@ -148,7 +155,7 @@ where
         }
 
         // Update the chain spec
-        if let Some(chain_spec_update) = update.chain_spec_update {
+        if let Some(chain_spec_update) = chain_spec_update {
             self.apply_chain_spec_update(chain_spec_update, &mut cfg)?;
         }
 
@@ -165,7 +172,7 @@ where
         if let Some(new_limit) = chain_spec_update.new_limit_contract_code_size {
             ensure!(
                 new_limit < MAX_CONTRACT_CODE_SIZE,
-                "Contract code size limit must be less than 2MB"
+                "Contract code size limit must be less than {MAX_CONTRACT_CODE_SIZE}"
             );
             cfg.chain_spec.limit_contract_code_size = Some(new_limit);
         }
@@ -174,7 +181,7 @@ where
         if let Some(new_block_gas_limit) = chain_spec_update.new_block_gas_limit {
             ensure!(
                 new_block_gas_limit > MIN_BLOCK_GAS_LIMIT,
-                "Block gas limit must be greater than 5M to avoid censorship"
+                "Block gas limit must be greater than {MIN_BLOCK_GAS_LIMIT} to avoid censorship"
             );
             cfg.chain_spec.block_gas_limit = new_block_gas_limit;
         }
@@ -182,7 +189,7 @@ where
         // Update the tx gas limit
         if let Some(new_tx_gas_limit) = chain_spec_update.new_tx_gas_limit {
             ensure!(new_tx_gas_limit <= cfg.chain_spec.block_gas_limit, "Tx gas limit must be less than or equal to the effective block gas limit after applying the update");
-            ensure!(new_tx_gas_limit <= MAX_TX_GAS_LIMIT, "Tx gas limit must be less than or equal to 10B to avoid DOS by the sequencer/operator");
+            ensure!(new_tx_gas_limit <= MAX_TX_GAS_LIMIT, "Tx gas limit must be less than or equal to {MAX_TX_GAS_LIMIT} to avoid DOS by the sequencer/operator");
             cfg.chain_spec.tx_gas_limit = Some(new_tx_gas_limit);
         }
 
