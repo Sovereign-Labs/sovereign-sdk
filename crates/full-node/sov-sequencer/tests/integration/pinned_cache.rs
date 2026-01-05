@@ -466,6 +466,7 @@ async fn test_pinned_cache_after_total_resync() {
     for path in [
         "user_nomt_db",
         "state-db",
+        "archival-state-db",
         "kernel_nomt_db",
         "accessory",
         "ledger",

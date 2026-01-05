@@ -299,24 +299,16 @@ pub const CRASH_ENV_NAME: &str = "SOV_CRASH_ON_COMMIT";
 /// The crash location.
 #[derive(Debug, Clone, Display, EnumString, Eq, PartialEq)]
 pub enum CrashLocation {
-    /// Rollup crashes before saving `the CommittingKernelNomt` flag.
-    BeforeSavingKernelNomt,
     /// Rollup crashes before committing the kernel.
     BeforeCommittingKernelNomt,
-    /// Rollup crashes before saving the `CommittingUserNomt` flag.
-    BeforeSavingUserlNomt,
     /// Rollup crashes before committing the user nomt.
     BeforeCommittingUserNomt,
-    /// Rollup crashes before saving the `CommittingLedger` flag.
-    BeforeSavingLedger,
     /// Rollup crashes before committing the ledger.
     BeforeCommittingLedger,
-    /// Rollup crashes before saving the `CommittingArchival` flag.
-    BeforeSavingArchival,
+    /// Rollup crashes before committing the accessory.
+    BeforeCommittingAccessory,
     /// Rollup crashes before committing the the archival db.
     BeforeCommittingArchival,
-    /// Rollup crashes before saving the `CommittingLive` flag.
-    BeforeSavingLive,
     /// Rollup crashes before committing the the live db.
     BeforeCommittingLive,
 }

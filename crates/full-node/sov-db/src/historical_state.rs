@@ -277,14 +277,12 @@ impl HistoricalStateReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commit_flag::CommitFlag;
     use crate::storage_manager::FlatStateDb;
 
     #[test]
     fn verify_last_version_bumped_properly() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
-        let commit_flag = CommitFlag::new(db_path);
         let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let key1 = b"AAA";
@@ -311,7 +309,7 @@ mod tests {
                 slot_number,
             )
             .unwrap();
-            rocksdb.commit(changes, Some(&commit_flag)).unwrap();
+            rocksdb.commit(changes).unwrap();
         }
     }
 
@@ -319,8 +317,6 @@ mod tests {
     fn test_no_bound_on_passed_version() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
-        let commit_flag = CommitFlag::new(db_path);
-
         let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         // Create two independent readers on the same database.
@@ -343,7 +339,7 @@ mod tests {
             version0,
         )
         .unwrap();
-        rocksdb.commit(changes0, Some(&commit_flag)).unwrap();
+        rocksdb.commit(changes0).unwrap();
         assert_eq!(reader1.get_next_version(), version0);
         assert_eq!(reader2.get_next_version(), version0);
 
@@ -370,7 +366,7 @@ mod tests {
             version1,
         )
         .unwrap();
-        rocksdb.commit(changes1, Some(&commit_flag)).unwrap();
+        rocksdb.commit(changes1).unwrap();
         assert_eq!(reader1.get_next_version(), version0);
         assert_eq!(reader2.get_next_version(), version0);
 
@@ -399,8 +395,6 @@ mod tests {
     fn test_unbound_last_version() {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
-        let commit_flag = CommitFlag::new(db_path);
-
         let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
@@ -424,7 +418,7 @@ mod tests {
             version0,
         )
         .unwrap();
-        rocksdb.commit(changes0, Some(&commit_flag)).unwrap();
+        rocksdb.commit(changes0).unwrap();
 
         // Reader1's bound version stays the same, but unbound sees the update
         assert_eq!(reader1.last_version(), None);
@@ -446,7 +440,7 @@ mod tests {
             version1,
         )
         .unwrap();
-        rocksdb.commit(changes1, Some(&commit_flag)).unwrap();
+        rocksdb.commit(changes1).unwrap();
 
         // Both readers see the latest version through unbound
         assert_eq!(reader1.last_version_unbound().unwrap(), version1);
