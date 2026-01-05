@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::{rocksdb, SchemaBatch};
-use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 
 use crate::historical_state::STATE_ROOT_HASH_SINGLETON;
 use crate::schema::tables::{
@@ -118,11 +118,15 @@ impl AccessoryDb {
 
     /// Rollback a specific version of the AccessoryDb.
     /// This will delete all key-value pairs that were written at the specified version.
-    pub fn rollback_version(
-        accessory_db: Arc<rockbound::DB>,
-        version: SlotNumber,
-    ) -> anyhow::Result<()> {
-        let schema_batch = Self::create_schema_batch_for_rollback(&accessory_db, version)?;
+    pub fn rollback(accessory_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
+        let Some((version, _)) =
+            Self::latest_version_and_root_hash_archival_db(accessory_db.clone())?
+        else {
+            return Ok(());
+        };
+
+        let schema_batch =
+            Self::create_schema_batch_for_rollback(&accessory_db, version.to_slot_number())?;
         accessory_db.write_schemas(&schema_batch)?;
         Ok(())
     }
@@ -278,7 +282,6 @@ mod tests {
 
     const VERSION_ZERO: SlotNumber = SlotNumber::new(0);
     const VERSION_ONE: SlotNumber = SlotNumber::new(1);
-    const VERSION_TWO: SlotNumber = SlotNumber::new(2);
 
     #[test]
     fn secondary_index_populated() {
@@ -420,7 +423,7 @@ mod tests {
 
         // Rollback version 2
         {
-            AccessoryDb::rollback_version(rocksdb.clone(), VERSION_TWO).unwrap();
+            AccessoryDb::rollback(rocksdb.clone()).unwrap();
             let version = 1;
 
             let latest =
@@ -438,7 +441,7 @@ mod tests {
 
         // Rollback version 1
         {
-            AccessoryDb::rollback_version(rocksdb.clone(), VERSION_ONE).unwrap();
+            AccessoryDb::rollback(rocksdb.clone()).unwrap();
             let version = 0;
 
             let latest =

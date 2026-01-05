@@ -173,6 +173,17 @@ where
                     LedgerDb::rollback_head_slot(ledger_db.clone())?;
                 }
             }
+            CommitStatus::CommittingAccessory => {
+                merkelized_state.kernel.rollback(1)?;
+                merkelized_state.user.rollback(1)?;
+                LedgerDb::rollback_head_slot(ledger_db.clone())?;
+
+                if state_roots.is_accessory_db_root_newer() {
+                    //AccessoryDb::rollback(accessory_db.clone())?;
+                }
+
+                todo!()
+            }
 
             CommitStatus::CommittingArchivalUserAndKernel
             | CommitStatus::CommittingLiveUserAndKernel => {
@@ -578,7 +589,7 @@ impl AllDBsStateRoots {
         self.root_hash_from_ledger_db != self.root_hash_from_live_db
     }
 
-    fn _is_accessory_db_root_newer(&self) -> bool {
+    fn is_accessory_db_root_newer(&self) -> bool {
         self.root_hash_from_archival_db != self.root_hash_from_live_db
     }
 
