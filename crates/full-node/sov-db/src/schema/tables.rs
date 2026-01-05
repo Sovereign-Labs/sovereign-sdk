@@ -69,6 +69,7 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
 pub const ACCESSORY_TABLES: &[ColumnFamilyName] = &[
     ModuleAccessoryState::table_name(),
     AccessoryKeysByVersion::table_name(),
+    StateRootHashes::table_name(),
 ];
 
 /// Macro to define a table that implements [`rockbound::Schema`].

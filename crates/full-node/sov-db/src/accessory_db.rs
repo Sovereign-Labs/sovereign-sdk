@@ -4,7 +4,10 @@ use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
 use sov_rollup_interface::common::SlotNumber;
 
-use crate::schema::tables::{AccessoryKeysByVersion, ModuleAccessoryState, ACCESSORY_TABLES};
+use crate::historical_state::STATE_ROOT_HASH_SINGLETON;
+use crate::schema::tables::{
+    AccessoryKeysByVersion, ModuleAccessoryState, StateRootHashes, ACCESSORY_TABLES,
+};
 use crate::schema::types::slot_key::SlotKey;
 use crate::schema::types::{AccessoryKey, AccessoryStateValue};
 use crate::{ensure_version_is_correct, DbOptions};
@@ -104,7 +107,7 @@ impl AccessoryDb {
 
             // Sanity check - we should only see keys from the target version
             if slot_number != version {
-                panic!("fooo");
+                break;
             }
 
             // Delete from both the main table and the secondary index
@@ -112,6 +115,9 @@ impl AccessoryDb {
             schema_batch.delete::<AccessoryKeysByVersion>(&(slot_number, key))?;
             keys_deleted += 1;
         }
+
+        // Also delete the StateRootHashes entry for this version
+        schema_batch.delete::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON))?;
 
         tracing::info!(
             version = %version,
