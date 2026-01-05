@@ -69,6 +69,29 @@ impl AccessoryDb {
         Ok(batch)
     }
 
+    /// Latest state root hash from archival db.
+    pub fn latest_version_and_root_hash_archival_db(
+        accessory_db: Arc<rockbound::DB>,
+    ) -> anyhow::Result<Option<(u64, [u8; 64])>> {
+        let reader = DeltaReader::new(accessory_db, Vec::new());
+        let latest = reader.get_largest::<StateRootHashes>()?;
+
+        match latest {
+            Some(((version, _state_root_hash_id), root_hash)) => {
+                // Convert SchemaValue (Vec<u8>) to [u8; 64]
+                let root_hash_array: [u8; 64] = root_hash.try_into().map_err(|v: Vec<u8>| {
+                    anyhow::anyhow!(
+                        "Invalid root hash length: expected 64 bytes, got {}",
+                        v.len()
+                    )
+                })?;
+
+                Ok(Some((version.get(), root_hash_array)))
+            }
+            None => Ok(None),
+        }
+    }
+
     /// TODO
     pub fn commit(
         accessory_db: &rockbound::DB,
@@ -99,13 +122,13 @@ impl AccessoryDb {
         accessory_db: Arc<rockbound::DB>,
         version: SlotNumber,
     ) -> anyhow::Result<()> {
-        let schema_batch = Self::create_schema_batch_for_rollback(accessory_db.clone(), version)?;
+        let schema_batch = Self::create_schema_batch_for_rollback(&accessory_db, version)?;
         accessory_db.write_schemas(&schema_batch)?;
         Ok(())
     }
 
     fn create_schema_batch_for_rollback(
-        db: Arc<rockbound::DB>,
+        db: &rockbound::DB,
         version: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut schema_batch = SchemaBatch::new();
@@ -396,25 +419,40 @@ mod tests {
         }
 
         // Rollback version 2
-        AccessoryDb::rollback_version(rocksdb.clone(), VERSION_TWO).unwrap();
+        {
+            AccessoryDb::rollback_version(rocksdb.clone(), VERSION_TWO).unwrap();
+            let version = 1;
 
-        for (k, v) in data.for_version(1) {
-            assert_eq!(
-                db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
-                    .unwrap(),
-                v
-            );
+            let latest =
+                AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
+            assert_eq!(latest, Some((version, [version as u8; 64])));
+
+            for (k, v) in data.for_version(1) {
+                assert_eq!(
+                    db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
+                        .unwrap(),
+                    v
+                );
+            }
         }
 
         // Rollback version 1
-        AccessoryDb::rollback_version(rocksdb.clone(), VERSION_ONE).unwrap();
+        {
+            AccessoryDb::rollback_version(rocksdb.clone(), VERSION_ONE).unwrap();
 
-        for (k, v) in data.for_version(0) {
-            assert_eq!(
-                db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
-                    .unwrap(),
-                v
-            );
+            let version = 1;
+
+            let latest =
+                AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
+            assert_eq!(latest, Some((version, [version as u8; 64])));
+
+            for (k, v) in data.for_version(0) {
+                assert_eq!(
+                    db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
+                        .unwrap(),
+                    v
+                );
+            }
         }
     }
 }
