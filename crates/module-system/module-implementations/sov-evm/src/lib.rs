@@ -81,6 +81,10 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) accounts: StateMap<Address, DbAccount, BcsCodec>,
 
+    /// The address allowed to make changes to the `cfg`.
+    #[state]
+    pub(crate) admin: StateValue<S::Address, BcsCodec>,
+
     /// Storage for accounts.
     #[state]
     pub(crate) account_storage: StateMap<AccountStorageKey, U256, BcsCodec>,
@@ -193,9 +197,9 @@ where
 {
     type Spec = S;
 
-    type Config = EvmGenesisConfig;
+    type Config = EvmGenesisConfig<S>;
 
-    type CallMessage = CallMessage;
+    type CallMessage = CallMessage<S>;
 
     type Event = ();
 
@@ -216,7 +220,12 @@ where
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error> {
-        Ok(self.execute_call(msg, context, state)?)
+        match msg {
+            CallMessage::Call(tx) => Ok(self.execute_call(tx, context, state)?),
+            CallMessage::UpdateRuntimeConfig(update) => {
+                Ok(self.update_runtime_config(update, context, state)?)
+            }
+        }
     }
 }
 
@@ -230,6 +239,15 @@ impl<S: Spec> Evm<S> {
             .base_fee_per_gas(state)?
             .expect("Base fee per gas must be set");
         Ok(price.as_ref()[0].0.try_into().unwrap_or(u64::MAX))
+    }
+
+    /// Get the admin address.
+    pub fn admin<Reader, E>(&self, state: &mut Reader) -> Result<S::Address, E>
+    where
+        Reader: StateReader<User, Error = E>,
+    {
+        let admin = self.admin.get(state)?;
+        Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
     }
 }
 

@@ -263,7 +263,7 @@ mod tests {
             initial_randomization_buffer_size: DEFAULT_RANDOMIZATION_BUFFER_SIZE,
             genesis_config: GenesisConfig::from_minimal_config(
                 MinimalZkGenesisConfig::from(HighLevelZkGenesisConfig::generate_with_additional_accounts_and_code_commitments(0, Default::default(), Default::default())),
-                EvmGenesisConfig::default(),
+                EvmGenesisConfig::default_with_admin(MultiAddress::Standard(Address::from_const_slice([0; 28]))),
                 Default::default(),
                 AccessPatternGenesisConfig {
                     admin: MultiAddress::Standard(Address::from_const_slice([0; 28])),
