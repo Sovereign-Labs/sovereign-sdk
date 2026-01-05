@@ -119,15 +119,6 @@ where
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 
-        let rr = AllDBsStateRoots::from_dbs(
-            &self.merklized_state,
-            self.ledger.clone(),
-            self.accessory.clone(),
-            &self.flat_state,
-            CommitStatus::Success,
-        )
-        .unwrap();
-
         // FLATDB
         let flat_metrics = self
             .flat_state

@@ -119,27 +119,16 @@ impl AccessoryDb {
     /// Rollback a specific version of the AccessoryDb.
     /// This will delete all key-value pairs that were written at the specified version.
     pub fn rollback(accessory_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
-        let Some((version, rh)) =
+        let Some((version, _)) =
             Self::latest_version_and_root_hash_archival_db(accessory_db.clone())?
         else {
-            panic!("FOOOO");
             return Ok(());
         };
-
-        println!("BEFORE ROLLBACK {version} {}", hex::encode(rh));
 
         let schema_batch =
             Self::create_schema_batch_for_rollback(&accessory_db, version.to_slot_number())?;
         accessory_db.write_schemas(&schema_batch)?;
 
-        let Some((version, rh)) =
-            Self::latest_version_and_root_hash_archival_db(accessory_db.clone())?
-        else {
-            panic!("FOOOO");
-            return Ok(());
-        };
-
-        println!("BEFORE ROLLBACK {version} {}", hex::encode(rh));
         Ok(())
     }
 
