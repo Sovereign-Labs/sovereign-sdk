@@ -296,7 +296,7 @@ async fn send_txs(
             return;
         }
 
-        // Send transactions continuously every 100ms to maintain steady TX traffic during the test.
+        // Send transactions continuously every 50ms to maintain steady TX traffic during the test.
         tokio::time::sleep(Duration::from_millis(50)).await;
         nb_of_txs += 1;
 
