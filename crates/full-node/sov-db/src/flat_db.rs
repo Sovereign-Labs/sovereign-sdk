@@ -583,8 +583,6 @@ mod tests {
     /// This test rolls back the archival state regardless of the version of the live state.
     #[test]
     fn test_rollback_skip_validation() -> anyhow::Result<()> {
-        let separate_archival = true;
-
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
 
