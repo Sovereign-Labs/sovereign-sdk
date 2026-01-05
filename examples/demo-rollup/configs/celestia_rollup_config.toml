@@ -72,7 +72,6 @@ backoff_max_times = 10
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 state_cache_size = 4294967296 # 4GB. Default is 1GB.
-separate_archival_state = true
 
 [runner]
 # 3 times per regular celestia block
