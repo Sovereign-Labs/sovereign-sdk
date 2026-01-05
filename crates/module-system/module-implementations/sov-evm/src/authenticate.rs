@@ -96,7 +96,8 @@ fn validate_chain_id(
         tx_hash,
     ))?;
 
-    if tx_chain_id != rollup_chain_id {
+    // Allow 0 chain id for compatibility with EIP7702
+    if tx_chain_id != rollup_chain_id && tx_chain_id != 0 {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
                 expected: rollup_chain_id,
