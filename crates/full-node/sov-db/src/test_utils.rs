@@ -311,6 +311,10 @@ pub enum CrashLocation {
     BeforeSavingLedger,
     /// Rollup crashes before committing the ledger.
     BeforeCommittingLedger,
+    /// Rollup crashes before saving the `CommittingAccessory` flag.
+    BeforeSavingAccessory,
+    /// Rollup crashes before committing the accessory.
+    BeforeCommittingAccessory,
     /// Rollup crashes before saving the `CommittingArchival` flag.
     BeforeSavingArchival,
     /// Rollup crashes before committing the the archival db.
