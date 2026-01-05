@@ -125,9 +125,8 @@ impl AccessoryDb {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use sov_rollup_interface::common::IntoSlotNumber;
+    use std::{collections::HashMap, sync::Arc};
 
     use super::*;
 
@@ -224,6 +223,11 @@ mod tests {
         );
     }
 
+    const VERSION_ZERO: SlotNumber = SlotNumber::new(0);
+    const VERSION_ONE: SlotNumber = SlotNumber::new(1);
+    const VERSION_TWO: SlotNumber = SlotNumber::new(2);
+    const VERSION_MAX: SlotNumber = SlotNumber::new(u64::MAX);
+
     #[test]
     fn secondary_index_populated() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -236,9 +240,10 @@ mod tests {
         // Write data at version 0
         let key1 = b"key1".to_vec();
         let value1 = b"value1".to_vec();
+
         let changes0 = AccessoryDb::materialize_values(
             vec![(key1.clone(), Some(value1.clone()))],
-            0.to_slot_number(),
+            VERSION_ZERO,
         )
         .unwrap();
         rocksdb.write_schemas(&changes0).unwrap();
@@ -248,7 +253,7 @@ mod tests {
         let value2 = b"value2".to_vec();
         let changes1 = AccessoryDb::materialize_values(
             vec![(key2.clone(), Some(value2.clone()))],
-            1.to_slot_number(),
+            VERSION_ONE,
         )
         .unwrap();
         rocksdb.write_schemas(&changes1).unwrap();
@@ -266,12 +271,48 @@ mod tests {
 
         // We should have exactly 2 entries in the secondary index
         assert_eq!(found_keys.len(), 2);
-        assert!(found_keys.contains(&(0.to_slot_number(), key1)));
-        assert!(found_keys.contains(&(1.to_slot_number(), key2)));
+        assert!(found_keys.contains(&(VERSION_ZERO, key1)));
+        assert!(found_keys.contains(&(VERSION_ONE, key2)));
+    }
+
+    struct TestData {
+        map: HashMap<SlotNumber, Vec<(AccessoryKey, AccessoryStateValue)>>,
+    }
+
+    impl TestData {
+        fn new() -> Self {
+            let mut map = HashMap::new();
+            map.insert(
+                VERSION_ZERO,
+                vec![(b"key0".to_vec(), Some(b"value0".to_vec()))],
+            );
+            map.insert(
+                VERSION_ONE,
+                vec![
+                    (b"key1".to_vec(), Some(b"value1".to_vec())),
+                    (b"key11".to_vec(), Some(b"value11".to_vec())),
+                ],
+            );
+
+            map.insert(
+                VERSION_TWO,
+                vec![
+                    (b"key2".to_vec(), Some(b"value12".to_vec())),
+                    (b"key11".to_vec(), Some(b"value12".to_vec())),
+                    (b"key0".to_vec(), None),
+                ],
+            );
+
+            Self { map }
+        }
+
+        fn for_version(&self, version: SlotNumber) -> Vec<(AccessoryKey, AccessoryStateValue)> {
+            self.map.get(&version).unwrap().clone()
+        }
     }
 
     #[test]
-    fn rollback_single_version() {
+    fn rollback_version() {
         let tempdir = tempfile::tempdir().unwrap();
         let rocksdb = Arc::new(
             AccessoryDb::get_rockbound_options()
@@ -281,90 +322,51 @@ mod tests {
         let reader = DeltaReader::new(rocksdb.clone(), Vec::new());
         let db = AccessoryDb::with_reader(reader).unwrap();
 
+        let data = TestData::new();
+
         // Write data at version 0
-        let key1 = b"key1".to_vec();
-        let value1 = b"value1".to_vec();
-        let changes0 = AccessoryDb::materialize_values(
-            vec![(key1.clone(), Some(value1.clone()))],
-            0.to_slot_number(),
-        )
-        .unwrap();
-        rocksdb.write_schemas(&changes0).unwrap();
+        let changes =
+            AccessoryDb::materialize_values(data.for_version(VERSION_ZERO), VERSION_ZERO).unwrap();
+        rocksdb.write_schemas(&changes).unwrap();
 
-        // Write data at version 1
-        let key2 = b"key2".to_vec();
-        let value2 = b"value2".to_vec();
-        let key3 = b"key3".to_vec();
-        let value3 = b"value3".to_vec();
-        let changes1 = AccessoryDb::materialize_values(
-            vec![
-                (key2.clone(), Some(value2.clone())),
-                (key3.clone(), Some(value3.clone())),
-            ],
-            1.to_slot_number(),
-        )
-        .unwrap();
-        rocksdb.write_schemas(&changes1).unwrap();
+        // Write data at version 0
+        let changes =
+            AccessoryDb::materialize_values(data.for_version(VERSION_ONE), VERSION_ONE).unwrap();
+        rocksdb.write_schemas(&changes).unwrap();
 
-        // Write data at version 2
-        let key4 = b"key4".to_vec();
-        let value4 = b"value4".to_vec();
-        let changes2 = AccessoryDb::materialize_values(
-            vec![(key4.clone(), Some(value4.clone()))],
-            2.to_slot_number(),
-        )
-        .unwrap();
-        rocksdb.write_schemas(&changes2).unwrap();
+        // Write data at version 0
+        let changes =
+            AccessoryDb::materialize_values(data.for_version(VERSION_TWO), VERSION_TWO).unwrap();
+        rocksdb.write_schemas(&changes).unwrap();
 
-        // Verify all data exists before rollback
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key1), 0.to_slot_number())
-                .unwrap(),
-            Some(value1.clone())
-        );
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key2), 1.to_slot_number())
-                .unwrap(),
-            Some(value2)
-        );
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key3), 1.to_slot_number())
-                .unwrap(),
-            Some(value3)
-        );
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key4), 2.to_slot_number())
-                .unwrap(),
-            Some(value4.clone())
-        );
+        for (k, v) in data.for_version(VERSION_TWO) {
+            assert_eq!(
+                db.get_value_option(&SlotKey::from_slice(&k), VERSION_MAX)
+                    .unwrap(),
+                v
+            );
+        }
+
+        // Rollback version 2
+        AccessoryDb::rollback_version(rocksdb.clone(), VERSION_TWO).unwrap();
+
+        for (k, v) in data.for_version(VERSION_ONE) {
+            assert_eq!(
+                db.get_value_option(&SlotKey::from_slice(&k), VERSION_MAX)
+                    .unwrap(),
+                v
+            );
+        }
 
         // Rollback version 1
-        AccessoryDb::rollback_version(rocksdb.clone(), 1.to_slot_number()).unwrap();
+        AccessoryDb::rollback_version(rocksdb.clone(), VERSION_ONE).unwrap();
 
-        // Verify data at version 0 still exists
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key1), 0.to_slot_number())
-                .unwrap(),
-            Some(value1)
-        );
-
-        // Verify data at version 1 is gone
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key2), 1.to_slot_number())
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key3), 1.to_slot_number())
-                .unwrap(),
-            None
-        );
-
-        // Verify data at version 2 still exists
-        assert_eq!(
-            db.get_value_option(&SlotKey::from_slice(&key4), 2.to_slot_number())
-                .unwrap(),
-            Some(value4)
-        );
+        for (k, v) in data.for_version(VERSION_ZERO) {
+            assert_eq!(
+                db.get_value_option(&SlotKey::from_slice(&k), VERSION_MAX)
+                    .unwrap(),
+                v
+            );
+        }
     }
 }

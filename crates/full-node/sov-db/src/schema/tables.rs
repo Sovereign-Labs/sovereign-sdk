@@ -297,7 +297,7 @@ define_table_without_codec!(
 );
 
 define_table_without_codec!(
-    /// Secondary index for efficient rollback: maps (SlotNumber, AccessoryKey) to unit.
+    /// Secondary index for efficient rollback.
     /// This allows fast lookup of all keys written at a specific version.
     (AccessoryKeysByVersion) (SlotNumber, AccessoryKey) => ()
 );
@@ -343,8 +343,8 @@ impl ValueCodec<ModuleAccessoryState> for AccessoryStateValue {
 
 impl KeyEncoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
     fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(std::mem::size_of::<u64>() + self.1.len() + 8);
-        // Write the version in big-endian order first for proper sorting by version
+        let mut out = Vec::with_capacity(std::mem::size_of::<Version>() + self.1.len() + 8);
+
         out.write_u64::<BigEndian>(self.0.get())
             .expect("serialization to vec is infallible");
         self.1
