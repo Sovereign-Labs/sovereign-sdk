@@ -40,7 +40,7 @@ impl TestableStorage for TestNomtStorage {
         self,
         items: &[(Vec<u8>, Option<Vec<u8>>)],
         version: u64,
-    ) -> Self::ChangeSet {
+    ) -> (Self::ChangeSet, [u8; 64]) {
         let TestNomtStorage {
             state_session_builder,
             historical_state: _,
@@ -86,20 +86,25 @@ impl TestableStorage for TestNomtStorage {
                 .iter()
                 .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
             // Not used at the moment,
-            root_hash,
+            root_hash.clone(),
             SlotNumber::new(version),
         )
         .unwrap();
 
-        NomtChangeSet {
-            state: StateFinishedSession {
-                user: user_finished_session,
-                kernel: kernel_finished_session,
+        let root_hash = root_hash.try_into().unwrap();
+
+        (
+            NomtChangeSet {
+                state: StateFinishedSession {
+                    user: user_finished_session,
+                    kernel: kernel_finished_session,
+                },
+                historical_state: historical_change_set,
+                accessory: accessory_change_set,
+                pinned_cache: None,
             },
-            historical_state: historical_change_set,
-            accessory: accessory_change_set,
-            pinned_cache: None,
-        }
+            root_hash,
+        )
     }
 
     fn get_value(&self, key: &[u8]) -> Option<Vec<u8>> {
@@ -337,7 +342,7 @@ async fn test_historical_state_with_pruning() {
             let value = height.to_be_bytes().to_vec();
             values.push((user_key, Some(value)));
         }
-        let stf_changes = stf_storage.materialize_from_key_values(&values, height);
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
 
         // Does not matter in this test
         let ledger_changes = SchemaBatch::default();

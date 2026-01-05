@@ -198,6 +198,15 @@ pub(crate) async fn get_signer_handler(
     Ok(Json(SignerResponse { address }))
 }
 
+pub(crate) async fn approximate_block_time_handler(
+    State(state): State<AppState>,
+) -> Result<Json<BlockTimeResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let block_time = state.da_service.get_approximate_block_time().await;
+    Ok(Json(BlockTimeResponse {
+        approximate_block_time_ms: block_time.as_millis() as u64,
+    }))
+}
+
 pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
     let state = AppState { da_service };
 
@@ -218,6 +227,10 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
         .route("/send-proof", post(send_proof_handler))
         .route("/proofs/:height", get(get_proofs_at_handler))
         .route("/signer", get(get_signer_handler))
+        .route(
+            "/approximate-block-time",
+            get(approximate_block_time_handler),
+        )
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024)) // 50MB limit
         .with_state(state)
 }

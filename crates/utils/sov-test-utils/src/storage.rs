@@ -177,7 +177,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         let commit_flag = CommitFlag::new(&config.path);
         let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
             .expect("Failed to initialize StateDb for NOMT");
-        let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
+        let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
             .default_setup_db_in_path(dir.path())
             .unwrap();
@@ -253,7 +253,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         self.accessory.write_schemas(&accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");
         self.historical_state
-            .commit(historical_state, &self.commit_flag)
+            .commit(historical_state, Some(&self.commit_flag))
             .unwrap();
 
         *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));

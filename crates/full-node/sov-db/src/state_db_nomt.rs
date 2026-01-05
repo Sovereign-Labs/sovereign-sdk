@@ -58,9 +58,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         // 1.
         let flag_mid_start = std::time::Instant::now();
-        commit_flag.save_commit_status(&CommitStatus::CommittingKernelNomt(
-            self.kernel.root().into_inner(),
-        ))?;
+        commit_flag.save_commit_status(&CommitStatus::CommittingKernelNomt)?;
         let flag_mid = flag_mid_start.elapsed();
 
         #[cfg(feature = "test-utils")]
@@ -75,9 +73,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         // 3.
         let flag_finish_start = std::time::Instant::now();
 
-        commit_flag.save_commit_status(&CommitStatus::CommittingUserNomt(
-            self.user.root().into_inner(),
-        ))?;
+        commit_flag.save_commit_status(&CommitStatus::CommittingUserNomt)?;
         let flag_finish = flag_finish_start.elapsed();
 
         #[cfg(feature = "test-utils")]
@@ -134,8 +130,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
     pub(crate) fn get_root_hashes(&self) -> StateRootHashes {
         StateRootHashes {
-            user: self.user.root(),
-            kernel: self.kernel.root(),
+            user: self.user.root().into_inner(),
+            kernel: self.kernel.root().into_inner(),
         }
     }
 
@@ -151,39 +147,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
 #[derive(Debug)]
 pub(crate) struct StateRootHashes {
-    pub(crate) user: nomt::Root,
-    pub(crate) kernel: nomt::Root,
-}
-
-impl StateRootHashes {
-    // It is known that historical root hash is a concatenation of 2 root hashes,
-    // but we don't want to duplicate logic between `sov_state` and here.
-    // So just the simple inclusion of 2 root hashes is enough.
-    // This is based on an assumption that serialized root hash is stored as is, without any permutation.
-    pub(crate) fn included_in_raw(
-        &self,
-        combined_historical_root: &rockbound::SchemaValue,
-    ) -> bool {
-        if combined_historical_root.len() < 64 {
-            tracing::warn!(
-                "Combined historical root is too short to contain 2 root hashes: {}",
-                combined_historical_root.len()
-            );
-            return false;
-        }
-        let user_needle: &[u8] = self.user.as_ref();
-        let kernel_needle: &[u8] = self.kernel.as_ref();
-        assert_eq!(user_needle.len(), 32);
-        assert_eq!(kernel_needle.len(), 32);
-
-        let user_found = combined_historical_root
-            .windows(32)
-            .any(|window| window == user_needle);
-        let kernel_found = combined_historical_root
-            .windows(32)
-            .any(|window| window == kernel_needle);
-        user_found && kernel_found
-    }
+    pub(crate) user: [u8; 32],
+    pub(crate) kernel: [u8; 32],
 }
 
 /// Combination of [`Overlay`] for user and kernel namespaces.

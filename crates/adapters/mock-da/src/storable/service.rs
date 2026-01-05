@@ -3,12 +3,14 @@
 use async_trait::async_trait;
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
 use crate::storable::StorableMockDaService;
 
-use crate::{MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier};
+use crate::config::SENSIBLE_BLOCK_PULL_TIME;
+use crate::{BlockProducingConfig, MockBlock, MockDaConfig, MockDaSpec, MockDaVerifier};
 
 #[async_trait]
 impl DaService for StorableMockDaService {
@@ -94,5 +96,16 @@ impl DaService for StorableMockDaService {
 
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         Some(self.sequencer_da_address)
+    }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        match self.block_producing {
+            BlockProducingConfig::Periodic { block_time_ms } => {
+                Duration::from_millis(block_time_ms)
+            }
+            BlockProducingConfig::OnBatchSubmit { .. }
+            | BlockProducingConfig::OnAnySubmit { .. }
+            | BlockProducingConfig::Manual => SENSIBLE_BLOCK_PULL_TIME,
+        }
     }
 }

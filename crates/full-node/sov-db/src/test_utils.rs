@@ -313,6 +313,12 @@ pub enum CrashLocation {
     BeforeCommittingLedger,
     /// Rollup crashes before saving the `CommittingArchival` flag.
     BeforeSavingArchival,
+    /// Rollup crashes before committing the the archival db.
+    BeforeCommittingArchival,
+    /// Rollup crashes before saving the `CommittingLive` flag.
+    BeforeSavingLive,
+    /// Rollup crashes before committing the the live db.
+    BeforeCommittingLive,
 }
 
 impl CrashLocation {
