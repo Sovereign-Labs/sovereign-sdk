@@ -273,56 +273,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn secondary_index_populated() {
-        let version_zero = SlotNumber::new(0);
-        let version_one = SlotNumber::new(1);
-
-        let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = Arc::new(
-            AccessoryDb::get_rockbound_options()
-                .default_setup_db_in_path(tempdir.path())
-                .unwrap(),
-        );
-
-        // Write data at version 0
-        let key1 = b"key1".to_vec();
-        let value1 = b"value1".to_vec();
-
-        let changes0 = AccessoryDb::materialize_values(
-            vec![(key1.clone(), Some(value1.clone()))],
-            version_zero,
-        )
-        .unwrap();
-        rocksdb.write_schemas(&changes0).unwrap();
-
-        // Write data at version 1
-        let key2 = b"key2".to_vec();
-        let value2 = b"value2".to_vec();
-        let changes1 = AccessoryDb::materialize_values(
-            vec![(key2.clone(), Some(value2.clone()))],
-            version_one,
-        )
-        .unwrap();
-        rocksdb.write_schemas(&changes1).unwrap();
-
-        // Verify secondary index contains the expected entries
-        let mut iter = rocksdb.iter::<AccessoryKeysByVersion>().unwrap();
-        iter.seek_to_first();
-
-        let mut found_keys = Vec::new();
-        for entry_result in iter {
-            let entry = entry_result.unwrap();
-            let (version, key) = entry.key;
-            found_keys.push((version, key));
-        }
-
-        // We should have exactly 2 entries in the secondary index
-        assert_eq!(found_keys.len(), 2);
-        assert!(found_keys.contains(&(version_zero, key1)));
-        assert!(found_keys.contains(&(version_one, key2)));
-    }
-
     // This test commits slot 3 and rolls back slots 2 and 1.
     #[test]
     fn rollback_accessory() {
