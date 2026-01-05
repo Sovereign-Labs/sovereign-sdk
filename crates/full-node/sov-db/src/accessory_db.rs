@@ -439,14 +439,13 @@ mod tests {
         // Rollback version 1
         {
             AccessoryDb::rollback_version(rocksdb.clone(), VERSION_ONE).unwrap();
-
-            let version = 1;
+            let version = 0;
 
             let latest =
                 AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
             assert_eq!(latest, Some((version, [version as u8; 64])));
 
-            for (k, v) in data.for_version(0) {
+            for (k, v) in data.for_version(version) {
                 assert_eq!(
                     db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
                         .unwrap(),
