@@ -66,7 +66,10 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
 /// A list of all tables used by the AccessoryDB. These tables store
 /// "accessory" state only accessible from a native execution context, to be
 /// used for JSON-RPC and other tooling.
-pub const ACCESSORY_TABLES: &[ColumnFamilyName] = &[ModuleAccessoryState::table_name()];
+pub const ACCESSORY_TABLES: &[ColumnFamilyName] = &[
+    ModuleAccessoryState::table_name(),
+    AccessoryKeysByVersion::table_name(),
+];
 
 /// Macro to define a table that implements [`rockbound::Schema`].
 /// `KeyCodec<Schema>` and `ValueCodec<Schema>` must be implemented separately.
@@ -293,6 +296,12 @@ define_table_without_codec!(
     (ModuleAccessoryState) (AccessoryKey, SlotNumber) => AccessoryStateValue
 );
 
+define_table_without_codec!(
+    /// Secondary index for efficient rollback: maps (SlotNumber, AccessoryKey) to unit.
+    /// This allows fast lookup of all keys written at a specific version.
+    (AccessoryKeysByVersion) (SlotNumber, AccessoryKey) => ()
+);
+
 impl KeyEncoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
     fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
         let mut out = Vec::with_capacity(self.0.len() + std::mem::size_of::<Version>() + 8);
@@ -329,5 +338,44 @@ impl ValueCodec<ModuleAccessoryState> for AccessoryStateValue {
 
     fn decode_value(data: &[u8]) -> rockbound::schema::Result<Self> {
         Ok(Self::deserialize_reader(&mut &data[..])?)
+    }
+}
+
+impl KeyEncoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
+    fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
+        let mut out = Vec::with_capacity(std::mem::size_of::<u64>() + self.1.len() + 8);
+        // Write the version in big-endian order first for proper sorting by version
+        out.write_u64::<BigEndian>(self.0.get())
+            .expect("serialization to vec is infallible");
+        self.1
+            .as_slice()
+            .serialize(&mut out)
+            .map_err(CodecError::from)?;
+        Ok(out)
+    }
+}
+
+impl SeekKeyEncoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
+    fn encode_seek_key(&self) -> rockbound::schema::Result<Vec<u8>> {
+        <(SlotNumber, AccessoryKey) as KeyEncoder<AccessoryKeysByVersion>>::encode_key(self)
+    }
+}
+
+impl KeyDecoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
+    fn decode_key(data: &[u8]) -> rockbound::schema::Result<Self> {
+        let mut cursor = std::io::Cursor::new(data);
+        let version = cursor.read_u64::<BigEndian>()?;
+        let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
+        Ok((SlotNumber::new_dangerous(version), key))
+    }
+}
+
+impl ValueCodec<AccessoryKeysByVersion> for () {
+    fn encode_value(&self) -> rockbound::schema::Result<Vec<u8>> {
+        Ok(Vec::new())
+    }
+
+    fn decode_value(_data: &[u8]) -> rockbound::schema::Result<Self> {
+        Ok(())
     }
 }
