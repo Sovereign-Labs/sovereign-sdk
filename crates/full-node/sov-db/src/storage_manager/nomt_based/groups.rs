@@ -493,12 +493,12 @@ impl AllDBsStateRoots {
         ledger_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<AllDBsStateRoots> {
-        let root_hash_from_archival_db = flat_state_db
-            .root_hash_from_archival_db()?
-            .unwrap_or_else(pre_genesis_root);
-
         let root_hash_from_live_db = flat_state_db
             .root_hash_from_live_db()?
+            .unwrap_or_else(pre_genesis_root);
+
+        let root_hash_from_archival_db = flat_state_db
+            .root_hash_from_archival_db()?
             .unwrap_or_else(pre_genesis_root);
 
         let root_hash_from_ledger_db =

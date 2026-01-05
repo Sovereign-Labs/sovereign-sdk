@@ -30,7 +30,7 @@ async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Nat
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
         BlockProducingConfig::Periodic {
-            block_time_ms: 1000,
+            block_time_ms: 1_000,
         },
         0,
     )
@@ -169,8 +169,6 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
         let max_nb_of_txs = 500;
 
-        println!("START1 =================");
-
         send_txs_in_background(
             0,
             receiver_addr,
@@ -212,8 +210,6 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         let test_rollup = start_node(temp_dir).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
         test_rollup.wait_for_next_blocks(10).await;
-
-        println!("START2 =================");
 
         let client = test_rollup.client.clone();
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
