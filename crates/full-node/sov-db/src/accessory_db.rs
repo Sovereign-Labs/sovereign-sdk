@@ -323,8 +323,9 @@ mod tests {
         assert!(found_keys.contains(&(version_one, key2)));
     }
 
+    // This test commits slot 3 and rolls back slots 2 and 1.
     #[test]
-    fn rollback_version() {
+    fn rollback_accessory() {
         let tempdir = tempfile::tempdir().unwrap();
         let rocksdb = Arc::new(
             AccessoryDb::get_rockbound_options()
@@ -336,27 +337,40 @@ mod tests {
 
         let data = TestData::new();
 
-        let version = 0;
-        let changes =
-            AccessoryDb::materialize_values(data.for_version(version), version.to_slot_number())
-                .unwrap();
+        // Commit version 0
+        {
+            let version = 0;
+            let changes = AccessoryDb::materialize_values(
+                data.for_version(version),
+                version.to_slot_number(),
+            )
+            .unwrap();
+            commit(&rocksdb, &changes, version).unwrap();
+        }
 
-        commit(&rocksdb, &changes, version).unwrap();
+        // Commit version 1
+        {
+            let version = 1;
+            let changes = AccessoryDb::materialize_values(
+                data.for_version(version),
+                version.to_slot_number(),
+            )
+            .unwrap();
+            commit(&rocksdb, &changes, version).unwrap();
+        }
 
-        let version = 1;
-        let changes =
-            AccessoryDb::materialize_values(data.for_version(version), version.to_slot_number())
-                .unwrap();
+        // Commit version 2
+        {
+            let version = 2;
+            let changes = AccessoryDb::materialize_values(
+                data.for_version(version),
+                version.to_slot_number(),
+            )
+            .unwrap();
 
-        commit(&rocksdb, &changes, version).unwrap();
-
-        let version = 2;
-        let changes =
-            AccessoryDb::materialize_values(data.for_version(version), version.to_slot_number())
-                .unwrap();
-
-        commit(&rocksdb, &changes, version).unwrap();
-        data.check_if_data_reverted(version, &db);
+            commit(&rocksdb, &changes, version).unwrap();
+            data.check_if_reverted(version, &db);
+        }
 
         // Rollback version 2
         {
@@ -365,9 +379,9 @@ mod tests {
 
             let latest =
                 AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
-            assert_eq!(latest, Some((version, [version as u8; 64])));
+            assert_eq!(latest, Some((version, root_hash_from_version(version))));
 
-            data.check_if_data_reverted(version, &db);
+            data.check_if_reverted(version, &db);
         }
 
         // Rollback version 1
@@ -377,10 +391,14 @@ mod tests {
 
             let latest =
                 AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
-            assert_eq!(latest, Some((version, [version as u8; 64])));
+            assert_eq!(latest, Some((version, root_hash_from_version(version))));
 
-            data.check_if_data_reverted(version, &db);
+            data.check_if_reverted(version, &db);
         }
+    }
+
+    fn root_hash_from_version(version: u64) -> [u8; 64] {
+        [version as u8; 64]
     }
 
     struct TestData {
@@ -411,7 +429,7 @@ mod tests {
             Self { map }
         }
 
-        fn check_if_data_reverted(&self, version: u64, db: &AccessoryDb) {
+        fn check_if_reverted(&self, version: u64, db: &AccessoryDb) {
             for (k, v) in self.for_version(version) {
                 assert_eq!(
                     db.get_value_option(&SlotKey::from_slice(&k), u64::MAX.to_slot_number())
@@ -431,7 +449,7 @@ mod tests {
         accessory_bach: &SchemaBatch,
         version: u64,
     ) -> anyhow::Result<()> {
-        let root_hash = [version as u8; 64].to_vec();
+        let root_hash = root_hash_from_version(version).to_vec();
         let version = SlotNumber::new(u64::from(version));
         let mut root_hash_batch = SchemaBatch::default();
         root_hash_batch
