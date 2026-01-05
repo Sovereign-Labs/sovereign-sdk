@@ -524,6 +524,10 @@ impl DaService for CelestiaService {
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         self.signer_address
     }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        std::time::Duration::from_secs(6)
+    }
 }
 
 pub(crate) fn extract_relevant_blobs(

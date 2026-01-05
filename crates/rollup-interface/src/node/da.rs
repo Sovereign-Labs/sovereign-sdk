@@ -248,6 +248,11 @@ pub trait DaService: Clone + Send + Sync + 'static {
     /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`].
     /// If `None` means that instance of DaService is not capable of sending blobs and can be used only in node mode.
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address>;
+
+    /// Method that should give an approximate block time of this DaService.
+    /// It helps other components to better arrange polling, timeouts or other operations.
+    /// If unclear it is better to return lower value.
+    async fn get_approximate_block_time(&self) -> std::time::Duration;
 }
 
 /// Retry the given async function with the given backoff policy.
