@@ -301,8 +301,8 @@ impl FlatStateDb {
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
         self.user.store_committed_archival_version(version);
-        // Write live db batch.
 
+        // Write live db batch.
         if commit_live_db {
             #[cfg(feature = "test-utils")]
             crate::test_utils::CrashLocation::BeforeSavingLive.crash_if_env_set();
@@ -343,7 +343,7 @@ impl FlatStateDb {
             self.latest_version_and_root_hash_archival_db()?
         else {
             assert!(live_version_and_root_hash.is_none());
-            tracing::info!("Roolup Archival & Live DBs are empty, nothing to rollback");
+            tracing::info!("Rollup Archival & Live DBs are empty, nothing to rollback");
             return Ok(());
         };
 
@@ -357,7 +357,11 @@ impl FlatStateDb {
             return Ok(());
         }
 
-        assert_eq!(current_version_archival, current_version_live + 1);
+        assert_eq!(
+            current_version_archival,
+            current_version_live + 1,
+            "Live and Archival DBs are in unrecoverable state."
+        );
 
         let prev_root_hash_archival = self
             .root_hash_from_archival_db_for_version(SlotNumber::new(current_version_live))?
@@ -520,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rollback_crash_before_comitting_live() -> anyhow::Result<()> {
+    fn test_rollback_crash_before_committing_live() -> anyhow::Result<()> {
         test_rollback(CrashLocation::BeforeCommittingLive, 1)
     }
 
@@ -529,7 +533,7 @@ mod tests {
     fn test_rollback(crash_location: CrashLocation, archival_version: u64) -> anyhow::Result<()> {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
-        let data = data_to_insert_per_verson();
+        let data = data_to_insert_per_version();
 
         // Commit version 0.
         {
@@ -586,7 +590,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
 
-        let data = data_to_insert_per_verson();
+        let data = data_to_insert_per_version();
 
         {
             let version = 0;
@@ -743,7 +747,7 @@ mod tests {
         }
     }
 
-    fn data_to_insert_per_verson() -> TestData {
+    fn data_to_insert_per_version() -> TestData {
         let mut data = TestData::new();
         data.insert(
             0,

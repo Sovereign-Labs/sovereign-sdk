@@ -494,7 +494,6 @@ where
         // Once we're this close to `deferred_slots_count`, we risk crossing the
         // `deferred_slots_count` threshold before the next call to
         // `update_state`. That's no good.
-
         let current_visible_slot_number =
             current_visible_slot_number_according_to_node::<S, Rt>(info);
         let too_close_to_deferred_slots_count_for_comfort =
