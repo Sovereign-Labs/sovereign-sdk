@@ -174,7 +174,7 @@ impl AccessoryDb {
 mod tests {
     use super::*;
     use sov_rollup_interface::common::IntoSlotNumber;
-    use std::{collections::HashMap, sync::Arc, u64};
+    use std::{collections::HashMap, sync::Arc};
 
     #[test]
     fn get_after_set() {
@@ -396,7 +396,7 @@ mod tests {
         version: u64,
     ) -> anyhow::Result<()> {
         let root_hash = root_hash_from_version(version).to_vec();
-        let version = SlotNumber::new(u64::from(version));
+        let version = SlotNumber::new(version);
         let mut root_hash_batch = SchemaBatch::default();
         root_hash_batch
             .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
