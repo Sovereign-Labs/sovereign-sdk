@@ -163,6 +163,27 @@ where
 
         state_roots.info("before validation");
 
+        if state_roots.is_kerner_nomt_root_newer() {
+            merkelized_state.kernel.rollback(1)?;
+        }
+
+        if state_roots.is_user_nomt_root_newer() {
+            merkelized_state.user.rollback(1)?;
+        }
+
+        if state_roots.is_ledger_db_root_newer() {
+            LedgerDb::rollback_head_slot(ledger_db.clone())?;
+        }
+
+        if state_roots.is_accessory_db_root_newer() {
+            AccessoryDb::rollback(accessory_db.clone())?;
+        }
+
+        if state_roots.is_archival_db_root_newer() {
+            flat_state_db.validate_and_rollback_archival()?;
+        }
+
+        /*
         match commit_status {
             CommitStatus::CommittingKernelNomt => {
                 // Kernel commit was successful but later commits failed. We rollback only the kernel.
@@ -209,6 +230,7 @@ where
             }
             CommitStatus::Success => {}
         }
+        */
 
         let state_roots = AllDBsStateRoots::from_dbs(
             merkelized_state,
