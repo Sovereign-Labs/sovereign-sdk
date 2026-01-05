@@ -517,6 +517,10 @@ impl AllDBsStateRoots {
                     // 2. It crashed before finishing the first commit, and the live DB was not saved.
                     //
                     // In this case, it is safe to delete all the databases.
+                    tracing::error!(
+                        ?commit_status,
+                        "Rollup instantiation error: Delete the rollup databases and start again."
+                    );
                     anyhow::bail!("Live db not found. Commit status: {commit_status:?}. Delete the rollup databses and start again.");
                 }
             }
