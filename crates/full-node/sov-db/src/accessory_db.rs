@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
-use rockbound::SchemaBatch;
+use rockbound::{rocksdb, SchemaBatch};
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::historical_state::STATE_ROOT_HASH_SINGLETON;
@@ -67,6 +67,30 @@ impl AccessoryDb {
             batch.put::<AccessoryKeysByVersion>(&(version, key), &())?;
         }
         Ok(batch)
+    }
+
+    /// TODO
+    pub fn commit(
+        accessory_db: &rockbound::DB,
+        accessory_bach: &SchemaBatch,
+        root_hash_batch: &SchemaBatch,
+    ) -> anyhow::Result<()> {
+        let mut accessory_db_batch = rocksdb::WriteBatch::default();
+        rockbound::DB::update_db_batch_with_schema_data(
+            &mut accessory_db_batch,
+            accessory_bach,
+            accessory_db,
+        )?;
+
+        rockbound::DB::update_db_batch_with_schema_data(
+            &mut accessory_db_batch,
+            root_hash_batch,
+            accessory_db,
+        )?;
+
+        accessory_db.write_db_batch(accessory_db_batch)?;
+
+        Ok(())
     }
 
     /// Rollback a specific version of the AccessoryDb.
@@ -317,6 +341,19 @@ mod tests {
         }
     }
 
+    fn commit(
+        accessory_db: &rockbound::DB,
+        accessory_bach: &SchemaBatch,
+        root_hash: Vec<u8>,
+        version: SlotNumber,
+    ) -> anyhow::Result<()> {
+        let mut root_hash_batch = SchemaBatch::default();
+        root_hash_batch
+            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
+
+        AccessoryDb::commit(accessory_db, accessory_bach, &root_hash_batch)
+    }
+
     #[test]
     fn rollback_version() {
         let tempdir = tempfile::tempdir().unwrap();
@@ -333,17 +370,23 @@ mod tests {
         // Write data at version 0
         let changes =
             AccessoryDb::materialize_values(data.for_version(VERSION_ZERO), VERSION_ZERO).unwrap();
-        rocksdb.write_schemas(&changes).unwrap();
+        //rocksdb.write_schemas(&changes).unwrap();
 
-        // Write data at version 0
+        commit(&rocksdb, &changes, [0u8; 64].to_vec(), VERSION_ZERO).unwrap();
+
+        // Write data at version 1
         let changes =
             AccessoryDb::materialize_values(data.for_version(VERSION_ONE), VERSION_ONE).unwrap();
-        rocksdb.write_schemas(&changes).unwrap();
+        //rocksdb.write_schemas(&changes).unwrap();
 
-        // Write data at version 0
+        commit(&rocksdb, &changes, [1u8; 64].to_vec(), VERSION_ONE).unwrap();
+
+        // Write data at version 2
         let changes =
             AccessoryDb::materialize_values(data.for_version(VERSION_TWO), VERSION_TWO).unwrap();
-        rocksdb.write_schemas(&changes).unwrap();
+        //rocksdb.write_schemas(&changes).unwrap();
+
+        commit(&rocksdb, &changes, [2u8; 64].to_vec(), VERSION_TWO).unwrap();
 
         for (k, v) in data.for_version(VERSION_TWO) {
             assert_eq!(

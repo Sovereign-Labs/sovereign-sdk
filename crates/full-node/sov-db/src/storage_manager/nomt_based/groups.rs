@@ -104,14 +104,15 @@ where
         crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
         let ledger_commit = self.commit_ledger(&ledger)?;
 
+        let accessory_commit =
+            self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
+
         let flat_metrics = self
             .flat_state
             .commit(historical_state, Some(&self.commit_flag))?;
 
         self.commit_flag
             .save_commit_status(&CommitStatus::Success)?;
-
-        let accessory_commit = self.commit_accessory(&accessory)?;
 
         let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
@@ -192,9 +193,15 @@ where
         Ok(())
     }
 
-    fn commit_accessory(&self, accessory: &SchemaBatch) -> anyhow::Result<Duration> {
+    fn commit_accessory(
+        &self,
+        accessory: &SchemaBatch,
+        root_hash_batch: &SchemaBatch,
+    ) -> anyhow::Result<Duration> {
         let accessory_start = std::time::Instant::now();
-        self.accessory.write_schemas(accessory)?;
+        //self.accessory.write_schemas(accessory)?;
+
+        AccessoryDb::commit(&self.accessory, accessory, root_hash_batch)?;
         Ok(accessory_start.elapsed())
     }
 
