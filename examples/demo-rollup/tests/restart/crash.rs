@@ -53,30 +53,10 @@ async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Nat
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_saving_kernel_nomt() -> anyhow::Result<()> {
-    tokio::time::timeout(
-        Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeSavingKernelNomt),
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_commiting_kernel_nomt() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingKernelNomt),
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_saving_user_nomt() -> anyhow::Result<()> {
-    tokio::time::timeout(
-        Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeSavingUserlNomt),
     )
     .await
     .unwrap()
@@ -93,30 +73,10 @@ async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_saving_ledger() -> anyhow::Result<()> {
-    tokio::time::timeout(
-        Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeSavingLedger),
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_commiting_ledger() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingLedger),
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_saving_accesorry() -> anyhow::Result<()> {
-    tokio::time::timeout(
-        Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeSavingAccessory),
     )
     .await
     .unwrap()
@@ -133,30 +93,10 @@ async fn test_crash_before_commiting_accesorry() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_saving_archival() -> anyhow::Result<()> {
-    tokio::time::timeout(
-        Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeSavingArchival),
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_comitting_archival() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingArchival),
-    )
-    .await
-    .unwrap()
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_saving_live() -> anyhow::Result<()> {
-    tokio::time::timeout(
-        Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeSavingLive),
     )
     .await
     .unwrap()

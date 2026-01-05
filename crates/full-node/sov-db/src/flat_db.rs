@@ -1,7 +1,6 @@
 //! A database to store the flat state of the rollup (i.e. the raw key-value pairs)
 //! used by NOMT.
 
-use crate::commit_flag::{CommitFlag, CommitStatus};
 use crate::historical_state::{HistoricalStateReader, STATE_ROOT_HASH_SINGLETON};
 use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
@@ -212,18 +211,13 @@ impl FlatStateDb {
     }
 
     /// Commit the `state_changes`.
-    pub fn commit(
-        &self,
-        state_changes: StateChanges,
-        commit_flag: Option<&CommitFlag>,
-    ) -> anyhow::Result<FlatStateCommitMetric> {
-        self.commit_internal(state_changes, commit_flag, true)
+    pub fn commit(&self, state_changes: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
+        self.commit_internal(state_changes, true)
     }
 
     fn commit_internal(
         &self,
         state_changes: StateChanges,
-        commit_flag: Option<&CommitFlag>,
         commit_live_db: bool,
     ) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
@@ -286,14 +280,7 @@ impl FlatStateDb {
             &self.live_db,
         )?;
 
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeSavingArchival.crash_if_env_set();
-
         // Write archival db batches.
-        if let Some(commit_flag) = commit_flag {
-            commit_flag.save_commit_status(&CommitStatus::CommittingArchivalUserAndKernel)?;
-        }
-
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeCommittingArchival.crash_if_env_set();
         self.archival_db.write_db_batch(archival_db_batch)?;
@@ -304,12 +291,6 @@ impl FlatStateDb {
 
         // Write live db batch.
         if commit_live_db {
-            #[cfg(feature = "test-utils")]
-            crate::test_utils::CrashLocation::BeforeSavingLive.crash_if_env_set();
-            if let Some(commit_flag) = commit_flag {
-                commit_flag.save_commit_status(&CommitStatus::CommittingLiveUserAndKernel)?;
-            }
-
             #[cfg(feature = "test-utils")]
             crate::test_utils::CrashLocation::BeforeCommittingLive.crash_if_env_set();
             self.live_db.write_db_batch(live_db_batch)?;
@@ -404,7 +385,7 @@ impl FlatStateDb {
 
         state_changes.root_hash_batch = Arc::new(root_hash_batch);
         // We rollback only archival db.
-        self.commit_internal(state_changes, None, false)?;
+        self.commit_internal(state_changes, false)?;
 
         Ok(())
     }
@@ -509,18 +490,8 @@ mod tests {
     type Changes = Vec<(SlotKey, Option<SlotValue>)>;
 
     #[test]
-    fn test_rollback_crash_before_saving_archival() -> anyhow::Result<()> {
-        test_rollback(CrashLocation::BeforeSavingArchival, 0)
-    }
-
-    #[test]
     fn test_rollback_crash_before_commiting_archival() -> anyhow::Result<()> {
         test_rollback(CrashLocation::BeforeCommittingArchival, 0)
-    }
-
-    #[test]
-    fn test_rollback_crash_before_saving_live() -> anyhow::Result<()> {
-        test_rollback(CrashLocation::BeforeSavingLive, 1)
     }
 
     #[test]
@@ -541,7 +512,7 @@ mod tests {
             let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
-            flat_db.commit(state_changes, None).unwrap();
+            flat_db.commit(state_changes).unwrap();
             assert_flat_state(version, version, &flat_db);
         }
 
@@ -555,7 +526,7 @@ mod tests {
 
             let state_changes = data.change_set(version);
             let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                flat_db.commit(state_changes, None).unwrap();
+                flat_db.commit(state_changes).unwrap();
             }));
 
             assert!(res.is_err());
@@ -597,7 +568,7 @@ mod tests {
             let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
-            flat_db.commit(state_changes, None).unwrap();
+            flat_db.commit(state_changes).unwrap();
             assert_flat_state(version, version, &flat_db);
         }
 
@@ -608,7 +579,7 @@ mod tests {
             let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
-            flat_db.commit(state_changes, None).unwrap();
+            flat_db.commit(state_changes).unwrap();
 
             assert_flat_state(version, version, &flat_db);
         }
@@ -620,7 +591,7 @@ mod tests {
             let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
-            flat_db.commit(state_changes, None).unwrap();
+            flat_db.commit(state_changes).unwrap();
 
             assert_flat_state(version, version, &flat_db);
         }

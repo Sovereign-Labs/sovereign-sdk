@@ -110,7 +110,7 @@ impl AccessoryDb {
         Ok(())
     }
 
-    /// Rollback a specific version of the AccessoryDb.
+    /// Rollback the AccessoryDb.
     /// This will delete all key-value pairs that were written at the specified version.
     pub fn rollback(accessory_db: Arc<rockbound::DB>) -> anyhow::Result<()> {
         let Some((version, _)) =
@@ -173,12 +173,9 @@ impl AccessoryDb {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use sov_rollup_interface::common::IntoSlotNumber;
     use std::{collections::HashMap, sync::Arc, u64};
-
-    use crate::rocks_db_config;
-
-    use super::*;
 
     #[test]
     fn get_after_set() {

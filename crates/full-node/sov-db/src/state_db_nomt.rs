@@ -2,15 +2,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use crate::config::RollupDbConfig;
+use crate::metrics::nomt::{MerklizedCommitMetric, NomtBeginSessionMetric, NomtDbMetric};
 use anyhow::Context;
 use nomt::hasher::BinaryHasher;
 use nomt::{Nomt, Overlay, SessionParams, WitnessMode};
 pub use rockbound::versioned_db::HistoricalValueError;
 use sov_rollup_interface::reexports::digest;
-
-use super::commit_flag::{CommitFlag, CommitStatus};
-use crate::config::RollupDbConfig;
-use crate::metrics::nomt::{MerklizedCommitMetric, NomtBeginSessionMetric, NomtDbMetric};
 
 const KERNEL: &str = "kernel_state";
 const USER: &str = "user_state";
@@ -42,23 +40,15 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
     /// Commit [`StateOverlay`] to disk.
     #[tracing::instrument(skip_all)]
-    pub(crate) fn commit(
-        &self,
-        overlay: StateOverlay,
-        commit_flag: &CommitFlag,
-    ) -> anyhow::Result<MerklizedCommitMetric> {
+    pub(crate) fn commit(&self, overlay: StateOverlay) -> anyhow::Result<MerklizedCommitMetric> {
         let start = std::time::Instant::now();
         let StateOverlay { user, kernel } = overlay;
         // Status should be completed before committing.
         let flag_prepare_start = std::time::Instant::now();
         let flag_prepare = flag_prepare_start.elapsed();
 
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeSavingKernelNomt.crash_if_env_set();
-
         // 1.
         let flag_mid_start = std::time::Instant::now();
-        commit_flag.save_commit_status(&CommitStatus::CommittingKernelNomt)?;
         let flag_mid = flag_mid_start.elapsed();
 
         #[cfg(feature = "test-utils")]
@@ -67,13 +57,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         // 2.
         let write_kernel = self.commit_kernel(kernel)?;
 
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeSavingUserlNomt.crash_if_env_set();
-
         // 3.
         let flag_finish_start = std::time::Instant::now();
-
-        commit_flag.save_commit_status(&CommitStatus::CommittingUserNomt)?;
         let flag_finish = flag_finish_start.elapsed();
 
         #[cfg(feature = "test-utils")]
@@ -122,10 +107,9 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     pub fn commit_change_set(
         &self,
         session: crate::storage_manager::StateFinishedSession,
-        commit_flag: &CommitFlag,
     ) -> anyhow::Result<MerklizedCommitMetric> {
         let overlay = session.into_state_overlay();
-        self.commit(overlay, commit_flag)
+        self.commit(overlay)
     }
 
     pub(crate) fn get_root_hashes(&self) -> StateRootHashes {
@@ -149,6 +133,12 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 pub(crate) struct StateRootHashes {
     pub(crate) user: [u8; 32],
     pub(crate) kernel: [u8; 32],
+}
+
+impl StateRootHashes {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.user == nomt::trie::TERMINATOR && self.kernel == nomt::trie::TERMINATOR
+    }
 }
 
 /// Combination of [`Overlay`] for user and kernel namespaces.
@@ -392,7 +382,6 @@ mod tests {
     fn test_session_can_be_built_while_finalized() {
         let temp_dir = tempfile::tempdir().unwrap();
         let config = RollupDbConfig::default_in_path(temp_dir.path().to_path_buf());
-        let commit_flag = CommitFlag::new(&config.path);
         let state_db = Arc::new(NomtStateDb::<H>::new(config).unwrap());
 
         // First produce some overlays with data
@@ -446,7 +435,7 @@ mod tests {
             drop(kernel_session);
             let mut overlays = all_overlays.write().unwrap();
             let overlay = overlays.remove(&commiting_ref).unwrap();
-            state_db.commit(overlay, &commit_flag).unwrap();
+            state_db.commit(overlay).unwrap();
         }
     }
 }
