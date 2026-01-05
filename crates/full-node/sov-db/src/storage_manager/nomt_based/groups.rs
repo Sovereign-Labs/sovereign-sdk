@@ -49,11 +49,10 @@ where
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
-        let separate_archival_state = config.separate_archival_state;
 
         let commit_flag = CommitFlag::new(&config.path);
         let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
-        let flat_state = FlatStateDb::new(path.clone(), state_cache_size, separate_archival_state)?;
+        let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
         let ledger_rocksdb =
             Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
 

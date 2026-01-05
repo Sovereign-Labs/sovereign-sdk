@@ -37,50 +37,39 @@ impl FlatStateDb {
     const ARCHIVAL_DB_PATH_SUFFIX: &'static str = "archival-state-db";
 
     /// Create a new [`FlatStateDb`] from a path.
-    pub fn new(
-        path: std::path::PathBuf,
-        cache_size: usize,
-        separate_archival: bool,
-    ) -> anyhow::Result<Self> {
-        let mut columns: Vec<ColumnFamilyDescriptor> =
-            vec![default_cf_descriptor(StateRootHashes::table_name())];
+    pub fn new(path: std::path::PathBuf, cache_size: usize) -> anyhow::Result<Self> {
+        let live_db = {
+            let mut live_columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
 
-        VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_column_families(
-            &mut columns,
-            separate_archival,
-        )?;
-        VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_column_families(
-            &mut columns,
-            separate_archival,
-        )?;
-        let live_db = Self::get_rockbound_options(columns)
-            .setup_db_in_path_with_column_descriptors(path.clone())?;
-        let live_db = Arc::new(live_db);
-        let archival_db = if separate_archival {
+            VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_live_db_column_families(
+                &mut live_columns,
+            )?;
+            VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_live_db_column_families(
+                &mut live_columns,
+            )?;
+
+            let live = Self::get_rockbound_options(live_columns)
+                .setup_db_in_path_with_column_descriptors(path.clone())?;
+            Arc::new(live)
+        };
+
+        let archival_db = {
             let archival_path = path.join(Self::ARCHIVAL_DB_PATH_SUFFIX);
-            let archival_columns = vec![
-                default_cf_descriptor(StateRootHashes::table_name()),
-                default_cf_descriptor(
-                    NomtStateValues::<UserNamespace>::HISTORICAL_COLUMN_FAMILY_NAME,
-                ),
-                default_cf_descriptor(
-                    NomtStateValues::<KernelNamespace>::HISTORICAL_COLUMN_FAMILY_NAME,
-                ),
-                default_cf_descriptor(NomtStateValues::<UserNamespace>::PRUNING_COLUMN_FAMILY_NAME),
-                default_cf_descriptor(
-                    NomtStateValues::<KernelNamespace>::PRUNING_COLUMN_FAMILY_NAME,
-                ),
-                default_cf_descriptor(
-                    NomtStateValues::<UserNamespace>::VERSION_METADATA_COLUMN_FAMILY_NAME,
-                ),
-                default_cf_descriptor(
-                    NomtStateValues::<KernelNamespace>::VERSION_METADATA_COLUMN_FAMILY_NAME,
-                ),
-            ];
-            let archival = Self::get_rockbound_options(archival_columns);
-            Arc::new(archival.setup_db_in_path_with_column_descriptors(archival_path)?)
-        } else {
-            live_db.clone()
+
+            let mut archival_columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
+
+            VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_archival_db_column_families(
+                &mut archival_columns,
+            )?;
+
+            VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_archival_db_column_families(
+                &mut archival_columns,
+            )?;
+
+            let archival = Self::get_rockbound_options(archival_columns)
+                .setup_db_in_path_with_column_descriptors(archival_path)?;
+
+            Arc::new(archival)
         };
 
         let inner = Arc::new(RwLock::new(Inner {
@@ -538,7 +527,6 @@ mod tests {
     // This test commits data for version 0 of the rollup state and panics at various points during the commit.
     // Afterward, it checks whether the rollback logic correctly reverted the archival state.
     fn test_rollback(crash_location: CrashLocation, archival_version: u64) -> anyhow::Result<()> {
-        let separate_archival = true;
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
         let data = data_to_insert_per_verson();
@@ -546,8 +534,7 @@ mod tests {
         // Commit version 0.
         {
             let version = 0;
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
             flat_db.commit(state_changes, None).unwrap();
@@ -560,8 +547,7 @@ mod tests {
         // Crash during commit of version 1.
         {
             let version = 1;
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
             let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -574,8 +560,7 @@ mod tests {
 
         // Rollback to version 0.
         {
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             flat_db.validate_and_rollback_archival().unwrap();
             assert_flat_state(0, 0, &flat_db);
@@ -607,8 +592,7 @@ mod tests {
 
         {
             let version = 0;
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
             flat_db.commit(state_changes, None).unwrap();
@@ -619,8 +603,7 @@ mod tests {
 
         {
             let version = 1;
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
             flat_db.commit(state_changes, None).unwrap();
@@ -632,8 +615,7 @@ mod tests {
 
         {
             let version = 2;
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             let state_changes = data.change_set(version);
             flat_db.commit(state_changes, None).unwrap();
@@ -646,8 +628,7 @@ mod tests {
         // Rollbacks
 
         {
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
 
             flat_db.rollback_archival_one_slot().unwrap();
 
@@ -658,8 +639,7 @@ mod tests {
         unlock_dbs(&tempdir);
 
         {
-            let flat_db =
-                FlatStateDb::new(db_path.to_path_buf(), 1_000_000, separate_archival).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
             flat_db.rollback_archival_one_slot().unwrap();
 
             let version = 2;

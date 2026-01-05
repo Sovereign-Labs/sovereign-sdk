@@ -285,7 +285,7 @@ mod tests {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
         let commit_flag = CommitFlag::new(db_path);
-        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let key1 = b"AAA";
         let key2 = b"BBB";
@@ -321,7 +321,7 @@ mod tests {
         let db_path = tempdir.path();
         let commit_flag = CommitFlag::new(db_path);
 
-        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         // Create two independent readers on the same database.
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
@@ -401,7 +401,7 @@ mod tests {
         let db_path = tempdir.path();
         let commit_flag = CommitFlag::new(db_path);
 
-        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000, true).unwrap(); // Use a 1MB state cache for tests
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
         let reader2 = HistoricalStateReader::new_empty(&rocksdb);
