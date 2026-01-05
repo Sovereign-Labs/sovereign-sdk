@@ -31,7 +31,7 @@ impl TestableStorage for TestNativeStorage {
         self,
         items: &[(Vec<u8>, Option<Vec<u8>>)],
         _version: u64,
-    ) -> Self::ChangeSet {
+    ) -> (Self::ChangeSet, [u8; 64]) {
         let mut preimages = Vec::with_capacity(items.len());
         let mut batch = Vec::with_capacity(items.len());
         let mut accessory_batch = Vec::with_capacity(items.len());
@@ -72,10 +72,13 @@ impl TestableStorage for TestNativeStorage {
         let accessory_change_set =
             AccessoryDb::materialize_values(accessory_batch, SlotNumber::GENESIS).unwrap();
 
-        NativeChangeSet {
-            state_change_set,
-            accessory_change_set,
-        }
+        (
+            NativeChangeSet {
+                state_change_set,
+                accessory_change_set,
+            },
+            [0; 64],
+        )
     }
 
     fn get_value(&self, key: &[u8]) -> Option<Vec<u8>> {
@@ -235,7 +238,7 @@ fn test_fork_keeps_reference_to_snapshot_after_finalization() {
 
     let stf_changes = storage.materialize_from_key_value(key.to_vec(), Some(value_1.to_vec()), 0);
     storage_manager
-        .save_change_set(&block_a, stf_changes, SchemaBatch::default())
+        .save_change_set(&block_a, stf_changes.0, SchemaBatch::default())
         .unwrap();
 
     let (stf_reader_b, _) = storage_manager.create_state_for(&block_b).unwrap();
@@ -250,7 +253,7 @@ fn test_fork_keeps_reference_to_snapshot_after_finalization() {
     let stf_changes =
         stf_reader_b.materialize_from_key_value(key.to_vec(), Some(value_2.to_vec()), 1);
     storage_manager
-        .save_change_set(&block_b, stf_changes, SchemaBatch::default())
+        .save_change_set(&block_b, stf_changes.0, SchemaBatch::default())
         .unwrap();
 
     storage_manager.finalize(&block_a).unwrap();

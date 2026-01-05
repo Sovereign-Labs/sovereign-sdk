@@ -11,7 +11,7 @@ async fn simple_transfer() -> anyhow::Result<()> {
 
     let simple_transfer = test_client.make_tx(Some(Address::ZERO), None);
     let gas_estimation = test_client.eth_estimate_gas(simple_transfer).await;
-    assert_eq!(gas_estimation, (14_710 / 2) * 3 + 100_000);
+    assert_eq!(gas_estimation, (14_810 / 2) * 3 + 100_000);
     Ok(())
 }
 
@@ -21,7 +21,7 @@ async fn contract_deploy() -> anyhow::Result<()> {
 
     let deploy_tx = test_client.make_tx(None, Some(test_client.contract.byte_code()));
     let gas_estimation = test_client.eth_estimate_gas(deploy_tx).await;
-    assert_eq!(gas_estimation, (248_038 / 2) * 3 + 100_000);
+    assert_eq!(gas_estimation, (248_136 / 2) * 3 + 100_000);
     Ok(())
 }
 

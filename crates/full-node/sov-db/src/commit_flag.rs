@@ -11,11 +11,12 @@ const FLAG_FILE_NAME: &str = "commit_status.flag";
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Clone, Copy)]
 pub enum CommitStatus {
     /// A commit of **kernel state** is in progress.
-    /// Stores the previous `kernel` root hash before the commit began.
-    CommittingKernelNomt([u8; 32]),
+    CommittingKernelNomt,
     /// A commit of **user state** is in progress.
     /// Stores the previous `user` root hash before the commit began.
-    CommittingUserNomt([u8; 32]),
+    CommittingUserNomt,
+    /// /// A commit of **LedgerDB** is in progress.
+    CommittingLedger,
     /// A commit of **archival user and kernel state** in the flat-db is in progress.
     CommittingArchivalUserAndKernel,
     /// A commit of **live user and kernel state** in the flat-db is in progress.

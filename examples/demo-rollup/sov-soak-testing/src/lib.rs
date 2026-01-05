@@ -129,8 +129,8 @@ pub async fn setup_rollup(
 
     let rollup_builder = TestRollupBuilder::new_with_storage_path(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
-        sov_soak_testing_lib::DEFAULT_BLOCK_PRODUCING_CONFIG,
-        sov_soak_testing_lib::DEFAULT_FINALIZATION_BLOCKS,
+        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        DEFAULT_FINALIZATION_BLOCKS,
         StoragePath::Buf(storage_path),
         false,
     )

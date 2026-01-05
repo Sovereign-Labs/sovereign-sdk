@@ -5,6 +5,8 @@ use crate::{Amount, Gas, GasArray, GasMeter, GasMeteringError, GetGasPrice, Spec
 
 /// The default Ethereum block gas limit: 1B
 pub const ETHEREUM_BLOCK_GAS_LIMIT: u64 = 1_000_000_000;
+/// The default Ethereum tx gas limit: 30M
+pub const ETHEREUM_TX_GAS_LIMIT: u64 = 30_000_000;
 
 /// A struct that keeps track of the gas used.
 /// The gas meter continues running until it either depletes its funds or runs out of gas, depending on its configuration.

@@ -4,7 +4,8 @@ mod tests;
 pub use crate::config::CelestiaConfig;
 use crate::metrics::client::{
     BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
-    GetNamespaceDataMeasurement, SubmitPayForBlob,
+    GetNamespaceDataMeasurement, HeaderSyncStateMeasurement, StateBalanceForAddressMeasurement,
+    StateEstimateGasPriceMeasurement, SubmitPayForBlob,
 };
 use crate::metrics::full::{
     BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
@@ -525,6 +526,10 @@ impl DaService for CelestiaService {
     async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         self.signer_address
     }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        std::time::Duration::from_secs(6)
+    }
 }
 
 pub(crate) fn extract_relevant_blobs(
@@ -628,23 +633,48 @@ async fn gather_stat(
     signer: &celestia_types::state::AccAddress,
     priority: celestia_client::tx::TxPriority,
 ) -> anyhow::Result<CelestiaAdapterStateMeasurement> {
-    let balance = client
-        .state()
-        .balance_for_address(signer)
-        .await
-        .context("state.BalanceForAddress")?;
+    // TODO: timeout as param!!!
+    let request_timeout = std::time::Duration::from_secs(12);
 
-    let sync_state = client
-        .header()
-        .sync_state()
-        .await
-        .context("header.SyncState")?;
+    // Balance
+    let balance_start = std::time::Instant::now();
+    let balance_response =
+        tokio::time::timeout(request_timeout, client.state().balance_for_address(signer)).await;
+    let response_time = balance_start.elapsed();
+    let is_success = matches!(balance_response, Ok(Ok(_)));
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(StateBalanceForAddressMeasurement::new(
+            response_time,
+            is_success,
+        ));
+    });
+    let balance = flatten_timeout::<u64>(balance_response).context("state.BalanceForAddress")?;
+
+    // Sync state
+    let sync_state_start = std::time::Instant::now();
+    let sync_state_response =
+        tokio::time::timeout(request_timeout, client.header().sync_state()).await;
+    let response_time = sync_state_start.elapsed();
+    let is_success = matches!(sync_state_response, Ok(Ok(_)));
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(HeaderSyncStateMeasurement::new(response_time, is_success));
+    });
+    let sync_state = flatten_timeout(sync_state_response).context("header.SyncState")?;
     let sync_distance = sync_state.to_height.saturating_sub(sync_state.from_height);
-    let gas_price = client
-        .state()
-        .estimate_gas_price(priority)
-        .await
-        .context("state.EstimateGasPrice")?;
+
+    // Gas price
+    let gas_price_start = std::time::Instant::now();
+    let gas_price_response =
+        tokio::time::timeout(request_timeout, client.state().estimate_gas_price(priority)).await;
+    let response_time = gas_price_start.elapsed();
+    let is_success = matches!(gas_price_response, Ok(Ok(_)));
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(StateEstimateGasPriceMeasurement::new(
+            response_time,
+            is_success,
+        ));
+    });
+    let gas_price = flatten_timeout(gas_price_response).context("state.EstimateGasPrice")?;
 
     Ok(CelestiaAdapterStateMeasurement {
         balance,

@@ -1,3 +1,9 @@
+# 2025-12-31
+- #2281 Breaking change for DaService implementations: new method `DaService::get_approximate_block_time`
+# 2026-01-01
+- #2256 Enforce the EVM block gas limit and introduce the EVM tx gas limit in config.
+- #2279 Propagates fee information to ethereum block responses
+
 # 2025-12-22
 - #2265 Adds a config to the EVM to allow accepting invalid transactions.
 

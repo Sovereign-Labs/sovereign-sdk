@@ -202,4 +202,20 @@ impl DaService for StorableMockDaClient {
             .expect("Failed to parse signer response");
         Some(signer_response.address)
     }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        let url = self.url("/approximate-block-time").expect("Bad url");
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .expect("Failed to fetch approximate block time");
+
+        let block_time_response: BlockTimeResponse = handle_response(response)
+            .await
+            .expect("Failed to parse approximate block time response");
+
+        std::time::Duration::from_millis(block_time_response.approximate_block_time_ms)
+    }
 }
