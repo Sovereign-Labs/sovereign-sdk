@@ -1,3 +1,6 @@
+# 2026-01-05
+- #2297 **Breaking change**: Removes the `separate_archival_state` flag. After this change, `livedb` and `archivaldb` are always stored in separate locations. Users should remove this flag from their configurations. If it was previously set to false, the node will need to be resynced from genesis.
+
 # 2026-01-01
 - #2256 Enforce the EVM block gas limit and introduce the EVM tx gas limit in config.
 - #2279 Propagates fee information to ethereum block responses
