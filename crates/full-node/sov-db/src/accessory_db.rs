@@ -77,22 +77,16 @@ impl AccessoryDb {
         let latest = reader.get_largest::<StateRootHashes>()?;
 
         match latest {
-            Some(((version, _state_root_hash_id), root_hash)) => {
-                // Convert SchemaValue (Vec<u8>) to [u8; 64]
-                let root_hash_array: [u8; 64] = root_hash.try_into().map_err(|v: Vec<u8>| {
-                    anyhow::anyhow!(
-                        "Invalid root hash length: expected 64 bytes, got {}",
-                        v.len()
-                    )
-                })?;
-
+            Some(((version, _), root_hash)) => {
+                let root_hash_array: [u8; 64] =
+                    root_hash.try_into().expect("Root hash muts be [u8; 64]");
                 Ok(Some((version.get(), root_hash_array)))
             }
             None => Ok(None),
         }
     }
 
-    /// TODO
+    /// Write the accessory data to disc.
     pub fn commit(
         accessory_db: &rockbound::DB,
         accessory_bach: &SchemaBatch,
@@ -156,11 +150,7 @@ impl AccessoryDb {
         for entry_result in iter {
             let entry = entry_result?;
             let (slot_number, key) = entry.key;
-
-            // Sanity check - we should only see keys from the target version
-            if slot_number != version {
-                panic!("XXX");
-            }
+            assert_eq!(slot_number, version);
 
             // Delete from both the main table and the secondary index
             schema_batch.delete::<ModuleAccessoryState>(&(key.clone(), slot_number))?;
@@ -185,6 +175,8 @@ impl AccessoryDb {
 mod tests {
     use sov_rollup_interface::common::IntoSlotNumber;
     use std::{collections::HashMap, sync::Arc, u64};
+
+    use crate::rocks_db_config;
 
     use super::*;
 
@@ -281,11 +273,11 @@ mod tests {
         );
     }
 
-    const VERSION_ZERO: SlotNumber = SlotNumber::new(0);
-    const VERSION_ONE: SlotNumber = SlotNumber::new(1);
-
     #[test]
     fn secondary_index_populated() {
+        let version_zero = SlotNumber::new(0);
+        let version_one = SlotNumber::new(1);
+
         let tempdir = tempfile::tempdir().unwrap();
         let rocksdb = Arc::new(
             AccessoryDb::get_rockbound_options()
@@ -299,7 +291,7 @@ mod tests {
 
         let changes0 = AccessoryDb::materialize_values(
             vec![(key1.clone(), Some(value1.clone()))],
-            VERSION_ZERO,
+            version_zero,
         )
         .unwrap();
         rocksdb.write_schemas(&changes0).unwrap();
@@ -309,7 +301,7 @@ mod tests {
         let value2 = b"value2".to_vec();
         let changes1 = AccessoryDb::materialize_values(
             vec![(key2.clone(), Some(value2.clone()))],
-            VERSION_ONE,
+            version_one,
         )
         .unwrap();
         rocksdb.write_schemas(&changes1).unwrap();
@@ -327,55 +319,8 @@ mod tests {
 
         // We should have exactly 2 entries in the secondary index
         assert_eq!(found_keys.len(), 2);
-        assert!(found_keys.contains(&(VERSION_ZERO, key1)));
-        assert!(found_keys.contains(&(VERSION_ONE, key2)));
-    }
-
-    struct TestData {
-        map: HashMap<u64, Vec<(AccessoryKey, AccessoryStateValue)>>,
-    }
-
-    impl TestData {
-        fn new() -> Self {
-            let mut map = HashMap::new();
-            map.insert(0, vec![(b"key0".to_vec(), Some(b"value0".to_vec()))]);
-            map.insert(
-                1,
-                vec![
-                    (b"key1".to_vec(), Some(b"value1".to_vec())),
-                    (b"key11".to_vec(), Some(b"value11".to_vec())),
-                ],
-            );
-
-            map.insert(
-                2,
-                vec![
-                    (b"key2".to_vec(), Some(b"value12".to_vec())),
-                    (b"key11".to_vec(), Some(b"value12".to_vec())),
-                    (b"key0".to_vec(), None),
-                ],
-            );
-
-            Self { map }
-        }
-
-        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, AccessoryStateValue)> {
-            self.map.get(&version).unwrap().clone()
-        }
-    }
-
-    fn commit(
-        accessory_db: &rockbound::DB,
-        accessory_bach: &SchemaBatch,
-        version: u64,
-    ) -> anyhow::Result<()> {
-        let root_hash = [version as u8; 64].to_vec();
-        let version = SlotNumber::new(u64::from(version));
-        let mut root_hash_batch = SchemaBatch::default();
-        root_hash_batch
-            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
-
-        AccessoryDb::commit(accessory_db, accessory_bach, &root_hash_batch)
+        assert!(found_keys.contains(&(version_zero, key1)));
+        assert!(found_keys.contains(&(version_one, key2)));
     }
 
     #[test]
@@ -411,16 +356,7 @@ mod tests {
                 .unwrap();
 
         commit(&rocksdb, &changes, version).unwrap();
-
-        let max = u64::MAX;
-
-        for (k, v) in data.for_version(version) {
-            assert_eq!(
-                db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
-                    .unwrap(),
-                v
-            );
-        }
+        data.check_if_data_reverted(version, &db);
 
         // Rollback version 2
         {
@@ -431,13 +367,7 @@ mod tests {
                 AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
             assert_eq!(latest, Some((version, [version as u8; 64])));
 
-            for (k, v) in data.for_version(1) {
-                assert_eq!(
-                    db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
-                        .unwrap(),
-                    v
-                );
-            }
+            data.check_if_data_reverted(version, &db);
         }
 
         // Rollback version 1
@@ -449,13 +379,64 @@ mod tests {
                 AccessoryDb::latest_version_and_root_hash_archival_db(rocksdb.clone()).unwrap();
             assert_eq!(latest, Some((version, [version as u8; 64])));
 
-            for (k, v) in data.for_version(version) {
+            data.check_if_data_reverted(version, &db);
+        }
+    }
+
+    struct TestData {
+        map: HashMap<u64, Vec<(AccessoryKey, AccessoryStateValue)>>,
+    }
+
+    impl TestData {
+        fn new() -> Self {
+            let mut map = HashMap::new();
+            map.insert(0, vec![(b"key0".to_vec(), Some(b"value0".to_vec()))]);
+            map.insert(
+                1,
+                vec![
+                    (b"key1".to_vec(), Some(b"value1".to_vec())),
+                    (b"key11".to_vec(), Some(b"value11".to_vec())),
+                ],
+            );
+
+            map.insert(
+                2,
+                vec![
+                    (b"key2".to_vec(), Some(b"value12".to_vec())),
+                    (b"key11".to_vec(), Some(b"value12".to_vec())),
+                    (b"key0".to_vec(), None),
+                ],
+            );
+
+            Self { map }
+        }
+
+        fn check_if_data_reverted(&self, version: u64, db: &AccessoryDb) {
+            for (k, v) in self.for_version(version) {
                 assert_eq!(
-                    db.get_value_option(&SlotKey::from_slice(&k), max.to_slot_number())
+                    db.get_value_option(&SlotKey::from_slice(&k), u64::MAX.to_slot_number())
                         .unwrap(),
                     v
                 );
             }
         }
+
+        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, AccessoryStateValue)> {
+            self.map.get(&version).unwrap().clone()
+        }
+    }
+
+    fn commit(
+        accessory_db: &rockbound::DB,
+        accessory_bach: &SchemaBatch,
+        version: u64,
+    ) -> anyhow::Result<()> {
+        let root_hash = [version as u8; 64].to_vec();
+        let version = SlotNumber::new(u64::from(version));
+        let mut root_hash_batch = SchemaBatch::default();
+        root_hash_batch
+            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
+
+        AccessoryDb::commit(accessory_db, accessory_bach, &root_hash_batch)
     }
 }

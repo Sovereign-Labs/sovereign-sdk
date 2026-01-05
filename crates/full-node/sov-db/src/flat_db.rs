@@ -174,7 +174,11 @@ impl FlatStateDb {
                     panic!("Root hash missing for the latest DB version {version}",);
                 });
 
-        Ok(Some(state_root_hash.try_into().unwrap()))
+        Ok(Some(
+            state_root_hash
+                .try_into()
+                .expect("Root hash muts be [u8; 64]"),
+        ))
     }
 
     fn latest_reader_and_version(
