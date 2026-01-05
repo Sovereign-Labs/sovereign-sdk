@@ -296,10 +296,8 @@ async fn send_txs(
         // It's fine not to check the result here — it will be verified later via subscription.
         let res = api_client.send_tx_to_sequencer(&tx).await;
 
-        if res.is_err() {
-            if std::env::var(CRASH_ENV_NAME).is_ok() {
-                return;
-            }
+        if res.is_err() && std::env::var(CRASH_ENV_NAME).is_ok() {
+            return;
         }
 
         // Send transactions continuously every 100ms to maintain steady TX traffic during the test.
