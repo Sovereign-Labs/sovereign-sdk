@@ -137,11 +137,16 @@ where
         ledger_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<()> {
-        let state_roots =
-            AllDBsStateRoots::from_dbs(merkelized_state, ledger_db.clone(), flat_state_db)?;
-
         let commit_status = commit_flag.read_status()?;
-        state_roots.info(&commit_status, "before validation");
+
+        let state_roots = AllDBsStateRoots::from_dbs(
+            merkelized_state,
+            ledger_db.clone(),
+            flat_state_db,
+            commit_status,
+        )?;
+
+        state_roots.info("before validation");
 
         match commit_status {
             CommitStatus::CommittingKernelNomt => {
@@ -179,8 +184,9 @@ where
             CommitStatus::Success => {}
         }
 
-        let state_roots = AllDBsStateRoots::from_dbs(merkelized_state, ledger_db, flat_state_db)?;
-        state_roots.info(&commit_status, "after validation");
+        let state_roots =
+            AllDBsStateRoots::from_dbs(merkelized_state, ledger_db, flat_state_db, commit_status)?;
+        state_roots.info("after validation");
         state_roots.check_all();
 
         Ok(())
@@ -485,6 +491,7 @@ struct AllDBsStateRoots {
     root_hash_from_archival_db: [u8; 64],
     root_hash_from_ledger_db: [u8; 64],
     root_hash_nomt: StateRootHashes,
+    commit_status: CommitStatus,
 }
 
 impl AllDBsStateRoots {
@@ -492,10 +499,28 @@ impl AllDBsStateRoots {
         merkelized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
+        commit_status: CommitStatus,
     ) -> anyhow::Result<AllDBsStateRoots> {
-        let root_hash_from_live_db = flat_state_db
-            .root_hash_from_live_db()?
-            .unwrap_or_else(pre_genesis_root);
+        let root_hash_from_live_db = match flat_state_db.root_hash_from_live_db()? {
+            Some(root_hash_from_live_db) => root_hash_from_live_db,
+            None => {
+                // root_hash_from_live_db is None.
+                if commit_status == CommitStatus::Success {
+                    // Missing `root_hash_from_live_db` and the commit status is Success, which indicates that the rollup is being run for the first time.
+                    pre_genesis_root()
+                } else {
+                    // The commit status is not Success. This means that the rollup ran before for the first time but crashed before saving the live DB.
+                    //
+                    // In this case, we should manually remove all databases and start again.
+                    // This happens only in the following scenario:
+                    // 1. The rollup started from genesis.
+                    // 2. It crashed before finishing the first commit, and the live DB was not saved.
+                    //
+                    // In this case, it is safe to delete all the databases.
+                    anyhow::bail!("Live db not found. Commit status: {commit_status:?}. Delete the rollup databses and start again.");
+                }
+            }
+        };
 
         let root_hash_from_archival_db = flat_state_db
             .root_hash_from_archival_db()?
@@ -511,6 +536,7 @@ impl AllDBsStateRoots {
             root_hash_from_archival_db,
             root_hash_from_ledger_db,
             root_hash_nomt,
+            commit_status,
         })
     }
 
@@ -547,14 +573,14 @@ impl AllDBsStateRoots {
         );
     }
 
-    fn info(&self, commit_status: &CommitStatus, msg: &str) {
+    fn info(&self, msg: &str) {
         tracing::info!(
             root_hash_from_live_db = hex::encode(self.root_hash_from_live_db),
             root_hash_from_archival_db = hex::encode(self.root_hash_from_archival_db),
             root_hash_from_ledger_db = hex::encode(self.root_hash_from_ledger_db),
             root_hash_nomt_user = hex::encode(self.root_hash_nomt.user),
             root_hash_nomt_kernel = hex::encode(self.root_hash_nomt.kernel),
-            ?commit_status,
+            ?self.commit_status,
             "State roots on startup {msg}"
         );
     }
