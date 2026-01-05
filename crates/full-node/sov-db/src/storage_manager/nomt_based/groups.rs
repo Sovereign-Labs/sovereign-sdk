@@ -119,6 +119,15 @@ where
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 
+        let rr = AllDBsStateRoots::from_dbs(
+            &self.merklized_state,
+            self.ledger.clone(),
+            self.accessory.clone(),
+            &self.flat_state,
+            CommitStatus::Success,
+        )
+        .unwrap();
+
         // FLATDB
         let flat_metrics = self
             .flat_state
@@ -201,6 +210,7 @@ where
                 merkelized_state.kernel.rollback(1)?;
                 merkelized_state.user.rollback(1)?;
                 LedgerDb::rollback_head_slot(ledger_db.clone())?;
+
                 AccessoryDb::rollback(accessory_db.clone())?;
 
                 if state_roots.is_archival_db_root_newer() {
@@ -218,6 +228,7 @@ where
             commit_status,
         )?;
         state_roots.info("after validation");
+
         state_roots.check_all();
 
         Ok(())
@@ -600,7 +611,7 @@ impl AllDBsStateRoots {
     }
 
     fn is_accessory_db_root_newer(&self) -> bool {
-        self.root_hash_from_archival_db != self.root_hash_from_live_db
+        self.root_hash_from_accessory_db != self.root_hash_from_live_db
     }
 
     fn is_archival_db_root_newer(&self) -> bool {
