@@ -53,28 +53,28 @@ where
         let commit_flag = CommitFlag::new(&config.path);
         let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
         let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
-        let ledger_rocksdb =
-            Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+        let ledger = Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+
+        let accessory =
+            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?);
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessesary(
             &commit_flag,
             &merklized_state,
-            ledger_rocksdb.clone(),
+            ledger.clone(),
+            accessory.clone(),
             &flat_state,
         )?;
 
         commit_flag.save_commit_status(&CommitStatus::Success)?;
 
-        let accessory_rocksdb =
-            AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-
         Ok(Self {
             commit_flag,
             merklized_state,
             flat_state,
-            accessory: Arc::new(accessory_rocksdb),
-            ledger: ledger_rocksdb,
+            accessory,
+            ledger,
             phantom_ref: Default::default(),
         })
     }
@@ -136,6 +136,7 @@ where
         commit_flag: &CommitFlag,
         merkelized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
+        accessory_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<()> {
         let commit_status = commit_flag.read_status()?;
@@ -143,6 +144,7 @@ where
         let state_roots = AllDBsStateRoots::from_dbs(
             merkelized_state,
             ledger_db.clone(),
+            accessory_db.clone(),
             flat_state_db,
             commit_status,
         )?;
@@ -185,8 +187,13 @@ where
             CommitStatus::Success => {}
         }
 
-        let state_roots =
-            AllDBsStateRoots::from_dbs(merkelized_state, ledger_db, flat_state_db, commit_status)?;
+        let state_roots = AllDBsStateRoots::from_dbs(
+            merkelized_state,
+            ledger_db,
+            accessory_db,
+            flat_state_db,
+            commit_status,
+        )?;
         state_roots.info("after validation");
         state_roots.check_all();
 
@@ -496,6 +503,7 @@ struct AllDBsStateRoots {
     // whether all other databases were committed in the previous run.
     root_hash_from_live_db: [u8; 64],
     root_hash_from_archival_db: [u8; 64],
+    root_hash_from_accessory_db: [u8; 64],
     root_hash_from_ledger_db: [u8; 64],
     root_hash_nomt: StateRootHashes,
     commit_status: CommitStatus,
@@ -505,6 +513,7 @@ impl AllDBsStateRoots {
     fn from_dbs<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
         merkelized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
+        accessory_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
         commit_status: CommitStatus,
     ) -> anyhow::Result<AllDBsStateRoots> {
@@ -542,9 +551,15 @@ impl AllDBsStateRoots {
 
         let root_hash_nomt = merkelized_state.get_root_hashes();
 
+        let root_hash_from_accessory_db =
+            AccessoryDb::latest_version_and_root_hash_archival_db(accessory_db)?
+                .map(|(_, r)| r)
+                .unwrap_or_else(pre_genesis_root);
+
         Ok(AllDBsStateRoots {
             root_hash_from_live_db,
             root_hash_from_archival_db,
+            root_hash_from_accessory_db,
             root_hash_from_ledger_db,
             root_hash_nomt,
             commit_status,
@@ -563,11 +578,25 @@ impl AllDBsStateRoots {
         self.root_hash_from_ledger_db != self.root_hash_from_live_db
     }
 
+    fn _is_accessory_db_root_newer(&self) -> bool {
+        self.root_hash_from_archival_db != self.root_hash_from_live_db
+    }
+
     fn is_archival_db_root_newer(&self) -> bool {
         self.root_hash_from_archival_db != self.root_hash_from_live_db
     }
 
     fn check_all(&self) {
+        assert_eq!(
+            hex::encode(self.root_hash_from_archival_db),
+            hex::encode(self.root_hash_from_live_db)
+        );
+
+        assert_eq!(
+            hex::encode(self.root_hash_from_accessory_db),
+            hex::encode(self.root_hash_from_live_db)
+        );
+
         assert_eq!(
             hex::encode(self.root_hash_from_ledger_db),
             hex::encode(self.root_hash_from_live_db)
