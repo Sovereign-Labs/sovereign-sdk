@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::commit_flag::{CommitFlag, CommitStatus};
 use crate::flat_db::DbCache;
 use std::any::Any;
