@@ -524,7 +524,7 @@ mod tests {
         test_rollback(CrashLocation::BeforeCommittingLive, 1)
     }
 
-    // This test commits data for version 0 of the rollup state and panics at various points during the commit.
+    // This test commits data for version 0 of the rollup state and panics at various points during the commit for version 1.
     // Afterward, it checks whether the rollback logic correctly reverted the archival state.
     fn test_rollback(crash_location: CrashLocation, archival_version: u64) -> anyhow::Result<()> {
         let tempdir = tempfile::tempdir().unwrap();
