@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::commit_flag::{CommitFlag, CommitStatus};
 use crate::flat_db::DbCache;
 use std::any::Any;
@@ -92,8 +93,10 @@ where
                 },
         } = group;
 
+        // NOMT
         let merklized_commit = self.merklized_state.commit(state, &self.commit_flag)?;
 
+        // LEDGER
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeSavingLedger.crash_if_env_set();
 
@@ -104,9 +107,19 @@ where
         crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
         let ledger_commit = self.commit_ledger(&ledger)?;
 
+        // ACCESORRY
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeSavingAccessory.crash_if_env_set();
+
+        self.commit_flag
+            .save_commit_status(&CommitStatus::CommittingAccessory)?;
+
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CrashLocation::BeforeCommittingAccessory.crash_if_env_set();
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 
+        // FLATDB
         let flat_metrics = self
             .flat_state
             .commit(historical_state, Some(&self.commit_flag))?;
@@ -179,10 +192,8 @@ where
                 LedgerDb::rollback_head_slot(ledger_db.clone())?;
 
                 if state_roots.is_accessory_db_root_newer() {
-                    //AccessoryDb::rollback(accessory_db.clone())?;
+                    AccessoryDb::rollback(accessory_db.clone())?;
                 }
-
-                todo!()
             }
 
             CommitStatus::CommittingArchivalUserAndKernel
@@ -190,6 +201,7 @@ where
                 merkelized_state.kernel.rollback(1)?;
                 merkelized_state.user.rollback(1)?;
                 LedgerDb::rollback_head_slot(ledger_db.clone())?;
+                AccessoryDb::rollback(accessory_db.clone())?;
 
                 if state_roots.is_archival_db_root_newer() {
                     flat_state_db.validate_and_rollback_archival()?;
@@ -217,8 +229,6 @@ where
         root_hash_batch: &SchemaBatch,
     ) -> anyhow::Result<Duration> {
         let accessory_start = std::time::Instant::now();
-        //self.accessory.write_schemas(accessory)?;
-
         AccessoryDb::commit(&self.accessory, accessory, root_hash_batch)?;
         Ok(accessory_start.elapsed())
     }

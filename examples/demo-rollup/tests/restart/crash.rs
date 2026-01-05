@@ -113,6 +113,26 @@ async fn test_crash_before_commiting_ledger() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_saving_accesorry() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeSavingAccessory),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_commiting_accesorry() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeCommittingAccessory),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_saving_archival() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
