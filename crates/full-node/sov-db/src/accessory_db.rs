@@ -148,8 +148,7 @@ impl AccessoryDb {
 
         let mut keys_deleted = 0;
         for entry_result in iter {
-            let entry = entry_result?;
-            let (slot_number, key) = entry.key;
+            let (slot_number, key) = entry_result?.key;
             assert_eq!(slot_number, version);
 
             // Delete from both the main table and the secondary index
