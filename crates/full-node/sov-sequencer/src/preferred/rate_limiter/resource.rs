@@ -228,7 +228,7 @@ mod tests {
         {
             let r1 = Resource::new(5, 5, 7, Gas::from([8, 9]));
             let r2 = Resource { ..r1 };
-            assert!(r2.err_if_exceeding(&r1).is_ok());
+            assert!(r2.err_if_exceeding(&r2).is_err());
         }
 
         {
@@ -248,10 +248,7 @@ mod tests {
 
         {
             let r1 = Resource::new(100, 101, 102, Gas::from([103, 104]));
-            let r2 = Resource {
-                space_in_bytes: 1,
-                ..r1
-            };
+            let r2 = Resource::new(101, 101, 103, Gas::from([104, 105])); // Set space in bytes exactly equal
             assert_eq!(
                 r1.err_if_exceeding(&r2),
                 Err(LimitExceeded::Space {
@@ -263,10 +260,7 @@ mod tests {
 
         {
             let r1 = Resource::new(100, 101, 102, Gas::from([103, 104]));
-            let r2 = Resource {
-                execution_time_micros: 1,
-                ..r1
-            };
+            let r2 = Resource::new(101, 102, 102, Gas::from([104, 105])); // Set execution time micros exactly equal
             assert_eq!(
                 r1.err_if_exceeding(&r2),
                 Err(LimitExceeded::ExecutionTime {
