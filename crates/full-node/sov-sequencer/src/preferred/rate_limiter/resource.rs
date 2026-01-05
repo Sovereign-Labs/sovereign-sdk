@@ -108,21 +108,23 @@ impl<G: Gas> Resource<G> {
     }
 
     pub(crate) fn err_if_exceeding(&self, other: &Self) -> Result<(), LimitExceeded<G>> {
-        if self.req_counter > other.req_counter {
+        // Error if the total accumulated is greater than or equal to the max allowed. 
+        // Using >= instead of > to ensure that a rate limit of zero prevents all requests.
+        if self.req_counter >= other.req_counter {
             return Err(LimitExceeded::RequestCount {
                 total_accumulated: self.req_counter,
                 max_allowed: other.req_counter,
             });
         }
 
-        if self.space_in_bytes > other.space_in_bytes {
+        if self.space_in_bytes >= other.space_in_bytes {
             return Err(LimitExceeded::Space {
                 total_accumulated: self.space_in_bytes,
                 max_allowed: other.space_in_bytes,
             });
         }
 
-        if self.execution_time_micros > other.execution_time_micros {
+        if self.execution_time_micros >= other.execution_time_micros {
             return Err(LimitExceeded::ExecutionTime {
                 total_accumulated: self.execution_time_micros,
                 max_allowed: other.execution_time_micros,
