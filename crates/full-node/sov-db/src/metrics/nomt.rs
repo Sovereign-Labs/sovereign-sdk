@@ -155,9 +155,6 @@ impl Metric for PrunerMetric {
 
 #[derive(Debug)]
 pub struct MerklizedCommitMetric {
-    pub flag_prepare: std::time::Duration,
-    pub flag_mid: std::time::Duration,
-    pub flag_finish: std::time::Duration,
     // How much time in total it took to write overlay
     pub write_user: std::time::Duration,
     pub write_kernel: std::time::Duration,
@@ -169,18 +166,12 @@ pub struct MerklizedCommitMetric {
 
 impl MerklizedCommitMetric {
     fn serialize_values_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // Flag
-        let flag_prepare_us = self.flag_prepare.as_micros();
-        let flag_mid_us = self.flag_mid.as_micros();
-        let flag_finish_us = self.flag_finish.as_micros();
-        write!(buffer,
-               "merklized_flag_prepare_us={flag_prepare_us},merklized_flag_mid_us={flag_mid_us},merklized_flag_finish={flag_finish_us}")?;
         // Times
         let write_user_us = self.write_user.as_micros();
         let write_kernel_us = self.write_kernel.as_micros();
         let total_us = self.total.as_micros();
         write!(buffer,
-               ",merklized_write_user_us={write_user_us},merklized_write_kernel_us={write_kernel_us},merklized_total_us={total_us}")?;
+               "merklized_write_user_us={write_user_us},merklized_write_kernel_us={write_kernel_us},merklized_total_us={total_us}")?;
 
         // Attempts
         let write_attempts_user = self.write_attempts_user;

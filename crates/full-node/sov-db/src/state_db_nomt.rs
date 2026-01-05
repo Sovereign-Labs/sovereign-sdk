@@ -43,14 +43,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     pub(crate) fn commit(&self, overlay: StateOverlay) -> anyhow::Result<MerklizedCommitMetric> {
         let start = std::time::Instant::now();
         let StateOverlay { user, kernel } = overlay;
-        // Status should be completed before committing.
-        let flag_prepare_start = std::time::Instant::now();
-        let flag_prepare = flag_prepare_start.elapsed();
-
         // 1.
-        let flag_mid_start = std::time::Instant::now();
-        let flag_mid = flag_mid_start.elapsed();
-
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeCommittingKernelNomt.crash_if_env_set();
 
@@ -58,9 +51,6 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let write_kernel = self.commit_kernel(kernel)?;
 
         // 3.
-        let flag_finish_start = std::time::Instant::now();
-        let flag_finish = flag_finish_start.elapsed();
-
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeCommittingUserNomt.crash_if_env_set();
 
@@ -69,13 +59,10 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
 
         let total = start.elapsed();
         Ok(MerklizedCommitMetric {
-            flag_prepare,
             write_attempts_kernel: 1,
             write_kernel,
-            flag_mid,
             write_attempts_user: 1,
             write_user,
-            flag_finish,
             total,
         })
     }
