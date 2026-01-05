@@ -253,7 +253,7 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         self.accessory.write_schemas(&accessory).unwrap();
         tracing::trace!("Committed accessory changes to disk");
         self.historical_state
-            .commit(historical_state, &self.commit_flag)
+            .commit(historical_state, Some(&self.commit_flag))
             .unwrap();
 
         *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));

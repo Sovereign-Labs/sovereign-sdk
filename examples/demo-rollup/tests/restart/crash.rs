@@ -30,7 +30,7 @@ async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Nat
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
         BlockProducingConfig::Periodic {
-            block_time_ms: 1_000,
+            block_time_ms: 1000,
         },
         0,
     )
@@ -55,7 +55,7 @@ async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Nat
 #[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_saving_kernel_nomt() -> anyhow::Result<()> {
     tokio::time::timeout(
-        Duration::from_secs(30),
+        Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeSavingKernelNomt),
     )
     .await
@@ -122,6 +122,36 @@ async fn test_crash_before_saving_archival() -> anyhow::Result<()> {
     .unwrap()
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_comitting_archival() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeCommittingArchival),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_saving_live() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeSavingLive),
+    )
+    .await
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_crash_before_comitting_live() -> anyhow::Result<()> {
+    tokio::time::timeout(
+        Duration::from_secs(120),
+        test_start_stop_with_crash(CrashLocation::BeforeCommittingLive),
+    )
+    .await
+    .unwrap()
+}
+
 // This test checks whether rollp can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
@@ -137,7 +167,9 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         let client = test_rollup.client.clone();
 
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
-        let max_nb_of_txs = 200;
+        let max_nb_of_txs = 500;
+
+        println!("START1 =================");
 
         send_txs_in_background(
             0,
@@ -150,8 +182,8 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
 
         let mut nb_of_events = 0;
         loop {
-            // Crash the node after 5 txs.
-            if nb_of_events == 5 {
+            // Crash the node after 100 txs.
+            if nb_of_events == 100 {
                 crash_moment.set_crash_env();
             }
 
@@ -181,10 +213,12 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         test_rollup.wait_for_sequencer_ready().await.unwrap();
         test_rollup.wait_for_next_blocks(10).await;
 
+        println!("START2 =================");
+
         let client = test_rollup.client.clone();
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;
 
-        let max_nb_of_txs = 100;
+        let max_nb_of_txs = 500;
         let start_generation = 1000;
 
         // Keep sending txs in the bacground.
@@ -198,7 +232,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         .await;
 
         // Check if transactions are coming through.
-        for _ in 0..10 {
+        for _ in 0..40 {
             let _ = event_subscription.next().await.unwrap().unwrap();
         }
         test_rollup.shutdown().await.unwrap();
@@ -260,10 +294,16 @@ async fn send_txs(
         );
 
         // It's fine not to check the result here — it will be verified later via subscription.
-        let _ = api_client.send_tx_to_sequencer(&tx).await;
+        let res = api_client.send_tx_to_sequencer(&tx).await;
+
+        if res.is_err() {
+            if std::env::var(CRASH_ENV_NAME).is_ok() {
+                return;
+            }
+        }
 
         // Send transactions continuously every 100ms to maintain steady TX traffic during the test.
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
         nb_of_txs += 1;
 
         assert!(nb_of_txs < max_nb_of_txs);
