@@ -358,7 +358,8 @@ where
             (0, 0) => 0,
             (_, 0) => u64::MAX,
             (funds, gas) => {
-                let gas_from_funds = (funds.checked_div(price).unwrap_or(u64::MAX as u128)).min(u64::MAX as u128) as u64;
+                let gas_from_funds = (funds.checked_div(price).unwrap_or(u64::MAX as u128))
+                    .min(u64::MAX as u128) as u64;
                 gas.min(gas_from_funds)
             }
         };
