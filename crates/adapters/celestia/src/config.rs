@@ -3,6 +3,7 @@ use std::num::NonZero;
 
 use schemars::JsonSchema;
 use std::fmt;
+use bincode::config;
 
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
@@ -161,6 +162,7 @@ impl CelestiaConfig {
         }
         // Submission section.
         if let Some(grpc_url) = &self.grpc_url {
+            builder = builder.grpc_url(grpc_url);
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
                 builder = builder.grpc_metadata("x-token", grpc_auth_token);
             }
