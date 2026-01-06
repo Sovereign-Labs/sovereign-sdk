@@ -3,7 +3,6 @@ use std::num::NonZero;
 
 use schemars::JsonSchema;
 use std::fmt;
-use bincode::config;
 
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
