@@ -545,30 +545,44 @@ impl AllDBsStateRoots {
     }
 
     fn check_all(&self) {
-        assert_eq!(
-            hex::encode(self.root_hash_from_archival_db),
-            hex::encode(self.root_hash_from_live_db)
+        Self::check_hashes(
+            &self.root_hash_from_archival_db,
+            "root_hash_from_archival_db",
+            &self.root_hash_from_live_db,
         );
 
-        assert_eq!(
-            hex::encode(self.root_hash_from_accessory_db),
-            hex::encode(self.root_hash_from_live_db)
+        Self::check_hashes(
+            &self.root_hash_from_accessory_db,
+            "root_hash_from_accessory_db",
+            &self.root_hash_from_live_db,
         );
 
-        assert_eq!(
-            hex::encode(self.root_hash_from_ledger_db),
-            hex::encode(self.root_hash_from_live_db)
+        Self::check_hashes(
+            &self.root_hash_from_ledger_db,
+            "root_hash_from_ledger_db",
+            &self.root_hash_from_live_db,
         );
 
-        assert_eq!(
-            hex::encode(self.root_hash_nomt.user),
-            hex::encode(&self.root_hash_from_live_db[0..32])
+        Self::check_hashes(
+            &self.root_hash_nomt.user,
+            "self.root_hash_nomt.user",
+            &self.root_hash_from_live_db[0..32],
         );
 
-        assert_eq!(
-            hex::encode(self.root_hash_nomt.kernel),
-            hex::encode(&self.root_hash_from_live_db[32..])
+        Self::check_hashes(
+            &self.root_hash_nomt.kernel,
+            "self.root_hash_nomt.kernel",
+            &self.root_hash_from_live_db[0..32],
         );
+    }
+
+    fn check_hashes(root_hash: &[u8], root_hash_name: &str, root_hash_from_live_db: &[u8]) {
+        let root_hash = hex::encode(root_hash);
+        let root_hash_from_live_db = hex::encode(root_hash_from_live_db);
+
+        if root_hash != root_hash_from_live_db {
+            panic!("{root_hash_name}: root_hash dooes not match root_hash_from_live_db: {root_hash_from_live_db}");
+        }
     }
 
     fn info(&self, msg: &str) {
