@@ -572,7 +572,7 @@ impl AllDBsStateRoots {
         Self::check_hashes(
             &self.root_hash_nomt.kernel,
             "self.root_hash_nomt.kernel",
-            &self.root_hash_from_live_db[0..32],
+            &self.root_hash_from_live_db[32..],
         );
     }
 
@@ -581,7 +581,7 @@ impl AllDBsStateRoots {
         let root_hash_from_live_db = hex::encode(root_hash_from_live_db);
 
         if root_hash != root_hash_from_live_db {
-            panic!("{root_hash_name}: root_hash dooes not match root_hash_from_live_db: {root_hash_from_live_db}");
+            panic!("{root_hash_name}: {root_hash} dooes not match root_hash_from_live_db: {root_hash_from_live_db}");
         }
     }
 
