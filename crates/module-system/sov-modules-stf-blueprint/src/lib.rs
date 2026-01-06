@@ -443,9 +443,9 @@ where
             {
                 let mut pinned_cache = pre_state.try_load_saved_pinned_cache();
                 if pinned_cache.is_none() {
-                    tracing::debug!("No pinned cache found in storage. Populating from db if supported - this may take a while...");
+                    tracing::trace!("No pinned cache found in storage. Populating from db if supported - this may take a while...");
                     pinned_cache = RT::populate_pinned_cache(&pre_state);
-                    tracing::debug!("Finished populating pinned cache from db.");
+                    tracing::trace!("Finished populating pinned cache from db.");
                 }
                 pinned_cache
             }
