@@ -274,7 +274,7 @@ impl NamespaceBoundaryProof {
                 last_share: None,
             });
         }
-        let all_before_last = &last_row.shares[..last_row.shares.len() - 1];
+        let all_before_last = &last_row.shares[..last_row.shares.len().saturating_sub(1)];
         let last_share = last_row
             .shares
             .last()

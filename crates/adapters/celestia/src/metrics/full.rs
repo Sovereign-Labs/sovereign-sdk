@@ -51,9 +51,12 @@ pub(crate) struct NamespaceDataMetrics {
 
 impl NamespaceDataMetrics {
     pub fn new(data: &NamespaceData) -> Self {
-        let rows = data.rows().len();
-        let shares = data.rows().iter().map(|r| r.shares.len()).sum();
-        Self { rows, shares }
+        let rows = data.rows();
+        let shares = rows.iter().map(|r| r.shares.len()).sum();
+        Self {
+            rows: rows.len(),
+            shares,
+        }
     }
 }
 

@@ -292,37 +292,37 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(no_read, read_half).await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "invalid proof self-check: InvalidRoot")]
-async fn verification_fails_if_sender_changed() {
-    // This is the preparation part, consider it as malicious native code:
-    // TODO: Find a way to test it differently
-    // let mut block = with_rollup_batch_data::filtered_block();
-    // let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-    // let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
-    // let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
-    // let addr_len = addr_1.as_ref().len();
-    //
-    // let row = block.rollup_batch_data.data.rows().get(0).unwrap();
-    // let share = row.shares.get(0).unwrap();
-    // let mut raw_share_1 = share.data().clone().to_vec();
-    //
-    // let add_pos = raw_share_1
-    //     .windows(addr_len)
-    //     .position(|window| window == addr_1.as_ref())
-    //     .expect("Block should contain given address. Check source data");
-    //
-    // raw_share_1.splice(add_pos..add_pos + addr_len, addr_2.as_ref().iter().copied());
-    //
-    // let malicious_share = celestia_types::Share::from_raw(&raw_share_1).unwrap();
-    //
-    // row.shares[0] = malicious_share;
-    //
-    // // This is how it is observed
-    // verification_error(block, "InvalidRoot", rollup_params)
-    //     .await
-    //     .unwrap();
-}
+// #[tokio::test(flavor = "multi_thread")]
+// #[should_panic(expected = "invalid proof self-check: InvalidRoot")]
+// async fn verification_fails_if_sender_changed() {
+//     // This is the preparation part, consider it as malicious native code:
+//     // TODO: Find a way to test it differently
+//     // let mut block = with_rollup_batch_data::filtered_block();
+//     // let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+//     // let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
+//     // let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
+//     // let addr_len = addr_1.as_ref().len();
+//     //
+//     // let row = block.rollup_batch_data.data.rows().get(0).unwrap();
+//     // let share = row.shares.get(0).unwrap();
+//     // let mut raw_share_1 = share.data().clone().to_vec();
+//     //
+//     // let add_pos = raw_share_1
+//     //     .windows(addr_len)
+//     //     .position(|window| window == addr_1.as_ref())
+//     //     .expect("Block should contain given address. Check source data");
+//     //
+//     // raw_share_1.splice(add_pos..add_pos + addr_len, addr_2.as_ref().iter().copied());
+//     //
+//     // let malicious_share = celestia_types::Share::from_raw(&raw_share_1).unwrap();
+//     //
+//     // row.shares[0] = malicious_share;
+//     //
+//     // // This is how it is observed
+//     // verification_error(block, "InvalidRoot", rollup_params)
+//     //     .await
+//     //     .unwrap();
+// }
 //
 // async fn verification_error(
 //     block: FilteredCelestiaBlock,
