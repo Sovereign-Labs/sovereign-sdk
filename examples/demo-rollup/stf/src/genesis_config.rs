@@ -98,7 +98,7 @@ where
 
     let nonces_config = ();
 
-    let evm_config: EvmGenesisConfig = read_genesis_json(&genesis_paths.evm_genesis_path)?;
+    let evm_config: EvmGenesisConfig<S> = read_genesis_json(&genesis_paths.evm_genesis_path)?;
 
     let chain_state_config: ChainStateConfig<S> =
         read_genesis_json(&genesis_paths.chain_state_genesis_path)?;

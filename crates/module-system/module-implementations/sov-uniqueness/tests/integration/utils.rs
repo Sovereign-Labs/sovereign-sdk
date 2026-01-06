@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::{eip1559::MIN_PROTOCOL_BASE_FEE, eip2718::Encodable2718};
@@ -5,8 +7,8 @@ use alloy_primitives::{Address, Bytes, TxKind};
 use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
-use sov_address::EthereumAddress;
 use sov_address::MultiAddress;
+use sov_address::{EthereumAddress, FromVmAddress};
 use sov_eth_dev_signer::Signer;
 use sov_evm::{
     AccountData, EthereumAuthenticator, EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
@@ -137,7 +139,12 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
             hardforks: vec![(0, SpecId::CANCUN)].into_iter().collect(),
             ..Default::default()
         },
-        ..Default::default()
+        contract_creation_policy: Default::default(),
+        initial_base_fee: 0,
+        genesis_timestamp: 0,
+        admin: MultiAddress::from_vm_address(
+            EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
+        ),
     };
 
     // Run genesis registering the attester and sequencer we've generated.

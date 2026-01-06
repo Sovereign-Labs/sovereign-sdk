@@ -1,4 +1,5 @@
 mod archival_state;
+mod config;
 mod contracts;
 mod genesis;
 mod helpers;

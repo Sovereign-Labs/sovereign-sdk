@@ -47,6 +47,7 @@ where
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
+        self.admin.set(&config.admin, state)?;
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
 
@@ -101,7 +102,7 @@ where
     }
 }
 
-fn init_block(config: &EvmGenesisConfig) -> Block {
+fn init_block<S: Spec>(config: &EvmGenesisConfig<S>) -> Block {
     let header = alloy_consensus::Header {
         beneficiary: config.chain_spec.coinbase,
         // This will be set in finalize_hook or in the next begin_rollup_block_hook
@@ -134,7 +135,7 @@ fn init_block(config: &EvmGenesisConfig) -> Block {
     }
 }
 
-fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
+fn init_spec<S: Spec>(config: &EvmGenesisConfig<S>) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
     let mut spec = config.chain_spec.hardforks.to_vec();
 
     spec.sort_by(|a, b| a.0.cmp(&b.0));
@@ -148,7 +149,10 @@ fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, Spec
     Ok(spec)
 }
 
-fn evm_chain_config(cfg: &EvmGenesisConfig, spec: Vec<(BlockNumber, SpecId)>) -> EvmRuntimeConfig {
+fn evm_chain_config<S: Spec>(
+    cfg: &EvmGenesisConfig<S>,
+    spec: Vec<(BlockNumber, SpecId)>,
+) -> EvmRuntimeConfig {
     EvmRuntimeConfig {
         chain_spec: cfg.chain_spec.clone(),
         hardforks: spec,

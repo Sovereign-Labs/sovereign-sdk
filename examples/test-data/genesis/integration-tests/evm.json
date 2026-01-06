@@ -38,5 +38,6 @@
       "elasticity_multiplier": 2
     },
     "hardforks": [[0, "CANCUN"]]
-  }
+  },
+  "admin": "0xAeb37910f93486C85A1F8F994b67E8187554d664"
 }

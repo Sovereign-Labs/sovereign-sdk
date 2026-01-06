@@ -117,7 +117,6 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
-    pub separate_archival_db: bool,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -350,11 +349,8 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
-        let mut rollup_db_config =
+        let rollup_db_config =
             RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
-        if self.config.separate_archival_db {
-            rollup_db_config.separate_archival_state = true;
-        }
 
         RollupConfig {
             storage: rollup_db_config,
@@ -436,7 +432,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_log_limit: 20000,
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
-            separate_archival_db: true,
         }
     }
 }

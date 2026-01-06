@@ -371,6 +371,7 @@ where
         let maybe_block = self
             .get_sealed_block_by_number(block_number, state)?
             .ok_or(EthApiError::UnknownBlock)?;
+
         let mut block_env = match maybe_block {
             MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
@@ -390,6 +391,7 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env.disable_base_fee = true;
     cfg_env.chain_id = config_value!("CHAIN_ID");
     cfg_env.limit_contract_code_size = None;
+    cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
     cfg_env
 }
 

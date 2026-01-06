@@ -108,21 +108,23 @@ impl<G: Gas> Resource<G> {
     }
 
     pub(crate) fn err_if_exceeding(&self, other: &Self) -> Result<(), LimitExceeded<G>> {
-        if self.req_counter > other.req_counter {
+        // Error if the total accumulated is greater than or equal to the max allowed.
+        // Using >= instead of > to ensure that a rate limit of zero prevents all requests.
+        if self.req_counter >= other.req_counter {
             return Err(LimitExceeded::RequestCount {
                 total_accumulated: self.req_counter,
                 max_allowed: other.req_counter,
             });
         }
 
-        if self.space_in_bytes > other.space_in_bytes {
+        if self.space_in_bytes >= other.space_in_bytes {
             return Err(LimitExceeded::Space {
                 total_accumulated: self.space_in_bytes,
                 max_allowed: other.space_in_bytes,
             });
         }
 
-        if self.execution_time_micros > other.execution_time_micros {
+        if self.execution_time_micros >= other.execution_time_micros {
             return Err(LimitExceeded::ExecutionTime {
                 total_accumulated: self.execution_time_micros,
                 max_allowed: other.execution_time_micros,
@@ -226,7 +228,7 @@ mod tests {
         {
             let r1 = Resource::new(5, 5, 7, Gas::from([8, 9]));
             let r2 = Resource { ..r1 };
-            assert!(r2.err_if_exceeding(&r1).is_ok());
+            assert!(r2.err_if_exceeding(&r2).is_err());
         }
 
         {
@@ -246,10 +248,7 @@ mod tests {
 
         {
             let r1 = Resource::new(100, 101, 102, Gas::from([103, 104]));
-            let r2 = Resource {
-                space_in_bytes: 1,
-                ..r1
-            };
+            let r2 = Resource::new(101, 101, 103, Gas::from([104, 105])); // Set space in bytes exactly equal
             assert_eq!(
                 r1.err_if_exceeding(&r2),
                 Err(LimitExceeded::Space {
@@ -261,10 +260,7 @@ mod tests {
 
         {
             let r1 = Resource::new(100, 101, 102, Gas::from([103, 104]));
-            let r2 = Resource {
-                execution_time_micros: 1,
-                ..r1
-            };
+            let r2 = Resource::new(101, 102, 102, Gas::from([104, 105])); // Set execution time micros exactly equal
             assert_eq!(
                 r1.err_if_exceeding(&r2),
                 Err(LimitExceeded::ExecutionTime {

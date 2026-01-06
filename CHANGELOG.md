@@ -1,5 +1,11 @@
+# 2026-01-02
+- #2292 **EVM Breaking Change, Chain Hash Change**. This PR Changes the borsh serialization of sov_evm::CallMessage by making it an enum. After upgrading, chains will not be able to deserialize transactions in the old format - so it will become impossible to sync from genesis if your chain pre-dates this change.
+# 2026-01-05
+- #2297 **Breaking change**: Removes the `separate_archival_state` flag. After this change, `livedb` and `archivaldb` are always stored in separate locations. Users should remove this flag from their configurations. If it was previously set to false, the node will need to be resynced from genesis.
+
 # 2025-12-31
 - #2281 Breaking change for DaService implementations: new method `DaService::get_approximate_block_time`
+
 # 2026-01-01
 - #2256 Enforce the EVM block gas limit and introduce the EVM tx gas limit in config.
 - #2279 Propagates fee information to ethereum block responses

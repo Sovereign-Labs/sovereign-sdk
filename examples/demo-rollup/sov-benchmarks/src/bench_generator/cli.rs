@@ -222,7 +222,7 @@ impl BenchCLICustomArgs {
 
         let genesis_config = GenesisConfig::from_minimal_config(
             genesis_config.into(),
-            EvmGenesisConfig::default(),
+            EvmGenesisConfig::default_with_admin(admin.address()),
             PaymasterConfig {
                 payers: [PayerGenesisConfig {
                     payer_address: payer.address(),

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::crypto::secp256k1::public_key_to_address;
@@ -8,8 +10,8 @@ use alloy_primitives::B256;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
-use sov_address::EthereumAddress;
 use sov_address::MultiAddress;
+use sov_address::{EthereumAddress, FromVmAddress};
 use sov_eth_dev_signer::Signer;
 use sov_evm::{
     AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId,
@@ -64,7 +66,13 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
                 code: Default::default(),
             },
         ],
-        ..Default::default()
+        chain_spec: Default::default(),
+        contract_creation_policy: Default::default(),
+        initial_base_fee: 0,
+        genesis_timestamp: 0,
+        admin: MultiAddress::from_vm_address(
+            EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
+        ),
     };
 
     evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];

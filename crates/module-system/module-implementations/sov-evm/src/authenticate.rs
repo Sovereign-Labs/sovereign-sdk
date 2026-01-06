@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
-use alloy_eips::eip2718::Decodable2718;
+use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -96,7 +96,8 @@ fn validate_chain_id(
         tx_hash,
     ))?;
 
-    if tx_chain_id != rollup_chain_id {
+    // Allow 0 chain id for compatibility with EIP7702
+    if tx_chain_id != rollup_chain_id && tx_chain_id != 0 {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
                 expected: rollup_chain_id,
@@ -141,7 +142,7 @@ pub fn authenticate<
 >(
     raw_tx: &[u8],
     state: &mut Accessor,
-) -> Result<AuthenticationOutput<S, CallMessage>, AuthenticationError>
+) -> Result<AuthenticationOutput<S, CallMessage<S>>, AuthenticationError>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
@@ -158,7 +159,7 @@ where
     let nonce = tx.nonce();
     let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
-    let call = CallMessage { rlp };
+    let call = CallMessage::<S>::Call(rlp);
 
     tracing::debug!(
         nonce,
@@ -181,7 +182,13 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
         ));
     }
 
-    let tx = TransactionSigned::decode_2718(&mut &tx_data.rlp[..])
+    let type_tag = TransactionSigned::extract_type_byte(&mut &tx_data.rlp[..]).unwrap_or(0); // Reject as a legacy transaction by default
+    if type_tag != EIP1559_TX_TYPE_ID {
+        return Err(FatalError::DeserializationFailed(
+            "Invalid transaction type: Only EIP1559 is currently supported. If you need to use EIP7702, please reach out to the SDK developers for support.".to_string(),
+        ));
+    }
+    let tx = TransactionSigned::decode_2718_exact(&tx_data.rlp)
         .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok((tx_data, tx))
@@ -221,7 +228,7 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
 {
-    type Decodable = EvmAuthenticatorInput<call::CallMessage, <Rt as DispatchCall>::Decodable>;
+    type Decodable = EvmAuthenticatorInput<call::CallMessage<S>, <Rt as DispatchCall>::Decodable>;
     type Input = EvmAuthenticatorInput;
 
     #[cfg(feature = "native")]
@@ -235,7 +242,9 @@ where
         match auth_variant {
             EvmAuthenticatorInput::Evm(raw_tx) => {
                 let (call, _tx) = decode_evm_tx(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }))
+                Ok(EvmAuthenticatorInput::Evm(call::CallMessage::<S>::Call(
+                    call,
+                )))
             }
             EvmAuthenticatorInput::Standard(raw_tx) => {
                 let call = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
