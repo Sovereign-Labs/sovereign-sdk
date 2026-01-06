@@ -219,6 +219,35 @@ impl HistoricalStateReader {
         version: SlotNumber,
     ) -> anyhow::Result<StateChanges> {
         let mut root_hash_batch = SchemaBatch::default();
+
+        let (user_batch, kernel_batch) =
+            Self::materialize_user_and_kernel_values(user_changes, kernel_changes)?;
+
+        tracing::trace!(
+            %version,
+            root_hash = %hex::encode(&root_hash),
+            "Materialized root hash"
+        );
+
+        root_hash_batch
+            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
+
+        Ok(StateChanges {
+            user: Arc::new(user_batch),
+            kernel: Arc::new(kernel_batch),
+            root_hash_batch: Arc::new(root_hash_batch),
+        })
+    }
+
+    /// Collects a sequence of key-value pairs into [`SchemaBatch`] for user & kernel changes.
+    #[allow(clippy::type_complexity)]
+    pub fn materialize_user_and_kernel_values(
+        user_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+        kernel_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+    ) -> anyhow::Result<(
+        VersionedSchemaBatch<NomtStateValues<UserNamespace>>,
+        VersionedSchemaBatch<NomtStateValues<KernelNamespace>>,
+    )> {
         let mut has_kernel_been_updated = false;
         let mut has_user_been_updated = false;
         let mut metric = StateMaterializationMetrics::new();
@@ -253,24 +282,11 @@ impl HistoricalStateReader {
             );
         }
 
-        tracing::trace!(
-            %version,
-            root_hash = %hex::encode(&root_hash),
-            "Materialized root hash"
-        );
-
-        root_hash_batch
-            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
-
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(metric);
         });
 
-        Ok(StateChanges {
-            user: Arc::new(user_batch),
-            kernel: Arc::new(kernel_batch),
-            root_hash_batch: Arc::new(root_hash_batch),
-        })
+        Ok((user_batch, kernel_batch))
     }
 }
 
