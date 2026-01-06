@@ -8,6 +8,7 @@ use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
 use crate::CelestiaService;
 use anyhow::Context;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
@@ -292,57 +293,65 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(no_read, read_half).await;
 }
 
-// #[tokio::test(flavor = "multi_thread")]
-// #[should_panic(expected = "invalid proof self-check: InvalidRoot")]
-// async fn verification_fails_if_sender_changed() {
-//     // This is the preparation part, consider it as malicious native code:
-//     // TODO: Find a way to test it differently
-//     // let mut block = with_rollup_batch_data::filtered_block();
-//     // let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
-//     // let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
-//     // let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
-//     // let addr_len = addr_1.as_ref().len();
-//     //
-//     // let row = block.rollup_batch_data.data.rows().get(0).unwrap();
-//     // let share = row.shares.get(0).unwrap();
-//     // let mut raw_share_1 = share.data().clone().to_vec();
-//     //
-//     // let add_pos = raw_share_1
-//     //     .windows(addr_len)
-//     //     .position(|window| window == addr_1.as_ref())
-//     //     .expect("Block should contain given address. Check source data");
-//     //
-//     // raw_share_1.splice(add_pos..add_pos + addr_len, addr_2.as_ref().iter().copied());
-//     //
-//     // let malicious_share = celestia_types::Share::from_raw(&raw_share_1).unwrap();
-//     //
-//     // row.shares[0] = malicious_share;
-//     //
-//     // // This is how it is observed
-//     // verification_error(block, "InvalidRoot", rollup_params)
-//     //     .await
-//     //     .unwrap();
-// }
-//
-// async fn verification_error(
-//     block: FilteredCelestiaBlock,
-//     expected_err_pattern: &str,
-//     rollup_params: RollupParams,
-// ) -> anyhow::Result<()> {
-//     let relevant_blobs = extract_relevant_blobs(&block);
-//     let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
-//
-//     let verifier = CelestiaVerifier::new(rollup_params);
-//
-//     let error = verifier
-//         .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-//         .unwrap_err();
-//     assert!(
-//         error.to_string().contains(expected_err_pattern),
-//         "Actual error: {error}"
-//     );
-//     Ok(())
-// }
+#[tokio::test(flavor = "multi_thread")]
+#[should_panic(expected = "invalid proof self-check: InvalidRoot")]
+async fn verification_fails_if_sender_changed() {
+    // This is the preparation part, consider it as malicious native code:
+    let mut block = with_rollup_batch_data::filtered_block();
+    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+    let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
+    let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
+    let addr_len = addr_1.as_ref().len();
+
+    let serialized_ns_data = serde_json::to_string(&block.rollup_batch_data.data).unwrap();
+    let row = block.rollup_batch_data.data.rows().get(0).unwrap();
+    let share = row.shares.get(0).unwrap();
+    // Save it to string for replacing it in JSON in the future.
+    let serialized_share_before = serde_json::to_string(share).unwrap();
+
+    let mut raw_share_1 = share.data().clone().to_vec();
+
+    let add_pos = raw_share_1
+        .windows(addr_len)
+        .position(|window| window == addr_1.as_ref())
+        .expect("Block should contain given address. Check source data");
+
+    raw_share_1.splice(add_pos..add_pos + addr_len, addr_2.as_ref().iter().copied());
+
+    let malicious_share = celestia_types::Share::from_raw(&raw_share_1).unwrap();
+    let serialized_malicious_share = serde_json::to_string(&malicious_share).unwrap();
+
+    let malicious_ns_data_json =
+        serialized_ns_data.replace(&serialized_share_before, &serialized_malicious_share);
+    let malicious_ns_data: NamespaceData = serde_json::from_str(&malicious_ns_data_json).unwrap();
+
+    block.rollup_batch_data.data = malicious_ns_data;
+
+    // This is how it is observed
+    verification_error(block, "InvalidRoot", rollup_params)
+        .await
+        .unwrap();
+}
+
+async fn verification_error(
+    block: FilteredCelestiaBlock,
+    expected_err_pattern: &str,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+    assert!(
+        error.to_string().contains(expected_err_pattern),
+        "Actual error: {error}"
+    );
+    Ok(())
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_fails_if_tx_missing() {
