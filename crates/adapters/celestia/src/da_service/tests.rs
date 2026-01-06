@@ -304,8 +304,8 @@ async fn verification_fails_if_sender_changed() {
     let addr_len = addr_1.as_ref().len();
 
     let serialized_ns_data = serde_json::to_string(&block.rollup_batch_data.data).unwrap();
-    let row = block.rollup_batch_data.data.rows().get(0).unwrap();
-    let share = row.shares.get(0).unwrap();
+    let row = block.rollup_batch_data.data.rows().first().unwrap();
+    let share = row.shares.first().unwrap();
     // Save it to string for replacing it in JSON in the future.
     let serialized_share_before = serde_json::to_string(share).unwrap();
 
