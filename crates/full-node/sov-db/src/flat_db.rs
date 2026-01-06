@@ -18,7 +18,7 @@ use rockbound::{
     default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB,
 };
 use rockbound::{rocksdb, SchemaBatch, DB};
-use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 use std::sync::Arc;
 
 /// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
@@ -212,22 +212,23 @@ impl FlatStateDb {
 
     /// Commit the `state_changes`.
     pub fn commit(&self, state_changes: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
-        self.commit_internal(state_changes, true)
+        let version = self
+            .latest_version_and_root_hash_live_db()?
+            .and_then(|(v, _)| v.checked_add(1))
+            .unwrap_or(0);
+
+        self.commit_internal(state_changes, version, true)
     }
 
     fn commit_internal(
         &self,
         state_changes: StateChanges,
-        commit_live_db: bool,
+        version: u64,
+        is_commit: bool,
     ) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
         let prepare = start_prepare.elapsed();
         let start_write = std::time::Instant::now();
-
-        let version = self
-            .latest_version_and_root_hash_live_db()?
-            .and_then(|(v, _)| v.checked_add(1))
-            .unwrap_or(0);
 
         let mut live_db_batch = rocksdb::WriteBatch::default();
         let mut archival_db_batch = rocksdb::WriteBatch::default();
@@ -247,6 +248,7 @@ impl FlatStateDb {
             kernel_cache,
             &self.live_db,
             &self.archival_db,
+            is_commit,
         )?;
 
         let serialized_size_kernel = live_db_batch.size_in_bytes();
@@ -261,6 +263,7 @@ impl FlatStateDb {
             user_cache,
             &self.live_db,
             &self.archival_db,
+            is_commit,
         )?;
 
         let serialized_size_user = live_db_batch.size_in_bytes() - serialized_size_kernel;
@@ -290,7 +293,7 @@ impl FlatStateDb {
         self.user.store_committed_archival_version(version);
 
         // Write live db batch.
-        if commit_live_db {
+        if is_commit {
             #[cfg(feature = "test-utils")]
             crate::test_utils::CrashLocation::BeforeCommittingLive.crash_if_env_set();
             self.live_db.write_db_batch(live_db_batch)?;
@@ -352,47 +355,39 @@ impl FlatStateDb {
 
         assert_eq!(prev_root_hash_archival, root_hash_live);
 
-        self.rollback_archival(
-            current_version_archival,
-            current_version_live,
-            root_hash_live,
-        )
+        self.rollback_archival(current_version_archival)
     }
 
-    fn rollback_archival(
-        &self,
-        current_version_archival: u64,
-        current_version_live: u64,
-        root_hash_live: [u8; 64],
-    ) -> anyhow::Result<()> {
-        let user_changes = keys_and_values_for_rollback(&self.user, current_version_archival)?;
-        let kernel_changes = keys_and_values_for_rollback(&self.kernel, current_version_archival)?;
+    fn rollback_archival(&self, current_version_archival: u64) -> anyhow::Result<()> {
+        let user_changes = keys_for_rollback(&self.user, current_version_archival)?;
+        let kernel_changes = keys_for_rollback(&self.kernel, current_version_archival)?;
 
-        let mut state_changes = HistoricalStateReader::materialize_values(
+        let (user_batch, kernel_batch) = HistoricalStateReader::materialize_user_and_kernel_values(
             user_changes,
             kernel_changes,
-            root_hash_live.to_vec(),
-            SlotNumber::new(current_version_live),
         )?;
 
-        // Remove the most recent (current_version_archival) root hash from the `StateRootHashes` table.
         let mut root_hash_batch = SchemaBatch::default();
-        root_hash_batch.merge(state_changes.root_hash_batch.as_ref().clone());
-        root_hash_batch.delete(&(
-            SlotNumber::new(current_version_archival),
+        root_hash_batch.delete::<StateRootHashes>(&(
+            current_version_archival.to_slot_number(),
             STATE_ROOT_HASH_SINGLETON,
         ))?;
 
-        state_changes.root_hash_batch = Arc::new(root_hash_batch);
+        let state_changes = StateChanges {
+            user: Arc::new(user_batch),
+            kernel: Arc::new(kernel_batch),
+            root_hash_batch: Arc::new(root_hash_batch),
+        };
+
         // We rollback only archival db.
-        self.commit_internal(state_changes, false)?;
+        self.commit_internal(state_changes, current_version_archival, false)?;
 
         Ok(())
     }
 }
 
 #[allow(clippy::type_complexity)]
-fn keys_and_values_for_rollback<V, C>(
+fn keys_for_rollback<V, C>(
     db: &VersionedDB<V, C>,
     version_to_rollback: u64,
 ) -> anyhow::Result<Vec<(V::Key, Option<V::Value>)>>
@@ -402,22 +397,15 @@ where
     V::Value: Clone + AsRef<[u8]>,
     V: SchemaWithVersion + Ord,
 {
-    // Get all keys committed at `version_to_rollback`.
-    // Then retrieve the values for those keys from the previous state version.
-    // Values that changed between `version_to_rollback` and `version_to_rollback - 1` are overridden.
-    // Values that were inserted at `version_to_rollback` are deleted.
-    // Values that were deleted at `version_to_rollback` are reinserted.
+    // Get all keys committed at `version_to_rollback` and delete them.
     let prunable_keys = db.iter_pruning_keys_at_version(version_to_rollback)?;
     let mut data_to_materialize = Vec::new();
 
     for key in prunable_keys {
         let (version, key) = key.version_and_key();
         assert_eq!(version, version_to_rollback);
-
-        let value = db.get_historical_value(&key, version_to_rollback - 1)?;
-        data_to_materialize.push((key, value));
+        data_to_materialize.push((key, None));
     }
-
     Ok(data_to_materialize)
 }
 
@@ -499,6 +487,25 @@ mod tests {
         test_rollback(CrashLocation::BeforeCommittingLive, 1)
     }
 
+    fn assert_key_value(
+        key: &SlotKey,
+        value: Option<SlotValue>,
+        version: u64,
+        flat_db: &FlatStateDb,
+    ) {
+        {
+            let key_version = flat_db
+                .kernel
+                .get_version_for_key(key, 99)
+                .unwrap()
+                .unwrap();
+            assert_eq!(key_version, version);
+
+            let value_from_fb = flat_db.kernel.get_historical_value(key, 99).unwrap();
+            assert_eq!(value_from_fb, value);
+        }
+    }
+
     // This test commits data for version 0 of the rollup state and panics at various points during the commit for version 1.
     // Afterward, it checks whether the rollback logic correctly reverted the archival state.
     fn test_rollback(crash_location: CrashLocation, archival_version: u64) -> anyhow::Result<()> {
@@ -506,14 +513,26 @@ mod tests {
         let db_path = tempdir.path();
         let data = data_to_insert_per_version();
 
+        // Key was inserted in version 0 and deleted in version 1
+        let kernel_key1 = &make_key("kernel_key1");
+
+        // Key was inserted in version 0 and overriden in version 1
+        let kernel_key2 = &make_key("kernel_key2");
+
         // Commit version 0.
         {
             let version = 0;
-            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000)?;
 
             let state_changes = data.change_set(version);
             flat_db.commit(state_changes).unwrap();
             assert_flat_state(version, version, &flat_db);
+
+            let value_1 = make_value("kernel_key1", version);
+            let value_2 = make_value("kernel_key2", version);
+
+            assert_key_value(kernel_key1, Some(value_1), version, &flat_db);
+            assert_key_value(kernel_key2, Some(value_2), version, &flat_db);
         }
 
         unlock_dbs(&tempdir);
@@ -522,7 +541,7 @@ mod tests {
         // Crash during commit of version 1.
         {
             let version = 1;
-            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000)?;
 
             let state_changes = data.change_set(version);
             let res = std::panic::catch_unwind(AssertUnwindSafe(|| {
@@ -532,6 +551,8 @@ mod tests {
             assert!(res.is_err());
             assert_flat_state(0, archival_version, &flat_db);
         }
+
+        unlock_dbs(&tempdir);
 
         // Rollback to version 0.
         {
@@ -550,6 +571,12 @@ mod tests {
                 let value_from_archival_db = flat_db.kernel.get_historical_value(k, 99).unwrap();
                 assert_eq!(v, &value_from_archival_db);
             }
+
+            let value_1 = make_value("kernel_key1", 0);
+            let value_2 = make_value("kernel_key2", 0);
+
+            assert_key_value(kernel_key1, Some(value_1), 0, &flat_db);
+            assert_key_value(kernel_key2, Some(value_2), 0, &flat_db);
         }
 
         Ok(())
@@ -637,17 +664,13 @@ mod tests {
             let (current_version_archival, _) =
                 self.latest_version_and_root_hash_archival_db()?.unwrap();
 
-            let prev_root_hash_archival = self
+            let _prev_root_hash_archival = self
                 .root_hash_from_archival_db_for_version(SlotNumber::new(
                     current_version_archival - 1,
                 ))?
                 .unwrap();
 
-            self.rollback_archival(
-                current_version_archival,
-                current_version_archival - 1,
-                prev_root_hash_archival,
-            )
+            self.rollback_archival(current_version_archival)
         }
     }
 
@@ -730,17 +753,19 @@ mod tests {
             vec![
                 OperationType::Insert("kernel_key1"),
                 OperationType::Insert("kernel_key2"),
-                OperationType::Insert("kernel_key3"),
             ],
         );
 
         data.insert(
             1,
             vec![
-                OperationType::Insert("user_key1"),
+                OperationType::Delete("user_key1"),
                 OperationType::Insert("user_key2"),
             ],
-            vec![OperationType::Insert("kernel_key4")],
+            vec![
+                OperationType::Delete("kernel_key1"),
+                OperationType::Insert("kernel_key2"),
+            ],
         );
 
         data.insert(
