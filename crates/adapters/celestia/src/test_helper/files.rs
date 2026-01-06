@@ -2,8 +2,8 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
-use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::ExtendedHeader;
 use rand::{RngCore, SeedableRng};
 use serde::de::DeserializeOwned;

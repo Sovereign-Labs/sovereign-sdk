@@ -2,7 +2,7 @@
 //! Can include multiple API calls.
 //! Always measured on success.
 use crate::metrics::RollupNamespace;
-use celestia_types::row_namespace_data::NamespaceData;
+use celestia_types::namespace_data::NamespaceData;
 use sov_metrics::Metric;
 use std::io::Write;
 
@@ -51,8 +51,8 @@ pub(crate) struct NamespaceDataMetrics {
 
 impl NamespaceDataMetrics {
     pub fn new(data: &NamespaceData) -> Self {
-        let rows = data.rows.len();
-        let shares = data.rows.iter().map(|r| r.shares.len()).sum();
+        let rows = data.rows().len();
+        let shares = data.rows().iter().map(|r| r.shares.len()).sum();
         Self { rows, shares }
     }
 }

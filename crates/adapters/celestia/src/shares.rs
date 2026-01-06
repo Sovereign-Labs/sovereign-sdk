@@ -239,19 +239,23 @@ pub(crate) struct NamespaceDataIterator<'a> {
 
 #[cfg(feature = "native")]
 impl<'a> NamespaceDataIterator<'a> {
-    pub(crate) fn new(data: &'a celestia_types::row_namespace_data::NamespaceData) -> Self {
-        let shares = data.rows.iter().map(|row| row.shares.len()).sum::<usize>();
+    pub(crate) fn new(data: &'a celestia_types::namespace_data::NamespaceData) -> Self {
+        let shares = data
+            .rows()
+            .iter()
+            .map(|row| row.shares.len())
+            .sum::<usize>();
         tracing::trace!(
             "Initialized NamespaceDataIterator: rows: {} shares: {}",
-            data.rows.len(),
+            data.rows().len(),
             shares
         );
-        for (row_idx, row) in data.rows.iter().enumerate() {
+        for (row_idx, row) in data.rows().iter().enumerate() {
             tracing::trace!("row {}: has {} shares", row_idx, row.shares.len());
         }
         NamespaceDataIterator {
             total_offset: 0,
-            rows: &data.rows,
+            rows: data.rows(),
             current_row_idx: None,
             relative_share_idx: None,
         }
@@ -357,8 +361,8 @@ pub(crate) fn shares_needed_for_bytes(payload_bytes: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use celestia_types::namespace_data::NamespaceData;
     use celestia_types::nmt::{Namespace, NS_ID_V0_SIZE, NS_SIZE};
-    use celestia_types::row_namespace_data::NamespaceData;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use sov_rollup_interface::da::CountedBufReader;
