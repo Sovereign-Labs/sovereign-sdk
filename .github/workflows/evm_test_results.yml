@@ -1,0 +1,87 @@
+name: Handle EVM Test Results
+
+on:
+  repository_dispatch:
+    types:
+      - evm-test-success
+      - evm-test-failure
+      - evm-test-build-failure
+      - evm-test-startup-failure
+
+permissions:
+  contents: read
+
+jobs:
+  handle-result:
+    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    timeout-minutes: 10
+    steps:
+      - name: Log event details
+        run: |
+          echo "Event type: ${{ github.event.action }}"
+          echo "Commit SHA: ${{ github.event.client_payload.commit_sha }}"
+          echo "Test duration: ${{ github.event.client_payload.test_duration_seconds }}s"
+
+      - name: Validate payload
+        id: validate
+        run: |
+          if [ -z "${{ github.event.client_payload.commit_sha }}" ]; then
+            echo "❌ Missing required field: commit_sha"
+            exit 1
+          fi
+          echo "✅ Payload validation passed"
+
+      - name: Slack notification on success
+        if: github.event.action == 'evm-test-success'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "✅ *EVM acceptance tests passed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on test failure
+        if: github.event.action == 'evm-test-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "❌ *EVM acceptance tests failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*View logs:* SSH to the build server and check `/opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.test_dir_name }}/logs/`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on build failure
+        if: github.event.action == 'evm-test-build-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "🔨 *EVM test Docker build failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\nFailed to build rollup Docker container.\n\n*View logs:* SSH to the build server and check `/opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.test_dir_name }}/logs/build.log`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on startup failure
+        if: github.event.action == 'evm-test-startup-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "🚀 *EVM test rollup startup failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\nRollup container failed to start or reach healthcheck.\n\n*View logs:* SSH to the build server and check `/opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.test_dir_name }}/logs/`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on validation failure
+        if: failure() && steps.validate.outcome == 'failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "🚨 *EVM test result validation failed*\n\nInvalid payload in repository dispatch event.\n\n*Event type:* `${{ github.event.action }}`\n*Commit ref:* `${{ github.event.client_payload.commit_sha }}`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
