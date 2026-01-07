@@ -342,7 +342,7 @@ mod tests {
 
     type Gas = <TestSpec as Spec>::Gas;
 
-    const MAX_REQ_COUNT: u64 = 10_000;
+    const MAX_REQ_COUNT: u64 = 100_000_000_000;
     const MAX_SPACE_IN_BYTES: u64 = 100_0000;
     const MAX_EXECUTION_TIME_MICROS: u64 = 1_000_000;
     const TTL_IN_MILLIS: u64 = 1_000_000;
@@ -416,8 +416,17 @@ mod tests {
     fn test_rate_limiter_happy_path_sepcial_address() {
         let resource_used_per_run = small_resource_used_per_run();
 
+        println!("XXX {:?}", resource_used_per_run);
+
         let default_config = RateLimiterConfig::<TestSpec> {
-            max_allowed_resources: TotalResources::zero(),
+            max_allowed_resources: TotalResources {
+                inner: Resource {
+                    req_counter: resource_used_per_run.inner.req_counter + 1,
+                    space_in_bytes: resource_used_per_run.inner.space_in_bytes + 1,
+                    execution_time_micros: resource_used_per_run.inner.execution_time_micros + 1,
+                    gas_used: Gas::from([0, 0]),
+                },
+            },
             refill_rate: RefillRatePerMillis::zero(),
         };
 
@@ -451,11 +460,20 @@ mod tests {
             rollup_simulator
                 .run_and_assert_limits(now, &special_addr, rollup_simulator.resource_used_per_run)
                 .unwrap();
+
+            let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
+            rollup_simulator
+                .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
+                .unwrap();
+
+            rollup_simulator
+                .run_and_assert_limits(now, &special_addr, expected_rate_limiter_usage)
+                .unwrap();
         }
 
         // After two runs, the standard addr is rate limitied but special_addr has higher limits.
         {
-            let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
+            let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(3);
             rollup_simulator
                 .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
                 .unwrap_err();

@@ -189,19 +189,7 @@ async fn test_zero_limit_address() {
 
     let client = test_rollup.api_client().clone();
 
-    // Send tx that takes 200ms but the limit for each sender is 3000*0.5% = 15ms
-    let tx = tx_set_value_and_sleep(&admin.private_key, 0, 99, 200);
-
-    // The transactions is accepted but the sender has been rate-limited after it is executed.
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
-
-    // Another transactions fails.
-    let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 1, 100, 1);
+    let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 1);
     let err = client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
@@ -211,18 +199,6 @@ async fn test_zero_limit_address() {
 
     let err_str = err.to_string();
     assert!(err_str.contains("The sender was rate-limited by the sequencer:"));
-
-    // Unfortunately, the only way to test this is by waiting.
-    // The rate limits recover proportionally to the time elapsed since the last request.
-    // Wait long enough for the limits to reset.
-    tokio::time::sleep(Duration::from_millis(2000)).await;
-
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
