@@ -415,9 +415,6 @@ mod tests {
     #[test]
     fn test_rate_limiter_happy_path_sepcial_address() {
         let resource_used_per_run = small_resource_used_per_run();
-
-        println!("XXX {:?}", resource_used_per_run);
-
         let default_config = RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
                 inner: Resource {
