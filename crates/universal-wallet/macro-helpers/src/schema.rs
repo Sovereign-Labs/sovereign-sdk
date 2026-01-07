@@ -681,7 +681,7 @@ fn virtual_field_generics(input_generics: Generics, fields: &[InputField]) -> Ge
     let input_lifetimes = input_generics.declared_lifetimes();
     let collected_generics = fields.collect_type_params(&Purpose::Declare.into(), &input_params);
     let collected_lifetimes = fields.collect_lifetimes(&Purpose::Declare.into(), &input_lifetimes);
-    let mut virt_generics = input_generics.clone();
+    let mut virt_generics = input_generics;
     virt_generics.params = virt_generics
         .params
         .into_iter()
