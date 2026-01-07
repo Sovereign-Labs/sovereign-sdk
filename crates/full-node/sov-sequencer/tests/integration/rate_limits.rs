@@ -174,7 +174,7 @@ async fn test_zero_limit_address() {
             refill_rate: 100,
         },
         address_custom_limits: vec![(
-            admin.address().clone(),
+            admin.address(),
             Limits {
                 resources_per_bucket: 0,
                 refill_rate: 0,
