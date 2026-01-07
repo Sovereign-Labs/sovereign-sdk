@@ -146,12 +146,13 @@ async fn test_rate_limiting() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_correct_ip() {
     let sov_config = SovRateLimiterConfig {
+        max_requests_per_second: 1000,
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
         default_limits: Limits {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
-        max_nb_of_concurrent_users_in_rate_limiter: 1000,
-        max_requests_per_second: 0,
+
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
@@ -168,7 +169,7 @@ async fn test_correct_ip() {
 
     // Send first tx.
     {
-        let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 0);
+        let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 200);
         let request = AcceptTx {
             body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
         };
