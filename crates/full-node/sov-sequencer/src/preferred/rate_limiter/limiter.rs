@@ -300,20 +300,20 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             }
         }
 
-        match self.data.get(key) {
-            Some(throttler) => {
-                let config = self.get_config(key);
-                Ok(throttler.allow_request_and_refill_resource_used(
-                    now,
-                    &config.max_allowed_resources,
-                    &config.refill_rate,
-                )?)
-            }
-            None => Ok(Throttler {
+        let throttler = match self.data.get(key) {
+            Some(throttler) => throttler,
+            None => Throttler {
                 total_resource_used: TotalResources::zero(),
                 last_refill: now,
-            }),
-        }
+            },
+        };
+
+        let config = self.get_config(key);
+        throttler.allow_request_and_refill_resource_used(
+            now,
+            &config.max_allowed_resources,
+            &config.refill_rate,
+        )
     }
 
     pub(crate) fn update(
@@ -415,9 +415,15 @@ mod tests {
     #[test]
     fn test_rate_limiter_happy_path_sepcial_address() {
         let resource_used_per_run = small_resource_used_per_run();
-
         let default_config = RateLimiterConfig::<TestSpec> {
-            max_allowed_resources: TotalResources::zero(),
+            max_allowed_resources: TotalResources {
+                inner: Resource {
+                    req_counter: resource_used_per_run.inner.req_counter + 1,
+                    space_in_bytes: resource_used_per_run.inner.space_in_bytes + 1,
+                    execution_time_micros: resource_used_per_run.inner.execution_time_micros + 1,
+                    gas_used: Gas::from([0, 0]),
+                },
+            },
             refill_rate: RefillRatePerMillis::zero(),
         };
 
@@ -451,11 +457,20 @@ mod tests {
             rollup_simulator
                 .run_and_assert_limits(now, &special_addr, rollup_simulator.resource_used_per_run)
                 .unwrap();
+
+            let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
+            rollup_simulator
+                .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
+                .unwrap();
+
+            rollup_simulator
+                .run_and_assert_limits(now, &special_addr, expected_rate_limiter_usage)
+                .unwrap();
         }
 
         // After two runs, the standard addr is rate limitied but special_addr has higher limits.
         {
-            let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(2);
+            let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(3);
             rollup_simulator
                 .run_and_assert_limits(now, &addr, expected_rate_limiter_usage)
                 .unwrap_err();
