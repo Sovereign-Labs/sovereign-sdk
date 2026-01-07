@@ -300,20 +300,20 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             }
         }
 
-        match self.data.get(key) {
-            Some(throttler) => {
-                let config = self.get_config(key);
-                Ok(throttler.allow_request_and_refill_resource_used(
-                    now,
-                    &config.max_allowed_resources,
-                    &config.refill_rate,
-                )?)
-            }
-            None => Ok(Throttler {
+        let throttler = match self.data.get(key) {
+            Some(throttler) => throttler,
+            None => Throttler {
                 total_resource_used: TotalResources::zero(),
                 last_refill: now,
-            }),
-        }
+            },
+        };
+
+        let config = self.get_config(key);
+        throttler.allow_request_and_refill_resource_used(
+            now,
+            &config.max_allowed_resources,
+            &config.refill_rate,
+        )
     }
 
     pub(crate) fn update(
