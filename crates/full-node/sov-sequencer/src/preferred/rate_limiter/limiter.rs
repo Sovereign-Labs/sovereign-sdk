@@ -342,7 +342,7 @@ mod tests {
 
     type Gas = <TestSpec as Spec>::Gas;
 
-    const MAX_REQ_COUNT: u64 = 100_000_000_000;
+    const MAX_REQ_COUNT: u64 = 10_000;
     const MAX_SPACE_IN_BYTES: u64 = 100_0000;
     const MAX_EXECUTION_TIME_MICROS: u64 = 1_000_000;
     const TTL_IN_MILLIS: u64 = 1_000_000;
