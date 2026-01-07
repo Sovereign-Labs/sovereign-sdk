@@ -10,6 +10,7 @@ use alloy::transports::RpcError;
 use alloy::transports::TransportErrorKind;
 use alloy_primitives::Address;
 use alloy_provider::DynProvider;
+use alloy_rpc_types_eth::TransactionInput;
 use core::net::SocketAddr;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
@@ -45,11 +46,11 @@ async fn setup_test_rollup(
 async fn evm_test_rate_limit() -> anyhow::Result<()> {
     let rate_limiter = SovRateLimiterConfig {
         default_limits: Limits {
-            resources_per_bucket: 5,
+            resources_per_bucket: 1,
             refill_rate: 0,
         },
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
-        max_requests_per_second: 0,
+        max_requests_per_second: 1,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
@@ -60,7 +61,12 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
     // Make first request.
     {
         let client = make_client_with_x_forwarded_for_header(rollup.http_addr, SENDER_PRIV_KEY);
-        let tx = TransactionRequest::default().with_to(Address::ZERO);
+        let mut tx = TransactionRequest::default().with_to(Address::ZERO);
+        // Set some input to cross the allowed space limit.
+        tx.input = TransactionInput {
+            input: Some(vec![1; 10000].into()),
+            data: None,
+        };
         let pending = client.send_transaction(tx).await?;
         _ = pending.watch().await?;
     }

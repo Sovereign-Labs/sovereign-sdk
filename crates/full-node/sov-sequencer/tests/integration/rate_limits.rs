@@ -28,6 +28,8 @@ use sov_test_utils::TestUser;
 use sov_test_utils::TEST_DEFAULT_USER_BALANCE;
 use sov_value_setter::ValueSetter;
 use sov_value_setter::ValueSetterConfig;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -36,20 +38,34 @@ generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, 
 type RT = TestRuntime<TestSpec>;
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, RT>;
 
-async fn create_test_rollup(
-    rate_limiter_config: SovRateLimiterConfig<<TestSpec as Spec>::Address>,
-) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
-    let reward_user = TestUser::<TestSpec>::generate(TEST_DEFAULT_USER_BALANCE);
+struct Genesis {
+    config: HighLevelOperatorGenesisConfig<TestSpec>,
+}
 
-    let genesis_config =
-        HighLevelOperatorGenesisConfig::<TestSpec>::generate_with_additional_accounts(
+impl Genesis {
+    fn new() -> Self {
+        let reward_user = TestUser::<TestSpec>::generate(TEST_DEFAULT_USER_BALANCE);
+
+        let config = HighLevelOperatorGenesisConfig::<TestSpec>::generate_with_additional_accounts(
             1,
             reward_user,
         );
 
-    let admin = genesis_config.additional_accounts()[0].clone();
+        Self { config }
+    }
+
+    fn admin(&self) -> TestUser<TestSpec> {
+        self.config.additional_accounts()[0].clone()
+    }
+}
+
+async fn create_test_rollup(
+    genesis: Genesis,
+    rate_limiter_config: SovRateLimiterConfig<<TestSpec as Spec>::Address>,
+) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
+    let admin = genesis.admin();
     let rt_genesis_config = <RT as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
-        genesis_config.into(),
+        genesis.config.into(),
         ValueSetterConfig {
             admin: admin.address(),
         },
@@ -90,6 +106,8 @@ async fn create_test_rollup(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rate_limiting() {
+    let genesis = Genesis::new();
+
     let sov_config = SovRateLimiterConfig {
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         default_limits: Limits {
@@ -101,7 +119,7 @@ async fn test_rate_limiting() {
         ip_custom_limits: Vec::default(),
     };
 
-    let (test_rollup, admin) = create_test_rollup(sov_config).await;
+    let (test_rollup, admin) = create_test_rollup(genesis, sov_config).await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -144,19 +162,61 @@ async fn test_rate_limiting() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_correct_ip() {
+async fn test_zero_limit_address() {
+    let genesis = Genesis::new();
+    let admin = genesis.admin();
+
     let sov_config = SovRateLimiterConfig {
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
+        max_requests_per_second: 1_000_000,
+        default_limits: Limits {
+            resources_per_bucket: 5,
+            refill_rate: 100,
+        },
+        address_custom_limits: vec![(
+            admin.address(),
+            Limits {
+                resources_per_bucket: 0,
+                refill_rate: 0,
+            },
+        )],
+        ip_custom_limits: Vec::default(),
+    };
+
+    let (test_rollup, _) = create_test_rollup(genesis, sov_config).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+
+    let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 1);
+    let err = client
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&tx),
+        })
+        .await
+        .unwrap_err();
+
+    let err_str = err.to_string();
+    assert!(err_str.contains("The sender was rate-limited by the sequencer:"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_correct_ip() {
+    let genesis = Genesis::new();
+    let sov_config = SovRateLimiterConfig {
+        max_requests_per_second: 1000,
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
         default_limits: Limits {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
-        max_nb_of_concurrent_users_in_rate_limiter: 1000,
-        max_requests_per_second: 0,
+
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
 
-    let (test_rollup, admin) = create_test_rollup(sov_config).await;
+    let (test_rollup, admin) = create_test_rollup(genesis, sov_config).await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -168,7 +228,7 @@ async fn test_correct_ip() {
 
     // Send first tx.
     {
-        let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 0);
+        let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 200);
         let request = AcceptTx {
             body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
         };
@@ -188,6 +248,63 @@ async fn test_correct_ip() {
         let private_key = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
         let tx: RawTx = tx_set_value_and_sleep(&private_key, 1, 100, 0);
 
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
+        };
+
+        let resp = client
+            .client()
+            .post(&url)
+            .json(&request)
+            // The header should be case insensitive.
+            .header("x-forwarded-for", x_forwarded_for)
+            .send()
+            .await
+            .unwrap();
+
+        let err = resp.bytes().await.unwrap();
+        let err_str = std::str::from_utf8(&err).unwrap().to_string();
+
+        // Check that the correct IP was rate limmited.
+        assert!(err_str
+            .contains("The sender was rate-limited by the sequencer: Resource limit exceeded for IP: 123.123.123.123"));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_zero_limit_ip() {
+    let x_forwarded_for = "123.123.123.123";
+
+    let genesis = Genesis::new();
+    let sov_config = SovRateLimiterConfig {
+        max_requests_per_second: 1000,
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
+        default_limits: Limits {
+            resources_per_bucket: 5,
+            refill_rate: 0,
+        },
+
+        address_custom_limits: Vec::default(),
+        ip_custom_limits: vec![(
+            IpAddr::from_str(x_forwarded_for).unwrap(),
+            Limits {
+                resources_per_bucket: 0,
+                refill_rate: 0,
+            },
+        )],
+    };
+
+    let (test_rollup, admin) = create_test_rollup(genesis, sov_config).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let base_url = test_rollup.client.base_url.clone();
+    let client = test_rollup.api_client().clone();
+
+    let url = format!("{base_url}/sequencer/txs");
+
+    {
+        let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 200);
         let request = AcceptTx {
             body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
         };

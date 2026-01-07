@@ -211,6 +211,14 @@ impl<S: Spec> SovRateLimiter<S> {
         batch_execution_time_limit_millis: u64,
         max_batch_size_bytes: usize,
     ) -> Self {
+        if batch_execution_time_limit_millis == 0 {
+            panic!("SovRateLimiter: batch_execution_time_limit_millis must be greater than zero");
+        }
+
+        if max_batch_size_bytes == 0 {
+            panic!("SovRateLimiter: max_batch_size_bytes must be greater than zero");
+        }
+
         let inner = config.map(|sov_config| {
             // All entries older than this value are evicted from the rate limiter.
             let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
