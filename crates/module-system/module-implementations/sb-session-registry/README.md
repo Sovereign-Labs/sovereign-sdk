@@ -1,6 +1,6 @@
 # `sb-session-registry`
 
-A Sovereign SDK module that maintains per-wallet “trading sessions” for a single application on a rollup.
+A module that maintains per-wallet “trading sessions” for a single application on a rollup.
 
 Used when other runtime modules (e.g., a DEX) need to enforce that a wallet has a **present** session and/or an **active** (non-expired) session.
 
