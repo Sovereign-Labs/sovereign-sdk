@@ -19,7 +19,7 @@ async fn test_eth_fee_history_basic() -> anyhow::Result<()> {
     assert!(fee_history
         .gas_used_ratio
         .iter()
-        .all(|&r| r >= 0.0 && r <= 1.0));
+        .all(|&r| (0.0..=1.0).contains(&r)));
 
     Ok(())
 }
@@ -103,7 +103,7 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
         .get_fee_history(2000, BlockNumberOrTag::Latest, &[])
         .await?;
 
-    assert!(fee_history.base_fee_per_gas.len() > 0);
+    assert!(!fee_history.base_fee_per_gas.is_empty());
     assert!(fee_history.base_fee_per_gas.len() <= 1025);
 
     Ok(())
