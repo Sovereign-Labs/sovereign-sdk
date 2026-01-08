@@ -100,6 +100,8 @@ where
             let gas_used = info.gas_used().as_ref()[0];
             let gas_limit = info.gas_limit().as_ref()[0];
             if gas_limit > 0 {
+                // Float arithmetic is safe here - RPC only, not consensus-critical
+                #[allow(clippy::float_arithmetic)]
                 return (gas_used as f64) / (gas_limit as f64);
             }
         }
