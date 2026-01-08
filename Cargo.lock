@@ -9491,6 +9491,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "sb-blacklist"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "schemars 0.8.22",
+ "serde",
+ "sov-address",
+ "sov-modules-api",
+ "sov-state",
+ "sov-test-utils",
+ "strum 0.26.3",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "sb-session-registry"
 version = "0.3.0"
 dependencies = [
