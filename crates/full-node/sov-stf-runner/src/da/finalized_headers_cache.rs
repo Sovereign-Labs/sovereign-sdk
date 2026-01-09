@@ -241,9 +241,11 @@ async fn background_header_fetch_task<Da: DaService>(
                                     last_seen = %previously_seen_finalized_header.display(),
                                     "Critical error in DaService, finalized header when backwards");
                             }
+                        } else {
+                            // Preventing adding rolled back finalized header
+                            last_seen_finalized_header = Some(finalized_header.clone());
+                            recent_headers.insert_new_header(finalized_header);
                         }
-                        last_seen_finalized_header = Some(finalized_header.clone());
-                        recent_headers.insert_new_header(finalized_header);
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
