@@ -227,7 +227,6 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        // TODO: SOME BUG HERE
                         let is_received_header_valid = match last_seen_finalized_header.as_ref() {
                             None => true,
                             Some(prev_seen) => {
