@@ -208,6 +208,8 @@ async fn background_header_fetch_task<Da: DaService>(
     tracing::info!(?interval, "Starting background fetcher task");
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    let mut last_seen_finalized_header: Option<<Da::Spec as DaSpec>::BlockHeader> = None;
+
     loop {
         // Wait for the next tick or shutdown
         match future_or_shutdown(interval.tick(), &shutdown_rx).await {
@@ -229,6 +231,18 @@ async fn background_header_fetch_task<Da: DaService>(
                             tracing::info!("All DA header receivers dropped, shutting down");
                             break;
                         }
+                        if let Some(previously_seen_finalized_header) =
+                            last_seen_finalized_header.as_ref()
+                        {
+                            if finalized_header.height() < previously_seen_finalized_header.height()
+                            {
+                                tracing::error!(
+                                    received = %finalized_header.display(),
+                                    last_seen = %previously_seen_finalized_header.display(),
+                                    "Critical error in DaService, finalized header when backwards");
+                            }
+                        }
+                        last_seen_finalized_header = Some(finalized_header.clone());
                         recent_headers.insert_new_header(finalized_header);
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
