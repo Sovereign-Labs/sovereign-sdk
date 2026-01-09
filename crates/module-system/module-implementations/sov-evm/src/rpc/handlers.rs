@@ -24,16 +24,6 @@ use tracing::trace;
 use crate::{apply_margins, Evm};
 use std::ops::DerefMut;
 
-const EMPTY_FEE_HISTORY: FeeHistory = FeeHistory {
-    base_fee_per_gas: vec![],
-    gas_used_ratio: vec![],
-    oldest_block: 0,
-    reward: None,
-    blob_gas_used_ratio: vec![],
-    // EIP-4844 related
-    base_fee_per_blob_gas: vec![],
-};
-
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
 where
@@ -187,11 +177,33 @@ where
     }
 
     /// Handler for: `eth_feeHistory`
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    /// Returns historical gas price and usage data for recent blocks.
+    ///
+    /// This endpoint helps wallets and users determine appropriate gas prices
+    /// by exposing the rollup's EIP-1559 style base fee history.
     #[rpc_method(name = "eth_feeHistory")]
-    pub fn fee_history(&self) -> RpcResult<FeeHistory> {
-        trace!(method = "eth_feeHistory", "EVM module JSON-RPC request");
-        Ok(EMPTY_FEE_HISTORY)
+    pub fn fee_history(
+        &self,
+        block_count: U64,
+        newest_block: BlockNumberOrTag,
+        reward_percentiles: Option<Vec<f64>>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<FeeHistory> {
+        let block_count = block_count.to::<u64>();
+        trace!(
+            block_count,
+            ?newest_block,
+            ?reward_percentiles,
+            method = "eth_feeHistory",
+            "EVM module JSON-RPC request"
+        );
+
+        Ok(self.get_fee_history(
+            block_count,
+            newest_block,
+            reward_percentiles.as_deref(),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getTransactionByHash`

@@ -33,6 +33,7 @@ pub(crate) mod error;
 pub(crate) mod handlers;
 pub(crate) mod maybe_archival_state;
 
+mod fee_history;
 mod trace;
 
 /// Result of String => BlockNr conversion
