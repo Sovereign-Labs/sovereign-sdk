@@ -513,79 +513,50 @@ where
 
         let predecessor_state_root = match self.get_pre_state_root_if_fit_candidate(block_header) {
             None => {
-                // Predecessor not found. Before assuming a reorg, verify the block is actually
-                // on the canonical chain. This helps handle cases where RPC nodes are slightly
-                // out of sync and return blocks that don't match our local state.
+                // Predecessor not found. If this is the next expected block, verify it's on
+                // the canonical chain before assuming a reorg. This handles cases where RPC
+                // nodes are slightly out of sync.
                 if let Some(highest_seen) = self.get_highest_seen_height() {
-                    // If the block height is close to what we've seen, it might be a valid
-                    // continuation that we just haven't processed yet. Verify by checking
-                    // if the block exists on the canonical chain.
-                    let height_diff = block_header.height().saturating_sub(highest_seen);
-                    if height_diff <= 1 {
-                        // Block is at or immediately after highest seen height. This could be
-                        // a valid continuation if the RPC node is slightly ahead. Verify the
-                        // block is on the canonical chain by checking if we can find it.
-                        tracing::debug!(
-                            block_header = %block_header.display(),
-                            highest_seen,
-                            height_diff,
-                            "Predecessor not found but block is close to highest seen height. Verifying block is on canonical chain."
-                        );
-                        // Try to verify the block is on the canonical chain by fetching it again
-                        // and checking if it matches. If the RPC node is out of sync, this might
-                        // return a different block, which would indicate a real reorg.
+                    let expected_next = highest_seen + 1;
+                    if block_header.height() == expected_next {
+                        // This is the next expected block. Verify it's on canonical chain.
                         match da_service.get_block_header_at(block_header.height()).await {
+                            Ok(canonical_header) if canonical_header.hash() == block_header.hash() => {
+                                // Block is on canonical chain - likely RPC sync issue, not a reorg
+                                tracing::debug!(
+                                    block_header = %block_header.display(),
+                                    highest_seen,
+                                    "Predecessor not found but block is next expected and on canonical chain. Treating as continuation."
+                                );
+                                return Ok(false);
+                            }
                             Ok(canonical_header) => {
-                                if canonical_header.hash() == block_header.hash() {
-                                    // Block is on canonical chain but predecessor not found.
-                                    // This could happen if RPC node is slightly ahead or if
-                                    // we're catching up. Don't treat as reorg yet.
-                                    tracing::debug!(
-                                        block_header = %block_header.display(),
-                                        "Block is on canonical chain but predecessor not in state. This may be due to RPC sync issues. Treating as continuation."
-                                    );
-                                    // Return false (no reorg) - the block will be processed and
-                                    // if there's a real issue, it will be caught later.
-                                    return Ok(false);
-                                } else {
-                                    // Block hash doesn't match canonical - real reorg
-                                    tracing::warn!(
-                                        requested_block = %block_header.display(),
-                                        canonical_block = %canonical_header.display(),
-                                        "Block hash doesn't match canonical chain - reorg detected"
-                                    );
-                                    return Ok(true);
-                                }
+                                // Block hash doesn't match canonical - real reorg
+                                tracing::warn!(
+                                    requested = %block_header.display(),
+                                    canonical = %canonical_header.display(),
+                                    "Block hash doesn't match canonical chain - reorg detected"
+                                );
+                                return Ok(true);
                             }
                             Err(e) => {
-                                // Error fetching canonical block - could be RPC issue
-                                // Log and treat as potential reorg to be safe
+                                // Error verifying - treat as potential reorg to be safe
                                 tracing::warn!(
                                     block_header = %block_header.display(),
                                     error = ?e,
-                                    "Error verifying block on canonical chain. Treating as potential reorg."
+                                    "Error verifying block on canonical chain - treating as reorg"
                                 );
                                 return Ok(true);
                             }
                         }
-                    } else {
-                        // Block is significantly ahead of highest seen - likely a reorg
-                        tracing::debug!(
-                            block_header = %block_header.display(),
-                            highest_seen,
-                            height_diff,
-                            "Predecessor not found and block is significantly ahead of highest seen - reorg likely"
-                        );
-                        return Ok(true);
                     }
-                } else {
-                    // No blocks seen yet - this shouldn't happen if state_on_block is not empty
-                    tracing::warn!(
-                        block_header = %block_header.display(),
-                        "Predecessor not found but no highest seen height - treating as reorg"
-                    );
-                    return Ok(true);
                 }
+                // Block is not the next expected height - treat as reorg
+                tracing::debug!(
+                    block_header = %block_header.display(),
+                    "Predecessor not found and block is not next expected height - reorg detected"
+                );
+                return Ok(true);
             }
             Some(state_root) => state_root,
         };
