@@ -227,17 +227,22 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        if let Some(previously_seen_finalized_header) =
-                            last_seen_finalized_header.as_ref()
-                        {
-                            if finalized_header.height() < previously_seen_finalized_header.height()
-                            {
-                                tracing::error!(
+                        // TODO: SOME BUG HERE
+                        let is_received_header_valid = match last_seen_finalized_header.as_ref() {
+                            None => true,
+                            Some(prev_seen) => {
+                                if finalized_header.height() < prev_seen.height() {
+                                    tracing::error!(
                                     received = %finalized_header.display(),
-                                    last_seen = %previously_seen_finalized_header.display(),
+                                    last_seen = %prev_seen.display(),
                                     "Critical error in DaService, finalized header when backwards");
+                                    false
+                                } else {
+                                    true
+                                }
                             }
-                        } else {
+                        };
+                        if is_received_header_valid {
                             // Preventing adding rolled back finalized header
                             if finalized_sender.send(finalized_header.clone()).is_err() {
                                 tracing::info!("All DA header receivers dropped, shutting down");
