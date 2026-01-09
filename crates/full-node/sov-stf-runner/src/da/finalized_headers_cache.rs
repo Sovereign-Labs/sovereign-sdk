@@ -227,10 +227,6 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        if finalized_sender.send(finalized_header.clone()).is_err() {
-                            tracing::info!("All DA header receivers dropped, shutting down");
-                            break;
-                        }
                         if let Some(previously_seen_finalized_header) =
                             last_seen_finalized_header.as_ref()
                         {
@@ -243,9 +239,13 @@ async fn background_header_fetch_task<Da: DaService>(
                             }
                         } else {
                             // Preventing adding rolled back finalized header
-                            last_seen_finalized_header = Some(finalized_header.clone());
-                            recent_headers.insert_new_header(finalized_header);
+                            if finalized_sender.send(finalized_header.clone()).is_err() {
+                                tracing::info!("All DA header receivers dropped, shutting down");
+                                break;
+                            }
+                            recent_headers.insert_new_header(finalized_header.clone());
                         }
+                        last_seen_finalized_header = Some(finalized_header);
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
