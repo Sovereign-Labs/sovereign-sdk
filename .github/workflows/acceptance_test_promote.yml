@@ -124,16 +124,18 @@ jobs:
           payload: |
             text: "⚠️ *Acceptance test data regeneration failed*\n\nAutomatic data regeneration for commit `${{ github.event.client_payload.commit_sha }}` failed.\n\n**View logs:** `less -R /opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.commit_sha }}-*/logs/regeneration.log`"
 
-      - name: Slack notification on EVM test success
-        if: github.event.action == 'evm-test-success'
-        uses: slackapi/slack-github-action@v2.1.1
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          webhook-type: incoming-webhook
-          payload: |
-            text: "✅ *EVM acceptance tests passed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      # Success notifications are commented out to avoid noise in the failure channel
+      # Uncomment when a dedicated success notification channel (e.g. #github-updates) is set up
+      # - name: Slack notification on EVM test success
+      #   if: github.event.action == 'evm-test-success'
+      #   uses: slackapi/slack-github-action@v2.1.1
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SUCCESS_WEBHOOK_URL }}
+      #   with:
+      #     webhook: ${{ secrets.SLACK_SUCCESS_WEBHOOK_URL }}
+      #     webhook-type: incoming-webhook
+      #     payload: |
+      #       text: "✅ *EVM acceptance tests passed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Slack notification on EVM test failure
         if: github.event.action == 'evm-test-failure'
