@@ -87,6 +87,7 @@ where
     // But then the runner needs to know about it and carry it over.
     state_root: StateRoot,
     // We record all seen transitions at the given height.
+    last_processed_finalized_header: Option<<<Da as DaService>::Spec as DaSpec>::BlockHeader>,
     state_on_block:
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
@@ -128,6 +129,7 @@ where
             storage_manager,
             ledger_db,
             state_root: initial_state_root,
+            last_processed_finalized_header: None,
             state_on_block: Default::default(),
             seen_on_height: Default::default(),
             state_update_sender: state_update_channel,
@@ -482,6 +484,7 @@ where
         // 0. Short circuit
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
+            // TODO: Fix this and use
             let finalized = da_service.get_last_finalized_block_header().await?;
             // Simple case
             if block_header.prev_hash() == finalized.hash()
@@ -562,6 +565,7 @@ where
     // the next incremental continuation of that fork that hasn't been processed should be found.
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
         if self.state_on_block.is_empty() {
+            // TODO: Use header provider
             let last_finalized = da_service.get_last_finalized_block_header().await?;
             let adjacent = da_service.get_block_at(last_finalized.height() + 1).await?;
             // reorg can happen between these 2 calls, right now just panic, improve handling in the future.

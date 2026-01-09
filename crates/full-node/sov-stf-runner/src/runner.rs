@@ -492,6 +492,7 @@ where
             )
             .await?
         };
+        // TODO: Assert that filtered block.height <= next_da_height
         let get_block_time = get_block_start.elapsed();
         tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
 

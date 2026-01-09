@@ -22,6 +22,7 @@ pub enum SyncStatus {
     Synced {
         /// The current height through which we've synced
         synced_da_height: u64,
+        // TODO: Add lfh
     },
     /// The node is currently syncing
     Syncing {
@@ -29,6 +30,7 @@ pub enum SyncStatus {
         synced_da_height: u64,
         /// The height to which we're syncing. This reflects the current view of the DA chain tip
         target_da_height: u64,
+        // TODO: Add lfh
     },
 }
 
