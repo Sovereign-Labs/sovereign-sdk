@@ -261,7 +261,7 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct WsMessage<Contents> {
     /// The message id.
-    pub id: u64,
+    pub id: String,
     /// The contents of the message.
     pub contents: Contents,
 }

@@ -511,13 +511,14 @@ async fn test_tx_ws_submission() {
 
     for i in 0..3 {
         let tx = tx_set_value(&admin.private_key, i, i);
-        writer.send(&tx).await.unwrap();
+        writer.send(&tx, i.to_string()).await.unwrap();
     }
     let mut received_ids = [false, false, false];
     for _ in 0..3 {
         let msg = reader.next().await.unwrap().unwrap();
-        assert!(!received_ids[msg.id as usize]);
-        received_ids[msg.id as usize] = true;
+        let id: usize = msg.id.parse().unwrap();
+        assert!(!received_ids[id]);
+        received_ids[id] = true;
         assert_eq!(msg.contents.events.len(), 1);
         for event in msg.contents.events {
             assert!(
@@ -527,7 +528,7 @@ async fn test_tx_ws_submission() {
             );
             assert_eq!(
                 event.value.get("new_value").unwrap().as_u64().unwrap(),
-                msg.id,
+                id as u64,
                 "Unexpected event value: {:?}",
                 event.value
             );

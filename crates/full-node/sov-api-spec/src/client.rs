@@ -29,24 +29,22 @@ pub type WsSubscription<T> = Result<BoxStream<'static, anyhow::Result<T>>, WsErr
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WsMessage<T> {
-    pub id: u64,
+    pub id: String,
     pub contents: T,
 }
 
 pub struct TxWsSender {
     sink: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-    id: u64,
 }
 
 impl TxWsSender {
-    pub async fn send(&mut self, tx: &RawTx) -> Result<(), WsError> {
+    pub async fn send(&mut self, tx: &RawTx, id: String) -> Result<(), WsError> {
         let message = WsMessage {
-            id: self.id,
+            id: id.clone(),
             contents: types::AcceptTxBody {
                 body: BASE64_STANDARD.encode(tx),
             },
         };
-        self.id += 1;
         self.sink
             .send(Message::Text(
                 serde_json::to_string(&message).unwrap().into(),
@@ -263,7 +261,7 @@ impl Client {
         anyhow::Error,
     > {
         let (sink, stream) = self.connect_to_ws("/sequencer/txs/submit/ws").await?;
-        Ok((TxWsSender { sink, id: 0 }, stream))
+        Ok((TxWsSender { sink }, stream))
     }
 
     pub async fn connect_to_ws<T: serde::de::DeserializeOwned>(
