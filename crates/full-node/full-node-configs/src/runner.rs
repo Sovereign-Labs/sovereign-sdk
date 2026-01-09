@@ -264,10 +264,10 @@ mod tests {
             batch_execution_time_limit_millis = 2000 
             num_cache_warmup_workers = 0
             ideal_lag_behind_finalized_slot = 3
-            is_replica = false
             [sequencer.preferred.postgres_config]
             postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db"
             node_id = "node_1"
+            node_role = "Leader"
             time_till_leader_update_allowed_ms = 1000
         "#;
 
@@ -317,10 +317,10 @@ mod tests {
             batch_execution_time_limit_millis = 2000 
             num_cache_warmup_workers = 0
             ideal_lag_behind_finalized_slot = 3
-            is_replica = false
             [sequencer.preferred.postgres_config]
             postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db"
             node_id = "node_1"
+            node_role = "Leader"
             time_till_leader_update_allowed_ms = 1000
             [sequencer.preferred.rate_limiter]
             max_nb_of_concurrent_users_in_rate_limiter = 100000

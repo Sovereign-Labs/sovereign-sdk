@@ -149,6 +149,7 @@ mod tests {
     use crate::preferred::db::postgres::PostgresBackend;
     use crate::preferred::db::BatchToStore;
     use crate::preferred::db::DbBackend;
+    use sov_full_node_configs::sequencer::NodeRole;
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
@@ -346,9 +347,10 @@ mod tests {
             }
         };
 
-        let postgres_config = config_from_postgres_container(&postgres, "Replica".into())
-            .await
-            .unwrap();
+        let postgres_config =
+            config_from_postgres_container(&postgres, "Replica".into(), NodeRole::Replica)
+                .await
+                .unwrap();
 
         let db = PostgresBackend::connect(&postgres_config).await.unwrap();
 

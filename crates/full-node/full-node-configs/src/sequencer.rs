@@ -129,10 +129,14 @@ pub enum RecoveryStrategy {
     TryToSave,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub enum NodeRole {
-    Replica,
+    /// The node is the leader.
     Leader,
+    /// The node is a replica and syncs from the leader.
+    Replica,
+    /// The node is a replica, but syncing from the leader via Postgres is disabled.
+    ReplicaNoLeaderSync,
 }
 
 /// Postgres DB config.
@@ -142,7 +146,7 @@ pub struct PostgresConfig {
     pub postgres_connection_string: String,
     /// Id of the node.
     pub node_id: String,
-    ///
+    /// The role of the node.
     pub node_role: NodeRole,
 }
 

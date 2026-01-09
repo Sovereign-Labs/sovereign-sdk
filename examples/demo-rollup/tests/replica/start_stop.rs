@@ -21,12 +21,15 @@ async fn test_replica_start_stop() {
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
-    // Why replica starts first?
-    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
-    let replica_test_rollup = start_rollup(true, addr, replica).await;
+    let replica = postgres
+        .clone()
+        .map(|pg| (pg, "replica".into(), NodeRole::Replica));
+    let replica_test_rollup = start_rollup(addr, replica).await;
 
-    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
-    let test_rollup = start_rollup(false, addr, primary).await;
+    let primary = postgres
+        .clone()
+        .map(|pg| (pg, "primary".into(), NodeRole::Leader));
+    let test_rollup = start_rollup(addr, primary).await;
 
     replica_test_rollup
         .wait_for_sequencer_ready()
@@ -254,12 +257,16 @@ async fn test_replica_start_stop_many_times() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let receiver_addr = random_address();
 
-    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
-    let test_rollup = start_rollup(false, addr, primary).await;
+    let primary = postgres
+        .clone()
+        .map(|pg| (pg, "primary".into(), NodeRole::Leader));
+    let test_rollup = start_rollup(addr, primary).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
-    let mut replica_test_rollup = start_rollup(true, addr, replica).await;
+    let replica = postgres
+        .clone()
+        .map(|pg| (pg, "replica".into(), NodeRole::Replica));
+    let mut replica_test_rollup = start_rollup(addr, replica).await;
 
     let nb_of_txs = 300;
     for i in 0..3 {

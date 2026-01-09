@@ -221,7 +221,6 @@ where
         }));
 
         // Launch replica sync task only for replicas.
-
         if let SequencerRole::Replica = seq_role {
             if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task

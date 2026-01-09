@@ -419,6 +419,7 @@ impl From<BatchToStore> for StoredBlob {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SequencerRole {
+    ReplicaNoLeaderSync,
     Replica,
     Leader,
 }
@@ -437,6 +438,7 @@ impl PreferredSequencerDb {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
                 match postgres_config.node_role {
+                    NodeRole::ReplicaNoLeaderSync => (None, SequencerRole::ReplicaNoLeaderSync),
                     NodeRole::Replica => (None, SequencerRole::Replica),
                     NodeRole::Leader => (
                         Some(Box::new(PostgresBackend::connect(postgres_config).await?)),
@@ -450,7 +452,6 @@ impl PreferredSequencerDb {
                 )
             }
         };
-
         Ok((
             Self {
                 backend,
