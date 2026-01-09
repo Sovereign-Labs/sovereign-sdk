@@ -24,6 +24,7 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
+use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 
 const MAX_REORG_FINDING_ATTEMPTS: u8 = 30;
 
@@ -125,10 +126,14 @@ where
         da_total_timeout: std::time::Duration,
         finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
     ) -> anyhow::Result<Self> {
+        // TODO: Use ledger to get last commited header. Maybe map slot number to DA Header
+        // let slot_numer = ledger_db.get_latest_finalized_slot_number().await.unwrap();
+
         Ok(Self {
             storage_manager,
             ledger_db,
             state_root: initial_state_root,
+            // TODO: Pass as par
             last_processed_finalized_header: None,
             state_on_block: Default::default(),
             seen_on_height: Default::default(),
@@ -471,11 +476,23 @@ where
         Ok(())
     }
 
+    fn get_last_processed_finalized_header(
+        &self,
+    ) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
+        Ok(match &self.last_processed_finalized_header {
+            // We haven't processed anything yet, taking it from the chain
+            None => self
+                .finalized_headers_provider
+                .get_last_finalized_block_header()?,
+            Some(b) => b.clone(),
+        })
+    }
+
     /// Returns true, if passing block_header is not an incremental continuation of the current canonical chain.
     async fn has_reorg_happened(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
-        da_service: &Da,
+        _da_service: &Da,
     ) -> anyhow::Result<bool> {
         // Reorg: if passed block header a new and it is not a continuation of any of the previous height transitions.
         tracing::trace!(
@@ -484,8 +501,7 @@ where
         // 0. Short circuit
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
-            // TODO: Fix this and use
-            let finalized = da_service.get_last_finalized_block_header().await?;
+            let finalized = self.get_last_processed_finalized_header()?;
             // Simple case
             if block_header.prev_hash() == finalized.hash()
                 || block_header.hash() == finalized.hash()
@@ -500,7 +516,8 @@ where
                 return Ok(true);
             }
             // If it is not last finalized, but finalized in the past
-            let past_finalized_block = da_service
+            let past_finalized_block = self
+                .finalized_headers_provider
                 .get_block_header_at(block_header.height())
                 .await?;
 
@@ -565,12 +582,13 @@ where
     // the next incremental continuation of that fork that hasn't been processed should be found.
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
         if self.state_on_block.is_empty() {
-            // TODO: Use header provider
-            let last_finalized = da_service.get_last_finalized_block_header().await?;
-            let adjacent = da_service.get_block_at(last_finalized.height() + 1).await?;
+            let last_processed_finalized = self.get_last_processed_finalized_header()?;
+            let adjacent = da_service
+                .get_block_at(last_processed_finalized.height() + 1)
+                .await?;
             // reorg can happen between these 2 calls, right now just panic, improve handling in the future.
             // TODO: This can be iterated and included in attempts.
-            assert!(adjacent.header().prev_hash() == last_finalized.hash());
+            assert!(adjacent.header().prev_hash() == last_processed_finalized.hash());
             return Ok(ForkPoint {
                 block: adjacent,
                 pre_state_root: self.state_root.clone(),
@@ -945,6 +963,9 @@ where
             finalized_transitions = finalized_transitions.len(),
             "Completed check for finalized transitions"
         );
+        if let Some(x) = finalized_transitions.iter().last() {
+            self.last_processed_finalized_header = Some(x.block_header.clone());
+        }
         Ok(finalized_transitions)
     }
 
