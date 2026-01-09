@@ -189,8 +189,9 @@ where
         reward_percentiles: Option<Vec<f64>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<FeeHistory> {
+        let block_count = block_count.to::<u64>();
         trace!(
-            block_count = block_count.to::<u64>(),
+            block_count,
             ?newest_block,
             ?reward_percentiles,
             method = "eth_feeHistory",
@@ -198,7 +199,7 @@ where
         );
 
         Ok(self.get_fee_history(
-            block_count.to::<u64>(),
+            block_count,
             newest_block,
             reward_percentiles.as_deref(),
             state,
