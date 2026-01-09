@@ -581,7 +581,9 @@ where
             .expect("Choosing fork point only possible if some transitions have been seen");
 
         let mut head = da_service.get_head_block_header().await?;
-        let last_finalized_header = self.finalized_headers_provider.get_last_finalized_block_header()?;
+        let last_finalized_header = self
+            .finalized_headers_provider
+            .get_last_finalized_block_header()?;
 
         for attempt in 0..MAX_REORG_FINDING_ATTEMPTS {
             match self
@@ -604,7 +606,11 @@ where
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
                     if new_head.height() < last_finalized_header.height() {
-                        anyhow::bail!("New head (height={}) went below last finalized height {}", new_head.height(), last_finalized_header.height());
+                        anyhow::bail!(
+                            "New head (height={}) went below last finalized height {}",
+                            new_head.height(),
+                            last_finalized_header.height()
+                        );
                     }
                     tracing::warn!(
                         old_head = %head.display(),
