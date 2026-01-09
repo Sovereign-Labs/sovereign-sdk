@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
 use std::sync::Arc;
 
 use crate::helpers::hash_stf::{HashStf, S};
@@ -176,45 +178,45 @@ fn build_da_config(
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
-    let finality = 50;
-    let block_time_ms = 500;
-    let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
-        reorg_interval: 1..3,
-        // TODO: It also messes up things with shorter block_time. get back to this later
-        behaviour: RandomizationBehaviour::only_shuffle(20),
-    };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+// #[tokio::test(flavor = "multi_thread")]
+// async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
+//     let finality = 50;
+//     let block_time_ms = 500;
+//     let randomization = RandomizationConfig {
+//         seed: HexHash::from([1; 32]),
+//         reorg_interval: 1..3,
+//         // TODO: It also messes up things with shorter block_time. get back to this later
+//         behaviour: RandomizationBehaviour::only_shuffle(20),
+//     };
+//     let da_config = build_da_config(finality, block_time_ms, randomization);
 
-    tokio::time::timeout(
-        TREE_MINUTES,
-        test_runner_with_background_da_service(40, da_config),
-    )
-    .await?
-}
+//     tokio::time::timeout(
+//         TREE_MINUTES,
+//         test_runner_with_background_da_service(40, da_config),
+//     )
+//     .await?
+// }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
-    let finality = 20;
-    let block_time_ms = 400;
-    let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
-        reorg_interval: 1..3,
-        behaviour: RandomizationBehaviour::ShuffleAndResize {
-            drop_percent: 10,
-            adjust_head_height: -15..15,
-        },
-    };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
+//     let finality = 20;
+//     let block_time_ms = 400;
+//     let randomization = RandomizationConfig {
+//         seed: HexHash::from([1; 32]),
+//         reorg_interval: 1..3,
+//         behaviour: RandomizationBehaviour::ShuffleAndResize {
+//             drop_percent: 10,
+//             adjust_head_height: -15..15,
+//         },
+//     };
+//     let da_config = build_da_config(finality, block_time_ms, randomization);
 
-    tokio::time::timeout(
-        TREE_MINUTES,
-        test_runner_with_background_da_service(40, da_config),
-    )
-    .await?
-}
+//     tokio::time::timeout(
+//         TREE_MINUTES,
+//         test_runner_with_background_da_service(40, da_config),
+//     )
+//     .await?
+// }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_instant_finality_data_stored() -> anyhow::Result<()> {

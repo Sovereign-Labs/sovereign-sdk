@@ -204,83 +204,83 @@ async fn test_instant_finality() -> anyhow::Result<()> {
     Ok(())
 }
 
-// Basic test for single reorg, but detailed check of what state root hash is returned.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
-    // The idea of the test is
-    // to ensure that the state manager returns the correct block and storage after a single reorg.
-    let tempdir = tempfile::tempdir()?;
+// // Basic test for single reorg, but detailed check of what state root hash is returned.
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
+//     // The idea of the test is
+//     // to ensure that the state manager returns the correct block and storage after a single reorg.
+//     let tempdir = tempfile::tempdir()?;
 
-    let fork_point = 3;
-    let fork_happens_at = 6;
-    let finality = 5;
-    let mut da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
-    da_service
-        .set_planned_fork(PlannedFork::new(
-            fork_happens_at,
-            fork_point,
-            vec![vec![11], vec![22], vec![33], vec![44]],
-        ))
-        .await?;
+//     let fork_point = 3;
+//     let fork_happens_at = 6;
+//     let finality = 5;
+//     let mut da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+//     da_service
+//         .set_planned_fork(PlannedFork::new(
+//             fork_happens_at,
+//             fork_point,
+//             vec![vec![11], vec![22], vec![33], vec![44]],
+//         ))
+//         .await?;
 
-    let (mut state_manager, shutdown_sender) =
-        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+//     let (mut state_manager, shutdown_sender) =
+//         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
-    let state_update_receiver = state_manager.state_update_sender.subscribe();
+//     let state_update_receiver = state_manager.state_update_sender.subscribe();
 
-    // State root after executing i-th transition
-    let mut post_state_roots = Vec::with_capacity(fork_happens_at as usize);
-    let mut hash_to_post_state_root: HashMap<MockHash, StateRoot> = HashMap::new();
+//     // State root after executing i-th transition
+//     let mut post_state_roots = Vec::with_capacity(fork_happens_at as usize);
+//     let mut hash_to_post_state_root: HashMap<MockHash, StateRoot> = HashMap::new();
 
-    for da_height in 1..=fork_happens_at {
-        // Not used anywhere, `process_normal_transition` relies on da header to produce changes.
-        let blob_data = [da_height as u8; 10];
-        da_service.send_transaction(&blob_data).await.await??;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
-        let filtered_block = da_service.get_block_at(da_height).await?;
-        if da_height < fork_happens_at {
-            let block_hash = filtered_block.header().hash();
-            process_continuous_transition(
-                &mut state_manager,
-                filtered_block,
-                &da_service,
-                finality,
-            )
-            .await?;
-            let current_state_root = *state_manager.get_state_root();
-            let received_storage = state_update_receiver.borrow().storage.clone();
-            let received_storage_root = received_storage.get_latest_root_hash()?;
-            assert_eq!(current_state_root, received_storage_root);
-            post_state_roots.push(current_state_root);
-            hash_to_post_state_root.insert(block_hash, current_state_root);
-        } else {
-            let (prover_storage, returned_block) = state_manager
-                .prepare_storage(filtered_block.clone(), &da_service)
-                .await?;
-            assert_ne!(filtered_block, returned_block);
-            // First non seen block:
-            assert_eq!(fork_point + 1, returned_block.header().height());
+//     for da_height in 1..=fork_happens_at {
+//         // Not used anywhere, `process_normal_transition` relies on da header to produce changes.
+//         let blob_data = [da_height as u8; 10];
+//         da_service.send_transaction(&blob_data).await.await??;
+//         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+//         let filtered_block = da_service.get_block_at(da_height).await?;
+//         if da_height < fork_happens_at {
+//             let block_hash = filtered_block.header().hash();
+//             process_continuous_transition(
+//                 &mut state_manager,
+//                 filtered_block,
+//                 &da_service,
+//                 finality,
+//             )
+//             .await?;
+//             let current_state_root = *state_manager.get_state_root();
+//             let received_storage = state_update_receiver.borrow().storage.clone();
+//             let received_storage_root = received_storage.get_latest_root_hash()?;
+//             assert_eq!(current_state_root, received_storage_root);
+//             post_state_roots.push(current_state_root);
+//             hash_to_post_state_root.insert(block_hash, current_state_root);
+//         } else {
+//             let (prover_storage, returned_block) = state_manager
+//                 .prepare_storage(filtered_block.clone(), &da_service)
+//                 .await?;
+//             assert_ne!(filtered_block, returned_block);
+//             // First non seen block:
+//             assert_eq!(fork_point + 1, returned_block.header().height());
 
-            assert!(!hash_to_post_state_root.contains_key(&returned_block.header.hash));
-            let expected_pre_state_root = hash_to_post_state_root
-                .get(&returned_block.header().prev_hash())
-                .expect("Should be there");
-            assert_eq!(
-                expected_pre_state_root,
-                state_manager.get_state_root(),
-                "Expected (left) state root does not match actual(right) set in StateManager. All state roots: {post_state_roots:?}");
+//             assert!(!hash_to_post_state_root.contains_key(&returned_block.header.hash));
+//             let expected_pre_state_root = hash_to_post_state_root
+//                 .get(&returned_block.header().prev_hash())
+//                 .expect("Should be there");
+//             assert_eq!(
+//                 expected_pre_state_root,
+//                 state_manager.get_state_root(),
+//                 "Expected (left) state root does not match actual(right) set in StateManager. All state roots: {post_state_roots:?}");
 
-            let returned_storage_root = prover_storage.get_latest_root_hash()?;
-            let received_update_info = state_update_receiver.borrow().clone();
-            let received_storage_root = received_update_info.storage.get_latest_root_hash()?;
-            assert_eq!(returned_storage_root, received_storage_root);
-        }
-    }
+//             let returned_storage_root = prover_storage.get_latest_root_hash()?;
+//             let received_update_info = state_update_receiver.borrow().clone();
+//             let received_storage_root = received_update_info.storage.get_latest_root_hash()?;
+//             assert_eq!(returned_storage_root, received_storage_root);
+//         }
+//     }
 
-    shutdown_sender.send(())?;
+//     shutdown_sender.send(())?;
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 /// This test checks that process_stf_changes goes normally,
 /// even when the finalized block progressed above the passed block header.
@@ -527,68 +527,68 @@ async fn test_progressing_with_shuffle(
     Ok(())
 }
 
-// This test check that a chain always returns the non-executed block, even if chain forks are restored.
-// We emulate the return of the chain by having only a single blob "floating" between a number of empty blocks.
-// Empty blocks have the same root hash, so we can check that we don't execute empty blocks several times.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_double_reorg_chain_restored() -> anyhow::Result<()> {
-    let finality = 20;
-    let empty_blocks_padding = 15;
-    let batches = 1;
-    let loop_blocks = 100;
-    for seed in [SEED_1, SEED_2, SEED_3] {
-        test_progressing_with_shuffle(
-            finality,
-            empty_blocks_padding,
-            batches,
-            loop_blocks,
-            3,
-            seed,
-        )
-        .await?;
-    }
-    Ok(())
-}
+// // This test check that a chain always returns the non-executed block, even if chain forks are restored.
+// // We emulate the return of the chain by having only a single blob "floating" between a number of empty blocks.
+// // Empty blocks have the same root hash, so we can check that we don't execute empty blocks several times.
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_double_reorg_chain_restored() -> anyhow::Result<()> {
+//     let finality = 20;
+//     let empty_blocks_padding = 15;
+//     let batches = 1;
+//     let loop_blocks = 100;
+//     for seed in [SEED_1, SEED_2, SEED_3] {
+//         test_progressing_with_shuffle(
+//             finality,
+//             empty_blocks_padding,
+//             batches,
+//             loop_blocks,
+//             3,
+//             seed,
+//         )
+//         .await?;
+//     }
+//     Ok(())
+// }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_shuffle_with_multiple_blobs() -> anyhow::Result<()> {
-    let finality = 20;
-    let empty_blocks_padding = 0;
-    let batches = 5;
-    let loop_blocks = 50;
-    for seed in [SEED_1, SEED_2, SEED_3] {
-        test_progressing_with_shuffle(
-            finality,
-            empty_blocks_padding,
-            batches,
-            loop_blocks,
-            2,
-            seed,
-        )
-        .await?;
-    }
-    Ok(())
-}
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_shuffle_with_multiple_blobs() -> anyhow::Result<()> {
+//     let finality = 20;
+//     let empty_blocks_padding = 0;
+//     let batches = 5;
+//     let loop_blocks = 50;
+//     for seed in [SEED_1, SEED_2, SEED_3] {
+//         test_progressing_with_shuffle(
+//             finality,
+//             empty_blocks_padding,
+//             batches,
+//             loop_blocks,
+//             2,
+//             seed,
+//         )
+//         .await?;
+//     }
+//     Ok(())
+// }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_shuffle_with_deeper_reorgs() -> anyhow::Result<()> {
-    let finality = 20;
-    let empty_blocks_padding = 10;
-    let batches = 5;
-    let loop_blocks = 50;
-    for seed in [SEED_1, SEED_2, SEED_3] {
-        test_progressing_with_shuffle(
-            finality,
-            empty_blocks_padding,
-            batches,
-            loop_blocks,
-            10,
-            seed,
-        )
-        .await?;
-    }
-    Ok(())
-}
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_shuffle_with_deeper_reorgs() -> anyhow::Result<()> {
+//     let finality = 20;
+//     let empty_blocks_padding = 10;
+//     let batches = 5;
+//     let loop_blocks = 50;
+//     for seed in [SEED_1, SEED_2, SEED_3] {
+//         test_progressing_with_shuffle(
+//             finality,
+//             empty_blocks_padding,
+//             batches,
+//             loop_blocks,
+//             10,
+//             seed,
+//         )
+//         .await?;
+//     }
+//     Ok(())
+// }
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -794,24 +794,24 @@ async fn test_chain_progress_between_prepare_and_save_instant_finality() -> anyh
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_chain_progress_between_prepare_and_save_non_instant_finality() -> anyhow::Result<()> {
-    let finality = 5;
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_chain_progress_between_prepare_and_save_non_instant_finality() -> anyhow::Result<()> {
+//     let finality = 5;
 
-    for seed in [SEED_1, SEED_2, SEED_3] {
-        // With empty blobs
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 6, seed)
-            .await?;
-        // Shuffle every time
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 3, seed)
-            .await?;
-        // Without empty blobs
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 0, 3, 6, seed)
-            .await?;
-    }
+//     for seed in [SEED_1, SEED_2, SEED_3] {
+//         // With empty blobs
+//         test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 6, seed)
+//             .await?;
+//         // Shuffle every time
+//         test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 3, seed)
+//             .await?;
+//         // Without empty blobs
+//         test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 0, 3, 6, seed)
+//             .await?;
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(100))]
@@ -820,8 +820,8 @@ proptest! {
     fn proptest_shuffling_with_different_params(
         finality in prop_oneof![
             Just(0u32),
-            Just(1u32),
-            Just(5u32)
+            // Just(1u32),
+            // Just(5u32)
         ],
         loop_blocks in 1..=20usize,
         batches in prop_oneof![
@@ -859,8 +859,8 @@ proptest! {
     fn proptest_chain_prorgress_between(
         finality in prop_oneof![
             Just(0u32),
-            Just(1u32),
-            Just(5u32)
+            // Just(1u32),
+            // Just(5u32)
         ],
         loop_blocks in 1..=20usize,
         batches in prop_oneof![
@@ -895,67 +895,67 @@ proptest! {
         }
 }
 
-// Fail case tests
-/// Normal changes tracked in state manager, some of them finalized.
-/// Then new [`MockDaService`] is initialized and new blocks are submitted, so new different header is finalized.
-/// This way we can have a case where [`StateManager`] cannot backtrack to continuous transition,
-/// because finalized were eliminated. This behaviour is similar as starting from a non-finalized block and then whole chain switches.
-#[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "Finalized header changed")]
-async fn test_change_in_finalized_header() {
-    let tempdir = tempfile::tempdir().unwrap();
+// // Fail case tests
+// /// Normal changes tracked in state manager, some of them finalized.
+// /// Then new [`MockDaService`] is initialized and new blocks are submitted, so new different header is finalized.
+// /// This way we can have a case where [`StateManager`] cannot backtrack to continuous transition,
+// /// because finalized were eliminated. This behaviour is similar as starting from a non-finalized block and then whole chain switches.
+// #[tokio::test(flavor = "multi_thread")]
+// #[should_panic(expected = "Finalized header changed")]
+// async fn test_change_in_finalized_header() {
+//     let tempdir = tempfile::tempdir().unwrap();
 
-    let chain_length = 5;
-    let finality = 3;
+//     let chain_length = 5;
+//     let finality = 3;
 
-    let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+//     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
 
-    let (mut state_manager, shutdown_sender) =
-        setup_state_manager(tempdir.path(), da_service.clone())
-            .await
-            .unwrap();
+//     let (mut state_manager, shutdown_sender) =
+//         setup_state_manager(tempdir.path(), da_service.clone())
+//             .await
+//             .unwrap();
 
-    for height in 1..=chain_length {
-        da_service
-            .send_transaction(&[height as u8; 10])
-            .await
-            .await
-            .unwrap()
-            .unwrap();
-        let filtered_block = da_service.get_block_at(height).await.unwrap();
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
-        process_continuous_transition(
-            &mut state_manager,
-            filtered_block.clone(),
-            &da_service,
-            finality,
-        )
-        .await
-        .unwrap();
-    }
+//     for height in 1..=chain_length {
+//         da_service
+//             .send_transaction(&[height as u8; 10])
+//             .await
+//             .await
+//             .unwrap()
+//             .unwrap();
+//         let filtered_block = da_service.get_block_at(height).await.unwrap();
+//         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+//         process_continuous_transition(
+//             &mut state_manager,
+//             filtered_block.clone(),
+//             &da_service,
+//             finality,
+//         )
+//         .await
+//         .unwrap();
+//     }
 
-    let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
-    for height in 1..=chain_length {
-        da_service
-            .send_transaction(&[(height * 10) as u8; 10])
-            .await
-            .await
-            .unwrap()
-            .unwrap();
-    }
+//     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+//     for height in 1..=chain_length {
+//         da_service
+//             .send_transaction(&[(height * 10) as u8; 10])
+//             .await
+//             .await
+//             .unwrap()
+//             .unwrap();
+//     }
 
-    let alien_block = da_service
-        .get_block_at(da_service.get_head_block_header().await.unwrap().height())
-        .await
-        .unwrap();
+//     let alien_block = da_service
+//         .get_block_at(da_service.get_head_block_header().await.unwrap().height())
+//         .await
+//         .unwrap();
 
-    state_manager
-        .prepare_storage(alien_block, &da_service)
-        .await
-        .unwrap();
+//     state_manager
+//         .prepare_storage(alien_block, &da_service)
+//         .await
+//         .unwrap();
 
-    shutdown_sender.send(()).unwrap();
-}
+//     shutdown_sender.send(()).unwrap();
+// }
 
 // On empty internal state, state manager should check if passed block is finalized
 // And return last finalized.

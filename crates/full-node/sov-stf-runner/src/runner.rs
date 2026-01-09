@@ -49,7 +49,7 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
-    da_total_timeout: Duration,
+    // da_total_timeout: Duration,
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
@@ -226,7 +226,7 @@ where
         Ok(Self {
             first_unprocessed_height_at_startup,
             da_polling_interval,
-            da_total_timeout,
+            // da_total_timeout,
             da_service: da_service.clone(),
             stf,
             state_manager,
@@ -458,14 +458,14 @@ where
 
     async fn process_next_slot(
         &mut self,
-        mut next_da_height: NextDaHeightToProcess,
+        next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
         genesis_da_height: u64,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
         let prev_state_root = self.get_state_root().clone();
-        let span = tracing::info_span!("process_next_slot", next_da_height = next_da_height);
+        let span: tracing::Span = tracing::info_span!("process_next_slot", next_da_height = next_da_height);
 
         if let Some(h) = start_at_rollup_height {
             span.record("start_at_rollup_height", tracing::field::display(h));
@@ -478,19 +478,22 @@ where
         let mut transaction_count = 0;
         let mut batch_count = 0;
         let get_block_start = std::time::Instant::now();
+        // Next DA height was 9302993. DA had produced at least 9302995 (we can see due to the sync_in_progress logs)
+        // Filtered block had height ...84 (too low)
         let filtered_block = if next_da_height <= self.sync_fetcher.last_finalized_height {
             // no reorg will happen for this height; it is safe to just pull it from the fetcher,
             // which could have this block fetcher already
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
-            // Requests height might re-org
-            crate::da::fetch_block_reorg_aware(
-                self.da_service.as_ref(),
-                self.sync_state.as_ref(),
-                next_da_height,
-                self.da_total_timeout,
-            )
-            .await?
+            // // Requests height might re-org
+            // crate::da::fetch_block_reorg_aware(
+            //     self.da_service.as_ref(),
+            //     self.sync_state.as_ref(),
+            //     next_da_height,
+            //     self.da_total_timeout,
+            // )
+            // .await?
+            self.da_service.get_block_at(next_da_height).await?
         };
         let get_block_time = get_block_start.elapsed();
         tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
@@ -505,17 +508,18 @@ where
             })?;
 
         let filtered_block_header = filtered_block.header().clone();
-        if next_da_height != filtered_block_header.height() {
-            debug!(
-                existing_next_da_height = next_da_height,
-                new_next_da_height = filtered_block_header.height(),
-                "Updating next_da_height after storage_manager, as reorg happened."
-            );
-            next_da_height = filtered_block_header.height();
-            tracing::Span::current().record("new_next_da_height", next_da_height);
-            self.sync_state
-                .update_synced(next_da_height.saturating_sub(1));
-        }
+        assert_eq!(next_da_height, filtered_block_header.height(), "Next DA height and filtered block height must be the same since this chain does not reorg");
+        // if next_da_height != filtered_block_header.height() {
+        //     debug!(
+        //         existing_next_da_height = next_da_height,
+        //         new_next_da_height = filtered_block_header.height(),
+        //         "Updating next_da_height after storage_manager, as reorg happened."
+        //     );
+        //     next_da_height = filtered_block_header.height();
+        //     tracing::Span::current().record("new_next_da_height", next_da_height);
+        //     self.sync_state
+        //         .update_synced(next_da_height.saturating_sub(1));
+        // }
 
         // STF execution
         let stf_execution_start = std::time::Instant::now();
