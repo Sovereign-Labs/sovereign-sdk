@@ -17,6 +17,7 @@ use sov_metrics::RunnerProcessStfChangesMetrics;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::stf::TxReceiptContents;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -24,7 +25,6 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
-use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 
 const MAX_REORG_FINDING_ATTEMPTS: u8 = 30;
 
