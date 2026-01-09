@@ -15,11 +15,13 @@ use serde_with::serde_as;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::runtime::Runtime;
 use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
-use sov_rest_utils::get_client_ip;
+use sov_rest_utils::handle_bad_ws_request;
+use sov_rest_utils::send_json;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
     PageSelection, PaginatedResponse, Pagination, Path, Query,
 };
+use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
@@ -87,6 +89,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 axum::routing::get(Self::subscribe_to_transactions),
             )
             .route(
+                "/sequencer/txs/submit/ws",
+                axum::routing::get(Self::axum_ws_submit_tx),
+            )
+            .route(
                 "/sequencer/unstable/events/:eventId",
                 axum::routing::get(Self::axum_get_event),
             )
@@ -128,6 +134,125 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         socket.send(ws_msg).await?;
 
         Ok(())
+    }
+
+    async fn axum_ws_submit_tx(
+        connect_info: ConnectInfo<SocketAddr>,
+        state: State<Self>,
+        headers: axum::http::HeaderMap,
+        ws: ws::WebSocketUpgrade,
+    ) -> Result<impl IntoResponse, axum::response::Response> {
+        let ip_addr = get_client_ip(headers, Some(&connect_info))
+            .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
+        Ok(ws.on_upgrade(move |mut socket| async move {
+            let mut shutdown_receiver = state.shutdown_receiver.clone();
+            let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
+            loop {
+                tokio::select! {
+                    // The client sent us a message
+                    inbound_msg = socket.recv() => {
+                        match inbound_msg {
+                            // Try to deserialize the message as a WsMessage<AcceptTx>. On success, spawn a task to handle it.
+                            Some(Ok(ws::Message::Text(text))) => {
+                                match serde_json::from_str::<WsMessage<AcceptTx>>(&text) {
+                                    Ok(WsMessage { id, contents }) => {
+                                        let sender = outbound_tx.clone();
+                                        let state = state.clone();
+                                        // Spawn a task to handle the transaction submission and forward the response back to the main handler loop for this subscription
+                                        tokio::spawn(async move {
+                                            let raw_tx = RawTx::new(contents.body.blob);
+                                            let baked_tx = <<Seq::Rt as Runtime<Seq::Spec>>::Auth as TransactionAuthenticator<
+                                                Seq::Spec,
+                                            >>::encode_with_standard_auth(raw_tx);
+
+                                            let response = match state
+                                                .sequencer
+                                                .accept_tx(baked_tx, ip_addr)
+                                                .await {
+                                                    Ok(tx_with_hash) => {
+                                                        Ok(WsMessage {
+                                                            id,
+                                                            contents: TxInfoWithConfirmation {
+                                                                id: tx_with_hash.tx_hash,
+                                                                confirmation: tx_with_hash.confirmation,
+                                                                status: TxStatus::<DaBlobHash<<Seq::Da as DaService>::Spec>>::Submitted,
+                                                            }
+                                                        })
+                                                    }
+                                                    Err(e) => {
+                                                        if e.status.is_server_error() {
+                                                            tracing::error!(error = ?e, "Error accepting transaction");
+                                                        }
+                                                        Err(WsMessage {
+                                                            id,
+                                                            contents: e,
+                                                        })
+                                                    }
+                                                };
+                                            if let Err(e) = sender.send(response).await {
+                                                tracing::warn!(?e, "Error sending response to client. Could not respond because outbound ws channel was dropped. This usually means the seqeuncer is shutting down.");
+                                            };
+                                        });
+                                    }
+                                    Err(e) => {
+                                        if handle_bad_ws_request(&mut socket, ip_addr, e).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            // If the client disconnected
+                            None => break,
+                            Some(Err(error)) => {
+                                if handle_bad_ws_request(&mut socket, ip_addr, error).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Some(_) => {
+                                if handle_bad_ws_request(&mut socket, ip_addr, "Invalid websocket message: only text messages are supported").await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // We have an outbound message ready to send
+                    outbound_msg = outbound_rx.recv() => {
+                        match outbound_msg {
+                            Some(msg) => {
+                                match msg {
+                                    Ok(msg) => {
+                                        if let Err(err) = send_json(&mut socket, msg).await {
+                                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                                            break;
+                                        }
+                                    }
+                                    Err(msg) => {
+                                        if let Err(err) = send_json(&mut socket, msg).await {
+                                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            None => break,
+                        }
+                    }
+                    _ = shutdown_receiver.changed() => break,
+                }
+            }
+
+            // Drop the local handle to the channel for outbound messages.
+            // This guarantees that the channel will be closed as soon as all in-flight tasks have resolved.
+            drop(outbound_tx);
+            // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
+            while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
+                if let Err(err) = send_json(&mut socket, msg).await {
+                    tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                    break;
+                }
+            }
+        }) )
     }
 
     async fn axum_get_tx_ws(
