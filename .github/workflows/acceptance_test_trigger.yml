@@ -58,34 +58,28 @@ jobs:
 
       - name: Trigger test run on Hetzner
         if: steps.check.outputs.skip != 'true'
-        env:
-          ACCEPTANCE_SERVER_API_TOKEN: ${{ secrets.ACCEPTANCE_SERVER_API_TOKEN }}
-          ACCEPTANCE_SERVER_API_URL: ${{ secrets.ACCEPTANCE_SERVER_API_URL }}
-          COMMIT_SHA: ${{ steps.commit.outputs.sha }}
-        run: |
-          echo "Triggering acceptance test for commit ${{ steps.commit.outputs.short_sha }}"
-          echo "Commit message: ${{ steps.commit.outputs.message }}"
+        uses: ./.github/actions/trigger-acceptance-test
+        with:
+          api_token: ${{ secrets.ACCEPTANCE_SERVER_API_TOKEN }}
+          api_url: ${{ secrets.ACCEPTANCE_SERVER_API_URL }}
+          commit_sha: ${{ steps.commit.outputs.sha }}
+          commit_short_sha: ${{ steps.commit.outputs.short_sha }}
+          commit_message: ${{ steps.commit.outputs.message }}
+          endpoint: 'start-test'
+          test_type: 'acceptance'
+          skip_regeneration: ${{ env.SKIP_REGENERATION }}
 
-          if ! response=$(curl -X POST "${ACCEPTANCE_SERVER_API_URL}/start-test" \
-            -H "Authorization: Bearer ${ACCEPTANCE_SERVER_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"commit_sha\": \"$COMMIT_SHA\", \"skip_regeneration\": ${{ env.SKIP_REGENERATION }}}" \
-            -w "\n%{http_code}" -s); then
-            echo "❌ Curl command failed; unable to send request"
-            exit 1
-          fi
-
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | head -n-1)
-
-          if [ "$http_code" -ne 200 ]; then
-            echo "❌ Failed to trigger test (HTTP $http_code)"
-            echo "Response: $body"
-            exit 1
-          fi
-
-          echo "✅ Test triggered successfully"
-          echo "$body"
+      - name: Trigger EVM test run on server
+        if: steps.check.outputs.skip != 'true'
+        uses: ./.github/actions/trigger-acceptance-test
+        with:
+          api_token: ${{ secrets.ACCEPTANCE_SERVER_API_TOKEN }}
+          api_url: ${{ secrets.ACCEPTANCE_SERVER_API_URL }}
+          commit_sha: ${{ steps.commit.outputs.sha }}
+          commit_short_sha: ${{ steps.commit.outputs.short_sha }}
+          commit_message: ${{ steps.commit.outputs.message }}
+          endpoint: 'start-evm-test'
+          test_type: 'EVM acceptance'
 
       - name: Skip message
         if: steps.check.outputs.skip == 'true'
