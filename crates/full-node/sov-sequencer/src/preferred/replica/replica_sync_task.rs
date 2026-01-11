@@ -17,6 +17,8 @@ const PAGE_SIZE: usize = 2000;
 pub(crate) enum DBDataRejected {
     ExecutorBehind(DbData),
     ExecutorAhead(u64),
+    /// The replica reached the configured stop height for a rollup upgrade.
+    StopHeightReached,
 }
 
 #[async_trait]
@@ -136,6 +138,34 @@ impl ReplicaSyncTask {
                         data = db_data;
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         continue 'inner;
+                    }
+
+                    Err(DBDataRejected::StopHeightReached) => {
+                        // Stop height reached: drain events until shutdown.
+                        //
+                        // We've reached the configured stop height for this rollup upgrade.
+                        // Rather than exiting (which the task monitor would treat as a bug),
+                        // we drain events from the channel until shutdown. This keeps the
+                        // task alive and prevents buffer filling while the runner completes
+                        // processing DA blocks and triggers graceful shutdown.
+                        //
+                        // INVARIANT: This assumes that once the stop height is reached, we are
+                        // guaranteed to shut down soon. If we ever add an API to live-edit the
+                        // stop height, this will need to be taken into account for replicas.
+                        tracing::info!("Replica reached stop height, stopping event processing. Draining db events until node shutdown.");
+                        loop {
+                            let fut =
+                                future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+                            match fut.await {
+                                FutureOrShutdownOutput::Shutdown
+                                | FutureOrShutdownOutput::Output(None) => {
+                                    break 'outer;
+                                }
+                                FutureOrShutdownOutput::Output(Some(_)) => {
+                                    // Discard - past stop height
+                                }
+                            }
+                        }
                     }
                 }
             }
