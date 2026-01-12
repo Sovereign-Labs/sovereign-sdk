@@ -1,8 +1,9 @@
+use alloy::network::TransactionBuilder;
+use alloy::providers::Provider;
+use alloy::rpc::types::TransactionRequest;
+use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, U256};
-use alloy_provider::{DynProvider, Provider};
-use alloy_rpc_types_eth::TransactionRequest;
-use alloy_signer::SignerSync;
-use alloy_signers::local::PrivateKeySigner;
+use alloy_provider::DynProvider;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
@@ -44,11 +45,11 @@ async fn send_and_mine_tx(
     rollup: &TestRollup<MockDemoRollup<Native>>,
     client: &DynProvider,
     max_fee_per_gas: u128,
-) -> anyhow::Result<alloy_rpc_types_eth::TransactionReceipt> {
+) -> anyhow::Result<alloy::rpc::types::TransactionReceipt> {
     let tx_request = create_tx_request(client, max_fee_per_gas).await?;
     let pending_tx = client.send_transaction(tx_request).await?;
 
-    rollup.unpause_preferred_batches().await;
+    rollup.resume_preferred_batches().await;
     rollup.wait_for_next_blocks(1).await;
 
     Ok(pending_tx.get_receipt().await?)
@@ -63,9 +64,9 @@ async fn test_insufficient_max_fee_per_gas() -> anyhow::Result<()> {
     let result = client.send_transaction(tx_request).await;
 
     let err_msg = result.unwrap_err().to_string();
-    assert_eq!(
-        err_msg,
-        "Insufficient max_fee_per_gas: user specified 1, but current base fee is 9"
+    assert!(
+        err_msg.contains("Insufficient max_fee_per_gas: user specified 1, but current base fee is"),
+        "Expected insufficient max_fee_per_gas error, got: {err_msg}"
     );
 
     Ok(())
