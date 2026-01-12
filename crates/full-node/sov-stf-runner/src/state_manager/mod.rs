@@ -91,7 +91,7 @@ where
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
-    // TODO: Why option though? It can always be set, genesis da header at lowest.
+    genesis_da_height: u64,
     last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
@@ -125,6 +125,7 @@ where
         da_sync_state: Arc<DaSyncState>,
         da_total_timeout: std::time::Duration,
         finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
+        genesis_da_height: u64,
         last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -141,6 +142,7 @@ where
             da_sync_state,
             da_total_timeout,
             finalized_headers_provider,
+            genesis_da_height,
         })
     }
 
@@ -263,7 +265,6 @@ where
         T: TxReceiptContents,
     >(
         &mut self,
-        da_height_at_genesis: u64,
         stf_changes: Sm::StfChangeSet,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
@@ -342,7 +343,7 @@ where
             let last_finalized_slot_number = SlotNumber::new_dangerous(
                 last_processed_finalized_header
                     .height()
-                    .saturating_sub(da_height_at_genesis),
+                    .saturating_sub(self.genesis_da_height),
             );
             tracing::trace!(
                 ?last_finalized_slot_number,
@@ -487,13 +488,18 @@ where
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
             let finalized = &self.last_processed_finalized_header;
-            // Simple case
-            if block_header.prev_hash() == finalized.hash()
-                || block_header.hash() == finalized.hash()
-            // Why second or? Genesis case?
-            {
+            // Direct descendand of the last seen finalized block.
+            if block_header.prev_hash() == finalized.hash() {
                 return Ok(false);
             }
+            // TODO: Why second or? Genesis case? Isn't it error and we are going to execute this block twice?
+            // TODO: Just added self.genesis_da_height, need to compare, and only then.
+            if block_header.hash() == finalized.hash() {
+                return Ok(false);
+            }
+            //
+            // Carefully re-evaluate everything below
+            // ----------------
             if block_header.height() >= finalized.height() {
                 tracing::trace!(
                     block_header = %block_header.display(),
@@ -501,6 +507,8 @@ where
                     "passed block header is higher than finalized and not direct descendant of finalized => reorg happened");
                 return Ok(true);
             }
+            // What is this thingy doing?:
+
             // If it is not last finalized, but finalized in the past
             let past_finalized_block = self
                 .finalized_headers_provider
@@ -517,9 +525,8 @@ where
             return Ok(false);
         }
 
-        let predecessor_state_root = match self.get_matching_pre_state_root(block_header) {
-            None => return Ok(true),
-            Some(state_root) => state_root,
+        let Some(predecessor_state_root) = self.get_matching_pre_state_root(block_header) else {
+            return Ok(true);
         };
         // 3. Continuation of **existing** state of state manager.
         let is_fork = self.state_root.as_ref() != predecessor_state_root.as_ref();
@@ -552,6 +559,7 @@ where
             .map(|state| state.post_state_root.clone())
     }
 
+    // TODO: Should we handle last processed finalized height here?
     fn get_earliest_seen_height(&self) -> Option<u64> {
         self.seen_on_height.first_key_value().map(|(k, _)| *k)
     }
@@ -807,6 +815,7 @@ where
 
     /// Returns all [`StateTransitionInfo`] which are below finalized height
     /// and relevant LedgerDb changes.
+    // TODO: Revisit that we use `last_finalzied_header` vs `last_seen_finalized_header` correctly.
     async fn process_finalized_state_transitions(
         &mut self,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {

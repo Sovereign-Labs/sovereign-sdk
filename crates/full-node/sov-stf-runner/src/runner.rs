@@ -159,6 +159,7 @@ where
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
+        genesis_da_height: u64,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -217,6 +218,7 @@ where
             sync_state.clone(),
             da_total_timeout,
             da_service_with_cached_finalized_headers.clone(),
+            genesis_da_height,
             last_processed_da_header,
         )?;
 
@@ -368,7 +370,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run_in_process(&mut self, genesis_da_height: u64) -> anyhow::Result<()> {
+    pub async fn run_in_process(&mut self) -> anyhow::Result<()> {
         self.state_manager.startup().await?;
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
@@ -398,7 +400,6 @@ where
                     next_da_height,
                     &start_at_rollup_height,
                     &stop_at_rollup_height,
-                    genesis_da_height,
                 ),
                 &shutdown_receiver,
             )
@@ -468,7 +469,6 @@ where
         mut next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
-        genesis_da_height: u64,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
         let prev_state_root = self.get_state_root().clone();
@@ -624,7 +624,6 @@ where
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
             .process_stf_changes(
-                genesis_da_height,
                 slot_result.change_set,
                 transition_data,
                 data_to_commit,
@@ -760,9 +759,9 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
     use tokio::runtime::{Handle, RuntimeFlavor};
 
     match Handle::current().runtime_flavor() {
-            RuntimeFlavor::CurrentThread => Err(anyhow::anyhow!("A multi-threaded Tokio runtime is required to run the rollup node. Check your Tokio configuration. If you're testing node functionality, make sure your test uses `#[tokio::test(flavor = \"multi_thread\")]` or an equivalent configuration. Aborting.")),
-            _ => Ok(())
-        }
+        RuntimeFlavor::CurrentThread => Err(anyhow::anyhow!("A multi-threaded Tokio runtime is required to run the rollup node. Check your Tokio configuration. If you're testing node functionality, make sure your test uses `#[tokio::test(flavor = \"multi_thread\")]` or an equivalent configuration. Aborting.")),
+        _ => Ok(())
+    }
 }
 
 /// Creates a new `DaSyncState`
