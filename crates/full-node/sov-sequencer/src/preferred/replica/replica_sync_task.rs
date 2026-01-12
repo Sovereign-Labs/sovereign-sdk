@@ -162,7 +162,14 @@ impl ReplicaSyncTask {
                                     break 'outer;
                                 }
                                 FutureOrShutdownOutput::Output(Some(_)) => {
-                                    // Discard - past stop height
+                                    // Discard - past stop height.
+                                    // As mentioned above, this assumes that we will always shut
+                                    // down after reaching the stop height. The node will process
+                                    // the on-disk state up to the stop height and shut down
+                                    // immediately, so these events only affect the in-memory state
+                                    // of the sequencer. Therefore they are useless to this version
+                                    // of the rollup, and the next version will catch up on startup
+                                    // using the normal mechanisms.
                                 }
                             }
                         }
