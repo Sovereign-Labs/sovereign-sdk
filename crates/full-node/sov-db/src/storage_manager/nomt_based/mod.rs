@@ -105,7 +105,6 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     chain_forks: HashMap<Da::SlotHash, Vec<Da::SlotHash>>,
     // Reverse: child_block -> parent
     blocks_to_parent: HashMap<Da::SlotHash, Da::SlotHash>,
-    last_finalized_hash: Option<Da::SlotHash>,
 
     rockbound_snapshots: HashMap<Da::SlotHash, SnapshotGroup>,
     nomt_snapshots: Arc<RwLock<HashMap<Da::SlotHash, StateOverlay>>>,
@@ -144,7 +143,6 @@ where
         Ok(Self {
             chain_forks: Default::default(),
             blocks_to_parent: Default::default(),
-            last_finalized_hash: None,
             rockbound_snapshots: Default::default(),
             nomt_snapshots: Arc::new(Default::default()),
             pinned_caches: Default::default(),
@@ -238,22 +236,12 @@ where
         &mut self,
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<(Self::StfState, Self::LedgerState)> {
-        // TODO: Do something here that block either belongs to some chain or originates directly from last finalized header
-
         tracing::trace!(block_header = %block_header.display(), "Requested native storage");
         let prev_hash = block_header.prev_hash();
         let current_hash = block_header.hash();
         if let std::collections::hash_map::Entry::Vacant(e) =
             self.blocks_to_parent.entry(current_hash.clone())
         {
-            // TODO: Figure this out
-            // if let Some(last_seen_finalized_hash) = self.last_finalized_hash.as_ref() {
-            //     if &prev_hash != last_seen_finalized_hash {
-            //         anyhow::bail!(
-            //             "Should belong to chain or directly start from last finalized header"
-            //         );
-            //     }
-            // }
             self.chain_forks
                 .entry(prev_hash.clone())
                 .or_default()
@@ -297,7 +285,6 @@ where
         stf_change_set: Self::StfChangeSet,
         ledger_change_set: Self::LedgerChangeSet,
     ) -> anyhow::Result<()> {
-        // TODO: Check if change set belogs to something
         tracing::trace!(block_header = %block_header.display(), "Saving changes");
 
         if !self.chain_forks.contains_key(&block_header.prev_hash()) {
@@ -515,8 +502,6 @@ where
                 self.pruner = Some(pruner);
             }
         }
-
-        self.last_finalized_hash = Some(block_header.hash());
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(StorageManagerFinalizationMetric {
