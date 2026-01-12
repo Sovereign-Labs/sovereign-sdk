@@ -5,6 +5,7 @@ mod evm_contract_creation_allowlist;
 mod evm_fee_history;
 mod evm_gas_estimation;
 mod evm_logs;
+mod evm_max_fee_validation;
 mod evm_no_gas_limit;
 mod evm_oog_error;
 mod evm_oracle;
