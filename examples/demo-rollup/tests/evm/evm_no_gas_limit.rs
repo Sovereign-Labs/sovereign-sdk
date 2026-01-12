@@ -25,7 +25,7 @@ async fn contract_deploy_via_eth_send_transaction_with_no_gas_limit() -> anyhow:
     // (to=None, no gas limit, only gas price)
     let params = serde_json::json!([{
         "from": from,
-        "maxFeePerGas": "0x1",
+        "maxFeePerGas": "0x100",  // Sufficient to cover base fee
         "maxPriorityFeePerGas": "0x1",
         "data": bytecode,
     }]);
