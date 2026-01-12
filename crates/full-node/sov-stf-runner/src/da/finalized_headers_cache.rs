@@ -231,10 +231,10 @@ async fn background_header_fetch_task<Da: DaService>(
                             None => true,
                             Some(prev_seen) => {
                                 if finalized_header.height() < prev_seen.height() {
-                                    tracing::error!(
+                                    tracing::warn!(
                                     received = %finalized_header.display(),
                                     last_seen = %prev_seen.display(),
-                                    "Critical error in DaService, finalized header when backwards");
+                                    "finalized header when backwards in DaService. This update won't be propagated to consumers of `DaServiceWithCachedFinalizedHeaders`");
                                     false
                                 } else {
                                     true
