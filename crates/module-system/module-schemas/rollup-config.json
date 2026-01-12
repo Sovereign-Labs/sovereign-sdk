@@ -336,21 +336,21 @@
     "NodeRole": {
       "oneOf": [
         {
-          "description": "The node is the leader.",
+          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
           "type": "string",
           "enum": [
             "Leader"
           ]
         },
         {
-          "description": "The node is a replica and syncs from the leader.",
+          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
           "type": "string",
           "enum": [
             "Replica"
           ]
         },
         {
-          "description": "The node is a replica, but syncing from the leader via Postgres is disabled.",
+          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
           "type": "string",
           "enum": [
             "ReplicaNoLeaderSync"
@@ -372,12 +372,7 @@
           "type": "string"
         },
         "node_role": {
-          "description": "The role of the node.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/NodeRole"
-            }
-          ]
+          "$ref": "#/definitions/NodeRole"
         },
         "postgres_connection_string": {
           "description": "Connection string.",
