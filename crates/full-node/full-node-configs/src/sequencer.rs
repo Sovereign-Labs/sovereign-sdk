@@ -133,11 +133,13 @@ pub enum RecoveryStrategy {
 pub enum NodeRole {
     /// This node runs as the leader. The leader is responsible for producing new batches.
     Leader,
-    /// This node runs as a replica, syncing state from the leader.
-    /// Replicas do not publish blobs to the DA layer.
+    /// This node runs as a replica, syncing its state from the leader.
+    /// Replicas do not publish blobs to the DA layer, do not accept transactions via the API,
+    /// and do not issue soft confirmations.
     Replica,
-    /// This node runs as a replica, but Postgres-based syncing from the leader is disabled.
-    /// It only receives transactions via the DA layer.
+    /// This node runs in replica mode with Postgres-based synchronization from the leader disabled.
+    /// It receives transactions exclusively through the DA layer.
+    /// Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.
     ReplicaNoLeaderSync,
 }
 
