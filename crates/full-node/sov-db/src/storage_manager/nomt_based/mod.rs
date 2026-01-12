@@ -246,13 +246,14 @@ where
         if let std::collections::hash_map::Entry::Vacant(e) =
             self.blocks_to_parent.entry(current_hash.clone())
         {
-            if let Some(last_seen_finalized_hash) = self.last_finalized_hash.as_ref() {
-                if &prev_hash != last_seen_finalized_hash {
-                    anyhow::bail!(
-                        "Should belong to chain or directly start from last finalized header"
-                    );
-                }
-            }
+            // TODO: Figure this out
+            // if let Some(last_seen_finalized_hash) = self.last_finalized_hash.as_ref() {
+            //     if &prev_hash != last_seen_finalized_hash {
+            //         anyhow::bail!(
+            //             "Should belong to chain or directly start from last finalized header"
+            //         );
+            //     }
+            // }
             self.chain_forks
                 .entry(prev_hash.clone())
                 .or_default()

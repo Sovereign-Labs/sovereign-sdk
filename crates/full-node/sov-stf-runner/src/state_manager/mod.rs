@@ -17,7 +17,6 @@ use sov_metrics::RunnerProcessStfChangesMetrics;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::stf::TxReceiptContents;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -88,11 +87,12 @@ where
     // But then the runner needs to know about it and carry it over.
     state_root: StateRoot,
     // We record all seen transitions at the given height.
-    last_processed_finalized_header: Option<<<Da as DaService>::Spec as DaSpec>::BlockHeader>,
     state_on_block:
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
+    // TODO: Why option though? It can always be set, genesis da header at lowest.
+    last_processed_finalized_header: Option<<<Da as DaService>::Spec as DaSpec>::BlockHeader>,
     state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
@@ -125,16 +125,13 @@ where
         da_sync_state: Arc<DaSyncState>,
         da_total_timeout: std::time::Duration,
         finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
+        last_processed_finalized_header: Option<<<Da as DaService>::Spec as DaSpec>::BlockHeader>,
     ) -> anyhow::Result<Self> {
-        // TODO: Use ledger to get last commited header. Maybe map slot number to DA Header
-        // let slot_numer = ledger_db.get_latest_finalized_slot_number().await.unwrap();
-
         Ok(Self {
             storage_manager,
             ledger_db,
             state_root: initial_state_root,
-            // TODO: Pass as par
-            last_processed_finalized_header: None,
+            last_processed_finalized_header,
             state_on_block: Default::default(),
             seen_on_height: Default::default(),
             state_update_sender: state_update_channel,
@@ -488,7 +485,7 @@ where
         })
     }
 
-    /// Returns true, if passing block_header is not an incremental continuation of the current canonical chain.
+    /// Returns true, if passed `block_header` is not an incremental continuation of the current chain.
     async fn has_reorg_happened(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
@@ -531,7 +528,7 @@ where
             return Ok(false);
         }
 
-        let predecessor_state_root = match self.get_pre_state_root_if_fit_candidate(block_header) {
+        let predecessor_state_root = match self.get_matching_pre_state_root(block_header) {
             None => return Ok(true),
             Some(state_root) => state_root,
         };
@@ -541,9 +538,16 @@ where
         Ok(is_fork)
     }
 
-    // Returns preceding state root
-    // if given block header is a new continuous transition from seen transition.
-    fn get_pre_state_root_if_fit_candidate(
+    /// Returns the pre-state root for processing this block, if it represents
+    /// an unprocessed continuation of a previously seen transition.
+    ///
+    /// Returns `Some(state_root)` when the block's predecessor was seen but this
+    /// block itself was not - meaning it's a valid next block to process.
+    ///
+    /// Returns `None` if:
+    /// - This block was already processed, or
+    /// - This block's predecessor was never seen (no continuation point exists)
+    fn get_matching_pre_state_root(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
     ) -> Option<StateRoot> {
@@ -685,7 +689,7 @@ where
             // Update head if another progression happens, we don't return early
             head = this_head;
             if let Some(pre_state_root) =
-                self.get_pre_state_root_if_fit_candidate(candidate.header())
+                self.get_matching_pre_state_root(candidate.header())
             {
                 tracing::trace!(candidate = %candidate.header().display(), "Found a matching candidate:");
                 return Ok(ForkPointSearchResult::Found(ForkPoint {
@@ -803,7 +807,7 @@ where
                 }
                 candidate = this_candidate;
                 if let Some(pre_state_root) =
-                    self.get_pre_state_root_if_fit_candidate(candidate.header())
+                    self.get_matching_pre_state_root(candidate.header())
                 {
                     return Ok(ForkPointSearchResult::Found(ForkPoint {
                         block: candidate,

@@ -1089,6 +1089,7 @@ where
         sync_state,
         std::time::Duration::from_millis(3_600_000),
         da_header_provider,
+        None,
     )?;
     state_manager.startup().await?;
 

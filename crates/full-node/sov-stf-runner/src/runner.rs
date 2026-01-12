@@ -180,6 +180,12 @@ where
             .checked_add(1)
             .expect("The impossible happened  first_unprocessed_height_at_startup overflowed");
 
+        // During startup last processed header is always the finalized one,
+        // because runner does not save to disk non-finalized headers.
+        let last_processed_da_header = da_service
+            .get_block_header_at(first_unprocessed_height_at_startup.saturating_sub(1))
+            .await?;
+
         debug!(
             %first_unprocessed_height_at_startup,
             proof_manager_config = ?pm_config,
@@ -211,6 +217,7 @@ where
             sync_state.clone(),
             da_total_timeout,
             da_service_with_cached_finalized_headers.clone(),
+            Some(last_processed_da_header),
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
