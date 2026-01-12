@@ -35,6 +35,8 @@ async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Nat
         0,
     )
     .with_zkvm_host_args(mock_da_risc0_host_args())
+        // probbably some
+    // .set_persistent_da()
     .set_config(|c| {
         c.storage = StoragePath::Tmp(location);
         c.max_concurrent_blobs = 65536;
@@ -78,12 +80,11 @@ async fn test_crash_before_commiting_ledger() -> anyhow::Result<()> {
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingLedger),
     )
-    .await
-    .unwrap()
+    .await?
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_commiting_accesorry() -> anyhow::Result<()> {
+async fn test_crash_before_commiting_accessory() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingAccessory),
@@ -93,7 +94,7 @@ async fn test_crash_before_commiting_accesorry() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_comitting_archival() -> anyhow::Result<()> {
+async fn test_crash_before_commiting_archival() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingArchival),
@@ -103,7 +104,7 @@ async fn test_crash_before_comitting_archival() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_crash_before_comitting_live() -> anyhow::Result<()> {
+async fn test_crash_before_commiting_live() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingLive),
@@ -112,7 +113,7 @@ async fn test_crash_before_comitting_live() -> anyhow::Result<()> {
     .unwrap()
 }
 
-// This test checks whether rollp can recover from different kinds of crashes, see `CrashLocation` enum.
+// This test checks whether rollup can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
     let key_and_address =
@@ -177,7 +178,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         let max_nb_of_txs = 500;
         let start_generation = 1000;
 
-        // Keep sending txs in the bacground.
+        // Keep sending txs in the background.
         send_txs_in_background(
             start_generation,
             receiver_addr,

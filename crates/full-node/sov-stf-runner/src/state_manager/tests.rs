@@ -572,6 +572,9 @@ async fn test_shuffle_with_multiple_blobs() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_shuffle_with_deeper_reorgs() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter(
+        "warn,sov_stf_runner::state_manager=trace,sov_metrics=off",
+    );
     let finality = 20;
     let empty_blocks_padding = 10;
     let batches = 5;

@@ -237,7 +237,7 @@ where
         // Second condition, we only update channels with new state before returning in case of reorg
         if reorg_happened {
             tracing::trace!(
-                "Reorg has happened, updating API and Ledger storage before returning Stf state"
+                "Reorg has happened, updating API and Ledger storage before returning STF state"
             );
             // In case if reorg happened, we want to keep ledger and API storages in sync.
             // Otherwise, the API storage and LedgerDb have been updated in [`Self::update_api_and_ledger_storage`]
@@ -507,19 +507,20 @@ where
                 block_header.height() > self.last_processed_finalized_header.height(),
                 "Bug in StateManager, block hasn't been tracked by StateManager"
             );
-            tracing::trace!("empty state_on_block => reorg, not a direct descendant of the last **seen** finalized header.");
+            tracing::trace!("Empty state_on_block => reorg, not a direct descendant of the last **seen** finalized header.");
             // By that point it is reorg: passed block is not a direct descendant of the last **seen** finalized header.
             return Ok(true);
         }
 
         // 2. TODO: What comment was heere.
         let Some(predecessor_state_root) = self.get_matching_pre_state_root(block_header) else {
+            tracing::trace!(block_header = %block_header.display(), "Hasn't found matching pre state root");
             return Ok(true);
         };
 
         // 3. Continuation of **existing** state of state manager.
         let is_fork = self.state_root.as_ref() != predecessor_state_root.as_ref();
-        tracing::trace!(block_header = %block_header.display(), is_fork, "current state matches predecessor");
+        tracing::trace!(block_header = %block_header.display(), is_fork, "Current state matches predecessor");
         Ok(is_fork)
     }
 
@@ -739,9 +740,12 @@ where
                 .next()
                 .expect("There should be no entries without values");
 
-            if self.get_prev_hash(any_earliest_seen_hash) != candidate.header().prev_hash() {
+            // Smelly part:
+            let p1 = self.get_prev_hash(any_earliest_seen_hash);
+            if p1 != candidate.header().prev_hash() {
                 tracing::trace!(candidate = %candidate.header().display(), any_earliest = %any_earliest_seen_hash, "There should be block after last finalized");
-                panic!("Finalized header changed");
+                // WHAT THIS ERROR MESSAGE ACTUALLY MEAN?
+                panic!("Finalized header changed: some_hash={} candidate={} last_processed_finalized={}", p1, candidate.header().display(), self.last_processed_finalized_header.display());
             }
 
             let state_on_the_same_block = self
