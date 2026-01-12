@@ -14,7 +14,7 @@ async fn test_replica_receives_txs_from_da() {
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let (da_service, da_shutdown, addr) = create_da_service_periodic().await;
-    // Ideal lag and stuff
+    // Wait 10 blocks to satisfy the ideal lag requirement. The primary won’t create batches until the lag is large enough, so we pause here to allow batches to be produced.
     da_service.wait_for_height(10).await.unwrap();
 
     let replica = postgres

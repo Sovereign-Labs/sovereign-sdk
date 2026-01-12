@@ -131,11 +131,13 @@ pub enum RecoveryStrategy {
 
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub enum NodeRole {
-    /// The node is the leader.
+    /// This node runs as the leader. The leader is responsible for producing new batches.
     Leader,
-    /// The node is a replica and syncs from the leader.
+    /// This node runs as a replica, syncing state from the leader.
+    /// Replicas do not publish blobs to the DA layer.
     Replica,
-    /// The node is a replica, but syncing from the leader via Postgres is disabled.
+    /// This node runs as a replica, but Postgres-based syncing from the leader is disabled.
+    /// It only receives transactions via the DA layer.
     ReplicaNoLeaderSync,
 }
 
@@ -146,7 +148,7 @@ pub struct PostgresConfig {
     pub postgres_connection_string: String,
     /// Id of the node.
     pub node_id: String,
-    /// The role of the node.
+    #[allow(missing_docs)]
     pub node_role: NodeRole,
 }
 

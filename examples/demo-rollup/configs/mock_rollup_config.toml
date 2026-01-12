@@ -115,7 +115,7 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 #[sequencer.preferred.postgres_config]
 #postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
 #node_id = "node_1"
-#node_role = "Leader"
+#node_role = "Leader" #Other options are "Replica" or "ReplicaNoLeaderSync".
 
 
 # [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
