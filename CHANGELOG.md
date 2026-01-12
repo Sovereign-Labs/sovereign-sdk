@@ -1,5 +1,5 @@
 # 2026-01-09
-- #2266 **Breaking Change, Chain Hash Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
+- #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
 
 # 2026-01-08
 - #2312 Implements `eth_feeHistory` RPC endpoint to expose rollup's EIP-1559 base fee history for wallets.
