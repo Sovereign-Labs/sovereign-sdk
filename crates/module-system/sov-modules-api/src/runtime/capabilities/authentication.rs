@@ -257,6 +257,14 @@ pub enum FatalError {
     /// Transaction decoding failed.
     #[error("Transaction decoding error: {0}")]
     MessageDecodingFailed(String),
+    /// The user's max_fee_per_gas is insufficient to cover rollup's base fee.
+    #[error("Insufficient max_fee_per_gas: user specified {user_max_fee_per_gas}, but rollup requires at least {rollup_base_fee}")]
+    InsufficientMaxFeePerGas {
+        /// The user's max_fee_per_gas in wei
+        user_max_fee_per_gas: u128,
+        /// The rollup's required base fee in wei
+        rollup_base_fee: u128,
+    },
     /// A variant to capture any other fatal error.
     #[error("Other: {0}")]
     Other(String),

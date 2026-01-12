@@ -64,8 +64,21 @@ fn create_auth_tx_and_hash<S: Spec>(
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
+
+    let user_max_fee_per_gas = tx.max_fee_per_gas();
+    let rollup_base_fee = gas_price.as_ref()[0].0;
+
+    if user_max_fee_per_gas < rollup_base_fee {
+        let err = FatalError::InsufficientMaxFeePerGas {
+            user_max_fee_per_gas,
+            rollup_base_fee,
+        };
+        return Err(AuthenticationError::FatalError(err, tx_hash));
+    }
+
     let gas_limit = tx.gas_limit().saturating_mul(100);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
+
     let max_fee = gas_limit
         .checked_value(gas_price)
         .ok_or(AuthenticationError::FatalError(
