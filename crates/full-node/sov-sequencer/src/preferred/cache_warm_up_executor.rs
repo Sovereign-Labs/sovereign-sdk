@@ -154,7 +154,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         seq_role: SequencerRole,
     ) -> (Self, Vec<JoinHandle<()>>) {
-        if seq_role == SequencerRole::Replica {
+        if seq_role != SequencerRole::Leader {
             return (Self { inner: None }, vec![]);
         }
 

@@ -61,14 +61,14 @@ expression: config
       "events_channel_size": 10000,
       "postgres_config": {
         "postgres_connection_string": "postgresql://postgres:pass@localhost:5432/db",
-        "node_id": "node_1"
+        "node_id": "node_1",
+        "node_role": "Leader"
       },
       "disable_state_root_consistency_checks": true,
       "ideal_lag_behind_finalized_slot": 3,
       "db_event_channel_size": 10000,
       "recovery_strategy": "TryToSave",
       "batch_execution_time_limit_millis": 2000,
-      "is_replica": false,
       "num_cache_warmup_workers": 0,
       "timing_oracle": null,
       "rate_limiter": {

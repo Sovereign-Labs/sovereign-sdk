@@ -129,6 +129,20 @@ pub enum RecoveryStrategy {
     TryToSave,
 }
 
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub enum NodeRole {
+    /// This node runs as the leader. The leader is responsible for producing new batches.
+    Leader,
+    /// This node runs as a replica, syncing its state from the leader.
+    /// Replicas do not publish blobs to the DA layer, do not accept transactions via the API,
+    /// and do not issue soft confirmations.
+    Replica,
+    /// This node runs in replica mode with Postgres-based synchronization from the leader disabled.
+    /// It receives transactions exclusively through the DA layer.
+    /// Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.
+    ReplicaNoLeaderSync,
+}
+
 /// Postgres DB config.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct PostgresConfig {
@@ -136,6 +150,8 @@ pub struct PostgresConfig {
     pub postgres_connection_string: String,
     /// Id of the node.
     pub node_id: String,
+    #[allow(missing_docs)]
+    pub node_role: NodeRole,
 }
 
 /// Configuration for [`PreferredSequencer`].
@@ -171,10 +187,6 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     pub recovery_strategy: RecoveryStrategy,
     /// Target time in milliseconds to spend executing all the txs in a single batch. Batches will be closed when they exceed this value.
     pub batch_execution_time_limit_millis: u64,
-    /// When enabled, the sequencer runs in replica mode and cannot accept transactions.
-    /// It will sync from the master sequencer's database but remain read-only.
-    #[serde(default)]
-    pub is_replica: Option<bool>,
     #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
@@ -207,7 +219,6 @@ impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
             disable_state_root_consistency_checks: false,
             ideal_lag_behind_finalized_slot: default_ideal_lag_behind_finalized_slot(),
             recovery_strategy: RecoveryStrategy::None,
-            is_replica: Some(false),
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
             num_cache_warmup_workers: default_num_cache_warmup_workers(),

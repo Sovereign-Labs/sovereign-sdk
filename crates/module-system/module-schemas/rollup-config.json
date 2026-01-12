@@ -333,17 +333,46 @@
         }
       }
     },
+    "NodeRole": {
+      "oneOf": [
+        {
+          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
+          "type": "string",
+          "enum": [
+            "Leader"
+          ]
+        },
+        {
+          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
+          "type": "string",
+          "enum": [
+            "Replica"
+          ]
+        },
+        {
+          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
+          "type": "string",
+          "enum": [
+            "ReplicaNoLeaderSync"
+          ]
+        }
+      ]
+    },
     "PostgresConfig": {
       "description": "Postgres DB config.",
       "type": "object",
       "required": [
         "node_id",
+        "node_role",
         "postgres_connection_string"
       ],
       "properties": {
         "node_id": {
           "description": "Id of the node.",
           "type": "string"
+        },
+        "node_role": {
+          "$ref": "#/definitions/NodeRole"
         },
         "postgres_connection_string": {
           "description": "Connection string.",
@@ -397,14 +426,6 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
-        },
-        "is_replica": {
-          "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
-          "default": null,
-          "type": [
-            "boolean",
-            "null"
-          ]
         },
         "maximum_future_nonce_delta": {
           "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly impacts the maximum \"batch\" of transactions that can be simultaneously sent to the sequencer out of order.",

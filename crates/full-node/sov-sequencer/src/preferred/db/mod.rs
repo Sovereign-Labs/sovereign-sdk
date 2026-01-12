@@ -18,6 +18,7 @@ use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
+use sov_full_node_configs::sequencer::NodeRole;
 use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
@@ -418,6 +419,7 @@ impl From<BatchToStore> for StoredBlob {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SequencerRole {
+    ReplicaNoLeaderSync,
     Replica,
     Leader,
 }
@@ -430,35 +432,32 @@ pub struct PreferredSequencerDb {
 impl PreferredSequencerDb {
     pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
-        is_replica: Option<bool>,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
     ) -> anyhow::Result<(Self, SequencerRole)> {
-        let is_replica = is_replica.unwrap_or(false);
-        if is_replica {
-            return Ok((
-                Self {
-                    backend: None,
-                    shutdown_sender: shutdown_sender.clone(),
-                },
-                SequencerRole::Replica,
-            ));
-        }
-
-        let backend: Option<Box<dyn DbBackend>> = {
+        let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
-                Some(Box::new(PostgresBackend::connect(postgres_config).await?))
+                match postgres_config.node_role {
+                    NodeRole::ReplicaNoLeaderSync => (None, SequencerRole::ReplicaNoLeaderSync),
+                    NodeRole::Replica => (None, SequencerRole::Replica),
+                    NodeRole::Leader => (
+                        Some(Box::new(PostgresBackend::connect(postgres_config).await?)),
+                        SequencerRole::Leader,
+                    ),
+                }
             } else {
-                Some(Box::new(RocksDbBackend::new(storage_path).await?))
+                (
+                    Some(Box::new(RocksDbBackend::new(storage_path).await?)),
+                    SequencerRole::Leader,
+                )
             }
         };
-
         Ok((
             Self {
                 backend,
                 shutdown_sender: shutdown_sender.clone(),
             },
-            SequencerRole::Leader,
+            role,
         ))
     }
 

@@ -82,12 +82,12 @@ num_cache_warmup_workers = 0
 
 ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintain. Larger values increase lag in seeing DA info on chain, but allow more buffering when the DA layer is unstable
 # db_event_channel_size = 10000 # Event buffer size while update_state is running
-is_replica = false
 
 
 [sequencer.preferred.postgres_config]
 postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
 node_id = "node_1"
+node_role = "Leader"
 
 # Alternative configuration for non-preferred sequencer. This is mutually exclusive with the preferred sequencer configuration:
 # [sequencer.standard]

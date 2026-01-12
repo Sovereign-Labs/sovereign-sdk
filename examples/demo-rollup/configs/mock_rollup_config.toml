@@ -110,10 +110,13 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 # db_event_channel_size = 10000 # Event buffer size while update_state is running
 
 
-is_replica = false
+
 
 #[sequencer.preferred.postgres_config]
 #postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
+#node_id = "node_1"
+#node_role = "Leader" #Other options are "Replica" or "ReplicaNoLeaderSync".
+
 
 # [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
 # max_nb_of_concurrent_users_in_rate_limiter = 100000 # Limit on how many concurrent users the rate limiter can handle.

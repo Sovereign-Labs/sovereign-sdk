@@ -18,6 +18,7 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
+use sov_sequencer::preferred::NodeRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
@@ -69,13 +70,11 @@ async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<(
 }
 
 async fn start_rollup(
-    is_replica: bool,
     addr: SocketAddr,
-    postgres: Option<(Arc<PostgresData>, String)>,
+    postgres: Option<(Arc<PostgresData>, String, NodeRole)>,
 ) -> TestRollup<ExternalMockDemoRollup<Native>> {
     let genesis = test_genesis_source(OperatingMode::Operator);
     RollupBuilder::new_with_external_da(
-        is_replica,
         genesis,
         MockDaClientConfig {
             url: format!("http://{addr}"),
