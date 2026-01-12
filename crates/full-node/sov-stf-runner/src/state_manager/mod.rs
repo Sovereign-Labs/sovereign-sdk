@@ -483,51 +483,43 @@ where
         // Reorg: if passed block header a new and it is not a continuation of any of the previous height transitions.
         tracing::trace!(
             block_header = %block_header.display(),
+            last_seen_finalized_header = %self.last_processed_finalized_header.display(),
             "Checking if reorg happened");
-        // 0. Short circuit
+        // 0. Short circuit.
+        // This branch is usually for 2 things: instant finality or genesis.
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
-            let finalized = &self.last_processed_finalized_header;
-            // Direct descendand of the last seen finalized block.
-            if block_header.prev_hash() == finalized.hash() {
+            // Direct descendant of the last seen finalized block.
+            if block_header.prev_hash() == self.last_processed_finalized_header.hash() {
                 return Ok(false);
             }
-            // TODO: Why second or? Genesis case? Isn't it error and we are going to execute this block twice?
-            // TODO: Just added self.genesis_da_height, need to compare, and only then.
-            if block_header.hash() == finalized.hash() {
-                return Ok(false);
+            if block_header.hash() == self.last_processed_finalized_header.hash() {
+                // We are at genesis
+                if self.last_processed_finalized_header.height() == self.genesis_da_height {
+                    tracing::trace!("empty state_on_block => genesis");
+                    return Ok(false);
+                }
+                debug_assert_eq!(
+                    block_header.prev_hash(),
+                    self.last_processed_finalized_header.prev_hash(),
+                    "Corrupt DA"
+                );
+                anyhow::bail!("Trying to process same finalized header twice.");
             }
-            //
-            // Carefully re-evaluate everything below
-            // ----------------
-            if block_header.height() >= finalized.height() {
-                tracing::trace!(
-                    block_header = %block_header.display(),
-                    last_finalzied = %finalized.display(),
-                    "passed block header is higher than finalized and not direct descendant of finalized => reorg happened");
-                return Ok(true);
-            }
-            // What is this thingy doing?:
-
-            // If it is not last finalized, but finalized in the past
-            let past_finalized_block = self
-                .finalized_headers_provider
-                .get_block_header_at(block_header.height())
-                .await?;
-
-            if block_header.hash() == past_finalized_block.hash() {
-                tracing::trace!("Passed block header has been finalized in the past => no reorg");
-                return Ok(false);
-            }
-            tracing::trace!(
-                "This block header has not been finalized in the past => reorg happened"
+            assert!(
+                block_header.height() > self.last_processed_finalized_header.height(),
+                "Bug in StateManager, block hasn't been tracked by StateManager"
             );
-            return Ok(false);
+            tracing::trace!("empty state_on_block => reorg, not a direct descendant of the last **seen** finalized header.");
+            // By that point it is reorg: passed block is not a direct descendant of the last **seen** finalized header.
+            return Ok(true);
         }
 
+        // 2. TODO: What comment was heere.
         let Some(predecessor_state_root) = self.get_matching_pre_state_root(block_header) else {
             return Ok(true);
         };
+
         // 3. Continuation of **existing** state of state manager.
         let is_fork = self.state_root.as_ref() != predecessor_state_root.as_ref();
         tracing::trace!(block_header = %block_header.display(), is_fork, "current state matches predecessor");
