@@ -901,7 +901,7 @@ proptest! {
 /// This way we can have a case where [`StateManager`] cannot backtrack to continuous transition,
 /// because finalized were eliminated. This behaviour is similar as starting from a non-finalized block and then whole chain switches.
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "Finalized header changed")]
+#[should_panic(expected = "Finalized chain inconsistency detected")]
 async fn test_change_in_finalized_header() {
     let tempdir = tempfile::tempdir().unwrap();
 

@@ -92,7 +92,6 @@ where
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
     genesis_da_height: u64,
-    // TODO: Check that all earliest seen on on height descend from last_processed finalized_header
     last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
@@ -748,12 +747,23 @@ where
                 .next()
                 .expect("There should be no entries without values");
 
-            // Smelly part:
-            let p1 = self.get_prev_hash(any_earliest_seen_hash);
-            if p1 != candidate.header().prev_hash() {
-                tracing::trace!(candidate = %candidate.header().display(), any_earliest = %any_earliest_seen_hash, "There should be block after last finalized");
-                // TODO: Better panic message
-                panic!("Finalized header changed: supposed_finalized_hash={p1} candidate={} last_processed_finalized={} any_earliest_seen_hash={any_earliest_seen_hash}", candidate.header().display(), self.last_processed_finalized_header.display());
+            // All earliest seen transitions must have prev_hash pointing to last_processed_finalized_header.
+            // If the candidate's prev_hash differs, it means the DA finalized a different block than
+            // what our earliest seen transitions descended from - this indicates data corruption or
+            // a bug in the survivors logic.
+            let earliest_prev_hash = self.get_prev_hash(any_earliest_seen_hash);
+            if earliest_prev_hash != candidate.header().prev_hash() {
+                panic!(
+                    "Finalized chain inconsistency detected: \
+                    earliest seen transition at height {} points to parent hash {}, \
+                    but current chain's block at that height has parent hash {}. \
+                    last_processed_finalized_header={}, candidate={}",
+                    earliest_seen_height,
+                    earliest_prev_hash,
+                    candidate.header().prev_hash(),
+                    self.last_processed_finalized_header.display(),
+                    candidate.header().display(),
+                );
             }
 
             let state_on_the_same_block = self
@@ -978,6 +988,24 @@ where
         if let Some(last_processed_transition) = finalized_transitions.iter().last() {
             self.last_processed_finalized_header = last_processed_transition.block_header.clone();
         }
+
+        // Verify invariant: all earliest seen transitions must descend from last_processed_finalized_header
+        #[cfg(debug_assertions)]
+        if let Some(earliest_blocks) = self.seen_on_height.first_key_value() {
+            let expected_prev_hash = self.last_processed_finalized_header.hash();
+            for block_hash in earliest_blocks.1 {
+                let actual_prev_hash = self.get_prev_hash(block_hash);
+                debug_assert_eq!(
+                    actual_prev_hash, expected_prev_hash,
+                    "Earliest seen transition {} has prev_hash={}, expected={} (last_processed_finalized_header={})",
+                    block_hash,
+                    actual_prev_hash,
+                    expected_prev_hash,
+                    self.last_processed_finalized_header.display(),
+                );
+            }
+        }
+
         Ok(finalized_transitions)
     }
 
