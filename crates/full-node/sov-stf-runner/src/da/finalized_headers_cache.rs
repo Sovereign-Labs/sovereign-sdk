@@ -227,7 +227,8 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        let is_received_header_valid = match highest_seen_finalized_header.as_ref() {
+                        let is_received_header_valid = match highest_seen_finalized_header.as_ref()
+                        {
                             None => true,
                             Some(highest_seen) => {
                                 if finalized_header.height() < highest_seen.height() {
@@ -251,7 +252,6 @@ async fn background_header_fetch_task<Da: DaService>(
                             // Only update seen headers in case if it is valid (that is, higher).
                             highest_seen_finalized_header = Some(finalized_header);
                         }
-
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
