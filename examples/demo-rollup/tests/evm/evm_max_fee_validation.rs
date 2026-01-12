@@ -7,7 +7,9 @@ use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
 
-use crate::evm::evm_test_helper::{alloy_client_with_signer, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY};
+use crate::evm::evm_test_helper::{
+    alloy_client_with_signer, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+};
 
 const GAS_LIMIT: u64 = 21000;
 
@@ -78,4 +80,3 @@ async fn test_sufficient_max_fee_per_gas() -> anyhow::Result<()> {
 
     Ok(())
 }
-
