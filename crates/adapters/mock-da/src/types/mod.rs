@@ -2,6 +2,8 @@ mod address;
 
 use std::fmt::{Debug, Formatter};
 
+use crate::config::GENESIS_HEADER;
+use crate::utils::hash_to_array;
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
@@ -12,8 +14,6 @@ use sov_rollup_interface::da::{
 };
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::Bytes;
-
-use crate::utils::hash_to_array;
 
 /// Serialized aggregated proof.
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -107,7 +107,11 @@ impl MockBlockHeader {
     /// Generates [`MockBlockHeader`] with given height, where hashes are derived from height.
     /// Can be used in tests, where a header of the following blocks will be consistent.
     pub fn from_height(height: u64) -> MockBlockHeader {
-        Self::new(height, Time::now())
+        if height == 0 {
+            GENESIS_HEADER
+        } else {
+            Self::new(height, Time::now())
+        }
     }
 }
 

@@ -183,9 +183,7 @@ where
                 "StateManager wasn't initialized. Please call `.startup()` method before using"
             );
         }
-        let reorg_happened = self
-            .has_reorg_happened(filtered_block.header(), da_service)
-            .await?;
+        let reorg_happened = self.has_reorg_happened(filtered_block.header()).await?;
         tracing::trace!(reorg_happened, "Checked if reorg happened");
 
         if reorg_happened {
@@ -478,9 +476,8 @@ where
     async fn has_reorg_happened(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
-        _da_service: &Da,
     ) -> anyhow::Result<bool> {
-        // Reorg: if passed block header a new and it is not a continuation of any of the previous height transitions.
+        // Reorg: if passed block header a new, and it is not a continuation of any of the previous height transitions.
         tracing::trace!(
             block_header = %block_header.display(),
             last_seen_finalized_header = %self.last_processed_finalized_header.display(),
@@ -551,7 +548,6 @@ where
             .map(|state| state.post_state_root.clone())
     }
 
-    // TODO: Should we handle last processed finalized height here?
     fn get_earliest_seen_height(&self) -> Option<u64> {
         self.seen_on_height.first_key_value().map(|(k, _)| *k)
     }
@@ -574,13 +570,19 @@ where
     // If reorg happened,
     // the next incremental continuation of that fork that hasn't been processed should be found.
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
+        // If we haven't seen anything we can only start from last seen finalized height.
         if self.state_on_block.is_empty() {
-            let adjacent = da_service
-                .get_block_at(self.last_processed_finalized_header.height() + 1)
-                .await?;
-            // reorg can happen between these 2 calls, right now just panic, improve handling in the future.
-            // TODO: This can be iterated and included in attempts.
-            assert!(adjacent.header().prev_hash() == self.last_processed_finalized_header.hash());
+            let adjacent_height = self
+                .last_processed_finalized_header
+                .height()
+                .checked_add(1)
+                .expect("Reached end of the DA");
+            let adjacent = da_service.get_block_at(adjacent_height).await?;
+            assert_eq!(
+                adjacent.header().prev_hash(),
+                self.last_processed_finalized_header.hash(),
+                "Bug in DA, block adjacent to finalized has wrong prev root hash"
+            );
             return Ok(ForkPoint {
                 block: adjacent,
                 pre_state_root: self.state_root.clone(),
@@ -648,7 +650,7 @@ where
 
         assert!(
             low < high,
-            "Error in `low` earliest_seen={}, highest_seen={}, head_height={} ",
+            "Error in `low` earliest_seen={}, highest_seen={}, head_height={}",
             earliest_seen_height,
             highest_seen_height,
             head.height()
@@ -805,12 +807,11 @@ where
         }
     }
 
-    /// Returns all [`StateTransitionInfo`] which are below finalized height
-    /// and relevant LedgerDb changes.
-    // TODO: Revisit that we use `last_finalzied_header` vs `last_seen_finalized_header` correctly.
+    /// Returns all [`StateTransitionInfo`] which are below finalized height at this point.
     async fn process_finalized_state_transitions(
         &mut self,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
+        // This is going to be cut off point
         let last_finalized_header = self
             .finalized_headers_provider
             .get_last_finalized_block_header()?;
@@ -820,12 +821,20 @@ where
         let highest_seen_transition = self
             .get_highest_seen_height()
             .expect("Should be called after at least single transition added");
+        debug_assert!(
+            earliest_seen_transition <= highest_seen_transition,
+            "bug in state manager"
+        );
+        debug_assert_eq!(
+            earliest_seen_transition,
+            self.last_processed_finalized_header
+                .height()
+                .saturating_add(1),
+            "bug in state manager"
+        );
 
-        tracing::trace!(
-            last_finalized_header = %last_finalized_header.display(),
-            highest_seen_transition,
-            "Compare truly last finalized header with highest seen transition");
-
+        // In case if node is syncing, last finalized header might be way higher than we've seen.
+        // To simplify logic in the rest of the function, we introduce "last seen" finalized header, which is at most matches highest seen transition
         let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_transition
         {
             self.finalized_headers_provider
@@ -837,30 +846,33 @@ where
         };
 
         tracing::trace!(
+            last_processed_finalized_header = %self.last_processed_finalized_header.display(),
             last_seen_finalized_header = %last_seen_finalized_header.display(),
+            last_finalized_header = %last_finalized_header.display(),
+            highest_seen_transition,
             seen_transitions = self.state_on_block.len(),
-            "Start processing finalized state transitions"
-        );
+            "Start processing finalized state transitions");
 
         // Start with eliminating all non-finalized transitions
-        // that does not originate from a finalized header.
+        // that does not originate from the last processed finalized header.
         // But do we need this? Won't they be cleared on the next iteration, when finalized height rises?
         // Yes, 2 reasons:
         //   1. Not all of them will be removed, so we might have many orphaned transitions in memory.
         //   2. We rely on check on clean-seen state to check if reorg happened or not.
         {
             // We start from height after the last finalized header
-            let start_height = last_seen_finalized_header
+            let start_height = self
+                .last_processed_finalized_header
                 .height()
                 .checked_add(1)
                 .expect("end of chain");
-            let mut survivors = vec![last_seen_finalized_header.hash()];
+            let mut survivors = vec![self.last_processed_finalized_header.hash()];
 
             let range = start_height..=highest_seen_transition;
             tracing::trace!(
-                 last_seen_finalized_header = % last_seen_finalized_header.display(),
+                last_processed_finalized_header = %self.last_processed_finalized_header.display(),
                 ?range,
-                "Going to eliminate all future transitions which are not derived from last seen finalized header");
+                "Going to eliminate all future transitions which are not derived from last processed finalized header");
             for height in range {
                 let new_survivors: Vec<_> = {
                     let this_height_blocks = self
@@ -896,11 +908,11 @@ where
             }
         }
 
-        let mut finalized_transitions = Vec::with_capacity(
-            last_seen_finalized_header
-                .height()
-                .saturating_sub(earliest_seen_transition) as usize,
-        );
+        // All transitions between last processed and last seen finalized.
+        let seen_transitions_to_finalize = last_seen_finalized_header
+            .height()
+            .saturating_sub(self.last_processed_finalized_header.height());
+        let mut finalized_transitions = Vec::with_capacity(seen_transitions_to_finalize as usize);
 
         // Going backwards does not mean there's a connection between earliest and fetched last seen finalized header.
         // TO BE 100% sure, we need to do N queries from earliest to latest seen finalized header.
@@ -969,10 +981,7 @@ where
 
         self.update_channels(api_storage, ledger_state).await?;
         let updating_time = start.elapsed();
-        tracing::trace!(
-            after_block = %block_header.display(),
-            time = ?
-            "Ledger and API storages have been sent");
+        tracing::trace!(after_block = %block_header.display(), time = ?updating_time, "Ledger and API storages have been sent");
         Ok(updating_time)
     }
 
