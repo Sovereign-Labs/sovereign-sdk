@@ -572,9 +572,6 @@ async fn test_shuffle_with_multiple_blobs() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_shuffle_with_deeper_reorgs() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter(
-        "warn,sov_stf_runner::state_manager=trace,sov_metrics=off",
-    );
     let finality = 20;
     let empty_blocks_padding = 10;
     let batches = 5;
@@ -960,8 +957,10 @@ async fn test_change_in_finalized_header() {
     shutdown_sender.send(()).unwrap();
 }
 
-// On empty internal state, state manager should check if passed block is finalized
-// And return last finalized.
+// On empty internal state, state manager should only allow blocks that are
+// direct descendants of last_processed_finalized_header (genesis in this case).
+// Any block that skips heights should trigger reorg detection and return
+// the block adjacent to last_processed_finalized_header.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
@@ -980,28 +979,33 @@ async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result
             .await??;
     }
 
+    // Block adjacent to last_processed_finalized_header (genesis at height 0)
+    let adjacent_to_genesis = da_service.get_block_at(1).await?;
+
     let last_finalized_header = da_service.get_last_finalized_block_header().await?;
-    // Should be allowed, because storage has continuous data
-    let next_to_finalized = da_service
+    // This is NOT adjacent to last_processed_finalized_header (genesis),
+    // so it should trigger reorg detection
+    let next_to_da_finalized = da_service
         .get_block_at(last_finalized_header.height() + 1)
         .await?;
-    // Should not be allowed
-    let not_next_to_finalized = da_service
+    let not_next_to_da_finalized = da_service
         .get_block_at(last_finalized_header.height() + 2)
         .await?;
 
+    // Even though next_to_da_finalized is adjacent to DA's finalized header,
+    // it's not adjacent to last_processed_finalized_header (genesis),
+    // so reorg is detected and we get block at height 1
     let (_prover_storage, returned_block_1) = state_manager
-        .prepare_storage(next_to_finalized.clone(), &da_service)
+        .prepare_storage(next_to_da_finalized.clone(), &da_service)
         .await?;
 
-    assert_eq!(returned_block_1, next_to_finalized);
+    assert_eq!(returned_block_1, adjacent_to_genesis);
 
     let (_prover_storage, returned_block_2) = state_manager
-        .prepare_storage(not_next_to_finalized.clone(), &da_service)
+        .prepare_storage(not_next_to_da_finalized.clone(), &da_service)
         .await?;
 
-    assert_ne!(returned_block_2, not_next_to_finalized);
-    assert_eq!(returned_block_2, next_to_finalized);
+    assert_eq!(returned_block_2, adjacent_to_genesis);
 
     shutdown_sender.send(())?;
 

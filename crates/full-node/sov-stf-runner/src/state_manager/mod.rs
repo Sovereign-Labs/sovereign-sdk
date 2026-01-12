@@ -92,6 +92,7 @@ where
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
     genesis_da_height: u64,
+    // TODO: Check that all earliest seen on on height descend from last_processed finalized_header
     last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
@@ -334,7 +335,7 @@ where
         let mut ledger_change_set = self
             .ledger_db
             .materialize_slot(slot_commit, new_state_root.as_ref())?;
-        tracing::trace!("Initial Ledger ChangeSet is materialized");
+        // tracing::trace!("Initial Ledger ChangeSet is materialized");
 
         if let Some(finalized_transition) = finalized_transitions.iter().last() {
             let last_processed_finalized_header = &finalized_transition.block_header;
@@ -381,7 +382,7 @@ where
             tracing::trace!("Aggregated Proof is materialized into Ledger ChangeSet");
         }
         let ledger_materialization_time = ledger_materialization_start.elapsed();
-        tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
+        // tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
 
         let save_start = std::time::Instant::now();
         self.storage_manager
@@ -644,6 +645,13 @@ where
     ) -> anyhow::Result<ForkPointSearchResult<Da, StateRoot>> {
         let mut low = earliest_seen_height;
         let mut high = std::cmp::min(highest_seen_height, head.height()).saturating_add(1);
+        let last_processed_finalized_height = self.last_processed_finalized_header.height();
+        assert_eq!(
+            last_processed_finalized_height
+                .checked_add(1)
+                .expect("End of chain"),
+            low
+        );
 
         // But what if low above head???
         // This is only possible if the earliest seen transition is not a direct descendant of the finalized block
@@ -730,7 +738,7 @@ where
 
             assert_eq!(candidate.header().height(), earliest_seen_height);
 
-            // All earliest transitions point to the last known finalized state
+            // All earliest transitions point to the last known finalized state. Do they?
             let any_earliest_seen_hash = self
                 .seen_on_height
                 .first_key_value()
@@ -744,8 +752,8 @@ where
             let p1 = self.get_prev_hash(any_earliest_seen_hash);
             if p1 != candidate.header().prev_hash() {
                 tracing::trace!(candidate = %candidate.header().display(), any_earliest = %any_earliest_seen_hash, "There should be block after last finalized");
-                // WHAT THIS ERROR MESSAGE ACTUALLY MEAN?
-                panic!("Finalized header changed: some_hash={} candidate={} last_processed_finalized={}", p1, candidate.header().display(), self.last_processed_finalized_header.display());
+                // TODO: Better panic message
+                panic!("Finalized header changed: supposed_finalized_hash={p1} candidate={} last_processed_finalized={} any_earliest_seen_hash={any_earliest_seen_hash}", candidate.header().display(), self.last_processed_finalized_header.display());
             }
 
             let state_on_the_same_block = self
@@ -858,25 +866,24 @@ where
             "Start processing finalized state transitions");
 
         // Start with eliminating all non-finalized transitions
-        // that does not originate from the last processed finalized header.
+        // that does not originate from the last seen finalized header.
         // But do we need this? Won't they be cleared on the next iteration, when finalized height rises?
         // Yes, 2 reasons:
         //   1. Not all of them will be removed, so we might have many orphaned transitions in memory.
         //   2. We rely on check on clean-seen state to check if reorg happened or not.
         {
-            // We start from height after the last finalized header
-            let start_height = self
-                .last_processed_finalized_header
+            // We start from height after the last seen finalized header
+            let start_height = last_seen_finalized_header
                 .height()
                 .checked_add(1)
                 .expect("end of chain");
-            let mut survivors = vec![self.last_processed_finalized_header.hash()];
+            let mut survivors = vec![last_seen_finalized_header.hash()];
 
             let range = start_height..=highest_seen_transition;
             tracing::trace!(
-                last_processed_finalized_header = %self.last_processed_finalized_header.display(),
+                last_seen_finalized_header = %last_seen_finalized_header.display(),
                 ?range,
-                "Going to eliminate all future transitions which are not derived from last processed finalized header");
+                "Going to eliminate all future transitions which are not derived from last seen finalized header");
             for height in range {
                 let new_survivors: Vec<_> = {
                     let this_height_blocks = self
