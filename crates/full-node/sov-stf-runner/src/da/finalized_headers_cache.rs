@@ -208,7 +208,7 @@ async fn background_header_fetch_task<Da: DaService>(
     tracing::info!(?interval, "Starting background fetcher task");
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-    let mut last_seen_finalized_header: Option<<Da::Spec as DaSpec>::BlockHeader> = None;
+    let mut highest_seen_finalized_header: Option<<Da::Spec as DaSpec>::BlockHeader> = None;
 
     loop {
         // Wait for the next tick or shutdown
@@ -227,13 +227,13 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        let is_received_header_valid = match last_seen_finalized_header.as_ref() {
+                        let is_received_header_valid = match highest_seen_finalized_header.as_ref() {
                             None => true,
-                            Some(prev_seen) => {
-                                if finalized_header.height() < prev_seen.height() {
+                            Some(highest_seen) => {
+                                if finalized_header.height() < highest_seen.height() {
                                     tracing::warn!(
                                     received = %finalized_header.display(),
-                                    last_seen = %prev_seen.display(),
+                                    last_seen = %highest_seen.display(),
                                     "finalized header when backwards in DaService. This update won't be propagated to consumers of `DaServiceWithCachedFinalizedHeaders`");
                                     false
                                 } else {
@@ -248,8 +248,10 @@ async fn background_header_fetch_task<Da: DaService>(
                                 break;
                             }
                             recent_headers.insert_new_header(finalized_header.clone());
+                            // Only update seen headers in case if it is valid (that is, higher).
+                            highest_seen_finalized_header = Some(finalized_header);
                         }
-                        last_seen_finalized_header = Some(finalized_header);
+
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
