@@ -234,7 +234,7 @@ async fn background_header_fetch_task<Da: DaService>(
                                 if finalized_header.height() < highest_seen.height() {
                                     tracing::warn!(
                                     received = %finalized_header.display(),
-                                    last_seen = %highest_seen.display(),
+                                    highest_seen = %highest_seen.display(),
                                     "finalized header when backwards in DaService. This update won't be propagated to consumers of `DaServiceWithCachedFinalizedHeaders`");
                                     false
                                 } else {
