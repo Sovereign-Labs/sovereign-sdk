@@ -1060,8 +1060,10 @@ where
 
     let (sync_status_sender, _rec) = tokio::sync::watch::channel(SyncStatus::START);
 
+    let start_da_height = 0;
+    let start_da_header = da_service.get_block_header_at(start_da_height).await?;
     let sync_state = Arc::new(DaSyncState {
-        synced_da_height: AtomicU64::new(0),
+        synced_da_height: AtomicU64::new(start_da_height),
         target_da_height: AtomicU64::new(u64::MAX),
         sync_status_sender,
     });
@@ -1089,7 +1091,7 @@ where
         sync_state,
         std::time::Duration::from_millis(3_600_000),
         da_header_provider,
-        None,
+        start_da_header,
     )?;
     state_manager.startup().await?;
 

@@ -92,7 +92,7 @@ where
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
     // TODO: Why option though? It can always be set, genesis da header at lowest.
-    last_processed_finalized_header: Option<<<Da as DaService>::Spec as DaSpec>::BlockHeader>,
+    last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
@@ -125,7 +125,7 @@ where
         da_sync_state: Arc<DaSyncState>,
         da_total_timeout: std::time::Duration,
         finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
-        last_processed_finalized_header: Option<<<Da as DaService>::Spec as DaSpec>::BlockHeader>,
+        last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             storage_manager,
@@ -473,18 +473,6 @@ where
         Ok(())
     }
 
-    fn get_last_processed_finalized_header(
-        &self,
-    ) -> anyhow::Result<<Da::Spec as DaSpec>::BlockHeader> {
-        Ok(match &self.last_processed_finalized_header {
-            // We haven't processed anything yet, taking it from the chain
-            None => self
-                .finalized_headers_provider
-                .get_last_finalized_block_header()?,
-            Some(b) => b.clone(),
-        })
-    }
-
     /// Returns true, if passed `block_header` is not an incremental continuation of the current chain.
     async fn has_reorg_happened(
         &self,
@@ -498,10 +486,11 @@ where
         // 0. Short circuit
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
-            let finalized = self.get_last_processed_finalized_header()?;
+            let finalized = &self.last_processed_finalized_header;
             // Simple case
             if block_header.prev_hash() == finalized.hash()
                 || block_header.hash() == finalized.hash()
+            // Why second or? Genesis case?
             {
                 return Ok(false);
             }
@@ -586,13 +575,12 @@ where
     // the next incremental continuation of that fork that hasn't been processed should be found.
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
         if self.state_on_block.is_empty() {
-            let last_processed_finalized = self.get_last_processed_finalized_header()?;
             let adjacent = da_service
-                .get_block_at(last_processed_finalized.height() + 1)
+                .get_block_at(self.last_processed_finalized_header.height() + 1)
                 .await?;
             // reorg can happen between these 2 calls, right now just panic, improve handling in the future.
             // TODO: This can be iterated and included in attempts.
-            assert!(adjacent.header().prev_hash() == last_processed_finalized.hash());
+            assert!(adjacent.header().prev_hash() == self.last_processed_finalized_header.hash());
             return Ok(ForkPoint {
                 block: adjacent,
                 pre_state_root: self.state_root.clone(),
@@ -688,9 +676,7 @@ where
             }
             // Update head if another progression happens, we don't return early
             head = this_head;
-            if let Some(pre_state_root) =
-                self.get_matching_pre_state_root(candidate.header())
-            {
+            if let Some(pre_state_root) = self.get_matching_pre_state_root(candidate.header()) {
                 tracing::trace!(candidate = %candidate.header().display(), "Found a matching candidate:");
                 return Ok(ForkPointSearchResult::Found(ForkPoint {
                     block: candidate,
@@ -806,9 +792,7 @@ where
                     return Ok(ForkPointSearchResult::HeadChanged(this_head));
                 }
                 candidate = this_candidate;
-                if let Some(pre_state_root) =
-                    self.get_matching_pre_state_root(candidate.header())
-                {
+                if let Some(pre_state_root) = self.get_matching_pre_state_root(candidate.header()) {
                     return Ok(ForkPointSearchResult::Found(ForkPoint {
                         block: candidate,
                         pre_state_root,
@@ -967,8 +951,8 @@ where
             finalized_transitions = finalized_transitions.len(),
             "Completed check for finalized transitions"
         );
-        if let Some(x) = finalized_transitions.iter().last() {
-            self.last_processed_finalized_header = Some(x.block_header.clone());
+        if let Some(last_processed_transition) = finalized_transitions.iter().last() {
+            self.last_processed_finalized_header = last_processed_transition.block_header.clone();
         }
         Ok(finalized_transitions)
     }

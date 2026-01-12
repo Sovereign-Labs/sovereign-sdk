@@ -217,7 +217,7 @@ where
             sync_state.clone(),
             da_total_timeout,
             da_service_with_cached_finalized_headers.clone(),
-            Some(last_processed_da_header),
+            last_processed_da_header,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
