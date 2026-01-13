@@ -50,6 +50,7 @@ where
     async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected> {
         let res: Result<(), ReplicaError<S>> = match data {
             DbData::BatchStart(batch_to_store) => {
+                println!("BS {batch_to_store:?}");
                 self.do_batch_start_msg_replica(batch_to_store, "replica_start_batch")
                     .await
             }
@@ -58,6 +59,7 @@ where
                     .await
             }
             DbData::BatchEnd(batch_to_store) => {
+                println!("BW {batch_to_store:?}");
                 self.close_current_batch_msg_replica(batch_to_store, "replica_close_batch")
                     .await
             }
