@@ -164,6 +164,14 @@ pub struct Evm<S: Spec> {
     #[module]
     pub(crate) chain_state_module: sov_chain_state::ChainState<S>,
 
+    /// Addresses of enabled custom precompiles.
+    ///
+    /// Uses `Vec<Address>` since the expected size is small and locality is high.
+    /// Precompile implementations are in the static `PRECOMPILES` map in code;
+    /// this just controls which addresses are activated.
+    #[state]
+    pub(crate) enabled_precompiles: StateValue<Vec<Address>, BcsCodec>,
+
     #[phantom]
     phantom: core::marker::PhantomData<S>,
 }
@@ -248,6 +256,108 @@ impl<S: Spec> Evm<S> {
     {
         let admin = self.admin.get(state)?;
         Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
+    }
+
+    /// Enable a precompile at genesis.
+    ///
+    /// The precompile must have an implementation in code (checked via `is_known_precompile`).
+    /// This is called during genesis initialization to activate precompiles
+    /// that should be available from the start.
+    pub fn enable_precompile_genesis(
+        &mut self,
+        address: Address,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        use crate::sov_evm::is_known_precompile;
+        anyhow::ensure!(
+            is_known_precompile(&address),
+            "Precompile at {address} is not implemented in this binary"
+        );
+        let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
+        if !enabled.contains(&address) {
+            enabled.push(address);
+            self.enabled_precompiles.set::<Vec<Address>, _>(&enabled, state)?;
+        }
+        Ok(())
+    }
+
+    /// Enable a precompile at runtime (admin only).
+    ///
+    /// Used to activate precompiles added in software updates.
+    /// The precompile implementation must already exist in code (checked via `is_known_precompile`),
+    /// which means the node binary must be updated before calling this method.
+    pub fn enable_precompile(
+        &mut self,
+        address: Address,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        use crate::sov_evm::is_known_precompile;
+
+        // Check admin permission
+        let admin = self
+            .admin
+            .get(state)?
+            .ok_or_else(|| anyhow::anyhow!("No admin configured"))?;
+        anyhow::ensure!(
+            context.sender() == &admin,
+            "Only admin can enable precompiles"
+        );
+
+        // Verify implementation exists in code
+        anyhow::ensure!(
+            is_known_precompile(&address),
+            "Precompile at {address} is not implemented. Deploy new binary first."
+        );
+
+        let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
+        if !enabled.contains(&address) {
+            enabled.push(address);
+            self.enabled_precompiles.set::<Vec<Address>, _>(&enabled, state)?;
+        }
+        Ok(())
+    }
+
+    /// Disable a precompile (admin only).
+    ///
+    /// This removes the precompile from the enabled list, making it no longer
+    /// callable from EVM contracts.
+    pub fn disable_precompile(
+        &mut self,
+        address: Address,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        // Check admin permission
+        let admin = self
+            .admin
+            .get(state)?
+            .ok_or_else(|| anyhow::anyhow!("No admin configured"))?;
+        anyhow::ensure!(
+            context.sender() == &admin,
+            "Only admin can disable precompiles"
+        );
+
+        let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
+        enabled.retain(|a| a != &address);
+        self.enabled_precompiles.set::<Vec<Address>, _>(&enabled, state)?;
+        Ok(())
+    }
+
+    /// Get the set of enabled precompile addresses for execution.
+    ///
+    /// This is called during transaction execution to determine which
+    /// custom precompiles are available.
+    pub fn get_enabled_precompiles(
+        &self,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<std::collections::HashSet<Address>> {
+        Ok(self
+            .enabled_precompiles
+            .get(state)?
+            .unwrap_or_default()
+            .into_iter()
+            .collect())
     }
 }
 

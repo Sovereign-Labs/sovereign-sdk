@@ -2,27 +2,30 @@ use revm::{
     context::{ContextError, ContextSetters, ContextTr, Evm, FrameStack},
     handler::{
         evm::FrameTr, instructions::EthInstructions, EthFrame, EthPrecompiles, EvmTr,
-        FrameInitOrResult, ItemOrResult,
+        FrameInitOrResult, ItemOrResult, PrecompileProvider,
     },
     inspector::{InspectorEvmTr, JournalExt},
-    interpreter::interpreter::EthInterpreter,
+    interpreter::{interpreter::EthInterpreter, InterpreterResult},
     Database, Inspector,
 };
 
-/// Customized EVM implementation that uses SovHandler to override gas charging behavior
+/// Customized EVM implementation that uses SovHandler to override gas charging behavior.
+///
+/// This struct is generic over the precompile provider `P`, allowing for custom
+/// stateful precompiles that can access sovereign SDK state during execution.
 #[derive(Debug)]
-pub struct SovEvm<CTX, INSP>(
-    pub  Evm<
+pub struct SovEvm<CTX, INSP, P = EthPrecompiles>(
+    pub Evm<
         CTX,
         INSP,
         EthInstructions<EthInterpreter, CTX>,
-        EthPrecompiles,
+        P,
         EthFrame<EthInterpreter>,
     >,
 );
 
-impl<CTX: ContextTr, INSP> SovEvm<CTX, INSP> {
-    /// Creates new SovEvm instance from context and inspector
+impl<CTX: ContextTr, INSP> SovEvm<CTX, INSP, EthPrecompiles> {
+    /// Creates new SovEvm instance from context and inspector with default Ethereum precompiles.
     pub fn new(ctx: CTX, inspector: INSP) -> Self {
         Self(Evm {
             ctx,
@@ -34,13 +37,38 @@ impl<CTX: ContextTr, INSP> SovEvm<CTX, INSP> {
     }
 }
 
-impl<CTX: ContextTr, INSP> EvmTr for SovEvm<CTX, INSP>
+impl<CTX, INSP, P> SovEvm<CTX, INSP, P>
 where
     CTX: ContextTr,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
+{
+    /// Creates a new SovEvm instance with custom precompiles.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The EVM context containing block/tx environment and database
+    /// * `inspector` - The inspector for tracing/debugging
+    /// * `precompiles` - Custom precompile provider
+    #[allow(dead_code)]
+    pub fn with_precompiles(ctx: CTX, inspector: INSP, precompiles: P) -> Self {
+        Self(Evm {
+            ctx,
+            inspector,
+            instruction: EthInstructions::new_mainnet(),
+            precompiles,
+            frame_stack: FrameStack::new(),
+        })
+    }
+}
+
+impl<CTX, INSP, P> EvmTr for SovEvm<CTX, INSP, P>
+where
+    CTX: ContextTr,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
     type Context = CTX;
     type Instructions = EthInstructions<EthInterpreter, CTX>;
-    type Precompiles = EthPrecompiles;
+    type Precompiles = P;
     type Frame = EthFrame<EthInterpreter>;
 
     fn ctx(&mut self) -> &mut Self::Context {
@@ -117,10 +145,11 @@ where
     }
 }
 
-impl<CTX: ContextTr, INSP> InspectorEvmTr for SovEvm<CTX, INSP>
+impl<CTX, INSP, P> InspectorEvmTr for SovEvm<CTX, INSP, P>
 where
-    CTX: ContextSetters<Journal: JournalExt>,
+    CTX: ContextTr + ContextSetters<Journal: JournalExt>,
     INSP: Inspector<CTX, EthInterpreter>,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
     type Inspector = INSP;
 
