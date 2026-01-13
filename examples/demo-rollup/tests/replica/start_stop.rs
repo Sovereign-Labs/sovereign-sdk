@@ -63,7 +63,8 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             &mut event_subscription,
         )
-        .await;
+        .await
+        .expect("Timeout after restart 1");
 
         let receiver_balance = replica_test_rollup
             .client
@@ -109,7 +110,8 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             &mut event_subscription,
         )
-        .await;
+        .await
+        .expect("Timeout after restart 2");
 
         let receiver_balance = replica_test_rollup
             .client
@@ -163,7 +165,8 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             &mut event_subscription,
         )
-        .await;
+        .await
+        .expect("Timeout after restart 3");
 
         let receiver_balance = replica_test_rollup
             .client
@@ -221,7 +224,8 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             &mut event_subscription,
         )
-        .await;
+        .await
+        .expect("Timeout after restart 4");
 
         let receiver_balance = replica_test_rollup
             .client
@@ -303,7 +307,8 @@ async fn test_replica_start_stop_many_times() {
             nb_of_txs,
             &mut event_subscription,
         )
-        .await;
+        .await
+        .unwrap();
 
         let receiver_balance = replica_test_rollup
             .client

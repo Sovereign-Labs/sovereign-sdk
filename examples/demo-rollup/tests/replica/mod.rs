@@ -28,6 +28,7 @@ use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
+use tokio::time::error::Elapsed;
 use tokio::time::Duration;
 
 mod replica_gets_txs_from_master;
@@ -135,10 +136,8 @@ async fn wait_for_all_events_with_timeout(
     timeout: Duration,
     nb_of_events: u64,
     subscription: &mut BoxStream<'static, anyhow::Result<types::LedgerEvent>>,
-) {
-    tokio::time::timeout(timeout, wait_for_all_events(nb_of_events, subscription))
-        .await
-        .unwrap();
+) -> Result<(), Elapsed> {
+    tokio::time::timeout(timeout, wait_for_all_events(nb_of_events, subscription)).await
 }
 
 async fn wait_for_all_events(
