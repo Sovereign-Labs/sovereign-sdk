@@ -557,6 +557,8 @@ where
             ExecutionContext::Node,
         );
 
+        println!("slot_result {:?}", slot_result.rollup_height);
+
         let apply_slot_time = apply_slot_start.elapsed();
 
         // --- Before destructuring the receipt, extract some data for metrics ---
