@@ -113,6 +113,7 @@ async fn send_transfers(
         let mut retry_duration = Duration::from_millis(100);
         // Send the tx with retries, up to 7 attempts (about 30 seconds)
         for attempt in 1..=7 {
+            println!("Sending tx {n} {attempt}");
             match test_rollup.send_tx_to_sequencer(&tx).await {
                 Ok(_) => break,
                 Err(e) => {
@@ -141,13 +142,17 @@ async fn wait_for_all_events_with_timeout(
     tokio::time::timeout(timeout, wait_for_all_events(nb_of_events, subscription)).await
 }
 
+use std::time::Instant;
 async fn wait_for_all_events(
     nb_of_events: u64,
     subscription: &mut BoxStream<'static, anyhow::Result<types::LedgerEvent>>,
 ) {
     println!("Waiting for {nb_of_events} events");
     for i in 0..nb_of_events {
+        let instant = Instant::now();
         println!("Waiting for event {i}");
         let _ = subscription.next().await.unwrap();
+        let x = instant.elapsed().as_millis();
+        println!("Waited for event {i} in {x:?}");
     }
 }
