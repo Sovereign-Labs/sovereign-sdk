@@ -70,6 +70,7 @@ impl<Da: DaSpec, StateRoot: Clone> StateOnBlock<Da, StateRoot> {
 enum ForkPointSearchResult<Da: DaService, StateRoot> {
     Found(ForkPoint<Da, StateRoot>),
     HeadChanged(<Da::Spec as DaSpec>::BlockHeader),
+    DaHeadIsBelowProcessed,
 }
 
 /// StateManager controls storage lifecycle for [`StateTransitionFunction`],
@@ -311,6 +312,10 @@ where
                     "Mismatch in block hashes after transition",
                 );
             }
+            assert_eq!(
+                transition_witness.initial_state_root.as_ref(),
+                self.state_root.as_ref(),
+                "Wrong transition, its pre_state_root does not match the current state root of StateManager");
         }
         self.state_on_block
             .insert(block_header.hash(), seen_state_on_block);
@@ -423,6 +428,7 @@ where
         let sending_to_prover_time = sending_to_prover_start.elapsed();
 
         self.state_root = new_state_root;
+
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(RunnerProcessStfChangesMetrics {
                 da_height: block_header.height(),
@@ -505,7 +511,7 @@ where
             }
             assert!(
                 block_header.height() > self.last_processed_finalized_header.height(),
-                "Bug in StateManager, block hasn't been tracked by StateManager"
+                "Bug in StateManager, finalized blocks haven't been tracked properly"
             );
             tracing::trace!("Empty state_on_block => reorg, not a direct descendant of the last **processed** finalized header.");
             return Ok(true);
@@ -598,7 +604,6 @@ where
         let mut head = da_service.get_head_block_header().await?;
 
         for attempt in 0..MAX_REORG_FINDING_ATTEMPTS {
-            // TODO: new head goes below
             match self
                 .try_find_candidate_in_current_chain(
                     da_service,
@@ -618,7 +623,6 @@ where
                     return Ok(fork_point);
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
-                    // TODO: new head goes below last processed finalized height. Sleep here? Continue? do not updated head?
                     tracing::warn!(
                         old_head = %head.display(),
                         new_head = %new_head.display(),
@@ -626,6 +630,17 @@ where
                         "Reorg happened during fork point selection, trying again"
                     );
                     head = new_head;
+                }
+                ForkPointSearchResult::DaHeadIsBelowProcessed => {
+                    let sleep_time = da_service.get_approximate_block_time().await * 10;
+                    tracing::warn!(
+                        attempt,
+                        max_attempts = MAX_REORG_FINDING_ATTEMPTS,
+                        retry_after = ?sleep_time,
+                        "Detected that DA height is below last processed finalized height. This can indicate issue with DA service. will retry");
+                    tokio::time::sleep(sleep_time).await;
+                    let head_again = da_service.get_head_block_header().await?;
+                    head = head_again;
                 }
             }
         }
@@ -642,9 +657,19 @@ where
         earliest_seen_height: u64,
         highest_seen_height: u64,
     ) -> anyhow::Result<ForkPointSearchResult<Da, StateRoot>> {
+        let last_processed_finalized_height = self.last_processed_finalized_header.height();
+        if head.height() <= last_processed_finalized_height {
+            tracing::info!(
+                passed = head.height(),
+                last_processed_finalized_height,
+                "Passed height is below or equal of what has been processed"
+            );
+            return Ok(ForkPointSearchResult::DaHeadIsBelowProcessed);
+        }
+
         let mut low = earliest_seen_height;
         let mut high = std::cmp::min(highest_seen_height, head.height()).saturating_add(1);
-        let last_processed_finalized_height = self.last_processed_finalized_header.height();
+
         assert_eq!(
             last_processed_finalized_height
                 .checked_add(1)
@@ -750,7 +775,7 @@ where
             // All earliest seen transitions must have prev_hash pointing to last_processed_finalized_header.
             // If the candidate's prev_hash differs, it means the DA finalized a different block than
             // what our earliest seen transitions descended from - this indicates data corruption or
-            // a bug in the survivors logic.
+            // a bug in the survivors' logic.
             let earliest_prev_hash = self.get_prev_hash(any_earliest_seen_hash);
             if earliest_prev_hash != candidate.header().prev_hash() {
                 panic!(
@@ -844,7 +869,7 @@ where
             .expect("Should be called after at least single transition added");
         debug_assert!(
             earliest_seen_transition <= highest_seen_transition,
-            "bug in state manager. earliest and highest transition numbers are calculated incorrrectly"
+            "bug in state manager. earliest and highest transition numbers are calculated incorrectly"
         );
         debug_assert_eq!(
             earliest_seen_transition,
@@ -985,8 +1010,34 @@ where
             "Completed check for finalized transitions"
         );
 
-        // TODO: Verify that finalized transitions connected to last processed finalized header,
-        // Thath they are continous, etc.
+        // ---
+        // Check that finalized transitions are valid
+        // First is connected to current
+        if let Some(first_processed_finalized_transition) = finalized_transitions.first() {
+            assert_eq!(
+                self.last_processed_finalized_header.hash(),
+                first_processed_finalized_transition
+                    .block_header
+                    .prev_hash(),
+                "First finalized transition has disconnected block header from StateManager's last_processed_finalized_block"
+            );
+        }
+
+        // All connected between
+        for (i, pair) in finalized_transitions.windows(2).enumerate() {
+            let prev = &pair[0];
+            let next = &pair[1];
+            assert_eq!(
+                prev.post_state_root.as_ref(),
+                next.pre_state_root.as_ref(),
+                "Finalized transition {i} has disconnected state roots"
+            );
+            assert_eq!(
+                prev.block_header.hash(),
+                next.block_header.prev_hash(),
+                "Finalized transition {i} has disconnected block header"
+            );
+        }
 
         if let Some(last_processed_transition) = finalized_transitions.iter().last() {
             self.last_processed_finalized_header = last_processed_transition.block_header.clone();
