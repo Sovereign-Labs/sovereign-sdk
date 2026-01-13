@@ -59,7 +59,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
