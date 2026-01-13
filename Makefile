@@ -194,3 +194,6 @@ start-obs: ## Start docker containers needed for observability stack: influxdb, 
 
 stop-obs: ## Stops observability stack
 	./scripts/stop_observability.sh
+
+test-focused:
+	@cargo nextest run --no-fail-fast --status-level skip --all-features -p sov-demo-rollup 'crash::'

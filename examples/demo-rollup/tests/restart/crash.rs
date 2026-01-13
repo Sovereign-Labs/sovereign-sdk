@@ -1,4 +1,5 @@
 use crate::test_helpers::build_transfer_token_tx;
+use crate::test_helpers::test_genesis_source;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_api_spec::types;
@@ -10,7 +11,9 @@ use sov_db::test_utils::CRASH_ENV_NAME;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_demo_rollup::MockNomtRollupSpec;
-use sov_mock_da::BlockProducingConfig;
+use sov_mock_da::storable::layer::StorableMockDaLayer;
+use sov_mock_da::storable::StorableMockDaService;
+use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::PrivateKey;
@@ -21,22 +24,24 @@ use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use std::sync::Arc;
 use tempfile::TempDir;
+use tokio::sync::RwLock;
 use tokio::time::Duration;
 
-use crate::test_helpers::test_genesis_source;
-
 // Starts test rollup node.
-async fn start_node(location: Arc<TempDir>) -> TestRollup<MockNomtDemoRollup<Native>> {
+async fn start_node(
+    location: Arc<TempDir>,
+    da_layer: Arc<RwLock<StorableMockDaLayer>>,
+) -> TestRollup<MockNomtDemoRollup<Native>> {
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
-        BlockProducingConfig::Periodic {
-            block_time_ms: 1_000,
-        },
+        // Actual block production is configured in the da_layer
+        BlockProducingConfig::Manual,
         0,
     )
     .with_zkvm_host_args(mock_da_risc0_host_args())
-        // probbably some
-    // .set_persistent_da()
+    .set_da_config(|da_config: &mut MockDaConfig| {
+        da_config.da_layer = Some(da_layer);
+    })
     .set_config(|c| {
         c.storage = StoragePath::Tmp(location);
         c.max_concurrent_blobs = 65536;
@@ -66,6 +71,7 @@ async fn test_crash_before_commiting_kernel_nomt() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,sov_metrics=off,tower=off,sov_stf_runner=debug,sov_stf_runner::state_manager=trace,sov_mock_da=debug");
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingUserNomt),
@@ -116,13 +122,23 @@ async fn test_crash_before_commiting_live() -> anyhow::Result<()> {
 // This test checks whether rollup can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
     let temp_dir = Arc::new(tempfile::tempdir()?);
+
+    let mut mock_da_config = MockDaConfig::instant_with_sender(MockAddress::new([0; 32]));
+    mock_da_config.block_producing = BlockProducingConfig::Periodic {
+        block_time_ms: 1_000,
+    };
+    let (shutdown_sender, mut shutdown_receiver) = tokio::sync::watch::channel(());
+    shutdown_receiver.mark_unchanged();
+    let da_service = StorableMockDaService::from_config(mock_da_config, shutdown_receiver).await;
+    let da_layer = da_service.da_layer();
+
     let key_and_address =
         read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
     let receiver_addr = random_address::<MockNomtRollupSpec<Native>>();
 
     // Start the rollup for the first time, and after some transactions are received, crash it.
     {
-        let test_rollup = start_node(temp_dir.clone()).await;
+        let test_rollup = start_node(temp_dir.clone(), da_layer.clone()).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
 
         let client = test_rollup.client.clone();
@@ -168,7 +184,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
 
     // Start the rollup with the existing DBs and check whether it is able to receive transactions.
     {
-        let test_rollup = start_node(temp_dir).await;
+        let test_rollup = start_node(temp_dir, da_layer.clone()).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
         test_rollup.wait_for_next_blocks(10).await;
 
@@ -192,8 +208,10 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
         for _ in 0..40 {
             let _ = event_subscription.next().await.unwrap().unwrap();
         }
-        test_rollup.shutdown().await.unwrap();
+        test_rollup.shutdown().await?;
     }
+
+    shutdown_sender.send(())?;
 
     Ok(())
 }

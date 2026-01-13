@@ -2,7 +2,6 @@ mod address;
 
 use std::fmt::{Debug, Formatter};
 
-use crate::config::GENESIS_HEADER;
 use crate::utils::hash_to_array;
 pub use address::{MockAddress, MOCK_SEQUENCER_DA_ADDRESS};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -107,11 +106,7 @@ impl MockBlockHeader {
     /// Generates [`MockBlockHeader`] with given height, where hashes are derived from height.
     /// Can be used in tests, where a header of the following blocks will be consistent.
     pub fn from_height(height: u64) -> MockBlockHeader {
-        if height == 0 {
-            GENESIS_HEADER
-        } else {
-            Self::new(height, Time::now())
-        }
+        Self::new(height, Time::now())
     }
 }
 
