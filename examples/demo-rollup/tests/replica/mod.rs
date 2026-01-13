@@ -102,6 +102,7 @@ async fn send_transfers(
     test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
 ) {
     for n in 0..count {
+        println!("Sending tx {n}");
         let tx = build_transfer_token_tx::<S>(
             &key_and_address.private_key,
             config_gas_token_id(),
