@@ -225,7 +225,7 @@ where
                 old_block = %filtered_block.header().display(),
                 new_block = %new_block.header().display(),
                 time = ?start.elapsed(),
-                "Chosen fork point"
+                "Reorg happened. Chosen fork point"
             );
             filtered_block = new_block;
             self.state_root = pre_state_root;
@@ -381,7 +381,7 @@ where
             tracing::trace!("Aggregated Proof is materialized into Ledger ChangeSet");
         }
         let ledger_materialization_time = ledger_materialization_start.elapsed();
-        // tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
+        tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
 
         let save_start = std::time::Instant::now();
         self.storage_manager
@@ -512,10 +512,9 @@ where
             return Ok(true);
         }
 
-        // 2. TODO: What comment was heere.
-        let Some(predecessor_state_root) = self.get_matching_pre_state_root(block_header) else {
-            tracing::trace!(block_header = %block_header.display(), "Hasn't found matching pre state root");
-            return Ok(true);
+        let predecessor_state_root = match self.get_pre_state_root_if_fit_candidate(block_header) {
+            None => return Ok(true),
+            Some(state_root) => state_root,
         };
 
         // 3. Continuation of **existing** state of state manager.
@@ -600,6 +599,7 @@ where
         let mut head = da_service.get_head_block_header().await?;
 
         for attempt in 0..MAX_REORG_FINDING_ATTEMPTS {
+            // TODO: new head goes below
             match self
                 .try_find_candidate_in_current_chain(
                     da_service,
@@ -619,6 +619,7 @@ where
                     return Ok(fork_point);
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
+                    // TODO: new head goes below last processed finalized height. Sleep here? Continue? do not updated head?
                     tracing::warn!(
                         old_head = %head.display(),
                         new_head = %new_head.display(),
@@ -737,7 +738,7 @@ where
 
             assert_eq!(candidate.header().height(), earliest_seen_height);
 
-            // All earliest transitions point to the last known finalized state. Do they?
+            // All earliest transitions point to the last known finalized state
             let any_earliest_seen_hash = self
                 .seen_on_height
                 .first_key_value()
@@ -845,14 +846,14 @@ where
             .expect("Should be called after at least single transition added");
         debug_assert!(
             earliest_seen_transition <= highest_seen_transition,
-            "bug in state manager"
+            "bug in state manager. earliest and highest transition numbers are calculated incorrrectly"
         );
         debug_assert_eq!(
             earliest_seen_transition,
             self.last_processed_finalized_header
                 .height()
                 .saturating_add(1),
-            "bug in state manager"
+            "bug in state manager. earliest seen transition should be incremental from last processed finalized"
         );
 
         // In case if node is syncing, last finalized header might be way higher than we've seen.

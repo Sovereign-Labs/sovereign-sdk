@@ -71,7 +71,6 @@ async fn test_crash_before_commiting_kernel_nomt() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,sov_metrics=off,tower=off,sov_stf_runner=debug,sov_stf_runner::state_manager=trace,sov_mock_da=debug");
     tokio::time::timeout(
         Duration::from_secs(120),
         test_start_stop_with_crash(CrashLocation::BeforeCommittingUserNomt),

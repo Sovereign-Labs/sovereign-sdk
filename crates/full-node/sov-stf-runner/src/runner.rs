@@ -188,6 +188,7 @@ where
             .await?;
 
         debug!(
+            last_processed_da_header = %last_processed_da_header.display(),
             %first_unprocessed_height_at_startup,
             proof_manager_config = ?pm_config,
             "Initializing StfRunner");
@@ -499,7 +500,6 @@ where
             )
             .await?
         };
-        // TODO: Assert that filtered block.height <= next_da_height
         let get_block_time = get_block_start.elapsed();
         tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
 
@@ -759,9 +759,9 @@ fn error_if_tokio_runtime_is_not_multi_threaded() -> anyhow::Result<()> {
     use tokio::runtime::{Handle, RuntimeFlavor};
 
     match Handle::current().runtime_flavor() {
-        RuntimeFlavor::CurrentThread => Err(anyhow::anyhow!("A multi-threaded Tokio runtime is required to run the rollup node. Check your Tokio configuration. If you're testing node functionality, make sure your test uses `#[tokio::test(flavor = \"multi_thread\")]` or an equivalent configuration. Aborting.")),
-        _ => Ok(())
-    }
+            RuntimeFlavor::CurrentThread => Err(anyhow::anyhow!("A multi-threaded Tokio runtime is required to run the rollup node. Check your Tokio configuration. If you're testing node functionality, make sure your test uses `#[tokio::test(flavor = \"multi_thread\")]` or an equivalent configuration. Aborting.")),
+            _ => Ok(())
+        }
 }
 
 /// Creates a new `DaSyncState`
