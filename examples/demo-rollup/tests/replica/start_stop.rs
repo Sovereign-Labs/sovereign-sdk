@@ -4,7 +4,7 @@ use tokio::time::Duration;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_start_stop() {
-    sov_test_utils::logging::initialize_or_change_logging_with_filter("info,tower=off");
+    //sov_test_utils::logging::initialize_or_change_logging_with_filter("info,tower=off");
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -56,7 +56,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(1000),
+            Duration::from_millis(100),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -102,7 +102,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(1000),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -156,7 +156,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(1000),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -214,7 +214,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(1000),
+            Duration::from_millis(300),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -239,7 +239,7 @@ async fn test_replica_start_stop() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_replica_start_stop_many_times() {
+async fn test_replica_start_stop_many_times_x() {
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
