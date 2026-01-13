@@ -329,7 +329,7 @@ impl StorableMockDaLayer {
     pub(crate) async fn get_block_at(&self, height: u32) -> anyhow::Result<MockBlock> {
         if height >= self.next_height {
             anyhow::bail!(
-                "Block at height {height} has not been produced yet, next block is {}",
+                "Cannot get full block at height {height} has not been produced yet, next block is {}",
                 self.next_height
             );
         }
@@ -1005,7 +1005,7 @@ mod tests {
         let response = da_layer.get_block_at(1).await;
         assert!(response.is_err());
         assert_eq!(
-            "Block at height 1 has not been produced yet, next block is 1",
+            "Cannot get full block at height 1 has not been produced yet, next block is 1",
             response.unwrap_err().to_string()
         );
 

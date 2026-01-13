@@ -334,7 +334,7 @@ where
         let mut ledger_change_set = self
             .ledger_db
             .materialize_slot(slot_commit, new_state_root.as_ref())?;
-        // tracing::trace!("Initial Ledger ChangeSet is materialized");
+        tracing::trace!("Initial Ledger ChangeSet is materialized");
 
         if let Some(finalized_transition) = finalized_transitions.iter().last() {
             let last_processed_finalized_header = &finalized_transition.block_header;
@@ -480,13 +480,13 @@ where
         // Reorg: if passed block header a new, and it is not a continuation of any of the previous height transitions.
         tracing::trace!(
             block_header = %block_header.display(),
-            last_seen_finalized_header = %self.last_processed_finalized_header.display(),
+            last_processed_finalized_header = %self.last_processed_finalized_header.display(),
             "Checking if reorg happened");
         // 0. Short circuit.
         // This branch is usually for 2 things: instant finality or genesis.
         if self.state_on_block.is_empty() {
             tracing::trace!("empty state_on_block => checking if passed block is finalized or direct descendant of finalized");
-            // Direct descendant of the last seen finalized block.
+            // Direct descendant of the last processed finalized block.
             if block_header.prev_hash() == self.last_processed_finalized_header.hash() {
                 return Ok(false);
             }
@@ -507,14 +507,13 @@ where
                 block_header.height() > self.last_processed_finalized_header.height(),
                 "Bug in StateManager, block hasn't been tracked by StateManager"
             );
-            tracing::trace!("Empty state_on_block => reorg, not a direct descendant of the last **seen** finalized header.");
-            // By that point it is reorg: passed block is not a direct descendant of the last **seen** finalized header.
+            tracing::trace!("Empty state_on_block => reorg, not a direct descendant of the last **processed** finalized header.");
             return Ok(true);
         }
 
-        let predecessor_state_root = match self.get_pre_state_root_if_fit_candidate(block_header) {
-            None => return Ok(true),
-            Some(state_root) => state_root,
+        // 2. Has matching pre-state root in the tree, not necessary current one.
+        let Some(predecessor_state_root) = self.get_matching_pre_state_root(block_header) else {
+            return Ok(true);
         };
 
         // 3. Continuation of **existing** state of state manager.
@@ -716,7 +715,7 @@ where
 
             final_candidate = Some(candidate);
         }
-        tracing::trace!("Haven't found candidate for fork point on seen transitions. It means candidate should be the next after last finalized height");
+        tracing::trace!("Haven't found candidate for fork point on seen transitions. It means candidate should be the next after last processed finalized height");
         // The difference in this case with the loop above,
         // is that we check that block at earliest seen transition height also points to last finalized height.
 
@@ -756,11 +755,10 @@ where
             if earliest_prev_hash != candidate.header().prev_hash() {
                 panic!(
                     "Finalized chain inconsistency detected: \
-                    earliest seen transition at height {} points to parent hash {}, \
+                    earliest seen transition at height {earliest_seen_height} \
+                    points to parent hash {earliest_prev_hash}, \
                     but current chain's block at that height has parent hash {}. \
                     last_processed_finalized_header={}, candidate={}",
-                    earliest_seen_height,
-                    earliest_prev_hash,
                     candidate.header().prev_hash(),
                     self.last_processed_finalized_header.display(),
                     candidate.header().display(),
@@ -986,6 +984,10 @@ where
             finalized_transitions = finalized_transitions.len(),
             "Completed check for finalized transitions"
         );
+
+        // TODO: Verify that finalized transitions connected to last processed finalized header,
+        // Thath they are continous, etc.
+
         if let Some(last_processed_transition) = finalized_transitions.iter().last() {
             self.last_processed_finalized_header = last_processed_transition.block_header.clone();
         }
