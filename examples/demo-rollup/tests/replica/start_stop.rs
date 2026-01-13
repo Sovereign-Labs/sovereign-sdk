@@ -308,7 +308,7 @@ async fn test_replica_start_stop_many_times() {
             &mut event_subscription,
         )
         .await
-        .unwrap();
+        .expect("Timeout: replica did not receive tx");
 
         let receiver_balance = replica_test_rollup
             .client

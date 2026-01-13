@@ -115,7 +115,7 @@ async fn test_replica_receives_txs_from_postgres() {
     test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
     wait_for_all_events_with_timeout(Duration::from_millis(100), 1, &mut event_subscription)
         .await
-        .unwrap();
+        .expect("Timeout: replica did not receive tx");
 
     let receiver_balance = replica_test_rollup
         .client
