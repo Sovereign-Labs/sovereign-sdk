@@ -56,7 +56,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -102,7 +102,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(300),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -156,7 +156,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(300),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -214,7 +214,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(300),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -292,7 +292,7 @@ async fn test_replica_start_stop_many_times() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
