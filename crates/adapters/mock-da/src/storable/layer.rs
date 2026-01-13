@@ -130,7 +130,6 @@ impl StorableMockDaLayer {
             })?;
             hash
         } else {
-            // MockBlockHeader::from_height(0).hash.0
             GENESIS_HEADER.hash.0
         };
 
