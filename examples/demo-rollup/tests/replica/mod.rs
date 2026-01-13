@@ -144,7 +144,9 @@ async fn wait_for_all_events(
     nb_of_events: u64,
     subscription: &mut BoxStream<'static, anyhow::Result<types::LedgerEvent>>,
 ) {
-    for _ in 0..nb_of_events {
+    println!("Waiting for {nb_of_events} events");
+    for i in 0..nb_of_events {
+        println!("Waiting for event {i}");
         let _ = subscription.next().await.unwrap();
     }
 }
