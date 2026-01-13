@@ -586,7 +586,7 @@ where
             assert_eq!(
                 adjacent.header().prev_hash(),
                 self.last_processed_finalized_header.hash(),
-                "Bug in DA, block adjacent to finalized has wrong prev root hash"
+                "Bug in DA, block adjacent to finalized has wrong prev_hash"
             );
             return Ok(ForkPoint {
                 block: adjacent,
@@ -1011,34 +1011,11 @@ where
         );
 
         // ---
-        // Check that finalized transitions are valid
-        // First is connected to current
-        if let Some(first_processed_finalized_transition) = finalized_transitions.first() {
-            assert_eq!(
-                self.last_processed_finalized_header.hash(),
-                first_processed_finalized_transition
-                    .block_header
-                    .prev_hash(),
-                "First finalized transition has disconnected block header from StateManager's last_processed_finalized_block"
-            );
-        }
-
-        // All connected between
-        for (i, pair) in finalized_transitions.windows(2).enumerate() {
-            let prev = &pair[0];
-            let next = &pair[1];
-            assert_eq!(
-                prev.post_state_root.as_ref(),
-                next.pre_state_root.as_ref(),
-                "Finalized transition {i} has disconnected state roots"
-            );
-            assert_eq!(
-                prev.block_header.hash(),
-                next.block_header.prev_hash(),
-                "Finalized transition {i} has disconnected block header"
-            );
-        }
-
+        // Check that finalized transitions are valid, before re-assigning
+        verify_finalized_transitions_continuity(
+            self.last_processed_finalized_header.hash(),
+            &finalized_transitions,
+        );
         if let Some(last_processed_transition) = finalized_transitions.iter().last() {
             self.last_processed_finalized_header = last_processed_transition.block_header.clone();
         }
@@ -1099,4 +1076,39 @@ fn is_head_changed<Da: DaSpec>(current_head: &Da::BlockHeader, new_head: &Da::Bl
         return false;
     }
     true
+}
+
+fn verify_finalized_transitions_continuity<Da, StateRoot>(
+    last_processed_finalized_header_hash: Da::SlotHash,
+    finalized_transitions: &[StateOnBlock<Da, StateRoot>],
+) where
+    Da: DaSpec,
+    StateRoot: AsRef<[u8]>,
+{
+    // First is connected to current
+    if let Some(first_processed_finalized_transition) = finalized_transitions.first() {
+        assert_eq!(
+            last_processed_finalized_header_hash,
+            first_processed_finalized_transition
+                .block_header
+                .prev_hash(),
+            "First finalized transition has disconnected block header from StateManager's last_processed_finalized_block"
+        );
+    }
+
+    // All correctly connected between each other
+    for (i, pair) in finalized_transitions.windows(2).enumerate() {
+        let prev = &pair[0];
+        let next = &pair[1];
+        assert_eq!(
+            prev.post_state_root.as_ref(),
+            next.pre_state_root.as_ref(),
+            "Finalized transition {i} has disconnected state roots"
+        );
+        assert_eq!(
+            prev.block_header.hash(),
+            next.block_header.prev_hash(),
+            "Finalized transition {i} has disconnected block header"
+        );
+    }
 }
