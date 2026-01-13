@@ -102,7 +102,6 @@ async fn send_transfers(
     test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
 ) {
     for n in 0..count {
-        println!("Sending tx {n}");
         let tx = build_transfer_token_tx::<S>(
             &key_and_address.private_key,
             config_gas_token_id(),
@@ -150,9 +149,9 @@ async fn wait_for_all_events(
     println!("Waiting for {nb_of_events} events");
     for i in 0..nb_of_events {
         let instant = Instant::now();
-        println!("Waiting for event {i}");
+
         let _ = subscription.next().await.unwrap();
-        let x = instant.elapsed().as_millis();
+        let x = instant.elapsed().as_micros();
         println!("Waited for event {i} in {x:?}");
     }
 }
