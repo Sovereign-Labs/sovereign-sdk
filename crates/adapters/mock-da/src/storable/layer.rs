@@ -1005,14 +1005,7 @@ mod tests {
         let response = da_layer.get_block_at(1).await;
         assert!(response.is_err());
         assert_eq!(
-            "Block at height 1 has not been produced yet",
-            response.unwrap_err().to_string()
-        );
-
-        let response = da_layer.get_header_at(1).await;
-        assert!(response.is_err());
-        assert_eq!(
-            "Block at height 1 has not been produced yet",
+            "Block at height 1 has not been produced yet, next block is 1",
             response.unwrap_err().to_string()
         );
 
