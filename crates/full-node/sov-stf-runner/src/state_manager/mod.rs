@@ -184,7 +184,7 @@ where
                 "StateManager wasn't initialized. Please call `.startup()` method before using"
             );
         }
-        let reorg_happened = self.has_reorg_happened(filtered_block.header()).await?;
+        let reorg_happened = self.has_reorg_happened(filtered_block.header())?;
         tracing::trace!(reorg_happened, "Checked if reorg happened");
 
         if reorg_happened {
@@ -479,7 +479,7 @@ where
     }
 
     /// Returns true, if passed `block_header` is not an incremental continuation of the current chain.
-    async fn has_reorg_happened(
+    fn has_reorg_happened(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
     ) -> anyhow::Result<bool> {
@@ -502,10 +502,10 @@ where
                     tracing::trace!("empty state_on_block => genesis");
                     return Ok(false);
                 }
-                debug_assert_eq!(
+                assert_eq!(
                     block_header.prev_hash(),
                     self.last_processed_finalized_header.prev_hash(),
-                    "Corrupt DA"
+                    "Corrupt DA, different finalized header from what previously been seen"
                 );
                 anyhow::bail!("Trying to process same finalized header twice.");
             }
