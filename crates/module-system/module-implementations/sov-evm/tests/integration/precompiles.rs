@@ -232,11 +232,12 @@ fn test_precompile_returns_wrong_result_when_not_enabled() {
     let query_address = evm_account.address();
     let precompile_input = Bytes::copy_from_slice(query_address.as_slice());
 
-    // Call assertPrecompileFails - this should SUCCEED because calling a disabled
-    // precompile now returns a Revert result.
-    let call = PrecompileTester::assertPrecompileFailsCall {
+    // Call assertPrecompileResult with empty expected output.
+    // Disabled precompiles behave like EOAs: the call succeeds with empty return data.
+    let call = PrecompileTester::assertPrecompileResultCall {
         precompile: BANK_BALANCE_PRECOMPILE_ADDRESS,
         input: precompile_input.clone(),
+        expectedOutput: Bytes::new(), // Empty - EOA behavior
     };
     let call_data = Bytes::from(call.abi_encode());
     let call_tx = create_contract_call_tx(1, &evm_account, tester_address, call_data);
@@ -244,10 +245,11 @@ fn test_precompile_returns_wrong_result_when_not_enabled() {
     runner.execute_transaction(TransactionTestCase {
         input: call_tx.tx,
         assert: Box::new(move |ctx, _state| {
-            // Disabled precompile now reverts, so assertPrecompileFails should pass
+            // Disabled precompile returns empty data (EOA behavior), so assertPrecompileResult
+            // with empty expected output should succeed
             assert!(
                 ctx.tx_receipt.is_successful(),
-                "assertPrecompileFails should succeed because disabled precompile reverts"
+                "assertPrecompileResult with empty output should succeed for disabled precompile"
             );
         }),
     });
@@ -551,10 +553,11 @@ fn test_precompile_works_after_admin_enables_it() {
         <S as Spec>::Address::from_vm_address(EthereumAddress::from(query_address));
     let precompile_input = Bytes::copy_from_slice(query_address.as_slice());
 
-    // First, verify the precompile call fails (disabled precompile reverts)
-    let call = PrecompileTester::assertPrecompileFailsCall {
+    // First, verify the precompile returns empty data (disabled = EOA behavior)
+    let call = PrecompileTester::assertPrecompileResultCall {
         precompile: BANK_BALANCE_PRECOMPILE_ADDRESS,
         input: precompile_input.clone(),
+        expectedOutput: Bytes::new(), // Empty - EOA behavior for disabled precompile
     };
     let call_data = Bytes::from(call.abi_encode());
     let call_tx = create_contract_call_tx(1, &evm_account, tester_address, call_data);
@@ -564,7 +567,7 @@ fn test_precompile_works_after_admin_enables_it() {
         assert: Box::new(move |ctx, _state| {
             assert!(
                 ctx.tx_receipt.is_successful(),
-                "assertPrecompileFails should succeed because disabled precompile reverts"
+                "Disabled precompile should return empty data (EOA behavior)"
             );
         }),
     });

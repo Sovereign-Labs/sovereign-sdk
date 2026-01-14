@@ -254,18 +254,11 @@ where
                         return Err(format!("Precompile at {} not implemented", address));
                     }
                 }
-            } else {
-                // Known precompile but NOT enabled - return a Revert to indicate
-                // that the precompile is not available.
-                let mut gas = Gas::new(gas_limit);
-                let _ = gas.record_cost(0);
-                let result = InterpreterResult {
-                    result: InstructionResult::Revert,
-                    gas,
-                    output: Bytes::from_static(b"Precompile not enabled"),
-                };
-                return Ok(Some(result));
             }
+            // Known precompile but NOT enabled - fall through to return Ok(None)
+            // which tells revm this is not a precompile. The call will then be
+            // handled as a normal call to an address with no code (EOA behavior),
+            // which succeeds with empty return data.
         }
 
         // Fall back to standard Ethereum precompiles
@@ -282,10 +275,8 @@ where
     }
 
     fn contains(&self, address: &Address) -> bool {
-        // Check if it's a standard Ethereum precompile OR a known sovereign precompile
-        // Note: We return true for known precompiles even if not enabled, because
-        // we handle the disabled case in run() by returning empty data.
-        self.eth_precompiles.contains(address) || is_known_precompile(address)
+        // Check if it's a standard Ethereum precompile OR an enabled sovereign precompile
+        self.eth_precompiles.contains(address) || self.enabled_addresses.contains(address)
     }
 }
 
