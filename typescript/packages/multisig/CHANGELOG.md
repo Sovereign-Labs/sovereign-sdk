@@ -1,9 +1,5 @@
 # @sovereign-sdk/multisig
 
-## 0.1.3
-
-- expose private variables `signatures`, `unusedPubKeys` & `minSigners`
-
 ## 0.1.2
 
 ### Patch Changes

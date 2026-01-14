@@ -204,7 +204,7 @@ export class MultisigTransaction {
    * @returns A readonly view of the signatures and public keys
    */
   get signaturesAndPubKeys(): Readonly<SignatureAndPubKey[]> {
-      return this.signatures;
+    return this.signatures;
   }
 
   /**
@@ -212,7 +212,7 @@ export class MultisigTransaction {
    * @returns A readonly view of the remaining public keys
    */
   get remainingPubKeys(): Readonly<Set<HexString>> {
-      return this.unusedPubKeys;
+    return this.unusedPubKeys;
   }
 
   /**
@@ -220,7 +220,7 @@ export class MultisigTransaction {
    * @returns The threshold number of signatures
    */
   get threshold(): number {
-      return this.minSigners;
+    return this.minSigners;
   }
 
   /**
