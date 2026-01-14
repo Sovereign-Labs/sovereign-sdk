@@ -1,5 +1,9 @@
 use std::marker::PhantomData;
 
+use crate::conversions::RlpConversionError;
+use crate::Evm;
+use crate::TransactionSigned;
+use crate::{call, CallMessage, RlpEvmTransaction};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
@@ -15,15 +19,12 @@ use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
+use sov_modules_api::StateReader;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
 use sov_rollup_interface::TxHash;
 use sov_state::User;
-
-use crate::conversions::RlpConversionError;
-use crate::TransactionSigned;
-use crate::{call, CallMessage, RlpEvmTransaction};
 
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
@@ -32,6 +33,15 @@ use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATUR
 #[cfg(feature = "native")]
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+
+impl<S: Spec> Evm<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    fn _fee_multiplayer<Accessor: StateReader<User>>(&mut self, state: &mut Accessor) {
+        let env = self.block_env.get(state);
+    }
+}
 
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(
