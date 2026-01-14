@@ -19,7 +19,7 @@ use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
-use sov_modules_api::StateReader;
+use sov_modules_api::{StateMetricsProvider, StateReader};
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
@@ -71,7 +71,7 @@ fn recover_evm_signer(
 
 /// Creates the transaction details and tx hash for an EVM transaction.
 fn create_auth_tx_and_hash<
-    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + StateMetricsProvider,
     S: Spec,
 >(
     tx: &TransactionSigned,
@@ -169,7 +169,7 @@ where
 /// If the caller does plan to derive rollup addresses from evm addresses, they should be sure that their scheme for doing so is deterministic and
 /// collision resistant. You don't want someone to be able to pick a rollup address that someone else is already using!
 pub fn authenticate<
-    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + StateMetricsProvider,
     S: Spec,
 >(
     raw_tx: &[u8],
@@ -285,7 +285,7 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + StateMetricsProvider>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<

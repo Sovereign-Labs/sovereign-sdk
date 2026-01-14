@@ -55,7 +55,7 @@ pub trait TransactionAuthenticator<S: Spec> {
     /// For rollups running a preferred sequencer it is expected that implementations cache signature
     /// checks during native execution, and the preferred sequencer will attempt to pre-populate this
     /// cache to parallelise signature checks.
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + crate::StateMetricsProvider>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, AuthenticationError>;
