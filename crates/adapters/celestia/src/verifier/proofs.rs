@@ -163,7 +163,7 @@ pub(crate) fn new_inclusion_proof(
     let mut prev_range_end: Option<usize> = None;
     let flat_shares = rollup_data
         .data
-        .rows
+        .rows()
         .iter()
         .flat_map(|r| r.shares.iter())
         .collect::<Vec<_>>();
@@ -290,7 +290,7 @@ fn build_ranges_to_prove_for_skipped_blobs(
 #[cfg(feature = "native")]
 fn sub_namespace_inclusion_proofs(
     row_length: usize,
-    namespace_data: &celestia_types::row_namespace_data::NamespaceData,
+    namespace_data: &celestia_types::namespace_data::NamespaceData,
     namespace: celestia_types::nmt::Namespace,
     blob_ranges_to_prove: &[std::ops::Range<usize>],
     row_roots: &[celestia_types::nmt::NamespacedHash],
@@ -307,8 +307,9 @@ fn sub_namespace_inclusion_proofs(
     let mut output = Vec::with_capacity(blob_ranges_to_prove.len());
 
     // Shares in the first row are aligned right
-    let first_row_offset = if !namespace_data.rows.is_empty() {
-        let first_row = &namespace_data.rows[0];
+    let rows = namespace_data.rows();
+    let first_row_offset = if !rows.is_empty() {
+        let first_row = &rows[0];
         row_length
             .checked_sub(first_row.shares.len())
             .expect("Row cannot be larger that square size")
@@ -322,13 +323,14 @@ fn sub_namespace_inclusion_proofs(
             range_proofs: Vec::new(),
         };
 
+        let ns_rows = namespace_data.rows();
         for blob_sub_range in per_row_sub_ranges {
             let row_num = blob_sub_range
                 .start
                 .checked_div(row_length)
                 .expect("row_length cannot be 0");
 
-            let namespace_row = &namespace_data.rows[row_num];
+            let namespace_row = &ns_rows[row_num];
 
             let mut row_relative_start = blob_sub_range.start % row_length;
             let mut row_relative_end = row_relative_start
