@@ -11,8 +11,7 @@ use sov_revenue_share::{CallMessage as RevenueShareCallMessage, RevenueShare};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::{
-    generate_optimistic_runtime, AsUser, TestSlotHash, TestStorageSpec, TestUser,
-    TransactionTestCase,
+    generate_optimistic_runtime, AsUser, TestStorage, TestUser, TransactionTestCase,
 };
 
 use crate::test_helpers::TestCryptoSpec;
@@ -24,7 +23,7 @@ type TestSpec = ConfigurableSpec<
     EthereumAddress,
     Native,
     TestCryptoSpec,
-    sov_state::nomt::prover_storage::NomtProverStorage<TestStorageSpec, TestSlotHash>,
+    TestStorage,
 >;
 
 type S = TestSpec;

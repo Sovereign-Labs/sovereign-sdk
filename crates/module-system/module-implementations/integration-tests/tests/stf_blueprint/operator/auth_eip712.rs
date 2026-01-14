@@ -21,9 +21,7 @@ use sov_rollup_interface::stf::{TxEffect, TxReceiptContents};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::TransactionTestCase;
-use sov_test_utils::{
-    generate_runtime, EncodeCall, TestSlotHash, TestStorageSpec, TestUser, TEST_DEFAULT_MAX_FEE,
-};
+use sov_test_utils::{generate_runtime, EncodeCall, TestStorage, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::CallMessage;
 
 type TestSpec = ConfigurableSpec<
@@ -33,7 +31,7 @@ type TestSpec = ConfigurableSpec<
     EthereumAddress,
     Native,
     EvmCryptoSpec,
-    sov_state::nomt::prover_storage::NomtProverStorage<TestStorageSpec, TestSlotHash>,
+    TestStorage,
 >;
 type S = TestSpec;
 

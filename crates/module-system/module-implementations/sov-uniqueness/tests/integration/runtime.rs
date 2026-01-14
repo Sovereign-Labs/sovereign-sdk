@@ -6,9 +6,7 @@ use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{RawTx, Spec};
 use sov_rollup_interface::execution_mode::Native;
-use sov_test_utils::{
-    generate_runtime, MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestSlotHash, TestStorageSpec,
-};
+use sov_test_utils::{generate_runtime, MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestStorage};
 use sov_value_setter::ValueSetter;
 
 type EvmTestSpec = ConfigurableSpec<
@@ -18,7 +16,7 @@ type EvmTestSpec = ConfigurableSpec<
     MultiAddressEvm,
     Native,
     MockZkvmCryptoSpec,
-    sov_state::nomt::prover_storage::NomtProverStorage<TestStorageSpec, TestSlotHash>,
+    TestStorage,
 >;
 
 generate_runtime! {

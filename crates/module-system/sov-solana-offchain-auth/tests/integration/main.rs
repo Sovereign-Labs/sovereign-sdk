@@ -36,10 +36,10 @@ use sov_test_utils::runtime::{BankConfig, Runtime as _};
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
-    generate_runtime, RtAgnosticBlueprint, TestUser, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE,
-    TEST_DEFAULT_MAX_PRIORITY_FEE,
+    generate_runtime, RtAgnosticBlueprint, TestStorage, TestUser, TEST_DEFAULT_GAS_LIMIT,
+    TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
 };
-use sov_test_utils::{MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestSlotHash, TestStorageSpec};
+use sov_test_utils::{MockDaSpec, MockZkvm, MockZkvmCryptoSpec};
 use sov_value_setter::ValueSetterConfig;
 use tempfile::tempdir;
 
@@ -54,7 +54,7 @@ pub type SolanaTestSpec = ConfigurableSpec<
     Base58Address, // Use Base58Address instead of the default Address
     Native,
     MockZkvmCryptoSpec,
-    sov_state::nomt::prover_storage::NomtProverStorage<TestStorageSpec, TestSlotHash>,
+    TestStorage,
 >;
 
 /// An arbitrary base58 address.
