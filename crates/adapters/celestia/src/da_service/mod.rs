@@ -252,6 +252,12 @@ impl CelestiaService {
             tracker.submit(GetBlockHeaderMeasurement::new(response_time, is_success));
         });
         let extended_header = flatten_timeout(result)?;
+        if extended_header.header.height.value() != height {
+            return Err(MaybeRetryable::Transient(anyhow::anyhow!(
+                "Received wrong height {}, when requested {height}",
+                extended_header.header.height.value()
+            )));
+        }
         Ok(extended_header.into())
     }
 
