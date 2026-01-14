@@ -45,7 +45,9 @@ use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_interface::StateUpdateInfo;
-use sov_sequencer::preferred::{PostgresConfig, PreferredSequencerConfig, TimingOracleConfig};
+use sov_sequencer::preferred::{
+    NodeRole, PostgresConfig, PreferredSequencerConfig, TimingOracleConfig,
+};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{
@@ -402,7 +404,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     fn default_config(
         finalization_blocks: u32,
         storage_path: StoragePath,
-        is_replica: bool,
         postgres_config: Option<PostgresConfig>,
     ) -> RollupBuilderConfig<R::Spec> {
         RollupBuilderConfig {
@@ -413,7 +414,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,
             sequencer_config: SequencerKindConfig::Preferred(PreferredSequencerConfig {
-                is_replica: Some(is_replica),
                 postgres_config,
                 ..PreferredSequencerConfig::default()
             }),
@@ -457,26 +457,26 @@ where
     R: FullNodeBlueprint<Native, DaService = StorableMockDaClient> + Default + 'static,
 {
     pub async fn new_with_external_da(
-        is_replica: bool,
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
-        postgres: Option<(Arc<PostgresData>, String)>,
+        postgres: Option<(Arc<PostgresData>, String, NodeRole)>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
 
         let postgres_container_opt: Option<Arc<PostgresData>> = postgres
             .as_ref()
-            .map(|(postgres_container, _)| postgres_container.clone());
+            .map(|(postgres_container, _, _)| postgres_container.clone());
 
         let post_config = postgres.as_ref().map(|p| PostgresConfig {
             postgres_connection_string: p.0.connection_string.clone(),
             node_id: p.1.clone(),
+            node_role: p.2,
         });
 
         Self {
             genesis,
             da_config,
-            config: Self::default_config(0, storage_path, is_replica, post_config),
+            config: Self::default_config(0, storage_path, post_config),
             postgres_container_opt,
             with_secondary_sequencer: None,
             exec_config: None,
@@ -556,7 +556,7 @@ where
             genesis,
             da_config,
             postgres_container_opt: None,
-            config: Self::default_config(finalization_blocks, storage_path, false, None),
+            config: Self::default_config(finalization_blocks, storage_path, None),
             with_secondary_sequencer: None,
             exec_config,
         }

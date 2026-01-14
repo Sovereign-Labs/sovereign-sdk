@@ -2,15 +2,31 @@ use super::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_receives_txs_from_da() {
-    let (_, shutdown_sender, addr) = create_da_service_periodic().await;
+    let postgres = PostgresData::create_postgres().await;
+
+    let postgres = match postgres {
+        Ok(pg) => Some(pg),
+        Err(CreatePostgresError::DockerNotSupported) => return,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+    let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
-    let test_rollup = start_rollup(false, addr, None).await;
-    let replica_test_rollup = start_rollup(true, addr, None).await;
+    let replica = postgres
+        .clone()
+        .map(|pg| (pg, "replica".into(), NodeRole::ReplicaNoLeaderSync));
+    let replica_test_rollup = start_rollup(addr, replica).await;
 
-    let token_id = config_gas_token_id();
+    let primary = postgres
+        .clone()
+        .map(|pg| (pg, "primary".into(), NodeRole::Leader));
+    let test_rollup = start_rollup(addr, primary).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
+    let token_id = config_gas_token_id();
     let receiver_addr = random_address();
 
     let tx = build_transfer_token_tx::<S>(
@@ -34,9 +50,10 @@ async fn test_replica_receives_txs_from_da() {
         .unwrap();
 
     assert_eq!(receiver_balance.0, AMOUNT);
+
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;
-    let _ = shutdown_sender.send(());
+    let _ = da_shutdown.send(());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -54,11 +71,15 @@ async fn test_replica_receives_txs_from_postgres() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let (da_service, addr) = create_da_service_manual().await;
 
-    let replica = postgres.clone().map(|pg| (pg, "replica".into()));
-    let replica_test_rollup = start_rollup(true, addr, replica).await;
+    let replica = postgres
+        .clone()
+        .map(|pg| (pg, "replica".into(), NodeRole::Replica));
+    let replica_test_rollup = start_rollup(addr, replica).await;
 
-    let primary = postgres.clone().map(|pg| (pg, "primary".into()));
-    let test_rollup = start_rollup(false, addr, primary).await;
+    let primary = postgres
+        .clone()
+        .map(|pg| (pg, "primary".into(), NodeRole::Leader));
+    let test_rollup = start_rollup(addr, primary).await;
 
     for _ in 0..20 {
         da_service.produce_block_now().await.unwrap();

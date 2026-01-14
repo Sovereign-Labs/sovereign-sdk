@@ -1,5 +1,9 @@
+# 2026-01-09
+- #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
+
 # 2026-01-08
 - #2312 Implements `eth_feeHistory` RPC endpoint to expose rollup's EIP-1559 base fee history for wallets.
+- #2319 Validates `max_fee_per_gas` against rollup's base fee during EVM transaction authentication, rejecting transactions with insufficient fees early.
 
 # 2026-01-02
 - #2292 **EVM Breaking Change, Chain Hash Change**. This PR Changes the borsh serialization of sov_evm::CallMessage by making it an enum. After upgrading, chains will not be able to deserialize transactions in the old format - so it will become impossible to sync from genesis if your chain pre-dates this change.

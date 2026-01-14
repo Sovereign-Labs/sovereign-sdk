@@ -2,7 +2,7 @@ name: Promote to Nightly
 
 on:
   repository_dispatch:
-    types: [acceptance-test-success, acceptance-test-failure, data-regeneration-success, data-regeneration-failure]
+    types: [acceptance-test-success, acceptance-test-failure, data-regeneration-success, data-regeneration-failure, evm-test-success, evm-test-failure, evm-test-build-failure, evm-test-startup-failure]
 
 permissions:
   contents: write
@@ -123,3 +123,49 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             text: "⚠️ *Acceptance test data regeneration failed*\n\nAutomatic data regeneration for commit `${{ github.event.client_payload.commit_sha }}` failed.\n\n**View logs:** `less -R /opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.commit_sha }}-*/logs/regeneration.log`"
+
+      # Success notifications are commented out to avoid noise in the failure channel
+      # Uncomment when a dedicated success notification channel (e.g. #github-updates) is set up
+      # - name: Slack notification on EVM test success
+      #   if: github.event.action == 'evm-test-success'
+      #   uses: slackapi/slack-github-action@v2.1.1
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_SUCCESS_WEBHOOK_URL }}
+      #   with:
+      #     webhook: ${{ secrets.SLACK_SUCCESS_WEBHOOK_URL }}
+      #     webhook-type: incoming-webhook
+      #     payload: |
+      #       text: "✅ *EVM acceptance tests passed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on EVM test failure
+        if: github.event.action == 'evm-test-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "❌ *EVM acceptance tests failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\n*Test duration:* ${{ github.event.client_payload.test_duration_seconds }}s\n\n*View logs:* SSH to the build server and check `/opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.test_dir_name }}/logs/`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on EVM build failure
+        if: github.event.action == 'evm-test-build-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "🔨 *EVM test Docker build failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\nFailed to build rollup Docker container.\n\n*View logs:* SSH to the build server and check `/opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.test_dir_name }}/logs/build.log`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Slack notification on EVM startup failure
+        if: github.event.action == 'evm-test-startup-failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "🚀 *EVM test rollup startup failed*\n\nCommit `${{ github.event.client_payload.commit_sha }}`\n\nRollup container failed to start or reach healthcheck.\n\n*View logs:* SSH to the build server and check `/opt/acceptance-tests-runner/test-runs/${{ github.event.client_payload.test_dir_name }}/logs/`\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

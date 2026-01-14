@@ -492,6 +492,51 @@ async fn txs_below_min_fee_are_rejected() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_tx_ws_submission() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+    let (mut writer, mut reader) = client.connect_txs_ws().await.unwrap();
+
+    for i in 0..3 {
+        let tx = tx_set_value(&admin.private_key, i, i);
+        writer.send(&tx, i.to_string()).await.unwrap();
+    }
+    let mut received_ids = [false, false, false];
+    for _ in 0..3 {
+        let msg = reader.next().await.unwrap().unwrap();
+        let id: usize = msg.id.parse().unwrap();
+        assert!(!received_ids[id]);
+        received_ids[id] = true;
+        assert_eq!(msg.contents.events.len(), 1);
+        for event in msg.contents.events {
+            assert!(
+                event.key.starts_with("ValueSetter/NewValue"),
+                "Unexpected event key: {}",
+                event.key
+            );
+            assert_eq!(
+                event.value.get("new_value").unwrap().as_u64().unwrap(),
+                id as u64,
+                "Unexpected event value: {:?}",
+                event.value
+            );
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 #[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
 async fn test_archival_state_with_pruning() {
     let (test_rollup, admin) = create_test_rollup(
