@@ -346,7 +346,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     state_manager
-        .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
+        .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
 
@@ -464,7 +464,7 @@ async fn test_progressing_with_shuffle(
         let state_root_hash = transition_witness.final_state_root;
         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -673,7 +673,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
         seen_transitions.insert(returned_block.header().hash(), state_root_hash);
@@ -768,7 +768,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         let state_root_hash = transition_witness.final_state_root;
         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -901,7 +901,7 @@ proptest! {
 /// This way we can have a case where [`StateManager`] cannot backtrack to continuous transition,
 /// because finalized were eliminated. This behaviour is similar as starting from a non-finalized block and then whole chain switches.
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "Finalized header changed")]
+#[should_panic(expected = "Finalized chain inconsistency detected")]
 async fn test_change_in_finalized_header() {
     let tempdir = tempfile::tempdir().unwrap();
 
@@ -957,8 +957,10 @@ async fn test_change_in_finalized_header() {
     shutdown_sender.send(()).unwrap();
 }
 
-// On empty internal state, state manager should check if passed block is finalized
-// And return last finalized.
+// On empty internal state, state manager should only allow blocks that are
+// direct descendants of last_processed_finalized_header (genesis in this case).
+// Any block that skips heights should trigger reorg detection and return
+// the block adjacent to last_processed_finalized_header.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
@@ -977,28 +979,33 @@ async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result
             .await??;
     }
 
+    // Block adjacent to last_processed_finalized_header (genesis at height 0)
+    let adjacent_to_genesis = da_service.get_block_at(1).await?;
+
     let last_finalized_header = da_service.get_last_finalized_block_header().await?;
-    // Should be allowed, because storage has continuous data
-    let next_to_finalized = da_service
+    // This is NOT adjacent to last_processed_finalized_header (genesis),
+    // so it should trigger reorg detection
+    let next_to_da_finalized = da_service
         .get_block_at(last_finalized_header.height() + 1)
         .await?;
-    // Should not be allowed
-    let not_next_to_finalized = da_service
+    let not_next_to_da_finalized = da_service
         .get_block_at(last_finalized_header.height() + 2)
         .await?;
 
+    // Even though next_to_da_finalized is adjacent to DA's finalized header,
+    // it's not adjacent to last_processed_finalized_header (genesis),
+    // so reorg is detected and we get block at height 1
     let (_prover_storage, returned_block_1) = state_manager
-        .prepare_storage(next_to_finalized.clone(), &da_service)
+        .prepare_storage(next_to_da_finalized.clone(), &da_service)
         .await?;
 
-    assert_eq!(returned_block_1, next_to_finalized);
+    assert_eq!(returned_block_1, adjacent_to_genesis);
 
     let (_prover_storage, returned_block_2) = state_manager
-        .prepare_storage(not_next_to_finalized.clone(), &da_service)
+        .prepare_storage(not_next_to_da_finalized.clone(), &da_service)
         .await?;
 
-    assert_ne!(returned_block_2, not_next_to_finalized);
-    assert_eq!(returned_block_2, next_to_finalized);
+    assert_eq!(returned_block_2, adjacent_to_genesis);
 
     shutdown_sender.send(())?;
 
@@ -1054,14 +1061,15 @@ where
     Da: DaService<Error = anyhow::Error, Spec = MockDaSpec>,
 {
     let (state_root, mut storage_manager) = setup_storage_manager(storage_path).await?;
-    let genesis_header = MockBlockHeader::from_height(0);
+    let genesis_height = 0;
+    let genesis_header = MockBlockHeader::from_height(genesis_height);
     let (stf_state, ledger_state) = storage_manager.create_state_after(&genesis_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
     let (sync_status_sender, _rec) = tokio::sync::watch::channel(SyncStatus::START);
 
     let sync_state = Arc::new(DaSyncState {
-        synced_da_height: AtomicU64::new(0),
+        synced_da_height: AtomicU64::new(genesis_height),
         target_da_height: AtomicU64::new(u64::MAX),
         sync_status_sender,
     });
@@ -1089,6 +1097,8 @@ where
         sync_state,
         std::time::Duration::from_millis(3_600_000),
         da_header_provider,
+        genesis_height,
+        genesis_header,
     )?;
     state_manager.startup().await?;
 
@@ -1170,7 +1180,7 @@ async fn process_continuous_transition(
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     state_manager
-        .process_stf_changes(0, change_set, transition_witness, slot_commit, Vec::new())
+        .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
         .await?;
     check_internal_consistency(state_manager, finality as usize);
 
