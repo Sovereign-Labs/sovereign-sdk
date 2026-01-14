@@ -2042,7 +2042,7 @@ mod tests {
         }
 
         let actual_finalized = da_layer.get_last_finalized_block_header().await?.height();
-        assert!(actual_finalized > 0, "Should have finalized blocks");
+        assert_eq!(actual_finalized, 10, "Should have finalized blocks");
 
         // Enable RewindBelowLastFinalized with a seed that triggers the behavior
         // Using reorg_interval 1..2 means 100% trigger rate
