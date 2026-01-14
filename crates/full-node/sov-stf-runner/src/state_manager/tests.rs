@@ -411,23 +411,22 @@ async fn test_progressing_with_shuffle(
     let mut max_seen_height = 0;
     let mut non_finalized_batches = batches.saturating_sub(finality as usize);
     let mut last_finalized_header = da_service.get_last_finalized_block_header().await?;
-    let mut height = match last_finalized_header.height {
-        0 => 1,
-        h => h,
-    };
+    // Always start from height 1 (adjacent to genesis) since StateManager
+    // is initialized with last_processed_finalized_header at genesis (height 0)
+    let mut height = 1;
 
     let mut seen_transitions: HashMap<MockHash, StateRoot> = HashMap::new();
     let mut finalized_hashes: HashSet<MockHash> = HashSet::new();
-    for h in 0..=last_finalized_header.height() {
-        finalized_hashes.insert(da_service.get_block_at(h).await?.header().hash());
-    }
+    // Only genesis is finalized from StateManager's perspective at startup
+    finalized_hashes.insert(da_service.get_block_at(0).await?.header().hash());
 
     // This is a simplified version of `StfRunner
     //  - Track height, adjusts it based on StateManager results
     //  - Produce some changes based on a given block
     //  - Moves on the next height
     for i in 0..loop_blocks {
-        // Start with getting block
+        // Start with getting block - always start from height 1 (adjacent to genesis)
+        // since StateManager's last_processed_finalized_header is at genesis
         let filtered_block = da_service.get_block_at(height).await?;
 
         let (prover_storage, returned_block) = state_manager
