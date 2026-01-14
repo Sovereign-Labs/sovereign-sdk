@@ -3,9 +3,9 @@ use sov_rollup_interface::da::DaSpec;
 #[cfg(feature = "native")]
 use sov_rollup_interface::execution_mode::{Native, WitnessGeneration};
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier, Zkvm};
-use sov_state::DefaultStorageSpec;
 #[cfg(feature = "native")]
 use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 
 use crate::higher_kinded_types::{Generic, HigherKindedHelper};
 use crate::{Address, GasUnit, Spec};
