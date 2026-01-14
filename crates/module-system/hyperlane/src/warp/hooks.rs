@@ -16,9 +16,9 @@ impl<S: Spec> Warp<S> {
         let visible_slot = state.current_visible_slot_number();
 
         tracing::trace!(
+            slot = %visible_slot,
             route_count = route_ids.len(),
-            "Emitting rate limiter metrics at slot {}",
-            visible_slot
+            "Emitting rate limiter metrics at slot",
         );
 
         for route_id in route_ids {
