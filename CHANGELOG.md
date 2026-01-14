@@ -1,3 +1,70 @@
+# 2026-01-09
+- #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
+
+# 2026-01-08
+- #2312 Implements `eth_feeHistory` RPC endpoint to expose rollup's EIP-1559 base fee history for wallets.
+- #2319 Validates `max_fee_per_gas` against rollup's base fee during EVM transaction authentication, rejecting transactions with insufficient fees early.
+
+# 2026-01-02
+- #2292 **EVM Breaking Change, Chain Hash Change**. This PR Changes the borsh serialization of sov_evm::CallMessage by making it an enum. After upgrading, chains will not be able to deserialize transactions in the old format - so it will become impossible to sync from genesis if your chain pre-dates this change.
+# 2026-01-05
+- #2297 **Breaking change**: Removes the `separate_archival_state` flag. After this change, `livedb` and `archivaldb` are always stored in separate locations. Users should remove this flag from their configurations. If it was previously set to false, the node will need to be resynced from genesis.
+
+# 2025-12-31
+- #2281 Breaking change for DaService implementations: new method `DaService::get_approximate_block_time`
+
+# 2026-01-01
+- #2256 Enforce the EVM block gas limit and introduce the EVM tx gas limit in config.
+- #2279 Propagates fee information to ethereum block responses
+
+# 2025-12-22
+- #2265 Adds a config to the EVM to allow accepting invalid transactions.
+
+# 2025-12-17
+- #2250 Moves address resolution for rate limiting off the critical path
+
+# 2025-12-16
+- #2239 Updates the internals of the API state for improved performance. 
+
+# 2025-12-15
+- #2167 Updates the internals of the nonce queue. 
+- #2188 **DB Breaking change**: Adds sequencer-provided metadata (timestamps, etc.) to transaction context accessible via `context.sequencing_data()`. Database schema changed - requires state wipe or resync.
+
+# 2025-12-14 
+- #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+- #2232 **Not breaking, but important**: rollup_config.toml now will panic if there's an unknown field, preventing accidental misconfiguration.
+
+# 2025-12-09
+- #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
+- #2214 EVM related test utils are extracted into separate crate: `sov-evm-test-utils`. Please update if you use them.
+- #2219 Dependency tree shaking.
+- #2224 `alloy-sol-types` is behind `evm` feature in sov-modules-api. Add this feature if there's compilation errors.
+
+# 2025-12-08
+- #2197 **Breaking DB change**: Restructures the internals of the database for NOMT to eliminate most allocations. This gives a 10-40% performance boost depending on the workload. Updating to this version requires a wipe or a resync.
+
+# 2025-12-03
+ - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
+
+# 2025-11-25
+- #2124 Allows configuring EVM contracts to pin their storage in RAM.
+
+# 2025-11-24
+- #2135 Add hex-formatted subscription IDs for Ethereum compatibility (e.g., `0x0000000000000001`).
+- #2105 **DB Breaking change** changes the serialization of state keys on disk. Updating to this branch requires a wipe or a resync. Also adds support for pinning certain state items in RAM.
+- #2109 Configuration changes in `sov-celestia-adapter`. Default values for `request_timeout_secs` and `tx_priority` has changed.
+  **It is recommended to remove those values and use defaults** unless there's a reason.
+  Here is minimal functioning celestia config:
+  ```toml
+  [da]
+  rpc_url = "ws://127.0.0.1:26658"
+  grpc_url = "http://127.0.0.1:9090"
+  signer_private_key = "0000000000000000000000000000000000000000000000000000000000000000"
+  ```
+# 2025-11-22
+- #2102 Adds `ModuleExecutionConfig` associated type to the `Runtime` trait, allowing modules to customize their offchain environment.
+
 # 2025-11-17
 - ##2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
 # 2025-11-14
