@@ -69,6 +69,11 @@ impl StorableMockDaLayer {
         tokio::spawn(async move { while rx.recv().await.is_ok() {} });
 
         let (sender, _receiver) = watch::channel(last_seen_block);
+        tracing::debug!(
+            last_finalized_height,
+            blocks_to_finality,
+            "Initializing `StorableMockDaLayer`"
+        );
 
         Ok(StorableMockDaLayer {
             conn,
@@ -230,11 +235,14 @@ impl StorableMockDaLayer {
     }
 
     async fn get_header_at(&self, height: u32) -> anyhow::Result<MockBlockHeader> {
-        if height < 1 {
+        if height == 0 {
             return Ok(GENESIS_HEADER);
         }
         if height >= self.next_height {
-            anyhow::bail!("Block at height {} has not been produced yet", height);
+            anyhow::bail!(
+                "Cannot get header, block at height {height} has not been produced yet (next block is going to be {}",
+                self.next_height
+            );
         }
         let header = BlockHeaders::find()
             .filter(block_headers::Column::Height.eq(height))
@@ -362,18 +370,15 @@ impl StorableMockDaLayer {
     }
 
     pub(crate) async fn get_block_header_at(&self, height: u32) -> anyhow::Result<MockBlockHeader> {
-        if height >= self.next_height {
-            anyhow::bail!("Block at height {} has not been produced yet", height);
-        }
-        if height == 0 {
-            return Ok(GENESIS_HEADER);
-        }
         self.get_header_at(height).await
     }
 
     pub(crate) async fn get_block_at(&self, height: u32) -> anyhow::Result<MockBlock> {
         if height >= self.next_height {
-            anyhow::bail!("Block at height {} has not been produced yet", height);
+            anyhow::bail!(
+                "Cannot get full block at height {height} has not been produced yet, next block is {}",
+                self.next_height
+            );
         }
         if height == 0 {
             return Ok(GENESIS_BLOCK);
@@ -1049,14 +1054,7 @@ mod tests {
         let response = da_layer.get_block_at(1).await;
         assert!(response.is_err());
         assert_eq!(
-            "Block at height 1 has not been produced yet",
-            response.unwrap_err().to_string()
-        );
-
-        let response = da_layer.get_header_at(1).await;
-        assert!(response.is_err());
-        assert_eq!(
-            "Block at height 1 has not been produced yet",
+            "Cannot get full block at height 1 has not been produced yet, next block is 1",
             response.unwrap_err().to_string()
         );
 

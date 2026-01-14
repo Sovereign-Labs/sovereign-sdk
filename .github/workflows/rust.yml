@@ -46,11 +46,6 @@ on:
     types: ["checks_requested"]
   push:
     branches: ["nightly", "stable", "dev"]
-    paths-ignore: &ignore-paths
-      - "typescript/**"
-      - "python/**"
-  pull_request:
-    paths-ignore: *ignore-paths
   workflow_dispatch: {}
 
 env:

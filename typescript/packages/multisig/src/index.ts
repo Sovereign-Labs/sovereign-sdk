@@ -200,6 +200,30 @@ export class MultisigTransaction {
   }
 
   /**
+   * Gets the signatures and public keys collected so far.
+   * @returns A readonly view of the signatures and public keys
+   */
+  get signaturesAndPubKeys(): Readonly<SignatureAndPubKey[]> {
+    return this.signatures;
+  }
+
+  /**
+   * Gets the remaining public keys that haven't signed yet.
+   * @returns A readonly view of the remaining public keys
+   */
+  get remainingPubKeys(): Readonly<Set<HexString>> {
+    return this.unusedPubKeys;
+  }
+
+  /**
+   * Gets the threshold number of signatures required for the multisig to be complete.
+   * @returns The threshold number of signatures
+   */
+  get threshold(): number {
+    return this.minSigners;
+  }
+
+  /**
    * Converts the multisig to a V1 transaction that can be submitted to the network.
    * @returns A V1 transaction containing all collected signatures and unused public keys
    */

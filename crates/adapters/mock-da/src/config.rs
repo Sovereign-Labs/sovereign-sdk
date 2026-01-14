@@ -20,8 +20,12 @@ pub(crate) const SENSIBLE_BLOCK_PULL_TIME: std::time::Duration =
     std::time::Duration::from_millis(200);
 
 pub(crate) const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
-    prev_hash: MockHash([0; 32]),
-    hash: MockHash([1; 32]),
+    prev_hash: MockHash([255; 32]),
+    // Unify with how MockBlockHeader::new or ::from_height are called
+    hash: MockHash([
+        0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ]),
     height: 0,
     // 2023-01-01T00:00:00Z
     time: Time::from_millis(1672531200000),
