@@ -38,8 +38,13 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    fn _fee_multiplayer<Accessor: StateReader<User>>(&mut self, state: &mut Accessor) {
-        let env = self.block_env.get(state);
+    fn fee_multiplayer<Accessor: StateReader<User>>(&mut self, state: &mut Accessor) -> u64 {
+        let env = self.block_env.get(state).unwrap().unwrap();
+        if env.number < 100 {
+            return 100;
+        } else {
+            1
+        }
     }
 }
 
