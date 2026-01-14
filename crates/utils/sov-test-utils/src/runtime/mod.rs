@@ -52,7 +52,7 @@ pub use {
     sov_value_setter,
 };
 
-use crate::storage::{ForklessStorageManager, SimpleStorageManager};
+use crate::storage::{ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager};
 use crate::{
     generate_optimistic_runtime, validate_and_materialize, Arc, BatchAssertContext, BatchReceipt,
     BatchTestCase, BatchType, ProofAssertContext, ProofTestCase, SequencerInfo, SlotInput,
@@ -165,7 +165,7 @@ pub struct RunnerConfig<Da: DaSpec> {
 pub struct TestRunner<
     RT: Runtime<S>,
     S: Spec,
-    Sm: ForklessStorageManager = SimpleStorageManager<
+    Sm: ForklessStorageManager = SimpleNomtStorageManager<
         DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
     >,
 > {

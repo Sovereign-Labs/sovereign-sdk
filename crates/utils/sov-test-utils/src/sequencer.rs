@@ -10,6 +10,7 @@ use crate::{
     TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
 };
 use sov_api_spec::Client;
+use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::SchemaBatch;
 use sov_db::storage_manager::NomtStorageManager;
@@ -210,10 +211,12 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         sequencer_config: StdSequencerConfig,
         register_admin: bool,
     ) -> anyhow::Result<Self> {
+        let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
         let storage_manager = NomtStorageManager::<
             MockDaSpec,
+            TestHasher,
             NomtProverStorage<DefaultStorageSpec<TestHasher>, TestSlotHash>,
-        >::new(dir.path())?;
+        >::new(config)?;
 
         Self::with_storage_manager(
             dir,

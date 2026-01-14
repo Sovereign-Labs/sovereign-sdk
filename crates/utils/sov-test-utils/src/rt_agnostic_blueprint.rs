@@ -34,7 +34,10 @@ pub struct RtAgnosticBlueprint<
     Manager = NomtStorageManager<
         MockDaSpec,
         <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher,
-        ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
+        NomtProverStorage<
+            DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
+        >,
     >,
 > {
     phantom: PhantomData<(S, R, Manager)>,

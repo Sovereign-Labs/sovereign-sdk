@@ -336,3 +336,21 @@ pub fn validate_and_materialize<ST: Storage>(
     let change_set = storage.materialize_changes(node_batch);
     Ok((root_hash, change_set))
 }
+
+// Type bound assertions to verify TestSpec implementation
+#[cfg(test)]
+mod spec_tests {
+    use super::*;
+    use crate::runtime::TestOptimisticRuntime;
+
+    // Test 1: TestSpec satisfies Spec
+    fn _test_spec_bound() where TestSpec: sov_modules_api::Spec {}
+
+    // Test 2: TestOptimisticRuntime<TestSpec> is a valid type
+    fn _test_runtime_type() {
+        let _: TestOptimisticRuntime<TestSpec>;
+    }
+
+    // Test 3: TestOptimisticRuntime<TestSpec> satisfies Runtime<TestSpec>
+    fn _test_runtime_bound() where TestOptimisticRuntime<TestSpec>: sov_modules_stf_blueprint::Runtime<TestSpec> {}
+}
