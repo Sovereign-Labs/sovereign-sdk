@@ -3,7 +3,13 @@ import TransportNodeHid from "@ledgerhq/hw-transport-node-hid";
 import { LedgerSolanaSignerBase } from "./common";
 
 async function loadNodeTransport(): Promise<Transport> {
-  return TransportNodeHid.create();
+  try {
+    return await TransportNodeHid.create();
+  } catch (error) {
+    throw new Error(
+      `Failed to connect via Node HID transport. Make sure your Ledger is connected. Error: ${error}`,
+    );
+  }
 }
 
 export class LedgerSolanaSigner extends LedgerSolanaSignerBase {

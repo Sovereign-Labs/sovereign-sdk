@@ -4,7 +4,7 @@
  * Prerequisites:
  * 1. Connect your Ledger device via USB
  * 2. Unlock it and open the Solana app
- * 3. Run: pnpm tsx src/ledger/node.test.manual.ts
+ * 3. Run: pnpm tsx src/ledger-solana/node.test.manual.ts
  *
  */
 
