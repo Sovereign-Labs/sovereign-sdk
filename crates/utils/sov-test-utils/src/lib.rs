@@ -15,13 +15,12 @@ pub use sov_mock_da::verifier::MockDaSpec;
 use sov_mock_da::BlockProducingConfig;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::default_spec::DefaultSpec;
+use sov_modules_api::default_spec::{DefaultNomtSpec, DefaultSpec};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{
     PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
-use sov_modules_api::{Address, Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
+use sov_modules_api::{Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
 pub use sov_modules_api::{EncodeCall, TxProcessingError, TxReceiptContents};
 pub use sov_modules_rollup_blueprint::logging::initialize_logging;
 pub use sov_modules_stf_blueprint::get_gas_used;
@@ -82,15 +81,7 @@ pub type TestJmtSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 pub type TestSlotHash = <MockDaSpec as DaSpec>::SlotHash;
 /// The default test spec for NOMT. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestSpec = ConfigurableSpec<
-    MockDaSpec,
-    MockZkvm,
-    MockZkvm,
-    Address,
-    Native,
-    MockZkvmCryptoSpec,
-    NomtProverStorage<TestStorageSpec, TestSlotHash>,
->;
+pub type TestSpec = DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// The default test spec for ZK. Uses a [`MockZkvm`] for both inner and outer vm verification.
 pub type ZkTestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Zk>;
 /// The default address type. This is the [`sov_modules_api::BasicAddress`] type defined by the [`TestSpec`].
@@ -335,22 +326,4 @@ pub fn validate_and_materialize<ST: Storage>(
 
     let change_set = storage.materialize_changes(node_batch);
     Ok((root_hash, change_set))
-}
-
-// Type bound assertions to verify TestSpec implementation
-#[cfg(test)]
-mod spec_tests {
-    use super::*;
-    use crate::runtime::TestOptimisticRuntime;
-
-    // Test 1: TestSpec satisfies Spec
-    fn _test_spec_bound() where TestSpec: sov_modules_api::Spec {}
-
-    // Test 2: TestOptimisticRuntime<TestSpec> is a valid type
-    fn _test_runtime_type() {
-        let _: TestOptimisticRuntime<TestSpec>;
-    }
-
-    // Test 3: TestOptimisticRuntime<TestSpec> satisfies Runtime<TestSpec>
-    fn _test_runtime_bound() where TestOptimisticRuntime<TestSpec>: sov_modules_stf_blueprint::Runtime<TestSpec> {}
 }

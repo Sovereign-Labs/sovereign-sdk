@@ -52,7 +52,7 @@ pub use {
     sov_value_setter,
 };
 
-use crate::storage::{ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager};
+use crate::storage::{ForklessStorageManager, SimpleNomtStorageManager};
 use crate::{
     generate_optimistic_runtime, validate_and_materialize, Arc, BatchAssertContext, BatchReceipt,
     BatchTestCase, BatchType, ProofAssertContext, ProofTestCase, SequencerInfo, SlotInput,
