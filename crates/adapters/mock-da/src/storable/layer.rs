@@ -309,7 +309,12 @@ impl StorableMockDaLayer {
 
     /// Get head block header saved in the database.
     pub async fn get_head_block_header(&self) -> anyhow::Result<MockBlockHeader> {
-        if let Some(height) = self.compute_below_finalized_height() {
+        if let Some(head_height) = self.compute_below_finalized_height(b"head") {
+            // Ensure head is never below what get_last_finalized_block_header would return
+            let finalized_height = self
+                .compute_below_finalized_height(b"finalized")
+                .unwrap_or(self.last_finalized_height);
+            let height = head_height.max(finalized_height);
             return self.get_header_at(height).await;
         }
         self.get_header_at(self.next_height.saturating_sub(1)).await
@@ -321,7 +326,7 @@ impl StorableMockDaLayer {
     }
 
     pub(crate) async fn get_last_finalized_block_header(&self) -> anyhow::Result<MockBlockHeader> {
-        if let Some(height) = self.compute_below_finalized_height() {
+        if let Some(height) = self.compute_below_finalized_height(b"finalized") {
             return self.get_header_at(height).await;
         }
         self.get_header_at(self.last_finalized_height).await
@@ -329,7 +334,8 @@ impl StorableMockDaLayer {
 
     /// Computes a deterministic "below finalized" height when `RewindBelowLastFinalized` is active.
     /// Returns `Some(height)` if the randomization should trigger, `None` otherwise.
-    fn compute_below_finalized_height(&self) -> Option<u32> {
+    /// The `discriminator` parameter ensures different callers get different random values.
+    fn compute_below_finalized_height(&self, discriminator: &[u8]) -> Option<u32> {
         let randomizer = self.randomizer.as_ref()?;
         let max_depth = match &randomizer.behaviour {
             RandomizationBehaviour::RewindBelowLastFinalized { max_depth } => *max_depth,
@@ -341,10 +347,11 @@ impl StorableMockDaLayer {
             return None;
         }
 
-        // Derive decision deterministically from seed + current height
+        // Derive decision deterministically from seed + current height + discriminator
         let mut hasher = sha2::Sha256::new();
         hasher.update(randomizer.rng.get_seed());
         hasher.update(self.next_height.to_le_bytes());
+        hasher.update(discriminator);
         let hash: [u8; 32] = hasher.finalize().into();
 
         // Use first bytes to decide if we should return stale header (based on reorg_interval)
@@ -2055,27 +2062,34 @@ mod tests {
         let reported_head = da_layer.get_head_block_header().await?;
         let reported_finalized = da_layer.get_last_finalized_block_header().await?;
 
-        // Both should report the same height (deterministic based on seed + next_height)
-        assert_eq!(
+        // Head should never be below finalized
+        assert!(
+            reported_head.height() >= reported_finalized.height(),
+            "Head {} should be >= finalized {}",
             reported_head.height(),
-            reported_finalized.height(),
-            "Both methods should return the same stale height"
+            reported_finalized.height()
         );
 
-        // Reported height should be at or below actual finalized
+        // Both should be at or below actual finalized height
         assert!(
             reported_head.height() <= actual_finalized,
-            "Reported height {} should be <= finalized {}",
+            "Reported head {} should be <= actual finalized {}",
             reported_head.height(),
             actual_finalized
         );
+        assert!(
+            reported_finalized.height() <= actual_finalized,
+            "Reported finalized {} should be <= actual finalized {}",
+            reported_finalized.height(),
+            actual_finalized
+        );
 
-        // Reported height should respect max_depth
+        // Both should respect max_depth
         let min_allowed = actual_finalized.saturating_sub(max_depth as u64);
         assert!(
-            reported_head.height() >= min_allowed,
-            "Reported height {} should be >= min_allowed {} (finalized {} - max_depth {})",
-            reported_head.height(),
+            reported_finalized.height() >= min_allowed,
+            "Reported finalized {} should be >= min_allowed {} (finalized {} - max_depth {})",
+            reported_finalized.height(),
             min_allowed,
             actual_finalized,
             max_depth

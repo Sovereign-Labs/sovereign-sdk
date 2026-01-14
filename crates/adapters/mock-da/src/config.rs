@@ -103,7 +103,7 @@ pub enum RandomizationBehaviour {
     /// Notes:
     /// - Does not affect actual block production or chain state.
     /// - Triggered based on `reorg_interval` configuration.
-    /// - When triggered, both methods return the same randomly chosen height.
+    /// - Each method returns independently randomized heights, but head >= finalized is guaranteed.
     RewindBelowLastFinalized {
         /// Maximum number of blocks below finalized height to report.
         /// Random height is chosen between `max(0, finalized - max_depth)` and `finalized`.
