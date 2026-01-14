@@ -3,11 +3,10 @@ use std::convert::Infallible;
 use crate::state_tests::*;
 use capabilities::mocks::MockKernel;
 use sov_modules_api::*;
-use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::{ArrayWitness, BorshCodec, Prefix, StateAccesses, Storage};
 use sov_test_utils::storage::SimpleNomtStorageManager;
-use sov_test_utils::TestSlotHash;
+use sov_test_utils::TestStorage;
 use unwrap_infallible::UnwrapInfallible;
 
 pub trait StateThing {
@@ -181,12 +180,7 @@ const CONDITIONS: [Condition; 8] = [
 ];
 
 /// Creates thing and checks it with all condition combinations
-pub fn test_state_thing<
-    S: Spec<Storage = NomtProverStorage<StorageSpec, TestSlotHash>>,
-    St: StateThing,
->(
-    conditions: &[Condition],
-) {
+pub fn test_state_thing<S: Spec<Storage = TestStorage>, St: StateThing>(conditions: &[Condition]) {
     let simple_storage_manager = SimpleNomtStorageManager::new();
     let storage = simple_storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage, &MockKernel::<S>::default(), None);

@@ -3,19 +3,13 @@ use crate::utils::tempdir_inside_codebase_dir;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
-use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::BlockProducingConfig;
-use sov_mock_da::MockHash;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_modules_api::CryptoSpec;
 use sov_modules_api::RawTx;
-use sov_modules_api::Spec;
 use sov_modules_api::{DispatchCall, HexHash, HexString};
 use sov_modules_stf_blueprint::Runtime;
 use sov_sequencer::SequencerKindConfig;
-use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::pinned_cache::PinnedCache;
-use sov_state::DefaultStorageSpec;
 use sov_test_modules::pinned_cache::CallMessage as PinnedCacheCallMessage;
 use sov_test_modules::pinned_cache::PinnedCacheTester;
 use sov_test_modules::pinned_cache::ValueRange;
@@ -26,25 +20,14 @@ use sov_test_utils::test_rollup::GenesisSource;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::TestRollup;
-use sov_test_utils::MockDaSpec;
 use sov_test_utils::RtAgnosticBlueprint;
 use sov_test_utils::TestSpec;
+use sov_test_utils::TestStorageManager;
 use sov_test_utils::TestUser;
 use sov_test_utils::{default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS};
 use tokio_stream::StreamExt;
 
-type TestNomtBlueprint = RtAgnosticBlueprint<
-    TestSpec,
-    TestRuntime<TestSpec>,
-    NomtStorageManager<
-        MockDaSpec,
-        <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
-        NomtProverStorage<
-            DefaultStorageSpec<<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
-            MockHash,
-        >,
-    >,
->;
+type TestNomtBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>, TestStorageManager>;
 
 const PINNED_ADDRESS: HexHash = HexString([1u8; 32]);
 
