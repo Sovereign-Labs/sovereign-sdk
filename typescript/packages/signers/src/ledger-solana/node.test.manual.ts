@@ -4,13 +4,12 @@
  * Prerequisites:
  * 1. Connect your Ledger device via USB
  * 2. Unlock it and open the Solana app
- * 3. Run: pnpm tsx src/ledger.test.manual.ts
+ * 3. Run: pnpm tsx src/ledger/node.test.manual.ts
  *
  */
 
 import bs58 from "bs58";
-import { Ed25519Signer } from "./ed25519";
-import { LedgerSolanaSigner } from "./ledger-solana";
+import { LedgerSolanaSigner } from "./node";
 
 // Solana preamble creation (copied from web3 package to avoid circular dependency)
 function createSolanaPreamble(

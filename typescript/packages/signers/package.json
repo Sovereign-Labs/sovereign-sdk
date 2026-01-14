@@ -21,6 +21,16 @@
       "types": "./dist/wasm.d.ts",
       "require": "./dist/wasm.js",
       "import": "./dist/wasm.mjs"
+    },
+    "./ledger-solana/browser": {
+      "types": "./dist/ledger-solana/browser.d.ts",
+      "require": "./dist/ledger-solana/browser.js",
+      "import": "./dist/ledger-solana/browser.mjs"
+    },
+    "./ledger-solana/node": {
+      "types": "./dist/ledger-solana/node.d.ts",
+      "require": "./dist/ledger-solana/node.js",
+      "import": "./dist/ledger-solana/node.mjs"
     }
   },
   "main": "./dist/index.js",
