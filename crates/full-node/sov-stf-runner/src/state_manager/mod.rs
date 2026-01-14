@@ -674,7 +674,7 @@ where
         assert_eq!(
             last_processed_finalized_height
                 .checked_add(1)
-                .expect("End of chain"),
+                .expect("Slot number overflow: this should be unreachable"),
             low
         );
 
