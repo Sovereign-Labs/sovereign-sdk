@@ -33,7 +33,7 @@ fn test_max_fee_check_height_is_respected() {
         "Transaction should pass before height threshold",
     );
 
-    runner.advance_slots(3);
+    runner.advance_slots(2);
 
     // Block 5: Transaction with low fee should FAIL.
     // Note: We don't increment nonce because this transaction will fail/be skipped

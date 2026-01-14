@@ -123,10 +123,7 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<bool, Accessor::Error> {
-        Ok(self
-            .disable_max_fee_check
-            .get(state)?
-            .expect("disable_max_fee_check should be set in genesis"))
+        Ok(self.disable_max_fee_check.get(state)?.unwrap_or(false))
     }
 }
 

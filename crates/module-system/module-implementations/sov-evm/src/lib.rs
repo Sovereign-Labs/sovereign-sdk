@@ -119,11 +119,6 @@ pub struct Evm<S: Spec> {
     #[state]
     pub(crate) head: StateValue<Block, BcsCodec>,
 
-    /// When true, the max fee check in the authenticator is disabled.
-    /// This is set to true when an EvmRuntimeConfigUpdate with all fields None is received.
-    #[state]
-    pub(crate) disable_max_fee_check: StateValue<bool, BcsCodec>,
-
     /// Used only by the RPC. This represents the head of the chain and is set in two distinct stages:
     ///  1. `end_rollup_block_hook`: the pending head is populated with data from pending_transactions.
     ///  2. `finalize_hook` the `root_hash` is populated.
@@ -171,6 +166,11 @@ pub struct Evm<S: Spec> {
 
     #[phantom]
     phantom: core::marker::PhantomData<S>,
+
+    /// When true, the max fee check in the authenticator is disabled.
+    /// This is set to true when an EvmRuntimeConfigUpdate with all fields None is received.
+    #[state]
+    pub(crate) disable_max_fee_check: StateValue<bool, BcsCodec>,
 }
 
 /// The top-level error type for all EVM module operations.
