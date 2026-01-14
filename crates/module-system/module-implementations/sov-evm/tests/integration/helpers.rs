@@ -73,6 +73,7 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
         admin: MultiAddress::from_vm_address(
             EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
         ),
+        enabled_precompiles: vec![],
     };
 
     evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
