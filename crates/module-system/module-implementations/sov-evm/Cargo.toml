@@ -65,6 +65,7 @@ revm = { workspace = true, features = [
 	"optional_balance_check",
 	"memory_limit",
 	"std",
+	"blst",
 ] }
 revm-database-interface = { workspace = true }
 reth-ethereum-primitives = { workspace = true, features = [
