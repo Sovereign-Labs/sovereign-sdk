@@ -112,17 +112,15 @@ async fn test_runner_with_background_da_service(
         None,
         da_sync_state,
         da_service_with_cache,
+        genesis_da_height,
     )
     .await?;
 
     let runner_task = tokio::spawn(async move {
-        runner
-            .run_in_process(genesis_da_height)
-            .await
-            .map_err(|error| {
-                tracing::warn!(?error, "Runner return execution with error");
-                error
-            })
+        runner.run_in_process().await.map_err(|error| {
+            tracing::warn!(?error, "Runner return execution with error");
+            error
+        })
     });
 
     let mut synced_da_height = 0;
@@ -273,7 +271,7 @@ async fn check_runner(
     let (mut runner, test_node) =
         initialize_runner(da_service, tmpdir.path(), init_variant, 1, None).await;
     let before = *runner.get_state_root();
-    let end = runner.run_in_process(0).await;
+    let end = runner.run_in_process().await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
     let after = *runner.get_state_root();
