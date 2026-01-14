@@ -24,9 +24,10 @@ use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 #[cfg(feature = "native")]
 use crate::execution_config::EVM_EXECUTION_CONFIG;
-use crate::executor::{get_cfg_env, transact};
+use crate::executor::{get_cfg_env, transact_with_precompiles};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
+use crate::sov_evm::SovPrecompiles;
 use crate::{
     gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
     ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
@@ -244,6 +245,13 @@ where
             self.fetch_state(context, state, tx)?;
 
         save_elapsed!(fetch_state_time SINCE fetch_state);
+
+        // Load enabled precompiles from state
+        let enabled_precompiles = self.get_enabled_precompiles(state)?;
+
+        // Create precompile provider with sovereign state access
+        let precompiles = SovPrecompiles::new(enabled_precompiles, &self.bank_module);
+
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
 
@@ -251,7 +259,7 @@ where
         let ExecResultAndState {
             result,
             state: state_changes,
-        } = match transact(&mut db, &block, tx_env, cfg_env) {
+        } = match transact_with_precompiles(&mut db, &block, tx_env, cfg_env, precompiles) {
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };

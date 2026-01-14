@@ -43,20 +43,6 @@ pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) bank_module: sov_bank::Bank<S>,
 }
 
-impl<'a, Ws: TxState<S>, S: Spec> EvmDb<'a, Ws, S> {
-    /// Get mutable access to the underlying TxState.
-    ///
-    /// Used by stateful precompiles to read/write sovereign state during execution.
-    pub fn state_mut(&mut self) -> &mut Ws {
-        self.state
-    }
-
-    /// Get immutable access to the underlying TxState.
-    pub fn state_ref(&self) -> &Ws {
-        self.state
-    }
-}
-
 impl<'a, Ws: TxState<S>, S: Spec> Database for EvmDb<'a, Ws, S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
@@ -137,6 +123,14 @@ where
             .map_err(Error::State)?
             .ok_or(Error::BlockHashNotFound(number))?;
         Ok(block_hash)
+    }
+}
+
+impl<'a, Ws: TxState<S>, S: Spec> crate::sov_evm::PrecompileDb<S> for EvmDb<'a, Ws, S> {
+    type State = Ws;
+
+    fn precompile_state_mut(&mut self) -> &mut Self::State {
+        self.state
     }
 }
 

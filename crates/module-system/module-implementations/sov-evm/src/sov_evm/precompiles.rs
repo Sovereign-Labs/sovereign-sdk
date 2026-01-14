@@ -24,13 +24,36 @@
 //! 3. Add a match arm in `invoke_precompile` that calls your implementation
 //! 4. Implement the precompile logic (can access TxState)
 
-use alloy_primitives::{Address, Bytes};
+use alloy_primitives::{Address, Bytes, U256};
 use revm::context_interface::ContextTr;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
 use revm::primitives::hardfork::SpecId;
-use sov_modules_api::{Context, Spec, TxState};
+use sov_address::{EthereumAddress, FromVmAddress};
+use sov_bank::{config_gas_token_id, TokenId};
+use sov_modules_api::{Spec, TxState};
 use std::collections::HashSet;
+
+/// Trait for databases that support stateful precompile execution.
+///
+/// This trait allows precompiles to access sovereign SDK state through the
+/// EVM context's database. Implemented by `EvmDb`.
+pub trait PrecompileDb<S: Spec> {
+    /// The state type that provides access to sovereign SDK state.
+    type State: TxState<S>;
+
+    /// Get mutable access to the underlying state for precompile execution.
+    fn precompile_state_mut(&mut self) -> &mut Self::State;
+}
+
+/// Blanket implementation for mutable references to databases that implement PrecompileDb.
+impl<S: Spec, T: PrecompileDb<S>> PrecompileDb<S> for &mut T {
+    type State = T::State;
+
+    fn precompile_state_mut(&mut self) -> &mut Self::State {
+        (*self).precompile_state_mut()
+    }
+}
 
 /// Result type for stateful precompile execution.
 pub type PrecompileResult = Result<PrecompileOutput, PrecompileError>;
@@ -66,6 +89,16 @@ pub const IDENTITY_PRECOMPILE_ADDRESS: Address = Address::new([
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00,
 ]);
 
+/// Bank balance precompile address (0x0101).
+///
+/// Returns the bank balance for a given address and token.
+/// Input: 20-byte address + optional 32-byte token ID (defaults to gas token)
+/// Output: 32-byte U256 balance
+/// Gas cost: 100 (fixed cost for state read)
+pub const BANK_BALANCE_PRECOMPILE_ADDRESS: Address = Address::new([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01,
+]);
+
 /// Check if an address has a known precompile implementation in code.
 ///
 /// Precompiles are only callable if they are both:
@@ -76,10 +109,7 @@ pub const IDENTITY_PRECOMPILE_ADDRESS: Address = Address::new([
 pub fn is_known_precompile(address: &Address) -> bool {
     matches!(
         *address,
-        IDENTITY_PRECOMPILE_ADDRESS
-        // Add new precompile addresses here:
-        // | BRIDGE_PRECOMPILE_ADDRESS
-        // | CROSS_MODULE_CALL_ADDRESS
+        IDENTITY_PRECOMPILE_ADDRESS | BANK_BALANCE_PRECOMPILE_ADDRESS
     )
 }
 
@@ -87,35 +117,50 @@ pub fn is_known_precompile(address: &Address) -> bool {
 /// and custom stateful sovereign precompiles.
 ///
 /// This struct is created fresh for each transaction execution and holds
-/// references to the enabled precompile addresses and sovereign context.
-/// Stateful precompiles are invoked via the `invoke_precompile` method which
-/// receives direct access to `TxState`.
-#[derive(Debug)]
+/// references to the enabled precompile addresses and bank module.
+/// Stateful precompiles are invoked via the `run` method which
+/// accesses `TxState` through the context's database.
 #[allow(dead_code)]
 pub struct SovPrecompiles<'a, S: Spec> {
     /// Standard Ethereum precompiles.
     eth_precompiles: EthPrecompiles,
     /// Set of enabled custom precompile addresses (loaded from state).
     enabled_addresses: HashSet<Address>,
-    /// Sovereign context for sender info, execution context, etc.
-    sov_context: &'a Context<S>,
+    /// Bank module for balance queries.
+    bank_module: &'a sov_bank::Bank<S>,
     /// Current EVM specification.
     spec: SpecId,
 }
 
-impl<'a, S: Spec> SovPrecompiles<'a, S> {
+impl<S: Spec> std::fmt::Debug for SovPrecompiles<'_, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SovPrecompiles")
+            .field("eth_precompiles", &self.eth_precompiles)
+            .field("enabled_addresses", &self.enabled_addresses)
+            .field("spec", &self.spec)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, S: Spec> SovPrecompiles<'a, S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
     /// Create a new SovPrecompiles instance.
     ///
     /// # Arguments
     ///
     /// * `enabled_addresses` - Set of addresses where custom precompiles are enabled
-    /// * `sov_context` - Sovereign SDK context for the current transaction
+    /// * `bank_module` - Reference to the bank module for balance queries
     #[allow(dead_code)]
-    pub fn new(enabled_addresses: HashSet<Address>, sov_context: &'a Context<S>) -> Self {
+    pub fn new(
+        enabled_addresses: HashSet<Address>,
+        bank_module: &'a sov_bank::Bank<S>,
+    ) -> Self {
         Self {
             eth_precompiles: EthPrecompiles::default(),
             enabled_addresses,
-            sov_context,
+            bank_module,
             spec: SpecId::CANCUN,
         }
     }
@@ -131,7 +176,7 @@ impl<'a, S: Spec> SovPrecompiles<'a, S> {
     /// * `address` - The precompile address being called
     /// * `input` - The input bytes to the precompile
     /// * `gas_limit` - Maximum gas available for this call
-    /// * `_state` - Mutable reference to the sovereign TxState (for stateful precompiles)
+    /// * `state` - Mutable reference to the sovereign TxState (for stateful precompiles)
     ///
     /// # Returns
     ///
@@ -143,15 +188,14 @@ impl<'a, S: Spec> SovPrecompiles<'a, S> {
         address: &Address,
         input: &Bytes,
         gas_limit: u64,
-        _state: &mut Ws,
+        state: &mut Ws,
     ) -> Option<PrecompileResult> {
         // Match on the address to dispatch to the appropriate precompile.
-        // Each match arm can access `_state` for stateful operations.
         match *address {
             IDENTITY_PRECOMPILE_ADDRESS => Some(identity_precompile(input, gas_limit)),
-            // Future precompiles can be added here:
-            // BRIDGE_PRECOMPILE_ADDRESS => Some(bridge_precompile(input, gas_limit, _state)),
-            // CROSS_MODULE_CALL_ADDRESS => Some(cross_module_call(input, gas_limit, _state, self.sov_context)),
+            BANK_BALANCE_PRECOMPILE_ADDRESS => {
+                Some(bank_balance_precompile::<S, Ws>(input, gas_limit, self.bank_module, state))
+            }
             _ => None,
         }
     }
@@ -166,7 +210,9 @@ impl<'a, S: Spec> SovPrecompiles<'a, S> {
 impl<'a, S, CTX> PrecompileProvider<CTX> for SovPrecompiles<'a, S>
 where
     S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
     CTX: ContextTr,
+    CTX::Db: PrecompileDb<S>,
 {
     type Output = InterpreterResult;
 
@@ -182,26 +228,28 @@ where
         let address = &inputs.target_address;
         let gas_limit = inputs.gas_limit;
 
-        // Check if this is an enabled custom precompile
+        // Check if this is an enabled custom precompile.
+        // Note: enabled_addresses only contains addresses that passed is_known_precompile
+        // check during enable_precompile/enable_precompile_genesis, so we don't need
+        // to check is_known_precompile again here.
         if self.enabled_addresses.contains(address) {
-            // Check if implementation exists in code
-            if is_known_precompile(address) {
-                // For now, we call precompiles without state access from the PrecompileProvider.
-                // Full stateful precompile support requires calling invoke_precompile from
-                // the executor with TxState access. This path handles the basic case.
-                //
-                // TODO: When integrating with executor, pass TxState through context's DB
-                // and use invoke_precompile for full stateful access.
-                let input_bytes = inputs.input.bytes(ctx);
-                match *address {
-                    IDENTITY_PRECOMPILE_ADDRESS => {
-                        let result = identity_precompile(&input_bytes, gas_limit);
-                        return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
-                    }
-                    _ => {
-                        // Unknown precompile - should not happen if is_known_precompile is correct
-                        return Err(format!("Precompile at {} not implemented", address));
-                    }
+            let input_bytes = inputs.input.bytes(ctx);
+            match *address {
+                IDENTITY_PRECOMPILE_ADDRESS => {
+                    let result = identity_precompile(&input_bytes, gas_limit);
+                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+                }
+                BANK_BALANCE_PRECOMPILE_ADDRESS => {
+                    // Access state through the context's database
+                    let state = ctx.db_mut().precompile_state_mut();
+                    let result =
+                        bank_balance_precompile::<S, _>(&input_bytes, gas_limit, self.bank_module, state);
+                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+                }
+                _ => {
+                    // Unknown precompile - should not happen since enabled_addresses
+                    // only contains known precompiles
+                    return Err(format!("Precompile at {} not implemented", address));
                 }
             }
         }
@@ -262,6 +310,9 @@ fn convert_to_interpreter_result(
 const IDENTITY_BASE_GAS: u64 = 15;
 const IDENTITY_PER_WORD_GAS: u64 = 3;
 
+/// Gas cost for the bank balance precompile (fixed cost for state read).
+const BANK_BALANCE_GAS: u64 = 100;
+
 /// Identity precompile - returns input unchanged.
 ///
 /// This is a simple test precompile that demonstrates the stateful precompile
@@ -293,6 +344,81 @@ fn identity_precompile(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     })
 }
 
+/// Bank balance precompile - returns the balance of an address for a token.
+///
+/// Input format:
+/// - Bytes 0-19: 20-byte Ethereum address to query
+/// - Bytes 20-51 (optional): 32-byte token ID (defaults to gas token if not provided)
+///
+/// Output: 32-byte U256 balance (big-endian)
+///
+/// Gas cost: 100 (fixed cost for state read)
+///
+/// # Arguments
+///
+/// * `input` - The input bytes containing address and optional token ID
+/// * `gas_limit` - Maximum gas available for this call
+/// * `bank_module` - Reference to the bank module for balance queries
+/// * `state` - Mutable reference to the sovereign TxState
+///
+/// # Returns
+///
+/// `PrecompileResult` containing the balance as 32-byte U256, or an error.
+fn bank_balance_precompile<S: Spec, Ws: TxState<S>>(
+    input: &Bytes,
+    gas_limit: u64,
+    bank_module: &sov_bank::Bank<S>,
+    state: &mut Ws,
+) -> PrecompileResult
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    // Check gas limit
+    if BANK_BALANCE_GAS > gas_limit {
+        return Err(PrecompileError::OutOfGas);
+    }
+
+    // Input must be at least 20 bytes (address)
+    if input.len() < 20 {
+        return Err(PrecompileError::Error(
+            "Input too short: expected at least 20 bytes for address".to_string(),
+        ));
+    }
+
+    // Parse the 20-byte Ethereum address
+    let eth_address = Address::from_slice(&input[0..20]);
+
+    // Convert to rollup address
+    let rollup_address: S::Address =
+        S::Address::from_vm_address(EthereumAddress::from(eth_address));
+
+    // Parse optional token ID (32 bytes) or use gas token
+    let token_id: TokenId = if input.len() >= 52 {
+        // Token ID provided
+        let mut token_bytes = [0u8; 32];
+        token_bytes.copy_from_slice(&input[20..52]);
+        TokenId::from(token_bytes)
+    } else {
+        // Use default gas token
+        config_gas_token_id()
+    };
+
+    // Query balance from bank module
+    let balance = bank_module
+        .get_balance_of(&rollup_address, token_id, state)
+        .map_err(|e| PrecompileError::Error(format!("State error: {:?}", e)))?
+        .unwrap_or_default();
+
+    // Convert balance (u128) to U256 and encode as 32 bytes (big-endian)
+    let balance_u256 = U256::from(balance.0);
+    let output = Bytes::copy_from_slice(&balance_u256.to_be_bytes::<32>());
+
+    Ok(PrecompileOutput {
+        gas_used: BANK_BALANCE_GAS,
+        bytes: output,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,6 +426,11 @@ mod tests {
     #[test]
     fn test_is_known_precompile_identity() {
         assert!(is_known_precompile(&IDENTITY_PRECOMPILE_ADDRESS));
+    }
+
+    #[test]
+    fn test_is_known_precompile_bank_balance() {
+        assert!(is_known_precompile(&BANK_BALANCE_PRECOMPILE_ADDRESS));
     }
 
     #[test]

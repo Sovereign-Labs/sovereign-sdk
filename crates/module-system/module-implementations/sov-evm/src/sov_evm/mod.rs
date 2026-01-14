@@ -12,7 +12,9 @@ mod precompiles;
 
 pub use evm::SovEvm;
 pub use inspector::StorageAccessInspector;
+// Re-export precompile types for public API (some are not used internally)
+#[allow(unused_imports)]
 pub use precompiles::{
-    is_known_precompile, PrecompileError, PrecompileOutput, PrecompileResult, SovPrecompiles,
-    IDENTITY_PRECOMPILE_ADDRESS,
+    is_known_precompile, PrecompileDb, PrecompileError, PrecompileOutput, PrecompileResult,
+    SovPrecompiles, BANK_BALANCE_PRECOMPILE_ADDRESS, IDENTITY_PRECOMPILE_ADDRESS,
 };

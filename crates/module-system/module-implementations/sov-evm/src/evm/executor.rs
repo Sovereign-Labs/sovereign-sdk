@@ -1,6 +1,6 @@
 use crate::{
     get_spec_id,
-    sov_evm::{SovEvm, StorageAccessInspector},
+    sov_evm::{PrecompileDb, SovEvm, SovPrecompiles, StorageAccessInspector},
     EvmRuntimeConfig,
 };
 use revm::InspectEvm;
@@ -15,7 +15,9 @@ use revm::{
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use revm_database_interface::{DBErrorMarker, TryDatabaseCommit};
+use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::config_value;
+use sov_modules_api::Spec;
 
 /// The maximum contract code size is 512KiB by default.
 pub const DEFAULT_MAX_CONTRACT_CODE_SIZE: usize = 512 * 1024;
@@ -79,6 +81,41 @@ where
     Ok(exec_result)
 }
 
+/// Execute ethereum transaction with inspection and sovereign precompiles.
+///
+/// This variant uses `SovPrecompiles` which can handle stateful precompiles
+/// that access sovereign SDK state during EVM execution, combined with
+/// a custom inspector for debugging/tracing.
+#[cfg(feature = "native")]
+#[allow(dead_code)]
+pub(crate) fn inspect_with_precompiles<'a, S, DB, E, I>(
+    db: DB,
+    block_env: &'a BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    inspector: I,
+    precompiles: SovPrecompiles<'a, S>,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+    DB: Database<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
+    I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+{
+    let context = context(db, block_env, cfg);
+    let storage_inspector = StorageAccessInspector::new();
+    let mut evm = SovEvm::with_precompiles(context, (inspector, storage_inspector), precompiles);
+    let mut exec_result = evm.inspect_tx(tx)?;
+    // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
+    // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
+    rebate_gas(
+        &mut exec_result,
+        evm.inspector().1.gas_spent_on_storage_access(),
+    );
+    Ok(exec_result)
+}
+
 /// Execute ethereum transaction
 pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
@@ -88,6 +125,35 @@ pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = context(db, block_env, cfg);
     let mut evm = SovEvm::new(context, StorageAccessInspector::new());
+    let mut exec_result = evm.inspect_tx(tx)?;
+    // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
+    // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
+    rebate_gas(
+        &mut exec_result,
+        evm.inspector().gas_spent_on_storage_access(),
+    );
+    Ok(exec_result)
+}
+
+/// Execute ethereum transaction with sovereign precompiles.
+///
+/// This variant uses `SovPrecompiles` which can handle stateful precompiles
+/// that access sovereign SDK state during EVM execution.
+pub fn transact_with_precompiles<'a, S, DB, E>(
+    db: DB,
+    block_env: &'a BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    precompiles: SovPrecompiles<'a, S>,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+    DB: Database<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
+{
+    let context = context(db, block_env, cfg);
+    let mut evm = SovEvm::with_precompiles(context, StorageAccessInspector::new(), precompiles);
     let mut exec_result = evm.inspect_tx(tx)?;
     // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
     // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.

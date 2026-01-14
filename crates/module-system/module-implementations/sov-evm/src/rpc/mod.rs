@@ -7,6 +7,7 @@ use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecover
 use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
+use crate::sov_evm::SovPrecompiles;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
@@ -202,8 +203,18 @@ where
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+
+        // Load enabled precompiles from state
+        let enabled_precompiles = self
+            .get_enabled_precompiles(state)
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+
+        // Create precompile provider with sovereign state access
+        let precompiles = SovPrecompiles::new(enabled_precompiles, &self.bank_module);
+
         let mut evm_db: EvmDb<_, S> = self.db(state);
-        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+        let result =
+            executor::transact_with_precompiles(&mut evm_db, &block_env, tx_env, cfg_env, precompiles)?;
         verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
