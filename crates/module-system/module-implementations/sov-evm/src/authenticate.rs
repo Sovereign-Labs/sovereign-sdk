@@ -34,10 +34,7 @@ use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATUR
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
-impl<S: Spec> Evm<S>
-where
-    S::Address: FromVmAddress<EthereumAddress>,
-{
+impl<S: Spec> Evm<S> {
     fn fee_multiplayer<Accessor: StateReader<User>>(&mut self, state: &mut Accessor) -> u64 {
         let env = self.block_env.get(state).unwrap().unwrap();
         if env.number < 100 {

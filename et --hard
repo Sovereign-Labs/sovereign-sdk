@@ -1,0 +1,53 @@
+[1mdiff --git a/crates/module-system/module-implementations/sov-evm/src/authenticate.rs b/crates/module-system/module-implementations/sov-evm/src/authenticate.rs[m
+[1mindex 95d31e785..00ae5d7c3 100644[m
+[1m--- a/crates/module-system/module-implementations/sov-evm/src/authenticate.rs[m
+[1m+++ b/crates/module-system/module-implementations/sov-evm/src/authenticate.rs[m
+[36m@@ -19,9 +19,9 @@[m [muse sov_modules_api::runtime::capabilities::AuthenticationError;[m
+ use sov_modules_api::transaction::{[m
+     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,[m
+ };[m
+[31m-use sov_modules_api::StateReader;[m
+[32m+[m[32muse sov_modules_api::StateMetricsProvider;[m
+ use sov_modules_api::{[m
+[31m-    DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,[m
+[32m+[m[32m    DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, ProvableStateWriter, RawTx, Runtime, Spec,[m
+ };[m
+ use sov_rollup_interface::TxHash;[m
+ use sov_state::User;[m
+[36m@@ -38,7 +38,7 @@[m [mimpl<S: Spec> Evm<S>[m
+ where[m
+     S::Address: FromVmAddress<EthereumAddress>,[m
+ {[m
+[31m-    fn fee_multiplayer<Accessor: StateReader<User>>(&mut self, state: &mut Accessor) -> u64 {[m
+[32m+[m[32m    fn fee_multiplayer<Accessor: ProvableStateReader<User, Spec = S> + StateMetricsProvider>(&mut self, state: &mut Accessor) -> u64 {[m
+         let env = self.block_env.get(state).unwrap().unwrap();[m
+         if env.number < 100 {[m
+             return 100;[m
+[36m@@ -74,13 +74,16 @@[m [mfn recover_evm_signer([m
+ [m
+ /// Creates the transaction details and tx hash for an EVM transaction.[m
+ fn create_auth_tx_and_hash<[m
+[31m-    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,[m
+[32m+[m[32m    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + StateMetricsProvider,[m
+     S: Spec,[m
+ >([m
+     tx: &TransactionSigned,[m
+     gas_price: <<S as Spec>::Gas as Gas>::Price,[m
+     state: &mut Accessor,[m
+[31m-) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {[m
+[32m+[m[32m) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError>[m
+[32m+[m[32mwhere[m
+[32m+[m[32m    S::Address: FromVmAddress<EthereumAddress>,[m
+[32m+[m[32m{[m
+     let tx_hash = TxHash::new(**tx.hash());[m
+     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;[m
+ [m
+[36m@@ -172,7 +175,7 @@[m [mwhere[m
+ /// If the caller does plan to derive rollup addresses from evm addresses, they should be sure that their scheme for doing so is deterministic and[m
+ /// collision resistant. You don't want someone to be able to pick a rollup address that someone else is already using![m
+ pub fn authenticate<[m
+[31m-    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,[m
+[32m+[m[32m    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + StateMetricsProvider,[m
+     S: Spec,[m
+ >([m
+     raw_tx: &[u8],[m
