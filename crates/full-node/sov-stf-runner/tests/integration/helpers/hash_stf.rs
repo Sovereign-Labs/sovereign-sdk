@@ -14,8 +14,7 @@ use sov_state::namespaces::User;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::storage::{NativeStorage, SlotKey, SlotValue};
 use sov_state::{
-    ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, ProverStorage, StateAccesses,
-    StorageRoot,
+    ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, StateAccesses, StorageRoot,
 };
 
 pub type S = DefaultStorageSpec<sha2::Sha256>;
@@ -33,6 +32,11 @@ impl HashStf {
         SlotKey::singleton(&prefix)
     }
 
+    fn kernel_key() -> SlotKey {
+        let prefix = Prefix::new(0, 0);
+        SlotKey::singleton(&prefix)
+    }
+
     fn save_from_hasher(
         hasher: sha2::Sha256,
         storage: NomtProverStorage<S, MockHash>,
@@ -44,13 +48,20 @@ impl HashStf {
         let hash_key = HashStf::hash_key();
         let hash_value = SlotValue::from(result.as_slice().to_vec());
 
-        let ordered_reads_writes = OrderedReadsAndWrites {
+        let kernel_key = HashStf::kernel_key();
+        let kernel_value = SlotValue::from(vec![0u8]); // Minimal kernel state marker
+
+        let user_reads_writes = OrderedReadsAndWrites {
             ordered_reads: Vec::default(),
             ordered_writes: vec![(hash_key, Some(hash_value))],
         };
+        let kernel_reads_writes = OrderedReadsAndWrites {
+            ordered_reads: Vec::default(),
+            ordered_writes: vec![(kernel_key, Some(kernel_value))],
+        };
         let state_accesses = StateAccesses {
-            user: ordered_reads_writes,
-            kernel: Default::default(),
+            user: user_reads_writes,
+            kernel: kernel_reads_writes,
         };
 
         let (jmt_root_hash, state_update) = storage
@@ -108,7 +119,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             hasher,
             genesis_state,
             &ArrayWitness::default(),
-            <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
+            <NomtProverStorage<S, MockHash> as Storage>::PRE_GENESIS_ROOT,
         )
     }
 

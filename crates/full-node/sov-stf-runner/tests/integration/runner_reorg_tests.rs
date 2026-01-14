@@ -7,7 +7,7 @@ use crate::helpers::runner_init::{
 use anyhow::Context;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
+use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
@@ -22,12 +22,11 @@ use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_state::storage::NativeStorage;
-use sov_state::{ArrayWitness, ProverStorage, Storage, StorageRoot};
+use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::storage::SimpleNomtStorageManager;
-use sov_test_utils::{TestStorage, TEST_MOCK_DA_POLLING_INTERVAL};
+use sov_test_utils::{TestStorage, TestStorageManager, TEST_MOCK_DA_POLLING_INTERVAL};
 use tempfile::TempDir;
 use tokio::sync::watch;
 
@@ -287,13 +286,13 @@ async fn check_runner(
 
 fn get_saved_root_hash(
     path: &std::path::Path,
-) -> anyhow::Result<Option<<ProverStorage<S> as Storage>::Root>> {
-    let mut storage_manager =
-        NativeStorageManager::<MockDaSpec, ProverStorage<S>>::new(path).unwrap();
+) -> anyhow::Result<Option<<TestStorage as Storage>::Root>> {
+    let config = RollupDbConfig::default_in_path(path.to_path_buf());
+    let mut storage_manager = TestStorageManager::new(config)?;
     let mock_block_header = MockBlockHeader::from_height(1000000);
     let (stf_state, ledger_state) = storage_manager.create_state_for(&mock_block_header)?;
 
-    let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
+    let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
     ledger_db
         .get_head_slot()?
@@ -304,7 +303,7 @@ fn get_saved_root_hash(
 fn get_expected_execution_hash_from(
     genesis_params: &[u8],
     blobs: Vec<Vec<u8>>,
-) -> (StorageRoot<S>, <ProverStorage<S> as Storage>::Root) {
+) -> (StorageRoot<S>, <TestStorage as Storage>::Root) {
     let blocks: Vec<MockBlock> = blobs
         .into_iter()
         .enumerate()
