@@ -79,7 +79,7 @@ fn create_auth_tx_and_hash<
 >(
     tx: &TransactionSigned,
     gas_price: <<S as Spec>::Gas as Gas>::Price,
-    _state: &mut Accessor,
+    state: &mut Accessor,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
@@ -95,7 +95,10 @@ fn create_auth_tx_and_hash<
         return Err(AuthenticationError::FatalError(err, tx_hash));
     }
 
-    let gas_limit = tx.gas_limit().saturating_mul(100);
+    let mut evm = Evm::<S>::default();
+    let m = evm.fee_multiplayer(state);
+
+    let gas_limit = tx.gas_limit().saturating_mul(m);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
 
     let max_fee = gas_limit
