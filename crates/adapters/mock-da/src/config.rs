@@ -90,6 +90,21 @@ pub enum RandomizationBehaviour {
     ///
     /// This operation adjusts the chain height but maintains finalization constraints.
     Rewind,
+    /// Makes `get_head_block_header` and `get_last_finalized_block_header` randomly
+    /// return block headers below the actual finalized height.
+    ///
+    /// This simulates scenarios where the DA layer reports stale data,
+    /// useful for testing rollup resilience to DA layer inconsistencies.
+    ///
+    /// Notes:
+    /// - Does not affect actual block production or chain state.
+    /// - Triggered based on `reorg_interval` configuration.
+    /// - When triggered, both methods return the same randomly chosen height.
+    RewindBelowLastFinalized {
+        /// Maximum number of blocks below finalized height to report.
+        /// Random height is chosen between `max(0, finalized - max_depth)` and `finalized`.
+        max_depth: u32,
+    },
     /// Combines blob shuffling with chain height adjustment:
     ///
     /// 1. All non-finalized blobs, including those being added to a new block,

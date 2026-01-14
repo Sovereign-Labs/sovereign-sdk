@@ -301,6 +301,9 @@ impl StorableMockDaLayer {
 
     /// Get head block header saved in the database.
     pub async fn get_head_block_header(&self) -> anyhow::Result<MockBlockHeader> {
+        if let Some(height) = self.compute_below_finalized_height() {
+            return self.get_header_at(height).await;
+        }
         self.get_header_at(self.next_height.saturating_sub(1)).await
     }
 
@@ -310,7 +313,52 @@ impl StorableMockDaLayer {
     }
 
     pub(crate) async fn get_last_finalized_block_header(&self) -> anyhow::Result<MockBlockHeader> {
+        if let Some(height) = self.compute_below_finalized_height() {
+            return self.get_header_at(height).await;
+        }
         self.get_header_at(self.last_finalized_height).await
+    }
+
+    /// Computes a deterministic "below finalized" height when `RewindBelowLastFinalized` is active.
+    /// Returns `Some(height)` if the randomization should trigger, `None` otherwise.
+    fn compute_below_finalized_height(&self) -> Option<u32> {
+        let randomizer = self.randomizer.as_ref()?;
+        let max_depth = match &randomizer.behaviour {
+            RandomizationBehaviour::RewindBelowLastFinalized { max_depth } => *max_depth,
+            _ => return None,
+        };
+
+        // Need some finalized blocks to rewind below
+        if self.last_finalized_height == 0 {
+            return None;
+        }
+
+        // Derive decision deterministically from seed + current height
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(randomizer.rng.get_seed());
+        hasher.update(self.next_height.to_le_bytes());
+        let hash: [u8; 32] = hasher.finalize().into();
+
+        // Use first bytes to decide if we should return stale header (based on reorg_interval)
+        let interval_size = randomizer
+            .reorg_interval
+            .end
+            .saturating_sub(randomizer.reorg_interval.start)
+            .max(1);
+        let choice = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]) % interval_size;
+
+        // Trigger when choice is 0 (probability: 1/interval_size)
+        if choice != 0 {
+            return None;
+        }
+
+        // Use next bytes to determine how far below finalized to go
+        let depth_choice = u32::from_le_bytes([hash[4], hash[5], hash[6], hash[7]]);
+        let actual_max_depth = max_depth.min(self.last_finalized_height);
+        let depth = depth_choice % (actual_max_depth + 1);
+        let target_height = self.last_finalized_height.saturating_sub(depth);
+
+        Some(target_height)
     }
 
     pub(crate) async fn get_block_header_at(&self, height: u32) -> anyhow::Result<MockBlockHeader> {
@@ -652,7 +700,9 @@ impl Randomizer {
         if should_randomize {
             match &self.behaviour {
                 // This happens only on `get_block_at`, so we produce normal block all the time.
-                RandomizationBehaviour::OutOfOrderBlobs => {
+                RandomizationBehaviour::OutOfOrderBlobs
+                // This happens only on `get_head_block_header` or `get_last_finalized_block_header`
+                | RandomizationBehaviour::RewindBelowLastFinalized { .. } => {
                     da_layer.produce_block_with_timestamp(timestamp).await?;
                 }
                 // Not supported currently
@@ -1978,6 +2028,131 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(seen_blobs, expected_blobs, "Expected blobs mismatch");
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rewind_below_last_finalized_triggers() -> anyhow::Result<()> {
+        let finality = 10;
+        let max_depth = 5;
+        let mut da_layer = StorableMockDaLayer::new_in_memory(finality).await?;
+
+        // Produce enough blocks to have finalized blocks
+        for _ in 0..20 {
+            da_layer.produce_block().await?;
+        }
+
+        let actual_finalized = da_layer.get_last_finalized_block_header().await?.height();
+        assert!(actual_finalized > 0, "Should have finalized blocks");
+
+        // Enable RewindBelowLastFinalized with a seed that triggers the behavior
+        // Using reorg_interval 1..2 means 100% trigger rate
+        da_layer.set_randomizer(Randomizer::from_config(RandomizationConfig {
+            seed: HexHash::new([42; 32]),
+            reorg_interval: 1..2,
+            behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth },
+        }));
+
+        let reported_head = da_layer.get_head_block_header().await?;
+        let reported_finalized = da_layer.get_last_finalized_block_header().await?;
+
+        // Both should report the same height (deterministic based on seed + next_height)
+        assert_eq!(
+            reported_head.height(),
+            reported_finalized.height(),
+            "Both methods should return the same stale height"
+        );
+
+        // Reported height should be at or below actual finalized
+        assert!(
+            reported_head.height() <= actual_finalized,
+            "Reported height {} should be <= finalized {}",
+            reported_head.height(),
+            actual_finalized
+        );
+
+        // Reported height should respect max_depth
+        let min_allowed = actual_finalized.saturating_sub(max_depth as u64);
+        assert!(
+            reported_head.height() >= min_allowed,
+            "Reported height {} should be >= min_allowed {} (finalized {} - max_depth {})",
+            reported_head.height(),
+            min_allowed,
+            actual_finalized,
+            max_depth
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rewind_below_last_finalized_is_deterministic() -> anyhow::Result<()> {
+        let finality = 10;
+        let max_depth = 5;
+        let seed = HexHash::new([123; 32]);
+
+        // Create two identical DA layers
+        let mut da_layer1 = StorableMockDaLayer::new_in_memory(finality).await?;
+        let mut da_layer2 = StorableMockDaLayer::new_in_memory(finality).await?;
+
+        // Produce same blocks on both
+        for _ in 0..20 {
+            da_layer1.produce_block().await?;
+            da_layer2.produce_block().await?;
+        }
+
+        // Enable same randomization on both
+        let config = RandomizationConfig {
+            seed,
+            reorg_interval: 1..2,
+            behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth },
+        };
+        da_layer1.set_randomizer(Randomizer::from_config(config.clone()));
+        da_layer2.set_randomizer(Randomizer::from_config(config));
+
+        // Results should be identical
+        let head1 = da_layer1.get_head_block_header().await?;
+        let head2 = da_layer2.get_head_block_header().await?;
+        assert_eq!(head1.height(), head2.height(), "Should be deterministic");
+
+        let finalized1 = da_layer1.get_last_finalized_block_header().await?;
+        let finalized2 = da_layer2.get_last_finalized_block_header().await?;
+        assert_eq!(
+            finalized1.height(),
+            finalized2.height(),
+            "Should be deterministic"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_rewind_below_last_finalized_disabled_returns_normal() -> anyhow::Result<()> {
+        let finality = 10;
+        let mut da_layer = StorableMockDaLayer::new_in_memory(finality).await?;
+
+        for _ in 0..20 {
+            da_layer.produce_block().await?;
+        }
+
+        let normal_head = da_layer.get_head_block_header().await?;
+        let normal_finalized = da_layer.get_last_finalized_block_header().await?;
+
+        // Enable then disable randomizer
+        da_layer.set_randomizer(Randomizer::from_config(RandomizationConfig {
+            seed: HexHash::new([42; 32]),
+            reorg_interval: 1..2,
+            behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
+        }));
+        da_layer.disable_randomizer();
+
+        // Should return normal values after disabling
+        let head_after = da_layer.get_head_block_header().await?;
+        let finalized_after = da_layer.get_last_finalized_block_header().await?;
+
+        assert_eq!(normal_head, head_after);
+        assert_eq!(normal_finalized, finalized_after);
 
         Ok(())
     }
