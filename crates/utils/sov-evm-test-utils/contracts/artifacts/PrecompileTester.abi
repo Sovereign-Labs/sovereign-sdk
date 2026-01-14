@@ -1,0 +1,72 @@
+[
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "precompile",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes",
+				"name": "input",
+				"type": "bytes"
+			}
+		],
+		"name": "assertPrecompileFails",
+		"outputs": [],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "precompile",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes",
+				"name": "input",
+				"type": "bytes"
+			},
+			{
+				"internalType": "bytes",
+				"name": "expectedOutput",
+				"type": "bytes"
+			}
+		],
+		"name": "assertPrecompileResult",
+		"outputs": [],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "precompile",
+				"type": "address"
+			},
+			{
+				"internalType": "bytes",
+				"name": "input",
+				"type": "bytes"
+			}
+		],
+		"name": "callPrecompile",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "success",
+				"type": "bool"
+			},
+			{
+				"internalType": "bytes",
+				"name": "result",
+				"type": "bytes"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+]

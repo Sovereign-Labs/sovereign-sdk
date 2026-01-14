@@ -227,33 +227,44 @@ where
         let address = &inputs.target_address;
         let gas_limit = inputs.gas_limit;
 
-        // Check if this is an enabled custom precompile.
-        // Note: enabled_addresses only contains addresses that passed is_known_precompile
-        // check during add_enabled_precompile, so we don't need
-        // to check is_known_precompile again here.
-        if self.enabled_addresses.contains(address) {
-            let input_bytes = inputs.input.bytes(ctx);
-            match *address {
-                IDENTITY_PRECOMPILE_ADDRESS => {
-                    let result = identity_precompile(&input_bytes, gas_limit);
-                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+        // Check if this is a known sovereign precompile address
+        if is_known_precompile(address) {
+            // Check if this precompile is enabled
+            if self.enabled_addresses.contains(address) {
+                let input_bytes = inputs.input.bytes(ctx);
+                match *address {
+                    IDENTITY_PRECOMPILE_ADDRESS => {
+                        let result = identity_precompile(&input_bytes, gas_limit);
+                        return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+                    }
+                    BANK_BALANCE_PRECOMPILE_ADDRESS => {
+                        // Access state through the context's database
+                        let state = ctx.db_mut().precompile_state_mut();
+                        let result = bank_balance_precompile::<S, _>(
+                            &input_bytes,
+                            gas_limit,
+                            self.bank_module,
+                            state,
+                        );
+                        return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+                    }
+                    _ => {
+                        // Unknown precompile - should not happen since is_known_precompile
+                        // and the match should be consistent
+                        return Err(format!("Precompile at {} not implemented", address));
+                    }
                 }
-                BANK_BALANCE_PRECOMPILE_ADDRESS => {
-                    // Access state through the context's database
-                    let state = ctx.db_mut().precompile_state_mut();
-                    let result = bank_balance_precompile::<S, _>(
-                        &input_bytes,
-                        gas_limit,
-                        self.bank_module,
-                        state,
-                    );
-                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
-                }
-                _ => {
-                    // Unknown precompile - should not happen since enabled_addresses
-                    // only contains known precompiles
-                    return Err(format!("Precompile at {} not implemented", address));
-                }
+            } else {
+                // Known precompile but NOT enabled - return a Revert to indicate
+                // that the precompile is not available.
+                let mut gas = Gas::new(gas_limit);
+                let _ = gas.record_cost(0);
+                let result = InterpreterResult {
+                    result: InstructionResult::Revert,
+                    gas,
+                    output: Bytes::from_static(b"Precompile not enabled"),
+                };
+                return Ok(Some(result));
             }
         }
 
@@ -271,9 +282,10 @@ where
     }
 
     fn contains(&self, address: &Address) -> bool {
-        // Check if it's either a standard precompile or an enabled custom precompile
-        self.eth_precompiles.contains(address)
-            || (self.enabled_addresses.contains(address) && is_known_precompile(address))
+        // Check if it's a standard Ethereum precompile OR a known sovereign precompile
+        // Note: We return true for known precompiles even if not enabled, because
+        // we handle the disabled case in run() by returning empty data.
+        self.eth_precompiles.contains(address) || is_known_precompile(address)
     }
 }
 

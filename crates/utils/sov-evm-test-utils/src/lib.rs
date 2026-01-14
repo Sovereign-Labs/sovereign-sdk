@@ -1,12 +1,17 @@
-use alloy::{contract::SolCallBuilder, network::Network, providers::Provider, sol_types::SolCall};
+use alloy::{contract::SolCallBuilder, network::Network, providers::Provider};
 use anyhow::Result;
+
+// Re-export SolCall for use in tests
+pub use alloy::sol_types::SolCall;
 
 mod block_hash;
 mod fake_uni;
 mod simple_storage;
+mod precompile_tester;
 pub use block_hash::BlockHash;
 pub use fake_uni::{Erc20, Router};
 pub use simple_storage::{LegacySimpleStorage, SimpleStorage};
+pub use precompile_tester::PrecompileTester;
 
 /// Helper trait to submit contract calls without needing to handle the response
 #[async_trait::async_trait]

@@ -31,6 +31,10 @@ impl EvmAccount {
         Self(secret_key)
     }
 
+    pub fn secret_key(&self) -> SecretKey {
+        self.0
+    }
+
     pub fn public_key(&self) -> PublicKey {
         PublicKey::from_secret_key(secp256k1::SECP256K1, &self.0)
     }
