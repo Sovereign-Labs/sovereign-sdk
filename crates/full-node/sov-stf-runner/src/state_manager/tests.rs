@@ -959,57 +959,42 @@ async fn test_change_in_finalized_header() {
 
 // On empty internal state, state manager should only allow blocks that are
 // direct descendants of last_processed_finalized_header (genesis in this case).
-// Any block that skips heights should trigger reorg detection and return
-// the block adjacent to last_processed_finalized_header.
+// Passing a block that skips heights is a misconfiguration and should panic.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_state_manager_starts_from_non_finalized_height() -> anyhow::Result<()> {
-    let tempdir = tempfile::tempdir()?;
+#[should_panic(expected = "Bug in StateManager, finalized blocks haven't been tracked properly")]
+async fn test_state_manager_starts_from_non_finalized_height() {
+    let tempdir = tempfile::tempdir().unwrap();
     let chain_length = 7;
     let finality = 5;
 
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
 
-    let (mut state_manager, shutdown_sender) =
-        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+    let (mut state_manager, _shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone())
+            .await
+            .unwrap();
 
     for height in 1..=chain_length {
         da_service
             .send_transaction(&[(height * 10) as u8; 10])
             .await
-            .await??;
+            .await
+            .unwrap()
+            .unwrap();
     }
 
-    // Block adjacent to last_processed_finalized_header (genesis at height 0)
-    let adjacent_to_genesis = da_service.get_block_at(1).await?;
-
-    let last_finalized_header = da_service.get_last_finalized_block_header().await?;
+    let last_finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     // This is NOT adjacent to last_processed_finalized_header (genesis),
-    // so it should trigger reorg detection
-    let next_to_da_finalized = da_service
+    // so it should panic as this is a misconfiguration.
+    let non_adjacent_block = da_service
         .get_block_at(last_finalized_header.height() + 1)
-        .await?;
-    let not_next_to_da_finalized = da_service
-        .get_block_at(last_finalized_header.height() + 2)
-        .await?;
+        .await
+        .unwrap();
 
-    // Even though next_to_da_finalized is adjacent to DA's finalized header,
-    // it's not adjacent to last_processed_finalized_header (genesis),
-    // so reorg is detected and we get block at height 1
-    let (_prover_storage, returned_block_1) = state_manager
-        .prepare_storage(next_to_da_finalized.clone(), &da_service)
-        .await?;
-
-    assert_eq!(returned_block_1, adjacent_to_genesis);
-
-    let (_prover_storage, returned_block_2) = state_manager
-        .prepare_storage(not_next_to_da_finalized.clone(), &da_service)
-        .await?;
-
-    assert_eq!(returned_block_2, adjacent_to_genesis);
-
-    shutdown_sender.send(())?;
-
-    Ok(())
+    // This should panic
+    let _ = state_manager
+        .prepare_storage(non_adjacent_block, &da_service)
+        .await;
 }
 
 // TODO: Add tests that verification of finalized transitions only contains finalized blocks
