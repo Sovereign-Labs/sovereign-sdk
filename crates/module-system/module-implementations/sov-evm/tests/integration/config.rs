@@ -73,6 +73,7 @@ fn test_empty_config_update_is_noop() {
                 new_contract_creation_policy: None,
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {
@@ -107,6 +108,7 @@ fn test_update_hardfork() {
                 new_contract_creation_policy: None,
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {
@@ -140,6 +142,7 @@ fn test_update_hardfork() {
                 new_contract_creation_policy: None,
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, _state| {
@@ -158,6 +161,7 @@ fn test_update_hardfork() {
                 new_contract_creation_policy: None,
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, _state| {
@@ -193,6 +197,7 @@ fn test_update_contract_creation_policy() {
                 }),
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {
@@ -225,6 +230,7 @@ fn test_update_contract_creation_policy() {
                 }),
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |_ctx, state| {
@@ -249,6 +255,7 @@ fn test_update_contract_creation_policy() {
                 }),
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |_ctx, state| {
@@ -268,6 +275,7 @@ fn test_update_contract_creation_policy() {
                 new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |_ctx, state| {
@@ -297,6 +305,7 @@ fn test_update_admin() {
                 new_contract_creation_policy: None,
                 chain_spec_update: None,
                 new_admin: Some(new_admin_address_alloy),
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {
@@ -324,6 +333,7 @@ fn test_update_admin() {
                 new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
                 chain_spec_update: None,
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, _state| {
@@ -354,6 +364,7 @@ fn test_update_chain_spec() {
                     new_tx_gas_limit: None,
                 }),
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {
@@ -385,6 +396,7 @@ fn test_update_chain_spec() {
                     new_tx_gas_limit: None,
                 }),
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {
@@ -412,6 +424,7 @@ fn test_update_chain_spec() {
                     new_tx_gas_limit: Some(20_000_000),
                 }),
                 new_admin: None,
+                enable_precompiles: None,
             },
         )),
         assert: Box::new(move |ctx, state| {

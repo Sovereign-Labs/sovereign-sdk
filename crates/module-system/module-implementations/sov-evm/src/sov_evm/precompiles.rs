@@ -153,10 +153,7 @@ where
     /// * `enabled_addresses` - Set of addresses where custom precompiles are enabled
     /// * `bank_module` - Reference to the bank module for balance queries
     #[allow(dead_code)]
-    pub fn new(
-        enabled_addresses: HashSet<Address>,
-        bank_module: &'a sov_bank::Bank<S>,
-    ) -> Self {
+    pub fn new(enabled_addresses: HashSet<Address>, bank_module: &'a sov_bank::Bank<S>) -> Self {
         Self {
             eth_precompiles: EthPrecompiles::default(),
             enabled_addresses,
@@ -193,9 +190,12 @@ where
         // Match on the address to dispatch to the appropriate precompile.
         match *address {
             IDENTITY_PRECOMPILE_ADDRESS => Some(identity_precompile(input, gas_limit)),
-            BANK_BALANCE_PRECOMPILE_ADDRESS => {
-                Some(bank_balance_precompile::<S, Ws>(input, gas_limit, self.bank_module, state))
-            }
+            BANK_BALANCE_PRECOMPILE_ADDRESS => Some(bank_balance_precompile::<S, Ws>(
+                input,
+                gas_limit,
+                self.bank_module,
+                state,
+            )),
             _ => None,
         }
     }
@@ -216,21 +216,20 @@ where
 {
     type Output = InterpreterResult;
 
-    fn set_spec(&mut self, spec: <<CTX as ContextTr>::Cfg as revm::context_interface::Cfg>::Spec) -> bool {
+    fn set_spec(
+        &mut self,
+        spec: <<CTX as ContextTr>::Cfg as revm::context_interface::Cfg>::Spec,
+    ) -> bool {
         <EthPrecompiles as PrecompileProvider<CTX>>::set_spec(&mut self.eth_precompiles, spec)
     }
 
-    fn run(
-        &mut self,
-        ctx: &mut CTX,
-        inputs: &CallInputs,
-    ) -> Result<Option<Self::Output>, String> {
+    fn run(&mut self, ctx: &mut CTX, inputs: &CallInputs) -> Result<Option<Self::Output>, String> {
         let address = &inputs.target_address;
         let gas_limit = inputs.gas_limit;
 
         // Check if this is an enabled custom precompile.
         // Note: enabled_addresses only contains addresses that passed is_known_precompile
-        // check during enable_precompile/enable_precompile_genesis, so we don't need
+        // check during add_enabled_precompile, so we don't need
         // to check is_known_precompile again here.
         if self.enabled_addresses.contains(address) {
             let input_bytes = inputs.input.bytes(ctx);
@@ -242,8 +241,12 @@ where
                 BANK_BALANCE_PRECOMPILE_ADDRESS => {
                     // Access state through the context's database
                     let state = ctx.db_mut().precompile_state_mut();
-                    let result =
-                        bank_balance_precompile::<S, _>(&input_bytes, gas_limit, self.bank_module, state);
+                    let result = bank_balance_precompile::<S, _>(
+                        &input_bytes,
+                        gas_limit,
+                        self.bank_module,
+                        state,
+                    );
                     return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
                 }
                 _ => {
@@ -263,7 +266,7 @@ where
         Box::new(
             self.eth_precompiles
                 .warm_addresses()
-                .chain(self.enabled_addresses.iter().copied())
+                .chain(self.enabled_addresses.iter().copied()),
         )
     }
 
@@ -275,10 +278,7 @@ where
 }
 
 /// Convert a PrecompileResult to an InterpreterResult.
-fn convert_to_interpreter_result(
-    result: PrecompileResult,
-    gas_limit: u64,
-) -> InterpreterResult {
+fn convert_to_interpreter_result(result: PrecompileResult, gas_limit: u64) -> InterpreterResult {
     match result {
         Ok(output) => {
             let mut gas = Gas::new(gas_limit);

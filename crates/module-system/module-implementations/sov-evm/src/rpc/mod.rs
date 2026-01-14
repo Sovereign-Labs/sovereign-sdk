@@ -213,8 +213,13 @@ where
         let precompiles = SovPrecompiles::new(enabled_precompiles, &self.bank_module);
 
         let mut evm_db: EvmDb<_, S> = self.db(state);
-        let result =
-            executor::transact_with_precompiles(&mut evm_db, &block_env, tx_env, cfg_env, precompiles)?;
+        let result = executor::transact_with_precompiles(
+            &mut evm_db,
+            &block_env,
+            tx_env,
+            cfg_env,
+            precompiles,
+        )?;
         verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)

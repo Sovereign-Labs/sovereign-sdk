@@ -15,13 +15,7 @@ use revm::{
 /// stateful precompiles that can access sovereign SDK state during execution.
 #[derive(Debug)]
 pub struct SovEvm<CTX, INSP, P>(
-    pub Evm<
-        CTX,
-        INSP,
-        EthInstructions<EthInterpreter, CTX>,
-        P,
-        EthFrame<EthInterpreter>,
-    >,
+    pub Evm<CTX, INSP, EthInstructions<EthInterpreter, CTX>, P, EthFrame<EthInterpreter>>,
 );
 
 impl<CTX, INSP, P> SovEvm<CTX, INSP, P>

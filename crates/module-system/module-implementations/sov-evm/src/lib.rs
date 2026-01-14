@@ -60,9 +60,9 @@ use crate::evm::primitive_types::{Block, PendingTransaction, TxSignedAndRecovere
 
 pub use crate::evm::primitive_types::{Receipt, SealedBlock};
 
+pub use crate::sov_evm::SovPrecompiles;
 pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
-pub use crate::sov_evm::SovPrecompiles;
 use revm::state::Bytecode;
 use thiserror::Error;
 
@@ -259,12 +259,12 @@ impl<S: Spec> Evm<S> {
         Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
     }
 
-    /// Enable a precompile at genesis.
+    /// Add an address to the set of enabled precompiles.
     ///
     /// The precompile must have an implementation in code (checked via `is_known_precompile`).
-    /// This is called during genesis initialization to activate precompiles
-    /// that should be available from the start.
-    pub fn enable_precompile_genesis(
+    /// This is used during genesis initialization and runtime config updates.
+    /// Callers are responsible for performing any necessary authorization checks.
+    pub fn add_enabled_precompile(
         &mut self,
         address: Address,
         state: &mut impl TxState<S>,
@@ -277,7 +277,8 @@ impl<S: Spec> Evm<S> {
         let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
         if !enabled.contains(&address) {
             enabled.push(address);
-            self.enabled_precompiles.set::<Vec<Address>, _>(&enabled, state)?;
+            self.enabled_precompiles
+                .set::<Vec<Address>, _>(&enabled, state)?;
         }
         Ok(())
     }
@@ -314,7 +315,8 @@ impl<S: Spec> Evm<S> {
         let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
         if !enabled.contains(&address) {
             enabled.push(address);
-            self.enabled_precompiles.set::<Vec<Address>, _>(&enabled, state)?;
+            self.enabled_precompiles
+                .set::<Vec<Address>, _>(&enabled, state)?;
         }
         Ok(())
     }
@@ -341,7 +343,8 @@ impl<S: Spec> Evm<S> {
 
         let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
         enabled.retain(|a| a != &address);
-        self.enabled_precompiles.set::<Vec<Address>, _>(&enabled, state)?;
+        self.enabled_precompiles
+            .set::<Vec<Address>, _>(&enabled, state)?;
         Ok(())
     }
 

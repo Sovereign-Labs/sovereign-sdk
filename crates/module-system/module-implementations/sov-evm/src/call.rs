@@ -119,11 +119,21 @@ where
             new_contract_creation_policy,
             chain_spec_update,
             new_admin,
+            enable_precompiles,
         } = update;
 
         // Update admin (no validation required)
         if let Some(new_admin) = new_admin {
             self.admin.set(&new_admin, state)?;
+        }
+
+        // Enable precompiles (admin already verified above)
+        if let Some(addresses) = enable_precompiles {
+            for hex_addr in addresses.iter() {
+                let address: Address = hex_addr.0.into();
+                // Admin check is already done above
+                self.add_enabled_precompile(address, state)?;
+            }
         }
 
         // Add hardfork activation, validating that it has a future height and is greater than the current spec id

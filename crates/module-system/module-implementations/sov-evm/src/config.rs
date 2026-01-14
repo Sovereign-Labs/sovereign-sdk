@@ -170,6 +170,10 @@ pub struct EvmRuntimeConfigUpdate<S: Spec> {
     pub chain_spec_update: Option<ChainSpecUpdate>,
     /// A new admin address to set. None means "no change"
     pub new_admin: Option<S::Address>,
+    /// Precompile addresses to enable. None means "no change".
+    /// Each address must have a known implementation in the binary.
+    /// Limited to 16 addresses per update to prevent abuse.
+    pub enable_precompiles: Option<SafeVec<HexString<[u8; 20]>, 16>>,
 }
 
 #[derive(
