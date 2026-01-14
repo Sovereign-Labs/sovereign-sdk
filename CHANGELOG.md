@@ -1,3 +1,6 @@
+# 2026-01-14
+- #2329 Changes default storage in sov-test-utils's TestRollup to be NOMT. No impact for regular customers
+
 # 2026-01-09
 - #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
 
