@@ -25,7 +25,7 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 
-const MAX_REORG_FINDING_ATTEMPTS: u8 = 10_000;
+const MAX_REORG_FINDING_ATTEMPTS: u16 = 10_000;
 
 /// Point where rollup execution can be resumed after DA fork happened.
 struct ForkPoint<Da: DaService, StateRoot> {
