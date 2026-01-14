@@ -3,11 +3,15 @@ use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Bytes, TxKind};
 use revm::context::result::ExecutionResult;
 use revm::context::{BlockEnv, CfgEnv};
-use sov_evm::{convert_to_tx_signed, create_tx_env, executor, EthereumAuthenticator, Evm, SpecId};
+use sov_evm::{
+    convert_to_tx_signed, create_tx_env, executor, EthereumAuthenticator, Evm, SovPrecompiles,
+    SpecId,
+};
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::TransactionType;
+use std::collections::HashSet;
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};
@@ -50,8 +54,16 @@ fn test_invalid_contract_execution() {
             CfgEnv::new_with_spec(SpecId::CANCUN).with_chain_id(config_value!("CHAIN_ID"));
         let tx = convert_to_tx_signed(signed_eth_tx).unwrap();
         let tx_env = create_tx_env(&tx, account.address(), 1, 1_000_000);
-        let result =
-            executor::transact_commit(&mut evm_db, &BlockEnv::default(), tx_env, cfg_env).unwrap();
+        // Create precompiles (no custom precompiles enabled for this test)
+        let precompiles = SovPrecompiles::new(HashSet::new(), evm.bank_module());
+        let result = executor::transact_commit(
+            &mut evm_db,
+            &BlockEnv::default(),
+            tx_env,
+            cfg_env,
+            precompiles,
+        )
+        .unwrap();
         assert!(matches!(result, ExecutionResult::Revert { .. }));
     });
 }

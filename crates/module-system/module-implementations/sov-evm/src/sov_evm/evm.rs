@@ -1,8 +1,8 @@
 use revm::{
     context::{ContextError, ContextSetters, ContextTr, Evm, FrameStack},
     handler::{
-        evm::FrameTr, instructions::EthInstructions, EthFrame, EthPrecompiles, EvmTr,
-        FrameInitOrResult, ItemOrResult, PrecompileProvider,
+        evm::FrameTr, instructions::EthInstructions, EthFrame, EvmTr, FrameInitOrResult,
+        ItemOrResult, PrecompileProvider,
     },
     inspector::{InspectorEvmTr, JournalExt},
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
@@ -14,7 +14,7 @@ use revm::{
 /// This struct is generic over the precompile provider `P`, allowing for custom
 /// stateful precompiles that can access sovereign SDK state during execution.
 #[derive(Debug)]
-pub struct SovEvm<CTX, INSP, P = EthPrecompiles>(
+pub struct SovEvm<CTX, INSP, P>(
     pub Evm<
         CTX,
         INSP,
@@ -23,19 +23,6 @@ pub struct SovEvm<CTX, INSP, P = EthPrecompiles>(
         EthFrame<EthInterpreter>,
     >,
 );
-
-impl<CTX: ContextTr, INSP> SovEvm<CTX, INSP, EthPrecompiles> {
-    /// Creates new SovEvm instance from context and inspector with default Ethereum precompiles.
-    pub fn new(ctx: CTX, inspector: INSP) -> Self {
-        Self(Evm {
-            ctx,
-            inspector,
-            instruction: EthInstructions::new_mainnet(),
-            precompiles: EthPrecompiles::default(),
-            frame_stack: FrameStack::new(),
-        })
-    }
-}
 
 impl<CTX, INSP, P> SovEvm<CTX, INSP, P>
 where
@@ -49,7 +36,6 @@ where
     /// * `ctx` - The EVM context containing block/tx environment and database
     /// * `inspector` - The inspector for tracing/debugging
     /// * `precompiles` - Custom precompile provider
-    #[allow(dead_code)]
     pub fn with_precompiles(ctx: CTX, inspector: INSP, precompiles: P) -> Self {
         Self(Evm {
             ctx,

@@ -62,6 +62,7 @@ pub use crate::evm::primitive_types::{Receipt, SealedBlock};
 
 pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
+pub use crate::sov_evm::SovPrecompiles;
 use revm::state::Bytecode;
 use thiserror::Error;
 
@@ -358,6 +359,13 @@ impl<S: Spec> Evm<S> {
             .unwrap_or_default()
             .into_iter()
             .collect())
+    }
+
+    /// Get a reference to the bank module.
+    ///
+    /// This is used to create `SovPrecompiles` for transaction execution.
+    pub fn bank_module(&self) -> &sov_bank::Bank<S> {
+        &self.bank_module
     }
 }
 

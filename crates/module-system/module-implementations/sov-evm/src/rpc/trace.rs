@@ -153,8 +153,16 @@ where
                 break;
             }
 
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(EthApiError::from)?;
+            // Create precompiles for each replay (moved into transact_commit)
+            let precompiles = SovPrecompiles::new(enabled_precompiles.clone(), &self.bank_module);
+            transact_commit(
+                &mut evm_db,
+                &block_env,
+                replay_tx_env(&tx),
+                cfg_env.clone(),
+                precompiles,
+            )
+            .map_err(EthApiError::from)?;
         }
 
         // Trace the target transaction
