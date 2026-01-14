@@ -45,7 +45,7 @@ impl<S: Spec> Evm<S> {
     /// - `Ok(1)` if the fee check passes (user fee >= rollup base fee)
     /// - `Ok(100)` if the fee check is skipped (before height threshold or disabled)
     /// - `Err(InsufficientMaxFeePerGas)` if the user's fee is below the rollup base fee
-    fn validate_fee_and_calculate_multiplayer<Accessor: StateReader<User>>(
+    fn validate_fee_and_calculate_multiplier<Accessor: StateReader<User>>(
         &self,
         user_max_fee_per_gas: u128,
         rollup_base_fee: u128,
@@ -53,12 +53,12 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> Result<u64, AuthenticationError> {
         let is_max_fee_check_disabled = self.is_max_fee_check_disabled(state).map_err(|e| {
-            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplayer: {e}"))
+            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
         })?;
 
         let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
         let env = self.block_env(state).map_err(|e| {
-            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplayer: {e}"))
+            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
         })?;
 
         let block_number: u64 = env.number.to::<u64>();
@@ -119,14 +119,14 @@ fn create_auth_tx_and_hash<
     let rollup_base_fee = gas_price.as_ref()[0].0;
 
     let evm = Evm::<S>::default();
-    let multiplayer = evm.validate_fee_and_calculate_multiplayer(
+    let multiplier = evm.validate_fee_and_calculate_multiplier(
         user_max_fee_per_gas,
         rollup_base_fee,
         tx_hash,
         state,
     )?;
 
-    let gas_limit = tx.gas_limit().saturating_mul(multiplayer);
+    let gas_limit = tx.gas_limit().saturating_mul(multiplier);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
 
     let max_fee = gas_limit
