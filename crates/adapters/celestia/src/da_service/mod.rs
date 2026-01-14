@@ -159,7 +159,7 @@ impl CelestiaService {
 
         let tx_hash = TmHash(tx_response.hash);
         tracing::info!(
-            da_height = tx_response.height.value(),
+            da_height = tx_response.height,
             tx_hash = %tx_hash,
             blob_hash = %blob_hash,
             bytes,
@@ -266,7 +266,9 @@ impl CelestiaService {
         tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
         let result = tokio::time::timeout(
             self.request_timeout,
-            client.share().get_namespace_data(height, namespace),
+            client
+                .share()
+                .get_namespace_data(height, APP_VERSION, namespace),
         )
         .await;
         let is_success = matches!(result, Ok(Ok(_)));
