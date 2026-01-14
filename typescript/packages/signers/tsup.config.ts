@@ -4,7 +4,7 @@ export default defineConfig({
   entry: [
     "src/index.ts",
     "src/wasm.ts",
-    "src/ledger-solana/browser.ts",
+    "src/ledger-solana/default.ts",
     "src/ledger-solana/node.ts",
   ],
   format: ["cjs", "esm"],

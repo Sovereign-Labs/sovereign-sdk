@@ -22,15 +22,17 @@
       "require": "./dist/wasm.js",
       "import": "./dist/wasm.mjs"
     },
-    "./ledger-solana/browser": {
-      "types": "./dist/ledger-solana/browser.d.ts",
-      "require": "./dist/ledger-solana/browser.js",
-      "import": "./dist/ledger-solana/browser.mjs"
-    },
-    "./ledger-solana/node": {
-      "types": "./dist/ledger-solana/node.d.ts",
-      "require": "./dist/ledger-solana/node.js",
-      "import": "./dist/ledger-solana/node.mjs"
+    "./ledger-solana": {
+      "node": {
+        "types": "./dist/ledger-solana/node.d.ts",
+        "require": "./dist/ledger-solana/node.js",
+        "import": "./dist/ledger-solana/node.mjs"
+      },
+      "default": {
+        "types": "./dist/ledger-solana/default.d.ts",
+        "require": "./dist/ledger-solana/default.js",
+        "import": "./dist/ledger-solana/default.mjs"
+      }
     }
   },
   "main": "./dist/index.js",

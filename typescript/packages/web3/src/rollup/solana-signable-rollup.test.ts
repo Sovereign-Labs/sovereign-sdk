@@ -1,7 +1,7 @@
 import SovereignClient from "@sovereign-sdk/client";
 import type { Signer } from "@sovereign-sdk/signers";
 import { Ed25519Signer } from "@sovereign-sdk/signers";
-import { LedgerSolanaSigner } from "@sovereign-sdk/signers/ledger-solana/node";
+import { LedgerSolanaSigner } from "@sovereign-sdk/signers/ledger-solana";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SolanaSignableRollup,
