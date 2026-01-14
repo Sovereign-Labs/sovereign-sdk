@@ -1074,9 +1074,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c7788ebceadccdad04234229de5555522674147cddee5638d16b7b5e51eee53"
+checksum = "8b9cc150ce1c20da1a79a9ea3e79d2feed4189bd7243b23fc0752784add94bba"
 dependencies = [
  "base64 0.22.1",
  "bech32",
