@@ -77,12 +77,12 @@ pub type TestHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 pub type TestStorageSpec = DefaultStorageSpec<TestHasher>;
 /// The default test spec. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+pub type TestJmtSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// Shortcut to [`sov_mock_da::MockHash`];
 pub type TestSlotHash = <MockDaSpec as DaSpec>::SlotHash;
 /// The default test spec for NOMT. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestNomtSpec = ConfigurableSpec<
+pub type TestSpec = ConfigurableSpec<
     MockDaSpec,
     MockZkvm,
     MockZkvm,
@@ -105,8 +105,11 @@ pub type TestSignature = <TestCryptoSpec as CryptoSpec>::Signature;
 /// The default STF blueprint type. Uses [`MockDaSpec`] for DA and [`sov_kernels::basic::BasicKernel`] for kernel.
 pub type TestStfBlueprint<RT, S> = StfBlueprint<S, RT>;
 /// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`ProverStorage`] and [`TestStorageSpec`].
-pub type TestStorageManager =
-    sov_db::storage_manager::NativeStorageManager<MockDaSpec, ProverStorage<TestStorageSpec>>;
+pub type TestStorageManager = sov_db::storage_manager::NomtStorageManager<
+    MockDaSpec,
+    TestHasher,
+    NomtProverStorage<TestStorageSpec, TestSlotHash>,
+>;
 // --- Blessed test parameters ---
 
 // Blessed gas parameters
