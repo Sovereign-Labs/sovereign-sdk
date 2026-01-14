@@ -380,7 +380,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Recovering the state root"
         );
         let native_stf = StfBlueprint::new();
-        let genesis_slot_number = genesis_params.genesis_slot_number();
+        let genesis_da_height = genesis_params.genesis_slot_number();
         let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
             // Missing prev_root means need for initialization
             None => {
@@ -428,7 +428,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         };
 
         let da_sync_state = make_da_sync_state(
-            genesis_slot_number,
+            genesis_da_height,
             stop_at_rollup_height,
             &ledger_db,
             &da_service_with_cache,
@@ -488,6 +488,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             stop_at_rollup_height,
             da_sync_state.clone(),
             da_service_with_cache,
+            genesis_da_height,
         )
         .await?;
 
@@ -580,7 +581,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             shutdown_sender: main_shutdown_sender,
             secondary_shutdown_sender,
             background_handles,
-            genesis_slot_number,
+            genesis_slot_number: genesis_da_height,
         })
     }
 }
@@ -678,7 +679,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         let monitoring_task =
             spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);
 
-        runner.run_in_process(self.genesis_slot_number).await?;
+        runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
 
         if self.shutdown_sender.send(()).is_err() {

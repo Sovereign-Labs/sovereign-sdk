@@ -326,6 +326,9 @@ impl CrashLocation {
                 let crash_location: CrashLocation = env.parse().unwrap();
 
                 if &crash_location == self {
+                    tracing::error!(
+                        "{CRASH_ENV_NAME} is set to: {crash_location}, crashing the node"
+                    );
                     panic!("{CRASH_ENV_NAME} is set to: {crash_location}, crashing the node");
                 }
             }
