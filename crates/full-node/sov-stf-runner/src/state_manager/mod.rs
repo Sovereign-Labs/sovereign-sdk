@@ -70,7 +70,7 @@ impl<Da: DaSpec, StateRoot: Clone> StateOnBlock<Da, StateRoot> {
 enum ForkPointSearchResult<Da: DaService, StateRoot> {
     Found(ForkPoint<Da, StateRoot>),
     HeadChanged(<Da::Spec as DaSpec>::BlockHeader),
-    DaHeadIsBelowProcessed,
+    DaHeadIsBelowProcessedFinalized,
 }
 
 /// StateManager controls storage lifecycle for [`StateTransitionFunction`],
@@ -509,8 +509,9 @@ where
                 );
                 anyhow::bail!("Trying to process same finalized header twice.");
             }
-            assert!(
-                block_header.height() > self.last_processed_finalized_header.height(),
+            assert_eq!(
+                block_header.height(),
+                self.last_processed_finalized_header.height(),
                 "Bug in StateManager, finalized blocks haven't been tracked properly"
             );
             tracing::trace!("Empty state_on_block => reorg, not a direct descendant of the last **processed** finalized header.");
@@ -631,7 +632,7 @@ where
                     );
                     head = new_head;
                 }
-                ForkPointSearchResult::DaHeadIsBelowProcessed => {
+                ForkPointSearchResult::DaHeadIsBelowProcessedFinalized => {
                     let sleep_time = da_service.get_approximate_block_time().await * 10;
                     tracing::warn!(
                         attempt,
@@ -664,7 +665,7 @@ where
                 last_processed_finalized_height,
                 "Passed height is below or equal of what has been processed"
             );
-            return Ok(ForkPointSearchResult::DaHeadIsBelowProcessed);
+            return Ok(ForkPointSearchResult::DaHeadIsBelowProcessedFinalized);
         }
 
         let mut low = earliest_seen_height;
