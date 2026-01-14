@@ -1016,11 +1016,19 @@ where
             self.last_processed_finalized_header.hash(),
             &finalized_transitions,
         );
+
         if let Some(last_processed_transition) = finalized_transitions.iter().last() {
             self.last_processed_finalized_header = last_processed_transition.block_header.clone();
         }
 
         // Verify invariant: all earliest seen transitions must descend from last_processed_finalized_header
+        self.verify_earliest_seen();
+
+        Ok(finalized_transitions)
+    }
+
+    // Checks that all earliest seen transitions point to the same block hash.
+    fn verify_earliest_seen(&self) {
         #[cfg(debug_assertions)]
         if let Some(earliest_blocks) = self.seen_on_height.first_key_value() {
             let expected_prev_hash = self.last_processed_finalized_header.hash();
@@ -1036,8 +1044,6 @@ where
                 );
             }
         }
-
-        Ok(finalized_transitions)
     }
 
     // Returns updating time
