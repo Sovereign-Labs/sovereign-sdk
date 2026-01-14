@@ -7,7 +7,7 @@ use sov_modules_api::{
 };
 use sov_state::{BorshCodec, Prefix, ProvableNamespace, StateRoot};
 use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
-use sov_test_utils::{TestNomtSpec, TestSpec};
+use sov_test_utils::{TestJmtSpec, TestSpec};
 
 use crate::state_tests::{commit_to_storage, ForklessStorageManager};
 
@@ -15,7 +15,7 @@ use crate::state_tests::{commit_to_storage, ForklessStorageManager};
 fn test_jmt_state_value_user_namespace() -> Result<(), Infallible> {
     let mut storage_manager = SimpleStorageManager::new();
     storage_manager.genesis();
-    test_state_value_user_namespace::<TestSpec, _>(storage_manager)
+    test_state_value_user_namespace::<TestJmtSpec, _>(storage_manager)
 }
 
 // TODO: Do we want to unify these 2 tests? The only differ by value passed. Probably
@@ -61,13 +61,13 @@ where
 #[test]
 fn test_jmt_state_value_kernel_namespace() -> Result<(), Infallible> {
     let storage_manager = SimpleStorageManager::new();
-    test_state_value_kernel_namespace::<TestSpec, _>(storage_manager)
+    test_state_value_kernel_namespace::<TestJmtSpec, _>(storage_manager)
 }
 
 #[test]
 fn test_nomt_state_value_kernel_namespace() -> Result<(), Infallible> {
     let storage_manager = SimpleNomtStorageManager::new();
-    test_state_value_kernel_namespace::<TestNomtSpec, _>(storage_manager)
+    test_state_value_kernel_namespace::<TestSpec, _>(storage_manager)
 }
 
 /// Test that the state values with a kernel working set get written to the kernel space
@@ -114,7 +114,7 @@ where
 #[test]
 fn test_jmt_state_map_user_namespace() -> Result<(), Infallible> {
     let storage_manager = SimpleStorageManager::new();
-    test_state_map_user_namespace::<TestSpec, _>(storage_manager)
+    test_state_map_user_namespace::<TestJmtSpec, _>(storage_manager)
 }
 
 /// Test that the state maps with a standard working set get written to the user space
@@ -161,13 +161,13 @@ where
 #[test]
 fn test_jmt_versioned_state_value_kernel_namespace() -> Result<(), Infallible> {
     let storage_manager = SimpleStorageManager::new();
-    test_versioned_state_value_kernel_namespace::<TestSpec, _>(storage_manager)
+    test_versioned_state_value_kernel_namespace::<TestJmtSpec, _>(storage_manager)
 }
 
 #[test]
 fn test_nomt_versioned_state_value_kernel_namespace() -> Result<(), Infallible> {
     let storage_manager = SimpleNomtStorageManager::new();
-    test_versioned_state_value_kernel_namespace::<TestNomtSpec, _>(storage_manager)
+    test_versioned_state_value_kernel_namespace::<TestSpec, _>(storage_manager)
 }
 
 /// Test that the kernel state maps with a kernel working set get written to the kernel space

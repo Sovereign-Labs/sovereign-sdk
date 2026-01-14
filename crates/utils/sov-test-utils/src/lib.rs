@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 pub use sov_db::schema::SchemaBatch;
 pub use sov_mock_da::verifier::MockDaSpec;
 use sov_mock_da::BlockProducingConfig;
+pub use sov_mock_da::MockHash;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::default_spec::{DefaultNomtSpec, DefaultSpec};
@@ -95,12 +96,11 @@ pub type TestSignature = <TestCryptoSpec as CryptoSpec>::Signature;
 
 /// The default STF blueprint type. Uses [`MockDaSpec`] for DA and [`sov_kernels::basic::BasicKernel`] for kernel.
 pub type TestStfBlueprint<RT, S> = StfBlueprint<S, RT>;
-/// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`ProverStorage`] and [`TestStorageSpec`].
-pub type TestStorageManager = sov_db::storage_manager::NomtStorageManager<
-    MockDaSpec,
-    TestHasher,
-    NomtProverStorage<TestStorageSpec, TestSlotHash>,
->;
+/// Just [`NomtProverStorage`] with predefined configs.
+pub type TestStorage = NomtProverStorage<TestStorageSpec, TestSlotHash>;
+/// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
+pub type TestStorageManager =
+    sov_db::storage_manager::NomtStorageManager<MockDaSpec, TestHasher, TestStorage>;
 // --- Blessed test parameters ---
 
 // Blessed gas parameters

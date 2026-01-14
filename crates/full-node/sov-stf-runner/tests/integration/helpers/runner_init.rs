@@ -1,18 +1,18 @@
 use std::num::NonZero;
 use std::sync::Arc;
 
+use crate::helpers::hash_stf::HashStf;
 use axum::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use rockbound::SchemaBatch;
-use sha2::Sha256;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::{
-    BlockProducingConfig, MockAddress, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec,
+    BlockProducingConfig, MockAddress, MockBlockHeader, MockDaConfig, MockDaService,
     MockDaVerifier, MockHash,
 };
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
@@ -29,7 +29,7 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
-use sov_state::{DefaultStorageSpec, NativeStorage, ProverStorage};
+use sov_state::NativeStorage;
 use sov_stf_runner::processes::{
     start_zk_workflow_in_background, ParallelProverService, RollupProverConfigDiscriminants,
 };
@@ -39,20 +39,17 @@ use sov_stf_runner::{
 };
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::{
-    TestSpec, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
-    TEST_MOCK_DA_POLLING_INTERVAL,
+    TestSpec, TestStorage, TestStorageManager, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE,
+    TEST_MAX_CONCURRENT_BLOBS, TEST_MOCK_DA_POLLING_INTERVAL,
 };
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
-use crate::helpers::hash_stf::HashStf;
-
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
 
-pub type S = DefaultStorageSpec<Sha256>;
-pub type StorageManager = NativeStorageManager<MockDaSpec, ProverStorage<S>>;
-pub type HashStfRunner<Da> = StateTransitionRunner<HashStf, StorageManager, Da, MockZkvm, MockZkvm>;
+pub type HashStfRunner<Da> =
+    StateTransitionRunner<HashStf, TestStorageManager, Da, MockZkvm, MockZkvm>;
 
 /// TestNode simulates a full-node.
 pub struct TestNode {
@@ -150,9 +147,9 @@ impl ProofSender for MockProofSender {
 
 // Returns genesis state root, prev state root for given init variant and initial value for state update info.
 pub async fn bootstrap_state_update_info(
-    storage_manager: &mut StorageManager,
+    storage_manager: &mut TestStorageManager,
     da_sync_state: &DaSyncState,
-) -> anyhow::Result<StateUpdateInfo<ProverStorage<S>>> {
+) -> anyhow::Result<StateUpdateInfo<TestStorage>> {
     let genesis_block_header = MockBlockHeader::from_height(0);
     let (stf_storage, ledger_state) = storage_manager.create_state_after(&genesis_block_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
@@ -199,7 +196,8 @@ pub async fn initialize_runner(
         };
     });
 
-    let mut storage_manager: StorageManager = NativeStorageManager::new(path).unwrap();
+    let db_config = RollupDbConfig::default_in_path(path.to_path_buf());
+    let mut storage_manager: TestStorageManager = NomtStorageManager::new(db_config).unwrap();
 
     let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     let (_, ledger_state) = storage_manager

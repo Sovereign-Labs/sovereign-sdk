@@ -28,7 +28,7 @@ use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::MockDaSpec;
 use sov_test_utils::RtAgnosticBlueprint;
-use sov_test_utils::TestNomtSpec as TestSpec;
+use sov_test_utils::TestSpec;
 use sov_test_utils::TestUser;
 use sov_test_utils::{default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS};
 use tokio_stream::StreamExt;

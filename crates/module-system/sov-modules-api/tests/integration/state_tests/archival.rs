@@ -8,7 +8,7 @@ use sov_modules_api::{
 };
 use sov_state::{BorshCodec, Prefix};
 use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
-use sov_test_utils::{TestJmtSpec, TestNomtSpec};
+use sov_test_utils::{TestJmtSpec, TestSpec};
 
 use crate::state_tests::*;
 

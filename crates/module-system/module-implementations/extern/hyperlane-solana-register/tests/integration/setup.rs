@@ -16,11 +16,20 @@ use sov_modules_api::{
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::{
-    generate_runtime, AsUser, MockDaSpec, MockZkvm, TestUser, TransactionTestCase,
+    generate_runtime, AsUser, MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestSlotHash,
+    TestStorageSpec, TestUser, TransactionTestCase,
 };
 
 pub type Mailbox<S> = RawMailbox<S, SolanaRegistration<S>>;
-pub type S = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, Base58Address, Native>;
+pub type S = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    Base58Address,
+    Native,
+    MockZkvmCryptoSpec,
+    sov_state::nomt::prover_storage::NomtProverStorage<TestStorageSpec, TestSlotHash>,
+>;
 pub type RT = TestRuntime<S>;
 type WarpRouteId = HexHash;
 

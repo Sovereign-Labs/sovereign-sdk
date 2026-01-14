@@ -244,3 +244,23 @@ where
 
     type CryptoSpec = <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec;
 }
+
+#[cfg(any(not(feature = "native"), feature = "test-utils"))]
+impl<Da: DaSpec, InnerZkvm: Zkvm, OuterZkvm: Zkvm> Spec
+    for DefaultNomtSpec<Da, InnerZkvm, OuterZkvm, crate::execution_mode::Zk>
+where
+    <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec: crate::CryptoSpecExt,
+{
+    type Da = Da;
+    type Address = Address;
+    type Gas = GasUnit<2>;
+
+    type Storage = sov_state::nomt::zk_storage::NomtVerifierStorage<
+        DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>,
+    >;
+
+    type InnerZkvm = InnerZkvm;
+    type OuterZkvm = OuterZkvm;
+
+    type CryptoSpec = <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec;
+}

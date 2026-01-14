@@ -133,7 +133,7 @@ async fn rest_api_routes() {
     values.insert("{index}", "0".to_string());
     values.insert("{moduleName}", _module_name.to_string());
 
-    let storage_manager = sov_test_utils::storage::SimpleStorageManager::new();
+    let storage_manager = sov_test_utils::storage::SimpleNomtStorageManager::new();
     let storage = storage_manager.create_storage();
     let (_sender, receiver) =
         tokio::sync::watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(

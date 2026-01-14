@@ -4,7 +4,7 @@ use capabilities::mocks::MockKernel;
 use capabilities::RollupHeight;
 use sov_modules_api::*;
 use sov_state::{BorshCodec, Prefix, Storage, StorageProof};
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleNomtStorageManager;
 use sov_test_utils::validate_and_materialize;
 use unwrap_infallible::UnwrapInfallible;
 
@@ -20,7 +20,7 @@ fn make_user_map_proof(
     StateMap<u32, u32>,
 ) {
     let kernel = MockKernel::<S>::default();
-    let mut storage_manager = SimpleStorageManager::new();
+    let mut storage_manager = SimpleNomtStorageManager::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel, None);
     let mut map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
@@ -59,7 +59,7 @@ fn make_user_value_proof(
     StateValue<u32>,
 ) {
     let kernel = MockKernel::<S>::default();
-    let mut storage_manager = SimpleStorageManager::new();
+    let mut storage_manager = SimpleNomtStorageManager::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default(), None);
     let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
@@ -177,7 +177,7 @@ mod value {
 #[test]
 fn test_archival_proof_gen() {
     let mut kernel = MockKernel::<S>::default();
-    let mut storage_manager = SimpleStorageManager::new();
+    let mut storage_manager = SimpleNomtStorageManager::new();
     let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     const NUM_ITER: u64 = 10;
