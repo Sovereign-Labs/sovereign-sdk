@@ -13,7 +13,7 @@ use crate::runtime::{RT, S};
 
 #[test]
 fn test_block_updates() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),

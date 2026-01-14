@@ -313,7 +313,7 @@ pub trait AccessoryStateReader: UniversalStateAccessor + StateMetricsProvider {}
 /// A trait wrapper that replicates the functionality of [`StateReader`] but with a gas metering interface.
 /// This allows a storage reader to charge gas for read operations.
 pub trait ProvableStateReader<N: ProvableCompileTimeNamespace>:
-    UniversalStateAccessor + GasMeter
+    UniversalStateAccessor + GasMeter + StateMetricsProvider
 {
 }
 
@@ -399,11 +399,11 @@ macro_rules! blanket_impl_metered_state_reader {
     };
 }
 
-impl<T: ProvableStateReader<Kernel> + StateMetricsProvider> StateReader<Kernel> for T {
+impl<T: ProvableStateReader<Kernel>> StateReader<Kernel> for T {
     blanket_impl_metered_state_reader!(Kernel);
 }
 
-impl<T: ProvableStateReader<User> + StateMetricsProvider> StateReader<User> for T {
+impl<T: ProvableStateReader<User>> StateReader<User> for T {
     blanket_impl_metered_state_reader!(User);
 }
 

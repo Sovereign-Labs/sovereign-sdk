@@ -4,23 +4,115 @@ use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, U256};
 use alloy_provider::DynProvider;
+use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_demo_rollup::MockDemoRollup;
+use sov_evm::{CallMessage, EvmRuntimeConfigUpdate};
 use sov_modules_api::execution_mode::Native;
-use sov_test_utils::test_rollup::TestRollup;
+use sov_modules_api::transaction::Transaction;
+use sov_test_utils::default_test_signed_transaction;
+use sov_test_utils::test_rollup::{read_private_key, TestRollup};
 
 use crate::evm::evm_test_helper::{
     alloy_client_with_signer, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
 };
+use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 
-const GAS_LIMIT: u64 = 21000;
+const GAS_LIMIT: u64 = 100_000;
 
 /// Sets up a test rollup and client, waiting for initial blocks and pausing batches
-async fn setup_paused_rollup() -> (TestRollup<MockDemoRollup<Native>>, DynProvider) {
+async fn setup() -> (TestRollup<MockDemoRollup<Native>>, DynProvider) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client_with_signer(rollup.http_addr, SENDER_PRIV_KEY);
-    rollup.wait_for_next_blocks(1).await;
-    rollup.pause_preferred_batches().await;
+    rollup.wait_for_sequencer_ready().await.unwrap();
     (rollup, client)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_disable_max_fee_check() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_MAX_FEE_CHECK_HEIGHT", "0");
+    let (rollup, client) = setup().await;
+
+    let low_fee = 1;
+    let high_fee = 1_000_000;
+
+    // Verify low fee fails and high fee passes with max fee check enabled
+    send_tx_expect_failure(
+        &client,
+        low_fee,
+        "Low fee should fail before disable_max_fee_check message.",
+    )
+    .await;
+
+    send_tx_expect_success(
+        &client,
+        high_fee,
+        "High fee should pass before disable_max_fee_check message.",
+    )
+    .await;
+
+    // Disable the max fee check via admin config update
+    disable_max_fee_check(&rollup).await?;
+
+    // Now both low and high fee transactions should succeed
+    send_tx_expect_success(
+        &client,
+        low_fee,
+        "Low fee should pass after disable_max_fee_check message.",
+    )
+    .await;
+
+    send_tx_expect_success(
+        &client,
+        high_fee,
+        "High fee should pass after disable_max_fee_check message.",
+    )
+    .await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
+    // Set a higher threshold so we can test before/after behavior
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_MAX_FEE_CHECK_HEIGHT", "15");
+
+    let (rollup, client) = setup().await;
+
+    let low_fee = 1;
+    let high_fee = 1_000_000;
+
+    // Before threshold: both low and high fee should pass
+    send_tx_expect_success(
+        &client,
+        low_fee,
+        "Low fee should pass before height threshold.",
+    )
+    .await;
+    send_tx_expect_success(
+        &client,
+        high_fee,
+        "High fee should pass before height threshold.",
+    )
+    .await;
+
+    // Advance past the threshold (height 15)
+    rollup.wait_for_next_blocks(20).await;
+
+    // After threshold: low fee should fail, high fee should pass
+    send_tx_expect_failure(
+        &client,
+        low_fee,
+        "Low fee should fail after height threshold.",
+    )
+    .await;
+    send_tx_expect_success(
+        &client,
+        high_fee,
+        "High fee should pass after height threshold.",
+    )
+    .await;
+
+    Ok(())
 }
 
 /// Helper to create a simple ETH transfer transaction with the given max fee per gas
@@ -40,44 +132,41 @@ async fn create_tx_request(
         .with_gas_limit(GAS_LIMIT))
 }
 
-/// Helper to send a transaction and wait for it to be mined
-async fn send_and_mine_tx(
-    rollup: &TestRollup<MockDemoRollup<Native>>,
-    client: &DynProvider,
-    max_fee_per_gas: u128,
-) -> anyhow::Result<alloy::rpc::types::TransactionReceipt> {
-    let tx_request = create_tx_request(client, max_fee_per_gas).await?;
-    let pending_tx = client.send_transaction(tx_request).await?;
-
-    rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
-
-    Ok(pending_tx.get_receipt().await?)
+/// Sends a transaction and asserts it succeeds
+async fn send_tx_expect_success(client: &DynProvider, fee: u128, msg: &str) {
+    let tx_request = create_tx_request(client, fee).await.unwrap();
+    let pending_tx = client.send_transaction(tx_request).await.unwrap();
+    let receipt = pending_tx.get_receipt().await.unwrap();
+    assert!(receipt.status(), "{msg}");
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_insufficient_max_fee_per_gas() -> anyhow::Result<()> {
-    let (_rollup, client) = setup_paused_rollup().await;
-
-    let user_max_fee = 1u128;
-    let tx_request = create_tx_request(&client, user_max_fee).await?;
-    let result = client.send_transaction(tx_request).await;
-
-    let err_msg = result.unwrap_err().to_string();
+/// Sends a transaction and asserts it fails with "Insufficient max_fee_per_gas"
+async fn send_tx_expect_failure(client: &DynProvider, fee: u128, msg: &str) {
+    let tx_request = create_tx_request(client, fee).await.unwrap();
+    let err = client.send_transaction(tx_request).await.unwrap_err();
+    let err_msg = err.to_string();
     assert!(
-        err_msg.contains("Insufficient max_fee_per_gas: user specified 1, but current base fee is"),
-        "Expected insufficient max_fee_per_gas error, got: {err_msg}"
+        err_msg.contains("Insufficient max_fee_per_gas"),
+        "{msg}: got {err_msg}"
     );
-
-    Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_sufficient_max_fee_per_gas() -> anyhow::Result<()> {
-    let (rollup, client) = setup_paused_rollup().await;
+/// Sends an empty EvmRuntimeConfigUpdate to disable the max fee check.
+async fn disable_max_fee_check(rollup: &TestRollup<MockDemoRollup<Native>>) -> anyhow::Result<()> {
+    let key_and_address = read_private_key::<DemoRollupSpec>("token_deployer_private_key.json");
+    let admin_key = key_and_address.private_key;
 
-    let receipt = send_and_mine_tx(&rollup, &client, 1_000_000_000).await?;
-    assert!(receipt.status());
+    let update = EvmRuntimeConfigUpdate::<DemoRollupSpec>::empty();
+    let msg = RuntimeCall::<DemoRollupSpec>::Evm(CallMessage::UpdateRuntimeConfig(update));
+
+    let tx: Transaction<Runtime<DemoRollupSpec>, DemoRollupSpec> =
+        default_test_signed_transaction(&admin_key, &msg, 0, &CHAIN_HASH);
+
+    rollup
+        .client
+        .client
+        .send_tx_to_sequencer_with_retry(&tx)
+        .await?;
 
     Ok(())
 }

@@ -15,7 +15,7 @@ use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
 fn test_simple_transfer() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let value = 1;
     let transfer_tx = create_transfer_tx(0, &from, &to, value).tx;
@@ -39,7 +39,7 @@ fn test_simple_transfer() {
 
 #[test]
 fn test_simple_transfer_balance_larger_than_allowed() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let transfer_tx = create_transfer_tx(
         0,
@@ -73,7 +73,7 @@ fn test_evm_gas_usage() {
         "[2, 0]",
     );
     let gas_used_with_evm_metering = {
-        let (mut runner, from, _) = setup();
+        let (mut runner, from, _, _) = setup();
         let contract = LegacySimpleStorage::default();
         let contract_addr = from.address().create(0);
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
@@ -86,7 +86,7 @@ fn test_evm_gas_usage() {
         "[1, 0]",
     );
     let gas_used_without_evm_metering = {
-        let (mut runner, from, _) = setup();
+        let (mut runner, from, _, _) = setup();
         let contract = LegacySimpleStorage::default();
         let contract_addr = from.address().create(0);
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
@@ -105,7 +105,7 @@ fn test_evm_gas_usage() {
 
 #[test]
 fn test_executing_eth_transactions() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
 
@@ -166,7 +166,7 @@ fn test_executing_eth_transactions() {
 
 #[test]
 fn test_executing_eth_transactions_several_blocks() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let nb_of_transfers: u64 = 200;
     let batch_size: usize = 10;
@@ -221,7 +221,7 @@ fn test_executing_eth_transactions_several_blocks() {
 
 #[test]
 fn test_failed_tx_doesnt_update_evm_module_state() {
-    let (mut runner, _, no_balance_account) = setup();
+    let (mut runner, _, no_balance_account, _) = setup();
     let contract = LegacySimpleStorage::default();
     let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account).tx;
 
@@ -238,7 +238,7 @@ fn test_failed_tx_doesnt_update_evm_module_state() {
 
 #[test]
 fn test_account_nonce() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let from_addr = from.address();
     let value = 1;
@@ -270,7 +270,7 @@ fn test_account_nonce() {
 // Check that if the same account deploys two contracts, each deployment results in a unique contract address
 #[test]
 fn test_deploy_many_contracts() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr_1 = account.address().create(0);
 
@@ -323,7 +323,7 @@ fn test_deploy_many_contracts() {
 
 #[test]
 fn test_evm_logs() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
     let address_bytes: [u8; 32] = account.address().into_word().into();

@@ -87,7 +87,7 @@ fn test_cfg_missing_specs() {
 
 #[test]
 fn test_genesis_block() {
-    let (runner, _, _) = setup();
+    let (runner, _, _, _) = setup();
     let beneficiary = Address::new([0u8; 20]);
 
     runner.query_visible_state(move |state| {

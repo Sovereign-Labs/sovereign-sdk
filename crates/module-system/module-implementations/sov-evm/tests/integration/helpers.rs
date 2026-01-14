@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::crypto::secp256k1::public_key_to_address;
@@ -10,9 +8,10 @@ use alloy_primitives::B256;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
-use sov_address::MultiAddress;
-use sov_address::{EthereumAddress, FromVmAddress};
+use sov_address::{EthereumAddress, MultiAddress};
 use sov_eth_dev_signer::Signer;
+use sov_evm::ContractCreationPolicy;
+use sov_evm::EvmChainSpec;
 use sov_evm::{
     AccountData, EthereumAuthenticator, EvmGenesisConfig, RlpEvmTransaction, SpecId,
     TransactionSigned,
@@ -21,7 +20,16 @@ use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::runtime::{genesis::optimistic::HighLevelOptimisticGenesisConfig, TestRunner};
-use sov_test_utils::{TransactionType, TEST_DEFAULT_USER_BALANCE};
+use sov_test_utils::{TestUser, TransactionType, TEST_DEFAULT_USER_BALANCE};
+
+/// Sets the block height after which max fee check becomes active.
+pub(crate) fn set_max_fee_check_height(height: u64) {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_EVM_MAX_FEE_CHECK_HEIGHT",
+        height.to_string(),
+    );
+}
+
 pub(crate) struct EvmAccount(SecretKey);
 
 impl EvmAccount {
@@ -47,35 +55,47 @@ impl EvmAccount {
     }
 }
 
-pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
+/// Setup with EVM accounts and an admin TestUser for config updates.
+/// Returns (runner, funded_account, no_balance_account, admin).
+pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount, TestUser<S>) {
     let evm_account = EvmAccount::generate();
     let no_balance_account = EvmAccount::generate();
 
-    let genesis_config = HighLevelOptimisticGenesisConfig::generate();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
+    let admin = genesis_config
+        .additional_accounts()
+        .first()
+        .unwrap()
+        .clone();
 
-    let mut evm_config = EvmGenesisConfig {
-        accounts: vec![
-            AccountData {
-                address: evm_account.address(),
-                code_hash: KECCAK_EMPTY,
-                code: Default::default(),
-            },
-            AccountData {
-                address: no_balance_account.address(),
-                code_hash: KECCAK_EMPTY,
-                code: Default::default(),
-            },
-        ],
-        chain_spec: Default::default(),
-        contract_creation_policy: Default::default(),
+    let accounts = vec![
+        AccountData {
+            address: evm_account.address(),
+            code_hash: KECCAK_EMPTY,
+            code: Default::default(),
+        },
+        AccountData {
+            address: no_balance_account.address(),
+            code_hash: KECCAK_EMPTY,
+            code: Default::default(),
+        },
+    ];
+
+    let evm_config = EvmGenesisConfig {
+        accounts,
+        chain_spec: EvmChainSpec {
+            limit_contract_code_size: None,
+            coinbase: Address::ZERO,
+            block_gas_limit: 1_000_000_000,
+            tx_gas_limit: Some(30_000_000),
+            hardforks: vec![(0, SpecId::CANCUN)],
+        },
+        contract_creation_policy: ContractCreationPolicy::Everyone,
         initial_base_fee: 0,
         genesis_timestamp: 0,
-        admin: MultiAddress::from_vm_address(
-            EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
-        ),
+        admin: admin.address(),
     };
-
-    evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
 
     let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
 
@@ -89,7 +109,7 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount) {
     let runner =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), TestRuntime::default());
 
-    (runner, evm_account, no_balance_account)
+    (runner, evm_account, no_balance_account, admin)
 }
 
 pub(crate) fn create_transfer_tx(
@@ -193,4 +213,26 @@ fn create_tx(account: &EvmAccount, tx: TxEip1559) -> TxWithNonceAndHash {
         hash: *tx_env.hash(),
         tx: TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
     }
+}
+
+/// Create a transfer transaction with a specific max_fee_per_gas.
+pub(crate) fn create_transfer_tx_with_max_fee(
+    nonce: u64,
+    from: &EvmAccount,
+    to: Address,
+    max_fee_per_gas: u128,
+) -> TransactionType<RT, S> {
+    let tx = TxEip1559 {
+        to: TxKind::Call(to),
+        value: U256::from(1),
+        nonce,
+        gas_limit: 1_000_000,
+        max_fee_per_gas,
+        chain_id: config_value!("CHAIN_ID"),
+        ..Default::default()
+    };
+    let (signed_eth_tx, _) = from.sign(TypedTransaction::Eip1559(tx));
+    let data = borsh::to_vec(&signed_eth_tx).unwrap();
+    let raw_tx = RawTx { data };
+    TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
 }

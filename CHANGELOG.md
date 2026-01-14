@@ -1,3 +1,7 @@
+# 2026-01-14
+- #2326 **Breaking Change** Add `max_fee` validation to the EVM authenticator. This is a breaking change, as transactions that were valid before may no longer be accepted.
+The check can be disabled by sending a special EVM admin message to turn off the validation.
+
 # 2026-01-09
 - #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
 
