@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use rand::SeedableRng;
 use serde::Deserialize;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
-use sov_mock_da::storable::layer::StorableMockDaLayer;
+use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockDaService,
@@ -1247,4 +1247,84 @@ where
     };
 
     assert_eq!(seen_on_height_size, expected_continuous_size);
+}
+
+/// Tests StateManager behavior when DA layer reports stale headers (below actual finalized height).
+/// Uses the same pattern as `test_progressing_with_shuffle` since StorableMockDaService is required for Randomizer.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rewind_below_finalized_instant_finality() -> anyhow::Result<()> {
+    // Reuse existing test infrastructure with RewindBelowLastFinalized behavior
+    test_progressing_with_rewind_below_finalized(0, 5, 5, 15, SEED_1).await
+}
+
+async fn test_progressing_with_rewind_below_finalized(
+    finality: u32,
+    batches: usize,
+    max_depth: u32,
+    loop_blocks: usize,
+    seed: [u8; 32],
+) -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let da_layer = std::sync::Arc::new(tokio::sync::RwLock::new(
+        StorableMockDaLayer::new_in_memory(finality).await?,
+    ));
+    let da_service = StorableMockDaService::new(
+        SEQUENCER_ADDRESS,
+        da_layer.clone(),
+        BlockProducingConfig::OnBatchSubmit {
+            block_wait_timeout_ms: Some(3_000),
+        },
+    )
+    .await;
+    let (mut state_manager, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    // Submit blobs
+    let blob_data = [10; 10];
+    for _ in 0..batches {
+        da_service.send_transaction(&blob_data).await.await??;
+    }
+
+    // Enable RewindBelowLastFinalized from the start
+    {
+        let mut layer = da_layer.write().await;
+        layer.set_randomizer(Randomizer::from_config(RandomizationConfig {
+            seed: HexHash::new(seed),
+            reorg_interval: 1..2, // Always trigger
+            behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth },
+        }));
+    }
+
+    let mut height = 1u64;
+    for _ in 0..loop_blocks {
+        let filtered_block = da_service.get_block_at(height).await?;
+
+        let (prover_storage, returned_block) = state_manager
+            .prepare_storage(filtered_block, &da_service)
+            .await?;
+
+        let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+            state_manager.get_state_root().to_owned(),
+            prover_storage,
+            &da_service,
+            returned_block.clone(),
+        )
+        .await;
+
+        let slot_commit: MockSlotCommit =
+            SlotCommit::new(returned_block.clone(), Default::default());
+
+        state_manager
+            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .await?;
+        check_internal_consistency(&state_manager, finality as usize);
+
+        height = returned_block.header().height() + 1;
+
+        // Keep submitting blobs to advance chain
+        da_service.send_transaction(&blob_data).await.await??;
+    }
+
+    shutdown_sender.send(())?;
+    Ok(())
 }
