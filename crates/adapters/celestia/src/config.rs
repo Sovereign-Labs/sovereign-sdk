@@ -152,7 +152,10 @@ impl CelestiaConfig {
     }
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
-        let mut builder = celestia_client::Client::builder().rpc_url(&self.rpc_url);
+        let request_timeout = std::time::Duration::from_secs(self.request_timeout_secs.get());
+        let mut builder = celestia_client::Client::builder()
+            .rpc_url(&self.rpc_url)
+            .timeout(request_timeout);
         if let Some(rpc_auth_token) = &self.rpc_auth_token {
             builder = builder.rpc_auth_token(rpc_auth_token);
         }

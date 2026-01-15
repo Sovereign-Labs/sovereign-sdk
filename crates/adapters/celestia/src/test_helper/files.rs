@@ -2,8 +2,8 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
-use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::ExtendedHeader;
 use rand::{RngCore, SeedableRng};
 use serde::de::DeserializeOwned;
@@ -652,7 +652,7 @@ pub(crate) async fn update_block_data_from_payload(
     if with_prev_header {
         let prev_block_header = client
             .header()
-            .get_by_height(block_header.height().value().checked_sub(1).unwrap())
+            .get_by_height(block_header.height().checked_sub(1).unwrap())
             .await?;
         write_to_file(&path.join(PREV_HEADER_JSON), &prev_block_header)?;
     }
@@ -681,32 +681,30 @@ async fn save_blobs(
     write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
     let rollup_batch_rows = client
         .share()
-        .get_namespace_data(block_header.height().value(), batch_namespace)
+        .get_namespace_data(block_header.height(), APP_VERSION, batch_namespace)
         .await
         .unwrap();
     write_to_file(&path.join(ROLLUP_BATCH_ROWS_JSON), &rollup_batch_rows).unwrap();
 
     let rollup_proof_rows = client
         .share()
-        .get_namespace_data(block_header.height().value(), proof_namespace)
+        .get_namespace_data(block_header.height(), APP_VERSION, proof_namespace)
         .await
         .unwrap();
     write_to_file(&path.join(ROLLUP_PROOF_ROWS_JSON), &rollup_proof_rows).unwrap();
 }
 
-#[allow(clippy::float_arithmetic)]
 pub(crate) async fn submit_blobs(
     client: &celestia_client::Client,
     blobs: Vec<celestia_types::Blob>,
 ) -> anyhow::Result<ExtendedHeader> {
-    // TODO: THIS:
     let tx_config = celestia_client::tx::TxConfig::default();
 
     let tx_response = client
         .state()
         .submit_pay_for_blob(&blobs, tx_config)
         .await?;
-    let height = tx_response.height.value();
+    let height = tx_response.height;
 
     let block_header = client.header().get_by_height(height).await?;
     Ok(block_header)

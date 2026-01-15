@@ -24,8 +24,8 @@ use anyhow::Context;
 use async_trait::async_trait;
 use backon::ExponentialBuilder;
 use celestia_types::blob::Blob as JsonBlob;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
-use celestia_types::row_namespace_data::NamespaceData;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
@@ -159,7 +159,7 @@ impl CelestiaService {
 
         let tx_hash = TmHash(tx_response.hash);
         tracing::info!(
-            da_height = tx_response.height.value(),
+            da_height = tx_response.height,
             tx_hash = %tx_hash,
             blob_hash = %blob_hash,
             bytes,
@@ -252,6 +252,12 @@ impl CelestiaService {
             tracker.submit(GetBlockHeaderMeasurement::new(response_time, is_success));
         });
         let extended_header = flatten_timeout(result)?;
+        if extended_header.header.height.value() != height {
+            return Err(MaybeRetryable::Transient(anyhow::anyhow!(
+                "Received wrong height {}, when requested {height}",
+                extended_header.header.height.value()
+            )));
+        }
         Ok(extended_header.into())
     }
 
@@ -266,7 +272,9 @@ impl CelestiaService {
         tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
         let result = tokio::time::timeout(
             self.request_timeout,
-            client.share().get_namespace_data(height, namespace),
+            client
+                .share()
+                .get_namespace_data(height, APP_VERSION, namespace),
         )
         .await;
         let is_success = matches!(result, Ok(Ok(_)));

@@ -70,6 +70,17 @@ where
             Err(ReplicaError::NotReady(_sequencer_not_ready_details, db_data_rejected)) => {
                 return Err(DBDataRejected::ExecutorBehind(*db_data_rejected))
             }
+            Err(ReplicaError::Creation(BatchCreationError::PreferredSequencerAtStopHeight {
+                current_height,
+                height_to_stop_at,
+            })) => {
+                tracing::info!(
+                    current_height = %current_height,
+                    height_to_stop_at = %height_to_stop_at,
+                    "Replica reached stop height, stopping event processing"
+                );
+                return Err(DBDataRejected::StopHeightReached);
+            }
             Err(ReplicaError::Creation(batch_creation_error)) => {
                 panic!("Replica failed to create a new batch. Error: {batch_creation_error:?}");
             }

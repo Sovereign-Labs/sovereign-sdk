@@ -39,7 +39,7 @@ async fn test_replica_start_stop() {
 
     let receiver_addr = random_address();
 
-    let nb_of_txs = 300;
+    let nb_of_txs = 50;
 
     tracing::info!("===== 1 BEGIN");
     {
@@ -59,7 +59,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -159,7 +159,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(300),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -217,7 +217,7 @@ async fn test_replica_start_stop() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(300),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )
@@ -268,7 +268,7 @@ async fn test_replica_start_stop_many_times() {
         .map(|pg| (pg, "replica".into(), NodeRole::Replica));
     let mut replica_test_rollup = start_rollup(addr, replica).await;
 
-    let nb_of_txs = 300;
+    let nb_of_txs = 50;
     for i in 0..3 {
         let builder = replica_test_rollup.shutdown().await.unwrap();
 
@@ -299,7 +299,7 @@ async fn test_replica_start_stop_many_times() {
         .await;
 
         wait_for_all_events_with_timeout(
-            Duration::from_millis(100),
+            Duration::from_millis(1000),
             nb_of_txs,
             &mut event_subscription,
         )

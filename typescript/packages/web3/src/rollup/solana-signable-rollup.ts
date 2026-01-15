@@ -1,6 +1,5 @@
 import type SovereignClient from "@sovereign-sdk/client";
-import type { Signer } from "@sovereign-sdk/signers";
-import { LedgerSolanaSigner } from "@sovereign-sdk/signers";
+import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type { Transaction, UnsignedTransaction } from "@sovereign-sdk/types";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
@@ -121,7 +120,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * and "solanaSimple" for software signers.
    */
   private getAutoAuthenticator(signer: Signer): "solana" | "solanaSimple" {
-    return signer instanceof LedgerSolanaSigner ? "solana" : "solanaSimple";
+    return isLedgerSolanaSigner(signer) ? "solana" : "solanaSimple";
   }
 
   /**

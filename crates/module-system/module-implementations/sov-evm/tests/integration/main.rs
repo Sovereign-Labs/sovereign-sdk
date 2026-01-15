@@ -1,4 +1,5 @@
 mod archival_state;
+mod bls_precompiles;
 mod config;
 mod contracts;
 mod genesis;

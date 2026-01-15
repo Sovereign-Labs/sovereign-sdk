@@ -2,6 +2,7 @@ use std::ops::Range;
 use std::time::Duration;
 
 use schemars::JsonSchema;
+use sha2::Digest;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::Time;
 
@@ -20,8 +21,12 @@ pub(crate) const SENSIBLE_BLOCK_PULL_TIME: std::time::Duration =
     std::time::Duration::from_millis(200);
 
 pub(crate) const GENESIS_HEADER: MockBlockHeader = MockBlockHeader {
-    prev_hash: MockHash([0; 32]),
-    hash: MockHash([1; 32]),
+    prev_hash: MockHash([255; 32]),
+    // Unify with how MockBlockHeader::new or ::from_height are called
+    hash: MockHash([
+        0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0,
+    ]),
     height: 0,
     // 2023-01-01T00:00:00Z
     time: Time::from_millis(1672531200000),
@@ -90,6 +95,27 @@ pub enum RandomizationBehaviour {
     ///
     /// This operation adjusts the chain height but maintains finalization constraints.
     Rewind,
+    /// Makes `get_head_block_header` and `get_last_finalized_block_header` randomly
+    /// return block headers below the actual finalized height.
+    ///
+    /// This simulates scenarios where the DA layer reports stale data,
+    /// useful for testing rollup resilience to DA layer inconsistencies.
+    ///
+    /// Behavior:
+    /// - Each call advances the internal RNG, returning a different height each time.
+    /// - `get_last_finalized_block_header()` stores its result as a floor for head.
+    /// - `get_head_block_header()` returns `max(computed_height, last_finalized_floor)`.
+    /// - To guarantee `head >= finalized`, call `get_last_finalized_block_header()` first.
+    ///
+    /// Notes:
+    /// - Does not affect actual block production or chain state.
+    /// - Triggered probabilistically based on `reorg_interval` configuration.
+    /// - Heights are deterministic given the same seed and call sequence.
+    RewindBelowLastFinalized {
+        /// Maximum number of blocks below finalized height to report.
+        /// Random height is chosen between `max(0, finalized - max_depth)` and `finalized`.
+        max_depth: u32,
+    },
     /// Combines blob shuffling with chain height adjustment:
     ///
     /// 1. All non-finalized blobs, including those being added to a new block,
@@ -153,6 +179,17 @@ pub struct RandomizationConfig {
     /// This determines how blobs or blocks are processed, including their ordering,
     /// shuffling, skipping, or potential adjustments affecting the chain.
     pub behaviour: RandomizationBehaviour,
+}
+
+/// Small, but more entropy seed, suitable for unit tests
+pub fn seed_for_test(small_seed: u8) -> HexHash {
+    let orig = [small_seed; 32];
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(orig);
+    let result = hasher.finalize();
+    let mut hashed_seed = [0u8; 32];
+    hashed_seed.copy_from_slice(&result[..32]);
+    HexHash::new(hashed_seed)
 }
 
 /// The configuration for Mock Da.
@@ -220,7 +257,7 @@ impl MockDaConfig {
         "sqlite::memory:".to_string()
     }
 
-    /// Builds SQlite connection string and checks if a given directory exists.
+    /// Builds SQLite connection string and checks if a given directory exists.
     pub fn sqlite_in_dir(dir: impl AsRef<std::path::Path>) -> anyhow::Result<String> {
         let path = dir.as_ref();
         if !path.exists() {

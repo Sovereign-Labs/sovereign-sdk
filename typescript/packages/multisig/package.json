@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/multisig",
-  "version": "0.1.2",
+  "version": "0.3.0",
   "description": "Multisig functionality for Sovereign SDK applications",
   "scripts": {
     "build": "tsup",
@@ -38,7 +38,9 @@
     "access": "public"
   },
   "dependencies": {
+    "@noble/hashes": "^1.5.0",
     "@sovereign-sdk/signers": "workspace:^",
-    "@sovereign-sdk/utils": "workspace:^"
+    "@sovereign-sdk/utils": "workspace:^",
+    "borsh": "0.7.0"
   }
 }

@@ -550,6 +550,30 @@
           ]
         },
         {
+          "description": "Makes `get_head_block_header` and `get_last_finalized_block_header` randomly return block headers below the actual finalized height.\n\nThis simulates scenarios where the DA layer reports stale data, useful for testing rollup resilience to DA layer inconsistencies.\n\nBehavior: - Each call advances the internal RNG, returning a different height each time. - `get_last_finalized_block_header()` stores its result as a floor for head. - `get_head_block_header()` returns `max(computed_height, last_finalized_floor)`. - To guarantee `head >= finalized`, call `get_last_finalized_block_header()` first.\n\nNotes: - Does not affect actual block production or chain state. - Triggered probabilistically based on `reorg_interval` configuration. - Heights are deterministic given the same seed and call sequence.",
+          "type": "object",
+          "required": [
+            "rewind_below_last_finalized"
+          ],
+          "properties": {
+            "rewind_below_last_finalized": {
+              "type": "object",
+              "required": [
+                "max_depth"
+              ],
+              "properties": {
+                "max_depth": {
+                  "description": "Maximum number of blocks below finalized height to report. Random height is chosen between `max(0, finalized - max_depth)` and `finalized`.",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
           "description": "Combines blob shuffling with chain height adjustment:\n\n1. All non-finalized blobs, including those being added to a new block, are shuffled across all blobs that are part of the new chain state. 2. The chain height is adjusted (rewound or extended) within the constraints of the finality window.\n\n**Constraints**: - Rewinding can only occur as far back as the finality window allows. - Extending is not possible if the finality window is already full. - Rewinding is not triggered if there is only one non-finalized block. - The specified percentage of blobs (`drop_percent`) is always respected.",
           "type": "object",
           "required": [

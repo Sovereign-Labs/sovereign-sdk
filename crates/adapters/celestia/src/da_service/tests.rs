@@ -2,12 +2,13 @@ use std::str::FromStr;
 
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
-use crate::test_helper::{ADDR_1, ADDR_2, ROLLUP_PARAMS_DEV};
+use crate::test_helper::{ADDR_1, ROLLUP_PARAMS_DEV};
 use crate::types::{BlobWithSender, FilteredCelestiaBlock};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
 use crate::CelestiaService;
 use anyhow::Context;
+use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
@@ -27,7 +28,7 @@ async fn collect_all_blobs_between(
     height_before: u64,
 ) -> anyhow::Result<(Vec<BlobWithSender>, Vec<BlobWithSender>)> {
     // Adding one more height to the current head to accommodate for blob inclusion.
-    // Even though by the time submiPayForBlob has returned it should be included, we observed flakyness.
+    // Even though by the time submitPayForBlob has returned it should be included, we observed flakiness.
     let height_after = da_service
         .get_head_block_header()
         .await?
@@ -299,11 +300,15 @@ async fn verification_fails_if_sender_changed() {
     let mut block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
     let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
-    let addr_2 = CelestiaAddress::from_str(ADDR_2).unwrap();
+    let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
     let addr_len = addr_1.as_ref().len();
 
-    let row = block.rollup_batch_data.data.rows.get_mut(0).unwrap();
-    let share = row.shares.get_mut(0).unwrap();
+    let serialized_ns_data = serde_json::to_string(&block.rollup_batch_data.data).unwrap();
+    let row = block.rollup_batch_data.data.rows().first().unwrap();
+    let share = row.shares.first().unwrap();
+    // Save it to string for replacing it in JSON in the future.
+    let serialized_share_before = serde_json::to_string(share).unwrap();
+
     let mut raw_share_1 = share.data().clone().to_vec();
 
     let add_pos = raw_share_1
@@ -314,8 +319,13 @@ async fn verification_fails_if_sender_changed() {
     raw_share_1.splice(add_pos..add_pos + addr_len, addr_2.as_ref().iter().copied());
 
     let malicious_share = celestia_types::Share::from_raw(&raw_share_1).unwrap();
+    let serialized_malicious_share = serde_json::to_string(&malicious_share).unwrap();
 
-    row.shares[0] = malicious_share;
+    let malicious_ns_data_json =
+        serialized_ns_data.replace(&serialized_share_before, &serialized_malicious_share);
+    let malicious_ns_data: NamespaceData = serde_json::from_str(&malicious_ns_data_json).unwrap();
+
+    block.rollup_batch_data.data = malicious_ns_data;
 
     // This is how it is observed
     verification_error(block, "InvalidRoot", rollup_params)

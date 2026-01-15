@@ -159,6 +159,7 @@ where
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
+        genesis_da_height: u64,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -180,7 +181,14 @@ where
             .checked_add(1)
             .expect("The impossible happened  first_unprocessed_height_at_startup overflowed");
 
+        // During startup last processed header is always the finalized one,
+        // because runner does not save to disk non-finalized headers.
+        let last_processed_da_header = da_service
+            .get_block_header_at(first_unprocessed_height_at_startup.saturating_sub(1))
+            .await?;
+
         debug!(
+            last_processed_da_header = %last_processed_da_header.display(),
             %first_unprocessed_height_at_startup,
             proof_manager_config = ?pm_config,
             "Initializing StfRunner");
@@ -211,6 +219,8 @@ where
             sync_state.clone(),
             da_total_timeout,
             da_service_with_cached_finalized_headers.clone(),
+            genesis_da_height,
+            last_processed_da_header,
         )?;
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
@@ -361,7 +371,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run_in_process(&mut self, genesis_da_height: u64) -> anyhow::Result<()> {
+    pub async fn run_in_process(&mut self) -> anyhow::Result<()> {
         self.state_manager.startup().await?;
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
@@ -391,7 +401,6 @@ where
                     next_da_height,
                     &start_at_rollup_height,
                     &stop_at_rollup_height,
-                    genesis_da_height,
                 ),
                 &shutdown_receiver,
             )
@@ -461,7 +470,6 @@ where
         mut next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
-        genesis_da_height: u64,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
         let prev_state_root = self.get_state_root().clone();
@@ -484,6 +492,7 @@ where
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
             // Requests height might re-org
+            // It never returns a future height for requested
             crate::da::fetch_block_reorg_aware(
                 self.da_service.as_ref(),
                 self.sync_state.as_ref(),
@@ -616,7 +625,6 @@ where
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
             .process_stf_changes(
-                genesis_da_height,
                 slot_result.change_set,
                 transition_data,
                 data_to_commit,
