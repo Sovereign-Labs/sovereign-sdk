@@ -65,7 +65,6 @@ revm = { workspace = true, features = [
 	"optional_balance_check",
 	"memory_limit",
 	"std",
-	"blst",
 ] }
 revm-database-interface = { workspace = true }
 reth-ethereum-primitives = { workspace = true, features = [
@@ -137,6 +136,7 @@ native = [
 	"dep:sov-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
+	"revm/blst", # Use faster C implementation of bls in native code
 	"sov-evm/native",
 	"sov-metrics/native",
 	"sov-address/native",
