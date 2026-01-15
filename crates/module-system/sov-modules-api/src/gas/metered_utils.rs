@@ -143,33 +143,12 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         meter: &mut Meter,
         msg_len: usize,
     ) -> Result<(), MeteredSigVerificationError<GU>> {
-        meter
-            .charge_gas(self.fixed_gas_to_charge_per_verification)
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        meter
-            .charge_linear_gas(
-                self.gas_to_charge_per_byte_for_verification,
-                as_u32_or_panic(msg_len),
-            )
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        meter
-            .charge_gas(<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        meter
-            .charge_linear_gas(
-                <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
-                msg_len.try_into().map_err(|e: TryFromIntError| {
-                    MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
-                        e.to_string(),
-                    ))
-                })?,
-            )
-            .map_err(MeteredSigVerificationError::GasError)?;
-
-        Ok(())
+        charge_gas_for_sig_inner(
+            meter,
+            msg_len,
+            self.fixed_gas_to_charge_per_verification,
+            self.gas_to_charge_per_byte_for_verification,
+        )
     }
 
     /// Verifies a signature with the provided gas meter. This method is a wrapper around [`Signature::verify`].
@@ -190,6 +169,54 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
     }
 }
 
+/// Charge gas for transaction signature verification.
+pub fn charge_gas_for_sig<S: Spec, Meter: GasMeter<Spec = S>>(
+    meter: &mut Meter,
+    msg_len: usize,
+) -> Result<(), MeteredSigVerificationError<S::Gas>> {
+    charge_gas_for_sig_inner(
+        meter,
+        msg_len,
+        S::fixed_gas_to_charge_per_signature_verification(),
+        S::gas_to_charge_per_byte_signature_verification(),
+    )
+}
+
+fn charge_gas_for_sig_inner<GU: Gas, Meter: GasMeter<Spec: Spec<Gas = GU>>>(
+    meter: &mut Meter,
+    msg_len: usize,
+    fixed_gas_to_charge_per_signature: GU,
+    gas_to_charge_per_byte_for_signature: GU,
+) -> Result<(), MeteredSigVerificationError<GU>> {
+    meter
+        .charge_gas(fixed_gas_to_charge_per_signature)
+        .map_err(MeteredSigVerificationError::GasError)?;
+
+    meter
+        .charge_linear_gas(
+            gas_to_charge_per_byte_for_signature,
+            as_u32_or_panic(msg_len),
+        )
+        .map_err(MeteredSigVerificationError::GasError)?;
+
+    meter
+        .charge_gas(<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
+        .map_err(MeteredSigVerificationError::GasError)?;
+
+    meter
+        .charge_linear_gas(
+            <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+            msg_len.try_into().map_err(|e: TryFromIntError| {
+                MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
+                    e.to_string(),
+                ))
+            })?,
+        )
+        .map_err(MeteredSigVerificationError::GasError)?;
+
+    Ok(())
+}
+
 /// Representation of a metered borsh deserialization error.
 #[derive(Debug, Error)]
 pub enum MeteredBorshDeserializeError<GU: Gas> {
@@ -203,46 +230,6 @@ pub enum MeteredBorshDeserializeError<GU: Gas> {
 
 /// Charges gas for deserialization.
 pub trait MeteredBorshDeserialize<S: Spec>: Sized {
-    /// The gas cost bias to deserialize this data structure.
-    fn bias_borsh_deserialization() -> <S as Spec>::Gas;
-
-    /// The linear gas cost to deserialize this data structure.
-    fn gas_to_charge_per_byte_borsh_deserialization() -> <S as Spec>::Gas;
-
-    /// Computes the cost to deserialize the given buffer, in `Gas`, and charges it to the provided
-    /// `GasMeter`.
-    ///
-    /// # Errors
-    /// Returns an error if charging the gas for the deserialization operation fails.
-    fn charge_gas_to_deserialize(
-        buf: &[u8],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        // This is safe to cast here. We won't have data bigger than 4GB.
-        let buf_len: u32 = as_u32_or_panic(buf.len());
-
-        // Custom gas costs to deserialize this data structure.
-        meter
-            .charge_gas(Self::bias_borsh_deserialization())
-            .map_err(MeteredBorshDeserializeError::GasError)?;
-
-        meter
-            .charge_linear_gas(
-                Self::gas_to_charge_per_byte_borsh_deserialization(),
-                buf_len,
-            )
-            .map_err(MeteredBorshDeserializeError::GasError)?;
-
-        // Common gas costs to deserialize this data structure.
-        meter
-            .charge_gas(S::bias_borsh_deserialization())
-            .map_err(MeteredBorshDeserializeError::GasError)?;
-
-        meter
-            .charge_linear_gas(S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
-            .map_err(MeteredBorshDeserializeError::GasError)
-    }
-
     /// Deserializes a type from a byte slice with the provided gas meter. Charge the [`GasSpec::gas_to_charge_per_byte_borsh_deserialization`]
     /// amount of gas for each byte of the struct to deserialize.
     fn deserialize(
@@ -255,6 +242,39 @@ pub trait MeteredBorshDeserialize<S: Spec>: Sized {
     fn unmetered_deserialize(
         buf: &mut &[u8],
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>>;
+}
+
+/// Computes the cost to deserialize the given buffer, in `Gas`, and charges it to the provided
+/// `GasMeter`.
+///
+/// # Errors
+/// Returns an error if charging the gas for the deserialization operation fails.
+pub fn charge_gas_to_deserialize<S: Spec>(
+    bias_borsh_deserialization: <S as Spec>::Gas,
+    gas_to_charge_per_byte_borsh_deserialization: <S as Spec>::Gas,
+    buf_len: usize,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
+    // This is safe to cast here. We won't have data bigger than 4GB.
+    let buf_len: u32 = as_u32_or_panic(buf_len);
+
+    // Custom gas costs to deserialize this data structure.
+    meter
+        .charge_gas(bias_borsh_deserialization)
+        .map_err(MeteredBorshDeserializeError::GasError)?;
+
+    meter
+        .charge_linear_gas(gas_to_charge_per_byte_borsh_deserialization, buf_len)
+        .map_err(MeteredBorshDeserializeError::GasError)?;
+
+    // Common gas costs to deserialize this data structure.
+    meter
+        .charge_gas(S::bias_borsh_deserialization())
+        .map_err(MeteredBorshDeserializeError::GasError)?;
+
+    meter
+        .charge_linear_gas(S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
+        .map_err(MeteredBorshDeserializeError::GasError)
 }
 
 /// Computes the cost to deserialize the given JSON buffer, in `Gas`, and charges it to the provided

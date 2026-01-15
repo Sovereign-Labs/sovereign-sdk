@@ -4,6 +4,7 @@ use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, U256};
 use alloy_provider::DynProvider;
+use alloy_rpc_types_eth::TransactionInput;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_demo_rollup::MockDemoRollup;
 use sov_evm::{CallMessage, EvmRuntimeConfigUpdate};
@@ -111,6 +112,23 @@ async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
         "High fee should pass after height threshold.",
     )
     .await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_big_call_data() -> anyhow::Result<()> {
+    let (rollup, client) = setup().await;
+    rollup.wait_for_next_blocks(1).await;
+    let mut tx = TransactionRequest::default().with_to(Address::ZERO);
+
+    tx.input = TransactionInput {
+        input: Some(vec![1; 1000_000].into()),
+        data: None,
+    };
+
+    let pending = client.send_transaction(tx).await.unwrap();
+    _ = pending.watch().await.unwrap();
 
     Ok(())
 }
