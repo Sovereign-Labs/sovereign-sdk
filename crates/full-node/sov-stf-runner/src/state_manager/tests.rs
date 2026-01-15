@@ -33,6 +33,17 @@ use super::*;
 
 const DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
 
+/// Helper to extract (pre_state, block) from PrepareStorageResult::Ready.
+/// Panics if result is NeedHeight - use this only in tests that expect Ready.
+fn unwrap_ready<S, B>(result: PrepareStorageResult<S, B>) -> (S, B) {
+    match result {
+        PrepareStorageResult::Ready { pre_state, block } => (pre_state, block),
+        PrepareStorageResult::NeedHeight(height) => {
+            panic!("Expected PrepareStorageResult::Ready, got NeedHeight({height})")
+        }
+    }
+}
+
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct MockGenesisParams;
 
@@ -254,9 +265,11 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             post_state_roots.push(current_state_root);
             hash_to_post_state_root.insert(block_hash, current_state_root);
         } else {
-            let (prover_storage, returned_block) = state_manager
-                .prepare_storage(filtered_block.clone(), &da_service)
-                .await?;
+            let (prover_storage, returned_block) = unwrap_ready(
+                state_manager
+                    .prepare_storage(filtered_block.clone(), &da_service)
+                    .await?,
+            );
             assert_ne!(filtered_block, returned_block);
             // First non seen block:
             assert_eq!(fork_point + 1, returned_block.header().height());
@@ -324,9 +337,11 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
         .await??;
 
     let filtered_block = da_service.get_block_at(chain_length).await?;
-    let (prover_storage, returned_block) = state_manager
-        .prepare_storage(filtered_block.clone(), &da_service)
-        .await?;
+    let (prover_storage, returned_block) = unwrap_ready(
+        state_manager
+            .prepare_storage(filtered_block.clone(), &da_service)
+            .await?,
+    );
 
     assert_eq!(filtered_block, returned_block);
 
@@ -429,9 +444,11 @@ async fn test_progressing_with_shuffle(
         // since StateManager's last_processed_finalized_header is at genesis
         let filtered_block = da_service.get_block_at(height).await?;
 
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        let (prover_storage, returned_block) = unwrap_ready(
+            state_manager
+                .prepare_storage(filtered_block, &da_service)
+                .await?,
+        );
 
         // Always a new non-seen block
         assert!(
@@ -648,9 +665,11 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
 
     while height < final_height {
         let filtered_block = da_service.get_block_at(height).await?;
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        let (prover_storage, returned_block) = unwrap_ready(
+            state_manager
+                .prepare_storage(filtered_block, &da_service)
+                .await?,
+        );
 
         assert!(
             !seen_transitions.contains_key(&returned_block.header().hash()),
@@ -725,9 +744,11 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
 
     for _ in 0..loop_blocks {
         let filtered_block = da_service.get_block_at(height).await?;
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        let (prover_storage, returned_block) = unwrap_ready(
+            state_manager
+                .prepare_storage(filtered_block, &da_service)
+                .await?,
+        );
 
         assert!(
             !seen_transitions.contains_key(&returned_block.header().hash()),
@@ -1148,9 +1169,11 @@ async fn process_continuous_transition(
     da_service: &MockDaService,
     finality: u32,
 ) -> anyhow::Result<()> {
-    let (prover_storage, returned_block) = state_manager
-        .prepare_storage(filtered_block.clone(), da_service)
-        .await?;
+    let (prover_storage, returned_block) = unwrap_ready(
+        state_manager
+            .prepare_storage(filtered_block.clone(), da_service)
+            .await?,
+    );
 
     assert_eq!(filtered_block, returned_block);
 

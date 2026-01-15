@@ -502,6 +502,10 @@ where
             .await?
         };
         let get_block_time = get_block_start.elapsed();
+        assert!(
+            filtered_block.header().height() <= next_da_height,
+            "Bug in block fetching results, it returned future block"
+        );
         tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, checking continuation");
 
         // Check if this block is a valid continuation of the current chain.

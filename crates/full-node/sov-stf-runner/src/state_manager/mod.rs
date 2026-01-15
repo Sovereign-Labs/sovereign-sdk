@@ -91,6 +91,27 @@ enum ForkPointSearchResult<Da: DaService, StateRoot> {
     Found(ForkPoint<Da, StateRoot>),
     HeadChanged(<Da::Spec as DaSpec>::BlockHeader),
     DaHeadIsBelowProcessedFinalized,
+    /// All seen blocks are in current chain up to DA head.
+    /// Caller should fetch and process block at the given height.
+    NeedFutureBlock {
+        height: u64,
+    },
+}
+
+/// Result of `choose_fork_point()` - either found a fork point or need a different height.
+enum ForkPointResult<Da: DaService, StateRoot> {
+    /// Found the fork point - caller can proceed with this block
+    Found(ForkPoint<Da, StateRoot>),
+    /// Need to fetch block at this height - propagate up to runner
+    NeedHeight(u64),
+}
+
+/// Result of `prepare_storage()` - either ready to process or need different height.
+pub(crate) enum PrepareStorageResult<StfState, Block> {
+    /// Ready to process - caller can proceed with STF execution
+    Ready { pre_state: StfState, block: Block },
+    /// Need to fetch block at this height - propagate up to caller
+    NeedHeight(u64),
 }
 
 /// StateManager controls storage lifecycle for [`StateTransitionFunction`],
@@ -120,6 +141,9 @@ where
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
     da_sync_state: Arc<DaSyncState>,
+    // TODO: Remove this field - it's no longer used after removing the waiting loop
+    // in try_find_candidate_in_current_chain. Kept for now to minimize interface changes.
+    #[allow(dead_code)]
     da_total_timeout: std::time::Duration,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
 }
@@ -192,13 +216,14 @@ where
     /// If a caller relies on some data from `filtered_block`,
     /// it should be updated after the call of this method.
     /// If a given block continues in the current fork, it is simply returned to the caller.
-    /// If reorg happened, it will return block following the last seen transition.
+    /// If reorg happened, it will return block following the last seen transition,
+    /// or indicate that a different height should be fetched.
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn prepare_storage(
+    async fn prepare_storage(
         &mut self,
         mut filtered_block: Da::FilteredBlock,
         da_service: &Da,
-    ) -> anyhow::Result<(Sm::StfState, Da::FilteredBlock)> {
+    ) -> anyhow::Result<PrepareStorageResult<Sm::StfState, Da::FilteredBlock>> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
             anyhow::bail!(
@@ -209,48 +234,61 @@ where
         tracing::trace!(reorg_happened, "Checked if reorg happened");
 
         if reorg_happened {
-            let ForkPoint {
-                block: new_block,
-                pre_state_root,
-            } = self.choose_fork_point(da_service).await?;
-            tracing::trace!(
-                old_block = %filtered_block.header().display(),
-                new_block = %new_block.header().display(),
-                old_pre_state_root = hex::encode(self.state_root.as_ref()),
-                new_pre_state_root = hex::encode(pre_state_root.as_ref()),
-                "Reorg happened, updating variables");
+            match self.choose_fork_point(da_service).await? {
+                ForkPointResult::Found(ForkPoint {
+                    block: new_block,
+                    pre_state_root,
+                }) => {
+                    tracing::trace!(
+                        old_block = %filtered_block.header().display(),
+                        new_block = %new_block.header().display(),
+                        old_pre_state_root = hex::encode(self.state_root.as_ref()),
+                        new_pre_state_root = hex::encode(pre_state_root.as_ref()),
+                        "Reorg happened, updating variables");
 
-            // Self check
-            {
-                if let Some(prev_state) = self.state_on_block.get(&new_block.header().prev_hash()) {
-                    assert_eq!(
-                        prev_state.post_state_root.as_ref(),
-                        pre_state_root.as_ref(),
-                        "mismatch in roots after transition"
+                    // Self check
+                    {
+                        if let Some(prev_state) =
+                            self.state_on_block.get(&new_block.header().prev_hash())
+                        {
+                            assert_eq!(
+                                prev_state.post_state_root.as_ref(),
+                                pre_state_root.as_ref(),
+                                "mismatch in roots after transition"
+                            );
+                            assert_eq!(
+                                prev_state.block_header.hash(),
+                                new_block.header().prev_hash(),
+                                "Mismatch in block hashes after transition",
+                            );
+                            assert!(
+                                !self.state_on_block.contains_key(&new_block.header().hash()),
+                                "We are return already seen block. how come?"
+                            );
+                        }
+                        assert!(
+                            !self.state_on_block.contains_key(&new_block.header().hash()),
+                            "trying to return previously seen state"
+                        );
+                    }
+                    tracing::info!(
+                        old_block = %filtered_block.header().display(),
+                        new_block = %new_block.header().display(),
+                        time = ?start.elapsed(),
+                        "Reorg happened. Chosen fork point"
                     );
-                    assert_eq!(
-                        prev_state.block_header.hash(),
-                        new_block.header().prev_hash(),
-                        "Mismatch in block hashes after transition",
-                    );
-                    assert!(
-                        !self.state_on_block.contains_key(&new_block.header().hash()),
-                        "We are return already seen block. how come?"
-                    );
+                    filtered_block = new_block;
+                    self.state_root = pre_state_root;
                 }
-                assert!(
-                    !self.state_on_block.contains_key(&new_block.header().hash()),
-                    "trying to return previously seen state"
-                );
+                ForkPointResult::NeedHeight(height) => {
+                    tracing::trace!(
+                        height,
+                        time = ?start.elapsed(),
+                        "Reorg happened but need future block, returning height to fetch"
+                    );
+                    return Ok(PrepareStorageResult::NeedHeight(height));
+                }
             }
-            tracing::info!(
-                old_block = %filtered_block.header().display(),
-                new_block = %new_block.header().display(),
-                time = ?start.elapsed(),
-                "Reorg happened. Chosen fork point"
-            );
-            filtered_block = new_block;
-            self.state_root = pre_state_root;
         }
 
         let (stf_pre_state, ledger_state) = self
@@ -272,7 +310,10 @@ where
             reorg_happened,
             time = ?start.elapsed(),
             "Returning STF state for block");
-        Ok((stf_pre_state, filtered_block))
+        Ok(PrepareStorageResult::Ready {
+            pre_state: stf_pre_state,
+            block: filtered_block,
+        })
     }
 
     /// Checks if a block is a valid continuation of the current chain state.
@@ -289,13 +330,22 @@ where
         da_service: &Da,
     ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState>> {
         let inner_block = block.clone();
-        let (pre_state, new_block) = self.prepare_storage(inner_block, da_service).await?;
-        if new_block.hash() == block.hash() {
-            Ok(BlockCandidateResolution::KnownContinuation { pre_state })
-        } else {
-            Ok(BlockCandidateResolution::NoMatch {
-                height_to_fetch: new_block.header().height(),
-            })
+        match self.prepare_storage(inner_block, da_service).await? {
+            PrepareStorageResult::Ready {
+                pre_state,
+                block: new_block,
+            } => {
+                if new_block.hash() == block.hash() {
+                    Ok(BlockCandidateResolution::KnownContinuation { pre_state })
+                } else {
+                    Ok(BlockCandidateResolution::NoMatch {
+                        height_to_fetch: new_block.header().height(),
+                    })
+                }
+            }
+            PrepareStorageResult::NeedHeight(height) => Ok(BlockCandidateResolution::NoMatch {
+                height_to_fetch: height,
+            }),
         }
     }
 
@@ -620,7 +670,11 @@ where
 
     // If reorg happened,
     // the next incremental continuation of that fork that hasn't been processed should be found.
-    async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
+    // Returns either a ForkPoint (with the block to process) or a height to fetch.
+    async fn choose_fork_point(
+        &self,
+        da_service: &Da,
+    ) -> anyhow::Result<ForkPointResult<Da, StateRoot>> {
         // If we haven't seen anything we can only start from last seen finalized height.
         if self.state_on_block.is_empty() {
             let adjacent_height = self
@@ -634,10 +688,10 @@ where
                 self.last_processed_finalized_header.hash(),
                 "Bug in DA, block adjacent to finalized has wrong prev_hash"
             );
-            return Ok(ForkPoint {
+            return Ok(ForkPointResult::Found(ForkPoint {
                 block: adjacent,
                 pre_state_root: self.state_root.clone(),
-            });
+            }));
         }
 
         let earliest_seen_height = self
@@ -666,7 +720,7 @@ where
                         fork_point = %fork_point.block.header().display(),
                         "Found a candidate for fork point"
                     );
-                    return Ok(fork_point);
+                    return Ok(ForkPointResult::Found(fork_point));
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
                     tracing::warn!(
@@ -687,6 +741,16 @@ where
                     tokio::time::sleep(sleep_time).await;
                     let head_again = da_service.get_head_block_header().await?;
                     head = head_again;
+                }
+                ForkPointSearchResult::NeedFutureBlock { height } => {
+                    // All seen blocks are in current chain - need to fetch a future block.
+                    // Don't retry, propagate up to caller (eventually runner).
+                    tracing::trace!(
+                        attempt,
+                        height,
+                        "Need future block, returning height for runner to fetch"
+                    );
+                    return Ok(ForkPointResult::NeedHeight(height));
                 }
             }
         }
@@ -847,55 +911,22 @@ where
                 pre_state_root: seen_prev_state_root,
             }))
         } else {
+            // We've seen all blocks in the current chain up to DA head.
+            // Instead of waiting for future blocks, return the height runner should fetch.
+            // The next height to check is `low` (the first unprocessed height in current fork).
+            let next_height = low;
             tracing::trace!(
                 earliest_seen_height,
                 highest_seen_height,
                 low,
                 high,
-                "Seen everything in current chain, will wait for next block"
+                next_height,
+                "Seen everything in current chain, returning height for runner to fetch"
             );
 
-            // This candidate obviously is not fit, otherwise it would've been selected in the main loop
-            let mut candidate = final_candidate.expect("Should be set");
-            assert_eq!(
-                candidate.header().height(),
-                high,
-                "Wrong candidate for the future block",
-            );
-
-            // So we are start going into the future, until we see some block.
-            // We will panic if we reach end of the seen heights without finding our candidate.
-            // If chain reorgs, we will start over
-            loop {
-                let next_candidate_height = candidate
-                    .header()
-                    .height()
-                    .checked_add(1)
-                    .expect("end of chain");
-                let (this_candidate, this_head) = tokio::try_join!(
-                    // Need fetch re-org aware if the chain rewinds here.
-                    crate::da::fetch_block_reorg_aware(
-                        da_service,
-                        self.da_sync_state.as_ref(),
-                        next_candidate_height,
-                        self.da_total_timeout,
-                    ),
-                    da_service.get_head_block_header(),
-                )?;
-                if is_head_changed::<Da::Spec>(&head, &this_head) {
-                    return Ok(ForkPointSearchResult::HeadChanged(this_head));
-                }
-                candidate = this_candidate;
-                if let Some(pre_state_root) = self.get_matching_pre_state_root(candidate.header()) {
-                    return Ok(ForkPointSearchResult::Found(ForkPoint {
-                        block: candidate,
-                        pre_state_root,
-                    }));
-                }
-                assert!(self.state_on_block.contains_key(&this_head.hash()), "bug in internal struct. Newly received head hasn't been seen and didn't fit for candidate");
-                assert!(self.state_on_block.contains_key(&candidate.header().hash()), "bug in internal struct. Newly received candidate hasn't been seen and didn't fit for candidate");
-                head = this_head;
-            }
+            Ok(ForkPointSearchResult::NeedFutureBlock {
+                height: next_height,
+            })
         }
     }
 
