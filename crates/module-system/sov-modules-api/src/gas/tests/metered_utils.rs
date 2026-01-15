@@ -160,7 +160,12 @@ impl MeteredBorshDeserialize<S> for BorshTestStruct {
         buf: &mut &[u8],
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<Self, MeteredBorshDeserializeError<<S as Spec>::Gas>> {
-        crate::charge_gas_to_deserialize(buf, meter)?;
+        crate::charge_gas_to_deserialize(
+            <S as Spec>::Gas::zero(),
+            <S as Spec>::Gas::zero(),
+            buf.len(),
+            meter,
+        )?;
 
         <Self as borsh::BorshDeserialize>::deserialize(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
