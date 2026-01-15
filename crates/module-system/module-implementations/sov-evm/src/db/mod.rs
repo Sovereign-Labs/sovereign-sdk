@@ -126,6 +126,14 @@ where
     }
 }
 
+impl<'a, Ws: TxState<S>, S: Spec> crate::sov_evm::PrecompileDb<S> for EvmDb<'a, Ws, S> {
+    type State = Ws;
+
+    fn precompile_state_mut(&mut self) -> &mut Self::State {
+        self.state
+    }
+}
+
 pub(crate) struct CachedByteCode {
     pub code: Bytecode,
 }

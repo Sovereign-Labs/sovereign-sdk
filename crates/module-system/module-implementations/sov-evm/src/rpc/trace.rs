@@ -2,6 +2,7 @@ use std::ops::DerefMut;
 
 use alloy_eips::BlockId;
 use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_rpc_types_trace::geth::{
     GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingOptions, GethTrace,
@@ -18,8 +19,10 @@ use sov_rpc_eth_types::EthApiError;
 use super::maybe_archival_state::MaybeArchivalState;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
+use crate::error::into_rpc_error;
 use crate::evm::primitive_types::{MaybeSealedBlock, TxSignedAndRecovered};
-use crate::executor::{get_cfg_env, inspect, transact_commit};
+use crate::executor::{get_cfg_env, inspect_with_precompiles, transact_commit};
+use crate::sov_evm::SovPrecompiles;
 use crate::Evm;
 
 impl<S: Spec> Evm<S>
@@ -93,6 +96,12 @@ where
         // Setup execution environment (fetches block, preloads transactions, sets up state)
         let (mut state, txs_to_trace, block_env, cfg_env) =
             self.setup_trace_execution(block_number, state)?;
+
+        // Load enabled precompiles before creating db (to avoid borrow conflicts)
+        let enabled_custom_precompiles = self
+            .get_enabled_sov_precompiles(state.deref_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+
         let mut evm_db = self.db(state.deref_mut());
 
         // Trace all transactions in the block
@@ -105,6 +114,7 @@ where
                 cfg_env.clone(),
                 &mut evm_db,
                 &opts,
+                enabled_custom_precompiles.clone(),
             )?;
             traces.push(TraceResult::new_success(result, Some(*tx.hash())));
         }
@@ -129,6 +139,12 @@ where
         // Setup execution environment (fetches block, preloads transactions, sets up state)
         let (mut state, txs_to_replay, block_env, cfg_env) =
             self.setup_trace_execution(traced_tx.block_number, state)?;
+
+        // Load enabled precompiles before creating db (to avoid borrow conflicts)
+        let enabled_custom_precompiles = self
+            .get_enabled_sov_precompiles(state.deref_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+
         let mut evm_db = self.db(state.deref_mut());
 
         // Replay previous transactions in the block
@@ -138,8 +154,17 @@ where
                 break;
             }
 
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(EthApiError::from)?;
+            // Create precompiles for each replay (moved into transact_commit)
+            let precompiles =
+                SovPrecompiles::new(enabled_custom_precompiles.clone(), &self.bank_module);
+            transact_commit(
+                &mut evm_db,
+                &block_env,
+                replay_tx_env(&tx),
+                cfg_env.clone(),
+                precompiles,
+            )
+            .map_err(EthApiError::from)?;
         }
 
         // Trace the target transaction
@@ -149,6 +174,7 @@ where
             cfg_env,
             &mut evm_db,
             &opts,
+            enabled_custom_precompiles,
         )
     }
 
@@ -159,6 +185,7 @@ where
         cfg: CfgEnv,
         db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
+        enabled_custom_precompiles: Vec<Address>,
     ) -> Result<GethTrace, EthApiError> {
         let GethDebugTracingOptions {
             tracer,
@@ -177,9 +204,19 @@ where
                         TracingInspectorConfig::from_geth_call_config(&call_config);
                     let mut inspector = TracingInspector::new(inspector_config);
 
+                    // Create precompile provider with sovereign state access
+                    let precompiles =
+                        SovPrecompiles::new(enabled_custom_precompiles.clone(), &self.bank_module);
+
                     let gas_limit = tx_env.gas_limit;
-                    let ExecResultAndState { result, state } =
-                        inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
+                    let ExecResultAndState { result, state } = inspect_with_precompiles(
+                        &mut *db,
+                        block_env,
+                        tx_env,
+                        cfg,
+                        &mut inspector,
+                        precompiles,
+                    )?;
                     db.try_commit(state)?;
 
                     inspector.set_transaction_gas_limit(gas_limit);

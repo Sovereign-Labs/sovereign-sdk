@@ -4,6 +4,7 @@ mod config;
 mod contracts;
 mod genesis;
 mod helpers;
+mod precompiles;
 mod pruning;
 mod runtime;
 mod state;

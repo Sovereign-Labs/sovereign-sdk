@@ -40,6 +40,10 @@ pub struct EvmGenesisConfig<S: Spec> {
     pub contract_creation_policy: ContractCreationPolicy,
     /// The address which is allowed to modify the config.
     pub admin: S::Address,
+    /// Precompile addresses to enable at genesis.
+    /// Each address must have a known implementation in the binary.
+    #[serde(default)]
+    pub enabled_custom_precompiles: Vec<Address>,
 }
 
 impl<S: Spec> EvmGenesisConfig<S> {
@@ -52,6 +56,7 @@ impl<S: Spec> EvmGenesisConfig<S> {
             chain_spec: EvmChainSpec::default(),
             contract_creation_policy: ContractCreationPolicy::Everyone,
             admin,
+            enabled_custom_precompiles: vec![],
         }
     }
 }
@@ -170,6 +175,10 @@ pub struct EvmRuntimeConfigUpdate<S: Spec> {
     pub chain_spec_update: Option<ChainSpecUpdate>,
     /// A new admin address to set. None means "no change"
     pub new_admin: Option<S::Address>,
+    /// Precompile addresses to enable. None means "no change".
+    /// Each address must have a known implementation in the binary.
+    /// Limited to 16 addresses per update to prevent abuse.
+    pub enable_precompiles: Option<SafeVec<HexString<[u8; 20]>, 16>>,
 }
 
 #[derive(
@@ -284,6 +293,7 @@ mod tests {
                 "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
             )
             .unwrap(),
+            enabled_custom_precompiles: vec![],
         };
 
         let data = r#"

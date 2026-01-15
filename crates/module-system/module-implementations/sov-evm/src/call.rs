@@ -24,9 +24,10 @@ use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 #[cfg(feature = "native")]
 use crate::execution_config::EVM_EXECUTION_CONFIG;
-use crate::executor::{get_cfg_env, transact};
+use crate::executor::{get_cfg_env, transact_with_precompiles};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
+use crate::sov_evm::SovPrecompiles;
 use crate::{
     gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
     ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
@@ -118,11 +119,21 @@ where
             new_contract_creation_policy,
             chain_spec_update,
             new_admin,
+            enable_precompiles,
         } = update;
 
         // Update admin (no validation required)
         if let Some(new_admin) = new_admin {
             self.admin.set(&new_admin, state)?;
+        }
+
+        // Enable precompiles
+        if let Some(addresses) = enable_precompiles {
+            for hex_addr in addresses.iter() {
+                let address: Address = hex_addr.0.into();
+                // Use enable_precompile_genesis since admin check is already done
+                self.add_enabled_precompile_unchecked(address, state)?;
+            }
         }
 
         // Add hardfork activation, validating that it has a future height and is greater than the current spec id
@@ -244,6 +255,13 @@ where
             self.fetch_state(context, state, tx)?;
 
         save_elapsed!(fetch_state_time SINCE fetch_state);
+
+        // Load enabled precompiles from state
+        let enabled_custom_precompiles = self.get_enabled_sov_precompiles(state)?;
+
+        // Create precompile provider with sovereign state access
+        let precompiles = SovPrecompiles::new(enabled_custom_precompiles, &self.bank_module);
+
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
 
@@ -251,7 +269,7 @@ where
         let ExecResultAndState {
             result,
             state: state_changes,
-        } = match transact(&mut db, &block, tx_env, cfg_env) {
+        } = match transact_with_precompiles(&mut db, &block, tx_env, cfg_env, precompiles) {
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };

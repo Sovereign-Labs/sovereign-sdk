@@ -140,3 +140,17 @@ impl<ExtDB: Database> Database for MetricsDb<ExtDB> {
         time!(self.db.block_hash(number))
     }
 }
+
+use sov_modules_api::Spec;
+
+/// Implement `PrecompileDb` for `MetricsDb` by delegating to the inner database.
+impl<ExtDB, S: Spec> crate::sov_evm::PrecompileDb<S> for MetricsDb<ExtDB>
+where
+    ExtDB: crate::sov_evm::PrecompileDb<S>,
+{
+    type State = ExtDB::State;
+
+    fn precompile_state_mut(&mut self) -> &mut Self::State {
+        self.db.precompile_state_mut()
+    }
+}

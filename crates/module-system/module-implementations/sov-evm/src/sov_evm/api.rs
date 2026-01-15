@@ -8,9 +8,9 @@ use revm::{
         result::{EVMError, ExecutionResult},
         ContextTr, Database, JournalTr,
     },
-    handler::{EvmTr, Handler},
+    handler::{EvmTr, Handler, PrecompileProvider},
     inspector::{InspectCommitEvm, InspectEvm, Inspector, InspectorHandler, JournalExt},
-    interpreter::interpreter::EthInterpreter,
+    interpreter::{interpreter::EthInterpreter, InterpreterResult},
     state::EvmState,
     DatabaseCommit, ExecuteCommitEvm, ExecuteEvm,
 };
@@ -19,9 +19,10 @@ use revm::{
 type MyError<CTX> = EVMError<<<CTX as ContextTr>::Db as Database>::Error, InvalidTransaction>;
 
 // Trait that allows to replay and transact the transaction.
-impl<CTX, INSP> ExecuteEvm for SovEvm<CTX, INSP>
+impl<CTX, INSP, P> ExecuteEvm for SovEvm<CTX, INSP, P>
 where
     CTX: ContextSetters<Journal: JournalTr<State = EvmState>>,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
     type State = EvmState;
     type ExecutionResult = ExecutionResult<HaltReason>;
@@ -57,9 +58,10 @@ where
 }
 
 // Trait allows replay_commit and transact_commit functionality.
-impl<CTX, INSP> ExecuteCommitEvm for SovEvm<CTX, INSP>
+impl<CTX, INSP, P> ExecuteCommitEvm for SovEvm<CTX, INSP, P>
 where
     CTX: ContextSetters<Db: DatabaseCommit, Journal: JournalTr<State = EvmState>>,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
     fn commit(&mut self, state: Self::State) {
         self.ctx().db_mut().commit(state);
@@ -67,10 +69,11 @@ where
 }
 
 // Inspection trait.
-impl<CTX, INSP> InspectEvm for SovEvm<CTX, INSP>
+impl<CTX, INSP, P> InspectEvm for SovEvm<CTX, INSP, P>
 where
     CTX: ContextSetters<Journal: JournalTr<State = EvmState> + JournalExt>,
     INSP: Inspector<CTX, EthInterpreter>,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
     type Inspector = INSP;
 
@@ -86,9 +89,10 @@ where
 }
 
 // Inspect
-impl<CTX, INSP> InspectCommitEvm for SovEvm<CTX, INSP>
+impl<CTX, INSP, P> InspectCommitEvm for SovEvm<CTX, INSP, P>
 where
     CTX: ContextSetters<Db: DatabaseCommit, Journal: JournalTr<State = EvmState> + JournalExt>,
     INSP: Inspector<CTX, EthInterpreter>,
+    P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
 }

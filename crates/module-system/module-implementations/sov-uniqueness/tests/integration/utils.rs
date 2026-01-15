@@ -145,6 +145,7 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
         admin: MultiAddress::from_vm_address(
             EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
         ),
+        enabled_custom_precompiles: vec![],
     };
 
     // Run genesis registering the attester and sequencer we've generated.
