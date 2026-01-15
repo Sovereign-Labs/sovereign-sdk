@@ -117,7 +117,7 @@ async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_big_call_data() -> anyhow::Result<()> {
+async fn test_big_call_data() {
     let (rollup, client) = setup().await;
     rollup.wait_for_next_blocks(1).await;
     let mut tx = TransactionRequest::default().with_to(Address::ZERO);
@@ -129,8 +129,6 @@ async fn test_big_call_data() -> anyhow::Result<()> {
 
     let pending = client.send_transaction(tx).await.unwrap();
     _ = pending.watch().await.unwrap();
-
-    Ok(())
 }
 
 /// Helper to create a simple ETH transfer transaction with the given max fee per gas

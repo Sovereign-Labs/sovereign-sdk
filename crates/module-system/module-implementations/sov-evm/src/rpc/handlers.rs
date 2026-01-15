@@ -294,7 +294,7 @@ where
         trace!(method = "eth_estimateGas", "EVM module JSON-RPC request");
 
         // Add 1,000 bytes to account for all other data in the Transaction structure, apart from call data.
-        let call_data_len = request.input.input().as_ref().map(|i| i.len()).unwrap_or(0) + 1000;
+        let tx_size = request.input.input().as_ref().map(|i| i.len()).unwrap_or(0) + 1000;
 
         let ResultAndState {
             result,
@@ -326,10 +326,10 @@ where
             .try_as_basic_gas_meter()
             .expect("ApiState has BasicGasMeter");
 
-        sov_modules_api::gas::charge_gas_for_sig(gas_meter, call_data_len)
+        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
             .expect("Gas meter is initialized with INF");
 
-        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, call_data_len)
+        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
             .expect("Gas meter is initialized with INF");
 
         gas_meter
