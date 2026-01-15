@@ -85,6 +85,10 @@ pub struct Mailbox<S: Spec, R: Recipient<S>> {
     #[state]
     pub deliveries: StateMap<MessageId, Delivery>,
 
+    /// The number of successful deliveries.
+    #[state]
+    pub delivery_count: StateValue<u64>,
+
     /// A map of announced validator addresses to their signature locations.
     #[state]
     pub validators: StateMap<EthAddress, Vec<StorageLocation>>,
