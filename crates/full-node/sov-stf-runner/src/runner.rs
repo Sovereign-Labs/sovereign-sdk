@@ -472,7 +472,6 @@ where
         stop_at_rollup_height: &Option<RollupHeight>,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
-        let prev_state_root = self.get_state_root().clone();
         let span = tracing::info_span!("process_next_slot", next_da_height = next_da_height);
 
         if let Some(h) = start_at_rollup_height {
@@ -510,7 +509,7 @@ where
 
         // Check if this block is a valid continuation of the current chain.
         // If not, early return with the height runner should fetch next.
-        let stf_pre_state = match self
+        let (stf_pre_state, pre_state_root) = match self
             .state_manager
             .is_good_continuation(&filtered_block, &self.da_service)
             .await
@@ -518,12 +517,15 @@ where
                 tracing::warn!(?e, "Error during is_good_continuation");
                 e
             })? {
-            BlockCandidateResolution::KnownContinuation { pre_state } => {
+            BlockCandidateResolution::KnownContinuation {
+                pre_state,
+                pre_state_root,
+            } => {
                 tracing::trace!(
                     header = %filtered_block.header().display(),
                     "Block is a valid continuation, proceeding with STF execution"
                 );
-                pre_state
+                (pre_state, pre_state_root)
             }
             BlockCandidateResolution::NoMatch { height_to_fetch } => {
                 debug!(
@@ -546,7 +548,7 @@ where
         debug!(
             batch_blobs_count = batch_blobs.len(),
             next_da_height,
-            current_state_root = hex::encode(prev_state_root.as_ref()),
+            current_state_root = hex::encode(pre_state_root.as_ref()),
             batch_blobs = ?batch_blobs
                 .iter()
                 .map(|b| format!(
@@ -570,7 +572,7 @@ where
 
         let apply_slot_start = std::time::Instant::now();
         let slot_result = self.stf.apply_slot(
-            self.state_manager.get_state_root(),
+            &pre_state_root,
             stf_pre_state,
             Default::default(),
             &filtered_block_header,
@@ -623,7 +625,7 @@ where
 
         let transition_data: StateTransitionWitness<Stf::StateRoot, Stf::Witness, Da::Spec> =
             StateTransitionWitness {
-                initial_state_root: self.get_state_root().clone(),
+                initial_state_root: pre_state_root,
                 final_state_root: slot_result.state_root.clone(),
                 da_block_header: filtered_block_header.clone(),
                 relevant_proofs,
@@ -696,11 +698,6 @@ where
         }
 
         Ok(Some(next_da_height + 1))
-    }
-
-    /// Allows reading current state root
-    pub fn get_state_root(&self) -> &Stf::StateRoot {
-        self.state_manager.get_state_root()
     }
 
     /// Retrieve a handle for the underlying DA service

@@ -148,7 +148,7 @@ async fn spawn(
     let da_service =
         Arc::new(MockDaService::new(MockAddress::new([11u8; 32])).with_wait_attempts(200));
 
-    let (mut runner, test_node) = initialize_runner(
+    let (mut runner, _state_root, test_node) = initialize_runner(
         da_service,
         path.as_ref(),
         init_variant,
