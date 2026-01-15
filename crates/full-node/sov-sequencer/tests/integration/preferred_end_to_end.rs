@@ -55,6 +55,7 @@ use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
 const DELAYED_TX_DELAY_MS: u64 = 2500;
+const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 generate_optimistic_runtime_with_kernel!(
     TestRuntime <=
@@ -141,11 +142,19 @@ impl DaLayerWithSubscription {
         let subscription = self.slot_subscription.as_mut().unwrap();
         while self.back_slot_notifications > 1 {
             self.back_slot_notifications -= 1;
-            subscription.next().await.unwrap().unwrap();
+            tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+                .await
+                .expect("timeout waiting for slot notification")
+                .unwrap()
+                .unwrap();
         }
 
         self.back_slot_notifications -= 1;
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for slot notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Gets the next state update notification, clearing any *known* updates from the queue first.
@@ -154,7 +163,11 @@ impl DaLayerWithSubscription {
     /// how many state update notifications we should ultimately be receiving.
     pub async fn next_state_update_notification(&mut self) -> StateUpdateNotification {
         let subscription = self.state_update_subscription.as_mut().unwrap();
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for state update notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Produces a slot and waits for the state update and slot notifications.

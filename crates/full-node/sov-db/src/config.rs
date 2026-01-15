@@ -63,29 +63,21 @@ impl RollupDbConfig {
         Self {
             path,
             state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
-            user_commit_concurrency: Some(4),
+            user_commit_concurrency: Some(2),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
-                2_500 // 9.77MB
+                500
             } else {
-                15_000_000
+                1_000_000
             }),
-            user_preallocate_ht: if cfg!(debug_assertions) {
-                Some(false)
-            } else {
-                None
-            },
+            user_preallocate_ht: Some(false),
             user_page_cache_size: None,
             user_leaf_cache_size: None,
             kernel_commit_concurrency: Some(2),
             kernel_hashtable_buckets: None,
-            kernel_preallocate_ht: if cfg!(debug_assertions) {
-                Some(false)
-            } else {
-                None
-            },
+            kernel_preallocate_ht: Some(false),
             kernel_page_cache_size: None,
             kernel_leaf_cache_size: None,
-            pruner_block_interval: Some(100),
+            pruner_block_interval: None,
             pruner_versions_to_keep: Some(20),
             pruner_max_batch_size: None,
         }
@@ -102,12 +94,16 @@ impl RollupDbConfig {
             self.kernel_commit_concurrency
                 .expect("`kernel_commit_concurrency` concurrency must be set"),
         );
-        if cfg!(debug_assertions) {
-            // 9.77MB
-            opts.hashtable_buckets(2_500);
+        if let Some(hashtable_buckets) = self.kernel_hashtable_buckets {
+            opts.hashtable_buckets(hashtable_buckets);
         } else {
-            // 1000MB
-            opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
+            if cfg!(debug_assertions) {
+                // 9.77MB
+                opts.hashtable_buckets(2_500);
+            } else {
+                // 1000MB
+                opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
+            }
         }
         if let Some(preallocate_ht) = self.kernel_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
