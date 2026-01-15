@@ -314,15 +314,18 @@ impl StorableMockDaLayer {
 
     /// Get head block header saved in the database.
     pub async fn get_head_block_header(&self) -> anyhow::Result<MockBlockHeader> {
-        if let Some(height) = self.compute_below_finalized_height().await {
-            // Ensure head is never below the last reported finalized height
-            let finalized_floor = self
-                .last_reported_finalized
-                .load(std::sync::atomic::Ordering::Relaxed);
-            let height = height.max(finalized_floor);
-            return self.get_header_at(height).await;
-        }
-        self.get_header_at(self.next_height.saturating_sub(1)).await
+        let height = self
+            .compute_below_finalized_height()
+            .await
+            .unwrap_or_else(|| self.next_height.saturating_sub(1));
+
+        // Ensure head is never below the last reported finalized height
+        let finalized_floor = self
+            .last_reported_finalized
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let height = height.max(finalized_floor);
+
+        self.get_header_at(height).await
     }
 
     /// Get updates on the latest head block
