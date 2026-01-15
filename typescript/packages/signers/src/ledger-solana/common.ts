@@ -1,15 +1,19 @@
 import Solana from "@ledgerhq/hw-app-solana";
 import type Transport from "@ledgerhq/hw-transport";
-import type { Signer } from "./signer";
+import type { Signer } from "../signer";
 
-export class LedgerSolanaSigner implements Signer {
+export type TransportLoader = () => Promise<Transport>;
+
+export class LedgerSolanaSignerBase implements Signer {
+  readonly __ledgerSolanaSigner = true as const;
+
   private transport: Transport | null = null;
   private solanaApp: Solana | null = null;
-  private derivationPath: string;
 
-  constructor(derivationPath = "44'/501'") {
-    this.derivationPath = derivationPath;
-  }
+  constructor(
+    private loadTransport: TransportLoader,
+    private derivationPath = "44'/501'",
+  ) {}
 
   private async connect(): Promise<void> {
     if (this.transport && this.solanaApp) {
@@ -17,39 +21,11 @@ export class LedgerSolanaSigner implements Signer {
     }
 
     try {
-      if (typeof window !== "undefined") {
-        // Browser environment - use WebHID or WebUSB
-        const TransportWebHID = (await import("@ledgerhq/hw-transport-webhid"))
-          .default;
-        const TransportWebUSB = (await import("@ledgerhq/hw-transport-webusb"))
-          .default;
-
-        if (await TransportWebHID.isSupported()) {
-          this.transport = await TransportWebHID.create();
-        } else if (await TransportWebUSB.isSupported()) {
-          this.transport = await TransportWebUSB.create();
-        } else {
-          throw new Error(
-            "No supported Ledger transport available (WebHID or WebUSB)",
-          );
-        }
-      } else {
-        // Assuming node environment
-        try {
-          const TransportNodeHid = (
-            await import("@ledgerhq/hw-transport-node-hid")
-          ).default;
-          this.transport = await TransportNodeHid.create();
-        } catch (e) {
-          throw new Error(
-            "Failed to connect via Node HID transport. Make sure your Ledger is connected.",
-          );
-        }
-      }
+      this.transport = await this.loadTransport();
 
       const solana = new Solana(this.transport);
       const version = await solana.getAppConfiguration().then((r) => r.version);
-      const [major, minor, patch] = version.split(".").map(Number);
+      const [major, minor, _patch] = version.split(".").map(Number);
       if (major < 1 || (major === 1 && minor < 8)) {
         throw new Error(
           "Signing off-chain messages requires Solana Ledger App 1.8.0 or later",

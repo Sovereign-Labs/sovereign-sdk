@@ -6,7 +6,6 @@ mod finalized_headers_cache;
 pub use bulk_finalized_blocks_fetcher::FinalizedBlocksBulkFetcher;
 pub use finalized_headers_cache::DaServiceWithCachedFinalizedHeaders;
 
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use sov_rollup_interface::node::da::DaService;
@@ -21,6 +20,8 @@ const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 ///
 /// Returns the new target height once it drops below `requested_height - 1`.
 /// Note: Requesting `target_height + 1` is normal when the node is synced and waiting for the next block.
+///
+/// If the sync status sender is dropped, this function blocks forever.
 async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_height: u64) -> u64 {
     let mut rx = sync_state.sync_status_sender.subscribe();
     loop {
@@ -43,8 +44,8 @@ async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_he
             "Received head is in expected range, keep waiting for new value"
         );
         if rx.changed().await.is_err() {
-            // Sender dropped, fall back to reading the atomic value
-            return sync_state.target_da_height.load(Ordering::Relaxed);
+            // Sender dropped, wait indefinitely so the other select branch can complete.
+            std::future::pending::<()>().await;
         }
     }
 }

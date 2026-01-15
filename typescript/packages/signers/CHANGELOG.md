@@ -1,5 +1,11 @@
 # @sovereign-sdk/signers
 
+## 0.5.0
+
+### Minor Changes
+
+-   4c19b87: Split Ledger-Solana signer implementation into a separate entrypoint. To use it, import LedgerSolanaSigner `'@sovereign-sdk/signers/ledger-solana';`. The old export has been removed. This should allow bundlers to skip building the Ledger dependencies except when explicitly using one of these entrypoints, and allows separation between node-specific HID support and browser USB support dependencies for the Ledger connection.
+
 ## 0.4.0
 
 ### Minor Changes

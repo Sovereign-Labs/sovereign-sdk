@@ -4,9 +4,9 @@ use std::convert::Infallible;
 use std::ops::Range;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use celestia_types::namespace_data::NamespaceData;
 /// Reexport the [`Namespace`] from `celestia-types`
 pub use celestia_types::nmt::Namespace;
-use celestia_types::row_namespace_data::NamespaceData;
 use celestia_types::AppVersion;
 pub use error::*;
 use serde::{Deserialize, Serialize};
@@ -151,7 +151,7 @@ impl NamespaceRelevantData {
     pub(crate) fn new(namespace: Namespace, data: NamespaceData) -> Self {
         #[cfg(debug_assertions)]
         {
-            for row in &data.rows {
+            for row in data.rows() {
                 for share in &row.shares {
                     assert_eq!(
                         share.namespace(),
@@ -265,7 +265,7 @@ pub struct NamespaceBoundaryProof {
 #[cfg(feature = "native")]
 impl NamespaceBoundaryProof {
     pub(crate) fn from_namespace_data(namespace_data: &NamespaceRelevantData) -> Option<Self> {
-        let last_row = namespace_data.data.rows.last()?;
+        let last_row = namespace_data.data.rows().last()?;
         if last_row.shares.is_empty() && last_row.proof.is_of_presence() {
             panic!("Incorrect namespace data: last row proof is of presence, but no shares");
         } else if last_row.shares.is_empty() && last_row.proof.is_of_absence() {
@@ -274,7 +274,7 @@ impl NamespaceBoundaryProof {
                 last_share: None,
             });
         }
-        let all_before_last = &last_row.shares[..last_row.shares.len() - 1];
+        let all_before_last = &last_row.shares[..last_row.shares.len().saturating_sub(1)];
         let last_share = last_row
             .shares
             .last()
@@ -339,9 +339,9 @@ pub mod tests {
 
         let rollup_proof_data = block.rollup_proof_data;
 
-        assert_eq!(rollup_proof_data.data.rows.len(), 1);
-        assert_eq!(rollup_proof_data.data.rows[0].shares.len(), 1);
-        assert!(rollup_proof_data.data.rows[0].proof.is_of_presence());
+        assert_eq!(rollup_proof_data.data.rows().len(), 1);
+        assert_eq!(rollup_proof_data.data.rows()[0].shares.len(), 1);
+        assert!(rollup_proof_data.data.rows()[0].proof.is_of_presence());
     }
 
     #[test]
@@ -354,9 +354,9 @@ pub mod tests {
 
         // single rollup share
         // assert_eq!(rollup_batch_data.group.shares().len(), 1);
-        assert_eq!(rollup_batch_data.data.rows.len(), 1);
-        assert_eq!(rollup_batch_data.data.rows[0].shares.len(), 1);
-        assert!(rollup_batch_data.data.rows[0].proof.is_of_presence());
+        assert_eq!(rollup_batch_data.data.rows().len(), 1);
+        assert_eq!(rollup_batch_data.data.rows()[0].shares.len(), 1);
+        assert!(rollup_batch_data.data.rows()[0].proof.is_of_presence());
     }
 
     #[test]
@@ -370,9 +370,9 @@ pub mod tests {
 
         // no rollup shares
         // we still get a single row, but with absence proof and no shares
-        assert_eq!(rollup_batch_data.data.rows.len(), 1);
-        assert_eq!(rollup_batch_data.data.rows[0].shares.len(), 0);
-        assert!(rollup_batch_data.data.rows[0].proof.is_of_absence());
+        assert_eq!(rollup_batch_data.data.rows().len(), 1);
+        assert_eq!(rollup_batch_data.data.rows()[0].shares.len(), 0);
+        assert!(rollup_batch_data.data.rows()[0].proof.is_of_absence());
     }
 
     #[test]
