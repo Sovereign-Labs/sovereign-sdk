@@ -123,7 +123,7 @@ async fn test_big_call_data() {
     let mut tx = TransactionRequest::default().with_to(Address::ZERO);
 
     tx.input = TransactionInput {
-        input: Some(vec![1; 1000_000].into()),
+        input: Some(vec![1; 1_000_000].into()),
         data: None,
     };
 
