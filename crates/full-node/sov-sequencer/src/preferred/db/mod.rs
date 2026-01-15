@@ -444,6 +444,9 @@ impl PreferredSequencerDb {
                         Some(Box::new(PostgresBackend::connect(postgres_config).await?)),
                         SequencerRole::Leader,
                     ),
+                    NodeRole::DbElected => {
+                        todo!()
+                    }
                 }
             } else {
                 (
