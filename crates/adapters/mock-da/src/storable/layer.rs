@@ -872,7 +872,7 @@ mod tests {
     use tokio::time;
 
     use super::*;
-    use crate::MockAddress;
+    use crate::{seed_for_test, MockAddress};
 
     enum TestBlob {
         Batch(Vec<u8>),
@@ -2053,6 +2053,7 @@ mod tests {
     async fn test_rewind_below_last_finalized_triggers() -> anyhow::Result<()> {
         let finality = 10;
         let max_depth = 5;
+        let blocks = 100;
         let mut da_layer = StorableMockDaLayer::new_in_memory(finality).await?;
 
         // Produce enough blocks to have finalized blocks
@@ -2066,46 +2067,47 @@ mod tests {
         // Enable RewindBelowLastFinalized with a seed that triggers the behavior
         // Using reorg_interval 1..2 means 100% trigger rate
         da_layer.set_randomizer(Randomizer::from_config(RandomizationConfig {
-            seed: HexHash::new([42; 32]),
-            reorg_interval: 1..2,
+            seed: seed_for_test(42),
+            reorg_interval: 1..4,
             behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth },
         }));
 
-        let reported_head = da_layer.get_head_block_header().await?;
-        let reported_finalized = da_layer.get_last_finalized_block_header().await?;
+        for _ in 0..blocks {
+            let actual_finalized = da_layer.last_finalized_height as u64;
+            // Finalized called first, that's important invariant, if we want to make sure that head is not falling below
+            let reported_finalized = da_layer.get_last_finalized_block_header().await?;
+            let reported_head = da_layer.get_head_block_header().await?;
 
-        // Head should never be below finalized
-        assert!(
-            reported_head.height() >= reported_finalized.height(),
-            "Head {} should be >= finalized {}",
-            reported_head.height(),
-            reported_finalized.height()
-        );
 
-        // Both should be at or below actual finalized height
-        assert!(
-            reported_head.height() <= actual_finalized,
-            "Reported head {} should be <= actual finalized {}",
-            reported_head.height(),
-            actual_finalized
-        );
-        assert!(
-            reported_finalized.height() <= actual_finalized,
-            "Reported finalized {} should be <= actual finalized {}",
-            reported_finalized.height(),
-            actual_finalized
-        );
+            // Head should never be below finalized
+            assert!(
+                reported_head.height() >= reported_finalized.height(),
+                "Head {} should be >= finalized {}",
+                reported_head.height(),
+                reported_finalized.height()
+            );
 
-        // Both should respect max_depth
-        let min_allowed = actual_finalized.saturating_sub(max_depth as u64);
-        assert!(
-            reported_finalized.height() >= min_allowed,
-            "Reported finalized {} should be >= min_allowed {} (finalized {} - max_depth {})",
-            reported_finalized.height(),
-            min_allowed,
-            actual_finalized,
-            max_depth
-        );
+            // Both should be at or below actual finalized height
+            assert!(
+                reported_head.height() >= reported_finalized.height(),
+                "Reported head {} should be >= reported finalized {}",
+                reported_head.height(),
+                reported_finalized.height(),
+            );
+            assert!(
+                reported_finalized.height() <= actual_finalized,
+                "Reported finalized {} should be <= actual finalized {actual_finalized}",
+                reported_finalized.height(),
+            );
+
+            // Both should respect max_depth
+            let min_allowed = actual_finalized.saturating_sub(max_depth as u64);
+            assert!(
+                reported_finalized.height() >= min_allowed,
+                "Reported finalized {} should be >= min_allowed {min_allowed} (finalized {actual_finalized} - max_depth {max_depth})",
+                reported_finalized.height(),
+            );
+        }
 
         Ok(())
     }
@@ -2114,7 +2116,8 @@ mod tests {
     async fn test_rewind_below_last_finalized_is_deterministic() -> anyhow::Result<()> {
         let finality = 10;
         let max_depth = 5;
-        let seed = HexHash::new([123; 32]);
+        let blocks = 40;
+        let seed = seed_for_test(123);
 
         // Create two identical DA layers
         let mut da_layer1 = StorableMockDaLayer::new_in_memory(finality).await?;
@@ -2129,24 +2132,26 @@ mod tests {
         // Enable same randomization on both
         let config = RandomizationConfig {
             seed,
-            reorg_interval: 1..2,
+            reorg_interval: 1..10,
             behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth },
         };
         da_layer1.set_randomizer(Randomizer::from_config(config.clone()));
         da_layer2.set_randomizer(Randomizer::from_config(config));
 
-        // Results should be identical
-        let head1 = da_layer1.get_head_block_header().await?;
-        let head2 = da_layer2.get_head_block_header().await?;
-        assert_eq!(head1.height(), head2.height(), "Should be deterministic");
+        for _ in 0..blocks {
+            // Results should be identical
+            let head1 = da_layer1.get_head_block_header().await?;
+            let head2 = da_layer2.get_head_block_header().await?;
+            assert_eq!(head1.height(), head2.height(), "Should be deterministic");
 
-        let finalized1 = da_layer1.get_last_finalized_block_header().await?;
-        let finalized2 = da_layer2.get_last_finalized_block_header().await?;
-        assert_eq!(
-            finalized1.height(),
-            finalized2.height(),
-            "Should be deterministic"
-        );
+            let finalized1 = da_layer1.get_last_finalized_block_header().await?;
+            let finalized2 = da_layer2.get_last_finalized_block_header().await?;
+            assert_eq!(
+                finalized1.height(),
+                finalized2.height(),
+                "Should be deterministic"
+            );
+        }
 
         Ok(())
     }
@@ -2165,10 +2170,13 @@ mod tests {
 
         // Enable then disable randomizer
         da_layer.set_randomizer(Randomizer::from_config(RandomizationConfig {
-            seed: HexHash::new([42; 32]),
-            reorg_interval: 1..2,
+            seed: seed_for_test(43),
+            reorg_interval: 1..10,
             behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
         }));
+
+        // TODO: Call something here to touch randomizer
+
         da_layer.disable_randomizer();
 
         // Should return normal values after disabling

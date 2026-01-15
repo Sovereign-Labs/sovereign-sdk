@@ -2,6 +2,7 @@ use std::ops::Range;
 use std::time::Duration;
 
 use schemars::JsonSchema;
+use sha2::Digest;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::Time;
 
@@ -175,6 +176,17 @@ pub struct RandomizationConfig {
     pub behaviour: RandomizationBehaviour,
 }
 
+/// Small, but more entropy seed, suitable for unit tests
+pub fn seed_for_test(small_seed: u8) -> HexHash {
+    let orig = [small_seed; 32];
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(orig);
+    let result = hasher.finalize();
+    let mut hashed_seed = [0u8; 32];
+    hashed_seed.copy_from_slice(&result[..32]);
+    HexHash::new(hashed_seed)
+}
+
 /// The configuration for Mock Da.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct MockDaConfig {
@@ -240,7 +252,7 @@ impl MockDaConfig {
         "sqlite::memory:".to_string()
     }
 
-    /// Builds SQlite connection string and checks if a given directory exists.
+    /// Builds SQLite connection string and checks if a given directory exists.
     pub fn sqlite_in_dir(dir: impl AsRef<std::path::Path>) -> anyhow::Result<String> {
         let path = dir.as_ref();
         if !path.exists() {
