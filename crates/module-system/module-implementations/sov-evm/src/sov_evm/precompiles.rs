@@ -287,7 +287,10 @@ where
         }
     };
 
-    let address =  S::Address::from_vm_address(EthereumAddress::try_from(address_bytes).expect("Conversion from 20-byte slice to EthereumAddress is infallible"));
+    let address = S::Address::from_vm_address(
+        EthereumAddress::try_from(address_bytes)
+            .expect("Conversion from 20-byte slice to EthereumAddress is infallible"),
+    );
     // Query balance from bank module
     let balance = bank_module
         .get_balance_of(&address, token_id, state)

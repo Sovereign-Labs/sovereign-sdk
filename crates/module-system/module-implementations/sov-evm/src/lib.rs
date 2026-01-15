@@ -272,7 +272,10 @@ impl<S: Spec> Evm<S> {
             is_known_sov_precompile(&address),
             "Precompile at {address} is not implemented in this binary"
         );
-        let mut enabled: Vec<Address> = self.enabled_custom_precompiles.get(state)?.unwrap_or_default();
+        let mut enabled: Vec<Address> = self
+            .enabled_custom_precompiles
+            .get(state)?
+            .unwrap_or_default();
         if !enabled.contains(&address) {
             enabled.push(address);
             self.enabled_custom_precompiles
@@ -292,7 +295,6 @@ impl<S: Spec> Evm<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-
         // Check admin permission
         let admin = self
             .admin
@@ -327,7 +329,10 @@ impl<S: Spec> Evm<S> {
             "Only admin can disable precompiles"
         );
 
-        let mut enabled: Vec<Address> = self.enabled_custom_precompiles.get(state)?.unwrap_or_default();
+        let mut enabled: Vec<Address> = self
+            .enabled_custom_precompiles
+            .get(state)?
+            .unwrap_or_default();
         enabled.retain(|a| a != &address);
         self.enabled_custom_precompiles
             .set::<Vec<Address>, _>(&enabled, state)?;
@@ -345,8 +350,7 @@ impl<S: Spec> Evm<S> {
         Ok(self
             .enabled_custom_precompiles
             .get(state)?
-            .unwrap_or_default()
-        )
+            .unwrap_or_default())
     }
 
     /// Get a reference to the bank module.

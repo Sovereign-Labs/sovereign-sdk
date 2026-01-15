@@ -155,7 +155,8 @@ where
             }
 
             // Create precompiles for each replay (moved into transact_commit)
-            let precompiles = SovPrecompiles::new(enabled_custom_precompiles.clone(), &self.bank_module);
+            let precompiles =
+                SovPrecompiles::new(enabled_custom_precompiles.clone(), &self.bank_module);
             transact_commit(
                 &mut evm_db,
                 &block_env,

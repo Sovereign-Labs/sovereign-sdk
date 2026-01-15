@@ -15,7 +15,6 @@ use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
-use sov_evm_test_utils::SolCall;
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddress};
 use sov_bank::{config_gas_token_id, Bank, CallMessage as BankCallMessage, Coins};
 use sov_evm::BANK_BALANCE_PRECOMPILE_ADDRESS;
@@ -24,6 +23,7 @@ use sov_evm::{
     EvmGenesisConfig, EvmRuntimeConfigUpdate, RlpEvmTransaction, SpecId,
 };
 use sov_evm_test_utils::PrecompileTester;
+use sov_evm_test_utils::SolCall;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Amount, HexString, RawTx, SafeVec, Spec};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -459,8 +459,7 @@ fn test_bank_balance_precompile_reflects_transfers() {
     // Verify initial balance via precompile
     let precompile_input = Bytes::copy_from_slice(recipient_eth_address.as_slice());
     let initial_balance_u256 = U256::from(initial_balance.0);
-    let initial_expected_output =
-        Bytes::copy_from_slice(&initial_balance_u256.to_be_bytes::<32>());
+    let initial_expected_output = Bytes::copy_from_slice(&initial_balance_u256.to_be_bytes::<32>());
 
     let call = PrecompileTester::assertPrecompileResultCall {
         precompile: BANK_BALANCE_PRECOMPILE_ADDRESS,
