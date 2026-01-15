@@ -126,7 +126,7 @@ fn setup_without_precompile() -> (TestRunner<RT, S>, TestUser<S>, EvmAccount) {
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: admin.address(),
-        enabled_precompiles: vec![], // No precompiles enabled
+        enabled_custom_precompiles: vec![], // No precompiles enabled
     };
 
     let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
@@ -174,7 +174,7 @@ fn setup_with_precompile_at_genesis() -> (TestRunner<RT, S>, TestUser<S>, EvmAcc
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: admin.address(),
-        enabled_precompiles: vec![BANK_BALANCE_PRECOMPILE_ADDRESS], // Bank precompile enabled
+        enabled_custom_precompiles: vec![BANK_BALANCE_PRECOMPILE_ADDRESS], // Bank precompile enabled
     };
 
     let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
@@ -203,7 +203,7 @@ fn test_precompile_returns_wrong_result_when_not_enabled() {
     // First verify the precompile is NOT enabled in state
     let enabled = runner.query_state(|state| {
         let evm = Evm::<S>::default();
-        evm.get_enabled_precompiles(state).unwrap()
+        evm.get_enabled_sov_precompiles(state).unwrap()
     });
     assert!(
         !enabled.contains(&BANK_BALANCE_PRECOMPILE_ADDRESS),
@@ -263,7 +263,7 @@ fn test_precompile_enabled_at_genesis() {
     // Verify the precompile is enabled using query_state
     let enabled = runner.query_state(|state| {
         let evm = Evm::<S>::default();
-        evm.get_enabled_precompiles(state).unwrap()
+        evm.get_enabled_sov_precompiles(state).unwrap()
     });
 
     assert!(
@@ -283,7 +283,7 @@ fn test_precompile_enabled_via_admin_tx() {
     // First verify the precompile is NOT enabled
     let enabled = runner.query_state(|state| {
         let evm = Evm::<S>::default();
-        evm.get_enabled_precompiles(state).unwrap()
+        evm.get_enabled_sov_precompiles(state).unwrap()
     });
 
     assert!(
@@ -305,7 +305,7 @@ fn test_precompile_enabled_via_admin_tx() {
         assert: Box::new(move |ctx, state| {
             assert!(ctx.tx_receipt.is_successful(), "Admin tx should succeed");
             let evm = Evm::<S>::default();
-            let enabled = evm.get_enabled_precompiles(state).unwrap();
+            let enabled = evm.get_enabled_sov_precompiles(state).unwrap();
             assert!(
                 enabled.contains(&BANK_BALANCE_PRECOMPILE_ADDRESS),
                 "Bank precompile should be enabled after admin tx"
@@ -410,7 +410,7 @@ fn test_bank_balance_precompile_reflects_transfers() {
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: admin.address(),
-        enabled_precompiles: vec![BANK_BALANCE_PRECOMPILE_ADDRESS],
+        enabled_custom_precompiles: vec![BANK_BALANCE_PRECOMPILE_ADDRESS],
     };
 
     let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);

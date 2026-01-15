@@ -127,12 +127,12 @@ where
             self.admin.set(&new_admin, state)?;
         }
 
-        // Enable precompiles (admin already verified above)
+        // Enable precompiles
         if let Some(addresses) = enable_precompiles {
             for hex_addr in addresses.iter() {
                 let address: Address = hex_addr.0.into();
-                // Admin check is already done above
-                self.add_enabled_precompile(address, state)?;
+                // Use enable_precompile_genesis since admin check is already done
+                self.add_enabled_precompile_unchecked(address, state)?;
             }
         }
 
@@ -257,10 +257,10 @@ where
         save_elapsed!(fetch_state_time SINCE fetch_state);
 
         // Load enabled precompiles from state
-        let enabled_precompiles = self.get_enabled_precompiles(state)?;
+        let enabled_custom_precompiles = self.get_enabled_sov_precompiles(state)?;
 
         // Create precompile provider with sovereign state access
-        let precompiles = SovPrecompiles::new(enabled_precompiles, &self.bank_module);
+        let precompiles = SovPrecompiles::new(enabled_custom_precompiles, &self.bank_module);
 
         let db = self.db(state);
         let mut db = MetricsDb::new(db);

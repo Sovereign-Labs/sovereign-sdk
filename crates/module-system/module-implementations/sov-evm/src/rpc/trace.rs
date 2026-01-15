@@ -2,6 +2,7 @@ use std::ops::DerefMut;
 
 use alloy_eips::BlockId;
 use alloy_eips::BlockNumberOrTag;
+use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_rpc_types_trace::geth::{
     GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingOptions, GethTrace,
@@ -97,8 +98,8 @@ where
             self.setup_trace_execution(block_number, state)?;
 
         // Load enabled precompiles before creating db (to avoid borrow conflicts)
-        let enabled_precompiles = self
-            .get_enabled_precompiles(state.deref_mut())
+        let enabled_custom_precompiles = self
+            .get_enabled_sov_precompiles(state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
 
         let mut evm_db = self.db(state.deref_mut());
@@ -113,7 +114,7 @@ where
                 cfg_env.clone(),
                 &mut evm_db,
                 &opts,
-                &enabled_precompiles,
+                &enabled_custom_precompiles,
             )?;
             traces.push(TraceResult::new_success(result, Some(*tx.hash())));
         }
@@ -140,8 +141,8 @@ where
             self.setup_trace_execution(traced_tx.block_number, state)?;
 
         // Load enabled precompiles before creating db (to avoid borrow conflicts)
-        let enabled_precompiles = self
-            .get_enabled_precompiles(state.deref_mut())
+        let enabled_custom_precompiles = self
+            .get_enabled_sov_precompiles(state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
 
         let mut evm_db = self.db(state.deref_mut());
@@ -154,7 +155,7 @@ where
             }
 
             // Create precompiles for each replay (moved into transact_commit)
-            let precompiles = SovPrecompiles::new(enabled_precompiles.clone(), &self.bank_module);
+            let precompiles = SovPrecompiles::new(enabled_custom_precompiles.clone(), &self.bank_module);
             transact_commit(
                 &mut evm_db,
                 &block_env,
@@ -172,7 +173,7 @@ where
             cfg_env,
             &mut evm_db,
             &opts,
-            &enabled_precompiles,
+            &enabled_custom_precompiles,
         )
     }
 
@@ -183,7 +184,7 @@ where
         cfg: CfgEnv,
         db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
-        enabled_precompiles: &std::collections::HashSet<alloy_primitives::Address>,
+        enabled_custom_precompiles: &Vec<Address>,
     ) -> Result<GethTrace, EthApiError> {
         let GethDebugTracingOptions {
             tracer,
@@ -204,7 +205,7 @@ where
 
                     // Create precompile provider with sovereign state access
                     let precompiles =
-                        SovPrecompiles::new(enabled_precompiles.clone(), &self.bank_module);
+                        SovPrecompiles::new(enabled_custom_precompiles.clone(), &self.bank_module);
 
                     let gas_limit = tx_env.gas_limit;
                     let ExecResultAndState { result, state } = inspect_with_precompiles(

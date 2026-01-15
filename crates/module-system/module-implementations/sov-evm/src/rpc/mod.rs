@@ -205,12 +205,12 @@ where
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
 
         // Load enabled precompiles from state
-        let enabled_precompiles = self
-            .get_enabled_precompiles(state)
+        let enabled_custom_precompiles = self
+            .get_enabled_sov_precompiles(state)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
 
         // Create precompile provider with sovereign state access
-        let precompiles = SovPrecompiles::new(enabled_precompiles, &self.bank_module);
+        let precompiles = SovPrecompiles::new(enabled_custom_precompiles, &self.bank_module);
 
         let mut evm_db: EvmDb<_, S> = self.db(state);
         let result = executor::transact_with_precompiles(

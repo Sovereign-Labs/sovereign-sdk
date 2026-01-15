@@ -170,10 +170,8 @@ pub struct Evm<S: Spec> {
     /// Addresses of enabled custom precompiles.
     ///
     /// Uses `Vec<Address>` since the expected size is small and locality is high.
-    /// Precompile implementations are in the static `PRECOMPILES` map in code;
-    /// this just controls which addresses are activated.
     #[state]
-    pub(crate) enabled_precompiles: StateValue<Vec<Address>, BcsCodec>,
+    pub(crate) enabled_custom_precompiles: StateValue<Vec<Address>, BcsCodec>,
 
     #[phantom]
     phantom: core::marker::PhantomData<S>,
@@ -261,25 +259,25 @@ impl<S: Spec> Evm<S> {
         Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
     }
 
-    /// Add an address to the set of enabled precompiles.
+    /// Add an address to the set of enabled precompiles without checking that the sender is an admin.
     ///
-    /// The precompile must have an implementation in code (checked via `is_known_precompile`).
+    /// The precompile must have an implementation in code (checked via `is_known_sov_precompile`).
     /// This is used during genesis initialization and runtime config updates.
     /// Callers are responsible for performing any necessary authorization checks.
-    pub fn add_enabled_precompile(
+    pub fn add_enabled_precompile_unchecked(
         &mut self,
         address: Address,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        use crate::sov_evm::is_known_precompile;
+        use crate::sov_evm::is_known_sov_precompile;
         anyhow::ensure!(
-            is_known_precompile(&address),
+            is_known_sov_precompile(&address),
             "Precompile at {address} is not implemented in this binary"
         );
-        let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
+        let mut enabled: Vec<Address> = self.enabled_custom_precompiles.get(state)?.unwrap_or_default();
         if !enabled.contains(&address) {
             enabled.push(address);
-            self.enabled_precompiles
+            self.enabled_custom_precompiles
                 .set::<Vec<Address>, _>(&enabled, state)?;
         }
         Ok(())
@@ -288,15 +286,14 @@ impl<S: Spec> Evm<S> {
     /// Enable a precompile at runtime (admin only).
     ///
     /// Used to activate precompiles added in software updates.
-    /// The precompile implementation must already exist in code (checked via `is_known_precompile`),
+    /// The precompile implementation must already exist in code (checked via `is_known_sov_precompile`),
     /// which means the node binary must be updated before calling this method.
-    pub fn enable_precompile(
+    pub fn enable_sov_precompile(
         &mut self,
         address: Address,
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        use crate::sov_evm::is_known_precompile;
 
         // Check admin permission
         let admin = self
@@ -308,18 +305,7 @@ impl<S: Spec> Evm<S> {
             "Only admin can enable precompiles"
         );
 
-        // Verify implementation exists in code
-        anyhow::ensure!(
-            is_known_precompile(&address),
-            "Precompile at {address} is not implemented. Deploy new binary first."
-        );
-
-        let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
-        if !enabled.contains(&address) {
-            enabled.push(address);
-            self.enabled_precompiles
-                .set::<Vec<Address>, _>(&enabled, state)?;
-        }
+        self.add_enabled_precompile_unchecked(address, state)?;
         Ok(())
     }
 
@@ -327,7 +313,7 @@ impl<S: Spec> Evm<S> {
     ///
     /// This removes the precompile from the enabled list, making it no longer
     /// callable from EVM contracts.
-    pub fn disable_precompile(
+    pub fn disable_sov_precompile(
         &mut self,
         address: Address,
         context: &Context<S>,
@@ -343,9 +329,9 @@ impl<S: Spec> Evm<S> {
             "Only admin can disable precompiles"
         );
 
-        let mut enabled: Vec<Address> = self.enabled_precompiles.get(state)?.unwrap_or_default();
+        let mut enabled: Vec<Address> = self.enabled_custom_precompiles.get(state)?.unwrap_or_default();
         enabled.retain(|a| a != &address);
-        self.enabled_precompiles
+        self.enabled_custom_precompiles
             .set::<Vec<Address>, _>(&enabled, state)?;
         Ok(())
     }
@@ -354,16 +340,15 @@ impl<S: Spec> Evm<S> {
     ///
     /// This is called during transaction execution to determine which
     /// custom precompiles are available.
-    pub fn get_enabled_precompiles(
+    pub fn get_enabled_sov_precompiles(
         &self,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<std::collections::HashSet<Address>> {
+    ) -> anyhow::Result<Vec<Address>> {
         Ok(self
-            .enabled_precompiles
+            .enabled_custom_precompiles
             .get(state)?
             .unwrap_or_default()
-            .into_iter()
-            .collect())
+        )
     }
 
     /// Get a reference to the bank module.

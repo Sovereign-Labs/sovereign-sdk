@@ -70,8 +70,8 @@ where
         }
 
         // Enable precompiles specified in genesis config
-        for address in &config.enabled_precompiles {
-            self.add_enabled_precompile(*address, state)?;
+        for address in &config.enabled_custom_precompiles {
+            self.add_enabled_precompile_unchecked(*address, state)?;
         }
 
         #[cfg(feature = "native")]

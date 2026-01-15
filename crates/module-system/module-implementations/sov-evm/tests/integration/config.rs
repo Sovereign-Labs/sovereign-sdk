@@ -48,7 +48,7 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: admin.address(),
-        enabled_precompiles: vec![],
+        enabled_custom_precompiles: vec![],
     };
 
     evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];

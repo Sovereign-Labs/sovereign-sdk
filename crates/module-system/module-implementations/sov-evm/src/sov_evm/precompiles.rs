@@ -8,7 +8,7 @@
 //!
 //! - `SovPrecompiles`: `PrecompileProvider` implementation for revm integration
 //! - `invoke_precompile`: Method that dispatches to precompile implementations with state access
-//! - `is_known_precompile`: Function to check if an address has a precompile implementation
+//! - `is_known_sov_precompile`: Function to check if an address has a precompile implementation
 //!
 //! # Activation Flow
 //!
@@ -20,7 +20,7 @@
 //!
 //! To add a new stateful precompile:
 //! 1. Add the address constant (e.g., `BRIDGE_PRECOMPILE_ADDRESS`)
-//! 2. Add a match arm in `is_known_precompile` for the address
+//! 2. Add a match arm in `is_known_sov_precompile` for the address
 //! 3. Add a match arm in `invoke_precompile` that calls your implementation
 //! 4. Implement the precompile logic (can access TxState)
 
@@ -28,11 +28,9 @@ use alloy_primitives::{Address, Bytes, U256};
 use revm::context_interface::ContextTr;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
-use revm::primitives::hardfork::SpecId;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::{config_gas_token_id, TokenId};
 use sov_modules_api::{Spec, TxState};
-use std::collections::HashSet;
 
 /// Trait for databases that support stateful precompile execution.
 ///
@@ -81,32 +79,32 @@ pub enum PrecompileError {
 // Precompile Address Constants
 // =============================================================================
 
-/// Identity precompile address (0x0100).
+/// Identity precompile address (0x010000).
 ///
 /// This is a test precompile that returns its input unchanged.
 /// Gas cost: 15 base + 3 per word (matching EIP-198 ecrecover style).
 pub const IDENTITY_PRECOMPILE_ADDRESS: Address = Address::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x00,
 ]);
 
-/// Bank balance precompile address (0x0101).
+/// Bank balance precompile address (0x010000).
 ///
 /// Returns the bank balance for a given address and token.
 /// Input: 20-byte address + optional 32-byte token ID (defaults to gas token)
 /// Output: 32-byte U256 balance
 /// Gas cost: 100 (fixed cost for state read)
 pub const BANK_BALANCE_PRECOMPILE_ADDRESS: Address = Address::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x01,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x01,
 ]);
 
 /// Check if an address has a known precompile implementation in code.
 ///
 /// Precompiles are only callable if they are both:
 /// 1. Known (this function returns true)
-/// 2. Enabled in the `enabled_precompiles` state (activation via admin tx)
+/// 2. Enabled in the `enabled_custom_precompiles` state (activation via admin tx)
 ///
 /// When adding a new precompile, add a match arm here for its address.
-pub fn is_known_precompile(address: &Address) -> bool {
+pub fn is_known_sov_precompile(address: &Address) -> bool {
     matches!(
         *address,
         IDENTITY_PRECOMPILE_ADDRESS | BANK_BALANCE_PRECOMPILE_ADDRESS
@@ -120,16 +118,13 @@ pub fn is_known_precompile(address: &Address) -> bool {
 /// references to the enabled precompile addresses and bank module.
 /// Stateful precompiles are invoked via the `run` method which
 /// accesses `TxState` through the context's database.
-#[allow(dead_code)]
 pub struct SovPrecompiles<'a, S: Spec> {
     /// Standard Ethereum precompiles.
     eth_precompiles: EthPrecompiles,
     /// Set of enabled custom precompile addresses (loaded from state).
-    enabled_addresses: HashSet<Address>,
+    enabled_addresses: Vec<Address>,
     /// Bank module for balance queries.
     bank_module: &'a sov_bank::Bank<S>,
-    /// Current EVM specification.
-    spec: SpecId,
 }
 
 impl<S: Spec> std::fmt::Debug for SovPrecompiles<'_, S> {
@@ -137,7 +132,6 @@ impl<S: Spec> std::fmt::Debug for SovPrecompiles<'_, S> {
         f.debug_struct("SovPrecompiles")
             .field("eth_precompiles", &self.eth_precompiles)
             .field("enabled_addresses", &self.enabled_addresses)
-            .field("spec", &self.spec)
             .finish_non_exhaustive()
     }
 }
@@ -152,58 +146,12 @@ where
     ///
     /// * `enabled_addresses` - Set of addresses where custom precompiles are enabled
     /// * `bank_module` - Reference to the bank module for balance queries
-    #[allow(dead_code)]
-    pub fn new(enabled_addresses: HashSet<Address>, bank_module: &'a sov_bank::Bank<S>) -> Self {
+    pub fn new(enabled_addresses: Vec<Address>, bank_module: &'a sov_bank::Bank<S>) -> Self {
         Self {
             eth_precompiles: EthPrecompiles::default(),
             enabled_addresses,
             bank_module,
-            spec: SpecId::CANCUN,
         }
-    }
-
-    /// Invoke a stateful precompile with access to TxState.
-    ///
-    /// This method dispatches to the appropriate precompile implementation based on
-    /// the target address. Precompile implementations have full access to sovereign
-    /// state through the `state` parameter.
-    ///
-    /// # Arguments
-    ///
-    /// * `address` - The precompile address being called
-    /// * `input` - The input bytes to the precompile
-    /// * `gas_limit` - Maximum gas available for this call
-    /// * `state` - Mutable reference to the sovereign TxState (for stateful precompiles)
-    ///
-    /// # Returns
-    ///
-    /// `Some(PrecompileResult)` if the address matches a known precompile,
-    /// `None` if the address is not a sovereign precompile.
-    #[allow(dead_code)]
-    pub fn invoke_precompile<Ws: TxState<S>>(
-        &self,
-        address: &Address,
-        input: &Bytes,
-        gas_limit: u64,
-        state: &mut Ws,
-    ) -> Option<PrecompileResult> {
-        // Match on the address to dispatch to the appropriate precompile.
-        match *address {
-            IDENTITY_PRECOMPILE_ADDRESS => Some(identity_precompile(input, gas_limit)),
-            BANK_BALANCE_PRECOMPILE_ADDRESS => Some(bank_balance_precompile::<S, Ws>(
-                input,
-                gas_limit,
-                self.bank_module,
-                state,
-            )),
-            _ => None,
-        }
-    }
-
-    /// Check if an address is a known sovereign precompile (has implementation in code).
-    #[allow(dead_code)]
-    pub fn is_sovereign_precompile(address: &Address) -> bool {
-        is_known_precompile(address)
     }
 }
 
@@ -227,38 +175,31 @@ where
         let address = &inputs.target_address;
         let gas_limit = inputs.gas_limit;
 
-        // Check if this is a known sovereign precompile address
-        if is_known_precompile(address) {
-            // Check if this precompile is enabled
-            if self.enabled_addresses.contains(address) {
-                let input_bytes = inputs.input.bytes(ctx);
-                match *address {
-                    IDENTITY_PRECOMPILE_ADDRESS => {
-                        let result = identity_precompile(&input_bytes, gas_limit);
-                        return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
-                    }
-                    BANK_BALANCE_PRECOMPILE_ADDRESS => {
-                        // Access state through the context's database
-                        let state = ctx.db_mut().precompile_state_mut();
-                        let result = bank_balance_precompile::<S, _>(
-                            &input_bytes,
-                            gas_limit,
-                            self.bank_module,
-                            state,
-                        );
-                        return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
-                    }
-                    _ => {
-                        // Unknown precompile - should not happen since is_known_precompile
-                        // and the match should be consistent
-                        return Err(format!("Precompile at {} not implemented", address));
-                    }
+        // Check if this precompile is enabled
+        if self.enabled_addresses.contains(address) {
+            let input_bytes = inputs.input.bytes(ctx);
+            match *address {
+                IDENTITY_PRECOMPILE_ADDRESS => {
+                    let result = identity_precompile(&input_bytes, gas_limit);
+                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+                }
+                BANK_BALANCE_PRECOMPILE_ADDRESS => {
+                    // Access state through the context's database
+                    let state = ctx.db_mut().precompile_state_mut();
+                    let result = bank_balance_precompile::<S, _>(
+                        &input_bytes,
+                        gas_limit,
+                        self.bank_module,
+                        state,
+                    );
+                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+                }
+                _ => {
+                    // Unknown precompile - should not happen since is_known_sov_precompile
+                    // and the match should be consistent
+                    return Err(format!("Precompile at {} not implemented", address));
                 }
             }
-            // Known precompile but NOT enabled - fall through to return Ok(None)
-            // which tells revm this is not a precompile. The call will then be
-            // handled as a normal call to an address with no code (EOA behavior),
-            // which succeeds with empty return data.
         }
 
         // Fall back to standard Ethereum precompiles
@@ -381,34 +322,28 @@ where
         return Err(PrecompileError::OutOfGas);
     }
 
-    // Input must be at least 20 bytes (address)
-    if input.len() < 20 {
-        return Err(PrecompileError::Error(
-            "Input too short: expected at least 20 bytes for address".to_string(),
-        ));
-    }
-
-    // Parse the 20-byte Ethereum address
-    let eth_address = Address::from_slice(&input[0..20]);
-
-    // Convert to rollup address
-    let rollup_address: S::Address =
-        S::Address::from_vm_address(EthereumAddress::from(eth_address));
-
-    // Parse optional token ID (32 bytes) or use gas token
-    let token_id: TokenId = if input.len() >= 52 {
-        // Token ID provided
-        let mut token_bytes = [0u8; 32];
-        token_bytes.copy_from_slice(&input[20..52]);
-        TokenId::from(token_bytes)
-    } else {
-        // Use default gas token
-        config_gas_token_id()
+    let (address_bytes, token_id) = match input.len() {
+        20 => {
+            // Use default gas token
+            (&input[0..20], config_gas_token_id())
+        }
+        52 => {
+            // Token ID provided
+            let mut token_bytes = [0u8; 32];
+            token_bytes.copy_from_slice(&input[20..52]);
+            (&input[0..20], TokenId::from(token_bytes))
+        }
+        _ => {
+            return Err(PrecompileError::Error(
+                "Input must be 20 or 52 bytes".to_string(),
+            ));
+        }
     };
 
+    let address =  S::Address::from_vm_address(EthereumAddress::try_from(address_bytes).expect("Conversion from 20-byte slice to EthereumAddress is infallible"));
     // Query balance from bank module
     let balance = bank_module
-        .get_balance_of(&rollup_address, token_id, state)
+        .get_balance_of(&address, token_id, state)
         .map_err(|e| PrecompileError::Error(format!("State error: {:?}", e)))?
         .unwrap_or_default();
 
@@ -427,19 +362,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_known_precompile_identity() {
-        assert!(is_known_precompile(&IDENTITY_PRECOMPILE_ADDRESS));
+    fn test_is_known_sov_precompile_identity() {
+        assert!(is_known_sov_precompile(&IDENTITY_PRECOMPILE_ADDRESS));
     }
 
     #[test]
-    fn test_is_known_precompile_bank_balance() {
-        assert!(is_known_precompile(&BANK_BALANCE_PRECOMPILE_ADDRESS));
+    fn test_is_known_sov_precompile_bank_balance() {
+        assert!(is_known_sov_precompile(&BANK_BALANCE_PRECOMPILE_ADDRESS));
     }
 
     #[test]
-    fn test_is_known_precompile_unknown() {
+    fn test_is_known_sov_precompile_unknown() {
         let unknown_addr = Address::from_slice(&[0u8; 20]);
-        assert!(!is_known_precompile(&unknown_addr));
+        assert!(!is_known_sov_precompile(&unknown_addr));
     }
 
     #[test]

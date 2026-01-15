@@ -55,7 +55,7 @@ fn test_invalid_contract_execution() {
         let tx = convert_to_tx_signed(signed_eth_tx).unwrap();
         let tx_env = create_tx_env(&tx, account.address(), 1, 1_000_000);
         // Create precompiles (no custom precompiles enabled for this test)
-        let precompiles = SovPrecompiles::new(HashSet::new(), evm.bank_module());
+        let precompiles = SovPrecompiles::new(Vec::new(), evm.bank_module());
         let result = executor::transact_commit(
             &mut evm_db,
             &BlockEnv::default(),

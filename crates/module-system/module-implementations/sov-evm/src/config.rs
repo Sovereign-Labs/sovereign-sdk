@@ -43,7 +43,7 @@ pub struct EvmGenesisConfig<S: Spec> {
     /// Precompile addresses to enable at genesis.
     /// Each address must have a known implementation in the binary.
     #[serde(default)]
-    pub enabled_precompiles: Vec<Address>,
+    pub enabled_custom_precompiles: Vec<Address>,
 }
 
 impl<S: Spec> EvmGenesisConfig<S> {
@@ -56,7 +56,7 @@ impl<S: Spec> EvmGenesisConfig<S> {
             chain_spec: EvmChainSpec::default(),
             contract_creation_policy: ContractCreationPolicy::Everyone,
             admin,
-            enabled_precompiles: vec![],
+            enabled_custom_precompiles: vec![],
         }
     }
 }
@@ -293,7 +293,7 @@ mod tests {
                 "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
             )
             .unwrap(),
-            enabled_precompiles: vec![],
+            enabled_custom_precompiles: vec![],
         };
 
         let data = r#"
