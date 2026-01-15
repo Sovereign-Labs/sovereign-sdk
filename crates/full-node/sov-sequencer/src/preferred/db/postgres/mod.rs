@@ -22,8 +22,8 @@ const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
 
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
-    node_id: String,
-    last_updated: OffsetDateTime,
+    pub node_id: String,
+    pub last_updated: OffsetDateTime,
 }
 
 pub struct PostgresBackend {
@@ -65,6 +65,12 @@ impl PostgresBackend {
         let backend = Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await?;
         backend.try_update_leader().await?;
         Ok(backend)
+    }
+
+    /// Connect without immediately claiming leadership.
+    /// Used by DbElected nodes during the election phase.
+    pub async fn connect_without_leadership(config: &PostgresConfig) -> Result<Self> {
+        Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await
     }
 
     async fn connect_with_leader_timeout(

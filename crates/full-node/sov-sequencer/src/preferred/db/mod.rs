@@ -9,6 +9,7 @@
 //! invariants and we'd rather have an application crash due to broken
 //! invariants than to have bugs that result in subtle state inconsistencies.
 
+pub mod leadership_election;
 pub mod postgres;
 pub mod rocksdb;
 use crate::preferred::PostgresBackend;
@@ -445,7 +446,29 @@ impl PreferredSequencerDb {
                         SequencerRole::Leader,
                     ),
                     NodeRole::DbElected => {
-                        todo!()
+                        // Connect without claiming leadership, then try to acquire it
+                        let backend =
+                            PostgresBackend::connect_without_leadership(postgres_config).await?;
+
+                        // Try to become leader
+                        let maybe_leader = backend.try_update_leader().await?;
+                        let is_leader = maybe_leader
+                            .map(|leader| leader.node_id == postgres_config.node_id)
+                            .unwrap_or(false);
+
+                        if is_leader {
+                            tracing::info!(
+                                node_id = %postgres_config.node_id,
+                                "DbElected node acquired leadership, running as Leader"
+                            );
+                            (Some(Box::new(backend)), SequencerRole::Leader)
+                        } else {
+                            tracing::info!(
+                                node_id = %postgres_config.node_id,
+                                "DbElected node did not acquire leadership, running as Replica"
+                            );
+                            (None, SequencerRole::Replica)
+                        }
                     }
                 }
             } else {
