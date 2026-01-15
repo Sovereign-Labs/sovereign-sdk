@@ -114,7 +114,7 @@ where
                 cfg_env.clone(),
                 &mut evm_db,
                 &opts,
-                &enabled_custom_precompiles,
+                enabled_custom_precompiles.clone(),
             )?;
             traces.push(TraceResult::new_success(result, Some(*tx.hash())));
         }
@@ -174,7 +174,7 @@ where
             cfg_env,
             &mut evm_db,
             &opts,
-            &enabled_custom_precompiles,
+            enabled_custom_precompiles,
         )
     }
 
@@ -185,7 +185,7 @@ where
         cfg: CfgEnv,
         db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
-        enabled_custom_precompiles: &Vec<Address>,
+        enabled_custom_precompiles: Vec<Address>,
     ) -> Result<GethTrace, EthApiError> {
         let GethDebugTracingOptions {
             tracer,

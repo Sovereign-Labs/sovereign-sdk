@@ -180,7 +180,7 @@ where
             } else {
                 // Unknown precompile - should not happen since enabled_addresses
                 // should only contain known precompiles
-                return Err(format!("Precompile at {} not implemented", address));
+                return Err(format!("Precompile at {address} not implemented"));
             }
         }
 
@@ -294,7 +294,7 @@ where
     // Query balance from bank module
     let balance = bank_module
         .get_balance_of(&address, token_id, state)
-        .map_err(|e| PrecompileError::Error(format!("State error: {:?}", e)))?
+        .map_err(|e| PrecompileError::Error(format!("State error: {e:?}")))?
         .unwrap_or_default();
 
     // Convert balance (u128) to U256 and encode as 32 bytes (big-endian)

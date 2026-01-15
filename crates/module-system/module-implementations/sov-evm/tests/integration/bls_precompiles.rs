@@ -121,6 +121,7 @@ fn setup_prague() -> (TestRunner<RT, S>, EvmAccount) {
         contract_creation_policy: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
+        enabled_custom_precompiles: vec![],
         admin: MultiAddress::from_vm_address(
             EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
         ),
@@ -162,6 +163,7 @@ fn setup_cancun() -> (TestRunner<RT, S>, EvmAccount) {
         contract_creation_policy: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
+        enabled_custom_precompiles: vec![],
         admin: MultiAddress::from_vm_address(
             EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
         ),

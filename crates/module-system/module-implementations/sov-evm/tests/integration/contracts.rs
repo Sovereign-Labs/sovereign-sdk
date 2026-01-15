@@ -11,7 +11,6 @@ use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
 use sov_test_utils::TransactionType;
-use std::collections::HashSet;
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};

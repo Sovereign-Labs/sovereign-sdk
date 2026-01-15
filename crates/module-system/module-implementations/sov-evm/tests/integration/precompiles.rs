@@ -278,7 +278,7 @@ fn test_precompile_enabled_via_admin_tx() {
     let (mut runner, admin, _evm_account) = setup_without_precompile();
 
     let precompile_addr_hex =
-        HexString::<[u8; 20]>::from_str(&format!("{:?}", BANK_BALANCE_PRECOMPILE_ADDRESS)).unwrap();
+        HexString::<[u8; 20]>::from_str(&format!("{BANK_BALANCE_PRECOMPILE_ADDRESS}")).unwrap();
 
     // First verify the precompile is NOT enabled
     let enabled = runner.query_state(|state| {
@@ -573,7 +573,7 @@ fn test_precompile_works_after_admin_enables_it() {
 
     // Enable the precompile via admin transaction
     let precompile_addr_hex =
-        HexString::<[u8; 20]>::from_str(&format!("{:?}", BANK_BALANCE_PRECOMPILE_ADDRESS)).unwrap();
+        HexString::<[u8; 20]>::from_str(&format!("{BANK_BALANCE_PRECOMPILE_ADDRESS}")).unwrap();
 
     runner.execute_transaction(TransactionTestCase {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig(
