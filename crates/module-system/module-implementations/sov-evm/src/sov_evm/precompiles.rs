@@ -79,14 +79,6 @@ pub enum PrecompileError {
 // Precompile Address Constants
 // =============================================================================
 
-/// Identity precompile address (0x010000).
-///
-/// This is a test precompile that returns its input unchanged.
-/// Gas cost: 15 base + 3 per word (matching EIP-198 ecrecover style).
-pub const IDENTITY_PRECOMPILE_ADDRESS: Address = Address::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x00,
-]);
-
 /// Bank balance precompile address (0x010000).
 ///
 /// Returns the bank balance for a given address and token.
@@ -94,7 +86,7 @@ pub const IDENTITY_PRECOMPILE_ADDRESS: Address = Address::new([
 /// Output: 32-byte U256 balance
 /// Gas cost: 100 (fixed cost for state read)
 pub const BANK_BALANCE_PRECOMPILE_ADDRESS: Address = Address::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x01,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x00,
 ]);
 
 /// Check if an address has a known precompile implementation in code.
@@ -105,10 +97,7 @@ pub const BANK_BALANCE_PRECOMPILE_ADDRESS: Address = Address::new([
 ///
 /// When adding a new precompile, add a match arm here for its address.
 pub fn is_known_sov_precompile(address: &Address) -> bool {
-    matches!(
-        *address,
-        IDENTITY_PRECOMPILE_ADDRESS | BANK_BALANCE_PRECOMPILE_ADDRESS
-    )
+    *address == BANK_BALANCE_PRECOMPILE_ADDRESS
 }
 
 /// PrecompileProvider that supports both standard Ethereum precompiles
@@ -178,27 +167,20 @@ where
         // Check if this precompile is enabled
         if self.enabled_addresses.contains(address) {
             let input_bytes = inputs.input.bytes(ctx);
-            match *address {
-                IDENTITY_PRECOMPILE_ADDRESS => {
-                    let result = identity_precompile(&input_bytes, gas_limit);
-                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
-                }
-                BANK_BALANCE_PRECOMPILE_ADDRESS => {
-                    // Access state through the context's database
-                    let state = ctx.db_mut().precompile_state_mut();
-                    let result = bank_balance_precompile::<S, _>(
-                        &input_bytes,
-                        gas_limit,
-                        self.bank_module,
-                        state,
-                    );
-                    return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
-                }
-                _ => {
-                    // Unknown precompile - should not happen since is_known_sov_precompile
-                    // and the match should be consistent
-                    return Err(format!("Precompile at {} not implemented", address));
-                }
+            if *address == BANK_BALANCE_PRECOMPILE_ADDRESS {
+                // Access state through the context's database
+                let state = ctx.db_mut().precompile_state_mut();
+                let result = bank_balance_precompile::<S, _>(
+                    &input_bytes,
+                    gas_limit,
+                    self.bank_module,
+                    state,
+                );
+                return Ok(Some(convert_to_interpreter_result(result, gas_limit)));
+            } else {
+                // Unknown precompile - should not happen since enabled_addresses
+                // should only contain known precompiles
+                return Err(format!("Precompile at {} not implemented", address));
             }
         }
 
@@ -250,43 +232,8 @@ fn convert_to_interpreter_result(result: PrecompileResult, gas_limit: u64) -> In
 // Precompile Implementations
 // =============================================================================
 
-/// Gas cost constants for the identity precompile.
-const IDENTITY_BASE_GAS: u64 = 15;
-const IDENTITY_PER_WORD_GAS: u64 = 3;
-
 /// Gas cost for the bank balance precompile (fixed cost for state read).
 const BANK_BALANCE_GAS: u64 = 100;
-
-/// Identity precompile - returns input unchanged.
-///
-/// This is a simple test precompile that demonstrates the stateful precompile
-/// infrastructure. It simply returns its input bytes unchanged.
-///
-/// Gas cost: 15 base + 3 per 32-byte word (matching EIP-198 style).
-///
-/// # Arguments
-///
-/// * `input` - The input bytes to return
-/// * `gas_limit` - Maximum gas available for this call
-///
-/// # Returns
-///
-/// `PrecompileResult` containing the input bytes unchanged, or an error if
-/// the gas limit is exceeded.
-fn identity_precompile(input: &Bytes, gas_limit: u64) -> PrecompileResult {
-    // Calculate gas cost: base + per-word cost
-    let word_count = (input.len() as u64 + 31) / 32;
-    let gas_used = IDENTITY_BASE_GAS + IDENTITY_PER_WORD_GAS * word_count;
-
-    if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    }
-
-    Ok(PrecompileOutput {
-        gas_used,
-        bytes: input.clone(),
-    })
-}
 
 /// Bank balance precompile - returns the balance of an address for a token.
 ///
@@ -362,11 +309,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_known_sov_precompile_identity() {
-        assert!(is_known_sov_precompile(&IDENTITY_PRECOMPILE_ADDRESS));
-    }
-
-    #[test]
     fn test_is_known_sov_precompile_bank_balance() {
         assert!(is_known_sov_precompile(&BANK_BALANCE_PRECOMPILE_ADDRESS));
     }
@@ -375,42 +317,5 @@ mod tests {
     fn test_is_known_sov_precompile_unknown() {
         let unknown_addr = Address::from_slice(&[0u8; 20]);
         assert!(!is_known_sov_precompile(&unknown_addr));
-    }
-
-    #[test]
-    fn test_identity_precompile_returns_input() {
-        let input = Bytes::from_static(b"hello world");
-        let result = identity_precompile(&input, 1000);
-
-        assert!(result.is_ok());
-        let output = result.unwrap();
-        assert_eq!(output.bytes, input);
-    }
-
-    #[test]
-    fn test_identity_precompile_gas_calculation() {
-        // Empty input: 15 base + 3 * 0 words = 15
-        let empty = Bytes::new();
-        let result = identity_precompile(&empty, 1000).unwrap();
-        assert_eq!(result.gas_used, 15);
-
-        // 32 bytes: 15 base + 3 * 1 word = 18
-        let one_word = Bytes::from(vec![0u8; 32]);
-        let result = identity_precompile(&one_word, 1000).unwrap();
-        assert_eq!(result.gas_used, 18);
-
-        // 33 bytes: 15 base + 3 * 2 words = 21
-        let two_words = Bytes::from(vec![0u8; 33]);
-        let result = identity_precompile(&two_words, 1000).unwrap();
-        assert_eq!(result.gas_used, 21);
-    }
-
-    #[test]
-    fn test_identity_precompile_out_of_gas() {
-        let input = Bytes::from(vec![0u8; 100]);
-        // 100 bytes = 4 words, gas = 15 + 3*4 = 27
-        let result = identity_precompile(&input, 20);
-
-        assert!(matches!(result, Err(PrecompileError::OutOfGas)));
     }
 }

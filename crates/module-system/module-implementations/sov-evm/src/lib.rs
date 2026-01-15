@@ -60,9 +60,7 @@ use crate::evm::primitive_types::{Block, PendingTransaction, TxSignedAndRecovere
 
 pub use crate::evm::primitive_types::{Receipt, SealedBlock};
 
-pub use crate::sov_evm::{
-    SovPrecompiles, BANK_BALANCE_PRECOMPILE_ADDRESS, IDENTITY_PRECOMPILE_ADDRESS,
-};
+pub use crate::sov_evm::{SovPrecompiles, BANK_BALANCE_PRECOMPILE_ADDRESS};
 pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;
 use revm::state::Bytecode;

@@ -16,5 +16,5 @@ pub use inspector::StorageAccessInspector;
 #[allow(unused_imports)]
 pub use precompiles::{
     is_known_sov_precompile, PrecompileDb, PrecompileError, PrecompileOutput, PrecompileResult,
-    SovPrecompiles, BANK_BALANCE_PRECOMPILE_ADDRESS, IDENTITY_PRECOMPILE_ADDRESS,
+    SovPrecompiles, BANK_BALANCE_PRECOMPILE_ADDRESS,
 };
