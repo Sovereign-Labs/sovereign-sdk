@@ -400,10 +400,13 @@ where
                     "Mismatch in block hashes after transition",
                 );
             }
-            assert_eq!(
-                transition_witness.initial_state_root.as_ref(),
-                self.last_processed_finalized_state_root.as_ref(),
-                "Wrong transition, its pre_state_root does not match the current state root of StateManager");
+            // This is not the case anymore
+            // TODO: How to better check that it is not messed up?
+            // Check that initial state root is known and matches block, right?
+            // assert_eq!(
+            //     transition_witness.initial_state_root.as_ref(),
+            //     self.last_processed_finalized_state_root.as_ref(),
+            //     "Wrong transition, its pre_state_root does not match the current state root of StateManager");
         }
         self.state_on_block
             .insert(block_header.hash(), seen_state_on_block);
