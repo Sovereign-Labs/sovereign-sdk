@@ -1,5 +1,11 @@
 # @sovereign-sdk/multisig
 
+## 0.3.0
+
+### Minor Changes
+
+-   d702dbc: Adds a method to retrieve the address/credential id associated with the multisig.
+
 ## 0.2.1
 
 ### Patch Changes
