@@ -11,7 +11,8 @@ use unwrap_infallible::UnwrapInfallible;
 /// Helper to write a dummy value to the kernel namespace.
 /// NOMT requires both user and kernel namespaces to be written together.
 fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) {
-    let mut kernel_val: KernelStateValue<u8> = KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
+    let mut kernel_val: KernelStateValue<u8> =
+        KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
     kernel_val.set(&0u8, state).unwrap_infallible();
 }
 

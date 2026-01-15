@@ -2211,9 +2211,24 @@ async fn test_no_crashes_on_resync_with_transactions() {
 
     let rollup_storage_path = builder.storage_path();
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
-    // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
-        std::fs::remove_dir_all(rollup_storage_path.path().join(path)).unwrap();
+    // doesn't interfere.
+    // NOMT uses different directories than JMT:
+    // - user_nomt_db, kernel_nomt_db (NOMT state)
+    // - state-db, archival-state-db (FlatStateDb)
+    // - accessory, ledger, blob_sender (common to both)
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
+        let full_path = rollup_storage_path.path().join(path);
+        if full_path.exists() {
+            std::fs::remove_dir_all(full_path).unwrap();
+        }
     }
 
     let test_rollup = builder.start().await.unwrap();
