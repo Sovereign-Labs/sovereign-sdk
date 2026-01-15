@@ -35,6 +35,26 @@ struct ForkPoint<Da: DaService, StateRoot> {
     pre_state_root: StateRoot,
 }
 
+/// Result of checking if a block is a valid continuation of the current chain.
+///
+/// Used by runner to determine whether to process the block or fetch a different one.
+pub enum BlockCandidateResolution<PreState> {
+    /// Block is a valid continuation of a previously seen transition.
+    /// Runner should proceed with STF execution using the provided pre-state.
+    KnownContinuation {
+        /// Valid pre-state for the requested block.
+        /// STF can safely rely on this state for execution.
+        pre_state: PreState,
+    },
+    /// Block is not a valid continuation (reorg detected or caught up).
+    /// Runner should fetch block at `height_to_fetch` and try again.
+    NoMatch {
+        /// The DA height runner should fetch next.
+        /// This is the first unprocessed height in the current fork.
+        height_to_fetch: u64,
+    },
+}
+
 /// Structure that holds a block header and a pre-state root that was on this block header
 struct StateOnBlock<Da: DaSpec, StateRoot> {
     block_header: Da::BlockHeader,
@@ -86,6 +106,7 @@ where
     // `state_root` is tracked so [`StateTransitionWitness`] can have proper `prev_state_root`.
     // Probably it can be saved in variable before "apply_slot" is called,
     // But then the runner needs to know about it and carry it over.
+    // TODO: remove this!!!! use `state_on_block`
     state_root: StateRoot,
     // We record all seen transitions at the given height.
     state_on_block:
@@ -252,6 +273,30 @@ where
             time = ?start.elapsed(),
             "Returning STF state for block");
         Ok((stf_pre_state, filtered_block))
+    }
+
+    /// Checks if a block is a valid continuation of the current chain state.
+    ///
+    /// Returns:
+    /// - `KnownContinuation { pre_state }` if the block can be processed
+    /// - `NoMatch { height_to_fetch }` if runner should fetch a different block
+    ///
+    /// This method internally uses `prepare_storage()` to handle reorg detection.
+    /// In Phase 3, this will be refactored to avoid block fetching inside StateManager.
+    pub(crate) async fn is_good_continuation(
+        &mut self,
+        block: &Da::FilteredBlock,
+        da_service: &Da,
+    ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState>> {
+        let inner_block = block.clone();
+        let (pre_state, new_block) = self.prepare_storage(inner_block, da_service).await?;
+        if new_block.hash() == block.hash() {
+            Ok(BlockCandidateResolution::KnownContinuation { pre_state })
+        } else {
+            Ok(BlockCandidateResolution::NoMatch {
+                height_to_fetch: new_block.header().height(),
+            })
+        }
     }
 
     /// Performs all necessary operations on data that has been processed by the rollup.

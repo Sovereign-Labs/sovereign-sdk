@@ -30,7 +30,7 @@ use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
-use crate::state_manager::StateManager;
+use crate::state_manager::{BlockCandidateResolution, StateManager};
 
 type GenesisParams<ST, InnerVm, OuterVm, Da> =
     <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
@@ -467,7 +467,7 @@ where
 
     async fn process_next_slot(
         &mut self,
-        mut next_da_height: NextDaHeightToProcess,
+        next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
@@ -502,29 +502,37 @@ where
             .await?
         };
         let get_block_time = get_block_start.elapsed();
-        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
+        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, checking continuation");
 
-        let (stf_pre_state, filtered_block) = self
+        // Check if this block is a valid continuation of the current chain.
+        // If not, early return with the height runner should fetch next.
+        let stf_pre_state = match self
             .state_manager
-            .prepare_storage(filtered_block, &self.da_service)
+            .is_good_continuation(&filtered_block, &self.da_service)
             .await
             .map_err(|e| {
-                tracing::warn!(?e, "Error during prepare_storage");
+                tracing::warn!(?e, "Error during is_good_continuation");
                 e
-            })?;
+            })? {
+            BlockCandidateResolution::KnownContinuation { pre_state } => {
+                tracing::trace!(
+                    header = %filtered_block.header().display(),
+                    "Block is a valid continuation, proceeding with STF execution"
+                );
+                pre_state
+            }
+            BlockCandidateResolution::NoMatch { height_to_fetch } => {
+                debug!(
+                    requested_height = next_da_height,
+                    height_to_fetch,
+                    "Block is not a continuation, runner should fetch different height"
+                );
+                // Early return - runner's main loop will fetch the new height
+                return Ok(Some(height_to_fetch));
+            }
+        };
 
         let filtered_block_header = filtered_block.header().clone();
-        if next_da_height != filtered_block_header.height() {
-            debug!(
-                existing_next_da_height = next_da_height,
-                new_next_da_height = filtered_block_header.height(),
-                "Updating next_da_height after storage_manager, as reorg happened."
-            );
-            next_da_height = filtered_block_header.height();
-            tracing::Span::current().record("new_next_da_height", next_da_height);
-            self.sync_state
-                .update_synced(next_da_height.saturating_sub(1));
-        }
 
         // STF execution
         let stf_execution_start = std::time::Instant::now();
