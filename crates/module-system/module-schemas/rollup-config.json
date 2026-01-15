@@ -550,7 +550,7 @@
           ]
         },
         {
-          "description": "Makes `get_head_block_header` and `get_last_finalized_block_header` randomly return block headers below the actual finalized height.\n\nThis simulates scenarios where the DA layer reports stale data, useful for testing rollup resilience to DA layer inconsistencies.\n\nNotes: - Does not affect actual block production or chain state. - Triggered based on `reorg_interval` configuration. - When triggered, both methods return the same randomly chosen height.",
+          "description": "Makes `get_head_block_header` and `get_last_finalized_block_header` randomly return block headers below the actual finalized height.\n\nThis simulates scenarios where the DA layer reports stale data, useful for testing rollup resilience to DA layer inconsistencies.\n\nBehavior: - Each call advances the internal RNG, returning a different height each time. - `get_last_finalized_block_header()` stores its result as a floor for head. - `get_head_block_header()` returns `max(computed_height, last_finalized_floor)`. - To guarantee `head >= finalized`, call `get_last_finalized_block_header()` first.\n\nNotes: - Does not affect actual block production or chain state. - Triggered probabilistically based on `reorg_interval` configuration. - Heights are deterministic given the same seed and call sequence.",
           "type": "object",
           "required": [
             "rewind_below_last_finalized"

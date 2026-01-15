@@ -101,11 +101,16 @@ pub enum RandomizationBehaviour {
     /// This simulates scenarios where the DA layer reports stale data,
     /// useful for testing rollup resilience to DA layer inconsistencies.
     ///
+    /// Behavior:
+    /// - Each call advances the internal RNG, returning a different height each time.
+    /// - `get_last_finalized_block_header()` stores its result as a floor for head.
+    /// - `get_head_block_header()` returns `max(computed_height, last_finalized_floor)`.
+    /// - To guarantee `head >= finalized`, call `get_last_finalized_block_header()` first.
+    ///
     /// Notes:
     /// - Does not affect actual block production or chain state.
-    /// - Triggered based on `reorg_interval` configuration.
-    /// - Each method returns independently randomized heights, but head >= finalized is guaranteed.
-    /// - Each call returns a different (but deterministic) height using an internal call counter.
+    /// - Triggered probabilistically based on `reorg_interval` configuration.
+    /// - Heights are deterministic given the same seed and call sequence.
     RewindBelowLastFinalized {
         /// Maximum number of blocks below finalized height to report.
         /// Random height is chosen between `max(0, finalized - max_depth)` and `finalized`.

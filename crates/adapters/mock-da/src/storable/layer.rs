@@ -313,13 +313,20 @@ impl StorableMockDaLayer {
     }
 
     /// Get head block header saved in the database.
+    ///
+    /// When `RewindBelowLastFinalized` randomization is active:
+    /// - Returns `max(computed_head, last_reported_finalized)`
+    /// - `last_reported_finalized` is set by `get_last_finalized_block_header()`
+    ///
+    /// To guarantee `head >= finalized`, call `get_last_finalized_block_header()` first.
+    /// If finalized was never called, `last_reported_finalized` is 0 and head has no floor.
     pub async fn get_head_block_header(&self) -> anyhow::Result<MockBlockHeader> {
         let height = self
             .compute_below_finalized_height()
             .await
             .unwrap_or_else(|| self.next_height.saturating_sub(1));
 
-        // Ensure head is never below the last reported finalized height
+        // Use previously reported finalized height as floor (set by get_last_finalized_block_header)
         let finalized_floor = self
             .last_reported_finalized
             .load(std::sync::atomic::Ordering::Relaxed);
@@ -333,13 +340,18 @@ impl StorableMockDaLayer {
         self.head_header_sender.subscribe()
     }
 
+    /// Get last finalized block header.
+    ///
+    /// When `RewindBelowLastFinalized` randomization is active, each call advances
+    /// the RNG and may return a different height. The returned height is stored
+    /// internally and used as a floor by `get_head_block_header()`.
     pub(crate) async fn get_last_finalized_block_header(&self) -> anyhow::Result<MockBlockHeader> {
         let height = self
             .compute_below_finalized_height()
             .await
             .unwrap_or(self.last_finalized_height);
 
-        // Always update so get_head_block_header() can use it as a floor
+        // Store for get_head_block_header() to use as a floor
         self.last_reported_finalized
             .store(height, std::sync::atomic::Ordering::Relaxed);
 
@@ -2077,7 +2089,6 @@ mod tests {
             // Finalized called first, that's important invariant, if we want to make sure that head is not falling below
             let reported_finalized = da_layer.get_last_finalized_block_header().await?;
             let reported_head = da_layer.get_head_block_header().await?;
-
 
             // Head should never be below finalized
             assert!(
