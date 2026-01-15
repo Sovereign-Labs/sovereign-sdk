@@ -10,7 +10,7 @@ use sov_test_utils::BatchTestCase;
 
 #[test]
 fn test_tracing() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
 

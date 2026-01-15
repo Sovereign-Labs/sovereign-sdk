@@ -22,8 +22,9 @@ use sov_risc0_adapter::Risc0;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::SovRateLimiterConfig;
 use sov_stf_runner::processes::RollupProverConfig;
-use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
-use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{
+    get_appropriate_rollup_prover_config, RollupBuilder, TestRollup,
+};
 
 pub(crate) const SENDER_PRIV_KEY: &str =
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";

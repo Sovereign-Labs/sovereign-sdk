@@ -111,6 +111,12 @@ where
             "Only the admin can update the runtime configuration. Got {} but expected {admin}",
             context.sender()
         );
+        // Check if all fields are None - this is the signal to disable max fee check
+        if update.is_empty() {
+            self.disable_max_fee_check.set(&true, state)?;
+            return Ok(());
+        }
+
         let mut cfg = self.cfg(state)?;
 
         let EvmRuntimeConfigUpdate {

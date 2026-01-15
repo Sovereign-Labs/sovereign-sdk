@@ -292,6 +292,10 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
         trace!(method = "eth_estimateGas", "EVM module JSON-RPC request");
+
+        // Add 1,000 bytes to account for all other data in the Transaction structure, apart from call data.
+        let tx_size = request.input.input().as_ref().map(|i| i.len()).unwrap_or(0) + 1000;
+
         let ResultAndState {
             result,
             state: changes,
@@ -317,14 +321,24 @@ where
             logs_size as u32,
         )
         .map_err(into_rpc_error)?;
+
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("ApiState has BasicGasMeter");
+
+        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
+        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
             .expect("Gas meter is initialized with INF");
+
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+
         Ok(U64::from(apply_margins(total_gas_used)?))
     }
 

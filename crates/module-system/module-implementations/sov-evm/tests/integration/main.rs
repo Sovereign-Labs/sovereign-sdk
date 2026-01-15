@@ -4,6 +4,7 @@ mod config;
 mod contracts;
 mod genesis;
 mod helpers;
+mod max_fee;
 mod pruning;
 mod runtime;
 mod state;

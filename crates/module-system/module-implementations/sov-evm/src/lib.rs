@@ -166,6 +166,11 @@ pub struct Evm<S: Spec> {
 
     #[phantom]
     phantom: core::marker::PhantomData<S>,
+
+    /// When true, the max fee check in the authenticator is disabled.
+    /// This is set to true when an EvmRuntimeConfigUpdate with all fields None is received.
+    #[state]
+    pub(crate) disable_max_fee_check: StateValue<bool, BcsCodec>,
 }
 
 /// The top-level error type for all EVM module operations.

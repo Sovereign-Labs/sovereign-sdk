@@ -55,6 +55,7 @@ where
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
+        self.disable_max_fee_check.set(&false, state)?;
 
         let block_env = create_block_env(
             0,
