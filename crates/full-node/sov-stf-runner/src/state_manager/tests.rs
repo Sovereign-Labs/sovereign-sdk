@@ -1029,12 +1029,11 @@ async fn test_change_in_finalized_header() {
     shutdown_sender.send(()).unwrap();
 }
 
-// On empty internal state, state manager should only allow blocks that are
-// direct descendants of last_processed_finalized_header (genesis in this case).
-// Passing a block that skips heights is a misconfiguration and should panic.
+// On empty internal state, if we pass a block that is not adjacent to
+// last_processed_finalized_header (genesis), the state manager should return
+// NoMatch with a height to fetch (recovered via fork point search).
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "Bug in StateManager, finalized blocks haven't been tracked properly")]
-async fn test_state_manager_starts_from_non_finalized_height() {
+async fn test_state_manager_recovers_from_non_adjacent_block() {
     let tempdir = tempfile::tempdir().unwrap();
     let chain_length = 7;
     let finality = 5;
@@ -1057,16 +1056,28 @@ async fn test_state_manager_starts_from_non_finalized_height() {
 
     let last_finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     // This is NOT adjacent to last_processed_finalized_header (genesis),
-    // so it should panic as this is a misconfiguration.
+    // so state manager should return NoMatch to guide us to the right block.
     let non_adjacent_block = da_service
         .get_block_at(last_finalized_header.height() + 1)
         .await
         .unwrap();
 
-    // This should panic
-    let _ = state_manager
+    // Should return NoMatch with height 1 (the first block after genesis)
+    let result = state_manager
         .is_good_continuation(&non_adjacent_block, &da_service)
-        .await;
+        .await
+        .unwrap();
+
+    match result {
+        BlockCandidateResolution::NoMatch { height_to_fetch } => {
+            // Fork point search should find block 1 as the first unprocessed block
+            // whose predecessor (genesis) we've seen (it's the finalized header)
+            assert_eq!(height_to_fetch, 1, "Should guide us to block 1");
+        }
+        BlockCandidateResolution::KnownContinuation { .. } => {
+            panic!("Should not be a continuation - block is not adjacent to genesis");
+        }
+    }
 }
 
 // TODO: Add tests that verification of finalized transitions only contains finalized blocks

@@ -582,10 +582,9 @@ where
         let processed = self.state_on_block.contains_key(&block_header.hash());
         // NOTE: Probably can do early return to safe memory accesses, but readability wins here.
 
-        // Genesis / instant finality case: state_on_block is empty, block must follow finalized
-        // TODO: Where is genesis here add it below
-        let adjacent_to_last_finalized = self.state_on_block.is_empty()
-            && block_header.prev_hash() == self.last_processed_finalized_header.hash();
+        // Block follows finalized header directly (genesis/instant finality/post-reorg case)
+        let adjacent_to_last_finalized =
+            block_header.prev_hash() == self.last_processed_finalized_header.hash();
 
         // Normal case: predecessor is in state_on_block
         let has_seen_predecessor = self.state_on_block.contains_key(&block_header.prev_hash());
