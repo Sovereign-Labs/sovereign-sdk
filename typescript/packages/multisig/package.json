@@ -38,7 +38,9 @@
     "access": "public"
   },
   "dependencies": {
+    "@noble/hashes": "^1.5.0",
     "@sovereign-sdk/signers": "workspace:^",
-    "@sovereign-sdk/utils": "workspace:^"
+    "@sovereign-sdk/utils": "workspace:^",
+    "borsh": "0.7.0"
   }
 }
