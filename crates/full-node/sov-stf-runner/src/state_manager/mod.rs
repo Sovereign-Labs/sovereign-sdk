@@ -25,8 +25,6 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 
-const MAX_REORG_FINDING_ATTEMPTS: u16 = 10_000;
-
 /// Point where rollup execution can be resumed after DA fork happened.
 struct ForkPoint<Da: DaService, StateRoot> {
     /// The next block in a new fork, following the last seen transition by the rollup.
@@ -96,14 +94,6 @@ enum ForkPointSearchResult<Da: DaService, StateRoot> {
     NeedFutureBlock {
         height: u64,
     },
-}
-
-/// Result of `choose_fork_point()` - either found a fork point or need a different height.
-enum ForkPointResult<Da: DaService, StateRoot> {
-    /// Found the fork point - caller can proceed with this block
-    Found(ForkPoint<Da, StateRoot>),
-    /// Need to fetch block at this height - propagate up to runner
-    NeedHeight(u64),
 }
 
 /// Result of `prepare_storage()` - either ready to process or need different height.
@@ -233,9 +223,11 @@ where
         let reorg_happened = self.has_reorg_happened(filtered_block.header())?;
         tracing::trace!(reorg_happened, "Checked if reorg happened");
 
+        // ABOVE THIS KIND OF GOOD.
+
         if reorg_happened {
             match self.choose_fork_point(da_service).await? {
-                ForkPointResult::Found(ForkPoint {
+                ForkPointSearchResult::Found(ForkPoint {
                     block: new_block,
                     pre_state_root,
                 }) => {
@@ -280,13 +272,39 @@ where
                     filtered_block = new_block;
                     self.state_root = pre_state_root;
                 }
-                ForkPointResult::NeedHeight(height) => {
+                ForkPointSearchResult::NeedFutureBlock { height } => {
                     tracing::trace!(
                         height,
                         time = ?start.elapsed(),
                         "Reorg happened but need future block, returning height to fetch"
                     );
                     return Ok(PrepareStorageResult::NeedHeight(height));
+                }
+                ForkPointSearchResult::HeadChanged(new_head) => {
+                    // DA reorged during fork point search. Tell runner to retry with same height.
+                    let retry_height = filtered_block.header().height();
+                    tracing::warn!(
+                        new_head = %new_head.display(),
+                        retry_height,
+                        time = ?start.elapsed(),
+                        "DA reorged during fork point search, runner should retry"
+                    );
+                    return Ok(PrepareStorageResult::NeedHeight(retry_height));
+                }
+                ForkPointSearchResult::DaHeadIsBelowProcessedFinalized => {
+                    // DA is behind our finalized height. Tell runner to fetch from after finalized.
+                    let retry_height = self
+                        .last_processed_finalized_header
+                        .height()
+                        .checked_add(1)
+                        .expect("height overflow");
+                    tracing::warn!(
+                        last_finalized_height = self.last_processed_finalized_header.height(),
+                        retry_height,
+                        time = ?start.elapsed(),
+                        "DA head is below finalized height, runner should retry"
+                    );
+                    return Ok(PrepareStorageResult::NeedHeight(retry_height));
                 }
             }
         }
@@ -619,6 +637,7 @@ where
         };
 
         // 3. Continuation of **existing** state of state manager.
+        // TODO: Does it matter? if we have predecessor, we just return storage and pre-state root.
         let is_fork = self.state_root.as_ref() != predecessor_state_root.as_ref();
         tracing::trace!(block_header = %block_header.display(), is_fork, "Current state matches predecessor");
         Ok(is_fork)
@@ -670,11 +689,15 @@ where
 
     // If reorg happened,
     // the next incremental continuation of that fork that hasn't been processed should be found.
-    // Returns either a ForkPoint (with the block to process) or a height to fetch.
+    // Returns a ForkPointSearchResult that caller should handle:
+    // - Found: proceed with the fork point block
+    // - HeadChanged: DA reorged during search, caller should retry
+    // - DaHeadIsBelowProcessedFinalized: DA is behind, caller should wait and retry
+    // - NeedFutureBlock: all seen blocks are in current chain, fetch at given height
     async fn choose_fork_point(
         &self,
         da_service: &Da,
-    ) -> anyhow::Result<ForkPointResult<Da, StateRoot>> {
+    ) -> anyhow::Result<ForkPointSearchResult<Da, StateRoot>> {
         // If we haven't seen anything we can only start from last seen finalized height.
         if self.state_on_block.is_empty() {
             let adjacent_height = self
@@ -688,7 +711,7 @@ where
                 self.last_processed_finalized_header.hash(),
                 "Bug in DA, block adjacent to finalized has wrong prev_hash"
             );
-            return Ok(ForkPointResult::Found(ForkPoint {
+            return Ok(ForkPointSearchResult::Found(ForkPoint {
                 block: adjacent,
                 pre_state_root: self.state_root.clone(),
             }));
@@ -701,61 +724,16 @@ where
             .get_highest_seen_height()
             .expect("Choosing fork point only possible if some transitions have been seen");
 
-        let mut head = da_service.get_head_block_header().await?;
+        let head = da_service.get_head_block_header().await?;
 
-        for attempt in 0..MAX_REORG_FINDING_ATTEMPTS {
-            match self
-                .try_find_candidate_in_current_chain(
-                    da_service,
-                    head.clone(),
-                    earliest_seen_height,
-                    highest_seen_height,
-                )
-                // We could've handle error case and try again, but this is not our responsibility
-                .await?
-            {
-                ForkPointSearchResult::Found(fork_point) => {
-                    tracing::trace!(
-                        attempt,
-                        fork_point = %fork_point.block.header().display(),
-                        "Found a candidate for fork point"
-                    );
-                    return Ok(ForkPointResult::Found(fork_point));
-                }
-                ForkPointSearchResult::HeadChanged(new_head) => {
-                    tracing::warn!(
-                        old_head = %head.display(),
-                        new_head = %new_head.display(),
-                        attempt,
-                        "Reorg happened during fork point selection, trying again"
-                    );
-                    head = new_head;
-                }
-                ForkPointSearchResult::DaHeadIsBelowProcessedFinalized => {
-                    let sleep_time = da_service.get_approximate_block_time().await * 10;
-                    tracing::warn!(
-                        attempt,
-                        max_attempts = MAX_REORG_FINDING_ATTEMPTS,
-                        retry_after = ?sleep_time,
-                        "Detected that DA height is below last processed finalized height. This can indicate issue with DA service. will retry");
-                    tokio::time::sleep(sleep_time).await;
-                    let head_again = da_service.get_head_block_header().await?;
-                    head = head_again;
-                }
-                ForkPointSearchResult::NeedFutureBlock { height } => {
-                    // All seen blocks are in current chain - need to fetch a future block.
-                    // Don't retry, propagate up to caller (eventually runner).
-                    tracing::trace!(
-                        attempt,
-                        height,
-                        "Need future block, returning height for runner to fetch"
-                    );
-                    return Ok(ForkPointResult::NeedHeight(height));
-                }
-            }
-        }
-
-        anyhow::bail!("Could find fork point after {MAX_REORG_FINDING_ATTEMPTS} attempts")
+        // Single attempt - caller handles retries
+        self.try_find_candidate_in_current_chain(
+            da_service,
+            head,
+            earliest_seen_height,
+            highest_seen_height,
+        )
+        .await
     }
 
     // Tries to find a candidate in the current state of the chain.
