@@ -1,5 +1,11 @@
 # @sovereign-sdk/multisig
 
+## 0.2.1
+
+### Patch Changes
+
+-   @sovereign-sdk/signers@0.5.1
+
 ## 0.2.0
 
 ### Minor Changes

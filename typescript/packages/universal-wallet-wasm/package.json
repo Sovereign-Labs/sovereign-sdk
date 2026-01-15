@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/universal-wallet-wasm",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "scripts": {
     "build": "pnpm run compile:node && pnpm run compile:esm && ./scripts/ensure_module_types.sh",
     "compile:esm": "wasm-pack build --target bundler --release --out-dir dist/esm",
