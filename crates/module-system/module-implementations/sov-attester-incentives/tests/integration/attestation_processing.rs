@@ -16,6 +16,7 @@ use crate::helpers::{
 };
 
 #[test]
+#[ignore = "NOMT does not support open_proof yet"]
 fn test_process_valid_attestation() {
     let nb_tests = 3;
     let (mut runner, genesis_attester, _, other_user) = setup();
@@ -63,6 +64,7 @@ fn test_process_valid_attestation() {
 }
 
 #[test]
+#[ignore = "NOMT does not support open_proof yet"]
 fn test_burn_on_invalid_attestation() {
     let (mut runner, genesis_attester, _, other_user) = setup();
 
