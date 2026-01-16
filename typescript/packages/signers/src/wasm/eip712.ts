@@ -2,7 +2,7 @@ import type { MetaMaskInpageProvider } from "@metamask/providers";
 import * as secp from "@noble/secp256k1";
 import { KnownTypeId, Schema } from "@sovereign-sdk/universal-wallet-wasm";
 import { hexToBytes } from "@sovereign-sdk/utils";
-import { Signature } from "ethers";
+import { parseSignature, type Signature } from "viem";
 import { SignerError } from "../errors";
 import type { Signer } from "../signer";
 
@@ -36,16 +36,16 @@ export class Eip712Signer implements Signer {
 
   /**
    * Cache the public key recovered from a signature.
+   * Uses viem's Signature type which accepts high-s signatures (unlike ethers).
    */
   private cachePublicKey(signingHash: Uint8Array, signature: Signature): void {
     if (this.cachedPublicKey) return;
 
-    let secpSig = secp.Signature.fromCompact(
-      new Uint8Array([
-        ...hexToBytes(signature.r.slice(2)),
-        ...hexToBytes(signature.s.slice(2)),
-      ]),
-    );
+    // viem's parseSignature accepts high-s signatures without throwing
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+
+    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
     secpSig = secpSig.addRecoveryBit(signature.yParity);
     const publicKey = secpSig.recoverPublicKey(signingHash);
 
@@ -121,11 +121,23 @@ export class Eip712Signer implements Signer {
       );
     }
 
-    // Parse the signature for public key recovery
-    const signature = Signature.from(signatureHex);
+    // Parse the signature using viem (accepts high-s signatures unlike ethers)
+    const signature = parseSignature(signatureHex);
     this.cachePublicKey(signingHash, signature);
 
-    // Return the standard compact serialized signature (r + s, 64 bytes)
-    return hexToBytes(signature.compactSerialized.slice(2));
+    // Create secp256k1 signature and normalize to low-s form
+    // MetaMask's eth_signTypedData_v4 may return high-s signatures for EIP-712 messages
+    // (EIP-2 low-s requirement only applies to transactions, not off-chain message signing)
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
+
+    // Normalize s if it's > n/2 (convert high-s to low-s)
+    if (secpSig.hasHighS()) {
+      secpSig = secpSig.normalizeS();
+    }
+
+    // Return the normalized compact serialized signature (r + s, 64 bytes)
+    return secpSig.toCompactRawBytes();
   }
 }
