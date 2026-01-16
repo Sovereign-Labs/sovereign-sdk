@@ -811,148 +811,133 @@ where
         }
     }
 
-    /// Returns all [`StateTransitionInfo`] which are below finalized height at this point.
-    async fn process_finalized_state_transitions(
-        &mut self,
-    ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
-        // This is going to be cut off point
+    /// Determines the effective finalized header to use for processing.
+    ///
+    /// Handles edge cases where DA layer reports unexpected finalized heights:
+    /// - If syncing: finalized might be higher than we've seen - cap at highest_seen
+    /// - If DA reports stale: finalized might be lower than already processed - use last_processed
+    async fn get_effective_finalized_header(
+        &self,
+        highest_seen_transition: u64,
+    ) -> anyhow::Result<<<Da as DaService>::Spec as DaSpec>::BlockHeader> {
         let last_finalized_header = self
             .finalized_headers_provider
             .get_last_finalized_block_header()?;
-        let earliest_seen_transition = self
-            .get_earliest_seen_height()
-            .expect("Should be called after at least single transition added");
-        let highest_seen_transition = self
-            .get_highest_seen_height()
-            .expect("Should be called after at least single transition added");
-        debug_assert!(
-            earliest_seen_transition <= highest_seen_transition,
-            "bug in state manager. earliest and highest transition numbers are calculated incorrectly"
-        );
-        debug_assert_eq!(
-            earliest_seen_transition,
-            self.last_processed_finalized_header
-                .height()
-                .saturating_add(1),
-            "bug in state manager. earliest seen transition should be incremental from last processed finalized"
-        );
 
-        // Handle edge cases where DA layer reports unexpected finalized heights:
-        // 1. If syncing: finalized might be higher than we've seen - cap at highest_seen
-        // 2. If DA reports stale: finalized might be lower than already processed - use last_processed
-        let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_transition
-        {
+        if last_finalized_header.height() > highest_seen_transition {
             // Syncing case: DA is ahead of us
-            self.finalized_headers_provider
+            Ok(self
+                .finalized_headers_provider
                 .get_block_header_at(highest_seen_transition)
                 .await?
-                .clone()
+                .clone())
         } else if last_finalized_header.height() < self.last_processed_finalized_header.height() {
             // Stale header case: DA reports older than what we've already finalized
-            // This can happen if DA layer has temporary inconsistencies
             tracing::warn!(
                 reported_finalized = last_finalized_header.height(),
                 already_processed = self.last_processed_finalized_header.height(),
                 "DA layer reported stale finalized header, using last processed instead"
             );
-            self.last_processed_finalized_header.clone()
+            Ok(self.last_processed_finalized_header.clone())
         } else {
-            last_finalized_header.clone()
-        };
+            Ok(last_finalized_header.clone())
+        }
+    }
 
-        tracing::trace!(
-            last_processed_finalized_header = %self.last_processed_finalized_header.display(),
-            last_seen_finalized_header = %last_seen_finalized_header.display(),
-            last_finalized_header = %last_finalized_header.display(),
-            highest_seen_transition,
-            seen_transitions = self.state_on_block.len(),
-            "Start processing finalized state transitions");
+    /// Removes all transitions that don't descend from the effective finalized header.
+    ///
+    /// This is necessary because:
+    /// 1. Not all orphaned transitions will be removed naturally, leaving memory waste.
+    /// 2. We rely on clean seen state to detect reorgs.
+    fn prune_orphaned_transitions(
+        &mut self,
+        effective_finalized_header: &<<Da as DaService>::Spec as DaSpec>::BlockHeader,
+        highest_seen_transition: u64,
+    ) {
+        let start_height = effective_finalized_header
+            .height()
+            .checked_add(1)
+            .expect("end of chain");
 
-        // Start with eliminating all non-finalized transitions
-        // that does not originate from the last seen finalized header.
-        // But do we need this? Won't they be cleared on the next iteration, when finalized height rises?
-        // Yes, 2 reasons:
-        //   1. Not all of them will be removed, so we might have many orphaned transitions in memory.
-        //   2. We rely on check on clean-seen state to check if reorg happened or not.
-        {
-            // We start from height after the last seen finalized header
-            let start_height = last_seen_finalized_header
-                .height()
-                .checked_add(1)
-                .expect("end of chain");
-            let mut survivors = vec![last_seen_finalized_header.hash()];
-
-            let range = start_height..=highest_seen_transition;
-            tracing::trace!(
-                last_seen_finalized_header = %last_seen_finalized_header.display(),
-                ?range,
-                "Going to eliminate all future transitions which are not derived from last seen finalized header");
-            for height in range {
-                let new_survivors: Vec<_> = {
-                    let this_height_blocks = self
-                        .seen_on_height
-                        .get(&height)
-                        .expect("Continuity broken, inconsistent internal state");
-                    this_height_blocks
-                        .iter()
-                        .filter(|block_hash| survivors.contains(&self.get_prev_hash(block_hash)))
-                        .cloned()
-                        .collect()
-                };
-
-                {
-                    self.seen_on_height.get_mut(&height)
-                        .expect("Continuity broken, inconsistent internal state")
-                        .retain(|block_hash| {
-                            if new_survivors.contains(block_hash) {
-                                true
-                            } else {
-                                tracing::trace!(
-                                %block_hash,
-                                ?new_survivors,
-                                "Removing block header from seen_on_height, because it does not originate from last seen finalized header"
-                            );
-                                self.state_on_block.remove(block_hash);
-                                false
-                            }
-                        });
-                }
-
-                survivors = new_survivors;
-            }
+        // Nothing to prune if start is above highest seen
+        if start_height > highest_seen_transition {
+            return;
         }
 
-        // All transitions between last processed and last seen finalized.
-        let seen_transitions_to_finalize = last_seen_finalized_header
+        let mut survivors = vec![effective_finalized_header.hash()];
+
+        let range = start_height..=highest_seen_transition;
+        tracing::trace!(
+            effective_finalized_header = %effective_finalized_header.display(),
+            ?range,
+            "Pruning transitions not derived from effective finalized header"
+        );
+
+        for height in range {
+            let new_survivors: Vec<_> = {
+                let this_height_blocks = self
+                    .seen_on_height
+                    .get(&height)
+                    .expect("Continuity broken, inconsistent internal state");
+                this_height_blocks
+                    .iter()
+                    .filter(|block_hash| survivors.contains(&self.get_prev_hash(block_hash)))
+                    .cloned()
+                    .collect()
+            };
+
+            self.seen_on_height
+                .get_mut(&height)
+                .expect("Continuity broken, inconsistent internal state")
+                .retain(|block_hash| {
+                    if new_survivors.contains(block_hash) {
+                        true
+                    } else {
+                        tracing::trace!(
+                            %block_hash,
+                            ?new_survivors,
+                            "Removing orphaned transition"
+                        );
+                        self.state_on_block.remove(block_hash);
+                        false
+                    }
+                });
+
+            survivors = new_survivors;
+        }
+    }
+
+    /// Extracts all finalized transitions from the seen transitions.
+    ///
+    /// Returns transitions in order from oldest to newest.
+    /// Removes extracted transitions from internal state.
+    async fn extract_finalized_transitions(
+        &mut self,
+        effective_finalized_header: &<<Da as DaService>::Spec as DaSpec>::BlockHeader,
+        earliest_seen_transition: u64,
+    ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
+        let seen_transitions_to_finalize = effective_finalized_header
             .height()
             .saturating_sub(self.last_processed_finalized_header.height());
         let mut finalized_transitions = Vec::with_capacity(seen_transitions_to_finalize as usize);
 
-        // Going backwards does not mean there's a connection between earliest and fetched last seen finalized header.
-        // TO BE 100% sure, we need to do N queries from earliest to latest seen finalized header.
-        // We can offload that into a background task that is subscribed and read it via a channel.
-        // But now it does queries. In reality, there shouldn't be a lot of them, as normally rollup progresses together with chain.
-        let range = (earliest_seen_transition..=last_seen_finalized_header.height()).rev();
+        let range = (earliest_seen_transition..=effective_finalized_header.height()).rev();
         tracing::trace!(
             ?range,
-            "Going to extract finalized transitions from previously seen transitions"
+            "Extracting finalized transitions from previously seen transitions"
         );
+
         for height in range {
-            // DaService call # 3 + n
             let finalized_at_that_height = self
                 .finalized_headers_provider
                 .get_block_header_at(height)
                 .await?;
 
-            tracing::trace!(height, "Going to extract finalized transitions from height");
             let blocks_on_height = self
                 .seen_on_height
                 .remove(&height)
                 .expect("Should be at least one seen transition on each height");
-            tracing::trace!(
-                ?blocks_on_height,
-                "Going to extract finalized transitions from height"
-            );
+
             let mut pushed_for_this_height = false;
             for block_hash in blocks_on_height {
                 let transition = self
@@ -976,23 +961,65 @@ where
         finalized_transitions.reverse();
         tracing::trace!(
             finalized_transitions = finalized_transitions.len(),
-            "Completed check for finalized transitions"
+            "Extracted finalized transitions"
         );
 
-        // ---
-        // Check that finalized transitions are valid, before re-assigning
+        Ok(finalized_transitions)
+    }
+
+    /// Returns all [`StateTransitionInfo`] which are below finalized height at this point.
+    async fn process_finalized_state_transitions(
+        &mut self,
+    ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
+        let earliest_seen = self
+            .get_earliest_seen_height()
+            .expect("Should be called after at least single transition added");
+        let highest_seen = self
+            .get_highest_seen_height()
+            .expect("Should be called after at least single transition added");
+
+        debug_assert!(
+            earliest_seen <= highest_seen,
+            "bug in state manager. earliest and highest transition numbers are calculated incorrectly"
+        );
+        debug_assert_eq!(
+            earliest_seen,
+            self.last_processed_finalized_header
+                .height()
+                .saturating_add(1),
+            "bug in state manager. earliest seen transition should be incremental from last processed finalized"
+        );
+
+        // 1. Determine effective finalized header (handles syncing/stale edge cases)
+        let effective_finalized = self.get_effective_finalized_header(highest_seen).await?;
+
+        tracing::trace!(
+            last_processed = %self.last_processed_finalized_header.display(),
+            effective_finalized = %effective_finalized.display(),
+            highest_seen,
+            seen_transitions = self.state_on_block.len(),
+            "Processing finalized state transitions"
+        );
+
+        // 2. Prune orphaned transitions not descending from effective finalized header
+        self.prune_orphaned_transitions(&effective_finalized, highest_seen);
+
+        // 3. Extract finalized transitions
+        let finalized_transitions = self
+            .extract_finalized_transitions(&effective_finalized, earliest_seen)
+            .await?;
+
+        // 4. Verify continuity and update state
         verify_finalized_transitions_continuity(
             self.last_processed_finalized_header.hash(),
             &finalized_transitions,
         );
 
-        if let Some(last_processed_transition) = finalized_transitions.iter().last() {
-            self.last_processed_finalized_header = last_processed_transition.block_header.clone();
-            self.last_processed_finalized_state_root =
-                last_processed_transition.post_state_root.clone();
+        if let Some(last) = finalized_transitions.last() {
+            self.last_processed_finalized_header = last.block_header.clone();
+            self.last_processed_finalized_state_root = last.post_state_root.clone();
         }
 
-        // Verify invariant: all earliest seen transitions must descend from last_processed_finalized_header
         self.verify_earliest_seen();
 
         Ok(finalized_transitions)
