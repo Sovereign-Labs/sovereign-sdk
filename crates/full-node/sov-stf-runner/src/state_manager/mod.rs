@@ -28,15 +28,16 @@ use tokio::sync::watch;
 /// Result of checking if a block is a valid continuation of the current chain.
 ///
 /// Used by runner to determine whether to process the block or fetch a different one.
-pub enum BlockCandidateResolution<PreState, StateRoot> {
+pub enum BlockCandidateResolution<StfPreState, StateRoot, LedgerPreState> {
     /// Block is a valid continuation of a previously seen transition.
     /// Runner should proceed with STF execution using the provided pre-state.
     KnownContinuation {
         /// Valid pre-state for the requested block.
         /// STF can safely rely on this state for execution.
-        pre_state: PreState,
+        pre_state: StfPreState,
         /// The state root before processing this block. matches `pre_state`
         pre_state_root: StateRoot,
+        ledger_pre_state: LedgerPreState,
     },
     /// Block is not a valid continuation (reorg detected or caught up).
     /// Runner should fetch block at `height_to_fetch` and try again.
@@ -146,8 +147,8 @@ where
         finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
         last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             storage_manager,
             ledger_db,
             last_processed_finalized_state_root,
@@ -161,7 +162,7 @@ where
             da_sync_state,
             finalized_headers_provider,
             genesis_da_height,
-        })
+        }
     }
 
     pub(crate) async fn startup(&mut self) -> anyhow::Result<()> {
@@ -189,7 +190,7 @@ where
         &mut self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
         da_service: &Da,
-    ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState, StateRoot>> {
+    ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState, StateRoot, Sm::LedgerState>> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
             anyhow::bail!(
@@ -254,7 +255,7 @@ where
 
         // Block is a continuation - get pre_state_root and create state
         let pre_state_root = self.get_pre_state_root_for(block_header);
-        let (pre_state, _ledger_state) = self.storage_manager.create_state_for(block_header)?;
+        let (pre_state, ledger_state) = self.storage_manager.create_state_for(block_header)?;
 
         tracing::trace!(
             block_header = %block_header.display(),
@@ -265,6 +266,7 @@ where
         Ok(BlockCandidateResolution::KnownContinuation {
             pre_state,
             pre_state_root,
+            ledger_pre_state: ledger_state,
         })
     }
 
@@ -305,6 +307,7 @@ where
     >(
         &mut self,
         stf_changes: Sm::StfChangeSet,
+        ledger_pre_state: Sm::LedgerState,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
         aggregated_proofs: Vec<SerializedAggregatedProof>,
@@ -315,7 +318,6 @@ where
                 "StateManager wasn't initialized. Please call `.startup()` method before using"
             );
         }
-        let slot_number = self.get_slot_number()?;
         let new_state_root = transition_witness.final_state_root.clone();
         let block_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader =
             transition_witness.da_block_header.clone();
@@ -325,9 +327,9 @@ where
                 block_header.display()
             );
         }
+
         let aggregated_proofs_count = aggregated_proofs.len();
         tracing::debug!(
-            %slot_number,
             current_state_root = hex::encode(self.last_processed_finalized_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
@@ -378,6 +380,9 @@ where
             "Processed finalized transitions"
         );
 
+        self.ledger_db.replace_reader(ledger_pre_state);
+        // TODO: We can check state root from ledger and verify its connected
+        let slot_number = self.get_slot_number()?;
         let ledger_materialization_start = std::time::Instant::now();
         let mut ledger_change_set = self
             .ledger_db
@@ -393,7 +398,6 @@ where
             );
             tracing::trace!(
                 ?last_finalized_slot_number,
-                current_slot_number = ?slot_number,
                 "Going to materialize last finalized slot number"
             );
             let last_finalized_slot_update = self

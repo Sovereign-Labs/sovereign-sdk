@@ -218,7 +218,7 @@ where
             da_service_with_cached_finalized_headers.clone(),
             genesis_da_height,
             last_processed_da_header,
-        )?;
+        );
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
             da_service.clone(),
@@ -504,7 +504,7 @@ where
 
         // Check if this block is a valid continuation of the current chain.
         // If not, early return with the height runner should fetch next.
-        let (stf_pre_state, pre_state_root) = match self
+        let (stf_pre_state, pre_state_root, ledger_pre_state) = match self
             .state_manager
             .check_continuation(filtered_block.header(), &self.da_service)
             .await
@@ -515,12 +515,13 @@ where
             BlockCandidateResolution::KnownContinuation {
                 pre_state,
                 pre_state_root,
+                ledger_pre_state,
             } => {
                 tracing::trace!(
                     header = %filtered_block.header().display(),
                     "Block is a valid continuation, proceeding with STF execution"
                 );
-                (pre_state, pre_state_root)
+                (pre_state, pre_state_root, ledger_pre_state)
             }
             BlockCandidateResolution::NoMatch { height_to_fetch } => {
                 debug!(
@@ -635,6 +636,7 @@ where
         self.state_manager
             .process_stf_changes(
                 slot_result.change_set,
+                ledger_pre_state,
                 transition_data,
                 data_to_commit,
                 aggregated_proofs,

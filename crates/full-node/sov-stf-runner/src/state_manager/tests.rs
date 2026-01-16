@@ -33,14 +33,15 @@ use super::*;
 
 const DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
 
-/// Helper to extract (pre_state, pre_state_root) from BlockCandidateResolution::KnownContinuation.
+/// Helper to extract (pre_state, pre_state_root, ledger_pre_state) from BlockCandidateResolution::KnownContinuation.
 /// Panics if result is NoMatch - use this only in tests that expect continuation.
-fn unwrap_continuation<S, R>(result: BlockCandidateResolution<S, R>) -> (S, R) {
+fn unwrap_continuation<S, R, L>(result: BlockCandidateResolution<S, R, L>) -> (S, R, L) {
     match result {
         BlockCandidateResolution::KnownContinuation {
             pre_state,
             pre_state_root,
-        } => (pre_state, pre_state_root),
+            ledger_pre_state,
+        } => (pre_state, pre_state_root, ledger_pre_state),
         BlockCandidateResolution::NoMatch { height_to_fetch } => {
             panic!("Expected KnownContinuation, got NoMatch(height_to_fetch={height_to_fetch})")
         }
@@ -282,7 +283,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
 
             // Now fetch and process the fork point block
             let fork_block = da_service.get_block_at(height_to_fetch).await?;
-            let (prover_storage, pre_state_root) = unwrap_continuation(
+            let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
                 state_manager
                     .check_continuation(fork_block.header(), &da_service)
                     .await?,
@@ -313,7 +314,13 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             let final_state_root = transition_witness.final_state_root;
             let slot_commit: MockSlotCommit = SlotCommit::new(fork_block, Default::default());
             state_manager
-                .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+                .process_stf_changes(
+                    change_set,
+                    ledger_pre_state,
+                    transition_witness,
+                    slot_commit,
+                    Vec::new(),
+                )
                 .await?;
             check_internal_consistency(&state_manager, finality as usize);
 
@@ -370,7 +377,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
         .await??;
 
     let filtered_block = da_service.get_block_at(chain_length).await?;
-    let (prover_storage, pre_state_root) = unwrap_continuation(
+    let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
         state_manager
             .check_continuation(filtered_block.header(), &da_service)
             .await?,
@@ -392,7 +399,13 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     state_manager
-        .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            Vec::new(),
+        )
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
 
@@ -476,7 +489,7 @@ async fn test_progressing_with_shuffle(
         let mut filtered_block = da_service.get_block_at(height).await?;
 
         // Keep trying until we get a continuation (handles reorgs)
-        let (prover_storage, pre_state_root) = loop {
+        let (prover_storage, pre_state_root, ledger_pre_state) = loop {
             match state_manager
                 .check_continuation(filtered_block.header(), &da_service)
                 .await?
@@ -484,7 +497,8 @@ async fn test_progressing_with_shuffle(
                 BlockCandidateResolution::KnownContinuation {
                     pre_state,
                     pre_state_root,
-                } => break (pre_state, pre_state_root),
+                    ledger_pre_state,
+                } => break (pre_state, pre_state_root, ledger_pre_state),
                 BlockCandidateResolution::NoMatch { height_to_fetch } => {
                     // Reorg detected - fetch the suggested block and try again
                     filtered_block = da_service.get_block_at(height_to_fetch).await?;
@@ -524,7 +538,13 @@ async fn test_progressing_with_shuffle(
         let state_root_hash = transition_witness.final_state_root;
         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -711,7 +731,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
         let mut filtered_block = da_service.get_block_at(height).await?;
 
         // Keep trying until we get a continuation (handles reorgs)
-        let (prover_storage, pre_state_root) = loop {
+        let (prover_storage, pre_state_root, ledger_pre_state) = loop {
             match state_manager
                 .check_continuation(filtered_block.header(), &da_service)
                 .await?
@@ -719,7 +739,8 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 BlockCandidateResolution::KnownContinuation {
                     pre_state,
                     pre_state_root,
-                } => break (pre_state, pre_state_root),
+                    ledger_pre_state,
+                } => break (pre_state, pre_state_root, ledger_pre_state),
                 BlockCandidateResolution::NoMatch { height_to_fetch } => {
                     filtered_block = da_service.get_block_at(height_to_fetch).await?;
                 }
@@ -748,7 +769,13 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
         seen_transitions.insert(returned_block.header().hash(), state_root_hash);
@@ -803,7 +830,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         let mut filtered_block = da_service.get_block_at(height).await?;
 
         // Keep trying until we get a continuation (handles reorgs)
-        let (prover_storage, pre_state_root) = loop {
+        let (prover_storage, pre_state_root, ledger_pre_state) = loop {
             match state_manager
                 .check_continuation(filtered_block.header(), &da_service)
                 .await?
@@ -811,7 +838,8 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
                 BlockCandidateResolution::KnownContinuation {
                     pre_state,
                     pre_state_root,
-                } => break (pre_state, pre_state_root),
+                    ledger_pre_state,
+                } => break (pre_state, pre_state_root, ledger_pre_state),
                 BlockCandidateResolution::NoMatch { height_to_fetch } => {
                     filtered_block = da_service.get_block_at(height_to_fetch).await?;
                 }
@@ -858,7 +886,13 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         let state_root_hash = transition_witness.final_state_root;
         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -1189,7 +1223,7 @@ where
         da_header_provider,
         genesis_height,
         genesis_header,
-    )?;
+    );
     state_manager.startup().await?;
 
     Ok((state_manager, initial_state_root, shutdown_tx))
@@ -1255,7 +1289,7 @@ async fn process_continuous_transition(
     da_service: &MockDaService,
     finality: u32,
 ) -> anyhow::Result<StateRoot> {
-    let (prover_storage, pre_state_root) = unwrap_continuation(
+    let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
         state_manager
             .check_continuation(filtered_block.header(), da_service)
             .await?,
@@ -1272,7 +1306,13 @@ async fn process_continuous_transition(
     let final_state_root = transition_witness.final_state_root;
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     state_manager
-        .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            Vec::new(),
+        )
         .await?;
     check_internal_consistency(state_manager, finality as usize);
 
@@ -1387,7 +1427,7 @@ async fn test_progressing_with_rewind_below_finalized(
         },
     )
     .await;
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     // Submit blobs
@@ -1408,14 +1448,29 @@ async fn test_progressing_with_rewind_below_finalized(
 
     let mut height = 1u64;
     for _ in 0..loop_blocks {
-        let filtered_block = da_service.get_block_at(height).await?;
+        let mut filtered_block = da_service.get_block_at(height).await?;
 
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        // Keep trying until we get a continuation (handles reorgs)
+        let (prover_storage, pre_state_root, ledger_pre_state) = loop {
+            match state_manager
+                .check_continuation(filtered_block.header(), &da_service)
+                .await?
+            {
+                BlockCandidateResolution::KnownContinuation {
+                    pre_state,
+                    pre_state_root,
+                    ledger_pre_state,
+                } => break (pre_state, pre_state_root, ledger_pre_state),
+                BlockCandidateResolution::NoMatch { height_to_fetch } => {
+                    filtered_block = da_service.get_block_at(height_to_fetch).await?;
+                }
+            }
+        };
+
+        let returned_block = filtered_block;
 
         let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-            state_manager.get_state_root().to_owned(),
+            pre_state_root,
             prover_storage,
             &da_service,
             returned_block.clone(),
@@ -1426,7 +1481,13 @@ async fn test_progressing_with_rewind_below_finalized(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         // Skip check_internal_consistency - this test exercises abnormal DA behavior
         // where finalized headers may be stale, so normal consistency rules don't apply
