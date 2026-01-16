@@ -93,15 +93,6 @@ enum ForkPointSearchResult<Da: DaService> {
     },
 }
 
-/// Result of `prepare_storage()` - either ready to process or need different height.
-/// TODO: Remove this eventually
-pub(crate) enum PrepareStorageResult<StfState, Block> {
-    /// Ready to process - caller can proceed with STF execution
-    Ready { pre_state: StfState, block: Block },
-    /// Need to fetch block at this height - propagate up to caller
-    NeedHeight(u64),
-}
-
 /// StateManager controls storage lifecycle for [`StateTransitionFunction`],
 /// [`LedgerDb`] and API endpoints in case of DA-reorgs.
 /// It needs [`DaService`] so it can backtrack to the last seen transition in new fork.
@@ -112,16 +103,17 @@ where
 {
     storage_manager: Sm,
     ledger_db: LedgerDb,
+
+    genesis_da_height: u64,
     /// The state root at the last processed finalized block.
     /// Used as fallback when `state_on_block` is empty (genesis/instant finality).
     last_processed_finalized_state_root: StateRoot,
+    last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     // We record all seen transitions at the given height.
     state_on_block:
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
-    genesis_da_height: u64,
-    last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
     state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
@@ -193,25 +185,25 @@ where
         Ok(())
     }
 
-    /// Returns an [`HierarchicalStorageManager::StfState`] and a [`DaService::FilteredBlock`] that can be used to continue execution.
-    /// If a caller relies on some data from `filtered_block`,
-    /// it should be updated after the call of this method.
-    /// If a given block continues in the current fork, it is simply returned to the caller.
-    /// If reorg happened, it will return block following the last seen transition,
-    /// or indicate that a different height should be fetched.
+    /// Checks if a block is a valid continuation of the current chain state.
+    ///
+    /// Returns:
+    /// - `KnownContinuation { pre_state, pre_state_root }` if the block can be processed
+    /// - `NoMatch { height_to_fetch }` if runner should fetch a different block
     #[tracing::instrument(skip_all)]
-    async fn prepare_storage(
+    pub(crate) async fn is_good_continuation(
         &mut self,
-        filtered_block: Da::FilteredBlock,
+        block: &Da::FilteredBlock,
         da_service: &Da,
-    ) -> anyhow::Result<PrepareStorageResult<Sm::StfState, Da::FilteredBlock>> {
+    ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState, StateRoot>> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
             anyhow::bail!(
                 "StateManager wasn't initialized. Please call `.startup()` method before using"
             );
         }
-        let is_continuation = self.is_continuation(filtered_block.header());
+
+        let is_continuation = self.is_continuation(block.header());
         tracing::trace!(is_continuation, "Checked if block is continuation");
 
         if !is_continuation {
@@ -219,7 +211,7 @@ where
             let height_to_fetch = match self.choose_fork_point(da_service).await? {
                 ForkPointSearchResult::Found { block_header } => {
                     tracing::info!(
-                        original_block = %filtered_block.header().display(),
+                        original_block = %block.header().display(),
                         fork_point = %block_header.display(),
                         time = ?start.elapsed(),
                         "Found fork point, runner should fetch this block"
@@ -236,7 +228,7 @@ where
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
                     // DA reorged during fork point search. Tell runner to retry with same height.
-                    let retry_height = filtered_block.header().height();
+                    let retry_height = block.header().height();
                     tracing::warn!(
                         new_head = %new_head.display(),
                         retry_height,
@@ -261,58 +253,23 @@ where
                     retry_height
                 }
             };
-            return Ok(PrepareStorageResult::NeedHeight(height_to_fetch));
+            return Ok(BlockCandidateResolution::NoMatch { height_to_fetch });
         }
 
-        // Block is a continuation - create state and return
-        let (stf_pre_state, _ledger_state) = self
-            .storage_manager
-            .create_state_for(filtered_block.header())?;
-
-        // NOTE: Channel update is handled in process_stf_changes (after execution).
-        // Early update was removed because it sent pre-execution state which caused
-        // sync check failures when sequencer reads fell through to storage.
+        // Block is a continuation - get pre_state_root and create state
+        let pre_state_root = self.get_pre_state_root_for(block.header());
+        let (pre_state, _ledger_state) = self.storage_manager.create_state_for(block.header())?;
 
         tracing::trace!(
-            block_header = %filtered_block.header().display(),
+            block_header = %block.header().display(),
             time = ?start.elapsed(),
-            "Block is a continuation, returning STF state");
-        Ok(PrepareStorageResult::Ready {
-            pre_state: stf_pre_state,
-            block: filtered_block,
-        })
-    }
+            "Block is a continuation, returning STF state"
+        );
 
-    /// Checks if a block is a valid continuation of the current chain state.
-    ///
-    /// Returns:
-    /// - `KnownContinuation { pre_state, pre_state_root }` if the block can be processed
-    /// - `NoMatch { height_to_fetch }` if runner should fetch a different block
-    ///
-    /// This method internally uses `prepare_storage()` to handle reorg detection.
-    // TODO: rename to `check_block_continuation`
-    pub(crate) async fn is_good_continuation(
-        &mut self,
-        block: &Da::FilteredBlock,
-        da_service: &Da,
-    ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState, StateRoot>> {
-        let inner_block = block.clone();
-        match self.prepare_storage(inner_block, da_service).await? {
-            PrepareStorageResult::Ready {
-                pre_state,
-                block: _new_block,
-            } => {
-                // Block is a continuation - get pre_state_root from the chain
-                let pre_state_root = self.get_pre_state_root_for(block.header());
-                Ok(BlockCandidateResolution::KnownContinuation {
-                    pre_state,
-                    pre_state_root,
-                })
-            }
-            PrepareStorageResult::NeedHeight(height) => Ok(BlockCandidateResolution::NoMatch {
-                height_to_fetch: height,
-            }),
-        }
+        Ok(BlockCandidateResolution::KnownContinuation {
+            pre_state,
+            pre_state_root,
+        })
     }
 
     /// Returns the pre-state root for processing this block.
