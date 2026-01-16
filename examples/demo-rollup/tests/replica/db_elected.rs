@@ -75,3 +75,78 @@ async fn test_db_elected_two_nodes_leader_and_replica() {
     let _ = rollup2.shutdown().await;
     let _ = da_shutdown.send(());
 }
+
+/// Test that when the leader dies, the replica acquires leadership and becomes the new leader.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_db_elected_leader_failover() {
+    let postgres = PostgresData::create_postgres().await;
+
+    let postgres = match postgres {
+        Ok(pg) => Some(pg),
+        Err(CreatePostgresError::DockerNotSupported) => return,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
+    let (_, da_shutdown, addr) = create_da_service_periodic().await;
+
+    // Start both DbElected nodes
+    let node1 = postgres
+        .clone()
+        .map(|pg| (pg, "node1".into(), NodeRole::DbElected));
+    let rollup1 = start_rollup(addr, node1).await;
+
+    let node2 = postgres.map(|pg| (pg, "node2".into(), NodeRole::DbElected));
+    let rollup2 = start_rollup(addr, node2).await;
+
+    // Wait for both nodes to be ready
+    rollup1.wait_for_sequencer_ready().await.unwrap();
+    rollup2.wait_for_sequencer_ready().await.unwrap();
+
+    // Discover roles via the /sequencer/role endpoint
+    let role1 = rollup1.sequencer_role().await.unwrap();
+    let role2 = rollup2.sequencer_role().await.unwrap();
+
+    // Determine which node is the leader and which is the replica
+    let (leader_rollup, replica_rollup) = match (role1, role2) {
+        (SequencerRole::Leader, SequencerRole::Replica) => (rollup1, rollup2),
+        (SequencerRole::Replica, SequencerRole::Leader) => (rollup2, rollup1),
+        _ => panic!(
+            "Expected one Leader and one Replica, got {:?} and {:?}",
+            role1, role2
+        ),
+    };
+
+    // Kill the leader
+    let _ = leader_rollup.shutdown().await;
+
+    // Wait for replica to shutdown (it will acquire leadership and call exit_rollup)
+    let timeout_duration = Duration::from_secs(5);
+    let start = std::time::Instant::now();
+    while !replica_rollup.is_rollup_crashed() {
+        if start.elapsed() > timeout_duration {
+            panic!("Timeout waiting for replica to acquire leadership and shutdown");
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    // Get the builder from the replica (task already finished due to exit_rollup)
+    let replica_builder = replica_rollup.shutdown().await.unwrap();
+
+    // Restart the former replica
+    let restarted_rollup = replica_builder.start_test_rollup().await.unwrap();
+    restarted_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // Verify the restarted node is now the leader
+    let new_role = restarted_rollup.sequencer_role().await.unwrap();
+    assert_eq!(
+        new_role,
+        SequencerRole::Leader,
+        "Expected restarted node to be Leader, got {:?}",
+        new_role
+    );
+
+    let _ = restarted_rollup.shutdown().await;
+    let _ = da_shutdown.send(());
+}
