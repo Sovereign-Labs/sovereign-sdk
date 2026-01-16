@@ -119,10 +119,6 @@ where
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
     da_sync_state: Arc<DaSyncState>,
-    // TODO: Remove this field - it's no longer used after removing the waiting loop
-    // in try_find_candidate_in_current_chain. Kept for now to minimize interface changes.
-    #[allow(dead_code)]
-    da_total_timeout: std::time::Duration,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
 }
 
@@ -147,7 +143,6 @@ where
         stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
-        da_total_timeout: std::time::Duration,
         finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
         last_processed_finalized_header: <<Da as DaService>::Spec as DaSpec>::BlockHeader,
@@ -164,7 +159,6 @@ where
             max_provable_slot_number_tracker: state_height_tracker,
             is_initialized: false,
             da_sync_state,
-            da_total_timeout,
             finalized_headers_provider,
             genesis_da_height,
         })

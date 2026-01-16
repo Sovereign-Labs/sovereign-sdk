@@ -49,7 +49,6 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
-    da_total_timeout: Duration,
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
@@ -207,7 +206,6 @@ where
         };
 
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
-        let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
         let state_manager = StateManager::new(
             storage_manager,
@@ -217,7 +215,6 @@ where
             stf_info_sender,
             state_height_tracker,
             sync_state.clone(),
-            da_total_timeout,
             da_service_with_cached_finalized_headers.clone(),
             genesis_da_height,
             last_processed_da_header,
@@ -236,7 +233,6 @@ where
         Ok(Self {
             first_unprocessed_height_at_startup,
             da_polling_interval,
-            da_total_timeout,
             da_service: da_service.clone(),
             stf,
             state_manager,
@@ -496,7 +492,6 @@ where
                 self.da_service.as_ref(),
                 self.sync_state.as_ref(),
                 next_da_height,
-                self.da_total_timeout,
             )
             .await?
         };
