@@ -414,6 +414,8 @@ async fn test_pinning_after_recovery() {
     client.send_raw_tx_to_sequencer(&tx2).await.unwrap();
     println!("6");
 
+    // Give sequencer time to process the TX and start a batch before closing it
+    tokio::time::sleep(reasonable_time_for_rollup).await;
     test_rollup.force_close_batch().await.unwrap();
     // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
     // So we just produce blocks and sleep
