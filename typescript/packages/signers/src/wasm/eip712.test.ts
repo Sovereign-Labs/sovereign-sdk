@@ -51,7 +51,7 @@ function parseTypedDataForViem(typedDataJson: string) {
   const typedData = JSON.parse(typedDataJson);
   const { EIP712Domain: _, ...typesWithoutDomain } = typedData.types;
   const chainId = typeof typedData.domain.chainId === "string"
-    ? parseInt(typedData.domain.chainId.replace("0x", ""), 16)
+    ? Number.parseInt(typedData.domain.chainId.replace("0x", ""), 16)
     : typedData.domain.chainId;
   return {
     domain: { ...typedData.domain, chainId },
@@ -160,7 +160,7 @@ describe("Eip712Signer", () => {
             const s = sigBytes.slice(32, 64);
             const v = sigBytes[64];
 
-            const sBigInt = BigInt("0x" + Array.from(s).map((b) => b.toString(16).padStart(2, "0")).join(""));
+            const sBigInt = BigInt(`0x${Array.from(s).map((b) => b.toString(16).padStart(2, "0")).join("")}`);
             const newS = N - sBigInt; // Force high-s
             const newV = v === 27 ? 28 : (v === 28 ? 27 : v);
 
@@ -170,7 +170,7 @@ describe("Eip712Signer", () => {
             highSSig.set(newSBytes, 32);
             highSSig[64] = newV;
 
-            return "0x" + Array.from(highSSig).map((b) => b.toString(16).padStart(2, "0")).join("");
+            return `0x${Array.from(highSSig).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
           }
           throw new Error(`Unsupported method: ${method}`);
         }),
@@ -181,7 +181,7 @@ describe("Eip712Signer", () => {
 
       // Verify s is now low (s <= n/2)
       const sBytes = signature.slice(32, 64);
-      const s = BigInt("0x" + Array.from(sBytes).map((b) => b.toString(16).padStart(2, "0")).join(""));
+      const s = BigInt(`0x${Array.from(sBytes).map((b) => b.toString(16).padStart(2, "0")).join("")}`);
       expect(s <= halfN).toBe(true);
 
       // Verify signature is still valid after normalization
