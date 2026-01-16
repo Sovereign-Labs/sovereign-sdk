@@ -94,6 +94,18 @@ enum ForkPointSearchResult<Da: DaService> {
     },
 }
 
+/// Outcome of binary search for fork point.
+enum BinarySearchOutcome<Da: DaService> {
+    /// Found a definitive result (Found or HeadChanged).
+    Done(ForkPointSearchResult<Da>),
+    /// Search exhausted without finding fork point - needs further handling.
+    Exhausted {
+        low: u64,
+        high: u64,
+        final_candidate: <Da::Spec as DaSpec>::BlockHeader,
+    },
+}
+
 /// StateManager controls storage lifecycle for [`StateTransitionFunction`],
 /// [`LedgerDb`] and API endpoints in case of DA-reorgs.
 /// It needs [`DaService`] so it can backtrack to the last seen transition in new fork.
@@ -638,12 +650,12 @@ where
         .await
     }
 
-    // Tries to find a candidate in the current state of the chain.
-    // If it notices that the chain has changed, it returns head of the new chain.
+    /// Tries to find a candidate in the current state of the chain.
+    /// If it notices that the chain has changed, it returns head of the new chain.
     async fn try_find_candidate_in_current_chain(
         &self,
         da_service: &Da,
-        mut head: <Da::Spec as DaSpec>::BlockHeader,
+        head: <Da::Spec as DaSpec>::BlockHeader,
         earliest_seen_height: u64,
         highest_seen_height: u64,
     ) -> anyhow::Result<ForkPointSearchResult<Da>> {
@@ -657,8 +669,8 @@ where
             return Ok(ForkPointSearchResult::DaHeadIsBelowProcessedFinalized);
         }
 
-        let mut low = earliest_seen_height;
-        let mut high = std::cmp::min(highest_seen_height, head.height()).saturating_add(1);
+        let low = earliest_seen_height;
+        let high = std::cmp::min(highest_seen_height, head.height()).saturating_add(1);
 
         // TODO: Should we derive low just from `last_processed_finalized_height`?, this will simplify this function.
         // Self-check-assert that all earliest seen height are below can be done during processing finalized transitions.
@@ -672,7 +684,6 @@ where
         // But what if low above head???
         // This is only possible if the earliest seen transition is not a direct descendant of the finalized block
         // Which means bug in another method.
-
         assert!(
             // TODO: < or <= ?
             low < high,
@@ -682,6 +693,38 @@ where
             head.height()
         );
 
+        match self
+            .binary_search_for_fork_point(da_service, head, low, high, earliest_seen_height)
+            .await?
+        {
+            BinarySearchOutcome::Done(result) => Ok(result),
+            BinarySearchOutcome::Exhausted {
+                low,
+                high,
+                final_candidate,
+            } => Ok(self.handle_exhausted_search(
+                low,
+                high,
+                earliest_seen_height,
+                highest_seen_height,
+                final_candidate,
+            )),
+        }
+    }
+
+    /// Performs binary search to find a fork point in the current chain.
+    ///
+    /// Returns:
+    /// - `Done(result)` if search completes with a definitive result
+    /// - `Exhausted { low, high, final_candidate }` if loop exits without finding fork point
+    async fn binary_search_for_fork_point(
+        &self,
+        da_service: &Da,
+        mut head: <Da::Spec as DaSpec>::BlockHeader,
+        mut low: u64,
+        mut high: u64,
+        earliest_seen_height: u64,
+    ) -> anyhow::Result<BinarySearchOutcome<Da>> {
         let mut final_candidate_header = None;
 
         while low <= high {
@@ -700,16 +743,18 @@ where
             )?;
 
             if is_head_changed::<Da::Spec>(&head, &this_head) {
-                return Ok(ForkPointSearchResult::HeadChanged(this_head));
+                return Ok(BinarySearchOutcome::Done(
+                    ForkPointSearchResult::HeadChanged(this_head),
+                ));
             }
             // Update head if another progression happens, we don't return early
             head = this_head;
 
             if self.is_valid_fork_point(&candidate_header) {
                 tracing::trace!(candidate = %candidate_header.display(), "Found a matching candidate");
-                return Ok(ForkPointSearchResult::Found {
+                return Ok(BinarySearchOutcome::Done(ForkPointSearchResult::Found {
                     block_header: candidate_header,
-                });
+                }));
             }
 
             if self.state_on_block.contains_key(&candidate_header.hash()) {
@@ -733,14 +778,30 @@ where
 
             final_candidate_header = Some(candidate_header);
         }
+
         tracing::trace!("Haven't found candidate for fork point on seen transitions. It means candidate should be the next after last processed finalized height");
-        // The difference in this case with the loop above,
-        // is that we check that block at earliest seen transition height also points to last finalized height.
 
-        // TODO: Can we get rid of all this below??
-        // Basically return height of low and call it a day?
-        // Cost: one extra network call.
+        Ok(BinarySearchOutcome::Exhausted {
+            low,
+            high,
+            final_candidate: final_candidate_header.expect("Loop executed at least once"),
+        })
+    }
 
+    /// Handles the case when binary search exhausted without finding a fork point.
+    ///
+    /// NOTE: This entire method could be replaced with:
+    ///   `ForkPointSearchResult::NeedFutureBlock { height: low }`
+    /// The validation would then happen in `check_continuation()` instead.
+    /// Trade-off: one extra network call vs ~40 lines of validation code.
+    fn handle_exhausted_search(
+        &self,
+        low: u64,
+        high: u64,
+        earliest_seen_height: u64,
+        highest_seen_height: u64,
+        final_candidate: <Da::Spec as DaSpec>::BlockHeader,
+    ) -> ForkPointSearchResult<Da> {
         assert!(
             high <= highest_seen_height.saturating_add(1),
             "Error in `high`"
@@ -755,9 +816,8 @@ where
                 high,
                 "Seen nothing in current chain, will check if lowest block matches"
             );
-            let candidate_header = final_candidate_header.expect("Should be set");
 
-            assert_eq!(candidate_header.height(), earliest_seen_height);
+            assert_eq!(final_candidate.height(), earliest_seen_height);
 
             // All earliest transitions point to the last known finalized state
             let any_earliest_seen_hash = self
@@ -774,27 +834,26 @@ where
             // what our earliest seen transitions descended from - this indicates data corruption or
             // a bug in the survivors' logic.
             let earliest_prev_hash = self.get_prev_hash(any_earliest_seen_hash);
-            if earliest_prev_hash != candidate_header.prev_hash() {
+            if earliest_prev_hash != final_candidate.prev_hash() {
                 panic!(
                     "Finalized chain inconsistency detected: \
                     earliest seen transition at height {earliest_seen_height} \
                     points to parent hash {earliest_prev_hash}, \
                     but current chain's block at that height has parent hash {}. \
                     last_processed_finalized_header={}, candidate={}",
-                    candidate_header.prev_hash(),
+                    final_candidate.prev_hash(),
                     self.last_processed_finalized_header.display(),
-                    candidate_header.display(),
+                    final_candidate.display(),
                 );
             }
 
-            Ok(ForkPointSearchResult::Found {
-                block_header: candidate_header,
-            })
+            ForkPointSearchResult::Found {
+                block_header: final_candidate,
+            }
         } else {
             // We've seen all blocks in the current chain up to DA head.
             // Instead of waiting for future blocks, return the height runner should fetch.
             // The next height to check is `low` (the first unprocessed height in current fork).
-            // TODO: Does it though?
             let next_height = low;
             tracing::trace!(
                 earliest_seen_height,
@@ -805,9 +864,9 @@ where
                 "Seen everything in current chain, returning height for runner to fetch"
             );
 
-            Ok(ForkPointSearchResult::NeedFutureBlock {
+            ForkPointSearchResult::NeedFutureBlock {
                 height: next_height,
-            })
+            }
         }
     }
 
