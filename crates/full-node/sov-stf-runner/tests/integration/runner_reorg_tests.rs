@@ -273,6 +273,8 @@ async fn check_runner(
     let end = runner.run_in_process().await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
+    // Drop runner to release storage lock before creating new storage manager
+    drop(runner);
     let after = get_saved_root_hash(tmpdir.path())
         .unwrap()
         .expect("State root should be saved after running");
