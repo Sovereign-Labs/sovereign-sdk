@@ -45,7 +45,7 @@ const testRollup = <S extends BaseTypeSpec, C extends RollupContext>(
 
   client.rollup.schema = vi.fn().mockResolvedValue({
     schema: demoRollupSchema,
-    chain_hash: "01020304",
+    chain_hash: "0x01020304",
   });
 
   return { rollup, client };
