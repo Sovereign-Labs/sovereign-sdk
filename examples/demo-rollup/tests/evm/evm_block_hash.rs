@@ -17,6 +17,7 @@ async fn block_hash() -> anyhow::Result<()> {
         .await?
         .unwrap()
         .number();
+
     let pending_block_hash = block_hash
         .block_hash(U256::from(pending_number))
         .block(BlockId::pending())
