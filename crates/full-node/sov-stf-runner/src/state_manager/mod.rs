@@ -265,14 +265,13 @@ where
         }
 
         // Block is a continuation - create state and return
-        let (stf_pre_state, ledger_state) = self
+        let (stf_pre_state, _ledger_state) = self
             .storage_manager
             .create_state_for(filtered_block.header())?;
 
-        // Update channels for API - needed in case previous call detected reorg and returned NoMatch
-        // The block could be on a different fork than what API was showing
-        self.update_channels(stf_pre_state.clone(), ledger_state)
-            .await?;
+        // NOTE: Channel update is handled in process_stf_changes (after execution).
+        // Early update was removed because it sent pre-execution state which caused
+        // sync check failures when sequencer reads fell through to storage.
 
         tracing::trace!(
             block_header = %filtered_block.header().display(),
