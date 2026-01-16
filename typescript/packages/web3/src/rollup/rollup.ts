@@ -183,7 +183,7 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
           this._serializer = this._config.getSerializer(schema);
 
           // bytesToHex returns without 0x prefix, but server returns with 0x prefix
-          if ("0x" + oldVersion !== newVersion) {
+          if (`0x${oldVersion}` !== newVersion) {
             throw new VersionMismatchError(
               "Schema version mismatch when submitting transaction",
               newVersion,
