@@ -160,14 +160,17 @@ pub async fn bootstrap_state_update_info(
     query_state_update_info(&ledger_db, stf_storage, da_sync_state).await
 }
 
+pub type StateRoot = <ProverStorage<S> as sov_state::Storage>::Root;
+
 // TODO: extract similarities into helper for rollup blueprint, a lot of duplication
+/// Returns (runner, state_root_after_init, test_node)
 pub async fn initialize_runner(
     da_service: Arc<MockDaService>,
     path: &std::path::Path,
     init_variant: MockInitVariant,
     aggregated_proof_block_jump: usize,
     nb_of_prover_threads: Option<usize>,
-) -> (HashStfRunner<MockDaService>, TestNode) {
+) -> (HashStfRunner<MockDaService>, StateRoot, TestNode) {
     let stf = HashStf::new();
     let inner_vm = MockZkvmHost::new();
     let outer_vm = MockZkvmHost::new_non_blocking();
@@ -298,6 +301,7 @@ pub async fn initialize_runner(
 
     (
         runner,
+        prev_state_root,
         TestNode {
             proof_posted_in_da_sub,
             agg_proof_saved_in_db_sub,
@@ -397,12 +401,6 @@ fn get_da_polling_interval_ms(da_config: &MockDaConfig) -> u64 {
     }
 }
 
-fn get_da_total_timeout_secs(da_config: &MockDaConfig) -> u64 {
-    match da_config.block_producing {
-        BlockProducingConfig::Periodic { block_time_ms } => block_time_ms.saturating_mul(10_000),
-        _ => 3_600,
-    }
-}
 pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     path: &std::path::Path,
     da_config: MockDaConfig,
@@ -412,7 +410,6 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
         storage: RollupDbConfig::default_in_path(path.to_path_buf()),
         runner: RunnerConfig {
             da_polling_interval_ms: get_da_polling_interval_ms(&da_config),
-            da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),
             concurrent_sync_tasks: 1,
             pre_fetched_blocks_capacity: NonZero::new(3).unwrap(),

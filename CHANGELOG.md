@@ -4,6 +4,8 @@
 # 2026-01-14
 - #2326 Add `max_fee` validation to the EVM authenticator. Introduce `EVM_MAX_FEE_CHECK_HEIGHT` in `constants.toml` to specify the block height after which the max-fee check becomes active.
 This validation can be disabled by sending an `UpdateRuntimeConfig::empty` EVM admin message.
+# 2026-01-16
+- **Infra only breaking change**: Removes `da_total_timeout_secs` from runner section in `rollup_config.toml`
 
 # 2026-01-09
 - #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.

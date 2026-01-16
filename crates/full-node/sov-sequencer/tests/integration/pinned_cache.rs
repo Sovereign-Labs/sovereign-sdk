@@ -170,8 +170,6 @@ async fn test_nomt_basic_pinning() {
 /// and don't touch storage.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_nomt_basic_pinning_with_writes() {
-    sov_test_utils::initialize_logging();
-
     let nb_of_blocks = 5;
     let (test_rollup, user) = create_test_nomt_rollup().await;
 
@@ -328,7 +326,6 @@ async fn test_nomt_basic_pinning_with_writes_not_cached_address() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pinning_after_recovery() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
-    // sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
 
     let client = test_rollup.api_client().clone();
@@ -337,7 +334,6 @@ async fn test_pinning_after_recovery() {
     // Finalise some blocks
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    println!("1");
 
     // Sanity check tx that the rollup works, and send the tx all the way through to DA.
     // Set a value in the pinned cache.
@@ -418,6 +414,8 @@ async fn test_pinning_after_recovery() {
     client.send_raw_tx_to_sequencer(&tx2).await.unwrap();
     println!("6");
 
+    // Give sequencer time to process the TX and start a batch before closing it
+    tokio::time::sleep(reasonable_time_for_rollup).await;
     test_rollup.force_close_batch().await.unwrap();
     // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
     // So we just produce blocks and sleep
@@ -526,7 +524,6 @@ async fn test_pinned_cache_after_total_resync() {
 /// Ensures that RAM pinning works again after the node falls out of sync
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pinned_cache_after_fast_resync() {
-    sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
     // Finalise some blocks
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;

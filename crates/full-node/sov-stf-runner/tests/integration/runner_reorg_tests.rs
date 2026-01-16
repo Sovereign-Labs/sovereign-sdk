@@ -289,13 +289,16 @@ async fn check_runner(
     init_variant: MockInitVariant,
     expected_state_root: StorageRoot<S>,
 ) {
-    let (mut runner, test_node) =
+    let (mut runner, before, test_node) =
         initialize_runner(da_service, tmpdir.path(), init_variant, 1, None).await;
-    let before = *runner.get_state_root();
     let end = runner.run_in_process().await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
-    let after = *runner.get_state_root();
+    // Drop runner to release storage lock before creating new storage manager
+    drop(runner);
+    let after = get_saved_root_hash(tmpdir.path())
+        .unwrap()
+        .expect("State root should be saved after running");
 
     assert_ne!(before, after);
     assert_eq!(expected_state_root, after);

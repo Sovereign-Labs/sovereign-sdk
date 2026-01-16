@@ -854,13 +854,6 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "da_total_timeout_secs": {
-          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead to rollup shutdown.",
-          "default": 600,
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
         "http_config": {
           "description": "HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.",
           "allOf": [
