@@ -287,6 +287,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                     .is_good_continuation(&fork_block, &da_service)
                     .await?,
             );
+            check_internal_consistency(&state_manager, finality as usize);
 
             assert!(!hash_to_post_state_root.contains_key(&fork_block.header().hash()));
             let expected_pre_state_root = hash_to_post_state_root
@@ -297,10 +298,28 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                 &pre_state_root,
                 "Expected (left) state root does not match actual(right) from KnownContinuation. All state roots: {post_state_roots:?}");
 
-            let returned_storage_root = prover_storage.get_latest_root_hash()?;
+            // State update is not called during re-org detection. So we process transition first
+            let _returned_storage_prev_root = prover_storage.get_latest_root_hash()?;
+            // TODO: Should we check this prev_root against something
+
+            let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+                pre_state_root,
+                prover_storage,
+                &da_service,
+                fork_block.clone(),
+            )
+            .await;
+
+            let final_state_root = transition_witness.final_state_root;
+            let slot_commit: MockSlotCommit = SlotCommit::new(fork_block, Default::default());
+            state_manager
+                .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+                .await?;
+            check_internal_consistency(&state_manager, finality as usize);
+
             let received_update_info = state_update_receiver.borrow().clone();
             let received_storage_root = received_update_info.storage.get_latest_root_hash()?;
-            assert_eq!(returned_storage_root, received_storage_root);
+            assert_eq!(final_state_root, received_storage_root);
         }
     }
 
