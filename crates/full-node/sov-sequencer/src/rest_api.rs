@@ -100,10 +100,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 "/sequencer/unstable/events",
                 axum::routing::get(Self::axum_list_events),
             )
-            .route(
-                "/sequencer/role",
-                axum::routing::get(Self::axum_get_role),
-            );
+            .route("/sequencer/role", axum::routing::get(Self::axum_get_role));
 
         #[cfg(feature = "test-utils")]
         let router = router
