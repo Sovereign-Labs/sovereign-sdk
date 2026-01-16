@@ -51,6 +51,8 @@ where
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
 
+        println!("EVM CONFIG: {:?}", config);
+
         let block = init_block(config);
 
         self.cfg.set(&chain_cfg, state)?;
@@ -64,6 +66,9 @@ where
             block.header.number,
             None,
         );
+
+        println!("EVM BLOCK_ENV: {:?}", block_env);
+
         self.block_env.set(&block_env, state)?;
         for acc in config.accounts.clone() {
             self.init_account(acc, state)?;
