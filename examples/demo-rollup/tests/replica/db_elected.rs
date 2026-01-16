@@ -113,7 +113,7 @@ async fn test_db_elected_leader_failover() {
     };
 
     let DbElectedTestSetup {
-        postgres: _,
+        postgres,
         leader,
         replica,
         da_shutdown,
@@ -125,6 +125,7 @@ async fn test_db_elected_leader_failover() {
     // Wait for replica to shutdown (it will acquire leadership and call exit_rollup)
     let timeout_duration = Duration::from_secs(15);
     let start = std::time::Instant::now();
+
     while !replica.is_rollup_crashed() {
         if start.elapsed() > timeout_duration {
             panic!("Timeout waiting for replica to acquire leadership and shutdown");
@@ -141,6 +142,7 @@ async fn test_db_elected_leader_failover() {
 
     // Verify the restarted node is now the leader
     let new_role = restarted_rollup.sequencer_role().await.unwrap();
+
     assert_eq!(
         new_role,
         SequencerRole::Leader,
@@ -150,4 +152,5 @@ async fn test_db_elected_leader_failover() {
 
     let _ = restarted_rollup.shutdown().await;
     let _ = da_shutdown.send(());
+    drop(postgres);
 }

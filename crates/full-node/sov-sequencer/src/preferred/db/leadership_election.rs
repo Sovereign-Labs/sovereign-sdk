@@ -128,9 +128,9 @@ impl LeadershipElectionTask {
                     Ok(true) => {
                         info!(
                             node_id = %self.node_id,
-                            "Replica acquired leadership! Restarting the node."
+                            "Replica acquired leadership! Shutting down the node."
                         );
-                        exit_rollup(&self.shutdown_sender).await;
+                        self.shutdown_sender.send(()).unwrap();
                     }
                     Ok(false) => {
                         // Another node is still leader, keep trying
