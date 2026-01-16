@@ -111,11 +111,6 @@ impl LeadershipElectionTask {
     ///
     /// This task periodically attempts to acquire leadership. If leadership is
     /// acquired, it will transition the node from replica to leader.
-    ///
-    /// # Note
-    ///
-    /// The replica-to-leader transition is currently not implemented and will
-    /// trigger a `todo!()` panic when leadership is acquired.
     pub fn spawn_replica_election_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, "Starting replica election task");
