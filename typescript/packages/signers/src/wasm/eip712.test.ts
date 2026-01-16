@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { privateKeyToAccount, signTypedData } from "viem/accounts";
+import { hashTypedData } from "viem";
 import * as secp from "@noble/secp256k1";
 import { Schema, KnownTypeId } from "@sovereign-sdk/universal-wallet-wasm";
 import { hexToBytes } from "@sovereign-sdk/utils";
@@ -10,6 +11,7 @@ import { Eip712Signer } from "./eip712";
 const TEST_PRIVATE_KEY =
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const testAccount = privateKeyToAccount(TEST_PRIVATE_KEY);
+const TEST_PUBLIC_KEY = secp.getPublicKey(hexToBytes(TEST_PRIVATE_KEY.slice(2)), true);
 
 const schema = Schema.fromJSON(JSON.stringify(demoRollupSchema));
 
@@ -31,48 +33,45 @@ const sampleUnsignedTx = {
 };
 
 /**
- * Helper to create test data for EIP-712 signing.
- * This mimics what rollup.signTransaction() does internally.
+ * Creates the message that would be passed to signer.sign().
+ * This is what rollup.signTransaction() does - serialize unsigned tx and append chain hash.
  */
-function createTestData() {
+function createTestMessage(): Uint8Array {
   const unsignedTxBorsh = schema.jsonToBorsh(
     schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
     JSON.stringify(sampleUnsignedTx)
   );
-  const chainHash = schema.chainHash;
-  const message = new Uint8Array([...unsignedTxBorsh, ...chainHash]);
-  const eip712Json = schema.eip712Json(
-    schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-    unsignedTxBorsh
-  );
-  const typedData = JSON.parse(eip712Json);
-  const signingHash = schema.eip712SigningHash(
-    schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-    unsignedTxBorsh
-  );
-  return { message, typedData, signingHash, unsignedTxBorsh };
+  return new Uint8Array([...unsignedTxBorsh, ...schema.chainHash]);
 }
 
 /**
- * Helper to create a mock provider that signs with viem.
+ * Parse typed data received by the mock provider and convert chainId for viem.
  */
-function createMockProvider(typedData: any) {
+function parseTypedDataForViem(typedDataJson: string) {
+  const typedData = JSON.parse(typedDataJson);
+  const { EIP712Domain: _, ...typesWithoutDomain } = typedData.types;
+  const chainId = typeof typedData.domain.chainId === "string"
+    ? parseInt(typedData.domain.chainId.replace("0x", ""), 16)
+    : typedData.domain.chainId;
   return {
-    request: vi.fn(async ({ method }: { method: string }) => {
+    domain: { ...typedData.domain, chainId },
+    types: typesWithoutDomain,
+    primaryType: typedData.primaryType as "UnsignedTransaction",
+    message: typedData.message,
+  };
+}
+
+/**
+ * Creates a mock provider that signs whatever typed data the signer sends.
+ * The provider receives typed data from the signer (not pre-computed in tests).
+ */
+function createMockProvider() {
+  return {
+    request: vi.fn(async ({ method, params }: { method: string; params?: unknown[] }) => {
       if (method === "eth_signTypedData_v4") {
-        const { EIP712Domain: _, ...typesWithoutDomain } = typedData.types;
-        return signTypedData({
-          privateKey: TEST_PRIVATE_KEY,
-          domain: {
-            ...typedData.domain,
-            chainId: typeof typedData.domain.chainId === "string"
-              ? parseInt(typedData.domain.chainId.replace("0x", ""), 16)
-              : typedData.domain.chainId,
-          },
-          types: typesWithoutDomain,
-          primaryType: typedData.primaryType,
-          message: typedData.message,
-        });
+        const [, typedDataJson] = params as [string, string];
+        const viemData = parseTypedDataForViem(typedDataJson);
+        return signTypedData({ privateKey: TEST_PRIVATE_KEY, ...viemData });
       }
       throw new Error(`Unsupported method: ${method}`);
     }),
@@ -89,12 +88,7 @@ describe("Eip712Signer", () => {
 
   describe("constructor", () => {
     it("should create a signer instance with address", () => {
-      const signer = new Eip712Signer(
-        mockProvider as any,
-        demoRollupSchema,
-        testAddress
-      );
-
+      const signer = new Eip712Signer(mockProvider as any, demoRollupSchema, testAddress);
       expect(signer).toBeDefined();
       expect(signer.publicKey).toBeDefined();
       expect(signer.sign).toBeDefined();
@@ -109,12 +103,7 @@ describe("Eip712Signer", () => {
 
   describe("publicKey", () => {
     it("should throw error if public key not available before signing", async () => {
-      const signer = new Eip712Signer(
-        mockProvider as any,
-        demoRollupSchema,
-        testAddress
-      );
-
+      const signer = new Eip712Signer(mockProvider as any, demoRollupSchema, testAddress);
       await expect(signer.publicKey()).rejects.toThrow(
         "Public key was not available, you must call sign() first"
       );
@@ -131,8 +120,8 @@ describe("Eip712Signer", () => {
     });
 
     it("should sign and return 64-byte signature with correct public key", async () => {
-      const { message, typedData, signingHash } = createTestData();
-      const provider = createMockProvider(typedData);
+      const message = createTestMessage();
+      const provider = createMockProvider();
       const signer = new Eip712Signer(provider as any, demoRollupSchema, testAddress);
 
       const signature = await signer.sign(message);
@@ -141,62 +130,41 @@ describe("Eip712Signer", () => {
       expect(signature).toBeInstanceOf(Uint8Array);
       expect(signature.length).toBe(64);
 
-      // Public key should be available and correct
+      // Public key should be available and match expected
       const publicKey = await signer.publicKey();
-      expect(publicKey.length).toBe(33);
-      const expectedPubKey = secp.getPublicKey(hexToBytes(TEST_PRIVATE_KEY.slice(2)), true);
-      expect(publicKey).toEqual(expectedPubKey);
+      expect(publicKey).toEqual(TEST_PUBLIC_KEY);
 
-      // Signature should be valid
-      expect(secp.verify(signature, signingHash, expectedPubKey)).toBe(true);
+      // Verify signature using the typed data the signer sent to the provider
+      const [, typedDataJson] = provider.request.mock.calls[0][0].params as [string, string];
+      const viemData = parseTypedDataForViem(typedDataJson);
+      const signingHash = hexToBytes(hashTypedData(viemData).slice(2));
+      expect(secp.verify(signature, signingHash, TEST_PUBLIC_KEY)).toBe(true);
     });
 
     it("should normalize high-s signatures to low-s", async () => {
       const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
       const halfN = N / 2n;
-      const { message, typedData, signingHash } = createTestData();
+      const message = createTestMessage();
 
-      // Create a mock provider that returns a HIGH-S signature
+      // Mock provider that forces HIGH-S signature
       const highSProvider = {
-        request: vi.fn(async ({ method }: { method: string }) => {
+        request: vi.fn(async ({ method, params }: { method: string; params?: unknown[] }) => {
           if (method === "eth_signTypedData_v4") {
-            const { EIP712Domain: _, ...typesWithoutDomain } = typedData.types;
+            const [, typedDataJson] = params as [string, string];
+            const viemData = parseTypedDataForViem(typedDataJson);
+            const sig = await signTypedData({ privateKey: TEST_PRIVATE_KEY, ...viemData });
 
-            // Use viem to sign (returns 65-byte signature with recovery byte)
-            const sig = await signTypedData({
-              privateKey: TEST_PRIVATE_KEY,
-              domain: {
-                ...typedData.domain,
-                chainId: typeof typedData.domain.chainId === "string"
-                  ? parseInt(typedData.domain.chainId.replace("0x", ""), 16)
-                  : typedData.domain.chainId,
-              },
-              types: typesWithoutDomain,
-              primaryType: typedData.primaryType,
-              message: typedData.message,
-            });
-
-            // Parse signature bytes (sig is 0x + 65 bytes hex)
+            // Parse and force high-s
             const sigBytes = hexToBytes(sig.slice(2));
             const r = sigBytes.slice(0, 32);
             const s = sigBytes.slice(32, 64);
             const v = sigBytes[64];
 
-            // Convert s to BigInt
-            const sBigInt = BigInt(
-              "0x" + Array.from(s).map((b) => b.toString(16).padStart(2, "0")).join("")
-            );
-
-            // Force convert to high-s (s' = N - s)
-            const newS = N - sBigInt;
-            // Flip recovery bit when we flip s
+            const sBigInt = BigInt("0x" + Array.from(s).map((b) => b.toString(16).padStart(2, "0")).join(""));
+            const newS = N - sBigInt; // Force high-s
             const newV = v === 27 ? 28 : (v === 28 ? 27 : v);
 
-            // Convert newS back to bytes
-            const newSHex = newS.toString(16).padStart(64, "0");
-            const newSBytes = hexToBytes(newSHex);
-
-            // Reconstruct signature with high-s
+            const newSBytes = hexToBytes(newS.toString(16).padStart(64, "0"));
             const highSSig = new Uint8Array(65);
             highSSig.set(r, 0);
             highSSig.set(newSBytes, 32);
@@ -208,26 +176,19 @@ describe("Eip712Signer", () => {
         }),
       };
 
-      const signer = new Eip712Signer(
-        highSProvider as any,
-        demoRollupSchema,
-        testAddress
-      );
-
+      const signer = new Eip712Signer(highSProvider as any, demoRollupSchema, testAddress);
       const signature = await signer.sign(message);
 
-      // Extract s value from output signature (last 32 bytes)
+      // Verify s is now low (s <= n/2)
       const sBytes = signature.slice(32, 64);
-      const s = BigInt(
-        "0x" + Array.from(sBytes).map((b) => b.toString(16).padStart(2, "0")).join("")
-      );
-
-      // Verify s is now low (s <= n/2) - this tests the normalization
+      const s = BigInt("0x" + Array.from(sBytes).map((b) => b.toString(16).padStart(2, "0")).join(""));
       expect(s <= halfN).toBe(true);
 
-      // Verify the normalized signature is still valid
-      const expectedPubKey = secp.getPublicKey(hexToBytes(TEST_PRIVATE_KEY.slice(2)), true);
-      expect(secp.verify(signature, signingHash, expectedPubKey)).toBe(true);
+      // Verify signature is still valid after normalization
+      const [, typedDataJson] = highSProvider.request.mock.calls[0][0].params as [string, string];
+      const viemData = parseTypedDataForViem(typedDataJson);
+      const signingHash = hexToBytes(hashTypedData(viemData).slice(2));
+      expect(secp.verify(signature, signingHash, TEST_PUBLIC_KEY)).toBe(true);
     });
   });
 });
