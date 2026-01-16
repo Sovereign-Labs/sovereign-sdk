@@ -2,7 +2,7 @@ import type { MetaMaskInpageProvider } from "@metamask/providers";
 import * as secp from "@noble/secp256k1";
 import { KnownTypeId, Schema } from "@sovereign-sdk/universal-wallet-wasm";
 import { hexToBytes } from "@sovereign-sdk/utils";
-import { parseSignature, type Signature } from "viem";
+import { type Signature, parseSignature } from "viem";
 import { SignerError } from "../errors";
 import type { Signer } from "../signer";
 

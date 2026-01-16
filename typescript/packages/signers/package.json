@@ -10,11 +10,7 @@
     "test": "vitest run"
   },
   "repository": "github:Sovereign-Labs/sovereign-sdk",
-  "files": [
-    "dist",
-    "README.md",
-    "package.json"
-  ],
+  "files": ["dist", "README.md", "package.json"],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
