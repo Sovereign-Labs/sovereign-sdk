@@ -193,7 +193,7 @@ where
     #[tracing::instrument(skip_all)]
     pub(crate) async fn check_continuation(
         &mut self,
-        block: &Da::FilteredBlock,
+        block_header: &<Da::Spec as DaSpec>::BlockHeader,
         da_service: &Da,
     ) -> anyhow::Result<BlockCandidateResolution<Sm::StfState, StateRoot>> {
         let start = std::time::Instant::now();
@@ -203,20 +203,22 @@ where
             );
         }
 
-        let is_continuation = self.is_continuation(block.header());
+        let is_continuation = self.is_continuation(block_header);
         tracing::trace!(is_continuation, "Checked if block is continuation");
 
         if !is_continuation {
             // Block is not a continuation - find the fork point and tell runner what to fetch
             let height_to_fetch = match self.choose_fork_point(da_service).await? {
-                ForkPointSearchResult::Found { block_header } => {
+                ForkPointSearchResult::Found {
+                    block_header: fork_point_header,
+                } => {
                     tracing::info!(
-                        original_block = %block.header().display(),
-                        fork_point = %block_header.display(),
+                        original_block = %block_header.display(),
+                        fork_point = %fork_point_header.display(),
                         time = ?start.elapsed(),
                         "Found fork point, runner should fetch this block"
                     );
-                    block_header.height()
+                    fork_point_header.height()
                 }
                 ForkPointSearchResult::NeedFutureBlock { height } => {
                     tracing::trace!(
@@ -228,7 +230,7 @@ where
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
                     // DA reorged during fork point search. Tell runner to retry with same height.
-                    let retry_height = block.header().height();
+                    let retry_height = block_header.height();
                     tracing::warn!(
                         new_head = %new_head.display(),
                         retry_height,
@@ -257,11 +259,11 @@ where
         }
 
         // Block is a continuation - get pre_state_root and create state
-        let pre_state_root = self.get_pre_state_root_for(block.header());
-        let (pre_state, _ledger_state) = self.storage_manager.create_state_for(block.header())?;
+        let pre_state_root = self.get_pre_state_root_for(block_header);
+        let (pre_state, _ledger_state) = self.storage_manager.create_state_for(block_header)?;
 
         tracing::trace!(
-            block_header = %block.header().display(),
+            block_header = %block_header.display(),
             time = ?start.elapsed(),
             "Block is a continuation, returning STF state"
         );
