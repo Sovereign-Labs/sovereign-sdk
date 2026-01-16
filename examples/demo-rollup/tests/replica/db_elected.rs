@@ -41,10 +41,7 @@ async fn test_db_elected_two_nodes_leader_and_replica() {
     let (leader_rollup, replica_rollup) = match (role1, role2) {
         (SequencerRole::Leader, SequencerRole::Replica) => (&rollup1, &rollup2),
         (SequencerRole::Replica, SequencerRole::Leader) => (&rollup2, &rollup1),
-        _ => panic!(
-            "Expected one Leader and one Replica, got {:?} and {:?}",
-            role1, role2
-        ),
+        _ => panic!("Expected one Leader and one Replica, got {role1:?} and {role2:?}",),
     };
 
     // Subscribe to events on the replica
