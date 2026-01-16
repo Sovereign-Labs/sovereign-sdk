@@ -175,9 +175,11 @@ describe("Eip712Signer", () => {
     });
 
     it("should normalize high-s signatures to low-s", async () => {
-      const N =
-        0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
-      const halfN = N / 2n;
+      // secp256k1 curve order (use BigInt() for ES2015 compatibility)
+      const N = BigInt(
+        "0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+      );
+      const halfN = N / BigInt(2);
       const message = createTestMessage();
 
       // Mock provider that forces HIGH-S signature
