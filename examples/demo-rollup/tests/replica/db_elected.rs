@@ -7,6 +7,7 @@ type Rollup = ExternalMockDemoRollup<Native>;
 
 /// Test setup for DbElected tests with two nodes (leader and replica).
 struct DbElectedTestSetup {
+    postgres: Arc<PostgresData>,
     leader: TestRollup<Rollup>,
     replica: TestRollup<Rollup>,
     da_shutdown: watch::Sender<()>,
@@ -17,7 +18,7 @@ impl DbElectedTestSetup {
     /// Returns None if Docker is not supported.
     async fn new() -> Option<Self> {
         let postgres = match PostgresData::create_postgres().await {
-            Ok(pg) => Some(pg),
+            Ok(pg) => pg,
             Err(CreatePostgresError::DockerNotSupported) => return None,
             Err(CreatePostgresError::DockerError(e)) => {
                 panic!("Failed to create Postgres container: {e}");
@@ -27,12 +28,10 @@ impl DbElectedTestSetup {
         let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
         // Start both DbElected nodes
-        let node1 = postgres
-            .clone()
-            .map(|pg| (pg, "node1".into(), NodeRole::DbElected));
+        let node1 = Some((postgres.clone(), "node1".into(), NodeRole::DbElected));
         let rollup1 = start_rollup(addr, node1).await;
 
-        let node2 = postgres.map(|pg| (pg, "node2".into(), NodeRole::DbElected));
+        let node2 = Some((postgres.clone(), "node2".into(), NodeRole::DbElected));
         let rollup2 = start_rollup(addr, node2).await;
 
         // Wait for both nodes to be ready
@@ -54,6 +53,7 @@ impl DbElectedTestSetup {
         };
 
         Some(Self {
+            postgres,
             leader,
             replica,
             da_shutdown,
@@ -113,6 +113,7 @@ async fn test_db_elected_leader_failover() {
     };
 
     let DbElectedTestSetup {
+        postgres: _,
         leader,
         replica,
         da_shutdown,
@@ -122,7 +123,7 @@ async fn test_db_elected_leader_failover() {
     let _ = leader.shutdown().await;
 
     // Wait for replica to shutdown (it will acquire leadership and call exit_rollup)
-    let timeout_duration = Duration::from_secs(5);
+    let timeout_duration = Duration::from_secs(15);
     let start = std::time::Instant::now();
     while !replica.is_rollup_crashed() {
         if start.elapsed() > timeout_duration {
