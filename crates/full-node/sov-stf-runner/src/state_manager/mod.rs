@@ -191,7 +191,7 @@ where
     /// - `KnownContinuation { pre_state, pre_state_root }` if the block can be processed
     /// - `NoMatch { height_to_fetch }` if runner should fetch a different block
     #[tracing::instrument(skip_all)]
-    pub(crate) async fn is_good_continuation(
+    pub(crate) async fn check_continuation(
         &mut self,
         block: &Da::FilteredBlock,
         da_service: &Da,

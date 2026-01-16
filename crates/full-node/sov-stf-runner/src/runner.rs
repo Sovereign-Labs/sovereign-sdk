@@ -511,7 +511,7 @@ where
         // If not, early return with the height runner should fetch next.
         let (stf_pre_state, pre_state_root) = match self
             .state_manager
-            .is_good_continuation(&filtered_block, &self.da_service)
+            .check_continuation(&filtered_block, &self.da_service)
             .await
             .map_err(|e| {
                 tracing::warn!(?e, "Error during is_good_continuation");

@@ -269,7 +269,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         } else {
             // Reorg detected - is_good_continuation should return NoMatch with fork point height
             let resolution = state_manager
-                .is_good_continuation(&filtered_block, &da_service)
+                .check_continuation(&filtered_block, &da_service)
                 .await?;
             let height_to_fetch = match resolution {
                 BlockCandidateResolution::NoMatch { height_to_fetch } => height_to_fetch,
@@ -284,7 +284,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             let fork_block = da_service.get_block_at(height_to_fetch).await?;
             let (prover_storage, pre_state_root) = unwrap_continuation(
                 state_manager
-                    .is_good_continuation(&fork_block, &da_service)
+                    .check_continuation(&fork_block, &da_service)
                     .await?,
             );
             check_internal_consistency(&state_manager, finality as usize);
@@ -372,7 +372,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     let filtered_block = da_service.get_block_at(chain_length).await?;
     let (prover_storage, pre_state_root) = unwrap_continuation(
         state_manager
-            .is_good_continuation(&filtered_block, &da_service)
+            .check_continuation(&filtered_block, &da_service)
             .await?,
     );
 
@@ -478,7 +478,7 @@ async fn test_progressing_with_shuffle(
         // Keep trying until we get a continuation (handles reorgs)
         let (prover_storage, pre_state_root) = loop {
             match state_manager
-                .is_good_continuation(&filtered_block, &da_service)
+                .check_continuation(&filtered_block, &da_service)
                 .await?
             {
                 BlockCandidateResolution::KnownContinuation {
@@ -713,7 +713,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
         // Keep trying until we get a continuation (handles reorgs)
         let (prover_storage, pre_state_root) = loop {
             match state_manager
-                .is_good_continuation(&filtered_block, &da_service)
+                .check_continuation(&filtered_block, &da_service)
                 .await?
             {
                 BlockCandidateResolution::KnownContinuation {
@@ -805,7 +805,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         // Keep trying until we get a continuation (handles reorgs)
         let (prover_storage, pre_state_root) = loop {
             match state_manager
-                .is_good_continuation(&filtered_block, &da_service)
+                .check_continuation(&filtered_block, &da_service)
                 .await?
             {
                 BlockCandidateResolution::KnownContinuation {
@@ -1041,7 +1041,7 @@ async fn test_change_in_finalized_header() {
 
     // An alien block from a different DA chain should return NoMatch
     let _result = state_manager
-        .is_good_continuation(&alien_block, &da_service)
+        .check_continuation(&alien_block, &da_service)
         .await
         .unwrap();
 
@@ -1083,7 +1083,7 @@ async fn test_state_manager_recovers_from_non_adjacent_block() {
 
     // Should return NoMatch with height 1 (the first block after genesis)
     let result = state_manager
-        .is_good_continuation(&non_adjacent_block, &da_service)
+        .check_continuation(&non_adjacent_block, &da_service)
         .await
         .unwrap();
 
@@ -1258,7 +1258,7 @@ async fn process_continuous_transition(
 ) -> anyhow::Result<StateRoot> {
     let (prover_storage, pre_state_root) = unwrap_continuation(
         state_manager
-            .is_good_continuation(&filtered_block, da_service)
+            .check_continuation(&filtered_block, da_service)
             .await?,
     );
 
