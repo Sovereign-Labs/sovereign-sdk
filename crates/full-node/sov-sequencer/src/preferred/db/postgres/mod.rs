@@ -22,8 +22,8 @@ const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
 
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
-    pub node_id: String,
-    pub last_updated: OffsetDateTime,
+    pub(crate) node_id: String,
+    pub(crate) last_updated: OffsetDateTime,
 }
 
 pub struct PostgresBackend {

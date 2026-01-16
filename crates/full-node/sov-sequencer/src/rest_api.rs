@@ -99,6 +99,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .route(
                 "/sequencer/unstable/events",
                 axum::routing::get(Self::axum_list_events),
+            )
+            .route(
+                "/sequencer/role",
+                axum::routing::get(Self::axum_get_role),
             );
 
         #[cfg(feature = "test-utils")]
@@ -316,6 +320,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             Ok(()) => Ok(().into()),
             Err(details) => Err(error_not_fully_synced(details).into_response()),
         }
+    }
+
+    async fn axum_get_role(state: State<Self>) -> ApiResult<crate::SequencerRole> {
+        Ok(state.sequencer.sequencer_role().await.into())
     }
 
     async fn axum_get_tx_status(

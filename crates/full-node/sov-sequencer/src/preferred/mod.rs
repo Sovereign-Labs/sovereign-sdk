@@ -29,6 +29,7 @@ use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
+pub use db::SequencerRole;
 use db::{PreferredSequencerDb, ReadBatch, ReadBlob};
 use derive_more::Deref;
 use futures::Stream;
@@ -159,6 +160,14 @@ where
                 stop_at_rollup_height,
             )
             .await
+    }
+
+    /// Returns the current sequencer role.
+    pub async fn sequencer_role(&self) -> Result<db::SequencerRole, anyhow::Error> {
+        self.synchronized_state_updator
+            .sequencer_role_msg("get_sequencer_role")
+            .await
+            .map_err(|e| e.into_state_update_error())
     }
 
     /// Returns a range to allow hysteresis during catchup. The first (lower) value will be the
@@ -721,7 +730,8 @@ where
     async fn is_ready(&self) -> Result<(), SequencerNotReadyDetails> {
         // We don't actually care about the `inner`, we just want to reuse the
         // same logic.
-        self.synchronized_state_updator
+        let res = self
+            .synchronized_state_updator
             .check_readiness_msg(
                 self.config.max_concurrent_blobs,
                 self.stop_at_rollup_height,
@@ -729,7 +739,9 @@ where
             )
             .await
             .map_err(|_| SequencerNotReadyDetails::Shutdown)?
-            .map(|_| ())
+            .map(|_| ());
+
+        res
     }
 
     fn api_state(&self) -> ApiState<Self::Spec> {
@@ -849,6 +861,13 @@ where
         // way that facilitates random access to tx status information. That
         // means the sequencer only relies on the cache. FIXME(@neysofu).
         Ok(TxStatus::Unknown)
+    }
+
+    async fn sequencer_role(&self) -> SequencerRole {
+        self.synchronized_state_updator
+            .sequencer_role_msg("get_sequencer_role")
+            .await
+            .unwrap_or(SequencerRole::Leader)
     }
 }
 

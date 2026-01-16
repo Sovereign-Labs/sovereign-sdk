@@ -418,10 +418,14 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(crate) enum SequencerRole {
+/// The role of the sequencer in a distributed setup.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SequencerRole {
+    /// Replica that does not sync with the leader.
     ReplicaNoLeaderSync,
+    /// Replica that syncs with the leader via PostgreSQL.
     Replica,
+    /// Leader node that accepts transactions and produces batches.
     Leader,
 }
 

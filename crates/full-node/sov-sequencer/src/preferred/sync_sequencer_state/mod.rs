@@ -127,6 +127,10 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         batch_from_master: BatchToStore,
         reason: &'static str,
     },
+    GetSequencerRole {
+        resp: oneshot::Sender<SequencerRole>,
+        reason: &'static str,
+    },
 }
 
 impl<S: Spec, Rt: Runtime<S>> Message<S, Rt> {

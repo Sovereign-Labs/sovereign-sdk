@@ -244,4 +244,8 @@ where
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         Ok(self.accept_encoded_tx(tx).await)
     }
+
+    async fn sequencer_role(&self) -> crate::SequencerRole {
+        crate::SequencerRole::Leader
+    }
 }

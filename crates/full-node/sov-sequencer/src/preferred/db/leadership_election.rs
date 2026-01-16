@@ -133,9 +133,9 @@ impl LeadershipElectionTask {
                     Ok(true) => {
                         info!(
                             node_id = %self.node_id,
-                            "Replica acquired leadership!"
+                            "Replica acquired leadership! Restarting the node."
                         );
-                        todo!("Transition replica to leader at runtime - this requires recreating leader components (BlobSender, etc.)")
+                        exit_rollup(&self.shutdown_sender).await;
                     }
                     Ok(false) => {
                         // Another node is still leader, keep trying

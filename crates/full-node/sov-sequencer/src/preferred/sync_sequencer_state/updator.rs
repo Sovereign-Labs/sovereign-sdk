@@ -319,4 +319,14 @@ where
         self.recv(recv).await??;
         Ok(())
     }
+
+    pub(crate) async fn sequencer_role_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<crate::preferred::db::SequencerRole, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::GetSequencerRole { resp, reason })
+            .await?;
+        self.recv(recv).await
+    }
 }
