@@ -1,6 +1,6 @@
 use super::*;
 
-use proxy_utils::{create_pool, get_cluster_info};
+use proxy_utils::Proxy;
 use sov_sequencer::SequencerRole;
 use tokio::time::Duration;
 
@@ -118,10 +118,11 @@ async fn test_db_elected_leader_failover() {
     } = setup;
 
     // Check initial cluster state using proxy-utils
-    let pool = create_pool(postgres.connection_string())
+    let proxy = Proxy::new(postgres.connection_string())
         .await
-        .expect("Failed to create pool");
-    let cluster_info = get_cluster_info(&pool)
+        .expect("Failed to create proxy");
+    let cluster_info = proxy
+        .get_cluster_info()
         .await
         .expect("Failed to get cluster info");
 
@@ -193,7 +194,8 @@ async fn test_db_elected_leader_failover() {
     );
 
     // Check final cluster state after failover
-    let cluster_info = get_cluster_info(&pool)
+    let cluster_info = proxy
+        .get_cluster_info()
         .await
         .expect("Failed to get cluster info after failover");
 
