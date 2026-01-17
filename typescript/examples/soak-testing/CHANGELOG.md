@@ -1,5 +1,14 @@
 # soak-testing
 
+## 1.0.18
+
+### Patch Changes
+
+-   Updated dependencies [fc00847]
+    -   @sovereign-sdk/signers@0.5.2
+    -   @sovereign-sdk/test@0.1.18
+    -   @sovereign-sdk/web3@0.12.4
+
 ## 1.0.17
 
 ### Patch Changes
