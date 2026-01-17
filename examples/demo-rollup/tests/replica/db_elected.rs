@@ -1,5 +1,6 @@
 use super::*;
 
+use proxy_utils::{create_pool, get_cluster_info};
 use sov_sequencer::SequencerRole;
 use tokio::time::Duration;
 
@@ -110,11 +111,36 @@ async fn test_db_elected_leader_failover() {
     };
 
     let DbElectedTestSetup {
-        postgres: _postgres,
+        postgres,
         leader,
         replica,
         da_shutdown,
     } = setup;
+
+    // Check initial cluster state using proxy-utils
+    let pool = create_pool(postgres.connection_string())
+        .await
+        .expect("Failed to create pool");
+    let cluster_info = get_cluster_info(&pool)
+        .await
+        .expect("Failed to get cluster info");
+
+    tracing::info!(
+        "Initial cluster state - Leader: {:?}, Followers: {:?}",
+        cluster_info.leader,
+        cluster_info.followers
+    );
+
+    // Verify we have a leader and one follower
+    assert!(
+        cluster_info.leader.is_some(),
+        "Expected a leader to be present"
+    );
+    assert_eq!(
+        cluster_info.followers.len(),
+        1,
+        "Expected exactly one follower"
+    );
 
     // Kill the leader
     let _ = leader.shutdown().await;
@@ -144,6 +170,23 @@ async fn test_db_elected_leader_failover() {
         new_role,
         SequencerRole::Leader,
         "Expected restarted node to be Leader, got {new_role:?}",
+    );
+
+    // Check final cluster state after failover
+    let cluster_info = get_cluster_info(&pool)
+        .await
+        .expect("Failed to get cluster info after failover");
+
+    tracing::info!(
+        "Final cluster state - Leader: {:?}, Followers: {:?}",
+        cluster_info.leader,
+        cluster_info.followers
+    );
+
+    // Verify the former replica is now the leader
+    assert!(
+        cluster_info.leader.is_some(),
+        "Expected a leader after failover"
     );
 
     let _ = restarted_rollup.shutdown().await;

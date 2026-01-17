@@ -11131,6 +11131,7 @@ dependencies = [
  "jsonrpsee",
  "prometheus_exporter",
  "proptest",
+ "proxy-utils",
  "rand 0.8.5",
  "reqwest",
  "reth-primitives",
