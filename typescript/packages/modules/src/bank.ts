@@ -41,11 +41,6 @@ type BalancePayload = {
   token_id: string;
 };
 
-type TotalSupplyPayload = {
-  amount: string;
-  token_id: string;
-};
-
 /**
  * Bank class for interacting with the Sovereign SDK Bank module.
  */
@@ -97,32 +92,6 @@ export class Bank {
 
       throw err;
     }
-  }
-
-  /**
-   * Gets the total supply of a specific token.
-   *
-   * If no token ID is provided, returns the total supply of the gas token.
-   *
-   * @param tokenId - Optional token ID. If not provided, uses the gas token
-   * @returns Promise resolving to the total supply as a bigint
-   * @throws {SovereignClient.APIError} When the request fails
-   * @example
-   * ```typescript
-   * const bank = new Bank(rollup);
-   * const totalSupply = await bank.totalSupply();
-   * console.log(`Total gas token supply: ${totalSupply}`);
-   *
-   * // Query specific token supply
-   * const tokenSupply = await bank.totalSupply("token_123");
-   * ```
-   */
-  async totalSupply(tokenId?: string): Promise<bigint> {
-    const token = await this.tokenIdOrElseGasTokenId(tokenId);
-    const response: TotalSupplyPayload = await this.rollup.http.get(
-      `/modules/bank/tokens/${token}/total-supply`,
-    );
-    return BigInt(response.amount);
   }
 
   /**
