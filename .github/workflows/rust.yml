@@ -265,6 +265,16 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Debug memlock limits
+        run: |
+            echo "=== Current ulimits ==="
+            ulimit -a
+            echo ""
+            echo "=== Memlock limit (KB) ==="
+            ulimit -l
+            echo ""
+            echo "=== /etc/security/limits.conf ==="
+            cat /etc/security/limits.conf 2>/dev/null || echo "Not readable"
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash

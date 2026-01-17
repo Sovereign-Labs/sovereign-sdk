@@ -52,9 +52,15 @@ total-clean:
 	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
 
 test:  ## Runs test suite using next test
+	echo "CHECKING ULIMIT:"
+	ulimit -l
+	echo "ULIMIT CHECKED"
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
 
 test-all: ## Runs test suite using nextest, across the whole workspace
+	echo "CHECKING ULIMIT:"
+	ulimit -l
+	echo "ULIMIT CHECKED"
 	cargo switcheroo save _backup
 	cargo switcheroo disable
 	$(MAKE) test

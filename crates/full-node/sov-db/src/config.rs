@@ -114,6 +114,10 @@ impl RollupDbConfig {
         if let Some(leaf_cache_size) = self.kernel_leaf_cache_size {
             opts.leaf_cache_size(leaf_cache_size);
         }
+        if cfg!(debug_assertions) {
+            opts.page_cache_upper_levels(1);
+        }
+
         opts.path(self.path.join("kernel_nomt_db"));
 
         opts
@@ -141,6 +145,10 @@ impl RollupDbConfig {
         if let Some(leaf_cache_size) = self.user_leaf_cache_size {
             opts.leaf_cache_size(leaf_cache_size);
         }
+        if cfg!(debug_assertions) {
+            opts.page_cache_upper_levels(1);
+        }
+
         opts.path(self.path.join("user_nomt_db"));
         opts
     }
