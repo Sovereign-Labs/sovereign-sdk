@@ -11,9 +11,11 @@ mod tests;
 
 pub use error::GasMeteringError;
 pub(crate) use impl_macros::*;
+pub use metered_utils::charge_gas_for_sig;
 pub use metered_utils::{
-    charge_gas_to_deserialize_json, metered_credential, MeteredBorshDeserialize,
-    MeteredBorshDeserializeError, MeteredHasher, MeteredSigVerificationError, MeteredSignature,
+    charge_gas_to_deserialize, charge_gas_to_deserialize_json, metered_credential,
+    MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher,
+    MeteredSigVerificationError, MeteredSignature,
 };
 pub use meters::*;
 pub use price::*;

@@ -880,14 +880,25 @@ where
             "bug in state manager. earliest seen transition should be incremental from last processed finalized"
         );
 
-        // In case if node is syncing, last finalized header might be way higher than we've seen.
-        // To simplify logic in the rest of the function, we introduce "last seen" finalized header, which is at most matches highest seen transition
+        // Handle edge cases where DA layer reports unexpected finalized heights:
+        // 1. If syncing: finalized might be higher than we've seen - cap at highest_seen
+        // 2. If DA reports stale: finalized might be lower than already processed - use last_processed
         let last_seen_finalized_header = if last_finalized_header.height() > highest_seen_transition
         {
+            // Syncing case: DA is ahead of us
             self.finalized_headers_provider
                 .get_block_header_at(highest_seen_transition)
                 .await?
                 .clone()
+        } else if last_finalized_header.height() < self.last_processed_finalized_header.height() {
+            // Stale header case: DA reports older than what we've already finalized
+            // This can happen if DA layer has temporary inconsistencies
+            tracing::warn!(
+                reported_finalized = last_finalized_header.height(),
+                already_processed = self.last_processed_finalized_header.height(),
+                "DA layer reported stale finalized header, using last processed instead"
+            );
+            self.last_processed_finalized_header.clone()
         } else {
             last_finalized_header.clone()
         };

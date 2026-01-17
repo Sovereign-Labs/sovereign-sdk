@@ -14,7 +14,7 @@ use crate::runtime::{RT, S};
 
 #[test]
 fn test_invalid_contract_execution() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
     let tx_request = TypedTransaction::Eip1559(TxEip1559 {
@@ -58,7 +58,7 @@ fn test_invalid_contract_execution() {
 
 #[test]
 fn test_get_empty_code() {
-    let (runner, account, _) = setup();
+    let (runner, account, _, _) = setup();
     let address_without_code = account.address();
 
     runner.query_visible_state(|state| {

@@ -36,7 +36,7 @@ fn test_pruning() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_BLOCK_PRUNING_THRESHOLD", "5");
     let block_pruning_threshold = config_value!("EVM_BLOCK_PRUNING_THRESHOLD");
 
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
     let value = 1;
     let mut nonce = 0;
 

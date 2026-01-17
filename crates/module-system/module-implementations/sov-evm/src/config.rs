@@ -172,6 +172,24 @@ pub struct EvmRuntimeConfigUpdate<S: Spec> {
     pub new_admin: Option<S::Address>,
 }
 
+impl<S: Spec> EvmRuntimeConfigUpdate<S> {
+    /// Creates an empty config update with all fields set to None.
+    /// Sending this as an UpdateRuntimeConfig message disables the max fee check.
+    pub fn empty() -> Self {
+        Self {
+            new_hardfork: None,
+            new_contract_creation_policy: None,
+            chain_spec_update: None,
+            new_admin: None,
+        }
+    }
+
+    /// Returns true if all fields are None, indicating no actual config changes.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::empty()
+    }
+}
+
 #[derive(
     Debug,
     Clone,

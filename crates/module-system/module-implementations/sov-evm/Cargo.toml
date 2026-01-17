@@ -136,6 +136,7 @@ native = [
 	"dep:sov-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
+	"revm/blst", # Use faster C implementation of bls in native code
 	"sov-evm/native",
 	"sov-metrics/native",
 	"sov-address/native",

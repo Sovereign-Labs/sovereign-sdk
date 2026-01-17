@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/modules",
-  "version": "0.1.8",
+  "version": "0.1.12",
   "description": "A package providing convenient helpers for interacting with core Sovereign SDK modules",
   "scripts": {
     "build": "tsup",

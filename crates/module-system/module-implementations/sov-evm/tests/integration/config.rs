@@ -1,10 +1,9 @@
 use std::str::FromStr;
 
-use crate::runtime::GenesisConfig;
-use crate::runtime::TestRuntime;
-use crate::runtime::RT;
-use crate::runtime::S;
 use alloy_primitives::Address;
+
+use crate::helpers::setup;
+use crate::runtime::{RT, S};
 use sov_address::EthereumAddress;
 use sov_address::MultiAddress;
 use sov_evm::BorshSpecId;
@@ -13,56 +12,17 @@ use sov_evm::ChainSpecUpdate;
 use sov_evm::ContractCreationPolicy;
 use sov_evm::ContractCreationPolicyUpdate;
 use sov_evm::Evm;
-use sov_evm::EvmChainSpec;
-use sov_evm::EvmGenesisConfig;
 use sov_evm::EvmRuntimeConfigUpdate;
 use sov_evm::SpecId;
 use sov_modules_api::HexString;
 use sov_modules_api::SafeVec;
 use sov_modules_api::TxEffect;
-use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
-use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::AsUser;
-use sov_test_utils::TestUser;
 use sov_test_utils::TransactionTestCase;
-
-pub(crate) fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
-    let genesis_config =
-        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
-    let admin = genesis_config
-        .additional_accounts()
-        .first()
-        .unwrap()
-        .clone();
-
-    let mut evm_config = EvmGenesisConfig {
-        accounts: vec![],
-        chain_spec: EvmChainSpec {
-            limit_contract_code_size: None,
-            coinbase: Address::ZERO,
-            block_gas_limit: 1_000_000_000,
-            tx_gas_limit: Some(30_000_000),
-            hardforks: vec![(0, SpecId::CANCUN)],
-        },
-        contract_creation_policy: ContractCreationPolicy::Everyone,
-        initial_base_fee: 0,
-        genesis_timestamp: 0,
-        admin: admin.address(),
-    };
-
-    evm_config.chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
-
-    let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
-
-    let runner =
-        TestRunner::new_with_genesis(genesis.into_genesis_params(), TestRuntime::default());
-
-    (runner, admin)
-}
 
 #[test]
 fn test_empty_config_update_is_noop() {
-    let (mut runner, admin) = setup();
+    let (mut runner, _, _, admin) = setup();
 
     let evm = Evm::<S>::default();
     // Send an empty config update and verify that the config is unchanged
@@ -95,7 +55,7 @@ fn test_empty_config_update_is_noop() {
 
 #[test]
 fn test_update_hardfork() {
-    let (mut runner, admin) = setup();
+    let (mut runner, _, _, admin) = setup();
 
     let evm = Evm::<S>::default();
     let admin_address = admin.address();
@@ -171,7 +131,7 @@ fn test_update_hardfork() {
 
 #[test]
 fn test_update_contract_creation_policy() {
-    let (mut runner, admin) = setup();
+    let (mut runner, _, _, admin) = setup();
 
     let evm = Evm::<S>::default();
     let admin_address = admin.address();
@@ -282,7 +242,7 @@ fn test_update_contract_creation_policy() {
 
 #[test]
 fn test_update_admin() {
-    let (mut runner, admin) = setup();
+    let (mut runner, _, _, admin) = setup();
 
     let evm = Evm::<S>::default();
     let new_admin_address = "0x0123456789012345678901234567890123456789";
@@ -337,7 +297,7 @@ fn test_update_admin() {
 
 #[test]
 fn test_update_chain_spec() {
-    let (mut runner, admin) = setup();
+    let (mut runner, _, _, admin) = setup();
 
     let evm = Evm::<S>::default();
     let admin_address = admin.address();
@@ -423,6 +383,63 @@ fn test_update_chain_spec() {
                     .chain_spec
                     .tx_gas_limit,
                 Some(20_000_000)
+            );
+        }),
+    });
+}
+
+#[test]
+fn test_disable_max_fee_check() {
+    let (mut runner, _, _, admin) = setup();
+
+    let evm = Evm::<S>::default();
+
+    // Verify that disable_max_fee_check is false by default
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig(
+            EvmRuntimeConfigUpdate {
+                new_hardfork: None,
+                new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
+                chain_spec_update: None,
+                new_admin: None,
+            },
+        )),
+        assert: Box::new(move |ctx, state| {
+            assert!(ctx.tx_receipt.is_successful());
+            assert!(
+                !evm.is_max_fee_check_disabled(state).unwrap(),
+                "disable_max_fee_check should be false by default"
+            );
+        }),
+    });
+
+    let evm = Evm::<S>::default();
+    let admin_address = admin.address();
+
+    // Send an empty config update (all fields None) and verify that disable_max_fee_check is set to true
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig(
+            EvmRuntimeConfigUpdate {
+                new_hardfork: None,
+                new_contract_creation_policy: None,
+                chain_spec_update: None,
+                new_admin: None,
+            },
+        )),
+        assert: Box::new(move |ctx, state| {
+            assert!(ctx.tx_receipt.is_successful());
+            // Verify that disable_max_fee_check is now true
+            assert!(
+                evm.is_max_fee_check_disabled(state).unwrap(),
+                "disable_max_fee_check should be true after empty config update"
+            );
+            // Verify that other config fields are unchanged
+            assert_eq!(evm.admin(state).unwrap(), admin_address);
+            let cfg = evm.cfg(state).unwrap();
+            assert_eq!(cfg.hardforks, vec![(0, SpecId::CANCUN)]);
+            assert_eq!(
+                cfg.contract_creation_policy,
+                ContractCreationPolicy::Everyone
             );
         }),
     });

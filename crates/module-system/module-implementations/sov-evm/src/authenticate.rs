@@ -1,5 +1,9 @@
 use std::marker::PhantomData;
 
+use crate::conversions::RlpConversionError;
+use crate::Evm;
+use crate::TransactionSigned;
+use crate::{call, CallMessage, RlpEvmTransaction};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
@@ -15,15 +19,12 @@ use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
+use sov_modules_api::StateReader;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
 use sov_rollup_interface::TxHash;
 use sov_state::User;
-
-use crate::conversions::RlpConversionError;
-use crate::TransactionSigned;
-use crate::{call, CallMessage, RlpEvmTransaction};
 
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
@@ -32,6 +33,51 @@ use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATUR
 #[cfg(feature = "native")]
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+
+impl<S: Spec> Evm<S> {
+    /// Validates the user's max fee per gas against the rollup's base fee and returns a gas multiplier.
+    ///
+    /// The max fee check is only enforced when:
+    /// - The current block number exceeds `EVM_MAX_FEE_CHECK_HEIGHT`
+    /// - The check has not been disabled via an admin `UpdateRuntimeConfig` message
+    ///
+    /// Returns:
+    /// - `Ok(1)` if the fee check passes (user fee >= rollup base fee)
+    /// - `Ok(100)` if the fee check is skipped (before height threshold or disabled)
+    /// - `Err(InsufficientMaxFeePerGas)` if the user's fee is below the rollup base fee
+    fn validate_fee_and_calculate_multiplier<Accessor: StateReader<User>>(
+        &self,
+        user_max_fee_per_gas: u128,
+        rollup_base_fee: u128,
+        tx_hash: TxHash,
+        state: &mut Accessor,
+    ) -> Result<u64, AuthenticationError> {
+        let is_max_fee_check_disabled = self.is_max_fee_check_disabled(state).map_err(|e| {
+            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
+        })?;
+
+        let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
+        let env = self.block_env(state).map_err(|e| {
+            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
+        })?;
+
+        let block_number: u64 = env.number.to::<u64>();
+
+        if block_number > apply_max_fee_check_after_height && !is_max_fee_check_disabled {
+            if user_max_fee_per_gas < rollup_base_fee {
+                let err = FatalError::InsufficientMaxFeePerGas {
+                    user_max_fee_per_gas,
+                    rollup_base_fee,
+                };
+                return Err(AuthenticationError::FatalError(err, tx_hash));
+            }
+
+            Ok(1)
+        } else {
+            Ok(100)
+        }
+    }
+}
 
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(
@@ -58,9 +104,13 @@ fn recover_evm_signer(
 }
 
 /// Creates the transaction details and tx hash for an EVM transaction.
-fn create_auth_tx_and_hash<S: Spec>(
+fn create_auth_tx_and_hash<
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,
+    S: Spec,
+>(
     tx: &TransactionSigned,
     gas_price: <<S as Spec>::Gas as Gas>::Price,
+    state: &mut Accessor,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
@@ -68,15 +118,15 @@ fn create_auth_tx_and_hash<S: Spec>(
     let user_max_fee_per_gas = tx.max_fee_per_gas();
     let rollup_base_fee = gas_price.as_ref()[0].0;
 
-    if user_max_fee_per_gas < rollup_base_fee {
-        let err = FatalError::InsufficientMaxFeePerGas {
-            user_max_fee_per_gas,
-            rollup_base_fee,
-        };
-        return Err(AuthenticationError::FatalError(err, tx_hash));
-    }
+    let evm = Evm::<S>::default();
+    let multiplier = evm.validate_fee_and_calculate_multiplier(
+        user_max_fee_per_gas,
+        rollup_base_fee,
+        tx_hash,
+        state,
+    )?;
 
-    let gas_limit = tx.gas_limit().saturating_mul(100);
+    let gas_limit = tx.gas_limit().saturating_mul(multiplier);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
 
     let max_fee = gas_limit
@@ -165,7 +215,7 @@ where
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
     let gas_price = state.gas_price();
-    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price, state)?;
 
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 

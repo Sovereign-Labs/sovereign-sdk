@@ -1,5 +1,24 @@
 # @sovereign-sdk/signers
 
+## 0.5.2
+
+### Patch Changes
+
+-   fc00847: Fix EIP-712 signature verification failures by normalizing high-s signatures to low-s. Migrated from ethers to viem for better signature handling. Removed ethers dependency.
+
+## 0.5.1
+
+### Patch Changes
+
+-   Updated dependencies [16e0e71]
+    -   @sovereign-sdk/universal-wallet-wasm@0.6.0
+
+## 0.5.0
+
+### Minor Changes
+
+-   4c19b87: Split Ledger-Solana signer implementation into a separate entrypoint. To use it, import LedgerSolanaSigner `'@sovereign-sdk/signers/ledger-solana';`. The old export has been removed. This should allow bundlers to skip building the Ledger dependencies except when explicitly using one of these entrypoints, and allows separation between node-specific HID support and browser USB support dependencies for the Ledger connection.
+
 ## 0.4.0
 
 ### Minor Changes
