@@ -661,17 +661,14 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
     pub async fn run(self) -> anyhow::Result<()> {
-        self.run_and_report_addr(None).await
+        self.run_and_report_addr().await
     }
 
     /// Runs the rollup. Reports REST and RPC ports to the caller using the provided channel.
-    pub async fn run_and_report_addr(
-        self,
-        axum_addr_channel: Option<oneshot::Sender<SocketAddr>>,
-    ) -> anyhow::Result<()> {
+    pub async fn run_and_report_addr(self) -> anyhow::Result<()> {
         let mut runner = self.runner;
 
-        let axum_addr = runner
+        runner
             .start_http_server(
                 self.endpoints.inner.axum_router,
                 self.endpoints.inner.jsonrpsee_module,
@@ -679,11 +676,6 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
             )
             .await
             .context("Failed to start Axum Server")?;
-        if let Some(sender) = axum_addr_channel {
-            sender
-                .send(axum_addr)
-                .map_err(|_| anyhow::anyhow!("Failed to send Axum address"))?;
-        }
 
         let monitoring_task =
             spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);

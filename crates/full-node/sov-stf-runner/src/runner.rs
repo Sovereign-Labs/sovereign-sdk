@@ -54,7 +54,8 @@ where
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
-    axum_tcp: Option<TcpListener>,
+    /// TODO
+    pub axum_tcp: Option<TcpListener>,
     stf_info_receiver: Option<Receiver<Stf::StateRoot, Stf::Witness, Da::Spec>>,
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
@@ -272,8 +273,8 @@ where
         router: axum::Router<()>,
         methods: RpcModule<()>,
         cors_configuration: CorsConfiguration,
-    ) -> anyhow::Result<SocketAddr> {
-        let (http_task_handle, rest_address) = crate::http::start_http_server(
+    ) -> anyhow::Result<()> {
+        let http_task_handle = crate::http::start_http_server(
             self.axum_tcp.take().unwrap(),
             router,
             methods,
@@ -284,7 +285,7 @@ where
 
         self.background_handles.push(http_task_handle);
 
-        Ok(rest_address)
+        Ok(())
     }
 
     /// Spawn a [`tokio::task`] that updates the sync status every `polling_interval`.

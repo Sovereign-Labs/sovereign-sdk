@@ -80,7 +80,7 @@ pub(crate) async fn start_http_server(
     methods: RpcModule<()>,
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
-) -> anyhow::Result<(JoinHandle<anyhow::Result<()>>, SocketAddr)> {
+) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
     let rest_address = axum_listener.local_addr()?;
     let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
 
@@ -116,7 +116,7 @@ pub(crate) async fn start_http_server(
 
         result
     });
-    Ok((handle, rest_address))
+    Ok(handle)
 }
 
 /// Build [`axum::Router`] from [`jsonrpsee::RpcModule`] with support of websocket.
