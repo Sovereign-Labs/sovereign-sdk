@@ -26,6 +26,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{alloy_client, SENDER_PRIV_KEY};
 use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
@@ -243,12 +244,7 @@ fn evm_transaction_into_blob(account: &EvmAccount, tx: TxEip1559) -> Vec<u8> {
 /// Address for second unregistered sender (different from UNREGISTERED_SENDER used in registration test)
 const UNREGISTERED_EVM_SENDER: MockAddress = MockAddress::new([122; 32]);
 
-/// Verifies that EVM transactions can be processed from unregistered sequencer batches.
-/// This is the core test for the new functionality that allows EVM txs in unregistered batches.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_evm_tx_in_unregistered_batch() -> anyhow::Result<()> {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
-
+async fn setup() -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
     let rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
@@ -263,7 +259,7 @@ async fn test_evm_tx_in_unregistered_batch() -> anyhow::Result<()> {
         c.max_infos_in_db = 1;
     })
     .start()
-    .await?;
+    .await.unwrap();
 
     // Wait for rollup to be ready (10 blocks like other EVM tests)
     rollup.wait_for_next_blocks(10).await;
@@ -274,6 +270,17 @@ async fn test_evm_tx_in_unregistered_batch() -> anyhow::Result<()> {
             .another_on_the_same_layer(UNREGISTERED_EVM_SENDER)
             .await,
     );
+
+    (rollup, da_service)
+}
+
+/// Verifies that EVM transactions can be processed from unregistered sequencer batches.
+/// This is the core test for the new functionality that allows EVM txs in unregistered batches.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_evm_tx_in_unregistered_batch() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
+
+    let (rollup, da_service) = setup().await;
 
     let http_addr = rollup.http_addr;
     let client = rollup.client.clone();
@@ -290,9 +297,11 @@ async fn evm_tx_unregistered_test_case(
     client: &NodeClient,
     http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
+    sov_test_utils::initialize_logging();
+    
     // Use the funded sender from genesis (same as used in EVM tests)
     let sender = EvmAccount::from_private_key_hex(SENDER_PRIV_KEY);
-    let sender_address = sender.address();
+    // let sender_address = sender.address();
 
     // Generate a random receiver
     let receiver = EvmAccount::generate();
@@ -303,13 +312,11 @@ async fn evm_tx_unregistered_test_case(
     let initial_balance = alloy.get_balance(receiver_address).await?;
     assert_eq!(initial_balance, U256::ZERO, "Receiver should start with 0 balance");
 
-    // Get sender's initial nonce
-    let sender_nonce = alloy.get_transaction_count(sender_address).await?;
-
     // Build EVM transfer tx
-    let transfer_amount = U256::from(1_000_000_u64);
-    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, sender_nonce);
+    let transfer_amount = U256::from(1u64);
+    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 1);
     let blob = evm_transaction_into_blob(&sender, tx);
+    let mut slot_subscription = client.client.subscribe_finalized_slots().await?;
 
     // Submit via unregistered DA service
     let _receipt = da_service
@@ -318,26 +325,25 @@ async fn evm_tx_unregistered_test_case(
         .await?
         .expect("Failed to submit EVM tx blob to DA");
 
-    // Wait for processing (deferred slots + finalization + buffer)
-    let wait_for_slots = config_deferred_slots_count() + FINALIZATION_BLOCKS as u64 + 5;
+    tracing::info!("Submitted first transaction");
 
-    let mut slots = client
-        .client
-        .subscribe_finalized_slots_with_children(IncludeChildren::new(true))
-        .await?;
+    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 0);
+    let alloy = alloy_client(http_addr);
+    alloy.send_transaction(tx.into()).await?;
 
-    for _i in 0..wait_for_slots {
-        let _slot = slots
-            .next()
-            .await
-            .transpose()?
-            .expect("slot data is missing");
+    for _ in 0..50 {
+        let _slot = slot_subscription.next().await.unwrap()?;
+        let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 2);
+        if let Ok(_) = alloy.send_transaction(tx.into()).await {
+            break;
+        }
     }
+    
 
     // Verify the balance was transferred
     let final_balance = alloy.get_balance(receiver_address).await?;
     assert_eq!(
-        final_balance, transfer_amount,
+        final_balance, U256::from(3u64),
         "Receiver should have received the transfer amount"
     );
 
