@@ -130,7 +130,7 @@ impl LeadershipElectionTask {
                             node_id = %self.node_id,
                             "Replica acquired leadership! Exiting to restart as leader."
                         );
-                        self.shutdown_sender.send(());
+                        let _ = self.shutdown_sender.send(());
                     }
                     Ok(false) => {
                         // Another node is still leader, keep trying
