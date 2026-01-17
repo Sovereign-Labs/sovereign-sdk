@@ -34,7 +34,11 @@ export class PrivySigner implements Signer {
   async sign(message: Uint8Array): Promise<Uint8Array> {
     const digest = keccak256(message);
     const signatureBytes = await this.signProvider(digest);
-    const signature = parseSignature(signatureBytes as `0x${string}`);
+    // Normalize to ensure 0x prefix
+    const normalizedHex = signatureBytes.startsWith("0x")
+      ? signatureBytes
+      : `0x${signatureBytes}`;
+    const signature = parseSignature(normalizedHex as `0x${string}`);
     this.cachePublicKey(digest, signature);
 
     // Return compact signature (r + s, 64 bytes)

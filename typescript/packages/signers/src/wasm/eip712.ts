@@ -139,7 +139,11 @@ export class Eip712Signer implements Signer {
     }
 
     // Parse the signature using viem (accepts high-s signatures unlike ethers)
-    const signature = parseSignature(signatureHex as `0x${string}`);
+    // Normalize to ensure 0x prefix
+    const normalizedHex = signatureHex.startsWith("0x")
+      ? signatureHex
+      : `0x${signatureHex}`;
+    const signature = parseSignature(normalizedHex as `0x${string}`);
     this.cachePublicKey(signingHash, signature);
 
     // Normalize to low-s form
