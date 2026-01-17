@@ -163,12 +163,18 @@ importers:
 
   packages/multisig:
     dependencies:
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
       '@sovereign-sdk/signers':
         specifier: workspace:^
         version: link:../signers
       '@sovereign-sdk/utils':
         specifier: workspace:^
         version: link:../utils
+      borsh:
+        specifier: 0.7.0
+        version: 0.7.0
     devDependencies:
       '@sovereign-sdk/types':
         specifier: workspace:^

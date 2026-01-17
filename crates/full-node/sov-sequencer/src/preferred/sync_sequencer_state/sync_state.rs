@@ -369,6 +369,12 @@ where
                 self.send_response(resp, ret, "process_do_batch_start_replica")
                     .await;
             }
+            Message::GetSequencerRole { resp, reason } => {
+                let inner = self.get_inner_with_timing(reason).await;
+                let role = inner.seq_role;
+                drop(inner);
+                self.send_response(resp, role, "get_sequencer_role").await;
+            }
         }
 
         Ok(())

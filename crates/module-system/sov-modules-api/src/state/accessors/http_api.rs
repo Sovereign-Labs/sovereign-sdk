@@ -952,3 +952,9 @@ impl<S: Spec> GetGasPrice for MeteredApiStateAccessor<S> {
         self.api_state_accessor.gas_meter.gas_price
     }
 }
+
+impl<S: Spec> crate::state::accessors::StateMetricsProvider for MeteredApiStateAccessor<S> {
+    fn metrics(&mut self) -> &mut StateMetrics {
+        &mut self.api_state_accessor.metrics
+    }
+}

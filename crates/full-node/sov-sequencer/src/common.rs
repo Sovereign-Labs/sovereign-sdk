@@ -188,6 +188,9 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
     ) -> Option<tokio::sync::broadcast::Receiver<StateUpdateNotification>> {
         None
     }
+
+    /// Returns the current sequencer role.
+    async fn sequencer_role(&self) -> crate::SequencerRole;
 }
 
 /// A transaction that has been accepted by the batch builder.

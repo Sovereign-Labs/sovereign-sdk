@@ -215,6 +215,27 @@ async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
     .await?
 }
 
+/// Tests runner behavior when DA layer reports stale finalized headers.
+/// With instant finality (finality=0), this tests resilience to DA inconsistencies
+/// where `get_last_finalized_block_header` returns blocks below actual finalized height.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_below_finalized_instant_finality() -> anyhow::Result<()> {
+    let finality = 0; // Instant finality
+    let block_time_ms = 500;
+    let randomization = RandomizationConfig {
+        seed: HexHash::from([1; 32]),
+        reorg_interval: 2..5,
+        behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization);
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(20, da_config),
+    )
+    .await?
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_instant_finality_data_stored() -> anyhow::Result<()> {
     let tmp_dir = tempfile::tempdir()?;

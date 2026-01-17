@@ -117,6 +117,14 @@ impl<S: Spec> Evm<S> {
         let cfg = self.cfg.get(state)?;
         Ok(cfg.expect("EVM config must be set in genesis"))
     }
+
+    /// Check if the max fee check is disabled.
+    pub fn is_max_fee_check_disabled<Accessor: StateReader<User>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<bool, Accessor::Error> {
+        Ok(self.disable_max_fee_check.get(state)?.unwrap_or(false))
+    }
 }
 
 /// Accessory state reads

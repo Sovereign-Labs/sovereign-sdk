@@ -319,6 +319,7 @@ where
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
             base_fee_per_gas: Some(current_block_env.basefee),
+            gas_limit: current_block_env.gas_limit,
             // Default values
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
@@ -327,7 +328,6 @@ where
             receipts_root: EMPTY_ROOT_HASH,
             logs_bloom: Bloom::default(),
             difficulty: U256::ZERO,
-            gas_limit: 0,
             gas_used: 0,
             extra_data: Bytes::default(),
             mix_hash: B256::ZERO,

@@ -1,5 +1,18 @@
 # @sovereign-sdk/modules
 
+## 0.1.11
+
+### Patch Changes
+
+-   Updated dependencies [647ba3b]
+    -   @sovereign-sdk/web3@0.12.3
+
+## 0.1.10
+
+### Patch Changes
+
+-   @sovereign-sdk/web3@0.12.2
+
 ## 0.1.9
 
 ### Patch Changes

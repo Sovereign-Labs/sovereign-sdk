@@ -57,14 +57,6 @@ impl<S: Spec> SerializeProofWithDetails<S> {
 }
 
 impl<S: Spec> MeteredBorshDeserialize<S> for SerializeProofWithDetails<S> {
-    fn bias_borsh_deserialization() -> <S as Spec>::Gas {
-        S::proof_bias_borsh_deserialization()
-    }
-
-    fn gas_to_charge_per_byte_borsh_deserialization() -> <S as Spec>::Gas {
-        S::proof_gas_to_charge_per_byte_borsh_deserialization()
-    }
-
     #[cfg_attr(feature = "bench", crate::cycle_tracker)]
     #[cfg_attr(
         all(feature = "gas-constant-estimation", feature = "native"),
@@ -74,7 +66,12 @@ impl<S: Spec> MeteredBorshDeserialize<S> for SerializeProofWithDetails<S> {
         buf: &mut &[u8],
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        Self::charge_gas_to_deserialize(buf, meter)?;
+        crate::charge_gas_to_deserialize(
+            S::proof_bias_borsh_deserialization(),
+            S::proof_gas_to_charge_per_byte_borsh_deserialization(),
+            buf.len(),
+            meter,
+        )?;
 
         SerializeProofWithDetails::<S>::unmetered_deserialize_inner(buf)
             .map_err(MeteredBorshDeserializeError::IOError)

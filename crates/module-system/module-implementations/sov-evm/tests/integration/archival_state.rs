@@ -5,7 +5,7 @@ use crate::runtime::S;
 
 #[test]
 fn test_state_at_different_depth_is_accessible() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let evm = Evm::<S>::default();
     for tx_idx in 0..=1 {

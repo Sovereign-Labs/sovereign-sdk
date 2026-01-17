@@ -1,5 +1,12 @@
 # @sovereign-sdk/signers
 
+## 0.5.1
+
+### Patch Changes
+
+-   Updated dependencies [16e0e71]
+    -   @sovereign-sdk/universal-wallet-wasm@0.6.0
+
 ## 0.5.0
 
 ### Minor Changes

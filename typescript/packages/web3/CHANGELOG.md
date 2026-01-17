@@ -1,5 +1,20 @@
 # @sovereign-sdk/web3
 
+## 0.12.3
+
+### Patch Changes
+
+-   647ba3b: Fix version comparison for checking if tx failure is due to version mismatch
+
+## 0.12.2
+
+### Patch Changes
+
+-   Updated dependencies [16e0e71]
+    -   @sovereign-sdk/universal-wallet-wasm@0.6.0
+    -   @sovereign-sdk/serializers@0.1.3
+    -   @sovereign-sdk/signers@0.5.1
+
 ## 0.12.1
 
 ### Patch Changes

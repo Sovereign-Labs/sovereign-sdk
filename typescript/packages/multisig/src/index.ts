@@ -1,3 +1,4 @@
+import { sha256 } from "@noble/hashes/sha2";
 import type {
   SignatureAndPubKey,
   Transaction,
@@ -5,6 +6,8 @@ import type {
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
+import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
+import * as borsh from "borsh";
 
 /**
  * Base error class for multisig-related errors.
@@ -221,6 +224,34 @@ export class MultisigTransaction {
    */
   get threshold(): number {
     return this.minSigners;
+  }
+
+  /**
+   * Calculates the multisig address (credential ID) by hashing the threshold and sorted public keys.
+   * This matches the Rust implementation: hash(threshold || borsh(sorted_pubkeys))
+   * @param hasher - The hash algorithm to use (currently only 'sha256' is supported)
+   * @returns The 32-byte multisig address as a Uint8Array
+   */
+  getMultisigAddress(hasher: "sha256" = "sha256"): Uint8Array {
+    if (hasher !== "sha256") {
+      throw new Error(`Unsupported hasher: ${hasher}`);
+    }
+
+    // Collect all public keys (signatures + unused)
+    const allPubKeys = [
+      ...this.signatures.map((s) => s.pub_key),
+      ...Array.from(this.unusedPubKeys),
+    ];
+    const sortedPubKeys = allPubKeys.sort();
+    const pubKeyBytes = sortedPubKeys.map((pk) => Array.from(hexToBytes(pk)));
+    const buffer = new borsh.BinaryWriter();
+
+    buffer.writeU8(this.minSigners);
+    buffer.writeArray(pubKeyBytes, (pkBytes: number[]) => {
+      buffer.writeFixedArray(new Uint8Array(pkBytes));
+    });
+
+    return sha256(buffer.toArray());
   }
 
   /**

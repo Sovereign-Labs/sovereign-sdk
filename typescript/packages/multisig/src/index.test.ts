@@ -4,6 +4,7 @@ import type {
   TransactionV1,
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
+import { bytesToHex } from "@sovereign-sdk/utils";
 import { describe, expect, it } from "vitest";
 import {
   InvalidMultisigParameterError,
@@ -240,6 +241,23 @@ describe("MultisigTransaction", () => {
 
       expect(() => multisig.addSignature("sig2", "pubkey1")).toThrow(
         InvalidMultisigParameterError,
+      );
+    });
+  });
+
+  describe("getMultisigAddress", () => {
+    it("should match Rust implementation output for known test vector", () => {
+      const multisig = MultisigTransaction.empty(createUnsignedTx(), 2, [
+        "33dd646d7c43830b52289c4f277d3a5a26b3ab0a10ee05c871cb654bc046e545",
+        "8c7788ad88084f12ce1556703b33e673c5e450eec793c1e8e1a55b1140b4dfb8",
+        "74fc1e9c39b21173ef47c1cdfb37158764486c8b8ba81d8f29c6dd77800cd57f",
+      ]);
+
+      const address = multisig.getMultisigAddress();
+      const addressHex = bytesToHex(address);
+
+      expect(addressHex).toBe(
+        "814394e81dd2a682efad0fc2082272cde35a172ba7e0e2240b0a0e9d68af23ee",
       );
     });
   });

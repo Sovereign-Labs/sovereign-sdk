@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/signers",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Signer interface and default implementations for use with Sovereign SDK applications",
   "scripts": {
     "build": "tsup",
