@@ -248,12 +248,35 @@ impl PostgresBackend {
         }))
     }
 
-    /// Attempts to acquire or refresh leadership in the database.
+    /// Attempts to acquire or refresh leadership and register the node in the nodes table atomically.
     ///
-    /// Returns `Some(leader)` if the upsert succeeded (this node became leader, refreshed its
+    /// Returns `Some(leader)` if leadership was acquired (this node became leader, refreshed its
     /// leadership, or took over from a timed-out leader). Returns `None` if another node is
-    /// the active leader and hasn't timed out yet.
-    pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
+    /// the active leader and hasn't timed out yet. The node is always registered regardless.
+    pub(crate) async fn try_update_leader_and_register_node(
+        &self,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        run_with_retries!(
+            &self.backoff_policy,
+            self.try_update_leader_and_register_node_in_tx(),
+            "postgres_db_backend_try_update_leader_and_register_node"
+        )
+    }
+
+    async fn try_update_leader_and_register_node_in_tx(
+        &self,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
+        let result = self.try_update_leader_inner(&mut tx).await?;
+        self.upsert_node_registration_inner(&mut tx).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    async fn try_update_leader_inner(
+        &self,
+        conn: &mut PgConnection,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
         let leader_timeout: i64 = self
             .leader_timeout
             .as_millis()
@@ -261,55 +284,40 @@ impl PostgresBackend {
             // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
             .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
 
-        let res = run_with_retries!(
-            &self.backoff_policy,
-            sqlx::query_as::<_, SequencerLeader>(
-                "WITH ts AS (SELECT NOW() as current_time)
-                INSERT INTO sequencer_leader (node_id, last_updated)
-                SELECT $1, ts.current_time FROM ts
-                    ON CONFLICT (singleton) DO UPDATE
-                        SET
-                            node_id = EXCLUDED.node_id,
-                            last_updated = EXCLUDED.last_updated
-                        WHERE
-                            sequencer_leader.node_id = EXCLUDED.node_id
-                            OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
-                        RETURNING node_id, last_updated",)
+        let res = sqlx::query_as::<_, SequencerLeader>(
+            "WITH ts AS (SELECT NOW() as current_time)
+            INSERT INTO sequencer_leader (node_id, last_updated)
+            SELECT $1, ts.current_time FROM ts
+                ON CONFLICT (singleton) DO UPDATE
+                    SET
+                        node_id = EXCLUDED.node_id,
+                        last_updated = EXCLUDED.last_updated
+                    WHERE
+                        sequencer_leader.node_id = EXCLUDED.node_id
+                        OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                    RETURNING node_id, last_updated",
+        )
         .bind(&self.node_id)
         .bind(leader_timeout)
-        .fetch_optional(&self.pool),
-            "postgres_db_backend_try_update_leader"
-        )?;
+        .fetch_optional(&mut *conn)
+        .await?;
 
         Ok(res)
     }
 
-    /// Upserts this node's registration in the nodes table.
-    pub(crate) async fn upsert_node_registration(&self, node_address: &str) -> anyhow::Result<()> {
-        run_with_retries!(
-            &self.backoff_policy,
-            sqlx::query(
-                "INSERT INTO nodes (node_id, address, last_updated)
-                 VALUES ($1, $2, NOW())
-                 ON CONFLICT (node_id) DO UPDATE
-                 SET address = EXCLUDED.address,
-                     last_updated = NOW()",
-            )
-            .bind(&self.node_id)
-            .bind(node_address)
-            .execute(&self.pool),
-            "postgres_db_backend_upsert_node_registration"
-        )?;
+    async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO nodes (node_id, address, last_updated)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (node_id) DO UPDATE
+             SET address = EXCLUDED.address,
+                 last_updated = NOW()",
+        )
+        .bind(&self.node_id)
+        .bind(&self.node_address)
+        .execute(&mut *conn)
+        .await?;
         Ok(())
-    }
-
-    /// Attempts to update leadership and register the node in the nodes table.
-    pub(crate) async fn try_update_leader_and_register_node(
-        &self,
-    ) -> anyhow::Result<Option<SequencerLeader>> {
-        let result: Option<SequencerLeader> = self.try_update_leader().await?;
-        self.upsert_node_registration(&self.node_address).await?;
-        Ok(result)
     }
 
     async fn prune_inner(
