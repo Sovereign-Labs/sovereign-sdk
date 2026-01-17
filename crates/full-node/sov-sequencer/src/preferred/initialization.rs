@@ -236,9 +236,12 @@ where
         // Launch leadership task for DbElected nodes
         if let Some(postgres_config) = &preferred_config.postgres_config {
             if postgres_config.node_role == NodeRole::DbElected {
-                let election_task =
-                    LeadershipElectionTask::new(postgres_config, shutdown_sender.clone(), bind_port)
-                        .await?;
+                let election_task = LeadershipElectionTask::new(
+                    postgres_config,
+                    shutdown_sender.clone(),
+                    bind_port,
+                )
+                .await?;
 
                 let leadership_handle = match seq_role {
                     SequencerRole::Leader => election_task.spawn_leader_heartbeat_task(),
