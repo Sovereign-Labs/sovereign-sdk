@@ -75,14 +75,13 @@ where
 }
 
 pub(crate) async fn start_http_server(
-    listen_address_http: &SocketAddr,
+    axum_listener: TcpListener,
     router: axum::Router<()>,
     methods: RpcModule<()>,
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
 ) -> anyhow::Result<(JoinHandle<anyhow::Result<()>>, SocketAddr)> {
-    let listener = TcpListener::bind(listen_address_http).await?;
-    let rest_address = listener.local_addr()?;
+    let rest_address = axum_listener.local_addr()?;
     let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
 
     let handle = tokio::spawn(async move {
@@ -96,7 +95,7 @@ pub(crate) async fn start_http_server(
 
         // TODO: Is there a way to have max_connections and other params for axum::serve?
         let result = axum::serve(
-            listener,
+            axum_listener,
             ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(
                 router,
             ),

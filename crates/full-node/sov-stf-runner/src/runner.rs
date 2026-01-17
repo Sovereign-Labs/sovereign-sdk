@@ -31,6 +31,7 @@ use tracing::{debug, info, trace};
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
+use tokio::net::TcpListener;
 
 type GenesisParams<ST, InnerVm, OuterVm, Da> =
     <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
@@ -53,7 +54,7 @@ where
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
-    listen_address_http: SocketAddr,
+    axum_tcp: Option<TcpListener>,
     stf_info_receiver: Option<Receiver<Stf::StateRoot, Stf::Witness, Da::Spec>>,
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
@@ -146,6 +147,7 @@ where
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
         runner_config: RunnerConfig,
+        axum_tcp: TcpListener,
         pm_config: Option<ProofManagerConfig<Stf::Address>>,
         da_service: Arc<Da>,
         ledger_db: LedgerDb,
@@ -169,11 +171,6 @@ where
         // But when REST and RPC handlers start, sender is used to get another subscription.
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
-
-        let axum_config = &runner_config.http_config;
-
-        let listen_address_http =
-            SocketAddr::new(axum_config.bind_host.parse()?, axum_config.bind_port);
 
         let first_unprocessed_height_at_startup = sync_state
             .synced_da_height
@@ -240,7 +237,7 @@ where
             da_service: da_service.clone(),
             stf,
             state_manager,
-            listen_address_http,
+            axum_tcp: Some(axum_tcp),
             sync_state,
             stf_info_receiver,
             sync_fetcher,
@@ -277,7 +274,7 @@ where
         cors_configuration: CorsConfiguration,
     ) -> anyhow::Result<SocketAddr> {
         let (http_task_handle, rest_address) = crate::http::start_http_server(
-            &self.listen_address_http,
+            self.axum_tcp.take().unwrap(),
             router,
             methods,
             self.secondary_shutdown_sender.subscribe(),

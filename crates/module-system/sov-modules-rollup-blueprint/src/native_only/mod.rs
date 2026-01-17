@@ -41,6 +41,7 @@ use sov_stf_runner::{
     StateTransitionRunner,
 };
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
+use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
@@ -470,8 +471,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             MaximumProvableHeight::new(state_update_sender.subscribe(), Self::Runtime::default()),
         );
 
+        let axum_socket_addr = SocketAddr::new(
+            rollup_config.runner.http_config.bind_host.parse()?,
+            rollup_config.runner.http_config.bind_port,
+        );
+        let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
+
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
+            axum_tcp,
             if prover_config.is_some() {
                 Some(rollup_config.proof_manager)
             } else {
