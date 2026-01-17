@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use proptest::prelude::*;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
@@ -799,26 +799,17 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
             resolve_to_continuation(&mut state_manager, &da_service, initial_block).await?;
 
-        // Validate block chain integrity
+        // Validate blockchain integrity
         validate_block_chain_integrity(&returned_block, &seen_transitions, &finalized_hashes);
 
-        // Here we do some progression of the chain
-        {
-            da_service.produce_n_blocks_now(empty_blobs).await?;
-            for i in 0..batch_blobs {
-                let blob_data = [i as u8, i as u8];
-                da_service.send_transaction(&blob_data).await.await??;
-            }
-            let head = da_service.get_head_block_header().await?;
-            let head_height = head.height().saturating_sub(last_shuffled_height);
-            if head_height > shuffle_after {
-                let mut da_layer = da_layer.write().await;
-                da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
-                last_shuffled_height = head_height;
-            }
+        // Produce more blocks (simulates chain advancing while we process)
+        da_service.produce_n_blocks_now(empty_blobs).await?;
+        for i in 0..batch_blobs {
+            let blob_data = [i as u8, i as u8];
+            da_service.send_transaction(&blob_data).await.await??;
         }
 
-        // Then saving
+        // Process the state transition
         let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
             pre_state_root,
             prover_storage,
@@ -849,6 +840,26 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         let last_finalized = da_service.get_last_finalized_block_header().await?;
         finalized_hashes.insert(last_finalized.hash());
 
+        // Check if we should rewind (AFTER processing, so it affects the next iteration)
+        let head = da_service.get_head_block_header().await?;
+        let head_height = head.height();
+        let last_finalized_height = last_finalized.height();
+        let blocks_since_last_rewind = head_height.saturating_sub(last_shuffled_height);
+
+        // Only rewind if we have blocks to rewind to (between finalized and head)
+        // and we're past the current block we just processed
+        let processed_height = returned_block.header().height();
+        let safe_min = std::cmp::max(last_finalized_height, processed_height);
+
+        if blocks_since_last_rewind > shuffle_after && head_height > safe_min + 1 {
+            let mut da_layer = da_layer.write().await;
+            // Rewind to a random height, ensuring at least one block above processed
+            let height_to_rewind = rng.gen_range((safe_min + 1)..head_height);
+            da_layer.rewind_to_height(height_to_rewind as u32).await?;
+            last_shuffled_height = height_to_rewind;
+        }
+
+        // Next height is always the one after what we just processed
         height = returned_block.header().height() + 1;
     }
 
@@ -875,13 +886,13 @@ async fn test_chain_progress_between_prepare_and_save_non_instant_finality() -> 
 
     for seed in [SEED_1, SEED_2, SEED_3] {
         // With empty blobs
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 6, seed)
+        test_chain_progress_between_prepare_storage_and_save_changes(finality, 100, 1, 2, 6, seed)
             .await?;
         // Shuffle every time
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 3, seed)
+        test_chain_progress_between_prepare_storage_and_save_changes(finality, 100, 1, 2, 3, seed)
             .await?;
         // Without empty blobs
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 0, 3, 6, seed)
+        test_chain_progress_between_prepare_storage_and_save_changes(finality, 100, 0, 3, 6, seed)
             .await?;
     }
 
@@ -937,7 +948,7 @@ proptest! {
             Just(1u32),
             Just(5u32)
         ],
-        loop_blocks in 1..=20usize,
+        loop_blocks in 1..=30usize,
         batches in prop_oneof![
             Just(1usize),
             Just(2usize),

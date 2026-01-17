@@ -547,12 +547,26 @@ where
     /// "current" chain is determined by runner, which increments height
     ///
     /// A block is a continuation if:
-    /// - It has NOT been processed yet (not in `state_on_block`)
+    /// - It has NOT been processed yet:
+    ///      - not in `state_on_block`
+    ///      - it is ABOVE the last processed finalized height (blocks at or below finalized height have already been processed)
     /// - Its predecessor HAS been processed (in `state_on_block`) OR its prev_hash matches the finalized header
     fn is_continuation(&self, block_header: &<Da::Spec as DaSpec>::BlockHeader) -> bool {
+        // Block at or below finalized height has already been processed
+        if block_header.height() <= self.last_processed_finalized_header.height() {
+            tracing::trace!(
+                block_height = block_header.height(),
+                finalized_height = self.last_processed_finalized_header.height(),
+                block_hash = %block_header.hash(),
+                "Block at or below finalized height, not a continuation"
+            );
+            return false;
+        }
+
         tracing::trace!(
             block_header = %block_header.display(),
             last_processed_finalized_header = %self.last_processed_finalized_header.display(),
+            state_on_block_len = self.state_on_block.len(),
             "Checking if block is a continuation");
 
         let processed = self.state_on_block.contains_key(&block_header.hash());
@@ -580,7 +594,7 @@ where
     /// Returns true if the block header represents a valid fork point during binary search.
     ///
     /// A block is a valid fork point if:
-    /// - It has NOT been processed yet (not in `state_on_block`)
+    /// - It has NOT been processed yet (not in `state_on_block`) and above last processed finalized height.
     /// - Its predecessor HAS been processed (in `state_on_block`)
     ///
     /// Note: Unlike `is_continuation`, this does not check the finalized header case
@@ -687,7 +701,6 @@ where
         // This is only possible if the earliest seen transition is not a direct descendant of the finalized block
         // Which means bug in another method.
         assert!(
-            // TODO: < or <= ?
             low < high,
             "Error in `low` earliest_seen={}, highest_seen={}, head_height={}",
             earliest_seen_height,
@@ -887,6 +900,7 @@ where
 
         if last_finalized_header.height() > highest_seen_transition {
             // Syncing case: DA is ahead of us
+            // TODO: PROBLEM: THIS RETURNED BLOCK CAN BE SOMETHING COMPLETELY WRONG AND NOT FINALIZED.
             Ok(self
                 .finalized_headers_provider
                 .get_block_header_at(highest_seen_transition)
@@ -990,34 +1004,27 @@ where
 
         // This is to safely connect blocks and avoid getting wrong block
         let mut next_hash_to_finalize = effective_finalized_header.hash();
-        // This is reverse range from finalized down to earliest seen
+        // This is **reverse** range from finalized down to earliest seen
         for height in range {
             let blocks_on_height = self
                 .seen_on_height
                 .remove(&height)
                 .expect("Should be at least one seen transition on each height");
 
-            let mut pushed_for_this_height = false;
-            for block_hash in blocks_on_height {
-                let transition = self
-                    .state_on_block
-                    .remove(&block_hash)
-                    .expect("Should be there");
-                if block_hash == next_hash_to_finalize {
-                    assert!(
-                        !pushed_for_this_height,
-                        "Should be only one finalized transition per height"
-                    );
-                    next_hash_to_finalize = transition.block_header.prev_hash();
-                    finalized_transitions.push(transition);
-                    pushed_for_this_height = true;
-                }
-            }
-            // But there's also another check after this is completed.
             assert!(
-                pushed_for_this_height,
-                "Should have pushed at least one transition for this height"
+                blocks_on_height.contains(&next_hash_to_finalize),
+                "We haven't seen transition {next_hash_to_finalize} that we suppose to finalize"
             );
+            let transition = self
+                .state_on_block
+                .remove(&next_hash_to_finalize)
+                .expect("Internal inconsistency between `seen_on_height` and `state_on_block`");
+
+            next_hash_to_finalize = transition.block_header.prev_hash();
+            finalized_transitions.push(transition);
+            for block_hash in blocks_on_height {
+                self.state_on_block.remove(&block_hash);
+            }
         }
 
         // Remove all entries in `seen_on_height` that have empty vectors.
@@ -1057,6 +1064,12 @@ where
 
         // 1. Determine effective finalized header (handles syncing/stale edge cases)
         let effective_finalized = self.get_effective_finalized_header(highest_seen).await?;
+        assert!(
+            self.state_on_block
+                .contains_key(&effective_finalized.hash())
+                || self.last_processed_finalized_header.hash() == effective_finalized.hash(),
+            "Effective finalized header must be a block we've processed"
+        );
 
         tracing::trace!(
             last_processed = %self.last_processed_finalized_header.display(),
