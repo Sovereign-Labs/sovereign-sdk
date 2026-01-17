@@ -182,7 +182,7 @@
           ]
         },
         {
-          "description": "Fail `get_block_at` or `get_block_header_at` after N successful calls. The counter decrements on each call; when it reaches 0, the call fails.",
+          "description": "Fail `get_block_at` or `get_block_header_at` after N successful calls. The counter decrements on each call; when it reaches 0, failures may occur based on the configured probability.",
           "type": "object",
           "required": [
             "fail_after_n_calls"
@@ -194,8 +194,15 @@
                 "remaining"
               ],
               "properties": {
+                "failure_probability": {
+                  "description": "Probability of failure (0-100). 100 = always fail, 0 = never fail.",
+                  "default": 100,
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                },
                 "remaining": {
-                  "description": "Number of successful calls remaining before failure.",
+                  "description": "Number of successful calls remaining before failures may start.",
                   "type": "integer",
                   "format": "uint64",
                   "minimum": 0.0
@@ -220,6 +227,39 @@
               "properties": {
                 "trigger_at_height": {
                   "description": "The height that triggers the reorg.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Add artificial delays to `get_block_at` or `get_block_header_at` after N calls. Useful for testing timeout handling and slow DA scenarios.",
+          "type": "object",
+          "required": [
+            "delay_after_n_calls"
+          ],
+          "properties": {
+            "delay_after_n_calls": {
+              "type": "object",
+              "required": [
+                "delay_range_ms",
+                "remaining"
+              ],
+              "properties": {
+                "delay_range_ms": {
+                  "description": "Range of delay in milliseconds. A random value from this range is used.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Range_of_uint64"
+                    }
+                  ]
+                },
+                "remaining": {
+                  "description": "Number of calls before delays start.",
                   "type": "integer",
                   "format": "uint64",
                   "minimum": 0.0
@@ -751,6 +791,25 @@
         "start": {
           "type": "integer",
           "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "Range_of_uint64": {
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint64",
           "minimum": 0.0
         }
       }

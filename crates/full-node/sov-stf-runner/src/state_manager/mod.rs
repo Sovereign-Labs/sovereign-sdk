@@ -988,12 +988,10 @@ where
             "Extracting finalized transitions from previously seen transitions"
         );
 
+        // This is to safely connect blocks and avoid getting wrong block
+        let mut next_hash_to_finalize = effective_finalized_header.hash();
+        // This is reverse range from finalized down to earliest seen
         for height in range {
-            let finalized_at_that_height = self
-                .finalized_headers_provider
-                .get_block_header_at(height)
-                .await?;
-
             let blocks_on_height = self
                 .seen_on_height
                 .remove(&height)
@@ -1005,15 +1003,21 @@ where
                     .state_on_block
                     .remove(&block_hash)
                     .expect("Should be there");
-                if block_hash == finalized_at_that_height.hash() {
+                if block_hash == next_hash_to_finalize {
                     assert!(
                         !pushed_for_this_height,
                         "Should be only one finalized transition per height"
                     );
+                    next_hash_to_finalize = transition.block_header.prev_hash();
                     finalized_transitions.push(transition);
                     pushed_for_this_height = true;
                 }
             }
+            // But there's also another check after this is completed.
+            assert!(
+                pushed_for_this_height,
+                "Should have pushed at least one transition for this height"
+            );
         }
 
         // Remove all entries in `seen_on_height` that have empty vectors.
