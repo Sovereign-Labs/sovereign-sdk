@@ -1,4 +1,7 @@
-# 2026-01-16 
+# 2026-01-17
+- #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
+
+# 2026-01-16
 - #2342 EVM: Populate the `gas_limit` for pending block.
 
 # 2026-01-14
