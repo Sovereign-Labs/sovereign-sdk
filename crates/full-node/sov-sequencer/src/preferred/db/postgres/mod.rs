@@ -278,6 +278,38 @@ impl PostgresBackend {
         Ok(res)
     }
 
+    /// Upserts this node's registration in the nodes table.
+    pub(crate) async fn upsert_node_registration(&self, node_address: &str) -> anyhow::Result<()> {
+        run_with_retries!(
+            &self.backoff_policy,
+            sqlx::query(
+                "INSERT INTO nodes (node_id, address, last_updated)
+                 VALUES ($1, $2, NOW())
+                 ON CONFLICT (node_id) DO UPDATE
+                 SET address = EXCLUDED.address,
+                     last_updated = NOW()",
+            )
+            .bind(&self.node_id)
+            .bind(node_address)
+            .execute(&self.pool),
+            "postgres_db_backend_upsert_node_registration"
+        )?;
+        Ok(())
+    }
+
+    /// Attempts to update leadership and register the node in the nodes table.
+    ///
+    /// This combines `try_update_leader` and `upsert_node_registration` into a single
+    /// operation to ensure the node is always registered when attempting leadership.
+    pub(crate) async fn try_update_leader_and_register_node(
+        &self,
+        node_address: &str,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let result = self.try_update_leader().await?;
+        self.upsert_node_registration(node_address).await?;
+        Ok(result)
+    }
+
     async fn prune_inner(
         &self,
         prune_up_to_including: SequenceNumber,
@@ -330,11 +362,6 @@ impl PostgresBackend {
             Some(leader_id) => leader_id == &self.node_id,
             None => false,
         }
-    }
-
-    /// Returns a reference to the connection pool.
-    pub fn pool(&self) -> &PgPool {
-        &self.pool
     }
 }
 

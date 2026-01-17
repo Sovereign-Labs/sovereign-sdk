@@ -88,6 +88,7 @@ where
             shutdown_sender.clone(),
             storage_path,
             &preferred_config.postgres_config,
+            bind_port,
         )
         .await?;
 

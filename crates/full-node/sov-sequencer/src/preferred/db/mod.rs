@@ -439,6 +439,7 @@ impl PreferredSequencerDb {
         shutdown_sender: watch::Sender<()>,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
+        bind_port: u16,
     ) -> anyhow::Result<(Self, SequencerRole)> {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
@@ -454,8 +455,13 @@ impl PreferredSequencerDb {
                         let backend =
                             PostgresBackend::connect_without_leadership(postgres_config).await?;
 
-                        // Try to become leader
-                        let maybe_leader = backend.try_update_leader().await?;
+                        // Compute node address for registration
+                        let node_address = leadership_election::compute_node_address(bind_port)?;
+
+                        // Try to become leader and register node
+                        let maybe_leader = backend
+                            .try_update_leader_and_register_node(&node_address)
+                            .await?;
                         let is_leader = maybe_leader
                             .map(|leader| leader.node_id == postgres_config.node_id)
                             .unwrap_or(false);

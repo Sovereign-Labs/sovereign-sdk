@@ -30,6 +30,13 @@ fn get_local_ip() -> Option<IpAddr> {
     socket.local_addr().ok().map(|addr| addr.ip())
 }
 
+/// Computes the node address from the local IP and bind port.
+pub fn compute_node_address(bind_port: u16) -> Result<String> {
+    let local_ip =
+        get_local_ip().ok_or_else(|| anyhow::anyhow!("Failed to determine local IP address"))?;
+    Ok(format!("{}:{}", local_ip, bind_port))
+}
+
 /// Manages leadership election and heartbeat for DbElected nodes.
 pub struct LeadershipElectionTask {
     backend: PostgresBackend,
@@ -53,9 +60,7 @@ impl LeadershipElectionTask {
         let shutdown_receiver = shutdown_sender.subscribe();
 
         // Compute node address from local IP and bind_port
-        let local_ip = get_local_ip()
-            .ok_or_else(|| anyhow::anyhow!("Failed to determine local IP address"))?;
-        let node_address = format!("{}:{}", local_ip, bind_port);
+        let node_address = compute_node_address(bind_port)?;
 
         Ok(Self {
             backend,
@@ -66,31 +71,22 @@ impl LeadershipElectionTask {
         })
     }
 
-    /// Attempts to acquire leadership.
+    /// Attempts to acquire leadership and registers the node in the nodes table.
     ///
     /// Returns `true` if this node successfully became the leader.
     /// Returns `false` if another node is the leader.
+    ///
+    /// This method always registers the node in the nodes table, regardless of
+    /// whether leadership was acquired.
     pub async fn try_acquire_leadership(&self) -> Result<bool> {
-        match self.backend.try_update_leader().await? {
+        match self
+            .backend
+            .try_update_leader_and_register_node(&self.node_address)
+            .await?
+        {
             Some(leader) => Ok(leader.node_id == self.node_id),
             None => Ok(false),
         }
-    }
-
-    /// Upserts this node's registration in the nodes table.
-    async fn upsert_node_registration(&self) -> Result<()> {
-        sqlx::query(
-            "INSERT INTO nodes (node_id, address, last_updated)
-             VALUES ($1, $2, NOW())
-             ON CONFLICT (node_id) DO UPDATE
-             SET address = EXCLUDED.address,
-                 last_updated = NOW()",
-        )
-        .bind(&self.node_id)
-        .bind(&self.node_address)
-        .execute(self.backend.pool())
-        .await?;
-        Ok(())
     }
 
     /// Spawns the leader heartbeat task.
@@ -105,11 +101,6 @@ impl LeadershipElectionTask {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, address = %self.node_address, "Starting leader heartbeat task");
 
-            // Initial node registration
-            if let Err(e) = self.upsert_node_registration().await {
-                warn!(error = ?e, "Failed initial node registration");
-            }
-
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
@@ -122,12 +113,8 @@ impl LeadershipElectionTask {
 
                 match self.try_acquire_leadership().await {
                     Ok(true) => {
-                        // Successfully refreshed leadership
+                        // Successfully refreshed leadership and node registration
                         tracing::trace!("Leadership heartbeat successful");
-                        // Also update node registration
-                        if let Err(e) = self.upsert_node_registration().await {
-                            warn!(error = ?e, "Failed to update node registration");
-                        }
                     }
                     Ok(false) => {
                         error!(
@@ -159,11 +146,6 @@ impl LeadershipElectionTask {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, address = %self.node_address, "Starting replica election task");
 
-            // Initial node registration
-            if let Err(e) = self.upsert_node_registration().await {
-                warn!(error = ?e, "Failed initial node registration");
-            }
-
             let mut interval = tokio::time::interval(ELECTION_INTERVAL);
 
             loop {
@@ -172,11 +154,6 @@ impl LeadershipElectionTask {
                 if self.shutdown_receiver.has_changed().unwrap_or(true) {
                     info!("Shutdown signal received, stopping election task");
                     return;
-                }
-
-                // Update node registration
-                if let Err(e) = self.upsert_node_registration().await {
-                    warn!(error = ?e, "Failed to update node registration");
                 }
 
                 match self.try_acquire_leadership().await {

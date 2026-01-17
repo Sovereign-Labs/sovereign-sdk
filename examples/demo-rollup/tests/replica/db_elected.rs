@@ -131,16 +131,36 @@ async fn test_db_elected_leader_failover() {
         cluster_info.followers
     );
 
-    // Verify we have a leader and one follower
+    // Verify we have a leader in the nodes table
+    let initial_leader = cluster_info
+        .leader
+        .as_ref()
+        .expect("Expected a leader to be present in nodes table");
     assert!(
-        cluster_info.leader.is_some(),
-        "Expected a leader to be present"
+        initial_leader.node_id == "node1" || initial_leader.node_id == "node2",
+        "Leader node_id should be node1 or node2, got {}",
+        initial_leader.node_id
     );
+
+    // Verify we have exactly one follower in the nodes table
     assert_eq!(
         cluster_info.followers.len(),
         1,
-        "Expected exactly one follower"
+        "Expected exactly one follower in nodes table"
     );
+    let initial_follower = &cluster_info.followers[0];
+    assert!(
+        initial_follower.node_id == "node1" || initial_follower.node_id == "node2",
+        "Follower node_id should be node1 or node2, got {}",
+        initial_follower.node_id
+    );
+    assert_ne!(
+        initial_leader.node_id, initial_follower.node_id,
+        "Leader and follower should have different node_ids"
+    );
+
+    // Remember the follower's node_id - this should become the new leader after failover
+    let expected_new_leader_id = initial_follower.node_id.clone();
 
     // Kill the leader
     let _ = leader.shutdown().await;
@@ -183,10 +203,15 @@ async fn test_db_elected_leader_failover() {
         cluster_info.followers
     );
 
-    // Verify the former replica is now the leader
-    assert!(
-        cluster_info.leader.is_some(),
-        "Expected a leader after failover"
+    // Verify the former follower is now the leader in the sequencer_leader table
+    let new_leader = cluster_info
+        .leader
+        .as_ref()
+        .expect("Expected a leader after failover");
+    assert_eq!(
+        new_leader.node_id, expected_new_leader_id,
+        "Expected the former follower ({}) to be the new leader, got {}",
+        expected_new_leader_id, new_leader.node_id
     );
 
     let _ = restarted_rollup.shutdown().await;
