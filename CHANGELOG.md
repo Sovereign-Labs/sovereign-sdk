@@ -1,3 +1,6 @@
+# 2026-01-17
+- #2353 **Breaking Change** IGP module now requires an `admin` address in genesis config. The `quote-dispatch` API no longer requires a relayer parameter - it falls back to the admin's relayer config when not specified.
+
 # 2026-01-09
 - #2266 **Breaking Change** Replaces `is_replica` with the `NodeRole` enum. Users must update the `PostgreSQL` sections in `rollup_config.toml` to specify node_role.
 
