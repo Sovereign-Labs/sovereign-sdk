@@ -364,13 +364,23 @@ where
                     "Mismatch in block hashes after transition",
                 );
             }
-            // This is not the case anymore
-            // TODO: How to better check that it is not messed up?
-            // Check that initial state root is known and matches block, right?
-            // assert_eq!(
-            //     transition_witness.initial_state_root.as_ref(),
-            //     self.last_processed_finalized_state_root.as_ref(),
-            //     "Wrong transition, its pre_state_root does not match the current state root of StateManager");
+            match self
+                .state_on_block
+                .get(&transition_witness.da_block_header.prev_hash())
+            {
+                None => {
+                    assert_eq!(
+                        transition_witness.initial_state_root.as_ref(),
+                        self.last_processed_finalized_state_root.as_ref(),
+                        "Wrong transition, its pre_state_root does not match the state in StateManager");
+                }
+                Some(state_on_prev_block) => {
+                    assert_eq!(
+                        transition_witness.initial_state_root.as_ref(),
+                        state_on_prev_block.post_state_root.as_ref(),
+                        "Wrong transition, its pre_state_root does not match the current state root of StateManager");
+                }
+            };
         }
         self.state_on_block
             .insert(block_header.hash(), seen_state_on_block);
@@ -1029,7 +1039,7 @@ where
             .get_highest_seen_height()
             .expect("Should be called after at least single transition added");
 
-        debug_assert!(
+        assert!(
             earliest_seen <= highest_seen,
             "bug in state manager. earliest and highest transition numbers are calculated incorrectly"
         );
@@ -1078,12 +1088,11 @@ where
 
     // Checks that all earliest seen transitions point to the same block hash.
     fn verify_earliest_seen(&self) {
-        #[cfg(debug_assertions)]
         if let Some(earliest_blocks) = self.seen_on_height.first_key_value() {
             let expected_prev_hash = self.last_processed_finalized_header.hash();
             for block_hash in earliest_blocks.1 {
                 let actual_prev_hash = self.get_prev_hash(block_hash);
-                debug_assert_eq!(
+                assert_eq!(
                     actual_prev_hash, expected_prev_hash,
                     "Earliest seen transition {} has prev_hash={}, expected={} (last_processed_finalized_header={})",
                     block_hash,
