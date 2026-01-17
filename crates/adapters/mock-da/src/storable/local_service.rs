@@ -26,6 +26,30 @@ const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
 const EXTRA_TIME_FOR_MAX_BLOCK: Duration = Duration::from_secs(10);
 const GET_BLOCK_ATTEMPTS: usize = 10;
 
+/// Configurable failure behavior for testing error handling in consumers of MockDa.
+/// This allows tests to inject failures at specific points during DA operations.
+#[derive(Debug, Default)]
+pub enum FailureBehavior {
+    /// No failures (default behavior).
+    #[default]
+    None,
+    /// Fail `get_block_at` or `get_block_header_at` after N successful calls.
+    /// The counter decrements on each call; when it reaches 0, the call fails.
+    FailAfterNCalls {
+        /// Number of successful calls remaining before failure.
+        remaining: u64,
+    },
+    /// Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or
+    /// `get_block_header_at` is called for a specific height.
+    /// After the reorg is triggered, subsequent calls proceed normally.
+    ReorgDuringCall {
+        /// The height that triggers the reorg.
+        trigger_at_height: u64,
+        /// Whether the reorg has already been triggered.
+        triggered: bool,
+    },
+}
+
 impl BlockProducingConfig {
     fn get_max_waiting_time_for_block(&self) -> Duration {
         match self {
@@ -106,6 +130,9 @@ pub struct StorableMockDaService {
     pub(crate) block_producer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     pub(crate) block_producing_pauser: Arc<Mutex<Option<watch::Sender<()>>>>,
     pub(crate) send_transaction_success: Arc<AtomicBool>,
+    /// Configurable failure behavior for testing. Allows injecting failures
+    /// or reorgs during `get_block_at` / `get_block_header_at` calls.
+    failure_behavior: Arc<Mutex<FailureBehavior>>,
 }
 
 impl StorableMockDaService {
@@ -131,6 +158,7 @@ impl StorableMockDaService {
             block_producer_handle: Arc::new(Mutex::new(block_producer_handle)),
             block_producing_pauser: Arc::new(Mutex::new(None)),
             send_transaction_success: Arc::new(AtomicBool::new(true)),
+            failure_behavior: Arc::new(Mutex::new(FailureBehavior::None)),
         }
     }
     /// The `send_transaction` method will fail to post blobs to the DA.
@@ -152,6 +180,30 @@ impl StorableMockDaService {
     /// The `send_transaction` method will start posting blobs to the DA.
     pub fn set_success_send_blob(&self) {
         self.send_transaction_success.store(true, Ordering::Relaxed);
+    }
+
+    /// Configure DA to fail `get_block_at` / `get_block_header_at` after N successful calls.
+    /// When the counter reaches 0, the next call will return an error.
+    pub async fn set_fail_after_n_calls(&self, n: u64) {
+        let mut behavior = self.failure_behavior.lock().await;
+        *behavior = FailureBehavior::FailAfterNCalls { remaining: n };
+    }
+
+    /// Configure DA to trigger a reorg (shuffle non-finalized blobs) when
+    /// `get_block_at` / `get_block_header_at` is called for the specified height.
+    /// The reorg triggers once; subsequent calls for that height proceed normally.
+    pub async fn set_reorg_during_get_block(&self, height: u64) {
+        let mut behavior = self.failure_behavior.lock().await;
+        *behavior = FailureBehavior::ReorgDuringCall {
+            trigger_at_height: height,
+            triggered: false,
+        };
+    }
+
+    /// Clear any configured failure behavior, returning to normal operation.
+    pub async fn clear_failure_behavior(&self) {
+        let mut behavior = self.failure_behavior.lock().await;
+        *behavior = FailureBehavior::None;
     }
 
     /// Suspend blob submission in the mock DA.
@@ -357,8 +409,51 @@ impl StorableMockDaService {
         Ok(stream.boxed())
     }
 
+    /// Checks and applies any configured failure behavior before a DA call.
+    /// Returns `Ok(())` if the call should proceed, or an error if it should fail.
+    /// May trigger side effects like reorgs based on the configured behavior.
+    async fn check_and_apply_failure_behavior(&self, height: u64) -> anyhow::Result<()> {
+        use rand::SeedableRng;
+
+        let mut behavior = self.failure_behavior.lock().await;
+        match &mut *behavior {
+            FailureBehavior::None => Ok(()),
+            FailureBehavior::FailAfterNCalls { remaining } => {
+                if *remaining == 0 {
+                    anyhow::bail!(
+                        "StorableMockDaService: Injected failure (FailAfterNCalls reached 0)"
+                    );
+                }
+                *remaining -= 1;
+                Ok(())
+            }
+            FailureBehavior::ReorgDuringCall {
+                trigger_at_height,
+                triggered,
+            } => {
+                if height == *trigger_at_height && !*triggered {
+                    *triggered = true;
+                    // Drop the mutex before acquiring write lock on DA layer
+                    drop(behavior);
+                    tracing::info!(
+                        %height,
+                        "Triggering injected reorg during get_block call"
+                    );
+                    // Trigger a shuffle with a deterministic RNG for reproducibility
+                    let mut rng = rand::rngs::StdRng::seed_from_u64(height);
+                    let mut da_layer = self.da_layer.write().await;
+                    da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
+                }
+                Ok(())
+            }
+        }
+    }
+
     pub(crate) async fn get_block_at_inner(&self, height: u64) -> anyhow::Result<MockBlock> {
         tracing::trace!(%height, "Getting block at");
+        // Check failure injection before proceeding
+        self.check_and_apply_failure_behavior(height).await?;
+
         if height > u32::MAX as u64 {
             return Err(anyhow::anyhow!(
                 "Height {} is too big for StorableMockDaService. Max is {}",
@@ -397,6 +492,9 @@ impl StorableMockDaService {
         height: u64,
     ) -> anyhow::Result<MockBlockHeader> {
         tracing::trace!(%height, "Getting block header at");
+        // Check failure injection before proceeding
+        self.check_and_apply_failure_behavior(height).await?;
+
         if height > u32::MAX as u64 {
             return Err(anyhow::anyhow!(
                 "Height {} is too big for StorableMockDaService. Max is {}",

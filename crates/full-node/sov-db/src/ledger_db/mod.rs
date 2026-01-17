@@ -538,6 +538,13 @@ impl LedgerDb {
             .get_largest::<SlotByNumber>()
     }
 
+    /// Get the state root from the most recent committed slot, if any.
+    pub fn get_head_state_root(&self) -> anyhow::Result<Option<Vec<u8>>> {
+        Ok(self
+            .get_head_slot()?
+            .map(|(_, slot)| slot.state_root.as_ref().to_vec()))
+    }
+
     /// Materializes aggregated zk proof
     pub fn materialize_aggregated_proof(
         &self,
