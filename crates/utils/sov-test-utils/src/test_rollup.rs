@@ -51,7 +51,7 @@ use sov_sequencer::preferred::{
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{
-    SequencerApis, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig,
+    SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole, SovRateLimiterConfig,
     StateUpdateNotification,
 };
 pub use sov_stf_runner::processes::RollupProverConfig;
@@ -818,6 +818,11 @@ where
                 false
             }
         }
+    }
+
+    /// Returns the current sequencer role.
+    pub async fn sequencer_role(&self) -> anyhow::Result<SequencerRole> {
+        self.client.query_rest_endpoint("/sequencer/role").await
     }
 
     /// Polls the sequencer until is_ready() returns Err(). Useful when you expect the sequencer to

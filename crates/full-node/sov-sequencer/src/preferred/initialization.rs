@@ -1,3 +1,4 @@
+use crate::preferred::db::leadership_election::LeadershipElectionTask;
 use crate::preferred::db::SequencerRole;
 
 use super::*;
@@ -228,6 +229,21 @@ where
                     .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);
+            }
+        }
+
+        // Launch leadership task for DbElected nodes
+        if let Some(postgres_config) = &preferred_config.postgres_config {
+            if postgres_config.node_role == NodeRole::DbElected {
+                let election_task =
+                    LeadershipElectionTask::new(postgres_config, shutdown_sender.clone()).await?;
+
+                let leadership_handle = match seq_role {
+                    SequencerRole::Leader => election_task.spawn_leader_heartbeat_task(),
+                    SequencerRole::Replica => election_task.spawn_replica_election_task(),
+                    _ => unreachable!("DbElected should only result in Leader or Replica role"),
+                };
+                handles.push(leadership_handle);
             }
         }
 

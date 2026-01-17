@@ -737,6 +737,10 @@ where
             Ok(TxStatus::Unknown)
         }
     }
+
+    async fn sequencer_role(&self) -> crate::SequencerRole {
+        crate::SequencerRole::Leader
+    }
 }
 
 #[async_trait]

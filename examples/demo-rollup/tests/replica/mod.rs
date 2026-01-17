@@ -30,6 +30,7 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
+mod db_elected;
 mod replica_gets_txs_from_master;
 mod start_stop;
 

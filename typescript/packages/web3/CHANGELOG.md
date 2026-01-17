@@ -1,5 +1,11 @@
 # @sovereign-sdk/web3
 
+## 0.12.3
+
+### Patch Changes
+
+-   647ba3b: Fix version comparison for checking if tx failure is due to version mismatch
+
 ## 0.12.2
 
 ### Patch Changes
