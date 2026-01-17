@@ -1,5 +1,12 @@
 # @sovereign-sdk/web3
 
+## 0.12.4
+
+### Patch Changes
+
+-   Updated dependencies [fc00847]
+    -   @sovereign-sdk/signers@0.5.2
+
 ## 0.12.3
 
 ### Patch Changes
