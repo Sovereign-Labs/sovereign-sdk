@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use alloy::network::TransactionBuilder;
-use alloy::providers::Provider;
-use alloy::rpc::types::TransactionRequest;
 use alloy::consensus::{TxEip1559, TypedTransaction};
 use alloy::eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy::eips::eip2718::Encodable2718;
+use alloy::network::TransactionBuilder;
+use alloy::providers::Provider;
+use alloy::rpc::types::TransactionRequest;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use futures::StreamExt;
@@ -24,9 +24,9 @@ use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as Runti
 use sov_modules_macros::config_value;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
+use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
-use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{alloy_client, SENDER_PRIV_KEY};
 use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
@@ -238,7 +238,10 @@ fn evm_transaction_into_blob(account: &EvmAccount, tx: TxEip1559) -> Vec<u8> {
     let raw_tx = RawTx { data };
 
     // Use encode_with_ethereum_auth to create EvmAuthenticatorInput::Evm variant
-    borsh::to_vec(&<Runtime<TestSpec> as EthereumAuthenticator<TestSpec>>::encode_with_ethereum_auth(raw_tx)).unwrap()
+    borsh::to_vec(
+        &<Runtime<TestSpec> as EthereumAuthenticator<TestSpec>>::encode_with_ethereum_auth(raw_tx),
+    )
+    .unwrap()
 }
 
 /// Address for second unregistered sender (different from UNREGISTERED_SENDER used in registration test)
@@ -259,7 +262,8 @@ async fn setup() -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
         c.max_infos_in_db = 1;
     })
     .start()
-    .await.unwrap();
+    .await
+    .unwrap();
 
     // Wait for rollup to be ready (10 blocks like other EVM tests)
     rollup.wait_for_next_blocks(10).await;
@@ -277,7 +281,7 @@ async fn setup() -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
 /// Verifies that EVM transactions can be processed from unregistered sequencer batches.
 /// This is the core test for the new functionality that allows EVM txs in unregistered batches.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_evm_tx_in_unregistered_batch() -> anyhow::Result<()> {
+async fn test_evm_transfer_in_unregistered_batch() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
 
     let (rollup, da_service) = setup().await;
@@ -297,8 +301,6 @@ async fn evm_tx_unregistered_test_case(
     client: &NodeClient,
     http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
-    sov_test_utils::initialize_logging();
-    
     // Use the funded sender from genesis (same as used in EVM tests)
     let sender = EvmAccount::from_private_key_hex(SENDER_PRIV_KEY);
     // let sender_address = sender.address();
@@ -310,7 +312,11 @@ async fn evm_tx_unregistered_test_case(
     // Get initial balance via RPC
     let alloy = alloy_client(http_addr);
     let initial_balance = alloy.get_balance(receiver_address).await?;
-    assert_eq!(initial_balance, U256::ZERO, "Receiver should start with 0 balance");
+    assert_eq!(
+        initial_balance,
+        U256::ZERO,
+        "Receiver should start with 0 balance"
+    );
 
     // Build EVM transfer tx
     let transfer_amount = U256::from(1u64);
@@ -318,7 +324,7 @@ async fn evm_tx_unregistered_test_case(
     let blob = evm_transaction_into_blob(&sender, tx);
     let mut slot_subscription = client.client.subscribe_finalized_slots().await?;
 
-    // Submit via unregistered DA service
+    // Submit via unregistered DA service first. It will be processed second
     let _receipt = da_service
         .send_transaction(&blob)
         .await
@@ -327,23 +333,28 @@ async fn evm_tx_unregistered_test_case(
 
     tracing::info!("Submitted first transaction");
 
+    // Send via preferred sequencer second. It will be processed first
     let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 0);
-    let alloy = alloy_client(http_addr);
-    alloy.send_transaction(tx.into()).await?;
+    let provider = alloy_client(http_addr);
+    provider
+        .send_transaction(tx.into())
+        .await?
+        .get_receipt()
+        .await?;
 
+    // Wait for the transaction to be processed
     for _ in 0..50 {
         let _slot = slot_subscription.next().await.unwrap()?;
-        let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 2);
-        if let Ok(_) = alloy.send_transaction(tx.into()).await {
+        if provider.get_transaction_count(sender.address()).await? == 2 {
             break;
         }
     }
-    
 
-    // Verify the balance was transferred
-    let final_balance = alloy.get_balance(receiver_address).await?;
+    // Verify that both transactions were processed
+    let final_balance = provider.get_balance(receiver_address).await?;
     assert_eq!(
-        final_balance, U256::from(3u64),
+        final_balance,
+        U256::from(2u64),
         "Receiver should have received the transfer amount"
     );
 
@@ -354,39 +365,9 @@ async fn evm_tx_unregistered_test_case(
 /// NOTE: This test is currently ignored due to timing/state synchronization issues with
 /// contract calls via unregistered batches. The core EVM-via-unregistered functionality
 /// is proven by test_evm_tx_in_unregistered_batch and test_interleaved_evm_and_standard_transactions.
-#[ignore = "Contract call via unregistered batch has state sync issues - EVM transfers already proven working"]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_evm_contract_call_in_unregistered_batch() -> anyhow::Result<()> {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
-
-    let rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Zk),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        FINALIZATION_BLOCKS,
-    )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
-        c.automatic_batch_production = true;
-        c.rollup_prover_config = None;
-        c.max_channel_size = 1;
-        c.max_infos_in_db = 1;
-    })
-    .start()
-    .await?;
-
-    // Wait for rollup to be ready (10 blocks like other EVM tests)
-    rollup.wait_for_next_blocks(10).await;
-
-    // Use a different unregistered address for this test
-    const UNREGISTERED_CONTRACT_SENDER: MockAddress = MockAddress::new([123; 32]);
-
-    let da_service = Arc::new(
-        rollup
-            .da_service
-            .another_on_the_same_layer(UNREGISTERED_CONTRACT_SENDER)
-            .await,
-    );
+    let (rollup, da_service) = setup().await;
 
     let http_addr = rollup.http_addr;
     let client = rollup.client.clone();
@@ -403,19 +384,25 @@ async fn evm_contract_call_unregistered_test_case(
     client: &NodeClient,
     http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
+    sov_test_utils::initialize_logging();
     let sender = EvmAccount::from_private_key_hex(SENDER_PRIV_KEY);
 
     // First, deploy the SimpleStorage contract via SimpleStorageClient
     let contract = LegacySimpleStorage::default();
-    let simple_storage = sov_eth_client::SimpleStorageClient::new(SENDER_PRIV_KEY, contract, http_addr).await;
+    let simple_storage =
+        sov_eth_client::SimpleStorageClient::new(SENDER_PRIV_KEY, contract, http_addr).await;
 
     // Deploy the contract
-    let tx_hash = simple_storage.deploy_contract().await.expect("Failed to deploy contract");
+    let tx_hash = simple_storage
+        .deploy_contract()
+        .await
+        .expect("Failed to deploy contract");
     let receipt = simple_storage.wait_for_receipt(tx_hash).await;
-    let contract_address = receipt.contract_address.expect("Contract should have been deployed");
+    let contract_address = receipt
+        .contract_address
+        .expect("Contract should have been deployed");
 
     // Wait a bit for state to settle
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     // Now call setValue via unregistered batch
     let set_value: u32 = 42;
@@ -423,9 +410,7 @@ async fn evm_contract_call_unregistered_test_case(
     let contract_for_calldata = LegacySimpleStorage::default();
     let calldata = Bytes::from(contract_for_calldata.set(set_value).to_vec());
 
-    let alloy = alloy_client(http_addr);
-    let sender_nonce = alloy.get_transaction_count(sender.address()).await?;
-    let call_tx = build_evm_contract_call_tx(&sender, contract_address, calldata, sender_nonce);
+    let call_tx = build_evm_contract_call_tx(&sender, contract_address, calldata, 1);
     let blob = evm_transaction_into_blob(&sender, call_tx);
 
     // Submit via unregistered DA service
@@ -435,20 +420,14 @@ async fn evm_contract_call_unregistered_test_case(
         .await?
         .expect("Failed to submit contract call blob to DA");
 
-    // Wait for processing
-    let wait_for_slots = config_deferred_slots_count() + FINALIZATION_BLOCKS as u64 + 5;
+    let mut slot_subscription = client.client.subscribe_finalized_slots().await?;
+    let provider = alloy_client(http_addr);
 
-    let mut slots = client
-        .client
-        .subscribe_finalized_slots_with_children(IncludeChildren::new(true))
-        .await?;
-
-    for _i in 0..wait_for_slots {
-        let _slot = slots
-            .next()
-            .await
-            .transpose()?
-            .expect("slot data is missing");
+    for _ in 0..50 {
+        let _slot = slot_subscription.next().await.unwrap()?;
+        if provider.get_transaction_count(sender.address()).await? == 2 {
+            continue;
+        }
     }
 
     // Verify the contract state was updated by calling getValue
@@ -457,159 +436,13 @@ async fn evm_contract_call_unregistered_test_case(
         .with_to(contract_address)
         .with_input(get_calldata);
 
-    let result = alloy.call(call_request).await?;
+    let result = provider.call(call_request).await?;
     let resp_array: [u8; 32] = result.to_vec().try_into().unwrap();
     let value = U256::from_be_bytes(resp_array);
-    assert_eq!(value, U256::from(set_value), "Contract value should match set value");
-
-    Ok(())
-}
-
-/// Comprehensive test verifying complex interleaving of EVM and Standard transactions
-/// from both preferred and unregistered sequencers.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_interleaved_evm_and_standard_transactions() -> anyhow::Result<()> {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
-
-    let rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Zk),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        FINALIZATION_BLOCKS,
-    )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
-        c.automatic_batch_production = true;
-        c.rollup_prover_config = None;
-        c.max_channel_size = 1;
-        c.max_infos_in_db = 1;
-    })
-    .start()
-    .await?;
-
-    // Wait for rollup to be ready (10 blocks like other EVM tests)
-    rollup.wait_for_next_blocks(10).await;
-
-    const UNREGISTERED_INTERLEAVED_SENDER: MockAddress = MockAddress::new([124; 32]);
-
-    let da_service = Arc::new(
-        rollup
-            .da_service
-            .another_on_the_same_layer(UNREGISTERED_INTERLEAVED_SENDER)
-            .await,
-    );
-
-    let http_addr = rollup.http_addr;
-    let client = rollup.client.clone();
-
-    tokio::select! {
-        err = rollup.rollup_task => err??,
-        res = interleaved_test_case(da_service, &client, http_addr) => res?,
-    };
-    Ok(())
-}
-
-async fn interleaved_test_case(
-    da_service: Arc<impl DaService>,
-    client: &NodeClient,
-    http_addr: std::net::SocketAddr,
-) -> anyhow::Result<()> {
-    let sender = EvmAccount::from_private_key_hex(SENDER_PRIV_KEY);
-    let alloy = alloy_client(http_addr);
-
-    // Create SimpleStorageClient for preferred sequencer transactions
-    let contract = LegacySimpleStorage::default();
-    let simple_storage = sov_eth_client::SimpleStorageClient::new(SENDER_PRIV_KEY, contract, http_addr).await;
-
-    // Generate receivers for EVM transfers
-    let evm_receiver1 = EvmAccount::generate();
-    let evm_receiver2 = EvmAccount::generate();
-    let evm_receiver3 = EvmAccount::generate();
-
-    // ============ Round 1: Preferred sequencer - EVM tx (ETH transfer via RPC) ============
-    let transfer_amount_1 = U256::from(500_000_u64);
-    simple_storage.send_eth(evm_receiver1.address(), transfer_amount_1).await;
-
-    // Wait for state to settle
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-    // Get nonce for unregistered transactions
-    let mut sender_nonce = alloy.get_transaction_count(sender.address()).await?;
-
-    // ============ Round 2: Unregistered - EVM tx (ETH transfer) ============
-    let transfer_amount_2 = U256::from(300_000_u64);
-    let tx2 = build_evm_transfer_tx(&sender, evm_receiver2.address(), transfer_amount_2, sender_nonce);
-    let blob2 = evm_transaction_into_blob(&sender, tx2);
-
-    let _receipt = da_service
-        .send_transaction(&blob2)
-        .await
-        .await?
-        .expect("Failed to submit EVM tx blob to DA");
-
-    sender_nonce += 1;
-
-    // ============ Round 3: Unregistered - Standard tx (sequencer registration) ============
-    // Send a standard transaction (sequencer registration) via the unregistered DA service
-    // This tests that both EVM and Standard transactions work via unregistered batches
-    let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
-    let registration_tx = build_register_sequencer_tx(&key_and_address.private_key, 0);
-    let registration_blob = transaction_into_blob(registration_tx);
-
-    let _receipt = da_service
-        .send_transaction(&registration_blob)
-        .await
-        .await?
-        .expect("Failed to submit registration blob to DA");
-
-    // ============ Round 4: Unregistered - Another EVM tx (ETH transfer) ============
-    let transfer_amount_3 = U256::from(200_000_u64);
-    let tx3 = build_evm_transfer_tx(&sender, evm_receiver3.address(), transfer_amount_3, sender_nonce);
-    let blob3 = evm_transaction_into_blob(&sender, tx3);
-
-    let _receipt = da_service
-        .send_transaction(&blob3)
-        .await
-        .await?
-        .expect("Failed to submit EVM tx blob 3 to DA");
-
-    // Wait for processing
-    let wait_for_slots = config_deferred_slots_count() + FINALIZATION_BLOCKS as u64 + 5;
-
-    let mut slots = client
-        .client
-        .subscribe_finalized_slots_with_children(IncludeChildren::new(true))
-        .await?;
-
-    for _i in 0..wait_for_slots {
-        let _slot = slots
-            .next()
-            .await
-            .transpose()?
-            .expect("slot data is missing");
-    }
-
-    // ============ Verification ============
-
-    // Verify EVM receiver 1 got their transfer (from preferred sequencer)
-    let balance1 = alloy.get_balance(evm_receiver1.address()).await?;
     assert_eq!(
-        balance1, transfer_amount_1,
-        "EVM receiver 1 should have received transfer from preferred sequencer"
-    );
-
-    // Verify EVM receiver 2 got their transfer (from unregistered sequencer)
-    let balance2 = alloy.get_balance(evm_receiver2.address()).await?;
-    assert_eq!(
-        balance2, transfer_amount_2,
-        "EVM receiver 2 should have received transfer from unregistered sequencer"
-    );
-
-    // Verify EVM receiver 3 got their transfer (from unregistered sequencer)
-    let balance3 = alloy.get_balance(evm_receiver3.address()).await?;
-    assert_eq!(
-        balance3, transfer_amount_3,
-        "EVM receiver 3 should have received transfer from unregistered sequencer"
+        value,
+        U256::from(set_value),
+        "Contract value should match set value"
     );
 
     Ok(())

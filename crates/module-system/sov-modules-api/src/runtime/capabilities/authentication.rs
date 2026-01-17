@@ -80,7 +80,9 @@ pub trait TransactionAuthenticator<S: Spec> {
     /// This is *not*  a significant DOS vector as long as gas consumption *during authentication* is reasonably low because (1)
     /// the blob storage capability bounds the number of unregistered blobs that can be submitted,
     /// and (2) if authentication succeeds then the gas for the blob is paid by the submitter.
-    fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + crate::StateMetricsProvider,>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + crate::StateMetricsProvider,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, UnregisteredAuthenticationError>;
@@ -195,7 +197,11 @@ where
         Ok(calculate_hash::<S>(&input.data))
     }
 
-    fn authenticate_unregistered<Accessor: ProvableStateReader<sov_state::User, Spec = S> + crate::GetGasPrice<Spec = S> + crate::StateMetricsProvider>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<sov_state::User, Spec = S>
+            + crate::GetGasPrice<Spec = S>
+            + crate::StateMetricsProvider,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         pre_exec_ws: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, UnregisteredAuthenticationError> {

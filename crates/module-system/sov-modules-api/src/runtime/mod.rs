@@ -120,7 +120,6 @@ pub trait Runtime<S: Spec>:
         auth_data: <Self::Auth as TransactionAuthenticator<S>>::Decodable,
     ) -> Self::Decodable;
 
-
     /// Gets the processing delay in milliseconds for a given transaction.
     /// Returns 0 if no delay is configured.
     ///
