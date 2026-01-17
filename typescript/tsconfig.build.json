@@ -2,7 +2,7 @@
   "compilerOptions": {
     "lib": ["es2020", "dom"],
     "module": "esnext",
-    "target": "es6",
+    "target": "es2020",
     "moduleResolution": "bundler",
     "sourceMap": true,
     "strict": true,
