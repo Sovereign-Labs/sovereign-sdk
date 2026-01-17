@@ -2,42 +2,9 @@ import type { MetaMaskInpageProvider } from "@metamask/providers";
 import * as secp from "@noble/secp256k1";
 import { KnownTypeId, Schema } from "@sovereign-sdk/universal-wallet-wasm";
 import { hexToBytes } from "@sovereign-sdk/utils";
+import { type Signature, parseSignature } from "viem";
 import { SignerError } from "../errors";
 import type { Signer } from "../signer";
-
-/**
- * Parsed ECDSA signature components.
- */
-interface ParsedSignature {
-  r: Uint8Array;
-  s: Uint8Array;
-  yParity: number;
-}
-
-/**
- * Parse a 65-byte hex signature string into r, s, and recovery bit.
- * Format: [0x] + r (32 bytes) + s (32 bytes) + v (1 byte)
- * Accepts signatures with or without "0x" prefix.
- * v is either 27/28 (legacy) or 0/1 (EIP-155)
- */
-function parseSignatureHex(signatureHex: string): ParsedSignature {
-  // Normalize: strip "0x" prefix if present
-  const hex = signatureHex.startsWith("0x")
-    ? signatureHex.slice(2)
-    : signatureHex;
-  const sigBytes = hexToBytes(hex);
-  if (sigBytes.length !== 65) {
-    throw new Error(
-      `Invalid signature length: expected 65 bytes, got ${sigBytes.length}`,
-    );
-  }
-  const r = sigBytes.slice(0, 32);
-  const s = sigBytes.slice(32, 64);
-  const v = sigBytes[64];
-  // v is 27/28 for legacy, 0/1 for EIP-155
-  const yParity = v >= 27 ? v - 27 : v;
-  return { r, s, yParity };
-}
 
 /**
  * EIP-712 signer implementation that uses MetaMask's eth_signTypedData_v4 method.
@@ -69,17 +36,16 @@ export class Eip712Signer implements Signer {
 
   /**
    * Cache the public key recovered from a signature.
+   * Uses viem's parseSignature which accepts high-s signatures (unlike ethers).
    */
-  private cachePublicKey(
-    signingHash: Uint8Array,
-    signature: ParsedSignature,
-  ): void {
+  private cachePublicKey(signingHash: Uint8Array, signature: Signature): void {
     if (this.cachedPublicKey) return;
 
-    let secpSig = secp.Signature.fromCompact(
-      new Uint8Array([...signature.r, ...signature.s]),
-    );
-    secpSig = secpSig.addRecoveryBit(signature.yParity);
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+
+    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
+    secpSig = secpSig.addRecoveryBit(signature.yParity ?? 0);
     const publicKey = secpSig.recoverPublicKey(signingHash);
 
     this.cachedPublicKey = publicKey.toBytes(true); // compressed form
@@ -154,16 +120,16 @@ export class Eip712Signer implements Signer {
       );
     }
 
-    // Parse the signature (format: 0x + r + s + v, 65 bytes total)
-    const signature = parseSignatureHex(signatureHex);
+    // Parse the signature using viem (accepts high-s signatures unlike ethers)
+    const signature = parseSignature(signatureHex as `0x${string}`);
     this.cachePublicKey(signingHash, signature);
 
     // Create secp256k1 signature and normalize to low-s form
     // MetaMask's eth_signTypedData_v4 may return high-s signatures for EIP-712 messages
     // (EIP-2 low-s requirement only applies to transactions, not off-chain message signing)
-    let secpSig = secp.Signature.fromCompact(
-      new Uint8Array([...signature.r, ...signature.s]),
-    );
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
 
     // Normalize s if it's > n/2 (convert high-s to low-s)
     if (secpSig.hasHighS()) {
