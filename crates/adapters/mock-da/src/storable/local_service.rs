@@ -17,8 +17,9 @@ use tracing::Instrument;
 use crate::config::WAIT_ATTEMPT_PAUSE;
 use crate::storable::layer::{Randomizer, StorableMockDaLayer};
 use crate::{
-    BlockProducingConfig, FailureBehavior, MockAddress, MockBlock, MockBlockHeader, MockDaConfig,
-    MockHash, RandomizationBehaviour, RandomizationConfig, DEFAULT_BLOCK_WAITING_TIME_MS,
+    BlockProducingConfig, CheckResult, FailureBehavior, FailureInjector, MockAddress, MockBlock,
+    MockBlockHeader, MockDaConfig, MockHash, RandomizationBehaviour, RandomizationConfig,
+    DEFAULT_BLOCK_WAITING_TIME_MS,
 };
 
 const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
@@ -106,9 +107,9 @@ pub struct StorableMockDaService {
     pub(crate) block_producer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     pub(crate) block_producing_pauser: Arc<Mutex<Option<watch::Sender<()>>>>,
     pub(crate) send_transaction_success: Arc<AtomicBool>,
-    /// Configurable failure behavior for testing. Allows injecting failures
-    /// or reorgs during `get_block_at` / `get_block_header_at` calls.
-    failure_behavior: Arc<Mutex<FailureBehavior>>,
+    /// Configurable failure injection for testing. Allows injecting failures,
+    /// delays, or reorgs during `get_block_at` / `get_block_header_at` calls.
+    failure_injector: Arc<Mutex<FailureInjector>>,
 }
 
 impl StorableMockDaService {
@@ -135,7 +136,7 @@ impl StorableMockDaService {
             block_producer_handle: Arc::new(Mutex::new(block_producer_handle)),
             block_producing_pauser: Arc::new(Mutex::new(None)),
             send_transaction_success: Arc::new(AtomicBool::new(true)),
-            failure_behavior: Arc::new(Mutex::new(failure_behavior)),
+            failure_injector: Arc::new(Mutex::new(FailureInjector::new(failure_behavior, 42))),
         }
     }
     /// The `send_transaction` method will fail to post blobs to the DA.
@@ -162,25 +163,46 @@ impl StorableMockDaService {
     /// Configure DA to fail `get_block_at` / `get_block_header_at` after N successful calls.
     /// When the counter reaches 0, the next call will return an error.
     pub async fn set_fail_after_n_calls(&self, n: u64) {
-        let mut behavior = self.failure_behavior.lock().await;
-        *behavior = FailureBehavior::FailAfterNCalls { remaining: n };
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::FailAfterNCalls {
+            remaining: n,
+            failure_probability: 100,
+        });
+    }
+
+    /// Configure DA to fail with a given probability after N successful calls.
+    pub async fn set_fail_after_n_calls_with_probability(&self, n: u64, probability: u8) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::FailAfterNCalls {
+            remaining: n,
+            failure_probability: probability,
+        });
+    }
+
+    /// Configure DA to add delays after N successful calls.
+    pub async fn set_delay_after_n_calls(&self, n: u64, delay_range_ms: std::ops::Range<u64>) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::DelayAfterNCalls {
+            remaining: n,
+            delay_range_ms,
+        });
     }
 
     /// Configure DA to trigger a reorg (shuffle non-finalized blobs) when
     /// `get_block_at` / `get_block_header_at` is called for the specified height.
     /// The reorg triggers once; subsequent calls for that height proceed normally.
     pub async fn set_reorg_during_get_block(&self, height: u64) {
-        let mut behavior = self.failure_behavior.lock().await;
-        *behavior = FailureBehavior::ReorgDuringCall {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::ReorgDuringCall {
             trigger_at_height: height,
             triggered: false,
-        };
+        });
     }
 
     /// Clear any configured failure behavior, returning to normal operation.
     pub async fn clear_failure_behavior(&self) {
-        let mut behavior = self.failure_behavior.lock().await;
-        *behavior = FailureBehavior::None;
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::None);
     }
 
     /// Suspend blob submission in the mock DA.
@@ -396,40 +418,31 @@ impl StorableMockDaService {
 
     /// Checks and applies any configured failure behavior before a DA call.
     /// Returns `Ok(())` if the call should proceed, or an error if it should fail.
-    /// May trigger side effects like reorgs based on the configured behavior.
+    /// May trigger side effects like delays or reorgs based on the configured behavior.
     async fn check_and_apply_failure_behavior(&self, height: u64) -> anyhow::Result<()> {
         use rand::SeedableRng;
 
-        let mut behavior = self.failure_behavior.lock().await;
-        match &mut *behavior {
-            FailureBehavior::None => Ok(()),
-            FailureBehavior::FailAfterNCalls { remaining } => {
-                if *remaining == 0 {
-                    anyhow::bail!(
-                        "StorableMockDaService: Injected failure (FailAfterNCalls reached 0)"
-                    );
-                }
-                *remaining -= 1;
+        let result = {
+            let mut injector = self.failure_injector.lock().await;
+            injector.check(height)
+        };
+
+        match result {
+            CheckResult::Ok => Ok(()),
+            CheckResult::Delay(delay_ms) => {
+                tracing::debug!(%height, delay_ms, "Injecting artificial delay");
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                 Ok(())
             }
-            FailureBehavior::ReorgDuringCall {
-                trigger_at_height,
-                triggered,
-            } => {
-                if height == *trigger_at_height && !*triggered {
-                    *triggered = true;
-                    // Drop the mutex before acquiring write lock on DA layer
-                    drop(behavior);
-                    tracing::info!(
-                        %height,
-                        "Triggering injected reorg during get_block call"
-                    );
-                    // Trigger a shuffle with a deterministic RNG for reproducibility
-                    let mut rng = rand::rngs::StdRng::seed_from_u64(height);
-                    let mut da_layer = self.da_layer.write().await;
-                    da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
-                }
+            CheckResult::TriggerReorg => {
+                tracing::info!(%height, "Triggering injected reorg during get_block call");
+                let mut rng = rand::rngs::StdRng::seed_from_u64(height);
+                let mut da_layer = self.da_layer.write().await;
+                da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
                 Ok(())
+            }
+            CheckResult::Fail(msg) => {
+                anyhow::bail!("StorableMockDaService: {msg}")
             }
         }
     }

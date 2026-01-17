@@ -16,7 +16,6 @@ use sov_mock_da::{
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
-use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -50,7 +49,6 @@ async fn test_runner_with_background_da_service(
         StorableMockDaService::from_config(da_config.clone(), shutdown_receiver.clone()).await;
     let da_service = Arc::new(da_service);
     let tempdir = tempfile::tempdir()?;
-    let finality = da_config.finalization_blocks;
     let rollup_config = crate::helpers::runner_init::rollup_config_with_da::<StorableMockDaService>(
         tempdir.path(),
         da_config,
@@ -123,8 +121,12 @@ async fn test_runner_with_background_da_service(
     });
 
     let mut synced_da_height = 0;
-    // TODO: Adjust this to be more realistic and with actual motivation
-    let seen_da_height_boundary = target_height + finality as u64 + 30;
+    let mut last_progress_time = std::time::Instant::now();
+    let mut last_synced_height = 0u64;
+    // Time to wait for sync status updates before retrying
+    const ITERATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+    // Max time without forward progress before failing
+    const PROGRESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
     while synced_da_height <= target_height {
         let batch = vec![FullyBakedTx::new(vec![1, 2, 3])];
@@ -132,7 +134,12 @@ async fn test_runner_with_background_da_service(
         let serialized_batch = borsh::to_vec(&batch)?;
         let _ = da_service.send_transaction(&serialized_batch).await.await?;
 
-        sync_status_receiver.changed().await?;
+        // Add timeout to prevent hanging if runner is stuck
+        match tokio::time::timeout(ITERATION_TIMEOUT, sync_status_receiver.changed()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => anyhow::bail!("Sync status channel closed unexpectedly"),
+            Err(_) => continue, // Timeout, send another transaction and try again
+        }
 
         let sync_status = { *sync_status_receiver.borrow() };
 
@@ -143,9 +150,16 @@ async fn test_runner_with_background_da_service(
             } => synced_da_height,
         };
 
-        let head = da_service.get_head_block_header().await?;
-        if head.height() > seen_da_height_boundary {
-            anyhow::bail!("Runner didn't manage to sync in time.");
+        // Track progress - fail if stuck for too long
+        if synced_da_height > last_synced_height {
+            last_synced_height = synced_da_height;
+            last_progress_time = std::time::Instant::now();
+        } else if last_progress_time.elapsed() > PROGRESS_TIMEOUT {
+            anyhow::bail!(
+                "No sync progress for {:?}. Stuck at height {}",
+                PROGRESS_TIMEOUT,
+                synced_da_height
+            );
         }
     }
 

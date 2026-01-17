@@ -190,10 +190,14 @@ pub enum FailureBehavior {
     #[default]
     None,
     /// Fail `get_block_at` or `get_block_header_at` after N successful calls.
-    /// The counter decrements on each call; when it reaches 0, the call fails.
+    /// The counter decrements on each call; when it reaches 0, failures may occur
+    /// based on the configured probability.
     FailAfterNCalls {
-        /// Number of successful calls remaining before failure.
+        /// Number of successful calls remaining before failures may start.
         remaining: u64,
+        /// Probability of failure (0-100). 100 = always fail, 0 = never fail.
+        #[serde(default = "default_failure_probability")]
+        failure_probability: u8,
     },
     /// Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or
     /// `get_block_header_at` is called for a specific height.
@@ -205,6 +209,107 @@ pub enum FailureBehavior {
         #[serde(skip, default)]
         triggered: bool,
     },
+    /// Add artificial delays to `get_block_at` or `get_block_header_at` after N calls.
+    /// Useful for testing timeout handling and slow DA scenarios.
+    DelayAfterNCalls {
+        /// Number of calls before delays start.
+        remaining: u64,
+        /// Range of delay in milliseconds. A random value from this range is used.
+        delay_range_ms: std::ops::Range<u64>,
+    },
+}
+
+fn default_failure_probability() -> u8 {
+    100
+}
+
+/// Result of checking failure behavior.
+#[derive(Debug)]
+pub enum CheckResult {
+    /// No action needed, proceed normally.
+    Ok,
+    /// Add delay before proceeding.
+    Delay(u64),
+    /// Trigger a reorg (shuffle non-finalized blobs).
+    TriggerReorg,
+    /// Fail with error message.
+    Fail(String),
+}
+
+/// Self-contained failure injection controller.
+/// Holds behavior state and its own RNG for deterministic testing.
+pub struct FailureInjector {
+    behavior: FailureBehavior,
+    rng: rand_chacha::ChaChaRng,
+}
+
+impl FailureInjector {
+    /// Create injector with given behavior and seed.
+    pub fn new(behavior: FailureBehavior, seed: u64) -> Self {
+        use rand::SeedableRng;
+        Self {
+            behavior,
+            rng: rand_chacha::ChaChaRng::seed_from_u64(seed),
+        }
+    }
+
+    /// Create injector with no failures.
+    pub fn none() -> Self {
+        Self::new(FailureBehavior::None, 0)
+    }
+
+    /// Set new behavior, preserving RNG state.
+    pub fn set_behavior(&mut self, behavior: FailureBehavior) {
+        self.behavior = behavior;
+    }
+
+    /// Check failure behavior. Returns action to take based on current state.
+    pub fn check(&mut self, height: u64) -> CheckResult {
+        use rand::Rng;
+
+        match &mut self.behavior {
+            FailureBehavior::None => CheckResult::Ok,
+
+            FailureBehavior::FailAfterNCalls {
+                remaining,
+                failure_probability,
+            } => {
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    return CheckResult::Ok;
+                }
+                let roll: u8 = self.rng.gen_range(0..100);
+                if roll < *failure_probability {
+                    return CheckResult::Fail(format!(
+                        "Injected failure (probability={failure_probability}%)"
+                    ));
+                }
+                CheckResult::Ok
+            }
+
+            FailureBehavior::ReorgDuringCall {
+                trigger_at_height,
+                triggered,
+            } => {
+                if height == *trigger_at_height && !*triggered {
+                    *triggered = true;
+                    return CheckResult::TriggerReorg;
+                }
+                CheckResult::Ok
+            }
+
+            FailureBehavior::DelayAfterNCalls {
+                remaining,
+                delay_range_ms,
+            } => {
+                if *remaining > 0 {
+                    *remaining -= 1;
+                    return CheckResult::Ok;
+                }
+                CheckResult::Delay(self.rng.gen_range(delay_range_ms.clone()))
+            }
+        }
+    }
 }
 
 /// Small, but more entropy seed, suitable for unit tests
