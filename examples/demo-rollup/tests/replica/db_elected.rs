@@ -110,7 +110,7 @@ async fn test_db_elected_leader_failover() {
     };
 
     let DbElectedTestSetup {
-        postgres,
+        postgres: _postgres,
         leader,
         replica,
         da_shutdown,
@@ -143,10 +143,9 @@ async fn test_db_elected_leader_failover() {
     assert_eq!(
         new_role,
         SequencerRole::Leader,
-        "Expected restarted node to be Leader, got {new_rolegit:?}",
+        "Expected restarted node to be Leader, got {new_role:?}",
     );
 
     let _ = restarted_rollup.shutdown().await;
     let _ = da_shutdown.send(());
-    drop(postgres);
 }
