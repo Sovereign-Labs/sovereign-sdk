@@ -331,6 +331,11 @@ impl PostgresBackend {
             None => false,
         }
     }
+
+    /// Returns a reference to the connection pool.
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }
 
 #[async_trait]

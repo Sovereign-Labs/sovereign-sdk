@@ -149,6 +149,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_port: u16,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         Builder::new(da, config)
             .build(
@@ -158,6 +159,7 @@ where
                 api_ledger_db,
                 shutdown_sender,
                 stop_at_rollup_height,
+                bind_port,
             )
             .await
     }
