@@ -54,6 +54,7 @@ members = [
     "crates/module-system/module-implementations/sov-attester-incentives",
     "crates/module-system/module-implementations/sov-sequencer-registry",
     "crates/module-system/module-implementations/sb-session-registry",
+    "crates/module-system/module-implementations/sb-blacklist",
     "crates/module-system/sov-solana-offchain-auth",
     "crates/module-system/sov-eip712-auth",
     "crates/module-system/module-implementations/sov-value-setter",
