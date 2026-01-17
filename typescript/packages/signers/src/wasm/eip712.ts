@@ -16,11 +16,16 @@ interface ParsedSignature {
 
 /**
  * Parse a 65-byte hex signature string into r, s, and recovery bit.
- * Format: 0x + r (32 bytes) + s (32 bytes) + v (1 byte)
+ * Format: [0x] + r (32 bytes) + s (32 bytes) + v (1 byte)
+ * Accepts signatures with or without "0x" prefix.
  * v is either 27/28 (legacy) or 0/1 (EIP-155)
  */
 function parseSignatureHex(signatureHex: string): ParsedSignature {
-  const sigBytes = hexToBytes(signatureHex.slice(2));
+  // Normalize: strip "0x" prefix if present
+  const hex = signatureHex.startsWith("0x")
+    ? signatureHex.slice(2)
+    : signatureHex;
+  const sigBytes = hexToBytes(hex);
   if (sigBytes.length !== 65) {
     throw new Error(
       `Invalid signature length: expected 65 bytes, got ${sigBytes.length}`,
