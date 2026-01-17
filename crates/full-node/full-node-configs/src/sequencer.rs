@@ -141,6 +141,12 @@ pub enum NodeRole {
     /// It receives transactions exclusively through the DA layer.
     /// Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.
     ReplicaNoLeaderSync,
+    /// The node initially starts as a `Replica` and attempts to register itself as the `Leader`
+    /// by sending a request to the Db to acquire leadership.
+    /// If successful, it becomes the `Leader`` and all other nodes remain Replicas.
+    /// If the Leader goes down and fails to refresh its entry in the `Leader` table,
+    /// one of the `Replicas` will take over and assume the Leader role.
+    DbElected,
 }
 
 /// Postgres DB config.

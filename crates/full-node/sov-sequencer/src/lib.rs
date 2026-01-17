@@ -19,6 +19,7 @@ use axum::async_trait;
 pub use common::StateUpdateNotification;
 pub use common::{react_to_state_updates, Sequencer};
 pub use config::{SeqConfigExtension, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig};
+pub use preferred::SequencerRole;
 pub use rest_api::SequencerApis;
 use serde::Serialize;
 use sov_modules_api::capabilities::RollupHeight;

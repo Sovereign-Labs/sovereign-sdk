@@ -355,6 +355,13 @@
           "enum": [
             "ReplicaNoLeaderSync"
           ]
+        },
+        {
+          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader`` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
+          "type": "string",
+          "enum": [
+            "DbElected"
+          ]
         }
       ]
     },
