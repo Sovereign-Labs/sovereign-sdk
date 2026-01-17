@@ -83,7 +83,7 @@ impl<Da: DaSpec, StateRoot: Clone> StateOnBlock<Da, StateRoot> {
 enum ForkPointSearchResult<Da: DaService> {
     /// Found a valid fork point - the first unprocessed block whose predecessor was seen.
     Found {
-        block_header: <Da::Spec as DaSpec>::BlockHeader,
+        height: u64,
     },
     HeadChanged(<Da::Spec as DaSpec>::BlockHeader),
     DaHeadIsBelowProcessedFinalized,
@@ -216,16 +216,14 @@ where
         if !is_continuation {
             // Block is not a continuation - find the fork point and tell runner what to fetch
             let height_to_fetch = match self.choose_fork_point(da_service).await? {
-                ForkPointSearchResult::Found {
-                    block_header: fork_point_header,
-                } => {
+                ForkPointSearchResult::Found { height } => {
                     tracing::info!(
                         original_block = %block_header.display(),
-                        fork_point = %fork_point_header.display(),
+                        fork_point_height = height,
                         time = ?start.elapsed(),
                         "Found fork point, runner should fetch this block"
                     );
-                    fork_point_header.height()
+                    height
                 }
                 ForkPointSearchResult::NeedFutureBlock { height } => {
                     tracing::trace!(
@@ -620,14 +618,8 @@ where
                 .height()
                 .checked_add(1)
                 .expect("Reached end of the DA");
-            let adjacent_header = da_service.get_block_header_at(adjacent_height).await?;
-            assert_eq!(
-                adjacent_header.prev_hash(),
-                self.last_processed_finalized_header.hash(),
-                "Bug in DA, block adjacent to finalized has wrong prev_hash"
-            );
             return Ok(ForkPointSearchResult::Found {
-                block_header: adjacent_header,
+                height: adjacent_height,
             });
         }
 
@@ -753,7 +745,7 @@ where
             if self.is_valid_fork_point(&candidate_header) {
                 tracing::trace!(candidate = %candidate_header.display(), "Found a matching candidate");
                 return Ok(BinarySearchOutcome::Done(ForkPointSearchResult::Found {
-                    block_header: candidate_header,
+                    height: candidate_header.height(),
                 }));
             }
 
@@ -848,7 +840,7 @@ where
             }
 
             ForkPointSearchResult::Found {
-                block_header: final_candidate,
+                height: final_candidate.height(),
             }
         } else {
             // We've seen all blocks in the current chain up to DA head.
@@ -1041,7 +1033,7 @@ where
             earliest_seen <= highest_seen,
             "bug in state manager. earliest and highest transition numbers are calculated incorrectly"
         );
-        debug_assert_eq!(
+        assert_eq!(
             earliest_seen,
             self.last_processed_finalized_header
                 .height()
