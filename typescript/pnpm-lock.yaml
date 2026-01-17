@@ -252,6 +252,9 @@ importers:
       ethers:
         specifier: ^6.15.0
         version: 6.15.0(bufferutil@4.0.9)(utf-8-validate@5.0.10)
+      viem:
+        specifier: ^2.44.4
+        version: 2.44.4(bufferutil@4.0.9)(typescript@5.6.3)(utf-8-validate@5.0.10)
     devDependencies:
       '@metamask/providers':
         specifier: ^18.1.0
@@ -265,9 +268,6 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.6.3
-      viem:
-        specifier: ^2.44.4
-        version: 2.44.4(bufferutil@4.0.9)(typescript@5.6.3)(utf-8-validate@5.0.10)
       vitest:
         specifier: 4.0.7
         version: 4.0.7(@types/debug@4.1.12)(@types/node@22.7.5)(tsx@4.20.3)(yaml@2.7.1)
@@ -1701,7 +1701,6 @@ packages:
 
   bun@1.2.17:
     resolution: {integrity: sha512-lrUZTWS24eVy6v+Eph8VTwqFPcG7/XQ0rLBQEMNoQs2Vd7ctVdMGAzJKKGZRUQH+rgkD8rBeHGIVoWxX4vJLCA==}
-    cpu: [arm64, x64, aarch64]
     os: [darwin, linux, win32]
     hasBin: true
 
