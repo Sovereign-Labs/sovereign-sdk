@@ -32,6 +32,7 @@ members = [
     "crates/utils/sov-evm-soak-testing",
     "crates/utils/sov-test-utils",
     "crates/utils/sov-evm-test-utils",
+    "crates/utils/proxy-utils",
     # Module System
     "crates/module-system/sov-cli",
     "crates/module-system/sov-modules-stf-blueprint",

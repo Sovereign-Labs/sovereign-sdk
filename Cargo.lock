@@ -8212,6 +8212,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "proxy-utils"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sqlx",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "puffin"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
