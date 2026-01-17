@@ -51,7 +51,7 @@ impl NodeDiscovery {
         let mut followers = Vec::new();
         for node in all_nodes {
             if Some(&node.node_id) == leader_id.as_ref() {
-                leader = Some(node)
+                leader = Some(node);
             } else {
                 followers.push(node);
             }
