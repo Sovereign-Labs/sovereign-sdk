@@ -70,8 +70,8 @@ impl RollupDbConfig {
                 1_000_000
             }),
             user_preallocate_ht: Some(false),
-            user_page_cache_size: Some(4),
-            user_leaf_cache_size: Some(4),
+            user_page_cache_size: Some(8),
+            user_leaf_cache_size: Some(8),
             kernel_commit_concurrency: Some(2),
             kernel_hashtable_buckets: None,
             kernel_preallocate_ht: Some(false),
