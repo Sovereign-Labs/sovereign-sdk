@@ -25,16 +25,13 @@ pub struct ClusterInfo {
     pub followers: Vec<NodeInfo>,
 }
 
-/// A proxy client for querying cluster information from the database.
-pub struct Proxy {
+/// Client for querying cluster information from the database.
+pub struct NodeDiscovery {
     pool: PgPool,
 }
 
-impl Proxy {
-    /// Creates a new Proxy with a connection pool.
-    ///
-    /// # Arguments
-    /// * `connection_string` - PostgreSQL connection string.
+impl NodeDiscovery {
+    /// Creates a new NodeDiscovery with a connection pool.
     pub async fn new(connection_string: &str) -> Result<Self> {
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
