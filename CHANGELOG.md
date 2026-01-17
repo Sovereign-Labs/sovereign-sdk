@@ -1,6 +1,7 @@
 # 2026-01-16 
 - #2342 EVM: Populate the `gas_limit` for pending block.
 - #2338 **Infra only breaking change**: Removes `da_total_timeout_secs` from runner section in `rollup_config.toml`
+- #2349 Adds optional celestia params: `api_request_timeout_secs`, `tx_status_polling_millis` and `background_stat_polling_interval_secs`
 
 # 2026-01-14
 - #2326 Add `max_fee` validation to the EVM authenticator. Introduce `EVM_MAX_FEE_CHECK_HEIGHT` in `constants.toml` to specify the block height after which the max-fee check becomes active.
