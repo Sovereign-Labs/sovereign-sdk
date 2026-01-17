@@ -10,7 +10,7 @@ use sov_bank::{config_gas_token_id, Amount, Bank, Coins};
 use sov_modules_api::prelude::tracing;
 use sov_modules_api::{
     Context, DaSpec, GenesisState, HexString, Module, ModuleId, ModuleInfo, ModuleRestApi, SafeVec,
-    Spec, StateMap, StateReader,
+    Spec, StateMap, StateReader, StateValue,
 };
 use sov_state::User;
 
@@ -34,6 +34,24 @@ pub use types::*;
 /// left of decimal point and 19 digits on the right of it.
 // See <https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/d7cb7ab1f413c510c66bf8152e4cdbdcbacbc359/rust/sealevel/programs/hyperlane-sealevel-igp/src/accounts.rs#L14-L16>
 pub const TOKEN_EXCHANGE_RATE_SCALE: u128 = 10u128.pow(19);
+
+/// Configuration for the InterchainGasPaymaster module genesis.
+#[derive(
+    Debug,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    borsh::BorshSerialize,
+    borsh::BorshDeserialize,
+)]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S: Spec", rename = "IGPConfig")]
+pub struct IGPConfig<S: Spec> {
+    /// The admin address who can update the admin and whose relayer config is used
+    /// as the fallback when no relayer is specified.
+    pub admin: S::Address,
+}
 
 /// Interchain Gas Paymaster module
 ///
@@ -64,6 +82,10 @@ pub struct InterchainGasPaymaster<S: Spec> {
     /// The Bank module.
     #[module]
     pub bank: Bank<S>,
+    /// The admin address who can update the admin and whose relayer config is used
+    /// as the fallback when no relayer is specified.
+    #[state]
+    pub admin: StateValue<S::Address>,
     /// Phantom data for the specification.
     #[phantom]
     phantom: std::marker::PhantomData<S>,
@@ -71,7 +93,7 @@ pub struct InterchainGasPaymaster<S: Spec> {
 
 impl<S: Spec> Module for InterchainGasPaymaster<S> {
     type Spec = S;
-    type Config = ();
+    type Config = IGPConfig<S>;
     type CallMessage = call::CallMessage<S>;
     type Event = Event<S>;
     type Error = anyhow::Error;
@@ -79,9 +101,10 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
-        _config: &Self::Config,
-        _state: &mut impl GenesisState<S>,
+        config: &Self::Config,
+        state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
+        self.admin.set(&config.admin, state)?;
         Ok(())
     }
 
@@ -125,6 +148,10 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
             } => {
                 tracing::debug!(?domain, ?oracle_value, "Updating oracle data");
                 self.update_oracle_value(domain, oracle_value, context, state)?;
+            }
+            CallMessage::SetAdmin { new_admin } => {
+                tracing::debug!(?new_admin, "Setting admin");
+                self.set_admin(new_admin, context, state)?;
             }
         }
 
@@ -213,6 +240,28 @@ impl<S: Spec> InterchainGasPaymaster<S> {
                 }
             }
         }
+    }
+
+    /// Quote gas price with fallback to admin's relayer config when no relayer is specified.
+    #[cfg(feature = "native")]
+    pub(crate) fn quote_gas_price_with_admin_fallback<Accessor: StateReader<User>>(
+        &self,
+        relayer: Option<S::Address>,
+        domain: Domain,
+        fees: Amount,
+        state: &mut Accessor,
+    ) -> Result<Amount> {
+        let relayer = match relayer {
+            Some(r) => r,
+            None => self
+                .admin
+                .get(state)
+                .context("get admin")?
+                .ok_or_else(|| anyhow!("no relayer specified and no admin configured"))?,
+        };
+
+        let key = RelayerWithDomainKey::new(relayer, domain);
+        self.quote_gas_price(&key, fees, state)
     }
 }
 

@@ -13,6 +13,7 @@ use crate::with_agent::helpers::evm::{
 use futures::future::join_all;
 use futures::{FutureExt, StreamExt};
 use sov_bank::Amount;
+use sov_hyperlane_integration::igp::IGPConfig;
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
@@ -115,8 +116,9 @@ pub fn generate_setup() -> Setup {
     let sequencer = genesis_config.initial_sequencer.clone();
     let prover = genesis_config.initial_prover.clone();
 
+    let igp_config = IGPConfig { admin: relayer.address() };
     let genesis_config =
-        GenesisConfig::from_minimal_config(genesis_config.into(), (), (), (), (), (), ());
+        GenesisConfig::from_minimal_config(genesis_config.into(), (), (), igp_config, (), (), ());
 
     Setup {
         sequencer,

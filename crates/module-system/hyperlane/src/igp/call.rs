@@ -63,6 +63,13 @@ pub enum CallMessage<S: Spec> {
         /// Relayer to transfer tokens from.
         relayer_address: S::Address,
     },
+    /// Set the admin address whose relayer config is used when no relayer is specified.
+    ///
+    /// Can only be called by the current admin.
+    SetAdmin {
+        /// The new admin address.
+        new_admin: S::Address,
+    },
 }
 
 impl<S: Spec> InterchainGasPaymaster<S> {
@@ -219,6 +226,42 @@ impl<S: Spec> InterchainGasPaymaster<S> {
             Event::RewardsClaimed {
                 beneficiary,
                 relayer,
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Set the admin address.
+    ///
+    /// Can only be called by the current admin.
+    ///
+    /// Emits `AdminSet` event.
+    pub fn set_admin(
+        &mut self,
+        new_admin: S::Address,
+        context: &Context<S>,
+        state: &mut impl sov_modules_api::TxState<S>,
+    ) -> Result<()> {
+        let current_admin = self
+            .admin
+            .get(state)
+            .context("get admin")?
+            .ok_or_else(|| anyhow::anyhow!("admin not configured"))?;
+
+        if context.sender() != &current_admin {
+            bail!("Access denied: only admin can change admin");
+        }
+
+        self.admin
+            .set(&new_admin, state)
+            .context("set admin")?;
+
+        self.emit_event(
+            state,
+            Event::AdminSet {
+                previous_admin: current_admin,
+                new_admin,
             },
         );
 

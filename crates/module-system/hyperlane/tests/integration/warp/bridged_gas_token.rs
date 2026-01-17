@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use sov_bank::{Amount, Bank, TokenId};
-use sov_hyperlane_integration::igp::ExchangeRateAndGasPrice;
+use sov_hyperlane_integration::igp::{ExchangeRateAndGasPrice, IGPConfig};
 use sov_hyperlane_integration::{
     CallMessage as MailboxCallMessage, HyperlaneAddress, InterchainGasPaymasterCallMessage, Ism,
     WarpCallMessage, WarpEvent,
@@ -46,8 +46,9 @@ pub fn setup_without_gas_token() -> (
     let extra_account = genesis_config.additional_accounts()[1].clone();
     let relayer_account = genesis_config.additional_accounts()[1].clone();
 
+    let igp_config = IGPConfig { admin: relayer_account.address() };
     let mut rt_genesis_config =
-        GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), ());
+        GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), igp_config);
 
     rt_genesis_config.chain_state.admin = Some(admin_account.address());
     rt_genesis_config.bank.gas_token_config = None;

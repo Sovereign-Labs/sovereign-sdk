@@ -4,7 +4,7 @@ use secp256k1::rand::rngs::OsRng;
 use secp256k1::{Message, Secp256k1, SecretKey};
 use sha3::Keccak256;
 use sov_bank::Amount;
-use sov_hyperlane_integration::igp::ExchangeRateAndGasPrice;
+use sov_hyperlane_integration::igp::{ExchangeRateAndGasPrice, IGPConfig};
 use sov_hyperlane_integration::test_recipient::{
     CallMessage as RecipientCallMessage, TestRecipient,
 };
@@ -52,7 +52,8 @@ pub fn setup() -> (
     let beneficiary_account = genesis_config.additional_accounts()[4].clone();
     let user_account = genesis_config.additional_accounts()[3].clone();
 
-    let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), (), (), (), ());
+    let igp_config = IGPConfig { admin: relayer_account.address() };
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), (), (), (), igp_config);
 
     (
         TestRunner::new_with_genesis(genesis.into_genesis_params(), Default::default()),

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use sov_bank::Amount;
-use sov_hyperlane_integration::igp::ExchangeRateAndGasPrice;
+use sov_hyperlane_integration::igp::{ExchangeRateAndGasPrice, IGPConfig};
 use sov_hyperlane_integration::warp::{Admin, TokenKind};
 use sov_hyperlane_integration::{
     HyperlaneAddress, InterchainGasPaymaster, InterchainGasPaymasterCallMessage, Ism,
@@ -50,7 +50,8 @@ pub fn setup() -> (
     let extra_account = genesis_config.additional_accounts()[1].clone();
     let relayer_account = genesis_config.additional_accounts()[1].clone();
 
-    let genesis = GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), ());
+    let igp_config = IGPConfig { admin: relayer_account.address() };
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), igp_config);
 
     (
         TestRunner::new_with_genesis(genesis.into_genesis_params(), Default::default()),

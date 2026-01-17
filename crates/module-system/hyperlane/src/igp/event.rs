@@ -66,4 +66,11 @@ pub enum Event<S: Spec> {
         /// Relayer whose rewards were claimed.
         relayer: S::Address,
     },
+    /// Event emitted when the admin is changed.
+    AdminSet {
+        /// The previous admin address.
+        previous_admin: S::Address,
+        /// The new admin address.
+        new_admin: S::Address,
+    },
 }
