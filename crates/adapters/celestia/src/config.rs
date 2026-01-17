@@ -37,12 +37,27 @@ pub struct CelestiaConfig {
     /// `cel-key export key-name --unarmored-hex --unsafe --node.type light --p2p.network=mocha`
     #[serde(default = "default_signer_private_key")]
     pub signer_private_key: Option<String>,
-    /// The timeout for a Celestia RPC request, in seconds.
+    /// High-level timeout for Celestia RPC operations that may include multiple requests (in seconds).
+    /// Default: 38 (6 blocks × 6 seconds + 2 seconds polling buffer).
     #[serde(
         default = "default_request_timeout_seconds",
         alias = "celestia_rpc_timeout_seconds"
     )]
     pub request_timeout_secs: NonZero<u64>,
+    /// Timeout for individual API requests to the Celestia node (in seconds).
+    /// This is passed to the underlying celestia-client for each API call.
+    /// Default: 6 (one block time).
+    #[serde(default = "default_api_request_timeout_secs")]
+    pub api_request_timeout_secs: NonZero<u64>,
+    /// Interval for polling transaction status confirmation (in milliseconds).
+    /// Default: 2000.
+    #[serde(default = "default_tx_status_polling_millis")]
+    pub tx_status_polling_millis: u64,
+    /// Interval for background statistics collection (in seconds).
+    /// Set to 0 to disable the background stat collection task.
+    /// Default: 30.
+    #[serde(default = "default_background_stat_polling_interval_secs")]
+    pub background_stat_polling_interval_secs: u64,
     /// See [`sov_rollup_interface::node::da::DaService::safe_lead_time`].
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
@@ -86,6 +101,12 @@ impl fmt::Debug for CelestiaConfig {
                 &self.signer_private_key.as_ref().map(|_| "REDACTED"),
             )
             .field("request_timeout_secs", &self.request_timeout_secs)
+            .field("api_request_timeout_secs", &self.api_request_timeout_secs)
+            .field("tx_status_polling_millis", &self.tx_status_polling_millis)
+            .field(
+                "background_stat_polling_interval_secs",
+                &self.background_stat_polling_interval_secs,
+            )
             .field("safe_lead_time_ms", &self.safe_lead_time_ms)
             .field("tx_priority", &self.tx_priority)
             .field("backoff_min_delay_ms", &self.backoff_min_delay_ms)
@@ -124,6 +145,9 @@ impl CelestiaConfig {
             grpc_auth_token: None,
             signer_private_key: None,
             request_timeout_secs: default_request_timeout_seconds(),
+            api_request_timeout_secs: default_api_request_timeout_secs(),
+            tx_status_polling_millis: default_tx_status_polling_millis(),
+            background_stat_polling_interval_secs: default_background_stat_polling_interval_secs(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
             tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),
@@ -152,10 +176,11 @@ impl CelestiaConfig {
     }
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
-        let request_timeout = std::time::Duration::from_secs(self.request_timeout_secs.get());
+        let api_request_timeout =
+            std::time::Duration::from_secs(self.api_request_timeout_secs.get());
         let mut builder = celestia_client::Client::builder()
             .rpc_url(&self.rpc_url)
-            .timeout(request_timeout);
+            .timeout(api_request_timeout);
         if let Some(rpc_auth_token) = &self.rpc_auth_token {
             builder = builder.rpc_auth_token(rpc_auth_token);
         }
@@ -232,6 +257,18 @@ pub(crate) fn default_factor() -> f32 {
 }
 
 pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
-    // 6 blocks + 1 second for jitter
-    NonZero::new(37).unwrap()
+    // 6 blocks × 6 seconds + 2 seconds polling buffer
+    NonZero::new(38).unwrap()
+}
+
+pub(crate) fn default_api_request_timeout_secs() -> NonZero<u64> {
+    NonZero::new(6).unwrap()
+}
+
+pub(crate) fn default_tx_status_polling_millis() -> u64 {
+    2_000
+}
+
+pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
+    30
 }

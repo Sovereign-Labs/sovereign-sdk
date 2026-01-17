@@ -3,8 +3,10 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use crate::config::{
+    default_api_request_timeout_secs, default_background_stat_polling_interval_secs,
     default_factor, default_max_delay_ms, default_max_times, default_min_delay_ms,
     default_request_timeout_seconds, default_safe_lead_time_ms, default_tx_priority,
+    default_tx_status_polling_millis,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::{CelestiaConfig, CelestiaService};
@@ -280,6 +282,9 @@ impl CelestiaDevNode {
             grpc_auth_token: None,
             signer_private_key: Some(key_0),
             request_timeout_secs: default_request_timeout_seconds(),
+            api_request_timeout_secs: default_api_request_timeout_secs(),
+            tx_status_polling_millis: default_tx_status_polling_millis(),
+            background_stat_polling_interval_secs: default_background_stat_polling_interval_secs(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
             tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),
