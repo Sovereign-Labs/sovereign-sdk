@@ -39,7 +39,7 @@ async fn setup_test_rollup(
 ) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, 0, Some(EVM_EXTENSION), None, Some(rate_limiter)).await
+    start_node(config, 0, Some(EVM_EXTENSION), Some(rate_limiter)).await
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -15,4 +15,9 @@ impl HDTimestamp {
             .as_nanos();
         Self(ts)
     }
+
+    /// Returns the timestamp as nanoseconds since the unix epoch.
+    pub const fn as_nanos(&self) -> u128 {
+        self.0
+    }
 }

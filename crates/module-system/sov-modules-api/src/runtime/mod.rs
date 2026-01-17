@@ -145,16 +145,7 @@ pub trait Runtime<S: Spec>:
         0
     }
 
-    /// Returns a call message to set the oracle timestamp if the runtime supports it.
-    fn maybe_set_oracle_timestamp(
-        &self,
-        _millis_since_epoch: i64,
-    ) -> Option<<Self as DispatchCall>::Decodable> {
-        None
-    }
-
-    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
-    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    /// Checks if a system transaction should be rejected based on the totality of its context.
     fn is_unauthorized_system_tx(
         &self,
         _call: &Self::Decodable,
@@ -235,8 +226,7 @@ pub trait Runtime<S: Spec>:
     /// `sov_sequencer_registry::CallMessage::Register` transactions here.
     fn allow_unregistered_tx(call: &Self::Decodable) -> bool;
 
-    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
-    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    /// Checks if a system transaction should be rejected based on the totality of its context.
     fn is_unauthorized_system_tx(
         &self,
         _call: &Self::Decodable,

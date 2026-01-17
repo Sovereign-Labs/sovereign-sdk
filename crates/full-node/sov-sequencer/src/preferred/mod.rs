@@ -15,7 +15,6 @@ mod rpc_errors;
 mod side_effects;
 mod state_root_compute;
 mod sync_sequencer_state;
-mod timestamp;
 mod transaction_subscriptions;
 mod update_state;
 
@@ -24,7 +23,6 @@ use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
-use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
@@ -42,7 +40,7 @@ use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    NodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    NodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,

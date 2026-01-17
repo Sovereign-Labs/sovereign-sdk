@@ -18,6 +18,7 @@ pub trait TxHooks {
     fn pre_dispatch_tx_hook<T: TxState<Self::Spec>>(
         &mut self,
         _tx: &AuthenticatedTransactionData<Self::Spec>,
+        _context: &Context<Self::Spec>,
         _state: &mut T,
     ) -> anyhow::Result<()> {
         Ok(())
@@ -43,6 +44,7 @@ impl<T: Module> TxHooks for &mut T {
     fn pre_dispatch_tx_hook<S: TxState<Self::Spec>>(
         &mut self,
         _tx: &AuthenticatedTransactionData<Self::Spec>,
+        _context: &Context<Self::Spec>,
         _state: &mut S,
     ) -> anyhow::Result<()> {
         Ok(())

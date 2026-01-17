@@ -124,7 +124,7 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
     runtime: &mut RT,
     state: &mut WorkingSet<S, I>,
 ) -> Result<(), Error> {
-    runtime.pre_dispatch_tx_hook(tx, state)?;
+    runtime.pre_dispatch_tx_hook(tx, ctx, state)?;
 
     runtime.dispatch_call(message, state, ctx)?;
 

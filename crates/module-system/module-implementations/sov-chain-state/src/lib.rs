@@ -26,6 +26,7 @@ mod genesis;
 pub use gas::{NonZeroRatio, NonZeroRatioConversionError};
 pub use genesis::*;
 use sov_modules_api::OperatingMode;
+use sov_modules_api::{AuthenticatedTransactionData, Context, HDTimestamp, TxHooks, TxState};
 
 /// Capabilities implementation for the module
 pub mod capabilities;
@@ -248,18 +249,14 @@ pub struct ChainState<S: Spec> {
     oracle_time: StateValue<Time>,
 }
 
-/// Reject any SetOracleTime calls from anyone not explicitly whitelisted in the sequencer config.
+/// Chain-state has no sequencer-only calls; all calls are safe for the sequencer.
 fn is_safe_for_sequencer<S: Spec>(
     _module: &ChainState<S>,
-    call: InnerEnumVariant<'_>,
+    _call: InnerEnumVariant<'_>,
     _sequencer_address: &<S::Da as DaSpec>::Address,
 ) -> bool {
-    if let Some(CallMessage::SetOracleTime { .. }) = call.inner().downcast_ref::<CallMessage>() {
-        false
-    } else {
-        // Calls to other modules are safe as far as we're concerned
-        true
-    }
+    // Calls to other modules are safe as far as we're concerned
+    true
 }
 
 impl<S: Spec> ChainState<S> {
@@ -333,16 +330,8 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// Returns the current time, as reported by the timing oracle.
-    /// Returns 0 if the timing oracle is not set.
-    pub fn get_oracle_time<Reader: StateReader<User>>(
-        &self,
-        state: &mut Reader,
-    ) -> Result<Time, <Reader as StateReader<User>>::Error> {
-        Ok(self.oracle_time.get(state)?.unwrap_or(Time::from_millis(0)))
-    }
-
-    /// Returns the current time, as reported by the timing oracle fallback to the DA layer time if the oracle time is not set.
-    pub fn get_oracle_time_with_fallback<
+    /// Falls back to the DA layer time if the oracle time is not set.
+    pub fn get_oracle_time<
         Reader: StateReader<User, Error = E> + VersionReader + StateReader<Kernel, Error = E>,
         E,
     >(
@@ -568,6 +557,54 @@ impl<S: Spec> ChainState<S> {
     }
 }
 
+impl<S: Spec> TxHooks for ChainState<S> {
+    type Spec = S;
+
+    fn pre_dispatch_tx_hook<T: TxState<Self::Spec>>(
+        &mut self,
+        _tx: &AuthenticatedTransactionData<Self::Spec>,
+        context: &Context<Self::Spec>,
+        state: &mut T,
+    ) -> anyhow::Result<()> {
+        if !context.sequencer_is_preferred() {
+            return Ok(());
+        }
+
+        let Some(sequencing_data) = context.sequencing_data().as_ref() else {
+            return Ok(());
+        };
+
+        let Ok(hd_timestamp) = HDTimestamp::try_from_slice(sequencing_data) else {
+            tracing::warn!("Invalid sequencing metadata for oracle time; ignoring");
+            return Ok(());
+        };
+
+        let millis = hd_timestamp.as_nanos() / 1_000_000;
+        if millis > i64::MAX as u128 {
+            tracing::warn!(millis = %millis, "Sequencing metadata overflow for oracle time; ignoring");
+            return Ok(());
+        }
+
+        let new_time = Time::from_millis(millis as i64);
+        if let Some(current_time) = self.oracle_time.get(state)? {
+            if new_time < current_time {
+                tracing::warn!(
+                    current_time = ?current_time,
+                    new_time = ?new_time,
+                    "Oracle time regression detected; ignoring update"
+                );
+                return Ok(());
+            }
+            if new_time == current_time {
+                return Ok(());
+            }
+        }
+
+        self.oracle_time.set(&new_time, state)?;
+        Ok(())
+    }
+}
+
 #[derive(
     BorshDeserialize,
     BorshSerialize,
@@ -585,11 +622,6 @@ impl<S: Spec> ChainState<S> {
 pub enum CallMessage {
     /// Terminates setup mode as of the next rollup block.
     TerminateSetupMode,
-    /// Sets the current time.
-    SetOracleTime {
-        /// The new time in milliseconds since the epoch
-        milliseconds_since_epoch: i64,
-    },
 }
 
 #[derive(
@@ -614,11 +646,6 @@ pub enum Event<S: Spec> {
         effective_at_rollup_height: u64,
         /// The address that terminated setup mode.
         by: S::Address,
-    },
-    /// Indicates that the oracle time has been updated.
-    OracleTimeUpdated {
-        /// The new time in milliseconds since the epoch
-        milliseconds_since_epoch: i64,
     },
 }
 
@@ -678,18 +705,6 @@ impl<S: Spec> Module for ChainState<S> {
                 tracing::debug!(
                     "setup mode terminated at height {}",
                     termination_height.get()
-                );
-            }
-            CallMessage::SetOracleTime {
-                milliseconds_since_epoch,
-            } => {
-                let time = Time::from_millis(milliseconds_since_epoch);
-                self.oracle_time.set(&time, state)?;
-                self.emit_event(
-                    state,
-                    Event::OracleTimeUpdated {
-                        milliseconds_since_epoch,
-                    },
                 );
             }
         }
