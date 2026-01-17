@@ -91,7 +91,7 @@ impl LeadershipElectionTask {
                             "Leadership lost! Another node has taken over. Initiating graceful shutdown."
                         );
                         exit_rollup(&self.shutdown_sender).await;
-                        return;
+                        unreachable!();
                     }
                     Err(e) => {
                         error!(
@@ -128,9 +128,9 @@ impl LeadershipElectionTask {
                     Ok(true) => {
                         info!(
                             node_id = %self.node_id,
-                            "Replica acquired leadership! Restarting the node."
+                            "Replica acquired leadership! Exiting to restart as leader."
                         );
-                        exit_rollup(&self.shutdown_sender).await;
+                        let _ = self.shutdown_sender.send(());
                     }
                     Ok(false) => {
                         // Another node is still leader, keep trying
