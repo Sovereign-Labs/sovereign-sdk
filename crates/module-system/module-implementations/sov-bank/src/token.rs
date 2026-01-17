@@ -194,7 +194,7 @@ impl std::fmt::Display for Coins {
 }
 
 /// This struct represents a token in the sov-bank module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, serde::Serialize)]
 pub struct Token<S: Spec> {
     /// Name of the token.
     pub(crate) name: String,
