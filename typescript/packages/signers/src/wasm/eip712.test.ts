@@ -208,8 +208,13 @@ describe("Eip712Signer", () => {
                   .map((b) => b.toString(16).padStart(2, "0"))
                   .join("")}`,
               );
-              const newS = N - sBigInt; // Force high-s
-              const newV = v === 27 ? 28 : v === 28 ? 27 : v;
+
+              // Only flip to high-s if currently low-s
+              // (N - s flips between high and low, so we only flip if s < N/2)
+              const isLowS = sBigInt <= halfN;
+              const newS = isLowS ? N - sBigInt : sBigInt;
+              // Only flip recovery bit if we flipped s
+              const newV = isLowS ? (v === 27 ? 28 : v === 28 ? 27 : v) : v;
 
               const newSBytes = hexToBytes(newS.toString(16).padStart(64, "0"));
               const highSSig = new Uint8Array(65);
