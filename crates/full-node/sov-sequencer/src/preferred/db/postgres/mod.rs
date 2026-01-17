@@ -67,12 +67,6 @@ impl PostgresBackend {
         Ok(backend)
     }
 
-    /// Connect without immediately claiming leadership.
-    /// Used by DbElected nodes during the election phase.
-    pub async fn connect_without_leadership(config: &PostgresConfig) -> Result<Self> {
-        Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await
-    }
-
     async fn connect_with_leader_timeout(
         config: &PostgresConfig,
         leader_timeout: Duration,
@@ -247,6 +241,11 @@ impl PostgresBackend {
         }))
     }
 
+    /// Attempts to acquire or refresh leadership in the database.
+    ///
+    /// Returns `Some(leader)` if the upsert succeeded (this node became leader, refreshed its
+    /// leadership, or took over from a timed-out leader). Returns `None` if another node is
+    /// the active leader and hasn't timed out yet.
     pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
         let leader_timeout: i64 = self
             .leader_timeout

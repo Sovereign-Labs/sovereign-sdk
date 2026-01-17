@@ -452,8 +452,7 @@ impl PreferredSequencerDb {
                     ),
                     NodeRole::DbElected => {
                         // Connect without claiming leadership, then try to acquire it
-                        let backend =
-                            PostgresBackend::connect_without_leadership(postgres_config).await?;
+                        let backend = PostgresBackend::connect(postgres_config).await?;
 
                         // Compute node address for registration
                         let node_address = leadership_election::compute_node_address(bind_port)?;

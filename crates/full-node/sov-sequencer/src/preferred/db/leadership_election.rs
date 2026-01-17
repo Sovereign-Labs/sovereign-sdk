@@ -56,7 +56,7 @@ impl LeadershipElectionTask {
         shutdown_sender: watch::Sender<()>,
         bind_port: u16,
     ) -> Result<Self> {
-        let backend = PostgresBackend::connect_without_leadership(postgres_config).await?;
+        let backend = PostgresBackend::connect(postgres_config).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
 
         // Compute node address from local IP and bind_port
