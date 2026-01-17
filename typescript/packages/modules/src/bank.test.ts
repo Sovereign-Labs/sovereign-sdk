@@ -1,5 +1,4 @@
 import { SovereignClient } from "@sovereign-sdk/web3";
-import { bech32m } from "bech32";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Bank } from "./bank";
 
@@ -145,17 +144,9 @@ describe("Bank", () => {
     const mockTokenId =
       "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7";
 
-    // Create a gas token ID with 6 decimals
-    const gasTokenBytes = new Uint8Array(32);
-    gasTokenBytes[31] = 6;
-    const mockGasTokenId = bech32m.encode(
-      "token_",
-      bech32m.toWords(gasTokenBytes),
-    );
-
     beforeEach(() => {
       // Mock gasTokenId method
-      vi.spyOn(bank, "gasTokenId").mockResolvedValue(mockGasTokenId);
+      vi.spyOn(bank, "gasTokenId").mockResolvedValue(mockTokenId);
     });
 
     it("should return token metadata for a specific token", async () => {
@@ -187,7 +178,7 @@ describe("Bank", () => {
 
     it("should return token metadata for gas token when no tokenId provided", async () => {
       const mockResponse = {
-        key: mockGasTokenId,
+        key: mockTokenId,
         value: {
           name: "Gas Token",
           total_supply: "500000000000000000000000",
@@ -201,11 +192,11 @@ describe("Bank", () => {
       const result = await bank.tokenMetadata();
 
       expect(mockClient.get).toHaveBeenCalledWith(
-        `/modules/bank/state/tokens/items/${mockGasTokenId}`,
+        `/modules/bank/state/tokens/items/${mockTokenId}`,
       );
       expect(result).toEqual({
         name: "Gas Token",
-        decimals: 6,
+        decimals: 89,
         totalSupply: BigInt("500000000000000000000000"),
         supplyCap: BigInt("1000000000000000000000000"),
         admins: ["sov1derived789"],
