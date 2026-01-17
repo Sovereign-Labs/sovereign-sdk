@@ -730,8 +730,7 @@ where
     async fn is_ready(&self) -> Result<(), SequencerNotReadyDetails> {
         // We don't actually care about the `inner`, we just want to reuse the
         // same logic.
-        let res = self
-            .synchronized_state_updator
+        self.synchronized_state_updator
             .check_readiness_msg(
                 self.config.max_concurrent_blobs,
                 self.stop_at_rollup_height,
@@ -739,9 +738,7 @@ where
             )
             .await
             .map_err(|_| SequencerNotReadyDetails::Shutdown)?
-            .map(|_| ());
-
-        res
+            .map(|_| ())
     }
 
     fn api_state(&self) -> ApiState<Self::Spec> {
