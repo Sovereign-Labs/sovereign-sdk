@@ -1,5 +1,6 @@
 import * as secp from "@noble/secp256k1";
-import { Signature, ethers } from "ethers";
+import { hexToBytes } from "@sovereign-sdk/utils";
+import { type Signature, keccak256, parseSignature } from "viem";
 import { SignerError } from "./errors";
 import type { Signer } from "./signer";
 
@@ -31,11 +32,15 @@ export class PrivySigner implements Signer {
   }
 
   async sign(message: Uint8Array): Promise<Uint8Array> {
-    const digest = ethers.keccak256(message);
+    const digest = keccak256(message);
     const signatureBytes = await this.signProvider(digest);
-    const signature = Signature.from(signatureBytes);
+    const signature = parseSignature(signatureBytes as `0x${string}`);
     this.cachePublicKey(digest, signature);
-    return ethers.getBytes(ethers.concat([signature.r, signature.s]));
+
+    // Return compact signature (r + s, 64 bytes)
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+    return new Uint8Array([...r, ...s]);
   }
 
   /** Returns the public key in compressed form. */
@@ -52,11 +57,13 @@ export class PrivySigner implements Signer {
   private cachePublicKey(msgHash: string, signature: Signature) {
     if (this.cachedPublicKey) return;
 
-    let secpSig = secp.Signature.fromCompact(
-      ethers.getBytesCopy(ethers.concat([signature.r, signature.s])),
-    );
-    secpSig = secpSig.addRecoveryBit(signature.yParity);
-    const publicKey = secpSig.recoverPublicKey(ethers.getBytes(msgHash));
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
+    secpSig = secpSig.addRecoveryBit(signature.yParity ?? 0);
+
+    const msgHashBytes = hexToBytes(msgHash.slice(2));
+    const publicKey = secpSig.recoverPublicKey(msgHashBytes);
 
     this.cachedPublicKey = publicKey.toBytes(true);
   }

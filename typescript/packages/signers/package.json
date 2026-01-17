@@ -63,7 +63,6 @@
     "@noble/secp256k1": "^2.3.0",
     "@sovereign-sdk/universal-wallet-wasm": "workspace:^",
     "@sovereign-sdk/utils": "workspace:^",
-    "ethers": "^6.15.0",
     "viem": "^2.44.4"
   }
 }

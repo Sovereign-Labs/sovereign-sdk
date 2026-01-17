@@ -7,6 +7,24 @@ import { SignerError } from "../errors";
 import type { Signer } from "../signer";
 
 /**
+ * Normalize a signature to low-s form if needed.
+ * MetaMask's eth_signTypedData_v4 may return high-s signatures (~50% of the time).
+ * The rollup server requires low-s signatures.
+ */
+function normalizeSignature(signature: Signature): Uint8Array {
+  const r = hexToBytes(signature.r.slice(2));
+  const s = hexToBytes(signature.s.slice(2));
+  let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
+
+  // Normalize s if it's > n/2 (convert high-s to low-s)
+  if (secpSig.hasHighS()) {
+    secpSig = secpSig.normalizeS();
+  }
+
+  return secpSig.toCompactRawBytes();
+}
+
+/**
  * EIP-712 signer implementation that uses MetaMask's eth_signTypedData_v4 method.
  *
  * This signer expects the message to be a valid UnsignedTransaction that can be
@@ -124,19 +142,9 @@ export class Eip712Signer implements Signer {
     const signature = parseSignature(signatureHex as `0x${string}`);
     this.cachePublicKey(signingHash, signature);
 
-    // Create secp256k1 signature and normalize to low-s form
-    // MetaMask's eth_signTypedData_v4 may return high-s signatures for EIP-712 messages
-    // (EIP-2 low-s requirement only applies to transactions, not off-chain message signing)
-    const r = hexToBytes(signature.r.slice(2));
-    const s = hexToBytes(signature.s.slice(2));
-    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
-
-    // Normalize s if it's > n/2 (convert high-s to low-s)
-    if (secpSig.hasHighS()) {
-      secpSig = secpSig.normalizeS();
-    }
-
-    // Return the normalized compact serialized signature (r + s, 64 bytes)
-    return secpSig.toCompactRawBytes();
+    // Normalize to low-s form
+    // (EIP-2 low-s requirement only applies to transactions, not off-chain message signing,
+    // but the rollup server expects low-s signatures)
+    return normalizeSignature(signature);
   }
 }
