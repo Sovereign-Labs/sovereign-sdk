@@ -253,9 +253,7 @@ impl<S: Spec> InterchainGasPaymaster<S> {
             bail!("Access denied: only admin can change admin");
         }
 
-        self.admin
-            .set(&new_admin, state)
-            .context("set admin")?;
+        self.admin.set(&new_admin, state).context("set admin")?;
 
         self.emit_event(
             state,

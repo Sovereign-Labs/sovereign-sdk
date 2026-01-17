@@ -46,7 +46,9 @@ pub fn setup_without_gas_token() -> (
     let extra_account = genesis_config.additional_accounts()[1].clone();
     let relayer_account = genesis_config.additional_accounts()[1].clone();
 
-    let igp_config = IGPConfig { admin: relayer_account.address() };
+    let igp_config = IGPConfig {
+        admin: relayer_account.address(),
+    };
     let mut rt_genesis_config =
         GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), igp_config);
 

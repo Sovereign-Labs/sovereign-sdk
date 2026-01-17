@@ -52,7 +52,9 @@ pub fn setup() -> (
     let beneficiary_account = genesis_config.additional_accounts()[4].clone();
     let user_account = genesis_config.additional_accounts()[3].clone();
 
-    let igp_config = IGPConfig { admin: relayer_account.address() };
+    let igp_config = IGPConfig {
+        admin: relayer_account.address(),
+    };
     let genesis = GenesisConfig::from_minimal_config(genesis_config.into(), (), (), (), igp_config);
 
     (

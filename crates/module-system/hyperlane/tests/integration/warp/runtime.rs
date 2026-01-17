@@ -50,8 +50,11 @@ pub fn setup() -> (
     let extra_account = genesis_config.additional_accounts()[1].clone();
     let relayer_account = genesis_config.additional_accounts()[1].clone();
 
-    let igp_config = IGPConfig { admin: relayer_account.address() };
-    let genesis = GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), igp_config);
+    let igp_config = IGPConfig {
+        admin: relayer_account.address(),
+    };
+    let genesis =
+        GenesisConfig::from_minimal_config(genesis_config.clone().into(), (), (), (), igp_config);
 
     (
         TestRunner::new_with_genesis(genesis.into_genesis_params(), Default::default()),

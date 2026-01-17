@@ -2,8 +2,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use sov_bank::Amount;
-use sov_hyperlane_integration::warp::{Admin, TokenKind};
 use sov_hyperlane_integration::igp::IGPConfig;
+use sov_hyperlane_integration::warp::{Admin, TokenKind};
 use sov_hyperlane_integration::{
     HyperlaneAddress, InterchainGasPaymaster, Ism, Mailbox as RawMailbox, MerkleTreeHook, Message,
     Warp, WarpCallMessage, WarpEvent,
@@ -69,7 +69,9 @@ pub fn setup() -> SetupParams {
         ism: Some(Ism::AlwaysTrust),
     };
 
-    let igp_config = IGPConfig { admin: module_admin.address() };
+    let igp_config = IGPConfig {
+        admin: module_admin.address(),
+    };
     let genesis = GenesisConfig::from_minimal_config(
         genesis_config.clone().into(),
         (),
