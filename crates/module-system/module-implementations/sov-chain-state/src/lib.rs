@@ -245,6 +245,10 @@ pub struct ChainState<S: Spec> {
     /// The current time, as reported by the timing oracle
     #[state]
     oracle_time: StateValue<Time>,
+
+    /// The current time in nanoseconds, as reported by the timing oracle.
+    #[state]
+    oracle_time_nanos: StateValue<u128>,
 }
 
 impl<S: Spec> ChainState<S> {
@@ -329,7 +333,30 @@ impl<S: Spec> ChainState<S> {
         if let Some(oracle_time) = self.oracle_time.get(state)? {
             return Ok(oracle_time);
         };
+        if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
+            let millis = (oracle_time_nanos / 1_000_000) as i64;
+            return Ok(Time::from_millis(millis));
+        }
         self.get_time(state)
+    }
+
+    /// Returns the current time in nanoseconds, as reported by the timing oracle.
+    /// Falls back to the DA layer time (converted to nanoseconds) if the oracle time is not set.
+    pub fn get_oracle_time_nanos<
+        Reader: StateReader<User, Error = E> + VersionReader + StateReader<Kernel, Error = E>,
+        E,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Result<u128, E> {
+        if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
+            return Ok(oracle_time_nanos);
+        }
+        if let Some(oracle_time) = self.oracle_time.get(state)? {
+            return Ok(oracle_time.as_millis() as u128 * 1_000_000);
+        }
+        let time = self.get_time(state)?;
+        Ok(time.as_millis() as u128 * 1_000_000)
     }
 
     /// Updates the oracle time using sequencer-provided sequencing metadata.
@@ -340,7 +367,8 @@ impl<S: Spec> ChainState<S> {
         timestamp: HDTimestamp,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
-        let millis = timestamp.as_nanos() / 1_000_000;
+        let nanos = timestamp.as_nanos();
+        let millis = nanos / 1_000_000;
         if millis > i64::MAX as u128 {
             tracing::warn!(
                 millis = %millis,
@@ -350,20 +378,29 @@ impl<S: Spec> ChainState<S> {
         }
 
         let new_time = Time::from_millis(millis as i64);
-        if let Some(current_time) = self.oracle_time.get(state)? {
-            if new_time < current_time {
+        let current_nanos = if let Some(current_nanos) = self.oracle_time_nanos.get(state)? {
+            Some(current_nanos)
+        } else if let Some(current_time) = self.oracle_time.get(state)? {
+            Some(current_time.as_millis() as u128 * 1_000_000)
+        } else {
+            None
+        };
+
+        if let Some(current_nanos) = current_nanos {
+            if nanos < current_nanos {
                 tracing::warn!(
-                    current_time = ?current_time,
-                    new_time = ?new_time,
+                    current_time_nanos = %current_nanos,
+                    new_time_nanos = %nanos,
                     "Oracle time regression detected; ignoring update"
                 );
                 return Ok(());
             }
-            if new_time == current_time {
+            if nanos == current_nanos {
                 return Ok(());
             }
         }
 
+        self.oracle_time_nanos.set(&nanos, state)?;
         self.oracle_time.set(&new_time, state)?;
         Ok(())
     }
