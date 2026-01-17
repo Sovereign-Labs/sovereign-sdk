@@ -46,10 +46,7 @@ impl DbElectedTestSetup {
         let (leader, replica) = match (role1, role2) {
             (SequencerRole::Leader, SequencerRole::Replica) => (rollup1, rollup2),
             (SequencerRole::Replica, SequencerRole::Leader) => (rollup2, rollup1),
-            _ => panic!(
-                "Expected one Leader and one Replica, got {:?} and {:?}",
-                role1, role2
-            ),
+            _ => panic!("Expected one Leader and one Replica, got {role1:?} and {role2:?}"),
         };
 
         Some(Self {
@@ -146,8 +143,7 @@ async fn test_db_elected_leader_failover() {
     assert_eq!(
         new_role,
         SequencerRole::Leader,
-        "Expected restarted node to be Leader, got {:?}",
-        new_role
+        "Expected restarted node to be Leader, got {new_rolegit:?}",
     );
 
     let _ = restarted_rollup.shutdown().await;
