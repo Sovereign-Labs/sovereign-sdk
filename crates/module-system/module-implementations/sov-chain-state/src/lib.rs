@@ -37,7 +37,6 @@ mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::da::Time;
-use sov_modules_api::InnerEnumVariant;
 use sov_modules_api::{DaSpec, Gas, KernelStateValue, Module, StateValue, VersionedStateValue};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::codec::BcsCodec;
@@ -128,7 +127,6 @@ impl<S: Spec> SlotInformation<S> {
 
 /// The chain state module definition. Contains the current state of the da layer.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
-#[module_info(sequencer_safety = "is_safe_for_sequencer")]
 pub struct ChainState<S: Spec> {
     /// The ID of the module.
     #[id]
@@ -247,16 +245,6 @@ pub struct ChainState<S: Spec> {
     /// The current time, as reported by the timing oracle
     #[state]
     oracle_time: StateValue<Time>,
-}
-
-/// Chain-state has no sequencer-only calls; all calls are safe for the sequencer.
-fn is_safe_for_sequencer<S: Spec>(
-    _module: &ChainState<S>,
-    _call: InnerEnumVariant<'_>,
-    _sequencer_address: &<S::Da as DaSpec>::Address,
-) -> bool {
-    // Calls to other modules are safe as far as we're concerned
-    true
 }
 
 impl<S: Spec> ChainState<S> {
