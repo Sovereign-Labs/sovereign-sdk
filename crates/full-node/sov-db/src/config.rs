@@ -70,13 +70,13 @@ impl RollupDbConfig {
                 1_000_000
             }),
             user_preallocate_ht: Some(false),
-            user_page_cache_size: None,
-            user_leaf_cache_size: None,
+            user_page_cache_size: Some(32),
+            user_leaf_cache_size: Some(32),
             kernel_commit_concurrency: Some(2),
             kernel_hashtable_buckets: None,
             kernel_preallocate_ht: Some(false),
-            kernel_page_cache_size: None,
-            kernel_leaf_cache_size: None,
+            kernel_page_cache_size: Some(32),
+            kernel_leaf_cache_size: Some(32),
             pruner_block_interval: None,
             pruner_versions_to_keep: Some(20),
             pruner_max_batch_size: None,
@@ -96,15 +96,14 @@ impl RollupDbConfig {
         );
         if let Some(hashtable_buckets) = self.kernel_hashtable_buckets {
             opts.hashtable_buckets(hashtable_buckets);
+        } else if cfg!(debug_assertions) {
+            // 9.77MB
+            opts.hashtable_buckets(2_500);
         } else {
-            if cfg!(debug_assertions) {
-                // 9.77MB
-                opts.hashtable_buckets(2_500);
-            } else {
-                // 1000MB
-                opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
-            }
+            // 1000MB
+            opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
         }
+
         if let Some(preallocate_ht) = self.kernel_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
         }
