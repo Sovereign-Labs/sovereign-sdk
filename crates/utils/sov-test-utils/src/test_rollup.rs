@@ -549,6 +549,7 @@ where
             block_producing,
             da_layer: None,
             randomization: None,
+            failure_behavior: Default::default(),
         };
 
         Self {

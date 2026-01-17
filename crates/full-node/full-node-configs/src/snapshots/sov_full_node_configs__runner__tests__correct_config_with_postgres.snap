@@ -41,7 +41,8 @@ expression: config
         "block_time_ms": 1000
       }
     },
-    "randomization": null
+    "randomization": null,
+    "failure_behavior": "none"
   },
   "proof_manager": {
     "aggregated_proof_block_jump": 22,

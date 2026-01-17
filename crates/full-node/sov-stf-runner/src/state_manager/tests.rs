@@ -64,12 +64,12 @@ pub struct MockStf;
 impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
     for MockStf
 {
-    type Address = Vec<u8>;
     type StateRoot = <ProverStorage<S> as Storage>::Root;
-    type GasPrice = ();
+    type Address = Vec<u8>;
     type GenesisParams = MockGenesisParams;
     type PreState = ();
     type ChangeSet = ();
+    type GasPrice = ();
     type StorageProof = ();
     type TxReceiptContents = ();
     type BatchReceiptContents = ();
@@ -143,20 +143,22 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
     let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
-    da_service.send_transaction(&[10; 10]).await.await??;
-    let filtered_block = da_service.get_block_at(1).await?;
+    for h in 1..=10 {
+        da_service.send_transaction(&[10; 10]).await.await??;
+        let filtered_block = da_service.get_block_at(h).await?;
 
-    process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
-        .await?;
+        process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
+            .await?;
 
-    // LedgerDb storage should be updated by that point, so the correct height is returned
-    assert_eq!(
-        SlotNumber::GENESIS,
-        state_manager
-            .ledger_db
-            .get_latest_finalized_slot_number()
-            .await?
-    );
+        // LedgerDb storage should be updated by that point, so the correct height is returned
+        assert_eq!(
+            SlotNumber::GENESIS,
+            state_manager
+                .ledger_db
+                .get_latest_finalized_slot_number()
+                .await?
+        );
+    }
 
     shutdown_sender.send(())?;
 
@@ -664,6 +666,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 reorg_interval: 1..2,
                 behaviour: RandomizationBehaviour::only_shuffle(0),
             }),
+            failure_behavior: Default::default(),
         },
         receiver,
     )

@@ -16,7 +16,6 @@ use sov_mock_da::{
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
-use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
@@ -171,6 +170,7 @@ fn build_da_config(
         block_producing,
         da_layer: None,
         randomization: Some(randomization),
+        failure_behavior: Default::default(),
     }
 }
 
@@ -179,7 +179,7 @@ async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
     let finality = 50;
     let block_time_ms = 500;
     let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
+        seed: sov_mock_da::seed_for_test(1),
         reorg_interval: 1..3,
         // TODO: It also messes up things with shorter block_time. get back to this later
         behaviour: RandomizationBehaviour::only_shuffle(20),
@@ -198,7 +198,7 @@ async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
     let finality = 20;
     let block_time_ms = 400;
     let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
+        seed: sov_mock_da::seed_for_test(2),
         reorg_interval: 1..3,
         behaviour: RandomizationBehaviour::ShuffleAndResize {
             drop_percent: 10,
@@ -222,7 +222,7 @@ async fn test_runner_rewind_below_finalized_instant_finality() -> anyhow::Result
     let finality = 0; // Instant finality
     let block_time_ms = 500;
     let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
+        seed: sov_mock_da::seed_for_test(3),
         reorg_interval: 2..5,
         behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
     };

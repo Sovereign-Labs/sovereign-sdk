@@ -41,6 +41,7 @@ fn bench_storable_mock_da_service(c: &mut Criterion) {
                 },
                 da_layer: None,
                 randomization: None,
+                failure_behavior: Default::default(),
             },
             receiver.clone(),
         )

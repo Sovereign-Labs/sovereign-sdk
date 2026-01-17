@@ -181,6 +181,32 @@ pub struct RandomizationConfig {
     pub behaviour: RandomizationBehaviour,
 }
 
+/// Configurable failure behavior for testing error handling in consumers of MockDa.
+/// This allows tests to inject failures at specific points during DA operations.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureBehavior {
+    /// No failures (default behavior).
+    #[default]
+    None,
+    /// Fail `get_block_at` or `get_block_header_at` after N successful calls.
+    /// The counter decrements on each call; when it reaches 0, the call fails.
+    FailAfterNCalls {
+        /// Number of successful calls remaining before failure.
+        remaining: u64,
+    },
+    /// Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or
+    /// `get_block_header_at` is called for a specific height.
+    /// After the reorg is triggered, subsequent calls proceed normally.
+    ReorgDuringCall {
+        /// The height that triggers the reorg.
+        trigger_at_height: u64,
+        /// Whether the reorg has already been triggered (runtime state, not serialized).
+        #[serde(skip, default)]
+        triggered: bool,
+    },
+}
+
 /// Small, but more entropy seed, suitable for unit tests
 pub fn seed_for_test(small_seed: u8) -> HexHash {
     let orig = [small_seed; 32];
@@ -213,6 +239,10 @@ pub struct MockDaConfig {
     pub da_layer: Option<std::sync::Arc<tokio::sync::RwLock<StorableMockDaLayer>>>,
     /// If specified, [`StorableMockDaLayer`] will add randomization to non-finalized blocks.
     pub randomization: Option<RandomizationConfig>,
+    /// Configures failure injection for testing.
+    /// Defaults to `FailureBehavior::None` (no failures).
+    #[serde(default)]
+    pub failure_behavior: FailureBehavior,
 }
 
 impl PartialEq for MockDaConfig {
@@ -221,7 +251,8 @@ impl PartialEq for MockDaConfig {
             && self.sender_address == other.sender_address
             && self.finalization_blocks == other.finalization_blocks
             && self.block_producing == other.block_producing
-            && self.randomization == other.randomization;
+            && self.randomization == other.randomization
+            && self.failure_behavior == other.failure_behavior;
 
         // Basic fields are not equal, no need to check da_layer field
         if !basic_eq {
@@ -249,6 +280,7 @@ impl MockDaConfig {
             block_producing: default_block_producing(),
             da_layer: None,
             randomization: None,
+            failure_behavior: FailureBehavior::None,
         }
     }
 
@@ -285,6 +317,7 @@ impl MockDaConfig {
                 // Just to spice things up a bit
                 behaviour: RandomizationBehaviour::OutOfOrderBlobs,
             }),
+            failure_behavior: FailureBehavior::None,
         }
     }
 
@@ -304,6 +337,7 @@ impl MockDaConfig {
                     adjust_head_height: -10..10,
                 },
             }),
+            failure_behavior: FailureBehavior::None,
         }
     }
 }

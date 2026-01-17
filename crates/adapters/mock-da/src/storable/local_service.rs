@@ -17,38 +17,14 @@ use tracing::Instrument;
 use crate::config::WAIT_ATTEMPT_PAUSE;
 use crate::storable::layer::{Randomizer, StorableMockDaLayer};
 use crate::{
-    BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockHash,
-    RandomizationBehaviour, RandomizationConfig, DEFAULT_BLOCK_WAITING_TIME_MS,
+    BlockProducingConfig, FailureBehavior, MockAddress, MockBlock, MockBlockHeader, MockDaConfig,
+    MockHash, RandomizationBehaviour, RandomizationConfig, DEFAULT_BLOCK_WAITING_TIME_MS,
 };
 
 const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
 // Time to accommodate rare cases of lock waiting time or latency to the database.
 const EXTRA_TIME_FOR_MAX_BLOCK: Duration = Duration::from_secs(10);
 const GET_BLOCK_ATTEMPTS: usize = 10;
-
-/// Configurable failure behavior for testing error handling in consumers of MockDa.
-/// This allows tests to inject failures at specific points during DA operations.
-#[derive(Debug, Default)]
-pub enum FailureBehavior {
-    /// No failures (default behavior).
-    #[default]
-    None,
-    /// Fail `get_block_at` or `get_block_header_at` after N successful calls.
-    /// The counter decrements on each call; when it reaches 0, the call fails.
-    FailAfterNCalls {
-        /// Number of successful calls remaining before failure.
-        remaining: u64,
-    },
-    /// Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or
-    /// `get_block_header_at` is called for a specific height.
-    /// After the reorg is triggered, subsequent calls proceed normally.
-    ReorgDuringCall {
-        /// The height that triggers the reorg.
-        trigger_at_height: u64,
-        /// Whether the reorg has already been triggered.
-        triggered: bool,
-    },
-}
 
 impl BlockProducingConfig {
     fn get_max_waiting_time_for_block(&self) -> Duration {
@@ -141,6 +117,7 @@ impl StorableMockDaService {
         da_layer: Arc<RwLock<StorableMockDaLayer>>,
         block_producing: BlockProducingConfig,
         block_producer_handle: Option<JoinHandle<()>>,
+        failure_behavior: FailureBehavior,
     ) -> Self {
         let (aggregated_proof_subscription, mut rec) = broadcast::channel(16);
         tokio::spawn(async move { while rec.recv().await.is_ok() {} });
@@ -158,7 +135,7 @@ impl StorableMockDaService {
             block_producer_handle: Arc::new(Mutex::new(block_producer_handle)),
             block_producing_pauser: Arc::new(Mutex::new(None)),
             send_transaction_success: Arc::new(AtomicBool::new(true)),
-            failure_behavior: Arc::new(Mutex::new(FailureBehavior::None)),
+            failure_behavior: Arc::new(Mutex::new(failure_behavior)),
         }
     }
     /// The `send_transaction` method will fail to post blobs to the DA.
@@ -228,7 +205,14 @@ impl StorableMockDaService {
         if !matches!(block_producing, BlockProducingConfig::Periodic { .. }) {
             tracing::warn!("Periodic block should be spawned separately, please use Self::from_config otherwise");
         }
-        Self::construct(sequencer_da_address, da_layer, block_producing, None).await
+        Self::construct(
+            sequencer_da_address,
+            da_layer,
+            block_producing,
+            None,
+            FailureBehavior::None,
+        )
+        .await
     }
 
     /// Create a new [` StorableMockDaService `] with the given address and [`BlockProducingConfig::Manual`].
@@ -310,6 +294,7 @@ impl StorableMockDaService {
             da_layer,
             config.block_producing,
             handle,
+            config.failure_behavior,
         )
         .await
     }
