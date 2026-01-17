@@ -26,7 +26,7 @@ mod genesis;
 pub use gas::{NonZeroRatio, NonZeroRatioConversionError};
 pub use genesis::*;
 use sov_modules_api::OperatingMode;
-use sov_modules_api::{AuthenticatedTransactionData, Context, HDTimestamp, TxHooks, TxState};
+use sov_modules_api::{HDTimestamp, TxState};
 
 /// Capabilities implementation for the module
 pub mod capabilities;
@@ -344,6 +344,42 @@ impl<S: Spec> ChainState<S> {
         self.get_time(state)
     }
 
+    /// Updates the oracle time using sequencer-provided sequencing metadata.
+    ///
+    /// This method is best-effort: invalid, overflowing, or regressing timestamps are ignored.
+    pub fn update_oracle_time_from_sequencing_data(
+        &mut self,
+        timestamp: HDTimestamp,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let millis = timestamp.as_nanos() / 1_000_000;
+        if millis > i64::MAX as u128 {
+            tracing::warn!(
+                millis = %millis,
+                "Sequencing metadata overflow for oracle time; ignoring"
+            );
+            return Ok(());
+        }
+
+        let new_time = Time::from_millis(millis as i64);
+        if let Some(current_time) = self.oracle_time.get(state)? {
+            if new_time < current_time {
+                tracing::warn!(
+                    current_time = ?current_time,
+                    new_time = ?new_time,
+                    "Oracle time regression detected; ignoring update"
+                );
+                return Ok(());
+            }
+            if new_time == current_time {
+                return Ok(());
+            }
+        }
+
+        self.oracle_time.set(&new_time, state)?;
+        Ok(())
+    }
+
     /// Returns the current time, as reported by the DA layer. This can be called within the execution context of a transaction.
     pub fn get_time<Reader: VersionReader + StateReader<Kernel>>(
         &self,
@@ -554,54 +590,6 @@ impl<S: Spec> ChainState<S> {
             prev_gas_info,
             provisional_visible_height_increase,
         ))
-    }
-}
-
-impl<S: Spec> TxHooks for ChainState<S> {
-    type Spec = S;
-
-    fn pre_dispatch_tx_hook<T: TxState<Self::Spec>>(
-        &mut self,
-        _tx: &AuthenticatedTransactionData<Self::Spec>,
-        context: &Context<Self::Spec>,
-        state: &mut T,
-    ) -> anyhow::Result<()> {
-        if !context.sequencer_is_preferred() {
-            return Ok(());
-        }
-
-        let Some(sequencing_data) = context.sequencing_data().as_ref() else {
-            return Ok(());
-        };
-
-        let Ok(hd_timestamp) = HDTimestamp::try_from_slice(sequencing_data) else {
-            tracing::warn!("Invalid sequencing metadata for oracle time; ignoring");
-            return Ok(());
-        };
-
-        let millis = hd_timestamp.as_nanos() / 1_000_000;
-        if millis > i64::MAX as u128 {
-            tracing::warn!(millis = %millis, "Sequencing metadata overflow for oracle time; ignoring");
-            return Ok(());
-        }
-
-        let new_time = Time::from_millis(millis as i64);
-        if let Some(current_time) = self.oracle_time.get(state)? {
-            if new_time < current_time {
-                tracing::warn!(
-                    current_time = ?current_time,
-                    new_time = ?new_time,
-                    "Oracle time regression detected; ignoring update"
-                );
-                return Ok(());
-            }
-            if new_time == current_time {
-                return Ok(());
-            }
-        }
-
-        self.oracle_time.set(&new_time, state)?;
-        Ok(())
     }
 }
 

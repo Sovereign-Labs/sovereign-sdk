@@ -26,6 +26,8 @@ mod sequencer;
 pub use sequencer::*;
 mod chain_state;
 pub use chain_state::*;
+mod sequencing_data;
+pub use sequencing_data::*;
 pub use sov_rollup_interface::common::RollupHeight;
 
 use crate::Spec;
@@ -59,6 +61,7 @@ pub trait HasCapabilities<S: Spec> {
         + SequencerAuthorization<S>
         + TransactionAuthorizer<S>
         + ProofProcessor<S>
+        + SequencingDataHandler<S>
         + SequencerRemuneration<S>
     where
         Self: 'a;
@@ -110,6 +113,13 @@ pub trait HasCapabilities<S: Spec> {
     ///
     /// This method can be overriden to provide a custom implementation.
     fn sequencer_remuneration(&mut self) -> impl SequencerRemuneration<S> {
+        self.capabilities().inner
+    }
+
+    /// Returns the [`SequencingDataHandler`] implementation on [`HasCapabilities::Capabilities`].
+    ///
+    /// This method can be overriden to provide a custom implementation.
+    fn sequencing_data_handler(&mut self) -> impl SequencingDataHandler<S> {
         self.capabilities().inner
     }
 }

@@ -1,12 +1,13 @@
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
+use sov_modules_api::capabilities::SequencingDataHandler;
 use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
     StateProvider, TransactionReceipt, TxScratchpad, WorkingSet, *,
 };
 use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use super::registered::IncrementalBatchReceipt;
 use crate::stf_blueprint::convert_to_runtime_events;
@@ -124,7 +125,16 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
     runtime: &mut RT,
     state: &mut WorkingSet<S, I>,
 ) -> Result<(), Error> {
-    runtime.pre_dispatch_tx_hook(tx, ctx, state)?;
+    if let Some(sequencing_data) = ctx.sequencing_data().as_ref() {
+        let mut handler = runtime.sequencing_data_handler();
+        if let Some(decoded) = handler.decode_sequencing_data(sequencing_data) {
+            handler.handle_sequencing_data(decoded, ctx, state)?;
+        } else {
+            warn!("Invalid sequencing metadata; ignoring");
+        }
+    }
+
+    runtime.pre_dispatch_tx_hook(tx, state)?;
 
     runtime.dispatch_call(message, state, ctx)?;
 

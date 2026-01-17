@@ -177,10 +177,6 @@ impl HooksMacro {
                     ty: quote::quote! {&::sov_modules_api::AuthenticatedTransactionData<Self::Spec>},
                 },
                 ArgWithType {
-                    arg: Ident::new("context", Span::call_site()),
-                    ty: quote::quote! {&::sov_modules_api::Context<Self::Spec>},
-                },
-                ArgWithType {
                     arg: Ident::new("state", Span::call_site()),
                     ty: quote::quote! {&mut T},
                 },

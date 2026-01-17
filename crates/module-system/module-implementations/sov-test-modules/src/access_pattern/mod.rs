@@ -503,7 +503,6 @@ impl<S: Spec> TxHooks for AccessPattern<S> {
     fn pre_dispatch_tx_hook<T: TxState<Self::Spec>>(
         &mut self,
         _tx: &sov_modules_api::AuthenticatedTransactionData<Self::Spec>,
-        _context: &Context<Self::Spec>,
         state: &mut T,
     ) -> anyhow::Result<()> {
         let curr_len = self.pre_hooks.len(state)?;
