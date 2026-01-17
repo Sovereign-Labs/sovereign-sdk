@@ -308,10 +308,9 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             other_handles.push(handle);
         }
 
-        let rest_addr = rollup.runner.axum_tcp.as_ref().unwrap().local_addr()?;
-
+        let rest_addr = rollup.runner.axum_socket_address()?;
         let rollup_task = tokio::spawn(async move {
-            match rollup.run_and_report_addr().await {
+            match rollup.run().await {
                 Ok(()) => {
                     tracing::info!("Completed running a rollup");
                     Ok(())

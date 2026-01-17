@@ -287,8 +287,10 @@ mod tests {
         let axum_router = build_test_axum_router();
         let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
         shutdown_receiver.mark_unchanged();
-        let (_join_handle, addr) = start_http_server(
-            &SocketAddr::from(([127, 0, 0, 1], 0)),
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _join_handle = start_http_server(
+            listener,
             axum_router,
             methods,
             shutdown_receiver,

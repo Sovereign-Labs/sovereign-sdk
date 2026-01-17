@@ -43,7 +43,7 @@ use sov_stf_runner::{
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::info;
 pub use wallet::*;
@@ -661,11 +661,6 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
     pub async fn run(self) -> anyhow::Result<()> {
-        self.run_and_report_addr().await
-    }
-
-    /// Runs the rollup. Reports REST and RPC ports to the caller using the provided channel.
-    pub async fn run_and_report_addr(self) -> anyhow::Result<()> {
         let mut runner = self.runner;
 
         runner

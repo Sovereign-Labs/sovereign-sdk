@@ -27,7 +27,9 @@ use sov_stf_runner::StateTransitionRunner;
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::TEST_MOCK_DA_POLLING_INTERVAL;
+use std::net::SocketAddr;
 use tempfile::TempDir;
+use tokio::net::TcpListener;
 use tokio::sync::watch;
 
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
@@ -97,8 +99,15 @@ async fn test_runner_with_background_da_service(
     let _ =
         sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_receiver.clone());
 
+    let axum_socket_addr = SocketAddr::new(
+        rollup_config.runner.http_config.bind_host.parse()?,
+        rollup_config.runner.http_config.bind_port,
+    );
+    let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
+
     let mut runner: HashStfRunner<StorableMockDaService> = StateTransitionRunner::new(
         rollup_config.runner.clone(),
+        axum_tcp,
         None,
         da_service.clone(),
         ledger_db.clone(),

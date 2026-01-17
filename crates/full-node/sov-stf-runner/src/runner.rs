@@ -54,8 +54,7 @@ where
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
-    /// TODO
-    pub axum_tcp: Option<TcpListener>,
+    axum_tcp: Option<TcpListener>,
     stf_info_receiver: Option<Receiver<Stf::StateRoot, Stf::Witness, Da::Spec>>,
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
@@ -238,7 +237,6 @@ where
             da_service: da_service.clone(),
             stf,
             state_manager,
-            axum_tcp: Some(axum_tcp),
             sync_state,
             stf_info_receiver,
             sync_fetcher,
@@ -249,7 +247,17 @@ where
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
             finalized_headers_provider: da_service_with_cached_finalized_headers,
+            axum_tcp: Some(axum_tcp),
         })
+    }
+
+    ///Returns the socket address of the Axum server.
+    pub fn axum_socket_address(&self) -> anyhow::Result<SocketAddr> {
+        let axum_tcp = self
+            .axum_tcp
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("The axum tcp listener is not initialized"))?;
+        Ok(axum_tcp.local_addr()?)
     }
 
     /// Subscribes to this runner's [`StateUpdateInfo`] channel, if enabled.
