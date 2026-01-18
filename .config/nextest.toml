@@ -29,12 +29,12 @@ filter = 'package(sov-sequencer) & test(/flaky_test_archival_state_is_immediatel
 priority = 95
 threads-required = 3
 
-[[profile.default.overrides]]
-filter = 'package(sov-sequencer) & test(/seq_behind_deferred_slots_count|test_no_crashes_on_resync|sequencer_back_pressure|heavy_blob_submission/)'
-test-group = 'heavy-sequencer-tests'
-threads-required = 4                                                 # Limit parallelism when these tests run
-slow-timeout = { period = "60s", terminate-after = 10 }              # These tests need up to 10 minutes under load
-
+#[[profile.default.overrides]]
+#filter = 'package(sov-sequencer) & test(/seq_behind_deferred_slots_count|test_no_crashes_on_resync|sequencer_back_pressure|heavy_blob_submission/)'
+#test-group = 'heavy-sequencer-tests'
+#threads-required = 4                                                 # Limit parallelism when these tests run
+#slow-timeout = { period = "60s", terminate-after = 10 }              # These tests need up to 10 minutes under load
+#
 ## This test has a race condition in archival state queries under load - needs full isolation
 #[[profile.default.overrides]]
 #filter = 'package(sov-sequencer)'

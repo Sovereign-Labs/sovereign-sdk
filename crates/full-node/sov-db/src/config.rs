@@ -70,13 +70,13 @@ impl RollupDbConfig {
                 1_000_000
             }),
             user_preallocate_ht: Some(false),
-            user_page_cache_size: Some(8),
-            user_leaf_cache_size: Some(8),
+            user_page_cache_size: Some(16),
+            user_leaf_cache_size: Some(16),
             kernel_commit_concurrency: Some(2),
             kernel_hashtable_buckets: None,
             kernel_preallocate_ht: Some(false),
-            kernel_page_cache_size: Some(4),
-            kernel_leaf_cache_size: Some(4),
+            kernel_page_cache_size: Some(16),
+            kernel_leaf_cache_size: Some(16),
             pruner_block_interval: None,
             pruner_versions_to_keep: Some(20),
             pruner_max_batch_size: None,
@@ -114,9 +114,6 @@ impl RollupDbConfig {
         if let Some(leaf_cache_size) = self.kernel_leaf_cache_size {
             opts.leaf_cache_size(leaf_cache_size);
         }
-        if cfg!(debug_assertions) {
-            opts.page_cache_upper_levels(1);
-        }
 
         opts.path(self.path.join("kernel_nomt_db"));
 
@@ -144,9 +141,6 @@ impl RollupDbConfig {
         }
         if let Some(leaf_cache_size) = self.user_leaf_cache_size {
             opts.leaf_cache_size(leaf_cache_size);
-        }
-        if cfg!(debug_assertions) {
-            opts.page_cache_upper_levels(1);
         }
 
         opts.path(self.path.join("user_nomt_db"));
