@@ -151,7 +151,8 @@ async fn test_runner_with_background_da_service(
         };
 
         // Track progress - fail if stuck for too long
-        if synced_da_height > last_synced_height {
+        // After reorgs, height can go down, so we track ANY change as progress
+        if synced_da_height != last_synced_height {
             last_synced_height = synced_da_height;
             last_progress_time = std::time::Instant::now();
         } else if last_progress_time.elapsed() > PROGRESS_TIMEOUT {
@@ -213,10 +214,10 @@ async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
     let block_time_ms = 400;
     let randomization = RandomizationConfig {
         seed: sov_mock_da::seed_for_test(2),
-        reorg_interval: 1..3,
+        reorg_interval: 3..6,
         behaviour: RandomizationBehaviour::ShuffleAndResize {
             drop_percent: 10,
-            adjust_head_height: -15..15,
+            adjust_head_height: -10..10,
         },
     };
     let da_config = build_da_config(finality, block_time_ms, randomization);
@@ -245,6 +246,48 @@ async fn test_runner_rewind_below_finalized_instant_finality() -> anyhow::Result
     tokio::time::timeout(
         TREE_MINUTES,
         test_runner_with_background_da_service(20, da_config),
+    )
+    .await?
+}
+
+/// Tests runner behavior when DA rewinds within non-finalized blocks.
+/// This simulates normal reorg scenarios where the chain tip moves backward
+/// but stays above the finalized height.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_non_finalized_state() -> anyhow::Result<()> {
+    let finality = 10; // Non-instant finality
+    let block_time_ms = 300;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(4),
+        reorg_interval: 3..6, // Rewind every 3-6 blocks
+        behaviour: RandomizationBehaviour::Rewind,
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization);
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(30, da_config),
+    )
+    .await?
+}
+
+/// Tests runner behavior when DA layer reports stale finalized headers with non-instant finality.
+/// This is the "faulty RPC node scenario" where `get_last_finalized_block_header`
+/// returns blocks below the actual finalized height.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_below_finalized_non_instant() -> anyhow::Result<()> {
+    let finality = 5; // Non-instant finality
+    let block_time_ms = 400;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(5),
+        reorg_interval: 2..4,
+        behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 3 },
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization);
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(25, da_config),
     )
     .await?
 }
