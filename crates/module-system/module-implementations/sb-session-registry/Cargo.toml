@@ -30,13 +30,16 @@ strum = { workspace = true }
 [features]
 default = []
 arbitrary = [
-    "sov-modules-api/arbitrary",
-    "sov-state/arbitrary",
-    "sov-test-utils/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-address/arbitrary",
+	"sov-bank/arbitrary"
 ]
 native = [
-    "sov-bank/native",
-    "sov-modules-api/native",
-    "sov-state/native",
-    "sov-address/native",
+	"sov-bank/native",
+	"sov-modules-api/native",
+	"sov-state/native",
+	"sov-address/native",
+	"sov-chain-state/native"
 ]

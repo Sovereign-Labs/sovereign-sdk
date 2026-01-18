@@ -1,11 +1,11 @@
 //! Call messages and execution entrypoint for the `Blacklist` module.
 
 use schemars::JsonSchema;
-use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::{Context, Spec, TxState, EventEmitter};
 use sov_modules_api::macros::serialize;
+use sov_modules_api::macros::UniversalWallet;
+use sov_modules_api::{Context, EventEmitter, Spec, TxState};
 
-use crate::{Event, Blacklist, BlacklistError};
+use crate::{Blacklist, BlacklistError, Event};
 
 /// Transaction-level messages supported by the `Blacklist`.
 ///
@@ -21,20 +21,13 @@ use crate::{Event, Blacklist, BlacklistError};
 #[schemars(bound = "S: Spec", rename = "CallMessage")]
 pub enum CallMessage<S: Spec> {
     /// Update the manager address.
-    SetManager {
-        new_manager: S::Address,
-    },
+    SetManager { new_manager: S::Address },
 
     /// Enable or disable global blacklist enforcement.
-    SetEnforcementEnabled {
-        enabled: bool,
-    },
+    SetEnforcementEnabled { enabled: bool },
 
     /// Grant or revoke blacklist-signer privileges for an address.
-    SetBlacklistSigner {
-        signer: S::Address,
-        allowed: bool,
-    },
+    SetBlacklistSigner { signer: S::Address, allowed: bool },
 
     /// Set or clear the blacklist status for a single wallet.
     ///
@@ -54,14 +47,10 @@ pub enum CallMessage<S: Spec> {
     /// Assert that a wallet is NOT blacklisted.
     ///
     /// Fails if the wallet is in the blacklist
-    EnforceNotBlacklisted {
-        wallet: S::Address,
-    },
+    EnforceNotBlacklisted { wallet: S::Address },
 
     /// Transfer ownership to a new address (owner-only).
-    TransferOwnership {
-        new_owner: S::Address,
-    },
+    TransferOwnership { new_owner: S::Address },
 }
 
 /// Route a CallMessage to the corresponding `Blacklist` logic.
@@ -83,7 +72,10 @@ pub fn execute<S: Spec>(
 
             module.emit_event(
                 state,
-                Event::ManagerSet { old_manager, new_manager },
+                Event::ManagerSet {
+                    old_manager,
+                    new_manager,
+                },
             );
 
             Ok(())
@@ -95,10 +87,7 @@ pub fn execute<S: Spec>(
 
             module.enforcement_enabled.set(&enabled, state)?;
 
-            module.emit_event(
-                state,
-                Event::EnforcementEnabledSet { enabled },
-            );
+            module.emit_event(state, Event::EnforcementEnabledSet { enabled });
 
             Ok(())
         }
@@ -113,14 +102,14 @@ pub fn execute<S: Spec>(
                 module.blacklist_signers.remove(&signer, state)?;
             }
 
-            module.emit_event(
-                state,
-                Event::BlacklistSignerSet { signer, allowed },
-            );
+            module.emit_event(state, Event::BlacklistSignerSet { signer, allowed });
 
             Ok(())
         }
-        CallMessage::SetBlacklisted { wallet, blacklisted } => {
+        CallMessage::SetBlacklisted {
+            wallet,
+            blacklisted,
+        } => {
             if !module.is_blacklist_signer(context.sender(), state)? {
                 return Err(BlacklistError::UnauthorizedBlacklistSigner.into());
             }
@@ -129,7 +118,10 @@ pub fn execute<S: Spec>(
 
             Ok(())
         }
-        CallMessage::SetBlacklistedBatch { wallets, blacklisted } => {
+        CallMessage::SetBlacklistedBatch {
+            wallets,
+            blacklisted,
+        } => {
             if !module.is_blacklist_signer(context.sender(), state)? {
                 return Err(BlacklistError::UnauthorizedBlacklistSigner.into());
             }
@@ -158,7 +150,10 @@ pub fn execute<S: Spec>(
 
             module.emit_event(
                 state,
-                Event::OwnershipTransferred { old_owner, new_owner },
+                Event::OwnershipTransferred {
+                    old_owner,
+                    new_owner,
+                },
             );
 
             Ok(())

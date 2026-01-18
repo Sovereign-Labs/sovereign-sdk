@@ -2,7 +2,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BlacklistError {
-
     #[error("Owner not initialized")]
     OwnerNotInitialized,
 

@@ -10,19 +10,19 @@
 //! - Helper methods for other modules (e.g. DEXes) to enforce that a
 //!   wallet is NOT blacklisted.
 
-mod types;
 mod call;
-mod event;
 mod error;
+mod event;
+mod types;
 
-pub use types::BlacklistConfig;
 pub use call::CallMessage;
-pub use event::Event;
 pub use error::BlacklistError;
+pub use event::Event;
+pub use types::BlacklistConfig;
 
 use sov_modules_api::{
-    Context, EventEmitter, GenesisState, Module, ModuleId, ModuleInfo,
-    ModuleRestApi, Spec, StateMap, StateValue, TxState
+    Context, EventEmitter, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
+    StateMap, StateValue, TxState,
 };
 
 /// Blacklist module definition.
@@ -81,7 +81,8 @@ impl<S: Spec> Module for Blacklist<S> {
     ) -> anyhow::Result<()> {
         self.owner.set(&config.owner, state)?;
         self.manager.set(&config.manager, state)?;
-        self.enforcement_enabled.set(&config.enforcement_enabled, state)?;
+        self.enforcement_enabled
+            .set(&config.enforcement_enabled, state)?;
         Ok(())
     }
 
@@ -96,14 +97,13 @@ impl<S: Spec> Module for Blacklist<S> {
 }
 
 impl<S: Spec> Blacklist<S> {
-
     // --- Public API for other modules (e.g., DEXes) ---
 
     /// Returns `true` if the wallet is currently blacklisted.
     pub fn is_blacklisted(
         &self,
         wallet: &S::Address,
-        state: &mut impl TxState<S>
+        state: &mut impl TxState<S>,
     ) -> anyhow::Result<bool> {
         Ok(self.blacklisted.get(wallet, state)?.unwrap_or(false))
     }
@@ -117,7 +117,7 @@ impl<S: Spec> Blacklist<S> {
     pub fn enforce_not_blacklisted(
         &self,
         wallet: &S::Address,
-        state: &mut impl TxState<S>
+        state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         // Skip enforcement if globally disabled
         if !self.enforcement_enabled.get(state)?.unwrap_or(true) {
@@ -134,11 +134,7 @@ impl<S: Spec> Blacklist<S> {
     // --- Private helpers ---
 
     /// Returns `true` if the given sender is the configured manager.
-    fn is_manager(
-        &self,
-        sender: &S::Address,
-        state: &mut impl TxState<S>
-    ) -> anyhow::Result<bool> {
+    fn is_manager(&self, sender: &S::Address, state: &mut impl TxState<S>) -> anyhow::Result<bool> {
         let manager = self
             .manager
             .get(state)?
@@ -148,11 +144,7 @@ impl<S: Spec> Blacklist<S> {
     }
 
     /// Returns `true` if the given sender is the configured owner.
-    fn is_owner(
-        &self,
-        sender: &S::Address,
-        state: &mut impl TxState<S>
-    ) -> anyhow::Result<bool> {
+    fn is_owner(&self, sender: &S::Address, state: &mut impl TxState<S>) -> anyhow::Result<bool> {
         let owner = self
             .owner
             .get(state)?
@@ -165,7 +157,7 @@ impl<S: Spec> Blacklist<S> {
     fn is_blacklist_signer(
         &self,
         signer: &S::Address,
-        state: &mut impl TxState<S>
+        state: &mut impl TxState<S>,
     ) -> anyhow::Result<bool> {
         Ok(self.blacklist_signers.get(signer, state)?.unwrap_or(false))
     }
@@ -175,7 +167,7 @@ impl<S: Spec> Blacklist<S> {
         &mut self,
         wallet: &S::Address,
         blacklisted: bool,
-        state: &mut impl TxState<S>
+        state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         if blacklisted {
             self.blacklisted.set(wallet, &true, state)?;

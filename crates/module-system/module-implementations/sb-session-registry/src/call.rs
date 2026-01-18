@@ -214,7 +214,10 @@ pub fn execute<S: Spec>(
 
             module.emit_event(
                 state,
-                Event::OwnershipTransferred { old_owner, new_owner },
+                Event::OwnershipTransferred {
+                    old_owner,
+                    new_owner,
+                },
             );
 
             Ok(())

@@ -5,8 +5,7 @@ mod test_dex {
     use schemars::JsonSchema;
     use sov_modules_api::macros::{serialize, UniversalWallet};
     use sov_modules_api::{
-        Context, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-        TxState,
+        Context, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, TxState,
     };
 
     use sb_blacklist::Blacklist;
@@ -56,8 +55,7 @@ mod test_dex {
         ) -> Result<()> {
             match msg {
                 DexCallMessage::EnforceNotBlacklisted { wallet } => {
-                    self.blacklist
-                        .enforce_not_blacklisted(&wallet, state)
+                    self.blacklist.enforce_not_blacklisted(&wallet, state)
                 }
             }
         }

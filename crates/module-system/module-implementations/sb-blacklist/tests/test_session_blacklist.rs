@@ -3,10 +3,10 @@
 use sov_modules_api::Spec;
 use sov_test_utils::{generate_optimistic_runtime, TestSpec};
 
-use sb_blacklist::{CallMessage, BlacklistConfig, Blacklist};
+use sb_blacklist::{Blacklist, BlacklistConfig, CallMessage};
 
 mod common;
-use common::{TestDex, DexConfig, DexCallMessage};
+use common::{DexCallMessage, DexConfig, TestDex};
 
 type S = TestSpec;
 
@@ -55,11 +55,8 @@ pub fn setup() -> (TestData<S>, TestRunner<TestRuntime<S>, S>) {
 
     let dex_config = DexConfig {};
 
-    let genesis = GenesisConfig::from_minimal_config(
-        genesis_config.into(),
-        blacklist_config,
-        dex_config,
-    );
+    let genesis =
+        GenesisConfig::from_minimal_config(genesis_config.into(), blacklist_config, dex_config);
 
     let runner =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), TestRuntime::default());
@@ -93,12 +90,11 @@ fn test_1() {
 
     // DEX enforces not blacklisted (should succeed: wallet is not in blacklist)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -109,13 +105,12 @@ fn test_1() {
 
     // Manager sets a blacklist signer
     runner.execute_transaction(TransactionTestCase {
-        input: manager
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklistSigner {
-                    signer: signer_addr.clone(),
-                    allowed: true,
-                },
-            ),
+        input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklistSigner {
+                signer: signer_addr.clone(),
+                allowed: true,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -126,13 +121,12 @@ fn test_1() {
 
     // Signer blacklists wallet
     runner.execute_transaction(TransactionTestCase {
-        input: signer
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklisted {
-                    wallet: wallet_addr.clone(),
-                    blacklisted: true,
-                },
-            ),
+        input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklisted {
+                wallet: wallet_addr.clone(),
+                blacklisted: true,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -143,12 +137,11 @@ fn test_1() {
 
     // DEX enforces not blacklisted (should fail: wallet is blacklisted)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 !result.tx_receipt.is_successful(),
@@ -159,13 +152,12 @@ fn test_1() {
 
     // Signer removes wallet from blacklist
     runner.execute_transaction(TransactionTestCase {
-        input: signer
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklisted {
-                    wallet: wallet_addr.clone(),
-                    blacklisted: false,
-                },
-            ),
+        input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklisted {
+                wallet: wallet_addr.clone(),
+                blacklisted: false,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -176,12 +168,11 @@ fn test_1() {
 
     // DEX enforces not blacklisted (should succeed again)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -192,13 +183,12 @@ fn test_1() {
 
     // Owner sets blacklist signer (should fail because only manager is allowed)
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklistSigner {
-                    signer: signer_addr.clone(),
-                    allowed: true,
-                },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklistSigner {
+                signer: signer_addr.clone(),
+                allowed: true,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 !result.tx_receipt.is_successful(),
@@ -209,13 +199,12 @@ fn test_1() {
 
     // Owner sets blacklisted (should fail because only signer allowed)
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklisted {
-                    wallet: wallet_addr.clone(),
-                    blacklisted: true,
-                },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklisted {
+                wallet: wallet_addr.clone(),
+                blacklisted: true,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 !result.tx_receipt.is_successful(),
@@ -250,13 +239,12 @@ fn test_2() {
 
     // Manager sets blacklist signer
     runner.execute_transaction(TransactionTestCase {
-        input: manager
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklistSigner {
-                    signer: signer_addr.clone(),
-                    allowed: true,
-                },
-            ),
+        input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklistSigner {
+                signer: signer_addr.clone(),
+                allowed: true,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -267,13 +255,12 @@ fn test_2() {
 
     // Signer blacklists wallet and wallet2 in batch
     runner.execute_transaction(TransactionTestCase {
-        input: signer
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklistedBatch {
-                    wallets: vec![wallet_addr.clone(), wallet2_addr.clone()],
-                    blacklisted: vec![true, true],
-                },
-            ),
+        input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklistedBatch {
+                wallets: vec![wallet_addr.clone(), wallet2_addr.clone()],
+                blacklisted: vec![true, true],
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -285,12 +272,11 @@ fn test_2() {
     // DEX enforces not blacklisted for both wallets (should fail for both)
     for target_wallet in [wallet_addr.clone(), wallet2_addr.clone()] {
         runner.execute_transaction(TransactionTestCase {
-            input: wallet
-                .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                    DexCallMessage::EnforceNotBlacklisted {
-                        wallet: target_wallet,
-                    },
-                ),
+            input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+                DexCallMessage::EnforceNotBlacklisted {
+                    wallet: target_wallet,
+                },
+            ),
             assert: Box::new(|result, _state| {
                 assert!(
                     !result.tx_receipt.is_successful(),
@@ -302,13 +288,12 @@ fn test_2() {
 
     // Signer removes wallet from blacklist
     runner.execute_transaction(TransactionTestCase {
-        input: signer
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklisted {
-                    wallet: wallet_addr.clone(),
-                    blacklisted: false,
-                },
-            ),
+        input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklisted {
+                wallet: wallet_addr.clone(),
+                blacklisted: false,
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -319,12 +304,11 @@ fn test_2() {
 
     // DEX enforces not blacklisted for wallet (should succeed)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -335,12 +319,11 @@ fn test_2() {
 
     // DEX enforces not blacklisted for wallet2 (should still fail)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet2_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet2_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 !result.tx_receipt.is_successful(),
@@ -376,13 +359,12 @@ fn test_3() {
 
     // Manager sets blacklist signer
     runner.execute_transaction(TransactionTestCase {
-        input: manager
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklistSigner {
-                    signer: signer_addr.clone(),
-                    allowed: true,
-                },
-            ),
+        input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklistSigner {
+                signer: signer_addr.clone(),
+                allowed: true,
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -393,13 +375,12 @@ fn test_3() {
 
     // Signer blacklists wallet
     runner.execute_transaction(TransactionTestCase {
-        input: signer
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklisted {
-                    wallet: wallet_addr.clone(),
-                    blacklisted: true,
-                },
-            ),
+        input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklisted {
+                wallet: wallet_addr.clone(),
+                blacklisted: true,
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -410,12 +391,11 @@ fn test_3() {
 
     // DEX enforces not blacklisted (should fail: wallet is blacklisted)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 !result.tx_receipt.is_successful(),
@@ -426,10 +406,9 @@ fn test_3() {
 
     // Owner disables global enforcement
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetEnforcementEnabled { enabled: false },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetEnforcementEnabled { enabled: false },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -440,12 +419,11 @@ fn test_3() {
 
     // With enforcement disabled, DEX checks should succeed even for blacklisted wallet
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, TestDex<S>>(
-                DexCallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
+            DexCallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _state| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -456,12 +434,11 @@ fn test_3() {
 
     // Direct call endpoint should behave the same: no-op under disabled enforcement
     runner.execute_transaction(TransactionTestCase {
-        input: manager
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::EnforceNotBlacklisted {
-                    wallet: wallet_addr.clone(),
-                },
-            ),
+        input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::EnforceNotBlacklisted {
+                wallet: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -472,12 +449,11 @@ fn test_3() {
 
     // Owner changes manager to owner address
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetManager {
-                    new_manager: owner_addr.clone(),
-                },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetManager {
+                new_manager: owner_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -488,13 +464,12 @@ fn test_3() {
 
     // New manager (owner) can now set blacklist signer successfully
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetBlacklistSigner {
-                    signer: signer_addr.clone(),
-                    allowed: true,
-                },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetBlacklistSigner {
+                signer: signer_addr.clone(),
+                allowed: true,
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -525,12 +500,11 @@ fn test_transfer_ownership() {
 
     // Owner transfers ownership to wallet
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::TransferOwnership {
-                    new_owner: wallet_addr.clone(),
-                },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::TransferOwnership {
+                new_owner: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -541,12 +515,11 @@ fn test_transfer_ownership() {
 
     // Old owner tries to change manager (should fail: no longer owner)
     runner.execute_transaction(TransactionTestCase {
-        input: owner
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetManager {
-                    new_manager: manager_addr.clone(),
-                },
-            ),
+        input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetManager {
+                new_manager: manager_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 !result.tx_receipt.is_successful(),
@@ -557,12 +530,11 @@ fn test_transfer_ownership() {
 
     // New owner (wallet) changes manager (should succeed)
     runner.execute_transaction(TransactionTestCase {
-        input: wallet
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::SetManager {
-                    new_manager: wallet_addr.clone(),
-                },
-            ),
+        input: wallet.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::SetManager {
+                new_manager: wallet_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 result.tx_receipt.is_successful(),
@@ -573,12 +545,11 @@ fn test_transfer_ownership() {
 
     // Non-owner (manager) tries to transfer ownership (should fail)
     runner.execute_transaction(TransactionTestCase {
-        input: manager
-            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
-                CallMessage::TransferOwnership {
-                    new_owner: manager_addr.clone(),
-                },
-            ),
+        input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+            CallMessage::TransferOwnership {
+                new_owner: manager_addr.clone(),
+            },
+        ),
         assert: Box::new(|result, _| {
             assert!(
                 !result.tx_receipt.is_successful(),
