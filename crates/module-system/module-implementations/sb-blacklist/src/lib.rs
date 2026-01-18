@@ -178,7 +178,7 @@ impl<S: Spec> Blacklist<S> {
         self.emit_event(
             state,
             Event::BlacklistSet {
-                wallet: wallet.clone(),
+                wallet: *wallet,
                 blacklisted,
             },
         );

@@ -118,7 +118,7 @@ impl<S: Spec> Module for SessionRegistry<S> {
 }
 
 impl<S: Spec> SessionRegistry<S> {
-    /// --- APIs for DEX modules ---
+    // --- APIs for DEX modules ---
 
     /// Returns `true` if the wallet currently has an active session.
     ///
@@ -210,7 +210,7 @@ impl<S: Spec> SessionRegistry<S> {
         }
     }
 
-    /// --- Helpers ---
+    // --- Helpers ---
 
     /// Returns `true` if the given sender is the configured manager.
     ///
@@ -269,7 +269,7 @@ impl<S: Spec> SessionRegistry<S> {
             self.emit_event(
                 state,
                 Event::SessionSet {
-                    wallet: wallet.clone(),
+                    wallet: *wallet,
                     expiry_ts: 0,
                 },
             );
@@ -288,7 +288,7 @@ impl<S: Spec> SessionRegistry<S> {
             self.emit_event(
                 state,
                 Event::SessionSet {
-                    wallet: wallet.clone(),
+                    wallet: *wallet,
                     expiry_ts: expires_at,
                 },
             );
