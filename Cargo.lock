@@ -11154,6 +11154,7 @@ dependencies = [
  "sov-modules-macros",
  "sov-modules-rollup-blueprint",
  "sov-modules-stf-blueprint",
+ "sov-proxy-utils",
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-rpc-eth-types",
@@ -11878,6 +11879,16 @@ dependencies = [
  "strum 0.26.3",
  "tempfile",
  "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "sov-proxy-utils"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sqlx",
+ "tokio",
  "tracing",
 ]
 

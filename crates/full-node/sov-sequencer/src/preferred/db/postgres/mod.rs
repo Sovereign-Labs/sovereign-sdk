@@ -1,4 +1,4 @@
-use crate::preferred::db::FailedOperation;
+use crate::preferred::db::{leadership_election, FailedOperation};
 use anyhow::{anyhow, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,6 +31,7 @@ pub struct PostgresBackend {
     backoff_policy: ExponentialBuilder,
     leader_timeout: Duration,
     node_id: String,
+    pub(crate) node_address: String,
 }
 
 // We need a macro to get around lifetime issues with async functions. Otherwise, Rust complains about FnMut
@@ -61,21 +62,20 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    pub async fn connect(config: &PostgresConfig) -> Result<Self> {
-        let backend = Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await?;
-        backend.try_update_leader().await?;
-        Ok(backend)
-    }
+    pub async fn connect(config: &PostgresConfig, bind_port: u16) -> Result<Self> {
+        // Compute node address for registration
+        let node_address = leadership_election::compute_node_address(bind_port)?;
 
-    /// Connect without immediately claiming leadership.
-    /// Used by DbElected nodes during the election phase.
-    pub async fn connect_without_leadership(config: &PostgresConfig) -> Result<Self> {
-        Self::connect_with_leader_timeout(config, LEADER_TIMEOUT).await
+        let backend =
+            Self::connect_with_leader_timeout(config, LEADER_TIMEOUT, node_address).await?;
+        backend.try_update_leader_and_register_node().await?;
+        Ok(backend)
     }
 
     async fn connect_with_leader_timeout(
         config: &PostgresConfig,
         leader_timeout: Duration,
+        node_address: String,
     ) -> Result<Self> {
         let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
@@ -105,6 +105,7 @@ impl PostgresBackend {
             backoff_policy,
             leader_timeout,
             node_id: config.node_id.clone(),
+            node_address,
         })
     }
 
@@ -247,7 +248,35 @@ impl PostgresBackend {
         }))
     }
 
-    pub(crate) async fn try_update_leader(&self) -> anyhow::Result<Option<SequencerLeader>> {
+    /// Attempts to acquire or refresh leadership and register the node in the nodes table atomically.
+    ///
+    /// Returns `Some(leader)` if leadership was acquired (this node became leader, refreshed its
+    /// leadership, or took over from a timed-out leader). Returns `None` if another node is
+    /// the active leader and hasn't timed out yet. The node is always registered regardless.
+    pub(crate) async fn try_update_leader_and_register_node(
+        &self,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        run_with_retries!(
+            &self.backoff_policy,
+            self.try_update_leader_and_register_node_in_tx(),
+            "postgres_db_backend_try_update_leader_and_register_node"
+        )
+    }
+
+    async fn try_update_leader_and_register_node_in_tx(
+        &self,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
+        let result = self.try_update_leader_inner(&mut tx).await?;
+        self.upsert_node_registration_inner(&mut tx).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    async fn try_update_leader_inner(
+        &self,
+        conn: &mut PgConnection,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
         let leader_timeout: i64 = self
             .leader_timeout
             .as_millis()
@@ -255,27 +284,40 @@ impl PostgresBackend {
             // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
             .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
 
-        let res = run_with_retries!(
-            &self.backoff_policy,
-            sqlx::query_as::<_, SequencerLeader>(
-                "WITH ts AS (SELECT NOW() as current_time)
-                INSERT INTO sequencer_leader (node_id, last_updated)
-                SELECT $1, ts.current_time FROM ts
-                    ON CONFLICT (singleton) DO UPDATE
-                        SET
-                            node_id = EXCLUDED.node_id,
-                            last_updated = EXCLUDED.last_updated
-                        WHERE
-                            sequencer_leader.node_id = EXCLUDED.node_id
-                            OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
-                        RETURNING node_id, last_updated",)
+        let res = sqlx::query_as::<_, SequencerLeader>(
+            "WITH ts AS (SELECT NOW() as current_time)
+            INSERT INTO sequencer_leader (node_id, last_updated)
+            SELECT $1, ts.current_time FROM ts
+                ON CONFLICT (singleton) DO UPDATE
+                    SET
+                        node_id = EXCLUDED.node_id,
+                        last_updated = EXCLUDED.last_updated
+                    WHERE
+                        sequencer_leader.node_id = EXCLUDED.node_id
+                        OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                    RETURNING node_id, last_updated",
+        )
         .bind(&self.node_id)
         .bind(leader_timeout)
-        .fetch_optional(&self.pool),
-            "postgres_db_backend_try_update_leader"
-        )?;
+        .fetch_optional(&mut *conn)
+        .await?;
 
         Ok(res)
+    }
+
+    async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO nodes (node_id, address, last_updated)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (node_id) DO UPDATE
+             SET address = EXCLUDED.address,
+                 last_updated = NOW()",
+        )
+        .bind(&self.node_id)
+        .bind(&self.node_address)
+        .execute(&mut *conn)
+        .await?;
+        Ok(())
     }
 
     async fn prune_inner(
@@ -837,10 +879,13 @@ mod tests {
                 config_from_postgres_container(postgres, node_id.clone(), node_role)
                     .await
                     .unwrap();
-            let backend =
-                PostgresBackend::connect_with_leader_timeout(&postgres_config, leader_timeout)
-                    .await
-                    .unwrap();
+            let backend = PostgresBackend::connect_with_leader_timeout(
+                &postgres_config,
+                leader_timeout,
+                "node_address".to_string(),
+            )
+            .await
+            .unwrap();
 
             Self { backend, node_id }
         }
@@ -850,7 +895,10 @@ mod tests {
         }
 
         async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
-            self.backend.try_update_leader().await.unwrap()
+            self.backend
+                .try_update_leader_and_register_node()
+                .await
+                .unwrap()
         }
 
         pub(crate) async fn get_sequencer_leader(&self) -> Result<Option<String>, sqlx::Error> {

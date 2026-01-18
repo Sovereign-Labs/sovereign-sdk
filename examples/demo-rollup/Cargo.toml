@@ -123,6 +123,7 @@ strum = { workspace = true }
 
 
 reqwest = { workspace = true }
+sov-proxy-utils = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

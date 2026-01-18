@@ -1,5 +1,6 @@
 use super::*;
 
+use sov_proxy_utils::NodeDiscovery;
 use sov_sequencer::SequencerRole;
 use tokio::time::Duration;
 
@@ -110,11 +111,56 @@ async fn test_db_elected_leader_failover() {
     };
 
     let DbElectedTestSetup {
-        postgres: _postgres,
+        postgres,
         leader,
         replica,
         da_shutdown,
     } = setup;
+
+    let node_discovery = NodeDiscovery::new(postgres.connection_string())
+        .await
+        .expect("Failed to create proxy");
+
+    let cluster_info = node_discovery
+        .get_cluster_info()
+        .await
+        .expect("Failed to get cluster info");
+
+    tracing::info!(
+        "Initial cluster state - Leader: {:?}, Followers: {:?}",
+        cluster_info.leader,
+        cluster_info.followers
+    );
+
+    // Verify we have a leader in the nodes table
+    let initial_leader = cluster_info
+        .leader
+        .as_ref()
+        .expect("Expected a leader to be present in nodes table");
+
+    // Verify we have exactly one follower in the nodes table
+    assert_eq!(
+        cluster_info.followers.len(),
+        1,
+        "Expected exactly one follower in nodes table"
+    );
+
+    let initial_follower = &cluster_info.followers[0];
+
+    assert_ne!(
+        initial_leader.node_id, initial_follower.node_id,
+        "Leader and follower should have different node_ids"
+    );
+
+    /*
+    assert_ne!(
+        initial_leader.address, initial_follower.address,
+        "Leader and follower should have different addresses"
+    );
+    */
+
+    // Remember the follower's node_id - this should become the new leader after failover
+    let expected_new_leader_id = initial_follower.node_id.clone();
 
     // Kill the leader
     let _ = leader.shutdown().await;
@@ -145,6 +191,20 @@ async fn test_db_elected_leader_failover() {
         SequencerRole::Leader,
         "Expected restarted node to be Leader, got {new_role:?}",
     );
+
+    // Check final cluster state after failover
+    let cluster_info = node_discovery
+        .get_cluster_info()
+        .await
+        .expect("Failed to get cluster info after failover");
+
+    // Verify the former follower is now the leader in the sequencer_leader table
+    let new_leader = cluster_info
+        .leader
+        .as_ref()
+        .expect("Expected a leader after failover");
+
+    assert_eq!(new_leader.node_id, expected_new_leader_id,);
 
     let _ = restarted_rollup.shutdown().await;
     let _ = da_shutdown.send(());

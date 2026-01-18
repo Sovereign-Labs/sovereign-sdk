@@ -448,6 +448,11 @@ impl PostgresData {
             postgres: pg,
         }))
     }
+
+    /// Returns the PostgreSQL connection string.
+    pub fn connection_string(&self) -> &str {
+        &self.connection_string
+    }
 }
 
 impl<R> RollupBuilder<R>
