@@ -12,6 +12,7 @@ use crate::{Event, Blacklist, BlacklistError};
 /// Access control is enforced in [`execute`]:
 /// - `SetManager`: owner-only
 /// - `SetEnforcementEnabled`: owner-only
+/// - `TransferOwnership`: owner-only
 /// - `SetBlacklistSigner`: manager-only
 /// - `SetBlacklisted` / `SetBlacklistedBatch`: blacklist-signer-only
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema, UniversalWallet)]
@@ -55,6 +56,11 @@ pub enum CallMessage<S: Spec> {
     /// Fails if the wallet is in the blacklist
     EnforceNotBlacklisted {
         wallet: S::Address,
+    },
+
+    /// Transfer ownership to a new address (owner-only).
+    TransferOwnership {
+        new_owner: S::Address,
     },
 }
 
@@ -140,6 +146,22 @@ pub fn execute<S: Spec>(
         }
         CallMessage::EnforceNotBlacklisted { wallet } => {
             module.enforce_not_blacklisted(&wallet, state)
+        }
+        CallMessage::TransferOwnership { new_owner } => {
+            if !module.is_owner(context.sender(), state)? {
+                return Err(BlacklistError::UnauthorizedOwner.into());
+            }
+
+            let old_owner = module.owner.get(state)?.expect("owner must be set");
+
+            module.owner.set(&new_owner, state)?;
+
+            module.emit_event(
+                state,
+                Event::OwnershipTransferred { old_owner, new_owner },
+            );
+
+            Ok(())
         }
     }
 }

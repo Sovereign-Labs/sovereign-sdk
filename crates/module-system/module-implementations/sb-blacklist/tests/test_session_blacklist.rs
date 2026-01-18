@@ -503,3 +503,87 @@ fn test_3() {
         }),
     });
 }
+
+//
+// TEST 4 – ownership transfer
+//
+// - Owner transfers ownership to wallet (should succeed)
+// - Old owner tries to change manager (should fail: no longer owner)
+// - New owner (wallet) changes manager (should succeed)
+// - Non-owner (manager) tries to transfer ownership (should fail)
+//
+#[test]
+fn test_transfer_ownership() {
+    let (test_data, mut runner) = setup();
+
+    let owner = &test_data.owner;
+    let manager = &test_data.manager;
+    let wallet = &test_data.wallet;
+
+    let wallet_addr = wallet.address().clone();
+    let manager_addr = manager.address().clone();
+
+    // Owner transfers ownership to wallet
+    runner.execute_transaction(TransactionTestCase {
+        input: owner
+            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+                CallMessage::TransferOwnership {
+                    new_owner: wallet_addr.clone(),
+                },
+            ),
+        assert: Box::new(|result, _| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "TransferOwnership should succeed for current owner"
+            );
+        }),
+    });
+
+    // Old owner tries to change manager (should fail: no longer owner)
+    runner.execute_transaction(TransactionTestCase {
+        input: owner
+            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+                CallMessage::SetManager {
+                    new_manager: manager_addr.clone(),
+                },
+            ),
+        assert: Box::new(|result, _| {
+            assert!(
+                !result.tx_receipt.is_successful(),
+                "SetManager should fail for old owner after ownership transfer"
+            );
+        }),
+    });
+
+    // New owner (wallet) changes manager (should succeed)
+    runner.execute_transaction(TransactionTestCase {
+        input: wallet
+            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+                CallMessage::SetManager {
+                    new_manager: wallet_addr.clone(),
+                },
+            ),
+        assert: Box::new(|result, _| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "SetManager should succeed for new owner"
+            );
+        }),
+    });
+
+    // Non-owner (manager) tries to transfer ownership (should fail)
+    runner.execute_transaction(TransactionTestCase {
+        input: manager
+            .create_plain_message::<TestRuntime<S>, Blacklist<S>>(
+                CallMessage::TransferOwnership {
+                    new_owner: manager_addr.clone(),
+                },
+            ),
+        assert: Box::new(|result, _| {
+            assert!(
+                !result.tx_receipt.is_successful(),
+                "TransferOwnership should fail for non-owner"
+            );
+        }),
+    });
+}

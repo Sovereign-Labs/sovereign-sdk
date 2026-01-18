@@ -35,4 +35,9 @@ pub enum Event<S: Spec> {
         old_offset: Option<i64>,
         new_offset: i64,
     },
+
+    OwnershipTransferred {
+        old_owner: S::Address,
+        new_owner: S::Address,
+    },
 }

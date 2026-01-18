@@ -25,4 +25,9 @@ pub enum Event<S: Spec> {
         wallet: S::Address,
         blacklisted: bool,
     },
+
+    OwnershipTransferred {
+        old_owner: S::Address,
+        new_owner: S::Address,
+    },
 }

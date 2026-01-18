@@ -12,6 +12,7 @@ use crate::{Event, Session, SessionRegistry, SessionRegistryError};
 /// Access control is enforced in [`execute`]:
 /// - `SetManager`: owner-only
 /// - `SetEnforcementEnabled`: owner-only
+/// - `TransferOwnership`: owner-only
 /// - `SetSessionSigner`: manager-only
 /// - `SetSession` / `SetSessionBatch`: session-signer-only
 /// - `SetBypass`: manager-only
@@ -55,6 +56,9 @@ pub enum CallMessage<S: Spec> {
 
     /// Set a new global expiry offset.
     SetExpiryOffset { new_offset: i64 },
+
+    /// Transfer ownership to a new address (owner-only).
+    TransferOwnership { new_owner: S::Address },
 }
 
 /// Route a CallMessage to the corresponding `SessionRegistry` logic.
@@ -194,6 +198,22 @@ pub fn execute<S: Spec>(
         }
         CallMessage::EnforceSessionPresent { wallet } => {
             module.enforce_session_present(&wallet, state)
+        }
+        CallMessage::TransferOwnership { new_owner } => {
+            if !module.is_owner(context.sender(), state)? {
+                return Err(SessionRegistryError::UnauthorizedOwner.into());
+            }
+
+            let old_owner = module.owner.get(state)?.expect("owner must be set");
+
+            module.owner.set(&new_owner, state)?;
+
+            module.emit_event(
+                state,
+                Event::OwnershipTransferred { old_owner, new_owner },
+            );
+
+            Ok(())
         }
     }
 }
