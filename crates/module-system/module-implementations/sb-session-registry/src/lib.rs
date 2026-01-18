@@ -136,8 +136,10 @@ impl<S: Spec> SessionRegistry<S> {
                 return Ok(true);
             }
 
-            let effective_expiry_ts =
-                session.expiry_ts + self.expiry_offset.get(state)?.unwrap_or(0);
+            let effective_expiry_ts = session
+                .expiry_ts
+                .checked_add(self.expiry_offset.get(state)?.unwrap_or(0))
+                .ok_or_else(|| anyhow::anyhow!("expiry timestamp overflow"))?;
 
             let now: Time = self.chain_state.get_time(state)?;
             let now_ts = now.secs();
