@@ -108,7 +108,11 @@ pub fn execute<S: Spec>(
                 return Err(SessionRegistryError::UnauthorizedManager.into());
             }
 
-            module.session_signers.set(&signer, &allowed, state)?;
+            if allowed {
+                module.session_signers.set(&signer, &true, state)?;
+            } else {
+                module.session_signers.remove(&signer, state)?;
+            }
 
             module.emit_event(state, Event::SessionSignerSet { signer, allowed });
 
