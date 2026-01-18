@@ -389,7 +389,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        let db = PostgresBackend::connect(&postgres_config).await.unwrap();
+        let db = PostgresBackend::connect(&postgres_config, 0).await.unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
         let (mut sync_task, start_replica_task_notifier) =

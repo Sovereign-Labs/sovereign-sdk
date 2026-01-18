@@ -4,6 +4,7 @@
 //! run as leaders with a heartbeat task. If not, they run as replicas while
 //! continuously attempting to acquire leadership.
 
+use std::net::IpAddr;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -21,6 +22,21 @@ const ELECTION_INTERVAL: Duration = Duration::from_millis(200);
 /// How often leaders refresh their leadership heartbeat.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(200);
 
+/// Gets the local IP address by creating a UDP socket and checking which local address
+/// would be used to reach an external destination. This doesn't actually send any traffic.
+fn get_local_ip() -> Option<IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    socket.local_addr().ok().map(|addr| addr.ip())
+}
+
+/// Computes the node address from the local IP and bind port.
+pub fn compute_node_address(bind_port: u16) -> Result<String> {
+    let local_ip =
+        get_local_ip().ok_or_else(|| anyhow::anyhow!("Failed to determine local IP address"))?;
+    Ok(format!("{local_ip}:{bind_port}"))
+}
+
 /// Manages leadership election and heartbeat for DbElected nodes.
 pub struct LeadershipElectionTask {
     backend: PostgresBackend,
@@ -37,9 +53,11 @@ impl LeadershipElectionTask {
     pub async fn new(
         postgres_config: &PostgresConfig,
         shutdown_sender: watch::Sender<()>,
+        bind_port: u16,
     ) -> Result<Self> {
-        let backend = PostgresBackend::connect_without_leadership(postgres_config).await?;
+        let backend = PostgresBackend::connect(postgres_config, bind_port).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
+
         Ok(Self {
             backend,
             node_id: postgres_config.node_id.clone(),
@@ -48,12 +66,15 @@ impl LeadershipElectionTask {
         })
     }
 
-    /// Attempts to acquire leadership.
+    /// Attempts to acquire leadership and registers the node in the nodes table.
     ///
     /// Returns `true` if this node successfully became the leader.
     /// Returns `false` if another node is the leader.
+    ///
+    /// This method always registers the node in the nodes table, regardless of
+    /// whether leadership was acquired.
     pub async fn try_acquire_leadership(&self) -> Result<bool> {
-        match self.backend.try_update_leader().await? {
+        match self.backend.try_update_leader_and_register_node().await? {
             Some(leader) => Ok(leader.node_id == self.node_id),
             None => Ok(false),
         }
@@ -61,15 +82,16 @@ impl LeadershipElectionTask {
 
     /// Spawns the leader heartbeat task.
     ///
-    /// This task periodically refreshes leadership. If leadership is lost
-    /// (another node took over or heartbeat failed), it triggers a graceful
-    /// shutdown of the node.
+    /// This task periodically refreshes leadership and updates the node registration.
+    /// If leadership is lost (another node took over or heartbeat failed), it triggers
+    /// a graceful shutdown of the node.
     ///
     /// This method consumes `self` and should only be called after successfully
     /// acquiring leadership via `try_acquire_leadership()`.
     pub fn spawn_leader_heartbeat_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
-            info!(node_id = %self.node_id, "Starting leader heartbeat task");
+            info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting leader heartbeat task");
+
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
@@ -82,7 +104,7 @@ impl LeadershipElectionTask {
 
                 match self.try_acquire_leadership().await {
                     Ok(true) => {
-                        // Successfully refreshed leadership
+                        // Successfully refreshed leadership and node registration
                         tracing::trace!("Leadership heartbeat successful");
                     }
                     Ok(false) => {
@@ -109,11 +131,12 @@ impl LeadershipElectionTask {
 
     /// Spawns the replica election task.
     ///
-    /// This task periodically attempts to acquire leadership. If leadership is
-    /// acquired, it will transition the node from replica to leader.
+    /// This task periodically attempts to acquire leadership and updates node registration.
+    /// If leadership is acquired, it will transition the node from replica to leader.
     pub fn spawn_replica_election_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
-            info!(node_id = %self.node_id, "Starting replica election task");
+            info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica election task");
+
             let mut interval = tokio::time::interval(ELECTION_INTERVAL);
 
             loop {

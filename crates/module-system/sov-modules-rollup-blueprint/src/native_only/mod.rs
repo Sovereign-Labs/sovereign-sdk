@@ -256,6 +256,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
                         stop_at_rollup_height,
+                        rollup_config.runner.http_config.bind_port,
                     )
                     .await?;
 
