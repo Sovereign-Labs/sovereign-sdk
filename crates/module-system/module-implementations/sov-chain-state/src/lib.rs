@@ -242,7 +242,9 @@ pub struct ChainState<S: Spec> {
     #[state]
     admin_address: StateValue<S::Address>,
 
-    /// The current time, as reported by the timing oracle
+    /// Legacy oracle time in milliseconds.
+    /// Retained to preserve state layout compatibility with existing rollups.
+    /// This value is no longer updated or read by the runtime.
     #[state]
     oracle_time: StateValue<Time>,
 
@@ -330,12 +332,15 @@ impl<S: Spec> ChainState<S> {
         &self,
         state: &mut Reader,
     ) -> Result<Time, E> {
-        if let Some(oracle_time) = self.oracle_time.get(state)? {
-            return Ok(oracle_time);
-        };
         if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
-            let millis = (oracle_time_nanos / 1_000_000) as i64;
-            return Ok(Time::from_millis(millis));
+            let millis = oracle_time_nanos / 1_000_000;
+            if millis <= i64::MAX as u128 {
+                return Ok(Time::from_millis(millis as i64));
+            }
+            tracing::warn!(
+                nanos = %oracle_time_nanos,
+                "Oracle time nanos overflow for millis conversion; ignoring"
+            );
         }
         self.get_time(state)
     }
@@ -351,9 +356,6 @@ impl<S: Spec> ChainState<S> {
     ) -> Result<u128, E> {
         if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
             return Ok(oracle_time_nanos);
-        }
-        if let Some(oracle_time) = self.oracle_time.get(state)? {
-            return Ok(oracle_time.as_millis() as u128 * 1_000_000);
         }
         let time = self.get_time(state)?;
         Ok(time.as_millis() as u128 * 1_000_000)
@@ -377,14 +379,7 @@ impl<S: Spec> ChainState<S> {
             return Ok(());
         }
 
-        let new_time = Time::from_millis(millis as i64);
-        let current_nanos = if let Some(current_nanos) = self.oracle_time_nanos.get(state)? {
-            Some(current_nanos)
-        } else if let Some(current_time) = self.oracle_time.get(state)? {
-            Some(current_time.as_millis() as u128 * 1_000_000)
-        } else {
-            None
-        };
+        let current_nanos = self.oracle_time_nanos.get(state)?;
 
         if let Some(current_nanos) = current_nanos {
             if nanos < current_nanos {
@@ -401,7 +396,6 @@ impl<S: Spec> ChainState<S> {
         }
 
         self.oracle_time_nanos.set(&nanos, state)?;
-        self.oracle_time.set(&new_time, state)?;
         Ok(())
     }
 
