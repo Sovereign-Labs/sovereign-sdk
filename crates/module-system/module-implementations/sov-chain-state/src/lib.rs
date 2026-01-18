@@ -245,6 +245,7 @@ pub struct ChainState<S: Spec> {
     /// Legacy oracle time in milliseconds.
     /// Retained to preserve state layout compatibility with existing rollups.
     /// This value is no longer updated or read by the runtime.
+    #[allow(dead_code)]
     #[state]
     oracle_time: StateValue<Time>,
 
