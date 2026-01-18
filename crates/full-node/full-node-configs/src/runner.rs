@@ -114,6 +114,14 @@ impl HttpServerConfig {
             cors: CorsConfiguration::Permissive,
         }
     }
+
+    /// Creates socket address from this config.
+    pub fn socket_address(&self) -> anyhow::Result<std::net::SocketAddr> {
+        Ok(std::net::SocketAddr::new(
+            self.bind_host.parse()?,
+            self.bind_port,
+        ))
+    }
 }
 
 /// Prover service configuration.
