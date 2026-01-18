@@ -49,6 +49,7 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
+    #[allow(dead_code)]
     da_total_timeout: Duration,
     da_service: Arc<Da>,
     stf: Stf,
@@ -491,15 +492,16 @@ where
             // which could have this block fetcher already
             self.sync_fetcher.get_block_at(next_da_height).await?
         } else {
-            // Requests height might re-org
-            // It never returns a future height for requested
-            crate::da::fetch_block_reorg_aware(
-                self.da_service.as_ref(),
-                self.sync_state.as_ref(),
-                next_da_height,
-                self.da_total_timeout,
-            )
-            .await?
+            // // Requests height might re-org
+            // // It never returns a future height for requested
+            // crate::da::fetch_block_reorg_aware(
+            //     self.da_service.as_ref(),
+            //     self.sync_state.as_ref(),
+            //     next_da_height,
+            //     self.da_total_timeout,
+            // )
+            // .await?
+            self.da_service.get_block_at(next_da_height).await?
         };
         let get_block_time = get_block_start.elapsed();
         tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");

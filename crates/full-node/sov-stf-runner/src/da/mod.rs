@@ -11,6 +11,7 @@ use std::time::Duration;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 
+#[allow(dead_code)]
 const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 
 /// Waits for the DA head to roll back below the requested height.
@@ -22,6 +23,7 @@ const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 /// Note: Requesting `target_height + 1` is normal when the node is synced and waiting for the next block.
 ///
 /// If the sync status sender is dropped, this function blocks forever.
+#[allow(dead_code)]
 async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_height: u64) -> u64 {
     let mut rx = sync_state.sync_status_sender.subscribe();
     loop {
@@ -55,6 +57,7 @@ async fn get_new_head_height_if_roll_back(sync_state: &DaSyncState, requested_he
 /// If the DA head rolls back during the fetch (reorg detected), this function automatically
 /// retries with the new head height. Allows up to `MAX_GET_BLOCK_ATTEMPTS` consecutive reorgs
 /// before returning an error.
+#[allow(dead_code)]
 pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     da_service: &Da,
     sync_state: &DaSyncState,

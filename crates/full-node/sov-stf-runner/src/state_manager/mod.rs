@@ -25,9 +25,11 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 
+#[allow(dead_code)]
 const MAX_REORG_FINDING_ATTEMPTS: u16 = 10_000;
 
 /// Point where rollup execution can be resumed after DA fork happened.
+#[allow(dead_code)]
 struct ForkPoint<Da: DaService, StateRoot> {
     /// The next block in a new fork, following the last seen transition by the rollup.
     block: Da::FilteredBlock,
@@ -67,6 +69,7 @@ impl<Da: DaSpec, StateRoot: Clone> StateOnBlock<Da, StateRoot> {
     }
 }
 
+#[allow(dead_code)]
 enum ForkPointSearchResult<Da: DaService, StateRoot> {
     Found(ForkPoint<Da, StateRoot>),
     HeadChanged(<Da::Spec as DaSpec>::BlockHeader),
@@ -99,6 +102,7 @@ where
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
     da_sync_state: Arc<DaSyncState>,
+    #[allow(dead_code)]
     da_total_timeout: std::time::Duration,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
 }
@@ -175,8 +179,8 @@ where
     #[tracing::instrument(skip_all)]
     pub(crate) async fn prepare_storage(
         &mut self,
-        mut filtered_block: Da::FilteredBlock,
-        da_service: &Da,
+        filtered_block: Da::FilteredBlock,
+        _da_service: &Da,
     ) -> anyhow::Result<(Sm::StfState, Da::FilteredBlock)> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
@@ -184,71 +188,71 @@ where
                 "StateManager wasn't initialized. Please call `.startup()` method before using"
             );
         }
-        let reorg_happened = self.has_reorg_happened(filtered_block.header())?;
-        tracing::trace!(reorg_happened, "Checked if reorg happened");
+        // let reorg_happened = self.has_reorg_happened(filtered_block.header())?;
+        // tracing::trace!(reorg_happened, "Checked if reorg happened");
 
-        if reorg_happened {
-            let ForkPoint {
-                block: new_block,
-                pre_state_root,
-            } = self.choose_fork_point(da_service).await?;
-            tracing::trace!(
-                old_block = %filtered_block.header().display(),
-                new_block = %new_block.header().display(),
-                old_pre_state_root = hex::encode(self.state_root.as_ref()),
-                new_pre_state_root = hex::encode(pre_state_root.as_ref()),
-                "Reorg happened, updating variables");
+        // if reorg_happened {
+        //     let ForkPoint {
+        //         block: new_block,
+        //         pre_state_root,
+        //     } = self.choose_fork_point(da_service).await?;
+        //     tracing::trace!(
+        //         old_block = %filtered_block.header().display(),
+        //         new_block = %new_block.header().display(),
+        //         old_pre_state_root = hex::encode(self.state_root.as_ref()),
+        //         new_pre_state_root = hex::encode(pre_state_root.as_ref()),
+        //         "Reorg happened, updating variables");
 
-            // Self check
-            {
-                if let Some(prev_state) = self.state_on_block.get(&new_block.header().prev_hash()) {
-                    assert_eq!(
-                        prev_state.post_state_root.as_ref(),
-                        pre_state_root.as_ref(),
-                        "mismatch in roots after transition"
-                    );
-                    assert_eq!(
-                        prev_state.block_header.hash(),
-                        new_block.header().prev_hash(),
-                        "Mismatch in block hashes after transition",
-                    );
-                    assert!(
-                        !self.state_on_block.contains_key(&new_block.header().hash()),
-                        "We are return already seen block. how come?"
-                    );
-                }
-                assert!(
-                    !self.state_on_block.contains_key(&new_block.header().hash()),
-                    "trying to return previously seen state"
-                );
-            }
-            tracing::info!(
-                old_block = %filtered_block.header().display(),
-                new_block = %new_block.header().display(),
-                time = ?start.elapsed(),
-                "Reorg happened. Chosen fork point"
-            );
-            filtered_block = new_block;
-            self.state_root = pre_state_root;
-        }
+        //     // Self check
+        //     {
+        //         if let Some(prev_state) = self.state_on_block.get(&new_block.header().prev_hash()) {
+        //             assert_eq!(
+        //                 prev_state.post_state_root.as_ref(),
+        //                 pre_state_root.as_ref(),
+        //                 "mismatch in roots after transition"
+        //             );
+        //             assert_eq!(
+        //                 prev_state.block_header.hash(),
+        //                 new_block.header().prev_hash(),
+        //                 "Mismatch in block hashes after transition",
+        //             );
+        //             assert!(
+        //                 !self.state_on_block.contains_key(&new_block.header().hash()),
+        //                 "We are return already seen block. how come?"
+        //             );
+        //         }
+        //         assert!(
+        //             !self.state_on_block.contains_key(&new_block.header().hash()),
+        //             "trying to return previously seen state"
+        //         );
+        //     }
+        //     tracing::info!(
+        //         old_block = %filtered_block.header().display(),
+        //         new_block = %new_block.header().display(),
+        //         time = ?start.elapsed(),
+        //         "Reorg happened. Chosen fork point"
+        //     );
+        //     filtered_block = new_block;
+        //     self.state_root = pre_state_root;
+        // }
 
-        let (stf_pre_state, ledger_state) = self
+        let (stf_pre_state, _ledger_state) = self
             .storage_manager
             .create_state_for(filtered_block.header())?;
-        // Second condition, we only update channels with new state before returning in case of reorg
-        if reorg_happened {
-            tracing::trace!(
-                "Reorg has happened, updating API and Ledger storage before returning STF state"
-            );
-            // In case if reorg happened, we want to keep ledger and API storages in sync.
-            // Otherwise, the API storage and LedgerDb have been updated in [`Self::update_api_and_ledger_storage`]
-            self.update_channels(stf_pre_state.clone(), ledger_state)
-                .await?;
-        }
+        // // Second condition, we only update channels with new state before returning in case of reorg
+        // if reorg_happened {
+        //     tracing::trace!(
+        //         "Reorg has happened, updating API and Ledger storage before returning STF state"
+        //     );
+        //     // In case if reorg happened, we want to keep ledger and API storages in sync.
+        //     // Otherwise, the API storage and LedgerDb have been updated in [`Self::update_api_and_ledger_storage`]
+        //     self.update_channels(stf_pre_state.clone(), ledger_state)
+        //         .await?;
+        // }
 
         tracing::trace!(
             block_header = %filtered_block.header().display(),
-            reorg_happened,
+            // reorg_happened,
             time = ?start.elapsed(),
             "Returning STF state for block");
         Ok((stf_pre_state, filtered_block))
@@ -479,6 +483,7 @@ where
     }
 
     /// Returns true, if passed `block_header` is not an incremental continuation of the current chain.
+    #[allow(dead_code)]
     fn has_reorg_happened(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
@@ -538,6 +543,7 @@ where
     /// Returns `None` if:
     /// - This block was already processed, or
     /// - This block's predecessor was never seen (no continuation point exists)
+    #[allow(dead_code)]
     fn get_matching_pre_state_root(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
@@ -575,6 +581,7 @@ where
 
     // If reorg happened,
     // the next incremental continuation of that fork that hasn't been processed should be found.
+    #[allow(dead_code)]
     async fn choose_fork_point(&self, da_service: &Da) -> anyhow::Result<ForkPoint<Da, StateRoot>> {
         // If we haven't seen anything we can only start from last seen finalized height.
         if self.state_on_block.is_empty() {
@@ -651,6 +658,7 @@ where
 
     // Tries to find a candidate in the current state of the chain.
     // If it notices that the chain has changed, it returns head of the new chain.
+    #[allow(dead_code)]
     async fn try_find_candidate_in_current_chain(
         &self,
         da_service: &Da,
@@ -1079,6 +1087,7 @@ where
 }
 
 /// Returns true if new head is not same as old or next after old.
+#[allow(dead_code)]
 fn is_head_changed<Da: DaSpec>(current_head: &Da::BlockHeader, new_head: &Da::BlockHeader) -> bool {
     // Basically same block or directly next one.
     // Not 100% precise.
