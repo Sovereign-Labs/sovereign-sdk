@@ -3,6 +3,8 @@
 //! This crate provides the [`Proxy`] struct to retrieve leader and follower
 //! IP addresses from the PostgreSQL database atomically.
 
+use std::net::SocketAddr;
+
 use anyhow::Result;
 use sqlx::postgres::PgPool;
 use sqlx::FromRow;
@@ -13,7 +15,7 @@ pub struct NodeInfo {
     /// The unique identifier of the node.
     pub node_id: String,
     /// The address (ip:port) where the node can be reached.
-    pub address: String,
+    pub address: SocketAddr,
 }
 
 /// Result of querying cluster node information.
@@ -49,7 +51,11 @@ impl NodeDiscovery {
 
         let mut leader = None;
         let mut followers = Vec::new();
-        for node in all_nodes {
+        for (node_id, address) in all_nodes {
+            let address: SocketAddr = address.parse()?;
+
+            let node = NodeInfo { node_id, address };
+
             if Some(&node.node_id) == leader_id.as_ref() {
                 leader = Some(node);
             } else {
@@ -60,7 +66,7 @@ impl NodeDiscovery {
         Ok(ClusterInfo { leader, followers })
     }
 
-    async fn get_cluster_info_from_db(&self) -> Result<(Option<String>, Vec<NodeInfo>)> {
+    async fn get_cluster_info_from_db(&self) -> Result<(Option<String>, Vec<(String, String)>)> {
         let mut tx = self.pool.begin().await?;
 
         // Fetch leader within transaction
@@ -70,7 +76,7 @@ impl NodeDiscovery {
                 .await?;
 
         // Fetch all nodes within same transaction
-        let all_nodes: Vec<NodeInfo> =
+        let all_nodes: Vec<(String, String)> =
             sqlx::query_as("SELECT node_id, address FROM nodes ORDER BY node_id")
                 .fetch_all(&mut *tx)
                 .await?;
