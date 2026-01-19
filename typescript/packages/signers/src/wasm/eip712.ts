@@ -2,9 +2,27 @@ import type { MetaMaskInpageProvider } from "@metamask/providers";
 import * as secp from "@noble/secp256k1";
 import { KnownTypeId, Schema } from "@sovereign-sdk/universal-wallet-wasm";
 import { hexToBytes } from "@sovereign-sdk/utils";
-import { Signature } from "ethers";
+import { type Signature, parseSignature } from "viem";
 import { SignerError } from "../errors";
 import type { Signer } from "../signer";
+
+/**
+ * Normalize a signature to low-s form if needed.
+ * MetaMask's eth_signTypedData_v4 may return high-s signatures (~50% of the time).
+ * The rollup server requires low-s signatures.
+ */
+function normalizeSignature(signature: Signature): Uint8Array {
+  const r = hexToBytes(signature.r.slice(2));
+  const s = hexToBytes(signature.s.slice(2));
+  let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
+
+  // Normalize s if it's > n/2 (convert high-s to low-s)
+  if (secpSig.hasHighS()) {
+    secpSig = secpSig.normalizeS();
+  }
+
+  return secpSig.toCompactRawBytes();
+}
 
 /**
  * EIP-712 signer implementation that uses MetaMask's eth_signTypedData_v4 method.
@@ -36,17 +54,16 @@ export class Eip712Signer implements Signer {
 
   /**
    * Cache the public key recovered from a signature.
+   * Uses viem's parseSignature which accepts high-s signatures (unlike ethers).
    */
   private cachePublicKey(signingHash: Uint8Array, signature: Signature): void {
     if (this.cachedPublicKey) return;
 
-    let secpSig = secp.Signature.fromCompact(
-      new Uint8Array([
-        ...hexToBytes(signature.r.slice(2)),
-        ...hexToBytes(signature.s.slice(2)),
-      ]),
-    );
-    secpSig = secpSig.addRecoveryBit(signature.yParity);
+    const r = hexToBytes(signature.r.slice(2));
+    const s = hexToBytes(signature.s.slice(2));
+
+    let secpSig = secp.Signature.fromCompact(new Uint8Array([...r, ...s]));
+    secpSig = secpSig.addRecoveryBit(signature.yParity ?? 0);
     const publicKey = secpSig.recoverPublicKey(signingHash);
 
     this.cachedPublicKey = publicKey.toBytes(true); // compressed form
@@ -121,11 +138,17 @@ export class Eip712Signer implements Signer {
       );
     }
 
-    // Parse the signature for public key recovery
-    const signature = Signature.from(signatureHex);
+    // Parse the signature using viem (accepts high-s signatures unlike ethers)
+    // Normalize to ensure 0x prefix
+    const normalizedHex = signatureHex.startsWith("0x")
+      ? signatureHex
+      : `0x${signatureHex}`;
+    const signature = parseSignature(normalizedHex as `0x${string}`);
     this.cachePublicKey(signingHash, signature);
 
-    // Return the standard compact serialized signature (r + s, 64 bytes)
-    return hexToBytes(signature.compactSerialized.slice(2));
+    // Normalize to low-s form
+    // (EIP-2 low-s requirement only applies to transactions, not off-chain message signing,
+    // but the rollup server expects low-s signatures)
+    return normalizeSignature(signature);
   }
 }

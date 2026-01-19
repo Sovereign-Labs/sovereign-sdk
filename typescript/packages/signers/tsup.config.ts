@@ -8,6 +8,7 @@ export default defineConfig({
     "src/ledger-solana/node.ts",
   ],
   format: ["cjs", "esm"],
+  target: "es2020",
   splitting: false,
   sourcemap: true,
   clean: true,

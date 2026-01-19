@@ -1,5 +1,11 @@
 # @sovereign-sdk/signers
 
+## 0.5.2
+
+### Patch Changes
+
+-   fc00847: Fix EIP-712 signature verification failures by normalizing high-s signatures to low-s. Migrated from ethers to viem for better signature handling. Removed ethers dependency.
+
 ## 0.5.1
 
 ### Patch Changes
