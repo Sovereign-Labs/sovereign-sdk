@@ -31,6 +31,7 @@ use tracing::{debug, info, trace};
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::StateManager;
+use tokio::net::TcpListener;
 
 type GenesisParams<ST, InnerVm, OuterVm, Da> =
     <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
@@ -53,7 +54,6 @@ where
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
-    listen_address_http: SocketAddr,
     stf_info_receiver: Option<Receiver<Stf::StateRoot, Stf::Witness, Da::Spec>>,
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
@@ -64,6 +64,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     save_tx_bodies: bool,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
+    axum_tcp: Option<TcpListener>,
 }
 
 struct DiscardEvents;
@@ -146,6 +147,7 @@ where
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
         runner_config: RunnerConfig,
+        axum_tcp: TcpListener,
         pm_config: Option<ProofManagerConfig<Stf::Address>>,
         da_service: Arc<Da>,
         ledger_db: LedgerDb,
@@ -169,11 +171,6 @@ where
         // But when REST and RPC handlers start, sender is used to get another subscription.
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
-
-        let axum_config = &runner_config.http_config;
-
-        let listen_address_http =
-            SocketAddr::new(axum_config.bind_host.parse()?, axum_config.bind_port);
 
         let first_unprocessed_height_at_startup = sync_state
             .synced_da_height
@@ -240,7 +237,6 @@ where
             da_service: da_service.clone(),
             stf,
             state_manager,
-            listen_address_http,
             sync_state,
             stf_info_receiver,
             sync_fetcher,
@@ -251,7 +247,21 @@ where
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
             finalized_headers_provider: da_service_with_cached_finalized_headers,
+            axum_tcp: Some(axum_tcp),
         })
+    }
+
+    /// Returns the socket address of the Axum server.
+    ///
+    /// This method must be called before [`StateTransitionRunner::run_in_process`], as the TCP listener
+    /// is consumed when the HTTP server starts. Calling this method after `run_in_process` will return
+    /// an error.
+    pub fn axum_socket_address(&self) -> anyhow::Result<SocketAddr> {
+        let axum_tcp = self
+            .axum_tcp
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("The axum tcp listener is not initialized."))?;
+        Ok(axum_tcp.local_addr()?)
     }
 
     /// Subscribes to this runner's [`StateUpdateInfo`] channel, if enabled.
@@ -275,9 +285,11 @@ where
         router: axum::Router<()>,
         methods: RpcModule<()>,
         cors_configuration: CorsConfiguration,
-    ) -> anyhow::Result<SocketAddr> {
-        let (http_task_handle, rest_address) = crate::http::start_http_server(
-            &self.listen_address_http,
+    ) -> anyhow::Result<()> {
+        let http_task_handle = crate::http::start_http_server(
+            self.axum_tcp
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("HTTP server already started."))?,
             router,
             methods,
             self.secondary_shutdown_sender.subscribe(),
@@ -287,7 +299,7 @@ where
 
         self.background_handles.push(http_task_handle);
 
-        Ok(rest_address)
+        Ok(())
     }
 
     /// Spawn a [`tokio::task`] that updates the sync status every `polling_interval`.

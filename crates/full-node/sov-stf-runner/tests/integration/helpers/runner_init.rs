@@ -42,6 +42,7 @@ use sov_test_utils::{
     TestSpec, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
     TEST_MOCK_DA_POLLING_INTERVAL,
 };
+use tokio::net::TcpListener;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -239,8 +240,18 @@ pub async fn initialize_runner(
         )
     });
 
+    let axum_socket_addr = rollup_config
+        .runner
+        .http_config
+        .socket_address()
+        .unwrap_or_else(|e| {
+            panic!("Unable to create socket from config: {e:?}");
+        });
+
+    let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
+        axum_tcp,
         if nb_of_prover_threads.is_some() {
             Some(rollup_config.proof_manager)
         } else {
