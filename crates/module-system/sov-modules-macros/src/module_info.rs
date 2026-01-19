@@ -123,6 +123,7 @@ fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStr
     let fn_prefix = make_module_prefix_fn(ident);
     let fn_is_safe_for_sequencer = make_sequencer_safety_fn(sequencer_safety_fn);
     let fn_discriminant = make_fn_discriminant(ident);
+    let fn_state_items = make_fn_state_items(&fields);
 
     Ok(quote::quote! {
         impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
@@ -137,6 +138,8 @@ fn impl_module_info(struct_def: &StructDef) -> syn::Result<proc_macro2::TokenStr
 
         impl #impl_generics ::sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
             type Spec = #generic_param;
+
+            #fn_state_items
 
             #fn_prefix
 
@@ -210,6 +213,31 @@ fn make_fn_dependencies(modules: &[&proc_macro2::Ident]) -> proc_macro2::TokenSt
     quote::quote! {
         fn dependencies(&self) -> ::std::vec::Vec<&::sov_modules_api::ModuleId> {
             ::std::vec![#(#address_tokens),*]
+        }
+    }
+}
+
+fn make_fn_state_items(fields: &[ModuleField]) -> proc_macro2::TokenStream {
+    let state_items = fields
+        .iter()
+        .filter(|field| matches!(field.attr, ModuleFieldAttribute::State { .. }))
+        .enumerate()
+        .map(|(idx, field)| {
+            let field_ident = &field.ident;
+            let item_discriminant: u8 = idx.try_into().expect("State item discriminant overflow");
+            quote::quote! {
+                ::sov_modules_api::StateItemDescriptor {
+                    name: stringify!(#field_ident),
+                    discriminant: #item_discriminant,
+                }
+            }
+        });
+
+    quote::quote! {
+        fn state_items(&self) -> &'static [::sov_modules_api::StateItemDescriptor] {
+            &[
+                #(#state_items),*
+            ]
         }
     }
 }

@@ -136,6 +136,11 @@ pub trait ModuleInfo {
     /// Execution context.
     type Spec: Spec;
 
+    /// Returns the module's state items in declaration order.
+    fn state_items(&self) -> &'static [StateItemDescriptor] {
+        &[]
+    }
+
     /// Returns id of the module.
     fn id(&self) -> &ModuleId;
 
@@ -162,6 +167,15 @@ pub trait ModuleInfo {
     ) -> bool {
         true
     }
+}
+
+/// Metadata for a module state item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StateItemDescriptor {
+    /// The name of the state item.
+    pub name: &'static str,
+    /// The discriminant used to namespace the state item.
+    pub discriminant: u8,
 }
 
 /// Allows modules to emit events. Events are served via the REST API but are *not* included in zk proofs.
