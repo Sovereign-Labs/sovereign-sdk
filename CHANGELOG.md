@@ -1,3 +1,6 @@
+# 2026-01-19
+- #2360 Demo rollup: route sequencing data through standard rollup capabilities to update oracle time (nanos support).
+
 # 2026-01-16 
 - #2342 EVM: Populate the `gas_limit` for pending block.
 
