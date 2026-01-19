@@ -8,7 +8,7 @@ connection_string = "sqlite://mock_da.sqlite?mode=rwc"
 # For initial full node should match genesis of sequencer-registry.
 # It is going to be a DA address that blobs from this node will be associated with.
 sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
-finalization = 40 # Reorgs up to this depth are allowed. Set to zero for instant finality
+finalization_blocks = 40 # Reorgs up to this depth are allowed. Set to zero for instant finality
 
 [da.block_producing.periodic]
 block_time_ms = 1_000
@@ -51,7 +51,7 @@ state_cache_size = 4294967296 # 4GB. Default is 1GB.
 da_polling_interval_ms = 50
 # da_total_timeout_secs = 600 # Total timeout for DA service including re-orgs and retries
 # concurrent_sync_tasks = 5 # Number of concurrent tasks to get blocks from DA service
-# pre_fetched_blocks_capacity = 20 # How many blocks pre-fetcher put into the channel for the node to consume before holding off next requests. Should be larger than `concurrent_sync_tasks`
+# pre_fetched_blocks_capacity = 20 # How many blocks maximum will be stored in memory. Should be larger than `concurrent_sync_tasks`
 # save_tx_bodies = false # Whether to save transaction bodies to the database
 
 [runner.http_config]
@@ -108,6 +108,12 @@ num_cache_warmup_workers = 0
 # events_channel_size = 10000 # Size of Tokio channel for streaming events. Larger values increase memory usage
 ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintain. Larger values increase lag in seeing DA info on chain, but allow more buffering when the DA layer is unstable
 # db_event_channel_size = 10000 # Event buffer size while update_state is running
+# maximum_future_nonce_delta = 100 # The farthest nonce into the future that the sequencer will accept and queue
+# future_nonce_transaction_timeout_millis = 2000 # Timeout for out-of-order transactions with near-future nonces
+# [sequencer.preferred.timing_oracle] # Optional timing oracle configuration
+# priority_fee_percentage = 10 # Priority fee percentage for timestamp oracle update tx
+# max_fee = 1000000 # Maximum fee for timestamp oracle update tx
+# interval_millis = 1000 # Interval for timestamp oracle updates
 
 
 
@@ -134,3 +140,4 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 
 [sequencer.extension]
 max_log_limit = 20000
+# response_size_limit = 994304 # Maximum size of eth_getLogs response in bytes (default: 1MB - 30KB)
