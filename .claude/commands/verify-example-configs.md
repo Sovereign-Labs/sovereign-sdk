@@ -1,4 +1,4 @@
-# Verify Examples Config
+# Verify Example Configs
 
 Verify that example configuration files in `examples/demo-rollup/configs/` are complete and accurate compared to their Rust struct definitions.
 
