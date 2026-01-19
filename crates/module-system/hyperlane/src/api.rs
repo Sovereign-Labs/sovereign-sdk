@@ -62,7 +62,6 @@ impl<S: Spec, R: Recipient<S>> HasCustomRestApi for Mailbox<S, R> {
     fn custom_rest_api(&self, state: ApiState<S>) -> axum::Router<()> {
         axum::Router::new()
             .route("/nonce", get(Self::get_nonce))
-            .route("/deliveries", get(Self::get_deliveries))
             .route("/recipient-ism/:address", get(Self::get_recipient_ism))
             .route(
                 "/recipient-ism/:address/validators_and_threshold",
@@ -115,18 +114,6 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
             .map(|dispatch_state| dispatch_state.nonce)
             .unwrap_or_default();
         Json(json!({"nonce": nonce}))
-    }
-
-    async fn get_deliveries(
-        state: ApiState<S, Self>,
-        mut accessor: ApiStateAccessor<S>,
-    ) -> impl IntoResponse {
-        let deliveries = state
-            .delivery_count
-            .get(&mut accessor)
-            .unwrap_infallible()
-            .unwrap_or_default();
-        Json(json!({"count": deliveries}))
     }
 
     async fn get_recipient_ism(
