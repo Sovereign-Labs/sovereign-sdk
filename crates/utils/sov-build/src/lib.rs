@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
+use serde::Serialize;
 use sov_modules_api::schemars::{schema_for, JsonSchema};
 use sov_modules_api::transaction::TransactionCallable;
 use sov_modules_api::{DispatchCall, Spec};
@@ -65,7 +66,7 @@ impl OptionsBuilder {
 
     /// Sets a custom path for the state layout file.
     ///
-    /// If not set, defaults to `{out_dir}/state-layout.txt`.
+    /// If not set, defaults to `{out_dir}/state-layout.json`.
     pub fn state_layout_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
         self.state_layout_path = Some(path.into());
         self
@@ -240,7 +241,7 @@ impl Options {
         let out_path = self
             .state_layout_path
             .clone()
-            .unwrap_or_else(|| self.out_dir.join("state-layout.txt"));
+            .unwrap_or_else(|| self.out_dir.join("state-layout.json"));
         let layout = render_state_layout::<S, D>();
         let mut file = File::create(out_path)?;
 
@@ -302,6 +303,24 @@ impl Options {
     }
 }
 
+#[derive(Serialize)]
+struct StateLayout<'a> {
+    modules: Vec<ModuleLayout<'a>>,
+}
+
+#[derive(Serialize)]
+struct ModuleLayout<'a> {
+    name: &'a str,
+    discriminant: u8,
+    state_items: Vec<StateItemLayout<'a>>,
+}
+
+#[derive(Serialize)]
+struct StateItemLayout<'a> {
+    name: &'a str,
+    discriminant: u8,
+}
+
 fn render_state_layout<S, D>() -> String
 where
     S: Spec,
@@ -313,30 +332,27 @@ where
     use sov_modules_api::NestedEnumUtils;
 
     let runtime = D::default();
-    let mut output = String::new();
+    let mut modules = Vec::new();
 
-    for (idx, discriminant) in <D::Decodable as NestedEnumUtils>::Discriminants::VARIANTS
-        .iter()
-        .enumerate()
-    {
-        if idx > 0 {
-            output.push('\n');
-        }
-
+    for discriminant in <D::Decodable as NestedEnumUtils>::Discriminants::VARIANTS.iter() {
         let module_name = discriminant.as_ref();
         let module = runtime.module_info(*discriminant);
-        output.push_str(&format!(
-            "module {module_name} (discriminant {})\n",
-            module.discriminant()
-        ));
+        let mut state_items = Vec::new();
 
         for state_item in module.state_items() {
-            output.push_str(&format!(
-                "  state {} = {}\n",
-                state_item.name, state_item.discriminant
-            ));
+            state_items.push(StateItemLayout {
+                name: state_item.name,
+                discriminant: state_item.discriminant,
+            });
         }
+
+        modules.push(ModuleLayout {
+            name: module_name,
+            discriminant: module.discriminant(),
+            state_items,
+        });
     }
 
-    output
+    let layout = StateLayout { modules };
+    serde_json::to_string_pretty(&layout).expect("Failed to serialize state layout")
 }
