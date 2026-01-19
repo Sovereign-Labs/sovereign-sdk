@@ -35,8 +35,41 @@ async fn test_eth_fee_history_single_block() -> anyhow::Result<()> {
         .get_fee_history(1, BlockNumberOrTag::Latest, &[])
         .await?;
 
+    let latest_block_number = client.get_block_number().await?;
+    let latest_block = client
+        .get_block_by_number(BlockNumberOrTag::Number(latest_block_number))
+        .await?
+        .expect("Latest sealed block should exist");
+    let pending_block = client
+        .get_block_by_number(BlockNumberOrTag::Pending)
+        .await?
+        .expect("Pending block should exist");
+
     assert_eq!(fee_history.base_fee_per_gas.len(), 2);
     assert_eq!(fee_history.gas_used_ratio.len(), 1);
+    assert_eq!(
+        fee_history.oldest_block,
+        latest_block.header.number,
+        "oldest_block should match the latest sealed block for a single-block query"
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[0],
+        u128::from(
+            latest_block
+                .header
+                .base_fee_per_gas
+                .expect("Latest block should have a base fee")
+        )
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[1],
+        u128::from(
+            pending_block
+                .header
+                .base_fee_per_gas
+                .expect("Pending block should have a base fee")
+        )
+    );
 
     Ok(())
 }

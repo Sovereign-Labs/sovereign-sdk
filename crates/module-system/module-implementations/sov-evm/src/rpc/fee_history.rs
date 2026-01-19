@@ -1,6 +1,7 @@
 use alloy_eips::BlockNumberOrTag;
 use alloy_rpc_types::FeeHistory;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_chain_state::ChainState;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
@@ -28,7 +29,15 @@ where
 
         let block_count = block_count.min(1024);
 
-        let end_block_number = self.resolve_block_number(newest_block, state);
+        // Fee history should use the latest sealed block for "latest".
+        let block_numbers = self.block_numbers(state);
+        let end_block_number = match newest_block {
+            BlockNumberOrTag::Earliest => *block_numbers.start(),
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
+            BlockNumberOrTag::Number(nr) => nr,
+            BlockNumberOrTag::Latest => *block_numbers.end(),
+            BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+        };
         let start_block_number = end_block_number.saturating_sub(block_count - 1);
 
         let base_fee_per_gas =
@@ -53,9 +62,16 @@ where
         end_block: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Vec<u128>, EthApiError> {
-        (start_block..=(end_block + 1))
-            .map(|block_num| self.get_base_fee_for_block(block_num, state))
-            .collect()
+        let mut base_fees =
+            Vec::with_capacity(end_block.saturating_sub(start_block).saturating_add(2) as usize);
+
+        for block_num in start_block..=end_block {
+            base_fees.push(self.get_base_fee_for_block(block_num, state)?);
+        }
+
+        base_fees.push(self.get_next_base_fee(end_block, state)?);
+
+        Ok(base_fees)
     }
 
     fn get_base_fee_for_block(
@@ -63,6 +79,11 @@ where
         block_num: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<u128, EthApiError> {
+        let latest_block = *self.block_numbers(state).end();
+        if block_num == latest_block + 1 {
+            return self.get_next_base_fee(latest_block, state);
+        }
+
         let rollup_height = RollupHeight::new(block_num);
         let gas_price = self
             .chain_state_module
@@ -75,6 +96,29 @@ where
 
         // Extract dimension 0 (execution gas) from multidimensional gas price
         Ok(gas_price.map(|price| price.as_ref()[0].0).unwrap_or(0))
+    }
+
+    fn get_next_base_fee(
+        &self,
+        block_num: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<u128, EthApiError> {
+        let rollup_height = RollupHeight::new(block_num);
+        let gas_info = self
+            .chain_state_module
+            .historical_gas_info_at(rollup_height, state)
+            .map_err(|e| {
+                EthApiError::other(into_rpc_error(anyhow::anyhow!(
+                    "Failed to get gas info: {e}"
+                )))
+            })?;
+
+        let Some(info) = gas_info else {
+            return Ok(0);
+        };
+
+        let next_price = ChainState::<S>::compute_base_fee_per_gas(info, 1);
+        Ok(next_price.as_ref()[0].0)
     }
 
     fn collect_gas_used_ratios(
