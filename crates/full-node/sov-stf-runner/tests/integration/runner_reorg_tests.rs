@@ -358,13 +358,14 @@ async fn check_runner(
     assert!(end.is_err());
     // Drop runner to release storage lock before creating new storage manager
     drop(runner);
+    // Stop TestNode to release ledger_db references before opening new storage manager
+    test_node.stop().await;
     let after = get_saved_root_hash(tmpdir.path())
         .unwrap()
         .expect("State root should be saved after running");
 
     assert_ne!(before, after);
     assert_eq!(expected_state_root, after);
-    test_node.stop().await;
 }
 
 fn get_saved_root_hash(
