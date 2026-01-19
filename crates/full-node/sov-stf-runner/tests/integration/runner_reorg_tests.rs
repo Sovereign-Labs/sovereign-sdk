@@ -10,8 +10,8 @@ use sov_db::storage_manager::NativeStorageManager;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
-    BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
-    MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
+    BlockProducingConfig, FailureBehavior, MockAddress, MockBlob, MockBlock, MockBlockHeader,
+    MockDaConfig, MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
 };
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
@@ -181,6 +181,7 @@ fn build_da_config(
     finality: u32,
     block_time_ms: u64,
     randomization: RandomizationConfig,
+    failure_behavior: FailureBehavior,
 ) -> MockDaConfig {
     let block_producing = BlockProducingConfig::Periodic { block_time_ms };
     MockDaConfig {
@@ -190,7 +191,7 @@ fn build_da_config(
         block_producing,
         da_layer: None,
         randomization: Some(randomization),
-        failure_behavior: Default::default(),
+        failure_behavior,
     }
 }
 
@@ -204,7 +205,7 @@ async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
         // TODO: It also messes up things with shorter block_time. get back to this later
         behaviour: RandomizationBehaviour::only_shuffle(20),
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
@@ -225,7 +226,7 @@ async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
             adjust_head_height: -5..5,
         },
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
@@ -246,7 +247,30 @@ async fn test_runner_rewind_below_finalized_instant_finality() -> anyhow::Result
         reorg_interval: 2..5,
         behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(20, da_config),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_below_finalized_instant_finality_with_rewind_during_da_call(
+) -> anyhow::Result<()> {
+    let finality = 0; // Instant finality
+    let block_time_ms = 500;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(3),
+        reorg_interval: 2..5,
+        behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
+    };
+    let failure_behaviour = FailureBehavior::ReorgDuringCall {
+        trigger_at_height: 3,
+        triggered: false,
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization, failure_behaviour);
 
     tokio::time::timeout(
         TREE_MINUTES,
@@ -267,7 +291,7 @@ async fn test_runner_rewind_non_finalized_state() -> anyhow::Result<()> {
         reorg_interval: 20..30,
         behaviour: RandomizationBehaviour::Rewind,
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
@@ -288,7 +312,7 @@ async fn test_runner_rewind_below_finalized_non_instant() -> anyhow::Result<()> 
         reorg_interval: 2..4,
         behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 3 },
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
