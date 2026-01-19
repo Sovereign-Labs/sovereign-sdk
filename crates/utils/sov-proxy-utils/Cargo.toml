@@ -11,7 +11,7 @@ repository.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 tracing = { workspace = true }
 
 [lints]

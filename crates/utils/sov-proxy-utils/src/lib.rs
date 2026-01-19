@@ -66,6 +66,40 @@ impl NodeDiscovery {
         Ok(ClusterInfo { leader, followers })
     }
 
+    /// Periodically writes cluster info to a file in a loop.
+    ///
+    /// Fetches `ClusterInfo` at the specified interval and writes it
+    /// to the given file path using debug format. This method runs
+    /// indefinitely - the caller is responsible for cancellation.
+    ///
+    /// # Arguments
+    /// * `path` - File path to write cluster info to
+    /// * `interval` - Duration between writes
+    pub async fn write_cluster_info_loop(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        interval: std::time::Duration,
+    ) {
+        let mut interval_timer = tokio::time::interval(interval);
+        let path = path.as_ref();
+
+        loop {
+            interval_timer.tick().await;
+
+            match self.get_cluster_info().await {
+                Ok(info) => {
+                    let content = format!("{info:?}");
+                    if let Err(e) = std::fs::write(path, content) {
+                        tracing::warn!("Failed to write cluster info to file: {e}");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to fetch cluster info: {e}");
+                }
+            }
+        }
+    }
+
     async fn get_cluster_info_from_db(&self) -> Result<(Option<String>, Vec<(String, String)>)> {
         let mut tx = self.pool.begin().await?;
 
