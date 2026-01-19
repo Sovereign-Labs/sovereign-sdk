@@ -1,6 +1,6 @@
+use sov_modules_api::capabilities::SequencingDataHandler;
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
-use sov_modules_api::capabilities::SequencingDataHandler;
 use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
     StateProvider, TransactionReceipt, TxScratchpad, WorkingSet, *,

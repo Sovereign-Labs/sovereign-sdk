@@ -22,4 +22,3 @@ pub trait SequencingDataHandler<S: Spec> {
         Ok(())
     }
 }
-

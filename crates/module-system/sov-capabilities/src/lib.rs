@@ -4,6 +4,7 @@ use std::convert::Infallible;
 use sov_attester_incentives::BondingProofServiceImpl;
 use sov_bank::utils::TokenHolder;
 use sov_bank::{config_gas_token_id, Coins, IntoPayable, Payable};
+use sov_chain_state::ChainState as ChainStateModule;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::{
@@ -14,13 +15,13 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
 use sov_modules_api::ExecutionContext;
+use sov_modules_api::HDTimestamp;
 use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
     SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage, TxState,
 };
-use sov_modules_api::HDTimestamp;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
@@ -28,7 +29,6 @@ use sov_rollup_interface::Bytes;
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::{Kernel, User};
-use sov_chain_state::ChainState as ChainStateModule;
 
 /// Implements the basic capabilities required for a zk-rollup runtime.
 pub struct StandardProvenRollupCapabilities<'a, S: Spec, GasPayer = ()> {
