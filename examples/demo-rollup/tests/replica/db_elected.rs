@@ -152,15 +152,13 @@ async fn test_db_elected_leader_failover() {
         "Leader and follower should have different node_ids"
     );
 
-    /*
     assert_ne!(
         initial_leader.address, initial_follower.address,
         "Leader and follower should have different addresses"
     );
-    */
 
     // Remember the follower's node_id - this should become the new leader after failover
-    let expected_new_leader_id = initial_follower.node_id.clone();
+    let expected_new_leader = initial_follower.clone();
 
     // Kill the leader
     let _ = leader.shutdown().await;
@@ -204,7 +202,7 @@ async fn test_db_elected_leader_failover() {
         .as_ref()
         .expect("Expected a leader after failover");
 
-    assert_eq!(new_leader.node_id, expected_new_leader_id,);
+    assert_eq!(new_leader, expected_new_leader);
 
     let _ = restarted_rollup.shutdown().await;
     let _ = da_shutdown.send(());

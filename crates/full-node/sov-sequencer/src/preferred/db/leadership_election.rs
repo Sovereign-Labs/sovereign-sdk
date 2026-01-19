@@ -4,7 +4,7 @@
 //! run as leaders with a heartbeat task. If not, they run as replicas while
 //! continuously attempting to acquire leadership.
 
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -22,21 +22,6 @@ const ELECTION_INTERVAL: Duration = Duration::from_millis(200);
 /// How often leaders refresh their leadership heartbeat.
 const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(200);
 
-/// Gets the local IP address by creating a UDP socket and checking which local address
-/// would be used to reach an external destination. This doesn't actually send any traffic.
-fn get_local_ip() -> Option<IpAddr> {
-    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    socket.local_addr().ok().map(|addr| addr.ip())
-}
-
-/// Computes the node address from the local IP and bind port.
-pub fn compute_node_address(bind_port: u16) -> Result<String> {
-    let local_ip =
-        get_local_ip().ok_or_else(|| anyhow::anyhow!("Failed to determine local IP address"))?;
-    Ok(format!("{local_ip}:{bind_port}"))
-}
-
 /// Manages leadership election and heartbeat for DbElected nodes.
 pub struct LeadershipElectionTask {
     backend: PostgresBackend,
@@ -53,9 +38,9 @@ impl LeadershipElectionTask {
     pub async fn new(
         postgres_config: &PostgresConfig,
         shutdown_sender: watch::Sender<()>,
-        bind_port: u16,
+        bind_addr: SocketAddr,
     ) -> Result<Self> {
-        let backend = PostgresBackend::connect(postgres_config, bind_port).await?;
+        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
 
         Ok(Self {

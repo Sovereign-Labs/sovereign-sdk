@@ -27,6 +27,7 @@ use sov_modules_api::{
     VisibleSlotNumber,
 };
 use std::collections::VecDeque;
+use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::Arc;
@@ -439,7 +440,7 @@ impl PreferredSequencerDb {
         shutdown_sender: watch::Sender<()>,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
-        bind_port: u16,
+        bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, SequencerRole)> {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
@@ -448,13 +449,13 @@ impl PreferredSequencerDb {
                     NodeRole::Replica => (None, SequencerRole::Replica),
                     NodeRole::Leader => (
                         Some(Box::new(
-                            PostgresBackend::connect(postgres_config, bind_port).await?,
+                            PostgresBackend::connect(postgres_config, bind_addr).await?,
                         )),
                         SequencerRole::Leader,
                     ),
                     NodeRole::DbElected => {
                         // Connect without claiming leadership, then try to acquire it
-                        let backend = PostgresBackend::connect(postgres_config, bind_port).await?;
+                        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
 
                         // Try to become leader and register node
                         let maybe_leader = backend.try_update_leader_and_register_node().await?;

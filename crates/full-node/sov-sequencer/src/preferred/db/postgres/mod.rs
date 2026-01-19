@@ -1,5 +1,6 @@
-use crate::preferred::db::{leadership_election, FailedOperation};
+use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -62,12 +63,13 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    pub async fn connect(config: &PostgresConfig, bind_port: u16) -> Result<Self> {
+    pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
-        let node_address = leadership_election::compute_node_address(bind_port)?;
+        let node_address = node_address(bind_addr)?;
 
         let backend =
             Self::connect_with_leader_timeout(config, LEADER_TIMEOUT, node_address).await?;
+
         backend.try_update_leader_and_register_node().await?;
         Ok(backend)
     }
@@ -631,6 +633,13 @@ impl DbBackend for PostgresBackend {
             }
         }
     }
+}
+
+/// Computes the node address from the local IP and bind port.
+fn node_address(bind_addr: SocketAddr) -> Result<String> {
+    let bind_port = bind_addr.port();
+    let ip = bind_addr.ip();
+    Ok(format!("{ip}:{bind_port}"))
 }
 
 #[cfg(test)]

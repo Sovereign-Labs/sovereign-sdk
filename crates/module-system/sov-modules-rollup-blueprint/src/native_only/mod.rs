@@ -38,6 +38,7 @@ use sov_stf_runner::{
     StateTransitionRunner,
 };
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
@@ -203,6 +204,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         shutdown_receiver: watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
         match &rollup_config.sequencer.sequencer_kind_config {
             SequencerKindConfig::Standard(seq_config) => {
@@ -255,7 +257,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
                         stop_at_rollup_height,
-                        rollup_config.runner.http_config.bind_port,
+                        bind_addr,
                     )
                     .await?;
 
@@ -471,6 +473,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
+        let axum_socket_addr = axum_tcp.local_addr()?;
 
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
@@ -507,6 +510,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 main_shutdown_receiver.clone(),
                 main_shutdown_sender.clone(),
                 stop_at_rollup_height,
+                axum_socket_addr,
             )
             .await?;
 

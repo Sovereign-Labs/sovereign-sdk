@@ -8,7 +8,7 @@ use sqlx::postgres::PgPool;
 use sqlx::FromRow;
 
 /// Information about a registered node.
-#[derive(Debug, Clone, FromRow)]
+#[derive(Debug, Clone, FromRow, PartialEq, Eq)]
 pub struct NodeInfo {
     /// The unique identifier of the node.
     pub node_id: String,

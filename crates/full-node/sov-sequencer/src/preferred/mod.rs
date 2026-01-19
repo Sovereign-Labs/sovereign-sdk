@@ -63,7 +63,7 @@ use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
 use std::marker::PhantomData;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::num::NonZero;
 use std::path::Path;
 use std::pin::Pin;
@@ -149,7 +149,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
-        bind_port: u16,
+        bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         Builder::new(da, config)
             .build(
@@ -159,7 +159,7 @@ where
                 api_ledger_db,
                 shutdown_sender,
                 stop_at_rollup_height,
-                bind_port,
+                bind_addr,
             )
             .await
     }
