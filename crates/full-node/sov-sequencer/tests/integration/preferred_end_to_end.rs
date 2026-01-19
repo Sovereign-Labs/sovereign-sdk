@@ -550,7 +550,7 @@ async fn test_tx_ws_submission() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
+#[ignore = "This test covers pruning behavior, which is currently disable."]
 async fn test_archival_state_with_pruning() {
     let (test_rollup, admin) = create_test_rollup(
         0,
