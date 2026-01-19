@@ -31,7 +31,8 @@ use uuid::Uuid;
 
 use super::state_root_compute::StateRootComputeRequest;
 use super::{
-    Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
+    nonce_buffer_task::NonceBufferWipeReason, Confirmation, PreferredBatchToReplay,
+    PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
 use crate::common::AcceptedTx;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
@@ -132,6 +133,7 @@ pub struct RollupBlockExecutorConfig<S: Spec> {
     pub shutdown_receiver: watch::Receiver<()>,
     pub shutdown_sender: watch::Sender<()>,
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
+    pub nonce_buffer_wipe_sender: Sender<NonceBufferWipeReason>,
 }
 
 type Hasher<S> = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
@@ -160,6 +162,9 @@ where
     id: Uuid,
     startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
     pub(super) uncommitted_changes: SequencerStateChanges<Hasher<S>>,
+    /// The nonce buffer task can get out of sync with state when non-preferred batches are executed.
+    /// We communicate that via this channel.
+    nonce_buffer_wipe_sender: Sender<NonceBufferWipeReason>,
     phantom: PhantomData<Rt>,
 }
 
@@ -230,6 +235,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             state_root_request_sender,
             shutdown_receiver,
             shutdown_sender,
+            nonce_buffer_wipe_sender,
         } = rollup_exec_config;
 
         Self {
@@ -248,6 +254,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             shutdown_sender,
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
+            nonce_buffer_wipe_sender,
             phantom: PhantomData,
         }
     }
@@ -758,18 +765,30 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("Error while shutting down in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
+        let mut saw_non_preferred_batch = false;
         for batch_receipt in batch_receipts {
             // We already increment the event number for our own transactions
             // inside `apply_tx_to_in_progress_batch`.
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
+            saw_non_preferred_batch = true;
             let mut accepted_txs = Vec::with_capacity(batch_receipt.tx_receipts.len());
             for tx_receipt in batch_receipt.tx_receipts {
                 let accepted_tx = self.process_tx_receipt(&tx_receipt);
                 accepted_txs.push(accepted_tx);
             }
             accepted_txs_by_batch.push(accepted_txs);
+        }
+        if saw_non_preferred_batch {
+            if let Err(err) = self
+                .nonce_buffer_wipe_sender
+                .try_send(NonceBufferWipeReason::NonPreferredBatchExecuted)
+            {
+                tracing::warn!(
+                    "Failed to signal nonce buffer wipe after non-preferred batch execution: {err:?}"
+                );
+            }
         }
 
         trace!(

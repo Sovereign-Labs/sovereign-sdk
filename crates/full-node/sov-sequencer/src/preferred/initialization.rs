@@ -128,12 +128,14 @@ where
 
         let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
+        let (nonce_buffer_wipe_sender, nonce_buffer_wipe_receiver) = mpsc::channel(1);
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
+            nonce_buffer_wipe_sender,
         };
 
         let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
@@ -200,6 +202,7 @@ where
             execution_backend,
             preferred_config.maximum_future_nonce_delta,
             preferred_config.future_nonce_transaction_timeout_millis,
+            nonce_buffer_wipe_receiver,
             shutdown_receiver.clone(),
         );
         handles.push(nonce_buffer_task);

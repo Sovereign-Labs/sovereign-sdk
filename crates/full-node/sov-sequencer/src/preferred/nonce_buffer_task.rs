@@ -46,6 +46,11 @@ const MAX_BUFFER_INPUT_QUEUE: usize = 20_000;
 // Batches metrics together for performance instead of sending them every single message.
 const METRICS_BATCH_SIZE: usize = 32;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum NonceBufferWipeReason {
+    NonPreferredBatchExecuted,
+}
+
 /// Send a message to an mpsc channel, returning how long the send was blocked.
 ///
 /// Uses try_send first for the non-blocking fast path. If the channel is full, falls back to
@@ -374,6 +379,7 @@ pub struct NonceBufferInputSender<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Run
 pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffers: HashMap<CredentialId, AddressQueue<S, Rt>>,
     buffer_input: mpsc::Receiver<NonceBufferInput<S, Rt>>,
+    wipe_receiver: mpsc::Receiver<NonceBufferWipeReason>,
     input_sender: NonceBufferInputSender<E, S, Rt>,
     execution_backend: E,
     maximum_future_nonce_delta: u64,
@@ -475,259 +481,286 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
     }
 
     async fn run(&mut self) {
-        while let Some(input) = self.buffer_input.recv().await {
-            // Track main queue depth on receive side with batching
-            self.main_queue_depth_batcher
-                .push(NonceBufferMainQueueDepthMetric {
-                    queue_depth: queue_depth(&self.input_sender.buffer_sender_channel),
-                });
+        let mut input_closed = false;
+        let mut wipe_closed = false;
+        loop {
+            if input_closed && wipe_closed {
+                return;
+            }
+            tokio::select! {
+                input = self.buffer_input.recv(), if !input_closed => {
+                    match input {
+                        Some(input) => {
+                            // Track main queue depth on receive side with batching
+                            self.main_queue_depth_batcher
+                                .push(NonceBufferMainQueueDepthMetric {
+                                    queue_depth: queue_depth(&self.input_sender.buffer_sender_channel),
+                                });
 
-            match input {
-                NonceBufferInput::NewTx {
-                    baked_tx,
-                    tx_hash,
-                    ip_addr_and_credential,
-                    tx_nonce,
-                    original_tx_queue_id,
-                    result_sender,
-                } => {
-                    let queue = self
-                        .buffers
-                        .entry(ip_addr_and_credential.credential_id)
-                        .or_default();
-
-                    let user_nonce = queue.non_persisted.user_nonce().unwrap_or_else(|| {
-                        self.execution_backend
-                            .get_current_nonce_for_user(&ip_addr_and_credential.credential_id)
-                    });
-
-                    match determine_action(tx_nonce, user_nonce, self.maximum_future_nonce_delta) {
-                        Action::Enqueue => {
-                            // Replacement handling: if a tx with the same nonce is already in the
-                            // queue...
-                            //  * If it's the same tx (same hash): we reject the new request
-                            //  * If it was a different tx: we replace it with the new one, and
-                            //  send a rejection to the old one
-                            if let btree_map::Entry::Occupied(old_entry) = queue.txs.entry(tx_nonce)
-                            {
-                                let old_tx = old_entry.get();
-                                if old_tx.tx_hash == tx_hash {
-                                    let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
-                                        tx_hash,
-                                        tx_nonce,
-                                        user_nonce,
-                                        old_tx.nonce_when_queued,
-                                        old_tx.queued_at,
-                                        ip_addr_and_credential.credential_id,
-                                        InvalidNonceReason::AlreadyQueued,
-                                    ));
-                                    continue;
-                                } else {
-                                    let old_tx = old_entry.remove();
-                                    let _ = old_tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                        old_tx.tx_hash,
-                                        tx_nonce,
-                                        user_nonce,
-                                        old_tx.nonce_when_queued,
-                                        old_tx.queued_at,
-                                        ip_addr_and_credential.credential_id,
-                                        InvalidNonceReason::Replaced,
-                                    ));
-                                }
-                            }
-                            queue.txs.insert(
-                                tx_nonce,
-                                QueuedTx {
+                            match input {
+                                NonceBufferInput::NewTx {
                                     baked_tx,
                                     tx_hash,
                                     ip_addr_and_credential,
+                                    tx_nonce,
                                     original_tx_queue_id,
-                                    nonce_when_queued: user_nonce,
-                                    queued_at: Instant::now(),
                                     result_sender,
-                                },
-                            );
-                            self.schedule_timeout(
-                                ip_addr_and_credential.credential_id,
-                                tx_nonce,
-                                tx_hash,
-                            )
-                            .await;
-                        }
-                        Action::Execute => {
-                            // The executor queue ID is incremented whenever the sequencer has
-                            // downtime.
-                            // It invalidates all pre-downtime transactions. So we need to empty
-                            // the nonce queue too.
-                            if self.execution_backend.get_current_executor_tx_queue_id()
-                                > original_tx_queue_id
-                            {
-                                let _ = result_sender.send(wipe_reject_error());
-                                self.wipe().await;
-                                continue;
+                                } => {
+                                    let queue = self
+                                        .buffers
+                                        .entry(ip_addr_and_credential.credential_id)
+                                        .or_default();
+
+                                    let user_nonce = queue.non_persisted.user_nonce().unwrap_or_else(|| {
+                                        self.execution_backend
+                                            .get_current_nonce_for_user(&ip_addr_and_credential.credential_id)
+                                    });
+
+                                    match determine_action(tx_nonce, user_nonce, self.maximum_future_nonce_delta) {
+                                        Action::Enqueue => {
+                                            // Replacement handling: if a tx with the same nonce is already in the
+                                            // queue...
+                                            //  * If it's the same tx (same hash): we reject the new request
+                                            //  * If it was a different tx: we replace it with the new one, and
+                                            //  send a rejection to the old one
+                                            if let btree_map::Entry::Occupied(old_entry) = queue.txs.entry(tx_nonce)
+                                            {
+                                                let old_tx = old_entry.get();
+                                                if old_tx.tx_hash == tx_hash {
+                                                    let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
+                                                        tx_hash,
+                                                        tx_nonce,
+                                                        user_nonce,
+                                                        old_tx.nonce_when_queued,
+                                                        old_tx.queued_at,
+                                                        ip_addr_and_credential.credential_id,
+                                                        InvalidNonceReason::AlreadyQueued,
+                                                    ));
+                                                    continue;
+                                                } else {
+                                                    let old_tx = old_entry.remove();
+                                                    let _ = old_tx.result_sender.send(err_invalid_nonce::<S, Rt>(
+                                                        old_tx.tx_hash,
+                                                        tx_nonce,
+                                                        user_nonce,
+                                                        old_tx.nonce_when_queued,
+                                                        old_tx.queued_at,
+                                                        ip_addr_and_credential.credential_id,
+                                                        InvalidNonceReason::Replaced,
+                                                    ));
+                                                }
+                                            }
+                                            queue.txs.insert(
+                                                tx_nonce,
+                                                QueuedTx {
+                                                    baked_tx,
+                                                    tx_hash,
+                                                    ip_addr_and_credential,
+                                                    original_tx_queue_id,
+                                                    nonce_when_queued: user_nonce,
+                                                    queued_at: Instant::now(),
+                                                    result_sender,
+                                                },
+                                            );
+                                            self.schedule_timeout(
+                                                ip_addr_and_credential.credential_id,
+                                                tx_nonce,
+                                                tx_hash,
+                                            )
+                                            .await;
+                                        }
+                                        Action::Execute => {
+                                            // The executor queue ID is incremented whenever the sequencer has
+                                            // downtime.
+                                            // It invalidates all pre-downtime transactions. So we need to empty
+                                            // the nonce queue too.
+                                            if self.execution_backend.get_current_executor_tx_queue_id()
+                                                > original_tx_queue_id
+                                            {
+                                                let _ = result_sender.send(wipe_reject_error());
+                                                self.wipe().await;
+                                                continue;
+                                            }
+                                            queue.non_persisted.mark_inflight(tx_nonce);
+                                            let input_sender = self.input_sender.clone();
+                                            let backend = self.execution_backend.clone();
+                                            tokio::spawn(async move {
+                                                let tx_result = backend
+                                                    .execute_tx(
+                                                        &baked_tx,
+                                                        tx_hash,
+                                                        ip_addr_and_credential,
+                                                        original_tx_queue_id,
+                                                        "nonce_queue_immediate",
+                                                    )
+                                                    .await;
+                                                let _ = input_sender
+                                                    .send_to_main_queue(NonceBufferInput::TxExecuted {
+                                                        credential_id: ip_addr_and_credential.credential_id,
+                                                        tx_nonce,
+                                                        tx_result,
+                                                        result_sender,
+                                                    })
+                                                    .await;
+                                            });
+                                        }
+                                        Action::Reject => {
+                                            let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
+                                                tx_hash,
+                                                tx_nonce,
+                                                user_nonce,
+                                                user_nonce,
+                                                Instant::now(),
+                                                ip_addr_and_credential.credential_id,
+                                                InvalidNonceReason::Invalid,
+                                            ));
+                                        }
+                                    }
+                                }
+                                NonceBufferInput::TxExecuted {
+                                    credential_id,
+                                    tx_nonce,
+                                    tx_result,
+                                    result_sender,
+                                } => {
+                                    // If the tx was rejected because the sequencer is down (syncing,
+                                    // recovering etc.), the nonce queue will be stale and needs to be wiped.
+                                    // At minimum the non_persisted tracking for all users needs wiping for
+                                    // correctness, but pre-downtime transactions are invalidated by the
+                                    // sequencer anyway so we wipe everything.
+                                    if is_notready_error(&tx_result) {
+                                        let _ = result_sender.send(tx_result);
+                                        self.wipe().await;
+                                        continue;
+                                    }
+
+                                    let queue = self.buffers.entry(credential_id).or_default();
+                                    if tx_result.as_ref().is_ok_and(|r| r.is_ok()) {
+                                        queue
+                                            .non_persisted
+                                            .mark_inflight_execution_succeeded(tx_nonce);
+                                    } else {
+                                        queue.non_persisted.mark_inflight_execution_failed();
+                                    }
+
+                                    let _ = result_sender.send(tx_result); // If the receiver was dropped, ignore
+
+                                    let user_nonce = queue.non_persisted.user_nonce().unwrap_or_else(|| {
+                                        self.execution_backend
+                                            .get_current_nonce_for_user(&credential_id)
+                                    });
+                                    loop {
+                                        let Some(head_entry) = queue.txs.first_entry() else {
+                                            break;
+                                        };
+                                        match head_entry.key().cmp(&user_nonce) {
+                                            CmpOrdering::Less => {
+                                                // Stale transaction in queue - evict and ignore.
+                                                // This should not normally happen either, but we handle it to avoid a deadlock
+                                                // if it does happen for any reason.
+                                                let msg = format!("The nonce buffer task evicted a stale transaction for user {} with nonce {}; the user's current nonce is believed to be {user_nonce}. Stale transactions should not exist in the nonce buffer. The user will see an EvictedBeforeExecution error.", credential_id, head_entry.key());
+                                                head_entry.remove();
+                                                tracing::error!(msg);
+                                                debug_assert!(false, "{msg}");
+                                                continue;
+                                            }
+                                            CmpOrdering::Greater => {
+                                                // First transaction starts in the future - nothing ready to execute yet
+                                                break;
+                                            }
+                                            CmpOrdering::Equal => {
+                                                // First transaction is the next expected nonce. Pop it and send
+                                                // as a NewTx.
+                                                let tx = head_entry.remove();
+                                                queue.non_persisted.mark_inflight(user_nonce);
+                                                let _ = self
+                                                    .input_sender
+                                                    .send_to_main_queue(NonceBufferInput::NewTx {
+                                                        baked_tx: tx.baked_tx,
+                                                        tx_hash: tx.tx_hash,
+                                                        ip_addr_and_credential: tx.ip_addr_and_credential,
+                                                        tx_nonce: user_nonce,
+                                                        original_tx_queue_id: tx.original_tx_queue_id,
+                                                        result_sender: tx.result_sender,
+                                                    })
+                                                    .await;
+                                            }
+                                        }
+                                    }
+                                }
+                                NonceBufferInput::TxPersisted {
+                                    credential_id,
+                                    tx_nonce,
+                                } => {
+                                    let hash_map::Entry::Occupied(entry) = self.buffers.entry(credential_id) else {
+                                        continue;
+                                    };
+                                    if entry.get().txs.is_empty()
+                                        && entry
+                                            .get()
+                                            .non_persisted
+                                            .user_nonce_to_use_as_prerequisite_start()
+                                            .is_none_or(|n| n <= tx_nonce)
+                                    {
+                                        entry.remove();
+                                    }
+                                }
+                                NonceBufferInput::TxTimedOut {
+                                    credential_id,
+                                    tx_nonce,
+                                    tx_hash,
+                                } => {
+                                    let queue = self.buffers.entry(credential_id).or_default();
+                                    let user_nonce_for_prerequisites = queue
+                                        .non_persisted
+                                        .user_nonce_to_use_as_prerequisite_start()
+                                        .unwrap_or_else(|| {
+                                            self.execution_backend
+                                                .get_current_nonce_for_user(&credential_id)
+                                        });
+                                    // Pre-requisite checks have been disabled to simplify.
+                                    // See the comments in the methods on NonPersisted for extra improvements on
+                                    // transactions with identical nonces that will make pre-requisite checks work
+                                    // reliably; additionally a time bound on execution would be needed (e.g. retry
+                                    // limit).
+                                    //
+                                    // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
+                                    //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
+                                    // }
+                                    match queue.txs.entry(tx_nonce) {
+                                        // If the hash doesn't match, it means the tx has been replaced. The
+                                        // `result_sender` is for the new tx and we shouldn't notify it.
+                                        btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
+                                            let tx = entry.remove();
+                                            let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
+                                                tx_hash,
+                                                tx_nonce,
+                                                user_nonce_for_prerequisites,
+                                                tx.nonce_when_queued,
+                                                tx.queued_at,
+                                                credential_id,
+                                                InvalidNonceReason::Timeout,
+                                            ));
+                                        }
+                                        _ => (),
+                                    }
+                                }
                             }
-                            queue.non_persisted.mark_inflight(tx_nonce);
-                            let input_sender = self.input_sender.clone();
-                            let backend = self.execution_backend.clone();
-                            tokio::spawn(async move {
-                                let tx_result = backend
-                                    .execute_tx(
-                                        &baked_tx,
-                                        tx_hash,
-                                        ip_addr_and_credential,
-                                        original_tx_queue_id,
-                                        "nonce_queue_immediate",
-                                    )
-                                    .await;
-                                let _ = input_sender
-                                    .send_to_main_queue(NonceBufferInput::TxExecuted {
-                                        credential_id: ip_addr_and_credential.credential_id,
-                                        tx_nonce,
-                                        tx_result,
-                                        result_sender,
-                                    })
-                                    .await;
-                            });
                         }
-                        Action::Reject => {
-                            let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
-                                tx_hash,
-                                tx_nonce,
-                                user_nonce,
-                                user_nonce,
-                                Instant::now(),
-                                ip_addr_and_credential.credential_id,
-                                InvalidNonceReason::Invalid,
-                            ));
+                        None => {
+                            input_closed = true;
                         }
                     }
                 }
-                NonceBufferInput::TxExecuted {
-                    credential_id,
-                    tx_nonce,
-                    tx_result,
-                    result_sender,
-                } => {
-                    // If the tx was rejected because the sequencer is down (syncing,
-                    // recovering etc.), the nonce queue will be stale and needs to be wiped.
-                    // At minimum the non_persisted tracking for all users needs wiping for
-                    // correctness, but pre-downtime transactions are invalidated by the
-                    // sequencer anyway so we wipe everything.
-                    if is_notready_error(&tx_result) {
-                        let _ = result_sender.send(tx_result);
-                        self.wipe().await;
-                        continue;
-                    }
-
-                    let queue = self.buffers.entry(credential_id).or_default();
-                    if tx_result.as_ref().is_ok_and(|r| r.is_ok()) {
-                        queue
-                            .non_persisted
-                            .mark_inflight_execution_succeeded(tx_nonce);
-                    } else {
-                        queue.non_persisted.mark_inflight_execution_failed();
-                    }
-
-                    let _ = result_sender.send(tx_result); // If the receiver was dropped, ignore
-
-                    let user_nonce = queue.non_persisted.user_nonce().unwrap_or_else(|| {
-                        self.execution_backend
-                            .get_current_nonce_for_user(&credential_id)
-                    });
-                    loop {
-                        let Some(head_entry) = queue.txs.first_entry() else {
-                            break;
-                        };
-                        match head_entry.key().cmp(&user_nonce) {
-                            CmpOrdering::Less => {
-                                // Stale transaction in queue - evict and ignore.
-                                // This should not normally happen either, but we handle it to avoid a deadlock
-                                // if it does happen for any reason.
-                                let msg = format!("The nonce buffer task evicted a stale transaction for user {} with nonce {}; the user's current nonce is believed to be {user_nonce}. Stale transactions should not exist in the nonce buffer. The user will see an EvictedBeforeExecution error.", credential_id, head_entry.key());
-                                head_entry.remove();
-                                tracing::error!(msg);
-                                debug_assert!(false, "{msg}");
-                                continue;
-                            }
-                            CmpOrdering::Greater => {
-                                // First transaction starts in the future - nothing ready to execute yet
-                                break;
-                            }
-                            CmpOrdering::Equal => {
-                                // First transaction is the next expected nonce. Pop it and send
-                                // as a NewTx.
-                                let tx = head_entry.remove();
-                                queue.non_persisted.mark_inflight(user_nonce);
-                                let _ = self
-                                    .input_sender
-                                    .send_to_main_queue(NonceBufferInput::NewTx {
-                                        baked_tx: tx.baked_tx,
-                                        tx_hash: tx.tx_hash,
-                                        ip_addr_and_credential: tx.ip_addr_and_credential,
-                                        tx_nonce: user_nonce,
-                                        original_tx_queue_id: tx.original_tx_queue_id,
-                                        result_sender: tx.result_sender,
-                                    })
-                                    .await;
-                            }
+                wipe_reason = self.wipe_receiver.recv(), if !wipe_closed => {
+                    match wipe_reason {
+                        Some(reason) => {
+                            tracing::info!(?reason, "Wiping nonce buffer due to external state change");
+                            self.wipe().await;
                         }
-                    }
-                }
-                NonceBufferInput::TxPersisted {
-                    credential_id,
-                    tx_nonce,
-                } => {
-                    let hash_map::Entry::Occupied(entry) = self.buffers.entry(credential_id) else {
-                        continue;
-                    };
-                    if entry.get().txs.is_empty()
-                        && entry
-                            .get()
-                            .non_persisted
-                            .user_nonce_to_use_as_prerequisite_start()
-                            .is_none_or(|n| n <= tx_nonce)
-                    {
-                        entry.remove();
-                    }
-                }
-                NonceBufferInput::TxTimedOut {
-                    credential_id,
-                    tx_nonce,
-                    tx_hash,
-                } => {
-                    let queue = self.buffers.entry(credential_id).or_default();
-                    let user_nonce_for_prerequisites = queue
-                        .non_persisted
-                        .user_nonce_to_use_as_prerequisite_start()
-                        .unwrap_or_else(|| {
-                            self.execution_backend
-                                .get_current_nonce_for_user(&credential_id)
-                        });
-                    // Pre-requisite checks have been disabled to simplify.
-                    // See the comments in the methods on NonPersisted for extra improvements on
-                    // transactions with identical nonces that will make pre-requisite checks work
-                    // reliably; additionally a time bound on execution would be needed (e.g. retry
-                    // limit).
-                    //
-                    // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
-                    //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
-                    // }
-                    match queue.txs.entry(tx_nonce) {
-                        // If the hash doesn't match, it means the tx has been replaced. The
-                        // `result_sender` is for the new tx and we shouldn't notify it.
-                        btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
-                            let tx = entry.remove();
-                            let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                tx_hash,
-                                tx_nonce,
-                                user_nonce_for_prerequisites,
-                                tx.nonce_when_queued,
-                                tx.queued_at,
-                                credential_id,
-                                InvalidNonceReason::Timeout,
-                            ));
+                        None => {
+                            wipe_closed = true;
                         }
-                        _ => (),
                     }
                 }
             }
@@ -738,6 +771,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         execution_backend: E,
         maximum_future_nonce_delta: u64,
         future_nonce_transaction_timeout_millis: u64,
+        wipe_receiver: mpsc::Receiver<NonceBufferWipeReason>,
         mut shutdown_receiver: watch::Receiver<()>,
     ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
@@ -757,6 +791,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         let mut main_task = NonceBufferTask {
             buffers: Default::default(),
             buffer_input,
+            wipe_receiver,
             input_sender: input_sender.clone(),
             execution_backend,
             maximum_future_nonce_delta,
@@ -1303,10 +1338,12 @@ mod tests {
         watch::Sender<()>,
     ) {
         let (shutdown_sender, shutdown_receiver) = watch::channel(());
+        let (_wipe_sender, wipe_receiver) = mpsc::channel(1);
         let (_handle, sender) = NonceBufferTask::spawn(
             backend.clone(),
             DEFAULT_TEST_MAX_QUEUE_SIZE,
             timeout_override.unwrap_or(DEFAULT_TEST_QUEUE_TIMEOUT_MS),
+            wipe_receiver,
             shutdown_receiver,
         );
         (sender, shutdown_sender)
