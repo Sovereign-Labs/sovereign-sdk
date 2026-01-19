@@ -106,7 +106,6 @@ mod map {
     use super::{make_user_map_proof, S};
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_roundtrip() {
         let (root, proof, map) = make_user_map_proof(1, 2);
         let (key, val) = map.verify_proof::<S>(root, proof).unwrap();
@@ -115,7 +114,6 @@ mod map {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_wrong_namespace() {
         let (root, mut proof, map) = make_user_map_proof(1, 2);
         proof.namespace = ProvableNamespace::Kernel;
@@ -123,7 +121,6 @@ mod map {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_wrong_key() {
         let (root, mut proof, map) = make_user_map_proof(1, 2);
         proof.key = SlotKey::new(&Prefix::new(1, 0), &1, map.codec());
@@ -131,7 +128,6 @@ mod map {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_missing_value() {
         let (root, mut proof, map) = make_user_map_proof(1, 2);
         proof.value = None;
@@ -139,7 +135,6 @@ mod map {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_wrong_value() {
         let (root, mut proof, map) = make_user_map_proof(1, 2);
         proof.value = Some(SlotValue::new(&3, map.codec()));
@@ -154,7 +149,6 @@ mod value {
     use super::{make_user_value_proof, S};
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_roundtrip() {
         let (root, proof, map) = make_user_value_proof(1);
         let val = map.verify_proof::<S>(root, proof).unwrap();
@@ -162,7 +156,6 @@ mod value {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_wrong_namespace() {
         let (root, mut proof, map) = make_user_value_proof(1);
         proof.namespace = ProvableNamespace::Kernel;
@@ -170,7 +163,6 @@ mod value {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_wrong_key() {
         let (root, mut proof, map) = make_user_value_proof(1);
         proof.key = SlotKey::new(&Prefix::new(255, 0), &1, map.codec()); // Use the wrong prefix
@@ -178,7 +170,6 @@ mod value {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_missing_value() {
         let (root, mut proof, map) = make_user_value_proof(1);
         proof.value = None;
@@ -186,7 +177,6 @@ mod value {
     }
 
     #[test]
-    #[ignore = "NOMT does not support open_proof yet"]
     fn test_state_proof_wrong_value() {
         let (root, mut proof, map) = make_user_value_proof(1);
         proof.value = Some(SlotValue::new(&3, map.codec()));
@@ -195,7 +185,7 @@ mod value {
 }
 
 #[test]
-#[ignore = "NOMT does not support open_proof yet"]
+#[ignore = "NOMT does not support archival proof generation - proofs are always generated against the current state"]
 fn test_archival_proof_gen() {
     let mut kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleNomtStorageManager::new();

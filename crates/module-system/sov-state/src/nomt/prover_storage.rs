@@ -9,6 +9,7 @@ use anyhow::Context;
 use nomt::hasher::BinaryHasher;
 use nomt::proof::MultiProof;
 use nomt::FinishedSession;
+use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
@@ -18,12 +19,14 @@ use sov_db::storage_manager::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
     Accessory, CompileTimeNamespace, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
     NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace, ProvableNamespace,
-    SlotKey, SlotValue, StateAccesses, StateUpdate, Storage, StorageProof, StorageRoot, Witness,
+    SlotKey, SlotValue, StateAccesses, StateRoot, StateUpdate, Storage, StorageProof, StorageRoot,
+    Witness,
 };
 
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
@@ -401,7 +404,7 @@ where
 {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = ();
+    type Proof = NomtMultiProof;
     type Root = StorageRoot<S>;
     // These 2 are effectively the same thing, `StateUpdate` is not materialized, `ChangeSet` is materialized.
     type StateUpdate = NomtStateUpdate<S>;
@@ -617,10 +620,51 @@ where
     }
 
     fn open_proof(
-        _state_root: Self::Root,
-        _proof: StorageProof<Self::Proof>,
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-        unimplemented!("The NomtProverStorage does not support `open_proof` yet.")
+        let StorageProof {
+            key,
+            value,
+            proof: multi_proof,
+            namespace,
+        } = proof;
+        let root_node: Node = state_root.namespace_root(namespace);
+
+        let verified = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
+            &multi_proof.0,
+            root_node,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to verify proof: {:?}", e))?;
+
+        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+
+        match &value {
+            None => {
+                if !verified
+                    .confirm_nonexistence(&key_path)
+                    .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
+                {
+                    anyhow::bail!("Failed to verify non-existence of key");
+                }
+            }
+            Some(slot_value) => {
+                let authenticated_write = slot_value.combine_val_hash_and_size::<S::Hasher>();
+                let value_hash: ValueHash = S::Hasher::digest(&authenticated_write).into();
+                let leaf = LeafData {
+                    key_path,
+                    value_hash,
+                };
+                if !verified
+                    .confirm_value(&leaf)
+                    .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
+                {
+                    anyhow::bail!("Failed to verify value for key");
+                }
+            }
+        }
+
+        Ok((key, value))
     }
 }
 
@@ -675,11 +719,23 @@ where
             ProvableNamespace::Kernel => self.read_value::<crate::Kernel>(&key, slot_number)?,
         };
 
+        let session = match namespace {
+            ProvableNamespace::User => self
+                .state_session_builder
+                .begin_user_session_without_witness()?,
+            ProvableNamespace::Kernel => self
+                .state_session_builder
+                .begin_kernel_session_without_witness()?,
+        };
+
+        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+        let path_proof = session.prove(key_path)?;
+        let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
+
         Ok(StorageProof {
             key,
             value,
-            // TODO: Proof is empty now, will be fixed in follow
-            proof: (),
+            proof: NomtMultiProof(multi_proof),
             namespace,
         })
     }
