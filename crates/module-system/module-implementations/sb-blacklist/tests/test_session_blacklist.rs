@@ -85,14 +85,14 @@ fn test_1() {
     let signer = &test_data.signer;
     let wallet = &test_data.wallet;
 
-    let signer_addr = signer.address().clone();
-    let wallet_addr = wallet.address().clone();
+    let signer_addr = signer.address();
+    let wallet_addr = wallet.address();
 
     // DEX enforces not blacklisted (should succeed: wallet is not in blacklist)
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -107,7 +107,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklistSigner {
-                signer: signer_addr.clone(),
+                signer: signer_addr,
                 allowed: true,
             },
         ),
@@ -123,7 +123,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
                 blacklisted: true,
             },
         ),
@@ -139,7 +139,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -154,7 +154,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
                 blacklisted: false,
             },
         ),
@@ -170,7 +170,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -185,7 +185,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklistSigner {
-                signer: signer_addr.clone(),
+                signer: signer_addr,
                 allowed: true,
             },
         ),
@@ -201,7 +201,7 @@ fn test_1() {
     runner.execute_transaction(TransactionTestCase {
         input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
                 blacklisted: true,
             },
         ),
@@ -233,15 +233,15 @@ fn test_2() {
     let wallet = &test_data.wallet;
     let wallet2 = &test_data.wallet2;
 
-    let signer_addr = signer.address().clone();
-    let wallet_addr = wallet.address().clone();
-    let wallet2_addr = wallet2.address().clone();
+    let signer_addr = signer.address();
+    let wallet_addr = wallet.address();
+    let wallet2_addr = wallet2.address();
 
     // Manager sets blacklist signer
     runner.execute_transaction(TransactionTestCase {
         input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklistSigner {
-                signer: signer_addr.clone(),
+                signer: signer_addr,
                 allowed: true,
             },
         ),
@@ -257,7 +257,7 @@ fn test_2() {
     runner.execute_transaction(TransactionTestCase {
         input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklistedBatch {
-                wallets: vec![wallet_addr.clone(), wallet2_addr.clone()],
+                wallets: vec![wallet_addr, wallet2_addr],
                 blacklisted: vec![true, true],
             },
         ),
@@ -270,7 +270,7 @@ fn test_2() {
     });
 
     // DEX enforces not blacklisted for both wallets (should fail for both)
-    for target_wallet in [wallet_addr.clone(), wallet2_addr.clone()] {
+    for target_wallet in [wallet_addr, wallet2_addr] {
         runner.execute_transaction(TransactionTestCase {
             input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
                 DexCallMessage::EnforceNotBlacklisted {
@@ -290,7 +290,7 @@ fn test_2() {
     runner.execute_transaction(TransactionTestCase {
         input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
                 blacklisted: false,
             },
         ),
@@ -306,7 +306,7 @@ fn test_2() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -321,7 +321,7 @@ fn test_2() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet2_addr.clone(),
+                wallet: wallet2_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -353,15 +353,15 @@ fn test_3() {
     let signer = &test_data.signer;
     let wallet = &test_data.wallet;
 
-    let owner_addr = owner.address().clone();
-    let signer_addr = signer.address().clone();
-    let wallet_addr = wallet.address().clone();
+    let owner_addr = owner.address();
+    let signer_addr = signer.address();
+    let wallet_addr = wallet.address();
 
     // Manager sets blacklist signer
     runner.execute_transaction(TransactionTestCase {
         input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklistSigner {
-                signer: signer_addr.clone(),
+                signer: signer_addr,
                 allowed: true,
             },
         ),
@@ -377,7 +377,7 @@ fn test_3() {
     runner.execute_transaction(TransactionTestCase {
         input: signer.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
                 blacklisted: true,
             },
         ),
@@ -393,7 +393,7 @@ fn test_3() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -421,7 +421,7 @@ fn test_3() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, TestDex<S>>(
             DexCallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _state| {
@@ -436,7 +436,7 @@ fn test_3() {
     runner.execute_transaction(TransactionTestCase {
         input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::EnforceNotBlacklisted {
-                wallet: wallet_addr.clone(),
+                wallet: wallet_addr,
             },
         ),
         assert: Box::new(|result, _| {
@@ -451,7 +451,7 @@ fn test_3() {
     runner.execute_transaction(TransactionTestCase {
         input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetManager {
-                new_manager: owner_addr.clone(),
+                new_manager: owner_addr,
             },
         ),
         assert: Box::new(|result, _| {
@@ -466,7 +466,7 @@ fn test_3() {
     runner.execute_transaction(TransactionTestCase {
         input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetBlacklistSigner {
-                signer: signer_addr.clone(),
+                signer: signer_addr,
                 allowed: true,
             },
         ),
@@ -495,14 +495,14 @@ fn test_transfer_ownership() {
     let manager = &test_data.manager;
     let wallet = &test_data.wallet;
 
-    let wallet_addr = wallet.address().clone();
-    let manager_addr = manager.address().clone();
+    let wallet_addr = wallet.address();
+    let manager_addr = manager.address();
 
     // Owner transfers ownership to wallet
     runner.execute_transaction(TransactionTestCase {
         input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::TransferOwnership {
-                new_owner: wallet_addr.clone(),
+                new_owner: wallet_addr,
             },
         ),
         assert: Box::new(|result, _| {
@@ -517,7 +517,7 @@ fn test_transfer_ownership() {
     runner.execute_transaction(TransactionTestCase {
         input: owner.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetManager {
-                new_manager: manager_addr.clone(),
+                new_manager: manager_addr,
             },
         ),
         assert: Box::new(|result, _| {
@@ -532,7 +532,7 @@ fn test_transfer_ownership() {
     runner.execute_transaction(TransactionTestCase {
         input: wallet.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::SetManager {
-                new_manager: wallet_addr.clone(),
+                new_manager: wallet_addr,
             },
         ),
         assert: Box::new(|result, _| {
@@ -547,7 +547,7 @@ fn test_transfer_ownership() {
     runner.execute_transaction(TransactionTestCase {
         input: manager.create_plain_message::<TestRuntime<S>, Blacklist<S>>(
             CallMessage::TransferOwnership {
-                new_owner: manager_addr.clone(),
+                new_owner: manager_addr,
             },
         ),
         assert: Box::new(|result, _| {
