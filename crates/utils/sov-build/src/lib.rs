@@ -152,7 +152,7 @@ impl Options {
     pub fn apply<S, D>(&self) -> anyhow::Result<()>
     where
         S: Spec,
-        D: DispatchCall + TransactionCallable + 'static,
+        D: DispatchCall<Spec = S> + TransactionCallable + Default + 'static,
         D::Decodable: JsonSchema,
     {
         std::fs::create_dir_all(&self.out_dir)?;
@@ -190,7 +190,7 @@ impl Options {
     pub fn apply_defaults<S, D>() -> anyhow::Result<()>
     where
         S: Spec,
-        D: DispatchCall + TransactionCallable + 'static,
+        D: DispatchCall<Spec = S> + TransactionCallable + Default + 'static,
         D::Decodable: JsonSchema,
     {
         Self::builder().build().apply::<S, D>()
@@ -236,7 +236,7 @@ impl Options {
     fn output_state_layout<S, D>(&self) -> anyhow::Result<()>
     where
         S: Spec,
-        D: DispatchCall + Default + 'static,
+        D: DispatchCall<Spec = S> + Default + 'static,
     {
         let out_path = self
             .state_layout_path
@@ -319,6 +319,7 @@ struct ModuleLayout<'a> {
 struct StateItemLayout<'a> {
     name: &'a str,
     discriminant: u8,
+    type_ident: &'a str,
 }
 
 fn render_state_layout<S, D>() -> String
@@ -328,7 +329,7 @@ where
     <D::Decodable as sov_modules_api::NestedEnumUtils>::Discriminants:
         sov_modules_api::prelude::strum::VariantArray + AsRef<str> + Copy,
 {
-    use sov_modules_api::ModuleInfo;
+    use sov_modules_api::prelude::strum::VariantArray;
     use sov_modules_api::NestedEnumUtils;
 
     let runtime = D::default();
@@ -343,6 +344,7 @@ where
             state_items.push(StateItemLayout {
                 name: state_item.name,
                 discriminant: state_item.discriminant,
+                type_ident: state_item.type_ident,
             });
         }
 

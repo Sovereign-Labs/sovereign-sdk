@@ -176,6 +176,8 @@ pub struct StateItemDescriptor {
     pub name: &'static str,
     /// The discriminant used to namespace the state item.
     pub discriminant: u8,
+    /// The stringified type of the state item as declared in the module.
+    pub type_ident: &'static str,
 }
 
 /// Allows modules to emit events. Events are served via the REST API but are *not* included in zk proofs.

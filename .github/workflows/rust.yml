@@ -85,6 +85,7 @@ jobs:
       # - cargo-doc-artifact
       # - deploy-github-pages
       - check-demo-rollup-table-of-contents
+      - check-demo-rollup-state-layout
       - check-demo-rollup-bash-commands-mock-da
       - check-demo-rollup-bash-commands
       - check-constant-overriding-is-disabled-in-release-mode
@@ -479,6 +480,31 @@ jobs:
         run: bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
+
+  check-demo-rollup-state-layout:
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
+    needs:
+      - check
+    timeout-minutes: 60
+    env:
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      SKIP_GUEST_BUILD: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
+      - name: Snapshot committed state layout
+        run: cp examples/demo-rollup/state-layout.json /tmp/state-layout.old.json
+      - name: Build demo rollup (generates state layout)
+        run: cargo build -p sov-demo-rollup
+      - name: Verify append-only state layout changes
+        run: cargo run -p sov-build --bin verify_state_layout -- /tmp/state-layout.old.json examples/demo-rollup/state-layout.json
+      - name: Ensure generated layout is committed
+        run: git diff --exit-code examples/demo-rollup/state-layout.json
 
   check-constant-overriding-is-disabled-in-release-mode:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88

@@ -1,0 +1,492 @@
+{
+  "modules": [
+    {
+      "name": "Bank",
+      "discriminant": 0,
+      "state_items": [
+        {
+          "name": "tokens",
+          "discriminant": 0,
+          "type_ident": "StateMap < TokenId, Token < S > , C >"
+        },
+        {
+          "name": "balances",
+          "discriminant": 1,
+          "type_ident": "StateMap < BalanceKey < TokenHolder < S > > , Amount, C >"
+        }
+      ]
+    },
+    {
+      "name": "SequencerRegistry",
+      "discriminant": 6,
+      "state_items": [
+        {
+          "name": "known_sequencers",
+          "discriminant": 0,
+          "type_ident": "KernelStateMap < < S :: Da as DaSpec > :: Address, KnownSequencer < S > >"
+        },
+        {
+          "name": "preferred_sequencer",
+          "discriminant": 1,
+          "type_ident": "StateValue < < S :: Da as DaSpec > :: Address >"
+        },
+        {
+          "name": "minimum_bond",
+          "discriminant": 2,
+          "type_ident": "StateValue < Amount >"
+        }
+      ]
+    },
+    {
+      "name": "OperatorIncentives",
+      "discriminant": 3,
+      "state_items": [
+        {
+          "name": "reward_address",
+          "discriminant": 0,
+          "type_ident": "StateValue < S :: Address >"
+        }
+      ]
+    },
+    {
+      "name": "AttesterIncentives",
+      "discriminant": 9,
+      "state_items": [
+        {
+          "name": "rollup_finality_period",
+          "discriminant": 0,
+          "type_ident": "StateValue < SlotNumber >"
+        },
+        {
+          "name": "bonded_attesters",
+          "discriminant": 1,
+          "type_ident": "StateMap < S :: Address, Amount >"
+        },
+        {
+          "name": "unbonding_attesters",
+          "discriminant": 2,
+          "type_ident": "StateMap < S :: Address, UnbondingInfo >"
+        },
+        {
+          "name": "maximum_attested_height",
+          "discriminant": 3,
+          "type_ident": "StateValue < SlotNumber >"
+        },
+        {
+          "name": "bad_transition_pool",
+          "discriminant": 4,
+          "type_ident": "StateMap < SlotNumber, Amount >"
+        },
+        {
+          "name": "bonded_challengers",
+          "discriminant": 5,
+          "type_ident": "StateMap < S :: Address, Amount >"
+        },
+        {
+          "name": "minimum_attester_bond",
+          "discriminant": 6,
+          "type_ident": "StateValue < S :: Gas >"
+        },
+        {
+          "name": "minimum_challenger_bond",
+          "discriminant": 7,
+          "type_ident": "StateValue < S :: Gas >"
+        },
+        {
+          "name": "light_client_finalized_height",
+          "discriminant": 8,
+          "type_ident": "StateValue < SlotNumber >"
+        },
+        {
+          "name": "reward_burn_rate",
+          "discriminant": 9,
+          "type_ident": "StateValue < BurnRate >"
+        }
+      ]
+    },
+    {
+      "name": "ProverIncentives",
+      "discriminant": 5,
+      "state_items": [
+        {
+          "name": "bonded_provers",
+          "discriminant": 0,
+          "type_ident": "StateMap < S :: Address, Amount >"
+        },
+        {
+          "name": "minimum_bond",
+          "discriminant": 1,
+          "type_ident": "StateValue < S :: Gas >"
+        },
+        {
+          "name": "last_claimed_reward",
+          "discriminant": 2,
+          "type_ident": "StateValue < SlotNumber >"
+        },
+        {
+          "name": "proving_penalty",
+          "discriminant": 3,
+          "type_ident": "StateValue < S :: Gas >"
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "discriminant": 1,
+      "state_items": [
+        {
+          "name": "accounts",
+          "discriminant": 0,
+          "type_ident": "StateMap < CredentialId, Account < S > >"
+        },
+        {
+          "name": "enable_custom_account_mappings",
+          "discriminant": 1,
+          "type_ident": "StateValue < bool >"
+        }
+      ]
+    },
+    {
+      "name": "Uniqueness",
+      "discriminant": 7,
+      "state_items": [
+        {
+          "name": "generations",
+          "discriminant": 0,
+          "type_ident": "StateMap < CredentialId, BTreeMap < u64, HashSet < TxHash > > >"
+        },
+        {
+          "name": "nonces",
+          "discriminant": 1,
+          "type_ident": "StateMap < CredentialId, u64 >"
+        }
+      ]
+    },
+    {
+      "name": "ChainState",
+      "discriminant": 2,
+      "state_items": [
+        {
+          "name": "next_visible_slot_number",
+          "discriminant": 0,
+          "type_ident": "KernelStateValue < VisibleSlotNumber >"
+        },
+        {
+          "name": "current_heights",
+          "discriminant": 1,
+          "type_ident": "StateValue < (RollupHeight, VisibleSlotNumber) >"
+        },
+        {
+          "name": "slot_number_history",
+          "discriminant": 2,
+          "type_ident": "StateMap < RollupHeight, VisibleSlotNumber >"
+        },
+        {
+          "name": "accessory_slot_number_history",
+          "discriminant": 3,
+          "type_ident": "AccessoryStateMap < RollupHeight, VisibleSlotNumber >"
+        },
+        {
+          "name": "true_slot_number_history",
+          "discriminant": 4,
+          "type_ident": "AccessoryStateMap < RollupHeight, SlotNumber >"
+        },
+        {
+          "name": "true_slot_number_to_rollup_height",
+          "discriminant": 5,
+          "type_ident": "AccessoryStateMap < SlotNumber, RollupHeight >"
+        },
+        {
+          "name": "true_to_visible_slot_number_history",
+          "discriminant": 6,
+          "type_ident": "VersionedStateValue < VisibleSlotNumber >"
+        },
+        {
+          "name": "true_slot_number",
+          "discriminant": 7,
+          "type_ident": "KernelStateValue < SlotNumber >"
+        },
+        {
+          "name": "time",
+          "discriminant": 8,
+          "type_ident": "VersionedStateValue < Time >"
+        },
+        {
+          "name": "operating_mode",
+          "discriminant": 9,
+          "type_ident": "StateValue < OperatingMode >"
+        },
+        {
+          "name": "slots",
+          "discriminant": 10,
+          "type_ident": "VersionedStateValue < SlotInformation < S > , BcsCodec >"
+        },
+        {
+          "name": "accessory_pre_state_roots",
+          "discriminant": 11,
+          "type_ident": "AccessoryStateMap < SlotNumber, < < S as Spec > :: Storage as Storage > ::\nRoot >"
+        },
+        {
+          "name": "genesis_root",
+          "discriminant": 12,
+          "type_ident": "AccessoryStateValue < < S :: Storage as Storage > :: Root >"
+        },
+        {
+          "name": "gas_info",
+          "discriminant": 13,
+          "type_ident": "StateMap < RollupHeight, BlockGasInfo < S :: Gas > >"
+        },
+        {
+          "name": "past_user_state_roots",
+          "discriminant": 14,
+          "type_ident": "KernelStateMap < RollupHeight, [u8; 32] >"
+        },
+        {
+          "name": "accessory_past_user_state_roots",
+          "discriminant": 15,
+          "type_ident": "AccessoryStateMap < RollupHeight, [u8; 32] >"
+        },
+        {
+          "name": "genesis_da_height",
+          "discriminant": 16,
+          "type_ident": "StateValue < u64 >"
+        },
+        {
+          "name": "inner_code_commitment",
+          "discriminant": 17,
+          "type_ident": "StateValue < CodeCommitmentFor < S :: InnerZkvm > , BcsCodec >"
+        },
+        {
+          "name": "outer_code_commitment",
+          "discriminant": 18,
+          "type_ident": "StateValue < CodeCommitmentFor < S :: OuterZkvm > , BcsCodec >"
+        },
+        {
+          "name": "setup_mode_termination_height",
+          "discriminant": 19,
+          "type_ident": "StateValue < RollupHeight >"
+        },
+        {
+          "name": "admin_address",
+          "discriminant": 20,
+          "type_ident": "StateValue < S :: Address >"
+        },
+        {
+          "name": "oracle_time",
+          "discriminant": 21,
+          "type_ident": "StateValue < Time >"
+        }
+      ]
+    },
+    {
+      "name": "BlobStorage",
+      "discriminant": 4,
+      "state_items": [
+        {
+          "name": "deferred_blobs",
+          "discriminant": 0,
+          "type_ident": "KernelStateMap < SlotNumber, Vec < ValidatedBlob < S, BatchWithId < S > > > ,\nBcsCodec >"
+        },
+        {
+          "name": "deferred_preferred_sequencer_blobs",
+          "discriminant": 1,
+          "type_ident": "KernelStateMap < SequenceNumber, PreferredBlobDataWithId >"
+        },
+        {
+          "name": "upcoming_sequence_numbers",
+          "discriminant": 2,
+          "type_ident": "KernelStateValue < SequencerNumberTracker >"
+        }
+      ]
+    },
+    {
+      "name": "Paymaster",
+      "discriminant": 16,
+      "state_items": [
+        {
+          "name": "payers",
+          "discriminant": 0,
+          "type_ident": "StateMap < S :: Address, PaymasterPolicy < S > >"
+        },
+        {
+          "name": "policies",
+          "discriminant": 1,
+          "type_ident": "StateMap < PolicyKey < S :: Address > , PayeePolicy < S > >"
+        },
+        {
+          "name": "sequencer_to_payer",
+          "discriminant": 2,
+          "type_ident": "StateMap < < S :: Da as DaSpec > :: Address, S :: Address >"
+        }
+      ]
+    },
+    {
+      "name": "Evm",
+      "discriminant": 11,
+      "state_items": [
+        {
+          "name": "accounts",
+          "discriminant": 0,
+          "type_ident": "StateMap < Address, DbAccount, BcsCodec >"
+        },
+        {
+          "name": "admin",
+          "discriminant": 1,
+          "type_ident": "StateValue < S :: Address, BcsCodec >"
+        },
+        {
+          "name": "account_storage",
+          "discriminant": 2,
+          "type_ident": "StateMap < AccountStorageKey, U256, BcsCodec >"
+        },
+        {
+          "name": "code",
+          "discriminant": 3,
+          "type_ident": "StateMap < B256, Bytecode, BcsCodec >"
+        },
+        {
+          "name": "contract_creation_allowlist",
+          "discriminant": 4,
+          "type_ident": "StateMap < Address, (), BcsCodec >"
+        },
+        {
+          "name": "block_hashes",
+          "discriminant": 5,
+          "type_ident": "StateMap < BlockNumber, BlockHash, BcsCodec >"
+        },
+        {
+          "name": "cfg",
+          "discriminant": 6,
+          "type_ident": "StateValue < EvmRuntimeConfig, BcsCodec >"
+        },
+        {
+          "name": "block_env",
+          "discriminant": 7,
+          "type_ident": "StateValue < BlockEnv, BcsCodec >"
+        },
+        {
+          "name": "pending_transactions",
+          "discriminant": 8,
+          "type_ident": "StateVec < PendingTransaction, BcsCodec >"
+        },
+        {
+          "name": "head",
+          "discriminant": 9,
+          "type_ident": "StateValue < Block, BcsCodec >"
+        },
+        {
+          "name": "pending_head",
+          "discriminant": 10,
+          "type_ident": "AccessoryStateValue < Block, BcsCodec >"
+        },
+        {
+          "name": "block_numbers",
+          "discriminant": 11,
+          "type_ident": "AccessoryStateValue < RangeInclusive < u64 > , BcsCodec >"
+        },
+        {
+          "name": "blocks",
+          "discriminant": 12,
+          "type_ident": "AccessoryStateMap < u64, SealedBlock, BcsCodec >"
+        },
+        {
+          "name": "transactions",
+          "discriminant": 13,
+          "type_ident": "AccessoryStateMap < u64, TxSignedAndRecovered, BcsCodec >"
+        },
+        {
+          "name": "receipts",
+          "discriminant": 14,
+          "type_ident": "AccessoryStateMap < u64, (Receipt, Time), BcsCodec >"
+        },
+        {
+          "name": "block_hash_to_number",
+          "discriminant": 15,
+          "type_ident": "AccessoryStateMap < B256, u64, BcsCodec >"
+        },
+        {
+          "name": "transaction_hashes",
+          "discriminant": 16,
+          "type_ident": "AccessoryStateMap < B256, u64, BcsCodec >"
+        },
+        {
+          "name": "disable_max_fee_check",
+          "discriminant": 17,
+          "type_ident": "StateValue < bool, BcsCodec >"
+        }
+      ]
+    },
+    {
+      "name": "AccessPattern",
+      "discriminant": 252,
+      "state_items": [
+        {
+          "name": "values",
+          "discriminant": 0,
+          "type_ident": "StateMap < u64, String >"
+        },
+        {
+          "name": "pre_hooks",
+          "discriminant": 1,
+          "type_ident": "StateVec < HooksConfig >"
+        },
+        {
+          "name": "post_hooks",
+          "discriminant": 2,
+          "type_ident": "StateVec < HooksConfig >"
+        },
+        {
+          "name": "read_values",
+          "discriminant": 3,
+          "type_ident": "AccessoryStateMap < u64, String >"
+        },
+        {
+          "name": "hashed_value",
+          "discriminant": 4,
+          "type_ident": "AccessoryStateValue < [u8; 32] >"
+        },
+        {
+          "name": "serialized_bytes",
+          "discriminant": 5,
+          "type_ident": "StateVec < u8 >"
+        },
+        {
+          "name": "deserialized_bytes",
+          "discriminant": 6,
+          "type_ident": "AccessoryStateValue < String >"
+        },
+        {
+          "name": "signature_stored",
+          "discriminant": 7,
+          "type_ident": "StateValue <\n(< S :: CryptoSpec as CryptoSpec > :: Signature, < S :: CryptoSpec as\nCryptoSpec > :: PublicKey, String,) >"
+        },
+        {
+          "name": "last_verified_message",
+          "discriminant": 8,
+          "type_ident": "AccessoryStateValue < String >"
+        },
+        {
+          "name": "admin",
+          "discriminant": 9,
+          "type_ident": "StateValue < S :: Address >"
+        }
+      ]
+    },
+    {
+      "name": "SyntheticLoad",
+      "discriminant": 250,
+      "state_items": [
+        {
+          "name": "very_large_vec",
+          "discriminant": 0,
+          "type_ident": "StateVec < u64 >"
+        },
+        {
+          "name": "heavy_state",
+          "discriminant": 1,
+          "type_ident": "StateValue < Vec < u64 > >"
+        }
+      ]
+    }
+  ]
+}

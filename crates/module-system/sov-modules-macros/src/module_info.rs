@@ -224,20 +224,23 @@ fn make_fn_state_items(fields: &[ModuleField]) -> proc_macro2::TokenStream {
         .enumerate()
         .map(|(idx, field)| {
             let field_ident = &field.ident;
+            let ty = &field.ty;
             let item_discriminant: u8 = idx.try_into().expect("State item discriminant overflow");
             quote::quote! {
                 ::sov_modules_api::StateItemDescriptor {
                     name: stringify!(#field_ident),
                     discriminant: #item_discriminant,
+                    type_ident: stringify!(#ty),
                 }
             }
         });
 
     quote::quote! {
         fn state_items(&self) -> &'static [::sov_modules_api::StateItemDescriptor] {
-            &[
+            const ITEMS: &[::sov_modules_api::StateItemDescriptor] = &[
                 #(#state_items),*
-            ]
+            ];
+            ITEMS
         }
     }
 }
