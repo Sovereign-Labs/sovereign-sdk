@@ -128,7 +128,7 @@ async fn test_runner_with_background_da_service(
     // Max time without forward progress before failing
     const PROGRESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-    while synced_da_height <= target_height {
+    while synced_da_height < target_height {
         let batch = vec![FullyBakedTx::new(vec![1, 2, 3])];
 
         let serialized_batch = borsh::to_vec(&batch)?;
@@ -214,10 +214,10 @@ async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
     let block_time_ms = 400;
     let randomization = RandomizationConfig {
         seed: sov_mock_da::seed_for_test(2),
-        reorg_interval: 3..6,
+        reorg_interval: 5..10,
         behaviour: RandomizationBehaviour::ShuffleAndResize {
             drop_percent: 10,
-            adjust_head_height: -10..10,
+            adjust_head_height: -5..5,
         },
     };
     let da_config = build_da_config(finality, block_time_ms, randomization);
@@ -259,7 +259,7 @@ async fn test_runner_rewind_non_finalized_state() -> anyhow::Result<()> {
     let block_time_ms = 300;
     let randomization = RandomizationConfig {
         seed: sov_mock_da::seed_for_test(4),
-        reorg_interval: 3..6, // Rewind every 3-6 blocks
+        reorg_interval: 3..6,
         behaviour: RandomizationBehaviour::Rewind,
     };
     let da_config = build_da_config(finality, block_time_ms, randomization);

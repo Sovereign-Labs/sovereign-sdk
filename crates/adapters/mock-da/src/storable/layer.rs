@@ -740,13 +740,21 @@ impl Randomizer {
                 | RandomizationBehaviour::RewindBelowLastFinalized { .. } => {
                     da_layer.produce_block_with_timestamp(timestamp).await?;
                 }
-                // Not supported currently
                 RandomizationBehaviour::Rewind => {
                     // Produce the block first, otherwise data will be always lost.
                     da_layer.produce_block_with_timestamp(timestamp).await?;
-                    let range = da_layer.last_finalized_height..da_layer.next_height;
-                    let height_to_rewind = rng.gen_range(range);
-                    da_layer.rewind_to_height(height_to_rewind).await?;
+                    // Rewind to a height above the finalized height (not including it).
+                    // This matches ShuffleAndResize behavior which uses last_finalized_height + 1.
+                    let min_height = da_layer
+                        .last_finalized_height
+                        .checked_add(1)
+                        .expect("finalized height overflow");
+                    if min_height < da_layer.next_height {
+                        let range = min_height..da_layer.next_height;
+                        let height_to_rewind = rng.gen_range(range);
+                        da_layer.rewind_to_height(height_to_rewind).await?;
+                    }
+                    // else: nothing above finalized height to rewind to, skip rewind
                 }
                 RandomizationBehaviour::ShuffleAndResize {
                     drop_percent,
