@@ -202,7 +202,7 @@ async fn test_db_elected_leader_failover() {
         .as_ref()
         .expect("Expected a leader after failover");
 
-    assert_eq!(new_leader.node_id, &expected_new_leader.node_id);
+    assert_eq!(new_leader.node_id, expected_new_leader.node_id);
 
     let _ = restarted_rollup.shutdown().await;
     let _ = da_shutdown.send(());
