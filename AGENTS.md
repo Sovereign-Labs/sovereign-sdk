@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI Agents when working with code in this repository.
 
 ## Project Overview
 
@@ -9,7 +9,6 @@ Sovereign SDK is a Rust toolkit for building rollups with real-time soft-confirm
 ## Build Commands
 
 ```bash
-make build                  # Build the project
 make lint                   # Run all linters (fmt, clippy, zepter, dylint)
 make lint-fix               # Auto-fix linting issues
 make test                   # Run tests with nextest
@@ -18,6 +17,8 @@ make mini-ci                # Full pre-submission checks
 make install-dev-tools      # Install all development dependencies
 ```
 
+Instead of running `make build` use `make lint` or `cargo check --all-features` for faster feedback loops.
+
 ### Running Single Tests
 
 ```bash
@@ -25,13 +26,17 @@ cargo nextest run <test_name>
 cargo nextest run -p <package_name> <test_name>
 ```
 
-Prefer running tests with `-p` to reduce rebuild times.
+- Prefer running tests with `-p` to reduce rebuild times.
+- Tests must be ran with `nextest`.
 
 ### Environment Variables
 
 - `PROPTEST_CASES=50` - Faster local proptest runs (CI uses more)
 - `SKIP_GUEST_BUILD=1` - Skip risc0 guest builds during development
 - `SP1_SKIP_PROGRAM_BUILD=1` - Skip SP1 program builds during development
+- `SOV_TEST_SKIP_DOCKER=1` - Skip docker-based tests, useful for local development without docker
+
+Always use `SKIP_GUEST_BUILD=1` unless performing specific ZK related changes.
 
 ## Architecture
 
@@ -46,6 +51,7 @@ Prefer running tests with `-p` to reduce rebuild times.
    - `sov-sequencer`: Transaction acceptance and soft-confirmation production
    - `sov-db`: RocksDB-backed persistent storage
    - `sov-stf-runner`: State transition function executor
+   - `sov-blob-sender`: Blob submission manager for DA layer publishing
 
 3. **Adapters** (`crates/adapters/`) - Pluggable integrations
    - DA layers: Celestia, Mock DA
@@ -103,7 +109,7 @@ Avoid over-engineering solutions. Prioritise clarity and maintainability. Don't 
 
 ### Non-Determinism
 
-- Always avoid non-deterministic code paths in modules and core logic.
+- Always avoid non-deterministic code paths in modules and core logic. Because it will break consensus code and ZK proofs.
 
 ### Safe Arithmetic
 
