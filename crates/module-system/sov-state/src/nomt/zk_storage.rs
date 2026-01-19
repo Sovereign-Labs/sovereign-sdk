@@ -8,6 +8,7 @@ use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
@@ -106,7 +107,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = MultiProof;
+    type Proof = NomtMultiProof;
     type Root = StorageRoot<S>;
     type StateUpdate = ();
     type ChangeSet = ();
@@ -172,7 +173,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
         let root_node: Node = state_root.namespace_root(namespace);
 
         let verified = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
-            &multi_proof,
+            &multi_proof.0,
             root_node,
         )
         .map_err(|e| anyhow::anyhow!("Failed to verify proof: {:?}", e))?;

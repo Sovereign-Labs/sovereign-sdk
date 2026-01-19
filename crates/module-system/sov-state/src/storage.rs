@@ -144,7 +144,15 @@ impl NodeLeaf {
 }
 
 #[derive(
-    Debug, Clone, Serialize, serde::Deserialize, BorshDeserialize, BorshSerialize, UniversalWallet,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    serde::Deserialize,
+    BorshDeserialize,
+    BorshSerialize,
+    UniversalWallet,
 )]
 /// A proof that a particular storage key has a particular value, or is absent.
 // Note: This type intentionally does not derive `UniversalWallet` because the slotkey and slotvalue
@@ -160,17 +168,6 @@ pub struct StorageProof<P> {
     /// The namespace of the key.
     pub namespace: ProvableNamespace,
 }
-
-impl<P: BorshSerialize> PartialEq for StorageProof<P> {
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key
-            && self.value == other.value
-            && self.namespace == other.namespace
-            && borsh::to_vec(&self.proof).ok() == borsh::to_vec(&other.proof).ok()
-    }
-}
-
-impl<P: BorshSerialize> Eq for StorageProof<P> {}
 
 /// A trait implemented by state updates that can be committed to the database.
 pub trait StateUpdate {
@@ -283,7 +280,9 @@ pub trait Storage: Clone + core::fmt::Debug {
         + BorshSerialize
         + BorshDeserialize
         + Send
-        + Sync;
+        + Sync
+        + PartialEq
+        + Eq;
 
     /// A cryptographic commitment to the contents of this storage.
     type Root: StateRoot;

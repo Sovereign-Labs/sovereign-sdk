@@ -19,6 +19,7 @@ use sov_db::storage_manager::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
@@ -403,7 +404,7 @@ where
 {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = MultiProof;
+    type Proof = NomtMultiProof;
     type Root = StorageRoot<S>;
     // These 2 are effectively the same thing, `StateUpdate` is not materialized, `ChangeSet` is materialized.
     type StateUpdate = NomtStateUpdate<S>;
@@ -631,7 +632,7 @@ where
         let root_node: Node = state_root.namespace_root(namespace);
 
         let verified = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
-            &multi_proof,
+            &multi_proof.0,
             root_node,
         )
         .map_err(|e| anyhow::anyhow!("Failed to verify proof: {:?}", e))?;
@@ -734,7 +735,7 @@ where
         Ok(StorageProof {
             key,
             value,
-            proof: multi_proof,
+            proof: NomtMultiProof(multi_proof),
             namespace,
         })
     }
