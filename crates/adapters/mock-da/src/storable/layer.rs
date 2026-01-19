@@ -741,8 +741,6 @@ impl Randomizer {
                     da_layer.produce_block_with_timestamp(timestamp).await?;
                 }
                 RandomizationBehaviour::Rewind => {
-                    // Produce the block first, otherwise data will be always lost.
-                    da_layer.produce_block_with_timestamp(timestamp).await?;
                     // Rewind to a height above the finalized height (not including it).
                     // This matches ShuffleAndResize behavior which uses last_finalized_height + 1.
                     let min_height = da_layer
@@ -754,7 +752,10 @@ impl Randomizer {
                         let height_to_rewind = rng.gen_range(range);
                         da_layer.rewind_to_height(height_to_rewind).await?;
                     }
-                    // else: nothing above finalized height to rewind to, skip rewind
+                    // Produce a new block after rewind. This creates a new block with
+                    // a different hash than the deleted blocks, allowing the runner
+                    // to make progress.
+                    da_layer.produce_block_with_timestamp(timestamp).await?;
                 }
                 RandomizationBehaviour::ShuffleAndResize {
                     drop_percent,

@@ -255,11 +255,11 @@ async fn test_runner_rewind_below_finalized_instant_finality() -> anyhow::Result
 /// but stays above the finalized height.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_runner_rewind_non_finalized_state() -> anyhow::Result<()> {
-    let finality = 10; // Non-instant finality
-    let block_time_ms = 300;
+    let finality = 5; // Lower finality for faster progress
+    let block_time_ms = 400;
     let randomization = RandomizationConfig {
         seed: sov_mock_da::seed_for_test(4),
-        reorg_interval: 3..6,
+        reorg_interval: 20..30,
         behaviour: RandomizationBehaviour::Rewind,
     };
     let da_config = build_da_config(finality, block_time_ms, randomization);

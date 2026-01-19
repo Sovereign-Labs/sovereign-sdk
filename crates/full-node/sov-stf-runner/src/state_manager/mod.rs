@@ -234,10 +234,17 @@ where
                     height
                 }
                 ForkPointSearchResult::HeadChanged(new_head) => {
-                    // DA reorged during fork point search. Tell runner to retry with same height.
-                    let retry_height = block_header.height();
+                    // DA reorged during fork point search.
+                    // If chain rewound below requested height, retry at new head + 1.
+                    // If chain extended or same level, retry original height.
+                    let retry_height = if new_head.height() < block_header.height() {
+                        new_head.height().saturating_add(1)
+                    } else {
+                        block_header.height()
+                    };
                     tracing::warn!(
                         new_head = %new_head.display(),
+                        original_height = block_header.height(),
                         retry_height,
                         time = ?start.elapsed(),
                         "DA reorged during fork point search, runner should retry"
