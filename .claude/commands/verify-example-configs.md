@@ -50,21 +50,27 @@ For each struct, extract:
 
 ### Step 3: Verification Checks
 
-#### 3.1 All Fields Referenced (only for `mock_rollup_config.toml`)
+**IMPORTANT**: Different checks apply to different files:
 
-For the mock config only, verify every struct field appears in the TOML file either:
+#### 3.1 All Fields Referenced - ONLY `mock_rollup_config.toml`
+
+**This check applies ONLY to `mock_rollup_config.toml` and NO OTHER config files.**
+
+For `mock_rollup_config.toml` only, verify every struct field appears either:
 - As an active field: `field_name = value`
 - As a commented field: `# field_name = value`
 
-Report any fields that are completely missing.
+Report any fields that are completely missing from `mock_rollup_config.toml`.
+
+**Do NOT add missing fields to any other config file (celestia, external_mock, replica, etc.).**
 
 #### 3.2 Comment Accuracy (all configs)
 
-For each field in the TOML that has an inline comment (text after `#`), compare it to the Rust doc comment. Report if they differ significantly.
+For fields that ALREADY EXIST in the TOML (active or commented), compare inline comments to Rust doc comments. Only report mismatches for existing fields.
 
 #### 3.3 Default Values (all configs)
 
-For commented-out fields showing a default value like `# field = default_value`, verify the value matches what's defined in Rust via `#[serde(default)]` or the type's `Default` implementation.
+For commented-out fields that ALREADY EXIST in the TOML, verify the default value matches Rust. Only check existing fields.
 
 ### Step 4: Report Findings
 
@@ -77,10 +83,11 @@ If all checks pass, print: "All config files verified successfully."
 
 ### Step 5: Fix Issues (with permission)
 
-If issues are found, ask the user:
-"Found X issues in Y config files. Would you like me to update the configs?"
+If issues are found, ask the user for permission before making any changes.
 
-Only make changes if the user approves.
+**What can be fixed:**
+- `mock_rollup_config.toml`: Add missing fields (commented out), fix comments, fix default values
+- All other configs: ONLY fix comments and default values for EXISTING fields. **Never add new fields.**
 
 ## Notes
 
