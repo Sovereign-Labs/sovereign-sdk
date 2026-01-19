@@ -106,7 +106,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = ();
+    type Proof = MultiProof;
     type Root = StorageRoot<S>;
     type StateUpdate = ();
     type ChangeSet = ();
@@ -160,10 +160,51 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     fn materialize_changes(self, _state_update: Self::StateUpdate) -> Self::ChangeSet {}
 
     fn open_proof(
-        _state_root: Self::Root,
-        _proof: StorageProof<Self::Proof>,
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-        unimplemented!("The NomtZkStorage does not support `open_proof` yet.");
+        let StorageProof {
+            key,
+            value,
+            proof: multi_proof,
+            namespace,
+        } = proof;
+        let root_node: Node = state_root.namespace_root(namespace);
+
+        let verified = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
+            &multi_proof,
+            root_node,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to verify proof: {:?}", e))?;
+
+        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+
+        match &value {
+            None => {
+                if !verified
+                    .confirm_nonexistence(&key_path)
+                    .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
+                {
+                    anyhow::bail!("Failed to verify non-existence of key");
+                }
+            }
+            Some(slot_value) => {
+                let authenticated_write = slot_value.combine_val_hash_and_size::<S::Hasher>();
+                let value_hash: ValueHash = S::Hasher::digest(&authenticated_write).into();
+                let leaf = LeafData {
+                    key_path,
+                    value_hash,
+                };
+                if !verified
+                    .confirm_value(&leaf)
+                    .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
+                {
+                    anyhow::bail!("Failed to verify value for key");
+                }
+            }
+        }
+
+        Ok((key, value))
     }
 }
 
