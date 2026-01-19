@@ -1,5 +1,5 @@
 # 2026-01-19
-- #2360 **Breaking change**: sequencing data is now handled via rollup capabilities instead of timing-oracle hooks. Runtimes must implement `SequencingDataHandler` (or use `StandardProvenRollupCapabilities`, which now requires the `chain_state` module) and provide a sequencing-data type. Chain state now stores oracle time in nanoseconds (`oracle_time_nanos`) and derives millis via `get_oracle_time`; legacy `oracle_time` remains for layout compatibility but is no longer updated. Oracle time updates only from the preferred sequencer’s sequencing data.
+- #2360 **Breaking change**: sequencing data is now handled via rollup capabilities, replacing the sequencer-submitted timing-oracle transactions. Runtimes must implement `SequencingDataHandler` (or use `StandardProvenRollupCapabilities`, which now requires the `chain_state` module) and provide a sequencing-data type. Chain state now stores oracle time in nanoseconds (`oracle_time_nanos`) and derives millis via `get_oracle_time`; legacy `oracle_time` remains for layout compatibility but is no longer updated. Oracle time updates only from the preferred sequencer’s sequencing data.
 
 # 2026-01-16 
 - #2342 EVM: Populate the `gas_limit` for pending block.
