@@ -60,14 +60,14 @@ type Result<T> = std::result::Result<T, Error>;
 impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> ErrorObjectOwned {
         match err {
-            Error::ReceiptPruned(_) | Error::BlockPruned(_) | Error::BlockHashNotFound(_) => {
-                rpc_resource_not_found(err.to_string())
-            }
+            Error::ReceiptPruned(_)
+            | Error::BlockPruned(_)
+            | Error::BlockHashNotFound(_)
+            | Error::InvalidCursorTxIdx { .. } => rpc_resource_not_found(err.to_string()),
             Error::TooManyLogsInBlock(_, _) => rpc_limit_exceeded(err.to_string()),
             Error::PendingBlock
             | Error::InvalidBlock(_)
             | Error::InvalidCursorBlockNumber { .. }
-            | Error::InvalidCursorTxIdx { .. }
             | Error::InvalidCursorLogIdx { .. }
             | Error::ParseBlockNumber(_) => rpc_invalid_params(err.to_string()),
         }
