@@ -1,5 +1,7 @@
 use std::sync::Arc;
+use std::time::Duration;
 
+use anyhow::{bail, Context};
 use alloy::consensus::{TxEip1559, TypedTransaction};
 use alloy::eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy::eips::eip2718::Encodable2718;
@@ -8,28 +10,36 @@ use alloy::providers::Provider;
 use alloy::rpc::types::TransactionRequest;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use demo_stf::runtime::{Runtime, RuntimeCall};
+use futures::stream::BoxStream;
 use futures::StreamExt;
 use secp256k1::{PublicKey, SecretKey};
-use sov_blob_storage::config_deferred_slots_count;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_mock_da::{MockAddress, MockDaSpec};
-use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
 use sov_modules_macros::config_value;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::ledger_api::IncludeChildren;
+use sov_sequencer::ForcedTxBatchNotification;
+use sov_sequencer_registry::KnownSequencer;
+use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+use tokio::time::{sleep, timeout};
 
+use crate::bank::helpers::{
+    assert_balance, build_create_token_tx, create_keys_and_addresses, send_tx_and_wait_for_status,
+};
 use crate::evm::evm_test_helper::{alloy_client, SENDER_PRIV_KEY};
-use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
+use crate::test_helpers::{
+    build_transfer_token_tx, test_genesis_source, DemoRollupSpec, CHAIN_HASH,
+};
 
 type TestSpec = DemoRollupSpec;
 type TestPrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
@@ -38,6 +48,8 @@ const MAX_TX_FEE: Amount = Amount::new(100_000_000);
 const UNREGISTERED_SENDER: MockAddress = MockAddress::new([121; 32]);
 const MINIMUM_BOND: Amount = Amount::new(100_000_000);
 const FINALIZATION_BLOCKS: u32 = 1;
+const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(60);
+const FORCED_TX_BATCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 // Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
 // Steps:
@@ -90,36 +102,16 @@ async fn forced_sequencer_registration_test_case(
 
     let tx = build_register_sequencer_tx(&key, 0);
     let blob = transaction_into_blob(tx);
+    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
 
     let _receipt = da_service
         .send_transaction(&blob)
         .await
         .await?
         .expect("Failed to submit forced sequencer registration to DA");
+    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    let wait_for_slots = config_deferred_slots_count() + FINALIZATION_BLOCKS as u64 + 5;
-
-    let mut slots = client
-        .client
-        .subscribe_finalized_slots_with_children(IncludeChildren::new(true))
-        .await?;
-
-    for _i in 0..wait_for_slots {
-        let _slot = slots
-            .next()
-            .await
-            .transpose()?
-            .expect("slot data is missing");
-        // This optimization could be enabled, when update of API state on sequencer side will be stable
-        // if !slot.batches.is_empty() {
-        //     break;
-        // }
-    }
-
-    let allowed_sequencer = client
-        .sequencer_rollup_address::<TestSpec, MockDaSpec>(&UNREGISTERED_SENDER)
-        .await?
-        .expect("Allowed sequencer response should contain data");
+    let allowed_sequencer = wait_for_registered_sequencer(client, &UNREGISTERED_SENDER).await?;
     assert_eq!(allowed_sequencer.balance, MINIMUM_BOND);
     assert_eq!(allowed_sequencer.address, key_and_address.address);
     Ok(())
@@ -159,6 +151,99 @@ fn transaction_into_blob(transaction: Transaction<Runtime<TestSpec>, TestSpec>) 
         }),
     )
     .unwrap()
+}
+
+async fn subscribe_forced_tx_batches(
+    client: &NodeClient,
+) -> anyhow::Result<BoxStream<'static, anyhow::Result<ForcedTxBatchNotification>>> {
+    let subscription = client
+        .client
+        .subscribe_to_ws::<ForcedTxBatchNotification>(
+            "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+        )
+        .await?;
+    Ok(subscription)
+}
+
+async fn wait_for_forced_tx_batch(
+    subscription: &mut BoxStream<'static, anyhow::Result<ForcedTxBatchNotification>>,
+) -> anyhow::Result<ForcedTxBatchNotification> {
+    timeout(FORCED_TX_BATCH_TIMEOUT, subscription.next())
+        .await
+        .context("Timed out waiting for forced tx batch notification")?
+        .transpose()?
+        .context("Forced tx batch notification stream ended")
+}
+
+async fn wait_for_registered_sequencer(
+    client: &NodeClient,
+    da_address: &MockAddress,
+) -> anyhow::Result<KnownSequencer<TestSpec>> {
+    let deadline = tokio::time::Instant::now() + FORCED_TX_BATCH_TIMEOUT;
+    loop {
+        if let Some(entry) = client
+            .sequencer_rollup_address::<TestSpec, MockDaSpec>(da_address)
+            .await?
+        {
+            return Ok(entry);
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            bail!("Timed out waiting for sequencer registration to be visible");
+        }
+
+        sleep(FORCED_TX_BATCH_POLL_INTERVAL).await;
+    }
+}
+
+async fn wait_for_bank_balance(
+    client: &NodeClient,
+    expected_amount: u128,
+    token_id: sov_bank::TokenId,
+    user_address: <TestSpec as Spec>::Address,
+) -> anyhow::Result<()> {
+    let deadline = tokio::time::Instant::now() + FORCED_TX_BATCH_TIMEOUT;
+    loop {
+        if assert_balance(client, expected_amount, token_id, user_address, None)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            bail!(
+                "Timed out waiting for bank balance {} for {}",
+                expected_amount,
+                user_address
+            );
+        }
+
+        sleep(FORCED_TX_BATCH_POLL_INTERVAL).await;
+    }
+}
+
+async fn wait_for_evm_balance(
+    provider: &impl Provider,
+    address: Address,
+    expected_balance: U256,
+) -> anyhow::Result<()> {
+    let deadline = tokio::time::Instant::now() + FORCED_TX_BATCH_TIMEOUT;
+    loop {
+        if provider.get_balance(address).await? == expected_balance {
+            return Ok(());
+        }
+
+        if tokio::time::Instant::now() >= deadline {
+            bail!(
+                "Timed out waiting for EVM balance {} for {}",
+                expected_balance,
+                address
+            );
+        }
+
+        sleep(FORCED_TX_BATCH_POLL_INTERVAL).await;
+    }
 }
 
 // ============================================================================
@@ -310,8 +395,8 @@ async fn evm_tx_unregistered_test_case(
     let receiver_address = receiver.address();
 
     // Get initial balance via RPC
-    let alloy = alloy_client(http_addr);
-    let initial_balance = alloy.get_balance(receiver_address).await?;
+    let provider = alloy_client(http_addr);
+    let initial_balance = provider.get_balance(receiver_address).await?;
     assert_eq!(
         initial_balance,
         U256::ZERO,
@@ -320,53 +405,105 @@ async fn evm_tx_unregistered_test_case(
 
     // Build EVM transfer tx
     let transfer_amount = U256::from(1u64);
-    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 1);
-    let blob = evm_transaction_into_blob(&sender, tx);
-    let mut slot_subscription = client.client.subscribe_finalized_slots().await?;
+    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
 
-    // Submit via unregistered DA service first. It will be processed second
-    let _receipt = da_service
-        .send_transaction(&blob)
-        .await
-        .await?
-        .expect("Failed to submit EVM tx blob to DA");
-
-    tracing::info!("Submitted first transaction");
-
-    // Send via preferred sequencer second. It will be processed first
-    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, 0);
-    let provider = alloy_client(http_addr);
+    // Send via preferred sequencer first to establish nonce ordering.
+    let preferred_nonce = provider.get_transaction_count(sender.address()).await?;
+    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, preferred_nonce);
     provider
         .send_transaction(tx.into())
         .await?
         .get_receipt()
         .await?;
 
-    // Wait for the transaction to be processed
-    for _ in 0..50 {
-        let _slot = slot_subscription.next().await.unwrap()?;
-        if provider.get_transaction_count(sender.address()).await? == 2 {
-            break;
-        }
-    }
+    // Submit via unregistered DA service after preferred tx is confirmed.
+    let forced_nonce = provider.get_transaction_count(sender.address()).await?;
+    let forced_tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, forced_nonce);
+    let blob = evm_transaction_into_blob(&sender, forced_tx);
+    let _receipt = da_service
+        .send_transaction(&blob)
+        .await
+        .await?
+        .expect("Failed to submit EVM tx blob to DA");
 
-    // Verify that both transactions were processed
-    let final_balance = provider.get_balance(receiver_address).await?;
-    assert_eq!(
-        final_balance,
-        U256::from(2u64),
-        "Receiver should have received the transfer amount"
-    );
+    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
+
+    wait_for_evm_balance(
+        &provider,
+        receiver_address,
+        transfer_amount + transfer_amount,
+    )
+    .await?;
+
+    // Note: the sequencer sends the batch notification before udpating the API state, so we still have to wait for the balance to be updated.
+    let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, forced_nonce + 1);
+    provider
+        .send_transaction(tx.into())
+        .await?
+        .get_receipt()
+        .await?;
+
+    assert_eq!(provider.get_balance(receiver_address).await?, (transfer_amount + transfer_amount + transfer_amount));
+    Ok(())
+}
+
+/// Verifies that standard (bank) transactions can be processed from unregistered sequencer batches.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_bank_transfer_in_unregistered_batch() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
+
+    let (rollup, da_service) = setup().await;
+    let client = rollup.client.clone();
+
+    tokio::select! {
+        err = rollup.rollup_task => err??,
+        res = bank_transfer_unregistered_test_case(da_service, &client) => res?,
+    };
+    Ok(())
+}
+
+async fn bank_transfer_unregistered_test_case(
+    da_service: Arc<impl DaService>,
+    client: &NodeClient,
+) -> anyhow::Result<()> {
+    let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
+    let initial_balance = 1_000u128;
+    let transfer_amount = 250u128;
+
+    let create_token_tx = build_create_token_tx(&key, 0, initial_balance);
+    send_tx_and_wait_for_status(&[create_token_tx], client).await?;
+    wait_for_bank_balance(client, initial_balance, token_id, user_address).await?;
+
+    let transfer_tx =
+        build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 1);
+    let blob = transaction_into_blob(transfer_tx);
+    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
+
+    let _receipt = da_service
+        .send_transaction(&blob)
+        .await
+        .await?
+        .expect("Failed to submit bank transfer blob to DA");
+    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
+
+    wait_for_bank_balance(
+        client,
+        initial_balance - transfer_amount,
+        token_id,
+        user_address,
+    )
+    .await?;
+    wait_for_bank_balance(client, transfer_amount, token_id, recipient_address).await?;
 
     Ok(())
 }
 
 /// Verifies that EVM contract calls can be processed from unregistered sequencer batches.
-/// NOTE: This test is currently ignored due to timing/state synchronization issues with
-/// contract calls via unregistered batches. The core EVM-via-unregistered functionality
-/// is proven by test_evm_tx_in_unregistered_batch and test_interleaved_evm_and_standard_transactions.
+/// Uses the forced batch notifier to avoid timing races when waiting for execution.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_evm_contract_call_in_unregistered_batch() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
+
     let (rollup, da_service) = setup().await;
 
     let http_addr = rollup.http_addr;
@@ -386,6 +523,7 @@ async fn evm_contract_call_unregistered_test_case(
 ) -> anyhow::Result<()> {
     sov_test_utils::initialize_logging();
     let sender = EvmAccount::from_private_key_hex(SENDER_PRIV_KEY);
+    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
 
     // First, deploy the SimpleStorage contract via SimpleStorageClient
     let contract = LegacySimpleStorage::default();
@@ -419,16 +557,8 @@ async fn evm_contract_call_unregistered_test_case(
         .await
         .await?
         .expect("Failed to submit contract call blob to DA");
-
-    let mut slot_subscription = client.client.subscribe_finalized_slots().await?;
+    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
     let provider = alloy_client(http_addr);
-
-    for _ in 0..50 {
-        let _slot = slot_subscription.next().await.unwrap()?;
-        if provider.get_transaction_count(sender.address()).await? == 2 {
-            continue;
-        }
-    }
 
     // Verify the contract state was updated by calling getValue
     let get_calldata = Bytes::from(contract_for_calldata.get().to_vec());

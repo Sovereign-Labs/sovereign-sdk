@@ -23,6 +23,7 @@ use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
@@ -30,10 +31,8 @@ use tracing::trace;
 use uuid::Uuid;
 
 use super::state_root_compute::StateRootComputeRequest;
-use super::{
-    nonce_buffer_task::NonceBufferWipeReason, Confirmation, PreferredBatchToReplay,
-    PreferredSequencerConfig, VisibleSlotNumberIncrease,
-};
+use crate::common::ForcedTxBatchNotification;
+use super::{Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease};
 use crate::common::AcceptedTx;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
@@ -133,7 +132,7 @@ pub struct RollupBlockExecutorConfig<S: Spec> {
     pub shutdown_receiver: watch::Receiver<()>,
     pub shutdown_sender: watch::Sender<()>,
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
-    pub nonce_buffer_wipe_sender: Sender<NonceBufferWipeReason>,
+    pub forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
 }
 
 type Hasher<S> = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
@@ -163,8 +162,8 @@ where
     startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
     pub(super) uncommitted_changes: SequencerStateChanges<Hasher<S>>,
     /// The nonce buffer task can get out of sync with state when non-preferred batches are executed.
-    /// We communicate that via this channel.
-    nonce_buffer_wipe_sender: Sender<NonceBufferWipeReason>,
+    /// We communicate that via this channel, which is also exposed to test utils.
+    forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
     phantom: PhantomData<Rt>,
 }
 
@@ -235,7 +234,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             state_root_request_sender,
             shutdown_receiver,
             shutdown_sender,
-            nonce_buffer_wipe_sender,
+            forced_tx_batch_notifier,
         } = rollup_exec_config;
 
         Self {
@@ -254,7 +253,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             shutdown_sender,
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
-            nonce_buffer_wipe_sender,
+            forced_tx_batch_notifier,
             phantom: PhantomData,
         }
     }
@@ -781,14 +780,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             accepted_txs_by_batch.push(accepted_txs);
         }
         if saw_non_preferred_batch {
-            if let Err(err) = self
-                .nonce_buffer_wipe_sender
-                .try_send(NonceBufferWipeReason::NonPreferredBatchExecuted)
-            {
-                tracing::warn!(
-                    "Failed to signal nonce buffer wipe after non-preferred batch execution: {err:?}"
-                );
-            }
+            let _ = self
+                .forced_tx_batch_notifier
+                .send(ForcedTxBatchNotification { rollup_height });
         }
 
         trace!(

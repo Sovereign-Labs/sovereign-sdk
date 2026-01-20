@@ -1,4 +1,4 @@
-mod helpers;
+pub(crate) mod helpers;
 mod op_rollup;
 mod operator_rollup;
 mod zk_rollup;

@@ -14,10 +14,10 @@ use std::fmt::Debug;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 
-use crate::common::AcceptedTx;
+use crate::common::{AcceptedTx, ForcedTxBatchNotification};
 use crate::metrics::{
     MetricBatcher, NonceBufferMainQueueBlockedMetric, NonceBufferMainQueueDepthMetric,
     NonceBufferTimeoutQueueMetric,
@@ -45,11 +45,6 @@ const MAX_BUFFER_INPUT_QUEUE: usize = 20_000;
 
 // Batches metrics together for performance instead of sending them every single message.
 const METRICS_BATCH_SIZE: usize = 32;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum NonceBufferWipeReason {
-    NonPreferredBatchExecuted,
-}
 
 /// Send a message to an mpsc channel, returning how long the send was blocked.
 ///
@@ -379,7 +374,7 @@ pub struct NonceBufferInputSender<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Run
 pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffers: HashMap<CredentialId, AddressQueue<S, Rt>>,
     buffer_input: mpsc::Receiver<NonceBufferInput<S, Rt>>,
-    wipe_receiver: mpsc::Receiver<NonceBufferWipeReason>,
+    forced_tx_batch_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
     input_sender: NonceBufferInputSender<E, S, Rt>,
     execution_backend: E,
     maximum_future_nonce_delta: u64,
@@ -752,13 +747,17 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                         }
                     }
                 }
-                wipe_reason = self.wipe_receiver.recv(), if !wipe_closed => {
-                    match wipe_reason {
-                        Some(reason) => {
-                            tracing::info!(?reason, "Wiping nonce buffer due to external state change");
+                forced_tx_batch = self.forced_tx_batch_receiver.recv(), if !wipe_closed => {
+                    match forced_tx_batch {
+                        Ok(notification) => {
+                            tracing::info!(?notification, "Wiping nonce buffer after forced batch execution");
                             self.wipe().await;
                         }
-                        None => {
+                        Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                            tracing::warn!(skipped, "Forced batch notifications lagged; wiping nonce buffer");
+                            self.wipe().await;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
                             wipe_closed = true;
                         }
                     }
@@ -771,7 +770,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         execution_backend: E,
         maximum_future_nonce_delta: u64,
         future_nonce_transaction_timeout_millis: u64,
-        wipe_receiver: mpsc::Receiver<NonceBufferWipeReason>,
+        forced_tx_batch_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
         mut shutdown_receiver: watch::Receiver<()>,
     ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
@@ -791,7 +790,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         let mut main_task = NonceBufferTask {
             buffers: Default::default(),
             buffer_input,
-            wipe_receiver,
+            forced_tx_batch_receiver,
             input_sender: input_sender.clone(),
             execution_backend,
             maximum_future_nonce_delta,
@@ -1338,12 +1337,12 @@ mod tests {
         watch::Sender<()>,
     ) {
         let (shutdown_sender, shutdown_receiver) = watch::channel(());
-        let (_wipe_sender, wipe_receiver) = mpsc::channel(1);
+        let (_forced_tx_batch_notifier, forced_tx_batch_receiver) = broadcast::channel(1);
         let (_handle, sender) = NonceBufferTask::spawn(
             backend.clone(),
             DEFAULT_TEST_MAX_QUEUE_SIZE,
             timeout_override.unwrap_or(DEFAULT_TEST_QUEUE_TIMEOUT_MS),
-            wipe_receiver,
+            forced_tx_batch_receiver,
             shutdown_receiver,
         );
         (sender, shutdown_sender)

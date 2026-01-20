@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::debug;
 
@@ -128,14 +128,14 @@ where
 
         let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
-        let (nonce_buffer_wipe_sender, nonce_buffer_wipe_receiver) = mpsc::channel(1);
+        let (forced_tx_batch_notifier, _) = broadcast::channel(1);
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
-            nonce_buffer_wipe_sender,
+            forced_tx_batch_notifier: forced_tx_batch_notifier.clone(),
         };
 
         let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
@@ -202,7 +202,7 @@ where
             execution_backend,
             preferred_config.maximum_future_nonce_delta,
             preferred_config.future_nonce_transaction_timeout_millis,
-            nonce_buffer_wipe_receiver,
+            forced_tx_batch_notifier.subscribe(),
             shutdown_receiver.clone(),
         );
         handles.push(nonce_buffer_task);
@@ -221,6 +221,7 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_receiver,
+            test_only_forced_tx_batch_notification_receiver: forced_tx_batch_notifier.subscribe(),
             runtime: Rt::default(),
         }));
 

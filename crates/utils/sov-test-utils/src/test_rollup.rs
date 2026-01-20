@@ -51,8 +51,8 @@ use sov_sequencer::preferred::{
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{
-    SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole, SovRateLimiterConfig,
-    StateUpdateNotification,
+    ForcedTxBatchNotification, SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole,
+    SovRateLimiterConfig, StateUpdateNotification,
 };
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
@@ -322,7 +322,19 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             }
         });
 
-        let rest_addr = rest_addr_rx.await?;
+        let rest_addr = match rest_addr_rx.await {
+            Ok(addr) => addr,
+            Err(_) => {
+                let err = match rollup_task.await {
+                    Ok(Ok(())) => {
+                        anyhow::anyhow!("Rollup exited before reporting its HTTP address")
+                    }
+                    Ok(Err(error)) => error,
+                    Err(error) => error.into(),
+                };
+                return Err(err);
+            }
+        };
 
         let rest_url = format!("http://{}:{}", rest_addr.ip(), rest_addr.port());
         let client = match NodeClient::new(&rest_url).await {
@@ -796,6 +808,18 @@ where
         self.client
             .client
             .subscribe_to_ws::<StateUpdateNotification>("/sequencer/test-utils/state-updates/ws")
+            .await
+    }
+
+    /// Subscribe to forced batch notifications.
+    pub async fn subscribe_forced_tx_batches(
+        &self,
+    ) -> WsSubscription<ForcedTxBatchNotification> {
+        self.client
+            .client
+            .subscribe_to_ws::<ForcedTxBatchNotification>(
+                "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+            )
             .await
     }
 

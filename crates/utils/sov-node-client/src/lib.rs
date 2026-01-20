@@ -335,7 +335,14 @@ impl NodeClient {
         );
 
         let response = self.http_client.get(url).send().await?;
-        if !response.status().is_success() {
+        let status = response.status();
+        // The SDK returns 404 if the item is not in the map.
+        // Unfortunately, there's no way to distinguish between a 404 for a missing endoint and a 404 because the item is None, 
+        // so this could bite us if we ever change the endpoint.
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
             anyhow::bail!("Unsuccessful response {:?}", response);
         }
         let response = response
