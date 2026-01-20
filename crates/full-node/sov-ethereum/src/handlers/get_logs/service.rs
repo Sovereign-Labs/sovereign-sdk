@@ -22,6 +22,7 @@ use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
+use sov_rpc_eth_types::rpc_error_with_code;
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::ops::RangeInclusive;
@@ -60,15 +61,16 @@ type Result<T> = std::result::Result<T, Error>;
 impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> ErrorObjectOwned {
         match err {
-            Error::ReceiptPruned(_)
-            | Error::BlockPruned(_)
-            | Error::BlockHashNotFound(_)
-            | Error::InvalidCursorTxIdx { .. } => rpc_resource_not_found(err.to_string()),
+            Error::ReceiptPruned(_) | Error::BlockPruned(_) => {
+                rpc_error_with_code(4444, err.to_string())
+            }
+            Error::BlockHashNotFound(_)
+            | Error::InvalidCursorBlockNumber { .. }
+            | Error::InvalidCursorTxIdx { .. }
+            | Error::InvalidCursorLogIdx { .. } => rpc_resource_not_found(err.to_string()),
             Error::TooManyLogsInBlock(_, _) => rpc_limit_exceeded(err.to_string()),
             Error::PendingBlock
             | Error::InvalidBlock(_)
-            | Error::InvalidCursorBlockNumber { .. }
-            | Error::InvalidCursorLogIdx { .. }
             | Error::ParseBlockNumber(_) => rpc_invalid_params(err.to_string()),
         }
     }
