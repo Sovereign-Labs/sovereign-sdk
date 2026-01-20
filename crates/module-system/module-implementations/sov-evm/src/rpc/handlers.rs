@@ -1,4 +1,5 @@
 use crate::error::into_rpc_error;
+use crate::evm::primitive_types::{decode_synthetic_block_hash, pending_block_hash};
 use crate::rpc::error::ensure_success;
 use alloy_consensus::ReceiptEnvelope;
 use alloy_primitives::{Address, U64};
@@ -21,6 +22,7 @@ use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use tracing::trace;
 
+use super::MaybeSealedBlock;
 use crate::{apply_margins, Evm};
 use std::ops::DerefMut;
 
@@ -73,7 +75,37 @@ where
         let kind = details.unwrap_or_default().into();
         Ok(match block_number_hex {
             Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state)?,
-            None => None,
+            None => {
+                let pending_block = self.pending_block(state);
+                let (block_number, tx_index) = decode_synthetic_block_hash(block_hash);
+                let pending_start = pending_block.transactions.start;
+                let pending_end = pending_block.transactions.end;
+
+                let (subset_end, should_return) = if pending_start == pending_end {
+                    (pending_start, tx_index == pending_start)
+                } else {
+                    let in_range = tx_index >= pending_start && tx_index < pending_end;
+                    (tx_index.saturating_add(1), in_range)
+                };
+
+                if should_return && block_number == pending_block.header.number {
+                    let mut subset_block = pending_block.clone();
+                    subset_block.transactions = pending_start..subset_end;
+                    let block = MaybeSealedBlock::Pending(subset_block);
+                    let transactions = self.get_block_transactions(&block, kind, state)?;
+                    Some(Block {
+                        header: self.get_rpc_header(block)?,
+                        transactions,
+                        uncles: vec![],
+                        withdrawals: None,
+                    })
+                } else if pending_block_hash(&pending_block) == block_hash {
+                    let pending_number_hex = format!("0x{:x}", pending_block.header.number);
+                    self.get_block(Some(pending_number_hex), kind, state)?
+                } else {
+                    None
+                }
+            }
         })
     }
 
