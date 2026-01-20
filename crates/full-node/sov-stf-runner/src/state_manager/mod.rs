@@ -654,9 +654,6 @@ where
             });
         }
 
-        let earliest_seen_height = self
-            .get_earliest_seen_height()
-            .expect("Choosing fork point only possible if some transitions have been seen");
         let highest_seen_height = self
             .get_highest_seen_height()
             .expect("Choosing fork point only possible if some transitions have been seen");
@@ -664,13 +661,8 @@ where
         let head = da_service.get_head_block_header().await?;
 
         // Single attempt - caller handles retries
-        self.try_find_candidate_in_current_chain(
-            da_service,
-            head,
-            earliest_seen_height,
-            highest_seen_height,
-        )
-        .await
+        self.try_find_candidate_in_current_chain(da_service, head, highest_seen_height)
+            .await
     }
 
     /// Tries to find a candidate in the current state of the chain.
@@ -679,7 +671,6 @@ where
         &self,
         da_service: &Da,
         head: <Da::Spec as DaSpec>::BlockHeader,
-        earliest_seen_height: u64,
         highest_seen_height: u64,
     ) -> anyhow::Result<ForkPointSearchResult<Da>> {
         let last_processed_finalized_height = self.last_processed_finalized_header.height();
@@ -692,31 +683,22 @@ where
             return Ok(ForkPointSearchResult::DaHeadIsBelowProcessedFinalized);
         }
 
-        let low = earliest_seen_height;
+        let low = last_processed_finalized_height
+            .checked_add(1)
+            .expect("DA Block height overflow: this should be unreachable");
         let high = std::cmp::min(highest_seen_height, head.height()).saturating_add(1);
-
-        // TODO: Should we derive low just from `last_processed_finalized_height`?, this will simplify this function.
-        // Self-check-assert that all earliest seen height are below can be done during processing finalized transitions.
-        assert_eq!(
-            last_processed_finalized_height
-                .checked_add(1)
-                .expect("Slot number overflow: this should be unreachable"),
-            low
-        );
 
         // But what if low above head???
         // This is only possible if the earliest seen transition is not a direct descendant of the finalized block
         // Which means bug in another method.
         assert!(
             low < high,
-            "Error in `low` earliest_seen={}, highest_seen={}, head_height={}",
-            earliest_seen_height,
-            highest_seen_height,
+            "Error in `low` earliest_seen={low}, highest_seen={highest_seen_height}, head_height={}",
             head.height()
         );
 
         match self
-            .binary_search_for_fork_point(da_service, head, low, high, earliest_seen_height)
+            .binary_search_for_fork_point(da_service, head, low, high)
             .await?
         {
             BinarySearchOutcome::Done(result) => Ok(result),
@@ -724,13 +706,7 @@ where
                 low,
                 high,
                 final_candidate,
-            } => Ok(self.handle_exhausted_search(
-                low,
-                high,
-                earliest_seen_height,
-                highest_seen_height,
-                final_candidate,
-            )),
+            } => Ok(self.handle_exhausted_search(low, high, highest_seen_height, final_candidate)),
         }
     }
 
@@ -745,7 +721,6 @@ where
         mut head: <Da::Spec as DaSpec>::BlockHeader,
         mut low: u64,
         mut high: u64,
-        earliest_seen_height: u64,
     ) -> anyhow::Result<BinarySearchOutcome<Da>> {
         let mut final_candidate_header = None;
 
@@ -755,7 +730,6 @@ where
                 candidate_height = mid,
                 low,
                 high,
-                earliest_seen_height,
                 head = %head.display(),
                 "Checking height"
             );
@@ -820,15 +794,22 @@ where
         &self,
         low: u64,
         high: u64,
-        earliest_seen_height: u64,
         highest_seen_height: u64,
         final_candidate: <Da::Spec as DaSpec>::BlockHeader,
     ) -> ForkPointSearchResult<Da> {
         assert!(
             high <= highest_seen_height.saturating_add(1),
-            "Error in `high`"
+            "Error in `high` = {high}, it should not be larger than largest seen {highest_seen_height} height by more than 1"
         );
-        assert!(low >= earliest_seen_height, "Error in `low`");
+        let earliest_seen_height = self
+            .last_processed_finalized_header
+            .height()
+            .checked_add(1)
+            .expect("DA Block height overflow: this should be unreachable");
+        assert!(
+            low >= earliest_seen_height,
+            "low={low} should not be less than {earliest_seen_height}"
+        );
 
         if low == earliest_seen_height {
             tracing::trace!(
