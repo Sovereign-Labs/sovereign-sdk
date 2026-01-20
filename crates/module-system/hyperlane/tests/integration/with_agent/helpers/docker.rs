@@ -55,12 +55,11 @@ where
                     collected.push_back(line);
                 }
             }
-            Ok(Ok(None)) => break,
+            Ok(Ok(None)) | Err(_) => break,
             Ok(Err(err)) => {
                 eprintln!("[DOCKER][logs] Failed reading logs: {err}");
                 break;
             }
-            Err(_) => break,
         }
     }
 
