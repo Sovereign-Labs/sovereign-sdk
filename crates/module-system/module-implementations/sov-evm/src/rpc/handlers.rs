@@ -77,6 +77,8 @@ where
             Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state)?,
             None => {
                 let pending_block = self.pending_block(state);
+                // Support synthetic hashes for the pending block so RPC clients can query
+                // "latest" by hash even before the block is sealed.
                 let (block_number, tx_index) = decode_synthetic_block_hash(block_hash);
                 let pending_start = pending_block.transactions.start;
                 let pending_end = pending_block.transactions.end;
@@ -89,6 +91,9 @@ where
                 };
 
                 if should_return && block_number == pending_block.header.number {
+                    // Return a minimal pending block view that includes txs up to the requested
+                    // synthetic hash index. This mirrors append-only pending blocks without
+                    // requiring a sealed header.
                     let mut subset_block = pending_block.clone();
                     subset_block.transactions = pending_start..subset_end;
                     let block = MaybeSealedBlock::Pending(subset_block);
@@ -100,6 +105,7 @@ where
                         withdrawals: None,
                     })
                 } else if pending_block_hash(&pending_block) == block_hash {
+                    // Fallback: match the latest synthetic pending hash and return full pending view.
                     let pending_number_hex = format!("0x{:x}", pending_block.header.number);
                     self.get_block(Some(pending_number_hex), kind, state)?
                 } else {

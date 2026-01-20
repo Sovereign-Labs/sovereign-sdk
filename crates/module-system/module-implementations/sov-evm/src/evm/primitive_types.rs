@@ -217,6 +217,8 @@ impl MaybeSealedBlock {
     pub fn hash(&self) -> Option<B256> {
         match self {
             Self::Sealed(block) => Some(block.header.hash()),
+            // Pending blocks are not sealed yet, but we still expose a deterministic synthetic hash
+            // so RPC clients can correlate receipts with "latest" block queries.
             Self::Pending(pending) => Some(pending_block_hash(pending)),
         }
     }
@@ -285,6 +287,8 @@ impl From<MaybeSealedBlock> for Sealed<Header> {
 }
 
 pub(crate) fn pending_block_hash(block: &Block) -> B256 {
+    // Use the newest pending tx index to create a stable, append-only synthetic hash.
+    // This ensures uniqueness even as the pending block grows.
     let tx_index = if block.transactions.start < block.transactions.end {
         block.transactions.end.saturating_sub(1)
     } else {
@@ -294,6 +298,8 @@ pub(crate) fn pending_block_hash(block: &Block) -> B256 {
 }
 
 pub(crate) fn synthetic_block_hash(block_number: u64, tx_index: u64) -> B256 {
+    // Encode `[block_number || tx_index]` into the lower 16 bytes of the hash.
+    // The higher 16 bytes stay zero for easy decode in RPC lookups.
     let mut bytes = [0u8; 32];
     bytes[16..24].copy_from_slice(&block_number.to_be_bytes());
     bytes[24..32].copy_from_slice(&tx_index.to_be_bytes());
@@ -301,6 +307,7 @@ pub(crate) fn synthetic_block_hash(block_number: u64, tx_index: u64) -> B256 {
 }
 
 pub(crate) fn decode_synthetic_block_hash(hash: B256) -> (u64, u64) {
+    // Decode the `[block_number || tx_index]` synthetic hash format.
     let bytes: &[u8; 32] = hash.as_ref();
     let mut block_number = [0u8; 8];
     let mut tx_index = [0u8; 8];

@@ -16,6 +16,7 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    // We project the pending block's base fee assuming it uses 3/4 of the gas limit.
     const ASSUMED_PENDING_GAS_USED_NUMERATOR: u64 = 3;
     const ASSUMED_PENDING_GAS_USED_DENOMINATOR: u64 = 4;
     const ASSUMED_PENDING_GAS_USED_RATIO: f64 = 0.75;
@@ -37,7 +38,8 @@ where
 
         let sealed_head = *self.block_numbers(state).end();
         let (end_block_number, project_pending) = match newest_block {
-            // We treat latest/pending as the pending block (head + 1) and project base fees forward.
+            // We treat latest/pending as the pending block (head + 1) and project base fees forward
+            // to satisfy clients that expect "latest" to include the in-flight block.
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
                 (sealed_head.saturating_add(1), true)
             }
@@ -95,6 +97,9 @@ where
         sealed_head: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Vec<u128>, EthApiError> {
+        // For pending/latest, we need base fees for (head + 1) and (head + 2). We compute:
+        // - pending base fee from the sealed head
+        // - next base fee assuming the pending block used 3/4 of gas
         let projected = self.projected_pending_base_fees(sealed_head, state)?;
         let pending_block_number = sealed_head.saturating_add(1);
         let next_block_number = pending_block_number.saturating_add(1);
@@ -155,6 +160,7 @@ where
         (start_block..=end_block)
             .map(|block_num| {
                 if block_num == pending_block_number {
+                    // Mirror the assumed pending gas usage in fee projection.
                     Self::ASSUMED_PENDING_GAS_USED_RATIO
                 } else {
                     self.get_gas_used_ratio_for_block(block_num, state)
@@ -197,6 +203,8 @@ where
         sealed_head: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ProjectedBaseFees, EthApiError> {
+        // Base fee for the pending block is derived from the sealed head.
+        // Base fee for the next block assumes the pending block is 3/4 full.
         let rollup_height = RollupHeight::new(sealed_head);
         let gas_info = self
             .chain_state_module
@@ -220,6 +228,7 @@ where
     }
 
     fn assumed_pending_gas_used(gas_limit: &S::Gas) -> S::Gas {
+        // Build an S::Gas with each dimension set to 3/4 of the limit.
         let gas_used: Vec<u64> = gas_limit
             .as_ref()
             .iter()
