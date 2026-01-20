@@ -42,6 +42,7 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 
 use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
+use crate::with_agent::helpers::wait::{wait_for_messages_processed, RelayerWaitConfig};
 use crate::with_agent::helpers::RELAYER_ACCOUNT;
 
 mod configs;
@@ -366,13 +367,26 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 .parse()
                 .unwrap();
 
-            // Find the dispatched message on counterparty
-            // TODO: How to do it more reliably? Check relayer metrics repeatedly, including error
-            // If error metrics increases, fail early and print logs.
+            // Wait for the relayer to process the message and submit to EVM
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
-            sleep(Duration::from_secs(20)).await; // give relayer extra time to relay
+            if let Some(metrics) = hyperlane.metrics() {
+                wait_for_messages_processed(
+                    metrics,
+                    "sovtest",
+                    "ethtest",
+                    1,
+                    RelayerWaitConfig::default(),
+                )
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::error!(?e, "Failed waiting for messages, continuing anyway");
+                });
+            } else {
+                // Fallback if metrics are not available
+                sleep(Duration::from_secs(20)).await;
+            }
 
-            // Check if relayer is healthy before checking for events
+            // Check for events on EVM
             tracing::info!("Checking for events on EVM counterparty...");
             let evm_event = hyperlane.latest_message_on_counterparty().await;
             assert_eq!(
@@ -588,7 +602,23 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
             );
 
             // check if transfer was received by counterparty
-            sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
+            tracing::info!("Waiting for warp transfer to be relayed to EVM...");
+            if let Some(metrics) = hyperlane.metrics() {
+                wait_for_messages_processed(
+                    metrics,
+                    "sovtest",
+                    "ethtest",
+                    1,
+                    RelayerWaitConfig::default(),
+                )
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::error!(?e, "Failed waiting for warp transfer, continuing anyway");
+                });
+            } else {
+                // Fallback if metrics are not available
+                sleep(Duration::from_secs(10)).await;
+            }
             let (origin_domain, recipient) = hyperlane
                 .latest_warp_transfer_on_counterparty(remote_route_id)
                 .await;

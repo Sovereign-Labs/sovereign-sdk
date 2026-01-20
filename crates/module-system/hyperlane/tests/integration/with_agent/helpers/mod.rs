@@ -1,6 +1,8 @@
 mod docker;
 mod evm;
 mod hyperlane_cli;
+pub mod metrics;
+pub mod wait;
 
 use std::env;
 
@@ -23,6 +25,8 @@ use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, T
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+
+use self::metrics::RelayerMetricsClient;
 
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
 pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
@@ -281,6 +285,7 @@ impl HyperlaneBuilder {
         };
 
         // Start container with just basic env and no processes
+        let has_relayer = self.relayer.is_some();
         let builder = self
             .image
             // test runtime uses fixed value for chain hash, this lets relayer know
@@ -294,15 +299,27 @@ impl HyperlaneBuilder {
             )
             .with_env_var("CONFIG_FILES", "/agent-config.json")
             // a dummy command because we will populate services by execs appropriately
-            .with_cmd(["tail", "-f", "/dev/null"]);
+            .with_cmd(["tail", "-f", "/dev/null"])
+            // Expose metrics port when relayer is enabled
+            .with_mapped_port(0, RELAYER_METRICS_PORT.into());
 
         let container = builder
             .start()
             .await
             .expect("Failed starting hyperlane image");
 
+        // Create metrics client if relayer is enabled
+        let metrics_client = if has_relayer {
+            let metrics_host_port = container
+                .get_host_port_ipv4(RELAYER_METRICS_PORT)
+                .await
+                .expect("Failed to get metrics port");
+            Some(RelayerMetricsClient::new("127.0.0.1", metrics_host_port))
+        } else {
+            None
+        };
+
         // start all the hyperlane agents concurrently
-        let has_relayer = self.relayer.is_some();
         let maybe_relayer_fut = if has_relayer {
             let fut = start_relayer(
                 &container,
@@ -337,20 +354,28 @@ impl HyperlaneBuilder {
             evm_counter_party,
             relayer,
             validators: agents,
+            metrics_client,
         }
     }
 }
 
 pub struct Hyperlane {
-    // Keep ownership of the container, so it does not stopped before neeeded.
+    // Keep ownership of the container, so it does not stopped before needed.
     #[allow(dead_code)]
     pub container: Container,
     pub evm_counter_party: Option<EvmCounterParty>,
     pub relayer: Option<ExecResult>,
     pub validators: Vec<ExecResult>,
+    /// Metrics client for monitoring the relayer. Only available when relayer is running.
+    pub metrics_client: Option<RelayerMetricsClient>,
 }
 
 impl Hyperlane {
+    /// Returns a reference to the relayer metrics client, if available.
+    pub fn metrics(&self) -> Option<&RelayerMetricsClient> {
+        self.metrics_client.as_ref()
+    }
+
     /// Send test message from evm counterparty to sov test recipient
     pub async fn dispatch_msg_from_counterparty(&self, recipient: HexHash) -> EvmDispatchWithId {
         self.evm_counter_party
