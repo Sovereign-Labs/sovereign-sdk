@@ -43,7 +43,7 @@ pub use subscribe::eth_subscribe;
 use tokio::time::timeout;
 
 use crate::Ethereum;
-use crate::{rpc_internal_error, rpc_invalid_input, rpc_invalid_params, rpc_tx_rejected};
+use crate::{rpc_internal_error, rpc_invalid_params, rpc_tx_rejected};
 
 const TIMEOUT_CODE: i32 = 4;
 
@@ -164,7 +164,7 @@ where
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
         let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
-            .map_err(|e| rpc_invalid_input(format!("Authentication failed: {e}")))?;
+            .map_err(|e| rpc_invalid_params(format!("Authentication failed: {e}")))?;
         Ok(())
     }
 

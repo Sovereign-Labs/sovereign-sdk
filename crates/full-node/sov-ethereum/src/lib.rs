@@ -3,9 +3,6 @@ mod handlers;
 use std::convert::Infallible;
 
 use alloy_primitives::{B256, U256};
-use jsonrpsee::types::error::{
-    CALL_EXECUTION_FAILED_CODE, INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE,
-};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -15,7 +12,9 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
-use sov_rpc_eth_types::EthApiError;
+use sov_rpc_eth_types::{
+    internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code, EthApiError,
+};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
@@ -143,30 +142,22 @@ where
     }
 }
 
-fn rpc_error_with_data(code: i32, message: &'static str, err: impl ToString) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(code, message, Some(err.to_string()))
-}
-
 pub(crate) fn rpc_invalid_params(err: impl ToString) -> ErrorObjectOwned {
-    rpc_error_with_data(INVALID_PARAMS_CODE, "Invalid params", err)
-}
-
-pub(crate) fn rpc_invalid_input(err: impl ToString) -> ErrorObjectOwned {
-    rpc_error_with_data(CALL_EXECUTION_FAILED_CODE, "Invalid input", err)
+    invalid_params_rpc_err(err.to_string())
 }
 
 pub(crate) fn rpc_internal_error(err: impl ToString) -> ErrorObjectOwned {
-    rpc_error_with_data(INTERNAL_ERROR_CODE, "Internal error", err)
+    internal_rpc_err(err.to_string())
 }
 
 pub(crate) fn rpc_limit_exceeded(err: impl ToString) -> ErrorObjectOwned {
-    rpc_error_with_data(LIMIT_EXCEEDED_CODE, "Limit exceeded", err)
+    rpc_error_with_code(LIMIT_EXCEEDED_CODE, err.to_string())
 }
 
 pub(crate) fn rpc_tx_rejected(err: impl ToString) -> ErrorObjectOwned {
-    rpc_error_with_data(TX_REJECTED_CODE, "Transaction rejected", err)
+    rpc_error_with_code(TX_REJECTED_CODE, err.to_string())
 }
 
 pub(crate) fn rpc_resource_not_found(err: impl ToString) -> ErrorObjectOwned {
-    rpc_error_with_data(RESOURCE_NOT_FOUND_CODE, "Resource not found", err)
+    rpc_error_with_code(RESOURCE_NOT_FOUND_CODE, err.to_string())
 }
