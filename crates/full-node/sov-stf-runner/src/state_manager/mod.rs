@@ -271,7 +271,7 @@ where
         }
 
         // Block is a continuation - get pre_state_root and create state
-        let pre_state_root = self.get_pre_state_root_for(block_header);
+        let pre_state_root = self.get_pre_state_root_for_contiuation(block_header);
         let (pre_state, ledger_state) = self.storage_manager.create_state_for(block_header)?;
 
         tracing::trace!(
@@ -291,7 +291,7 @@ where
     ///
     /// PRECONDITION: `is_continuation(block_header)` must be true.
     /// Panics if called on a non-continuation block.
-    fn get_pre_state_root_for(
+    fn get_pre_state_root_for_contiuation(
         &self,
         block_header: &<Da::Spec as DaSpec>::BlockHeader,
     ) -> StateRoot {
