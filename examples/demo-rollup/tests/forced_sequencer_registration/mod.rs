@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{bail, Context};
 use alloy::consensus::{TxEip1559, TypedTransaction};
 use alloy::eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy::eips::eip2718::Encodable2718;
@@ -9,16 +8,21 @@ use alloy::network::TransactionBuilder;
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionRequest;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
+use anyhow::{bail, Context};
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use secp256k1::{PublicKey, SecretKey};
+use sov_api_spec::types as api_types;
 use sov_cli::NodeClient;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
-use sov_mock_da::{MockAddress, MockDaSpec};
+use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaSpec};
+use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
@@ -27,7 +31,6 @@ use sov_modules_macros::config_value;
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::ForcedTxBatchNotification;
 use sov_sequencer_registry::KnownSequencer;
-use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
@@ -50,6 +53,7 @@ const MINIMUM_BOND: Amount = Amount::new(100_000_000);
 const FINALIZATION_BLOCKS: u32 = 1;
 const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(60);
 const FORCED_TX_BATCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
+const RESYNC_FORCED_BLOCKS: usize = 15;
 
 // Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
 // Steps:
@@ -333,9 +337,16 @@ fn evm_transaction_into_blob(account: &EvmAccount, tx: TxEip1559) -> Vec<u8> {
 const UNREGISTERED_EVM_SENDER: MockAddress = MockAddress::new([122; 32]);
 
 async fn setup() -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
+    setup_with_block_producing(TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING).await
+}
+
+async fn setup_with_block_producing(
+    block_producing: BlockProducingConfig,
+) -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
+    let is_manual = matches!(&block_producing, BlockProducingConfig::Manual);
     let rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+        block_producing,
         FINALIZATION_BLOCKS,
     )
     .with_zkvm_host_args(mock_da_risc0_host_args())
@@ -350,8 +361,12 @@ async fn setup() -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
     .await
     .unwrap();
 
-    // Wait for rollup to be ready (10 blocks like other EVM tests)
-    rollup.wait_for_next_blocks(10).await;
+    if is_manual {
+        rollup.tenderly_produce_blocks(10).await.unwrap();
+    } else {
+        rollup.wait_for_next_blocks(10).await;
+    }
+    rollup.wait_for_sequencer_ready().await.unwrap();
 
     let da_service = Arc::new(
         rollup
@@ -443,7 +458,10 @@ async fn evm_tx_unregistered_test_case(
         .get_receipt()
         .await?;
 
-    assert_eq!(provider.get_balance(receiver_address).await?, (transfer_amount + transfer_amount + transfer_amount));
+    assert_eq!(
+        provider.get_balance(receiver_address).await?,
+        (transfer_amount + transfer_amount + transfer_amount)
+    );
     Ok(())
 }
 
@@ -494,6 +512,183 @@ async fn bank_transfer_unregistered_test_case(
     )
     .await?;
     wait_for_bank_balance(client, transfer_amount, token_id, recipient_address).await?;
+
+    Ok(())
+}
+
+/// Verifies forced transactions show up in sequencer state after a resync
+#[tokio::test(flavor = "multi_thread")]
+async fn test_forced_txs_survive_resync() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "500");
+
+    let (rollup, da_service) = setup_with_block_producing(BlockProducingConfig::Manual).await;
+    let res = forced_txs_resync_test_case(&rollup, da_service).await;
+    let shutdown_res = rollup.shutdown().await;
+    shutdown_res?;
+    res?;
+    Ok(())
+}
+
+/// Verifies forced transactions show up in sequencer state after a resync
+/// 
+/// Steps:
+/// 1. Create a token and do one transfer through the prefererd sequencer.
+/// 2. Pause the sequencer and create enough batches to unsync the node. Each da block should include some forced txs to give good coverage
+/// 4. Let it get back to ready.
+/// 5. Wait for the visible slot number to increment enough times to cover all the forced txs.
+/// 6. Send one more preferred tx to make sure everything is working correctly after the resync.
+async fn forced_txs_resync_test_case(
+    rollup: &TestRollup<MockDemoRollup<Native>>,
+    forced_da_service: Arc<impl DaService>,
+) -> anyhow::Result<()> {
+    let client = &rollup.client;
+    let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
+    let initial_balance = 1_000u128;
+    let preferred_transfer = 50u128;
+    let forced_transfer = 5u128;
+    let total_forced = forced_transfer * RESYNC_FORCED_BLOCKS as u128;
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await?;
+
+    // Setup - create a token and do one transfer through the prefererd sequencer.
+    {
+        let create_token_tx = build_create_token_tx(&key, 0, initial_balance);
+        client
+            .client
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&borsh::to_vec(&create_token_tx).unwrap()),
+            })
+            .await?;
+        rollup.da_service.produce_block_now().await?;
+        let _ = slot_subscription.next().await.unwrap()?;
+        assert_balance(client, initial_balance, token_id, user_address, None).await?;
+
+        let preferred_tx = build_transfer_token_tx::<TestSpec>(
+            &key,
+            token_id,
+            recipient_address,
+            preferred_transfer,
+            1,
+        );
+        client
+            .client
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&borsh::to_vec(&preferred_tx).unwrap()),
+            })
+            .await?;
+        assert_balance(
+            client,
+            initial_balance - preferred_transfer,
+            token_id,
+            user_address,
+            None,
+        )
+        .await?;
+        assert_balance(
+            client,
+            preferred_transfer,
+            token_id,
+            recipient_address,
+            None,
+        )
+        .await?;
+
+        rollup.da_service.produce_block_now().await?;
+        let _ = slot_subscription.next().await.unwrap()?;
+    }
+
+    let forced_start_nonce = 2u64;
+    // Pause the sequencer and send forced txs enough times to unsync the sequencer. We want to check that the sequencer handles this case correctly
+    rollup.pause_preferred_batches().await;
+    for i in 0..RESYNC_FORCED_BLOCKS {
+        let tx = build_transfer_token_tx(
+            &key,
+            token_id,
+            recipient_address,
+            forced_transfer,
+            forced_start_nonce + i as u64,
+        );
+        let blob = transaction_into_blob(tx);
+        let _receipt = forced_da_service
+            .send_transaction(&blob)
+            .await
+            .await?
+            .expect("Failed to submit forced bank transfer blob to DA");
+        rollup.da_service.produce_block_now().await?;
+    }
+    rollup.resume_preferred_batches().await;
+
+    // Make sure the sequencer becomes unready. Then, let it get back to ready.
+    rollup.wait_for_sequencer_not_ready().await?;
+    rollup.wait_for_sequencer_ready().await?;
+
+    // Wait for all forced blocks to be processed
+    let mut state_update_subscription = rollup.subscribe_state_updates().await?;
+    let mut slot_num_of_last_forced_tx = 0;
+    for _ in 0..RESYNC_FORCED_BLOCKS {
+        let slot = slot_subscription.next().await.unwrap()?;
+        slot_num_of_last_forced_tx = slot.number;
+    }
+    // This part is sensitive to numbers; we need to produce more blocks than we had forced blocks *plus* in flight batches. This gives time for the blob sender
+    // to actually send all of the original blobs on chain and then the preferred sequencer to create new batches that increment the visible slot number.
+    // This is necessary because the preferred sequencer tries not to produce batches when there are more than a few blobs in flight, and the blob sender
+    // only recognizes that a blob is no longer in flight when it appears in the ledger DB - but that only happens after the visible slot number has been incremented.
+    // So (because of all the forced txs) we have a mild chicken-and-egg problem where the preferred sequencer only produces batches very infrequently.
+    for _ in 0..RESYNC_FORCED_BLOCKS + 10 {
+        rollup.da_service.produce_block_now().await?;
+        let slot = slot_subscription.next().await.unwrap()?;
+        let _ = state_update_subscription.next().await.unwrap()?;
+    }
+    // Now, that we're sure we've produced batches to increment the visible slot number, just wait for the state update notification that we've processed all of the forced txs.
+    for _ in 0..RESYNC_FORCED_BLOCKS + 10 {
+        let update = state_update_subscription.next().await.unwrap()?;
+        if update.slot_number.get() >= slot_num_of_last_forced_tx {
+            break;
+        }
+    }
+
+    let expected_sender = initial_balance - preferred_transfer - total_forced;
+    let expected_recipient = preferred_transfer + total_forced;
+    assert_balance(client, expected_sender, token_id, user_address, None).await?;
+    assert_balance(
+        client,
+        expected_recipient,
+        token_id,
+        recipient_address,
+        None,
+    )
+    .await?;
+
+    // Send one more preferred tx to make sure everything is working correctly after the resync
+    let preferred_tx = build_transfer_token_tx::<TestSpec>(
+        &key,
+        token_id,
+        recipient_address,
+        preferred_transfer,
+        forced_start_nonce + RESYNC_FORCED_BLOCKS as u64,
+    );
+    client
+        .client
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&borsh::to_vec(&preferred_tx).unwrap()),
+        })
+        .await?;
+
+    assert_balance(
+        client,
+        expected_sender - preferred_transfer,
+        token_id,
+        user_address,
+        None,
+    )
+    .await?;
+    assert_balance(
+        client,
+        expected_recipient + preferred_transfer,
+        token_id,
+        recipient_address,
+        None,
+    )
+    .await?;
 
     Ok(())
 }
