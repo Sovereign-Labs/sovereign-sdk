@@ -1,4 +1,7 @@
-# 2026-01-16 
+# 2026-01-20
+- #2374 EVM: Ethereum JSON-RPC compatibility improvements. Standardizes error codes, adds EIP-1898 BlockId support, new methods (web3_clientVersion, web3_sha3, eth_maxPriorityFeePerGas, eth_getBlockTransactionCountBy*), and eth_feeHistory percentile validation.
+
+# 2026-01-16
 - #2342 EVM: Populate the `gas_limit` for pending block.
 
 # 2026-01-14
