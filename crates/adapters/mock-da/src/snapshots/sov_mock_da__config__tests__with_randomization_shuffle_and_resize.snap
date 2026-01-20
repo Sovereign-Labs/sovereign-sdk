@@ -26,5 +26,6 @@ expression: config
         }
       }
     }
-  }
+  },
+  "failure_behavior": "none"
 }

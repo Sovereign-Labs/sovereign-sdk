@@ -347,7 +347,6 @@ mod tests {
     ) -> RunnerConfig {
         RunnerConfig {
             da_polling_interval_ms: 30,
-            da_total_timeout_secs: 0,
             http_config: sov_stf_runner::HttpServerConfig {
                 bind_host: bind_host.to_string(),
                 bind_port,

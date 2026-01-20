@@ -76,10 +76,6 @@ state_cache_size = 4294967296 # 4GB. Default is 1GB.
 [runner]
 # 3 times per regular celestia block
 da_polling_interval_ms = 2_000
-# Celestia configured to give ~216s to retry, so we limit it at 300 to eliminate any locks or slow read.
-# This field is the safeguard against any long blocking in DaService.
-# The default value is: 600
-da_total_timeout_secs = 300
 
 [runner.http_config]
 bind_host = "127.0.0.1"
