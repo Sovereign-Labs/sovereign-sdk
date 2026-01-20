@@ -357,38 +357,8 @@ where
         let seen_state_on_block =
             StateOnBlock::from_transition_witness::<Witness>(&transition_witness);
         tracing::trace!(block_header = %block_header.display(), "Adding transition to the list of the seen");
-        // Self check
-        {
-            if let Some(prev_state) = self.state_on_block.get(&block_header.prev_hash()) {
-                assert_eq!(
-                    prev_state.post_state_root.as_ref(),
-                    seen_state_on_block.pre_state_root.as_ref(),
-                    "Incorrect transition received"
-                );
-                assert_eq!(
-                    prev_state.block_header.hash(),
-                    block_header.prev_hash(),
-                    "Mismatch in block hashes after transition",
-                );
-            }
-            match self
-                .state_on_block
-                .get(&transition_witness.da_block_header.prev_hash())
-            {
-                None => {
-                    assert_eq!(
-                        transition_witness.initial_state_root.as_ref(),
-                        self.last_processed_finalized_state_root.as_ref(),
-                        "Wrong transition, its pre_state_root does not match the state in StateManager");
-                }
-                Some(state_on_prev_block) => {
-                    assert_eq!(
-                        transition_witness.initial_state_root.as_ref(),
-                        state_on_prev_block.post_state_root.as_ref(),
-                        "Wrong transition, its pre_state_root does not match the current state root of StateManager");
-                }
-            };
-        }
+        self.pre_validate_transition_witness(&transition_witness, &seen_state_on_block);
+
         self.state_on_block
             .insert(block_header.hash(), seen_state_on_block);
         self.seen_on_height
@@ -408,26 +378,8 @@ where
         );
 
         self.ledger_db.replace_reader(ledger_pre_state);
-        #[cfg(debug_assertions)]
-        {
-            match self.ledger_db.get_head_state_root()? {
-                None => {
-                    // No state root means we're at genesis - verify that's actually the case
-                    assert_eq!(
-                        block_header.height(),
-                        self.genesis_da_height,
-                        "Ledger should have state root after genesis is completed"
-                    );
-                }
-                Some(ledger_state_root) => {
-                    assert_eq!(
-                        ledger_state_root.as_slice(),
-                        transition_witness.initial_state_root.as_ref(),
-                        "Ledger head state root should match the pre-state of the current transition"
-                    );
-                }
-            }
-        }
+        self.verify_transition_witness_against_ledger_state(&transition_witness)?;
+
         let slot_number = self.get_slot_number()?;
         let ledger_materialization_start = std::time::Instant::now();
         let mut ledger_change_set = self
@@ -1131,6 +1083,71 @@ where
                 );
             }
         }
+    }
+
+    fn pre_validate_transition_witness(
+        &self,
+        transition_witness: &StateTransitionWitness<StateRoot, Witness, Da::Spec>,
+        seen_state_on_block: &StateOnBlock<Da::Spec, StateRoot>,
+    ) {
+        if let Some(prev_state) = self
+            .state_on_block
+            .get(&transition_witness.da_block_header.prev_hash())
+        {
+            assert_eq!(
+                prev_state.post_state_root.as_ref(),
+                seen_state_on_block.pre_state_root.as_ref(),
+                "Incorrect transition received"
+            );
+            assert_eq!(
+                prev_state.block_header.hash(),
+                transition_witness.da_block_header.prev_hash(),
+                "Mismatch in block hashes after transition",
+            );
+        }
+        match self
+            .state_on_block
+            .get(&transition_witness.da_block_header.prev_hash())
+        {
+            None => {
+                assert_eq!(
+                    transition_witness.initial_state_root.as_ref(),
+                    self.last_processed_finalized_state_root.as_ref(),
+                    "Wrong transition, its pre_state_root does not match the state in StateManager"
+                );
+            }
+            Some(state_on_prev_block) => {
+                assert_eq!(
+                    transition_witness.initial_state_root.as_ref(),
+                    state_on_prev_block.post_state_root.as_ref(),
+                    "Wrong transition, its pre_state_root does not match the current state root of StateManager");
+            }
+        };
+    }
+
+    // Make sure that current ledger pre-state matches pre-state of given transition witness
+    fn verify_transition_witness_against_ledger_state(
+        &self,
+        transition_witness: &StateTransitionWitness<StateRoot, Witness, Da::Spec>,
+    ) -> anyhow::Result<()> {
+        match self.ledger_db.get_head_state_root()? {
+            None => {
+                // No state root means we're at genesis - verify that's actually the case
+                assert_eq!(
+                    transition_witness.da_block_header.height(),
+                    self.genesis_da_height,
+                    "Ledger should have state root after genesis is completed"
+                );
+            }
+            Some(ledger_state_root) => {
+                assert_eq!(
+                    ledger_state_root.as_slice(),
+                    transition_witness.initial_state_root.as_ref(),
+                    "Ledger head state root should match the pre-state of the current transition"
+                );
+            }
+        }
+        Ok(())
     }
 
     // Returns updating time
