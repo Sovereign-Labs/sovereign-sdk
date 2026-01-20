@@ -408,13 +408,35 @@ where
         );
 
         self.ledger_db.replace_reader(ledger_pre_state);
-        // TODO: We can check state root from ledger and verify its connected
+        #[cfg(debug_assertions)]
+        {
+            match self.ledger_db.get_head_state_root()? {
+                None => {
+                    // No state root means we're at genesis - verify that's actually the case
+                    assert_eq!(
+                        block_header.height(),
+                        self.genesis_da_height,
+                        "Ledger should have state root after genesis is completed"
+                    );
+                }
+                Some(ledger_state_root) => {
+                    assert_eq!(
+                        ledger_state_root.as_slice(),
+                        transition_witness.initial_state_root.as_ref(),
+                        "Ledger head state root should match the pre-state of the current transition"
+                    );
+                }
+            }
+        }
         let slot_number = self.get_slot_number()?;
         let ledger_materialization_start = std::time::Instant::now();
         let mut ledger_change_set = self
             .ledger_db
             .materialize_slot(slot_commit, new_state_root.as_ref())?;
-        tracing::trace!("Initial Ledger ChangeSet is materialized");
+        tracing::trace!(
+            prev_slot_number = ?slot_number,
+            "Initial Ledger ChangeSet is materialized"
+        );
 
         if let Some(finalized_transition) = finalized_transitions.iter().last() {
             let last_processed_finalized_header = &finalized_transition.block_header;
