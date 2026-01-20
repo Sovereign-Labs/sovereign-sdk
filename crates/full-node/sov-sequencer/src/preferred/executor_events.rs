@@ -172,7 +172,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             checkpoint,
             forced_txs,
         })
-            .await;
+        .await;
     }
 
     pub(crate) async fn prune(&mut self, prune_up_to_including: SequenceNumber) {

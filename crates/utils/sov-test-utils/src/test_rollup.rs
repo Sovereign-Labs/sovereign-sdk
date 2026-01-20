@@ -812,9 +812,7 @@ where
     }
 
     /// Subscribe to forced batch notifications.
-    pub async fn subscribe_forced_tx_batches(
-        &self,
-    ) -> WsSubscription<ForcedTxBatchNotification> {
+    pub async fn subscribe_forced_tx_batches(&self) -> WsSubscription<ForcedTxBatchNotification> {
         self.client
             .client
             .subscribe_to_ws::<ForcedTxBatchNotification>(

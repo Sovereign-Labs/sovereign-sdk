@@ -22,8 +22,8 @@ use sov_rest_utils::{json_obj, ErrorObject};
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
-use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::broadcast;
+use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
@@ -31,9 +31,11 @@ use tracing::trace;
 use uuid::Uuid;
 
 use super::state_root_compute::StateRootComputeRequest;
-use crate::common::ForcedTxBatchNotification;
-use super::{Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease};
+use super::{
+    Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
+};
 use crate::common::AcceptedTx;
+use crate::common::ForcedTxBatchNotification;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
