@@ -158,7 +158,7 @@ pub async fn bootstrap_state_update_info(
     query_state_update_info(&ledger_db, stf_storage, da_sync_state).await
 }
 
-pub type StateRoot = <ProverStorage<S> as sov_state::Storage>::Root;
+pub type StateRoot = <TestStorage as sov_state::Storage>::Root;
 
 // TODO: extract similarities into helper for rollup blueprint, a lot of duplication
 /// Returns (runner, state_root_after_init, test_node)
