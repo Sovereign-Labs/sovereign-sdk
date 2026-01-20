@@ -287,8 +287,12 @@ impl From<MaybeSealedBlock> for Sealed<Header> {
 }
 
 pub(crate) fn pending_block_hash(block: &Block) -> B256 {
-    // Use the newest pending tx index to create a stable, append-only synthetic hash.
-    // This ensures uniqueness even as the pending block grows.
+    // We expose a synthetic hash for pending blocks because receipts are returned before the
+    // block is sealed. The hash encodes `[block_number || last_tx_index]` so:
+    // - it stays stable for a given pending snapshot
+    // - it changes as new txs are appended
+    //
+    // Note: the tx range is half-open (start..end), so the last valid tx index is end-1.
     let tx_index = if block.transactions.start < block.transactions.end {
         block.transactions.end.saturating_sub(1)
     } else {

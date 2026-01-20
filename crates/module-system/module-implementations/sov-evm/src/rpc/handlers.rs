@@ -78,11 +78,17 @@ where
             None => {
                 let pending_block = self.pending_block(state);
                 // Support synthetic hashes for the pending block so RPC clients can query
-                // "latest" by hash even before the block is sealed.
+                // "latest" by hash even before the block is sealed. The synthetic hash encodes
+                // the pending block number plus the last included tx index, which lets us return
+                // a stable snapshot of an append-only pending block.
                 let (block_number, tx_index) = decode_synthetic_block_hash(block_hash);
                 let pending_start = pending_block.transactions.start;
                 let pending_end = pending_block.transactions.end;
 
+                // The pending tx range is half-open (start..end). The synthetic hash encodes
+                // the last valid tx index, so we only accept indices inside that range. We then
+                // return a subset [start..tx_index+1) snapshot.
+                // For empty blocks (start == end), only an exact match is valid.
                 let (subset_end, should_return) = if pending_start == pending_end {
                     (pending_start, tx_index == pending_start)
                 } else {
