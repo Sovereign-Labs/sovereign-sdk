@@ -1,5 +1,7 @@
 use alloy_eips::BlockNumberOrTag;
 use alloy_rpc_types::FeeHistory;
+use jsonrpsee::types::error::INVALID_PARAMS_CODE;
+use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, Spec};
@@ -21,9 +23,24 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<FeeHistory, EthApiError> {
         if block_count == 0 {
-            return Err(EthApiError::other(into_rpc_error(anyhow::anyhow!(
-                "block_count must be greater than 0"
-            ))));
+            return Err(EthApiError::other(ErrorObjectOwned::owned(
+                INVALID_PARAMS_CODE,
+                "block_count must be greater than 0",
+                None::<()>,
+            )));
+        }
+
+        // Validate reward percentiles
+        if let Some(percentiles) = reward_percentiles {
+            for &p in percentiles {
+                if !(0.0..=100.0).contains(&p) {
+                    return Err(EthApiError::InvalidRewardPercentile(p));
+                }
+            }
+            // Check monotonic increasing
+            if !percentiles.windows(2).all(|w| w[0] <= w[1]) {
+                return Err(EthApiError::RewardPercentilesMustBeMonotonic);
+            }
         }
 
         let block_count = block_count.min(1024);

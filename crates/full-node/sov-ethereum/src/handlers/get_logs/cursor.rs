@@ -1,7 +1,7 @@
 use hex::{decode, encode};
 use jsonrpsee::types::ErrorObjectOwned;
 
-use crate::{handlers::ETH_RPC_ERROR, to_jsonrpsee_error_object};
+use crate::rpc_invalid_params;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Cursor indicating where to start processing.
@@ -29,15 +29,14 @@ impl Cursor {
     /// Unpacks a 40-character (or "0x"-prefixed) hex string into `Self`.
     pub fn unpack(hex_str: &str) -> Result<Self, ErrorObjectOwned> {
         let s = hex_str.strip_prefix("0x").unwrap_or(hex_str);
-        let bytes = decode(s)
-            .map_err(|_| to_jsonrpsee_error_object("Invalid hex string", ETH_RPC_ERROR))?;
+        let bytes = decode(s).map_err(|_| rpc_invalid_params("Invalid hex string"))?;
 
         if bytes.len() != 20 {
             let msg = format!(
                 "Invalid decoded length expected 20 bytes, got {}",
                 bytes.len()
             );
-            return Err(to_jsonrpsee_error_object(msg, ETH_RPC_ERROR));
+            return Err(rpc_invalid_params(msg));
         }
 
         let block_height = u64::from_be_bytes(bytes[0..8].try_into().unwrap());

@@ -3,7 +3,9 @@ mod handlers;
 use std::convert::Infallible;
 
 use alloy_primitives::{B256, U256};
-use jsonrpsee::types::error::UNKNOWN_ERROR_CODE;
+use jsonrpsee::types::error::{
+    CALL_EXECUTION_FAILED_CODE, INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE,
+};
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -13,6 +15,7 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_rpc_eth_types::EthApiError;
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
@@ -28,6 +31,11 @@ pub struct EthRpcConfig {
     /// Shutdown signal receiver for graceful termination
     pub shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
+
+const LIMIT_EXCEEDED_CODE: i32 = -32005;
+const RESOURCE_NOT_FOUND_CODE: i32 = -32001;
+const METHOD_NOT_SUPPORTED_CODE: i32 = -32004;
+const TX_REJECTED_CODE: i32 = -32003;
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Seq) -> RpcModule<()>
 where
@@ -66,6 +74,58 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    for method in [
+        "web3_clientVersion",
+        "web3_sha3",
+        "net_listening",
+        "net_peerCount",
+        "eth_protocolVersion",
+        "eth_syncing",
+        "eth_coinbase",
+        "eth_mining",
+        "eth_hashrate",
+        "eth_maxPriorityFeePerGas",
+        "eth_getBlockTransactionCountByHash",
+        "eth_getBlockTransactionCountByNumber",
+        "eth_getTransactionByBlockHashAndIndex",
+        "eth_getTransactionByBlockNumberAndIndex",
+        "eth_getUncleCountByBlockHash",
+        "eth_getUncleCountByBlockNumber",
+        "eth_getUncleByBlockHashAndIndex",
+        "eth_getUncleByBlockNumberAndIndex",
+        "eth_newFilter",
+        "eth_newBlockFilter",
+        "eth_newPendingTransactionFilter",
+        "eth_uninstallFilter",
+        "eth_getFilterChanges",
+        "eth_getFilterLogs",
+        "eth_sign",
+        "eth_signTransaction",
+        "eth_signTypedData",
+        "eth_signTypedData_v1",
+        "eth_signTypedData_v3",
+        "eth_signTypedData_v4",
+        "eth_getProof",
+        "eth_createAccessList",
+        "trace_block",
+        "trace_call",
+        "trace_filter",
+        "trace_get",
+        "trace_rawTransaction",
+        "trace_replayBlockTransactions",
+        "trace_replayTransaction",
+        "trace_transaction",
+        "txpool_content",
+        "txpool_contentFrom",
+        "txpool_inspect",
+        "txpool_status",
+    ] {
+        let method_name = method;
+        rpc.register_async_method(method_name, move |_, _, _| {
+            ready(Err::<(), _>(rpc_method_not_supported(method_name)))
+        })?;
+    }
+
     rpc.register_async_method("eth_gasPrice", |_, _, _| {
         // We don't use EVM gas price mechanism and rely on sov gas/gas price.
         // Therefore - we can safely return zero here as it's used by wallets to set gas price when sending transactions.
@@ -120,9 +180,8 @@ where
 {
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
-        let signed_transaction = convert_to_tx_signed(raw_tx).map_err(|err| {
-            ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, err.to_string(), None::<()>)
-        })?;
+        let signed_transaction = convert_to_tx_signed(raw_tx)
+            .map_err(|err| ErrorObjectOwned::from(EthApiError::from(err)))?;
 
         let tx_hash = signed_transaction.hash();
 
@@ -137,6 +196,34 @@ where
     }
 }
 
-pub(crate) fn to_jsonrpsee_error_object(err: impl ToString, message: &str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, message, Some(err.to_string()))
+fn rpc_error_with_data(code: i32, message: &'static str, err: impl ToString) -> ErrorObjectOwned {
+    ErrorObjectOwned::owned(code, message, Some(err.to_string()))
+}
+
+pub(crate) fn rpc_invalid_params(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_data(INVALID_PARAMS_CODE, "Invalid params", err)
+}
+
+pub(crate) fn rpc_invalid_input(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_data(CALL_EXECUTION_FAILED_CODE, "Invalid input", err)
+}
+
+pub(crate) fn rpc_internal_error(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_data(INTERNAL_ERROR_CODE, "Internal error", err)
+}
+
+pub(crate) fn rpc_limit_exceeded(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_data(LIMIT_EXCEEDED_CODE, "Limit exceeded", err)
+}
+
+pub(crate) fn rpc_method_not_supported(method: &str) -> ErrorObjectOwned {
+    rpc_error_with_data(METHOD_NOT_SUPPORTED_CODE, "Method not supported", method)
+}
+
+pub(crate) fn rpc_tx_rejected(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_data(TX_REJECTED_CODE, "Transaction rejected", err)
+}
+
+pub(crate) fn rpc_resource_not_found(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_data(RESOURCE_NOT_FOUND_CODE, "Resource not found", err)
 }
