@@ -200,11 +200,7 @@ pub(crate) fn rpc_limit_exceeded(err: impl ToString) -> ErrorObjectOwned {
 }
 
 pub(crate) fn rpc_method_not_supported(method: &str) -> ErrorObjectOwned {
-    rpc_error_with_data(
-        METHOD_NOT_SUPPORTED_CODE,
-        "Method not supported",
-        method,
-    )
+    rpc_error_with_data(METHOD_NOT_SUPPORTED_CODE, "Method not supported", method)
 }
 
 pub(crate) fn rpc_tx_rejected(err: impl ToString) -> ErrorObjectOwned {
