@@ -2,6 +2,7 @@ mod archival_state;
 mod bls_precompiles;
 mod config;
 mod contracts;
+mod fee_history;
 mod genesis;
 mod helpers;
 mod max_fee;

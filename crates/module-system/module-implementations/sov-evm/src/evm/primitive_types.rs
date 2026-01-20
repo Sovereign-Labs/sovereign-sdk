@@ -301,7 +301,7 @@ pub(crate) fn synthetic_block_hash(block_number: u64, tx_index: u64) -> B256 {
 }
 
 pub(crate) fn decode_synthetic_block_hash(hash: B256) -> (u64, u64) {
-    let bytes = hash.as_ref();
+    let bytes: &[u8; 32] = hash.as_ref();
     let mut block_number = [0u8; 8];
     let mut tx_index = [0u8; 8];
     block_number.copy_from_slice(&bytes[16..24]);

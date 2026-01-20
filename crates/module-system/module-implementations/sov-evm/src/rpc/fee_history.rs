@@ -2,7 +2,6 @@ use alloy_eips::BlockNumberOrTag;
 use alloy_rpc_types::FeeHistory;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_chain_state::ChainState;
-use sov_modules_api::gas::GAS_DIMENSIONS;
 use sov_modules_api::module::GasSpec;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::runtime::capabilities::BlockGasInfo;
@@ -221,12 +220,16 @@ where
     }
 
     fn assumed_pending_gas_used(gas_limit: &S::Gas) -> S::Gas {
-        let mut gas_used = [0u64; GAS_DIMENSIONS];
-        for (idx, limit) in gas_limit.as_ref().iter().enumerate() {
-            gas_used[idx] = limit.saturating_mul(Self::ASSUMED_PENDING_GAS_USED_NUMERATOR)
-                / Self::ASSUMED_PENDING_GAS_USED_DENOMINATOR;
-        }
-        S::Gas::from(gas_used)
+        let gas_used: Vec<u64> = gas_limit
+            .as_ref()
+            .iter()
+            .map(|limit| {
+                limit.saturating_mul(Self::ASSUMED_PENDING_GAS_USED_NUMERATOR)
+                    / Self::ASSUMED_PENDING_GAS_USED_DENOMINATOR
+            })
+            .collect();
+        S::Gas::try_from(gas_used)
+            .unwrap_or_else(|err| panic!("Failed to build assumed pending gas used: {err:?}"))
     }
 }
 
