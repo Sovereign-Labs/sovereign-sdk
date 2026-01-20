@@ -5,7 +5,7 @@ use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::get_cfg_env;
-use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
+use crate::helpers::{from_recovered_pending, from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
@@ -149,6 +149,18 @@ where
         let index = tx_number - block.transactions_start();
         let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
         Some(tx)
+    }
+
+    fn get_pending_transaction(
+        &self,
+        hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Transaction> {
+        let pending_transactions: Vec<_> = self.pending_transactions.collect_infallible(state);
+        let pending = pending_transactions
+            .iter()
+            .find(|pending| *pending.transaction.signed_transaction.hash() == hash)?;
+        Some(from_recovered_pending(pending.transaction.clone().into()))
     }
 
     fn get_receipt_by_hash(

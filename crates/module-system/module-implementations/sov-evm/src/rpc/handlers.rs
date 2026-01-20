@@ -1,6 +1,7 @@
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_consensus::ReceiptEnvelope;
+use alloy_consensus::Transaction as TransactionTrait;
 use alloy_eips::BlockId;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
@@ -153,16 +154,32 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        let mut state = self.resolve_state_for_block_id(block_id, state)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let is_pending = block_id.is_latest() || block_id.is_pending();
 
-        let ethereum_address: EthereumAddress = address.into();
-        let credential_id = ethereum_address.as_credential_id();
+        let nonce = {
+            let mut resolved_state = self.resolve_state_for_block_id(Some(block_id), state)?;
+            let ethereum_address: EthereumAddress = address.into();
+            let credential_id = ethereum_address.as_credential_id();
+            self.uniqueness_module
+                .next_nonce(&credential_id, resolved_state.deref_mut())
+                .unwrap_or_default()
+        };
 
-        let nonce = self
-            .uniqueness_module
-            .next_nonce(&credential_id, state.deref_mut())
-            .unwrap_or_default();
+        let pending_nonce = if is_pending {
+            let pending_txs: Vec<_> = self.pending_transactions.collect_infallible(state);
+            pending_txs
+                .iter()
+                .filter(|pending| pending.transaction.signer == address)
+                .map(|pending| pending.transaction.signed_transaction.nonce())
+                .max()
+                .map(|nonce| nonce.saturating_add(1))
+                .unwrap_or(0)
+        } else {
+            0
+        };
 
+        let nonce = nonce.max(pending_nonce);
         trace!(%address, nonce, method = "eth_getTransactionCount", "EVM module JSON-RPC request");
         Ok(U64::from(nonce))
     }
@@ -217,7 +234,9 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let transaction = self.get_transaction(hash, state);
+        let transaction = self
+            .get_transaction(hash, state)
+            .or_else(|| self.get_pending_transaction(hash, state));
         trace!(
             %hash,
             ?transaction,

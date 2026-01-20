@@ -67,6 +67,19 @@ pub(crate) fn from_recovered_with_block_context(
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }
 
+pub(crate) fn from_recovered_pending(
+    tx: Recovered<TransactionSigned>,
+) -> alloy_rpc_types::Transaction {
+    let tx_info = TransactionInfo {
+        block_hash: None,
+        block_number: None,
+        index: None,
+        hash: None,
+        base_fee: None,
+    };
+    alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
+}
+
 #[cfg(test)]
 mod tests {
     use alloy_primitives::{Address, U256};
