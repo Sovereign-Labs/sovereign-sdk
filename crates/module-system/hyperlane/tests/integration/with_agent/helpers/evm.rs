@@ -1,5 +1,8 @@
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
-use crate::with_agent::helpers::{EVM_MAILBOX, RELAYER_ACCOUNT};
+use crate::with_agent::helpers::{
+    eth_address_to_hexhash, EVM_MAILBOX, EVM_MERKLE_TREE_HOOK, EVM_TEST_RECIPIENT,
+    RELAYER_ACCOUNT,
+};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -8,30 +11,47 @@ use sov_hyperlane_integration::{EthAddress, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, HexHash, HexString};
 use sov_test_utils::docker::print_logs_from_container;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
 
 pub const ANVIL_PORT: u16 = 8545;
 const TAG: &str = "v1.3.6";
+const ANVIL_STATE_FILE: &str = "anvil_core_state.json";
 
 pub struct AnvilRunner {
     container: ContainerAsync<AnvilNode>,
     req_id: AtomicU64,
     host_port: u16,
+    loaded_state: bool,
 }
 
 impl AnvilRunner {
     pub async fn new() -> Self {
         tracing::info!("Starting anvil container...");
         // Hard code tag, so we don't accidental breakages
-        let container = AnvilNode::default()
-            .with_tag(TAG)
-            .start()
-            .await
-            .expect("failed to start anvil");
+        let (container, loaded_state) = {
+            let state_dir = fixtures_dir();
+            let state_path = state_dir.join(ANVIL_STATE_FILE);
+            let use_state = state_path.exists();
+
+            let mut node = AnvilNode::default().with_tag(TAG);
+            if use_state {
+                let state_mount =
+                    Mount::bind_mount(state_dir.to_string_lossy().to_string(), "/state");
+                let load_path = format!("/state/{ANVIL_STATE_FILE}");
+                node = node
+                    .with_mount(state_mount)
+                    .with_cmd(vec!["--load-state".to_string(), load_path]);
+            }
+
+            let container = node.start().await.expect("failed to start anvil");
+            (container, use_state)
+        };
 
         let host_port = container
             .get_host_port_ipv4(ANVIL_PORT)
@@ -43,11 +63,16 @@ impl AnvilRunner {
             container,
             req_id: AtomicU64::new(0),
             host_port,
+            loaded_state,
         }
     }
 
     pub fn port(&self) -> u16 {
         self.host_port
+    }
+
+    pub fn loaded_state(&self) -> bool {
+        self.loaded_state
     }
 
     /// Send a transaction directly via Anvil JSON-RPC (avoids parsing `cast` CLI output).
@@ -129,7 +154,45 @@ impl AnvilRunner {
     }
 
     pub async fn print_logs(&self) {
-        print_logs_from_container("anvil", &self.container).await;
+        print_logs_from_container("anvil", &self.container, 400).await;
+    }
+
+    pub async fn assert_preloaded_core(&self) {
+        self.ensure_contract_code(EVM_MAILBOX, "mailbox").await;
+        self.ensure_contract_code(EVM_MERKLE_TREE_HOOK, "merkleTreeHook")
+            .await;
+        self.ensure_contract_code(EVM_TEST_RECIPIENT, "testRecipient")
+            .await;
+
+        let mailbox_nonce: String = self
+            .eth_call_hex(EVM_MAILBOX, encode_no_args("nonce()"))
+            .await;
+        let merkle_count: String = self
+            .eth_call_hex(EVM_MERKLE_TREE_HOOK, encode_no_args("count()"))
+            .await;
+
+        if !is_zero_hex(&mailbox_nonce) || !is_zero_hex(&merkle_count) {
+            panic!(
+                "Expected preloaded core to have zero mailbox nonce and merkle tree count; got nonce={mailbox_nonce}, count={merkle_count}"
+            );
+        }
+    }
+
+    async fn eth_call_hex(&self, contract: EthAddress, data: Vec<u8>) -> String {
+        let call = json!({
+            "to": contract.to_string(),
+            "data": format!("0x{}", hex::encode(data)),
+        });
+        self.rpc("eth_call", json!([call, "latest"])).await
+    }
+
+    async fn ensure_contract_code(&self, contract: EthAddress, name: &str) {
+        let code: String = self
+            .rpc("eth_getCode", json!([contract.to_string(), "latest"]))
+            .await;
+        if code == "0x" {
+            panic!("Expected {name} to be deployed in preloaded state");
+        }
     }
 }
 
@@ -144,9 +207,16 @@ impl EvmCounterParty {
         let anvil = AnvilRunner::new().await;
         let anvil_port = anvil.port();
         let hyperlane_cli = HyperlaneCliRunner::new(rollup_port, anvil_port, host_address);
-        let hyperlane_deploy_start = std::time::Instant::now();
-        let evm_recipient = hyperlane_cli.deploy_core().await;
-        tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");
+        let evm_recipient = if anvil.loaded_state() {
+            tracing::info!("Using preloaded Anvil state for Hyperlane core");
+            anvil.assert_preloaded_core().await;
+            eth_address_to_hexhash(EVM_TEST_RECIPIENT)
+        } else {
+            let hyperlane_deploy_start = std::time::Instant::now();
+            let evm_recipient = hyperlane_cli.deploy_core().await;
+            tracing::info!(time = ?hyperlane_deploy_start.elapsed(), "Hyperlane deployed");
+            evm_recipient
+        };
         Self {
             anvil,
             hyperlane_cli,
@@ -229,10 +299,10 @@ impl EvmCounterParty {
         Amount(u128::from_be_bytes(amount))
     }
 
-    pub async fn latest_message(&mut self) -> EvmProcessWithId {
+    pub async fn latest_message(&mut self) -> Result<EvmProcessWithId, String> {
         // fetch logs in the latest block
         let logs: Vec<_> = self.anvil.rpc("eth_getLogs", json!([{}])).await;
-        EvmProcessWithId::new(logs)
+        EvmProcessWithId::try_new(logs)
     }
 
     /// Returns (origin_domain, recipient)
@@ -300,26 +370,40 @@ pub struct EvmProcessWithId {
 impl EvmProcessWithId {
     /// Reconstruct combined process event from mailbox logs.
     /// https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/7656fe1c3865f817d68971ed3c8b939376065283/solidity/contracts/interfaces/IMailbox.sol#L29-L45
-    pub fn new(logs: impl IntoIterator<Item = EvmLog>) -> Self {
+    pub fn try_new(logs: impl IntoIterator<Item = EvmLog>) -> Result<Self, String> {
         let mut logs = logs.into_iter().filter(|log| log.address == EVM_MAILBOX);
-        let process = logs.next().expect("Didn't find first event: Process");
+        let process = logs
+            .next()
+            .ok_or_else(|| "Didn't find first event: Process".to_string())?;
         let process_id = logs
             .next()
-            .expect("Didn't find the second event: ProcessId");
+            .ok_or_else(|| "Didn't find the second event: ProcessId".to_string())?;
 
         // we should only have 2 logs from the mailbox
-        assert!(logs.next().is_none());
+        if logs.next().is_some() {
+            return Err("Expected only 2 mailbox logs for Process/ProcessId".to_string());
+        }
 
         // Fields on evm have the same order as our events
-        assert_eq!(process.topics.len(), 4);
-        assert_eq!(process_id.topics.len(), 2);
+        if process.topics.len() != 4 {
+            return Err(format!(
+                "Unexpected Process topics count: {}",
+                process.topics.len()
+            ));
+        }
+        if process_id.topics.len() != 2 {
+            return Err(format!(
+                "Unexpected ProcessId topics count: {}",
+                process_id.topics.len()
+            ));
+        }
 
-        EvmProcessWithId {
+        Ok(EvmProcessWithId {
             origin_domain: domain_from_hexhash(process.topics[1]),
             sender_address: process.topics[2],
             recipient_address: process.topics[3],
             id: process_id.topics[1],
-        }
+        })
     }
 }
 
@@ -382,6 +466,10 @@ fn hex_hash_into_eth_addr(hex_hash: &HexHash) -> EthAddress {
     res.into()
 }
 
+fn fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/integration/with_agent/fixtures")
+}
+
 fn function_selector(signature: &str) -> [u8; 4] {
     let mut hasher = Keccak256::new();
     hasher.update(signature.as_bytes());
@@ -399,6 +487,17 @@ fn pad_u128(value: u128) -> [u8; 32] {
     let mut buf = [0u8; 32];
     buf[16..].copy_from_slice(&value.to_be_bytes());
     buf
+}
+
+fn encode_no_args(signature: &str) -> Vec<u8> {
+    function_selector(signature).to_vec()
+}
+
+fn is_zero_hex(value: &str) -> bool {
+    value
+        .trim_start_matches("0x")
+        .chars()
+        .all(|c| c == '0')
 }
 
 fn encode_dispatch(domain: u32, recipient: HexHash, body: &[u8]) -> Vec<u8> {

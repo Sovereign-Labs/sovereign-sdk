@@ -4,6 +4,9 @@ mod hyperlane_cli;
 pub mod metrics;
 pub mod wait;
 
+pub use docker::get_docker_gateway_ip;
+pub use hyperlane_cli::HyperlaneCliRunner;
+
 use std::env;
 
 use super::configs::agent_config;
@@ -45,9 +48,23 @@ pub const EVM_DOMAIN: u32 = 31337_90210;
 pub const EVM_CHAIN_ID: u32 = 31337;
 /// Address of the mailbox on evm counterparty chain.
 /// Derived from the deployer in hyperlane-cli
-/// 0x8a791620dd6260079bf849dc5567adc3f2fdc318
+/// 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84
 pub const EVM_MAILBOX: EthAddress = HexString([
     18, 151, 81, 115, 184, 127, 117, 149, 238, 69, 223, 251, 42, 184, 18, 236, 229, 150, 191, 132,
+]);
+/// Address of the merkle tree hook on evm counterparty chain.
+/// Derived from the deployer in hyperlane-cli
+/// 0x196dBCBb54b8ec4958c959D8949EBFE87aC2Aaaf
+pub const EVM_MERKLE_TREE_HOOK: EthAddress = HexString([
+    25, 109, 188, 187, 84, 184, 236, 73, 88, 201, 89, 216, 148, 158, 191, 232, 122, 194, 170,
+    175,
+]);
+/// Address of the test recipient on evm counterparty chain.
+/// Derived from the deployer in hyperlane-cli
+/// 0xc6B8FBF96CF7bbE45576417EC2163AcecFA88ECC
+pub const EVM_TEST_RECIPIENT: EthAddress = HexString([
+    198, 184, 251, 249, 108, 247, 187, 228, 85, 118, 65, 126, 194, 22, 58, 206, 207, 168, 142,
+    204,
 ]);
 /// Fixed Eth keys created by anvil. They don't change. Each address is funded 1000ETH
 // run `docker run --rm ghcr.io/foundry-rs/foundry:v1.1.0 anvil` to see all keys
@@ -387,7 +404,7 @@ impl Hyperlane {
 
     /// Searches the latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
-    pub async fn latest_message_on_counterparty(&mut self) -> EvmProcessWithId {
+    pub async fn latest_message_on_counterparty(&mut self) -> Result<EvmProcessWithId, String> {
         self.evm_counter_party
             .as_mut()
             .expect("Called latest message on counterparty before its setup")
@@ -471,7 +488,13 @@ impl Hyperlane {
             } else {
                 format!("validator-{n}")
             };
-            print_logs_from_exec_result(&name, val, std::time::Duration::from_secs(1)).await;
+            print_logs_from_exec_result(
+                &name,
+                val,
+                std::time::Duration::from_secs(10),
+                400,
+            )
+            .await;
         }
     }
 }
@@ -609,10 +632,14 @@ async fn start_validator(
 }
 
 // parses eth addr 0x(40 chars hex) into HexHash
-pub fn parse_eth_addr(addr: &str) -> HexHash {
-    // TODO: use sov-address with proper feature?
-    let address: EthAddress = addr.trim().parse().unwrap();
+pub fn eth_address_to_hexhash(address: EthAddress) -> HexHash {
     let mut res = [0; 32];
     res[12..].copy_from_slice(&address.0);
     res.into()
+}
+
+pub fn parse_eth_addr(addr: &str) -> HexHash {
+    // TODO: use sov-address with proper feature?
+    let address: EthAddress = addr.trim().parse().unwrap();
+    eth_address_to_hexhash(address)
 }
