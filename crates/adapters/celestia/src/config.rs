@@ -262,7 +262,7 @@ pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
 }
 
 pub(crate) fn default_api_request_timeout_secs() -> NonZero<u64> {
-    NonZero::new(6).unwrap()
+    NonZero::new(8).unwrap()
 }
 
 pub(crate) fn default_tx_status_polling_millis() -> u64 {

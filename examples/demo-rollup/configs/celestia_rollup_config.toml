@@ -36,8 +36,8 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 
 # Timeout for individual API requests to the Celestia node (in seconds).
 # This is passed to the underlying celestia-client for each API call.
-# Default: 6 (one block time)
-#api_request_timeout_secs = 6
+# Default: 8 (one block time plus 2 seconds of wiggle room)
+#api_request_timeout_secs = 8
 
 # Interval for polling transaction status confirmation (in milliseconds).
 # Default: 2000
