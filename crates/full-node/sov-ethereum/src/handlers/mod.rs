@@ -148,9 +148,9 @@ where
         Self::authenticate_tx(&tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
-        seq.accept_tx(tx, ip_addr)
-            .await
-            .map_err(|e| rpc_tx_rejected(format!("{} - '{}' ({:?})", e.status, e.message, e.details)))?;
+        seq.accept_tx(tx, ip_addr).await.map_err(|e| {
+            rpc_tx_rejected(format!("{} - '{}' ({:?})", e.status, e.message, e.details))
+        })?;
 
         on_success(tx_hash, ethereum)
     }
