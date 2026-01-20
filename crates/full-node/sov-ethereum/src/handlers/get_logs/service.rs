@@ -20,9 +20,9 @@ use sov_evm::{Evm, MaybeSealedBlock, Receipt};
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::rpc_error_with_code;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
-use sov_rpc_eth_types::rpc_error_with_code;
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::ops::RangeInclusive;
@@ -69,9 +69,9 @@ impl From<Error> for ErrorObjectOwned {
             | Error::InvalidCursorTxIdx { .. }
             | Error::InvalidCursorLogIdx { .. } => rpc_resource_not_found(err.to_string()),
             Error::TooManyLogsInBlock(_, _) => rpc_limit_exceeded(err.to_string()),
-            Error::PendingBlock
-            | Error::InvalidBlock(_)
-            | Error::ParseBlockNumber(_) => rpc_invalid_params(err.to_string()),
+            Error::PendingBlock | Error::InvalidBlock(_) | Error::ParseBlockNumber(_) => {
+                rpc_invalid_params(err.to_string())
+            }
         }
     }
 }
