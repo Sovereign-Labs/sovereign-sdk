@@ -1,3 +1,4 @@
+use alloy_eips::BlockId;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use reth_primitives::{TxKind, U256};
@@ -124,7 +125,7 @@ where
             max_fee_per_blob_gas: None,
             ..Default::default()
         },
-        Some("pending".to_string()),
+        Some(BlockId::pending()),
         state,
     )?;
 
