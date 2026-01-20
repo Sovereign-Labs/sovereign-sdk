@@ -75,18 +75,10 @@ where
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
     for method in [
-        "web3_clientVersion",
-        "web3_sha3",
-        "net_listening",
-        "net_peerCount",
         "eth_protocolVersion",
-        "eth_syncing",
         "eth_coinbase",
         "eth_mining",
         "eth_hashrate",
-        "eth_maxPriorityFeePerGas",
-        "eth_getBlockTransactionCountByHash",
-        "eth_getBlockTransactionCountByNumber",
         "eth_getTransactionByBlockHashAndIndex",
         "eth_getTransactionByBlockNumberAndIndex",
         "eth_getUncleCountByBlockHash",
