@@ -208,6 +208,8 @@ async fn background_header_fetch_task<Da: DaService>(
     tracing::info!(?interval, "Starting background fetcher task");
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+    let mut highest_seen_finalized_header: Option<<Da::Spec as DaSpec>::BlockHeader> = None;
+
     loop {
         // Wait for the next tick or shutdown
         match future_or_shutdown(interval.tick(), &shutdown_rx).await {
@@ -225,11 +227,31 @@ async fn background_header_fetch_task<Da: DaService>(
                         break;
                     }
                     FutureOrShutdownOutput::Output(Ok(finalized_header)) => {
-                        if finalized_sender.send(finalized_header.clone()).is_err() {
-                            tracing::info!("All DA header receivers dropped, shutting down");
-                            break;
+                        let is_received_header_valid = match highest_seen_finalized_header.as_ref()
+                        {
+                            None => true,
+                            Some(highest_seen) => {
+                                if finalized_header.height() < highest_seen.height() {
+                                    tracing::warn!(
+                                    received = %finalized_header.display(),
+                                    highest_seen = %highest_seen.display(),
+                                    "finalized header when backwards in DaService. This update won't be propagated to consumers of `DaServiceWithCachedFinalizedHeaders`");
+                                    false
+                                } else {
+                                    true
+                                }
+                            }
+                        };
+                        if is_received_header_valid {
+                            // Preventing adding rolled back finalized header
+                            if finalized_sender.send(finalized_header.clone()).is_err() {
+                                tracing::info!("All DA header receivers dropped, shutting down");
+                                break;
+                            }
+                            recent_headers.insert_new_header(finalized_header.clone());
+                            // Only update seen headers in case if it is valid (that is, higher).
+                            highest_seen_finalized_header = Some(finalized_header);
                         }
-                        recent_headers.insert_new_header(finalized_header);
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
