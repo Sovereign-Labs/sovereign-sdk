@@ -56,15 +56,13 @@ pub const EVM_MAILBOX: EthAddress = HexString([
 /// Derived from the deployer in hyperlane-cli
 /// 0x196dBCBb54b8ec4958c959D8949EBFE87aC2Aaaf
 pub const EVM_MERKLE_TREE_HOOK: EthAddress = HexString([
-    25, 109, 188, 187, 84, 184, 236, 73, 88, 201, 89, 216, 148, 158, 191, 232, 122, 194, 170,
-    175,
+    25, 109, 188, 187, 84, 184, 236, 73, 88, 201, 89, 216, 148, 158, 191, 232, 122, 194, 170, 175,
 ]);
 /// Address of the test recipient on evm counterparty chain.
 /// Derived from the deployer in hyperlane-cli
 /// 0xc6B8FBF96CF7bbE45576417EC2163AcecFA88ECC
 pub const EVM_TEST_RECIPIENT: EthAddress = HexString([
-    198, 184, 251, 249, 108, 247, 187, 228, 85, 118, 65, 126, 194, 22, 58, 206, 207, 168, 142,
-    204,
+    198, 184, 251, 249, 108, 247, 187, 228, 85, 118, 65, 126, 194, 22, 58, 206, 207, 168, 142, 204,
 ]);
 /// Fixed Eth keys created by anvil. They don't change. Each address is funded 1000ETH
 // run `docker run --rm ghcr.io/foundry-rs/foundry:v1.1.0 anvil` to see all keys
@@ -488,13 +486,7 @@ impl Hyperlane {
             } else {
                 format!("validator-{n}")
             };
-            print_logs_from_exec_result(
-                &name,
-                val,
-                std::time::Duration::from_secs(10),
-                400,
-            )
-            .await;
+            print_logs_from_exec_result(&name, val, std::time::Duration::from_secs(10), 400).await;
         }
     }
 }

@@ -84,8 +84,7 @@ async fn test_replica_start_stop() {
     };
 
     if let Some(pg_data) = &postgres {
-        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200)
-            .await;
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200).await;
     }
 
     tracing::info!("=== IN TEST: WAIT FOR EVENTS 0");
@@ -124,8 +123,7 @@ async fn test_replica_start_stop() {
 
     tracing::info!("=== IN TEST: RESTART REPLICA");
     if let Some(pg_data) = &postgres {
-        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200)
-            .await;
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200).await;
     }
 
     // Restart replica
@@ -141,8 +139,7 @@ async fn test_replica_start_stop() {
 
     tracing::info!("=== IN TEST: READING EVENTS 1");
     if let Some(pg_data) = &postgres {
-        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200)
-            .await;
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200).await;
     }
 
     {
@@ -179,8 +176,7 @@ async fn test_replica_start_stop() {
 
     tracing::info!("=== IN TEST: RESTART REPLICA AND WAIT");
     if let Some(pg_data) = &postgres {
-        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200)
-            .await;
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200).await;
     }
 
     // Restart replica and wait
@@ -202,8 +198,7 @@ async fn test_replica_start_stop() {
 
     tracing::info!("=== IN TEST: READ EVENTS AGAIN");
     if let Some(pg_data) = &postgres {
-        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200)
-            .await;
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200).await;
     }
     {
         let mut event_subscription = replica_test_rollup
@@ -238,8 +233,7 @@ async fn test_replica_start_stop() {
     }
 
     if let Some(pg_data) = &postgres {
-        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200)
-            .await;
+        sov_test_utils::docker::print_logs_from_container("postgres", &pg_data.postgres, 200).await;
     }
 
     let _ = replica_test_rollup.shutdown().await;

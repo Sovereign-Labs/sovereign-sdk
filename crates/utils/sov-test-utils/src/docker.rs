@@ -7,8 +7,7 @@ pub async fn print_logs_from_container<T>(
     name: &str,
     container: &ContainerAsync<T>,
     max_lines: usize,
-)
-where
+) where
     T: testcontainers::Image,
 {
     eprintln!("[DOCKER][{name}] container stdout:");

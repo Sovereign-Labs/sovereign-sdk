@@ -734,10 +734,8 @@ async fn regenerate_anvil_core_state() {
     let state = anvil_rpc_value(anvil_port, "anvil_dumpState", json!([])).await;
     let state_bytes = maybe_decompress_gzip(rpc_result_to_bytes(state));
 
-    std::fs::write(&temp_state_path, &state_bytes)
-        .expect("Failed to write temp anvil state");
-    std::fs::rename(&temp_state_path, &state_path)
-        .expect("Failed to persist anvil state");
+    std::fs::write(&temp_state_path, &state_bytes).expect("Failed to write temp anvil state");
+    std::fs::rename(&temp_state_path, &state_path).expect("Failed to persist anvil state");
 
     anvil.stop().await.expect("Failed to stop anvil");
 

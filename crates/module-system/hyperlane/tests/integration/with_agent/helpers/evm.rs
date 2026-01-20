@@ -1,7 +1,6 @@
 use crate::with_agent::helpers::hyperlane_cli::HyperlaneCliRunner;
 use crate::with_agent::helpers::{
-    eth_address_to_hexhash, EVM_MAILBOX, EVM_MERKLE_TREE_HOOK, EVM_TEST_RECIPIENT,
-    RELAYER_ACCOUNT,
+    eth_address_to_hexhash, EVM_MAILBOX, EVM_MERKLE_TREE_HOOK, EVM_TEST_RECIPIENT, RELAYER_ACCOUNT,
 };
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -494,10 +493,7 @@ fn encode_no_args(signature: &str) -> Vec<u8> {
 }
 
 fn is_zero_hex(value: &str) -> bool {
-    value
-        .trim_start_matches("0x")
-        .chars()
-        .all(|c| c == '0')
+    value.trim_start_matches("0x").chars().all(|c| c == '0')
 }
 
 fn encode_dispatch(domain: u32, recipient: HexHash, body: &[u8]) -> Vec<u8> {
