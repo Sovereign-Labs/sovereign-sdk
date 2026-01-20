@@ -917,6 +917,20 @@ impl<S: Spec> GasMeter for MeteredApiStateAccessor<S> {
     }
 }
 
+impl<S: Spec> VersionReader for MeteredApiStateAccessor<S> {
+    fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
+        self.api_state_accessor.max_allowed_slot_number_to_access()
+    }
+
+    fn current_visible_slot_number(&self) -> VisibleSlotNumber {
+        self.api_state_accessor.current_visible_slot_number()
+    }
+
+    fn rollup_height_to_access(&self) -> RollupHeight {
+        self.api_state_accessor.rollup_height_to_access()
+    }
+}
+
 impl<S: Spec> UniversalStateAccessor for MeteredApiStateAccessor<S> {
     fn get_size(
         &mut self,

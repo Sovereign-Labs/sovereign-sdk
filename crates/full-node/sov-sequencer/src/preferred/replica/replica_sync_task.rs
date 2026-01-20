@@ -192,6 +192,8 @@ mod tests {
     use sov_modules_api::VisibleSlotNumber;
     use sov_test_utils::postgres::config_from_postgres_container;
     use sov_test_utils::postgres::{create_postgres_container, CreatePostgresError};
+    use std::net::Ipv4Addr;
+    use std::net::SocketAddr;
     use std::sync::atomic::Ordering;
     use tokio::sync::mpsc::error::TryRecvError;
 
@@ -389,7 +391,10 @@ mod tests {
                 .await
                 .unwrap();
 
-        let db = PostgresBackend::connect(&postgres_config).await.unwrap();
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
+        let db = PostgresBackend::connect(&postgres_config, addr)
+            .await
+            .unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
         let (mut sync_task, start_replica_task_notifier) =

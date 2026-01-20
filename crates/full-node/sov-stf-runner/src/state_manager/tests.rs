@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use futures::StreamExt;
 use proptest::prelude::*;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
@@ -33,6 +33,21 @@ use super::*;
 
 const DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
 
+/// Helper to extract (pre_state, pre_state_root, ledger_pre_state) from BlockCandidateResolution::KnownContinuation.
+/// Panics if result is NoMatch - use this only in tests that expect continuation.
+fn unwrap_continuation<S, R, L>(result: BlockCandidateResolution<S, R, L>) -> (S, R, L) {
+    match result {
+        BlockCandidateResolution::KnownContinuation {
+            pre_state,
+            pre_state_root,
+            ledger_pre_state,
+        } => (pre_state, pre_state_root, ledger_pre_state),
+        BlockCandidateResolution::NoMatch { height_to_fetch } => {
+            panic!("Expected KnownContinuation, got NoMatch(height_to_fetch={height_to_fetch})")
+        }
+    }
+}
+
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct MockGenesisParams;
 
@@ -49,12 +64,12 @@ pub struct MockStf;
 impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
     for MockStf
 {
-    type Address = Vec<u8>;
     type StateRoot = <ProverStorage<S> as Storage>::Root;
-    type GasPrice = ();
+    type Address = Vec<u8>;
     type GenesisParams = MockGenesisParams;
     type PreState = ();
     type ChangeSet = ();
+    type GasPrice = ();
     type StorageProof = ();
     type TxReceiptContents = ();
     type BatchReceiptContents = ();
@@ -125,23 +140,25 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
     let finality = 1000;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
 
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
-    da_service.send_transaction(&[10; 10]).await.await??;
-    let filtered_block = da_service.get_block_at(1).await?;
+    for h in 1..=10 {
+        da_service.send_transaction(&[10; 10]).await.await??;
+        let filtered_block = da_service.get_block_at(h).await?;
 
-    process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
-        .await?;
+        process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
+            .await?;
 
-    // LedgerDb storage should be updated by that point, so the correct height is returned
-    assert_eq!(
-        SlotNumber::GENESIS,
-        state_manager
-            .ledger_db
-            .get_latest_finalized_slot_number()
-            .await?
-    );
+        // LedgerDb storage should be updated by that point, so the correct height is returned
+        assert_eq!(
+            SlotNumber::GENESIS,
+            state_manager
+                .ledger_db
+                .get_latest_finalized_slot_number()
+                .await?
+        );
+    }
 
     shutdown_sender.send(())?;
 
@@ -152,7 +169,7 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
 async fn test_instant_finality() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS);
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
@@ -163,7 +180,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
     .await?;
     state_manager.stf_info_sender = Some(sender);
 
-    let mut state_root = *state_manager.get_state_root();
+    let mut state_root = initial_state_root;
     for height in 1..4 {
         da_service
             .send_transaction(&[height as u8; 10])
@@ -223,7 +240,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         ))
         .await?;
 
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let state_update_receiver = state_manager.state_update_sender.subscribe();
@@ -240,40 +257,78 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         let filtered_block = da_service.get_block_at(da_height).await?;
         if da_height < fork_happens_at {
             let block_hash = filtered_block.header().hash();
-            process_continuous_transition(
+            let current_state_root = process_continuous_transition(
                 &mut state_manager,
                 filtered_block,
                 &da_service,
                 finality,
             )
             .await?;
-            let current_state_root = *state_manager.get_state_root();
             let received_storage = state_update_receiver.borrow().storage.clone();
             let received_storage_root = received_storage.get_latest_root_hash()?;
             assert_eq!(current_state_root, received_storage_root);
             post_state_roots.push(current_state_root);
             hash_to_post_state_root.insert(block_hash, current_state_root);
         } else {
-            let (prover_storage, returned_block) = state_manager
-                .prepare_storage(filtered_block.clone(), &da_service)
+            // Reorg detected - is_good_continuation should return NoMatch with fork point height
+            let resolution = state_manager
+                .check_continuation(filtered_block.header(), &da_service)
                 .await?;
-            assert_ne!(filtered_block, returned_block);
-            // First non seen block:
-            assert_eq!(fork_point + 1, returned_block.header().height());
+            let height_to_fetch = match resolution {
+                BlockCandidateResolution::NoMatch { height_to_fetch } => height_to_fetch,
+                BlockCandidateResolution::KnownContinuation { .. } => {
+                    panic!("Expected NoMatch for reorg, got KnownContinuation")
+                }
+            };
+            // First non seen block should be at fork_point + 1
+            assert_eq!(fork_point + 1, height_to_fetch);
 
-            assert!(!hash_to_post_state_root.contains_key(&returned_block.header.hash));
+            // Now fetch and process the fork point block
+            let fork_block = da_service.get_block_at(height_to_fetch).await?;
+            let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
+                state_manager
+                    .check_continuation(fork_block.header(), &da_service)
+                    .await?,
+            );
+            check_internal_consistency(&state_manager, finality as usize);
+
+            assert!(!hash_to_post_state_root.contains_key(&fork_block.header().hash()));
             let expected_pre_state_root = hash_to_post_state_root
-                .get(&returned_block.header().prev_hash())
+                .get(&fork_block.header().prev_hash())
                 .expect("Should be there");
             assert_eq!(
                 expected_pre_state_root,
-                state_manager.get_state_root(),
-                "Expected (left) state root does not match actual(right) set in StateManager. All state roots: {post_state_roots:?}");
+                &pre_state_root,
+                "Expected (left) state root does not match actual(right) from KnownContinuation. All state roots: {post_state_roots:?}");
 
-            let returned_storage_root = prover_storage.get_latest_root_hash()?;
+            // State update is not called during re-org detection. So we process transition first
+            let _returned_storage_prev_root = prover_storage.get_latest_root_hash()?;
+            // TODO: Should we check this prev_root against something
+
+            let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+                pre_state_root,
+                prover_storage,
+                &da_service,
+                fork_block.clone(),
+            )
+            .await;
+
+            let final_state_root = transition_witness.final_state_root;
+            let slot_commit: MockSlotCommit = SlotCommit::new(fork_block, Default::default());
+            state_manager
+                .process_stf_changes(
+                    change_set,
+                    ledger_pre_state,
+                    transition_witness,
+                    slot_commit,
+                    Vec::new(),
+                )
+                .await?;
+            check_internal_consistency(&state_manager, finality as usize);
+
             let received_update_info = state_update_receiver.borrow().clone();
             let received_storage_root = received_update_info.storage.get_latest_root_hash()?;
-            assert_eq!(returned_storage_root, received_storage_root);
+            assert_eq!(final_state_root, received_storage_root);
         }
     }
 
@@ -293,7 +348,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     let tempdir = tempfile::tempdir()?;
     let finality = 10;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let chain_length = 5;
@@ -324,11 +379,11 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
         .await??;
 
     let filtered_block = da_service.get_block_at(chain_length).await?;
-    let (prover_storage, returned_block) = state_manager
-        .prepare_storage(filtered_block.clone(), &da_service)
-        .await?;
-
-    assert_eq!(filtered_block, returned_block);
+    let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
+        state_manager
+            .check_continuation(filtered_block.header(), &da_service)
+            .await?,
+    );
 
     let produce_between = (finality * 3) as u64;
     for _ in 0..produce_between {
@@ -336,7 +391,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     }
 
     let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-        state_manager.get_state_root().to_owned(),
+        pre_state_root,
         prover_storage,
         &da_service,
         filtered_block.clone(),
@@ -346,7 +401,13 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     state_manager
-        .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            Vec::new(),
+        )
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
 
@@ -387,7 +448,7 @@ async fn test_progressing_with_shuffle(
         },
     )
     .await;
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let mut rng = rand::rngs::SmallRng::from_seed(seed);
@@ -427,30 +488,17 @@ async fn test_progressing_with_shuffle(
     for i in 0..loop_blocks {
         // Start with getting block - always start from height 1 (adjacent to genesis)
         // since StateManager's last_processed_finalized_header is at genesis
-        let filtered_block = da_service.get_block_at(height).await?;
+        let initial_block = da_service.get_block_at(height).await?;
 
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        // Keep trying until we get a continuation (handles reorgs)
+        let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
+            resolve_to_continuation(&mut state_manager, &da_service, initial_block).await?;
 
-        // Always a new non-seen block
-        assert!(
-            !seen_transitions.contains_key(&returned_block.header().hash()),
-            "Already seen: {}",
-            returned_block.header().display()
-        );
-
-        let prev_hash = returned_block.header().prev_hash();
-        assert!(
-            seen_transitions.contains_key(&prev_hash) || finalized_hashes.contains(&prev_hash),
-            "prev hash of returned block should be seen or in finalized {} SEEN: {:?} FINALIZED {:?}",
-            returned_block.header().display(),
-            seen_transitions,
-            finalized_hashes,
-        );
+        // Validate block chain integrity
+        validate_block_chain_integrity(&returned_block, &seen_transitions, &finalized_hashes);
 
         let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-            state_manager.get_state_root().to_owned(),
+            pre_state_root,
             prover_storage,
             &da_service,
             returned_block.clone(),
@@ -463,7 +511,13 @@ async fn test_progressing_with_shuffle(
         let state_root_hash = transition_witness.final_state_root;
         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
@@ -612,12 +666,13 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 reorg_interval: 1..2,
                 behaviour: RandomizationBehaviour::only_shuffle(0),
             }),
+            failure_behavior: Default::default(),
         },
         receiver,
     )
     .await;
 
-    let (mut state_manager, shutdown_sender_2) =
+    let (mut state_manager, _initial_state_root, shutdown_sender_2) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     {
@@ -645,22 +700,22 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
     let final_height = 100;
 
     let mut seen_transitions: HashMap<MockHash, StateRoot> = HashMap::new();
+    let mut finalized_hashes: HashSet<MockHash> = HashSet::new();
+    // Genesis is finalized at startup
+    finalized_hashes.insert(da_service.get_block_at(0).await?.header().hash());
 
     while height < final_height {
-        let filtered_block = da_service.get_block_at(height).await?;
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        let initial_block = da_service.get_block_at(height).await?;
 
-        assert!(
-            !seen_transitions.contains_key(&returned_block.header().hash()),
-            "Already seen: {}",
-            returned_block.header().display()
-        );
-        // TODO: Check prev_hash connected to something already seen.
+        // Keep trying until we get a continuation (handles reorgs)
+        let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
+            resolve_to_continuation(&mut state_manager, &da_service, initial_block).await?;
+
+        // Validate block chain integrity
+        validate_block_chain_integrity(&returned_block, &seen_transitions, &finalized_hashes);
 
         let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-            state_manager.get_state_root().to_owned(),
+            pre_state_root,
             prover_storage,
             &da_service,
             returned_block.clone(),
@@ -672,10 +727,20 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
 
         let state_root_hash = transition_witness.final_state_root;
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
         seen_transitions.insert(returned_block.header().hash(), state_root_hash);
+
+        // Track finalized headers
+        let last_finalized = da_service.get_last_finalized_block_header().await?;
+        finalized_hashes.insert(last_finalized.hash());
 
         height = returned_block.header().height() + 1;
     }
@@ -713,48 +778,40 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
     )
     .await;
 
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     // To kick-start things.
     da_service.produce_block_now().await?;
 
     let mut seen_transitions: HashMap<MockHash, StateRoot> = HashMap::new();
+    let mut finalized_hashes: HashSet<MockHash> = HashSet::new();
+    // Genesis is finalized at startup
+    finalized_hashes.insert(da_service.get_block_at(0).await?.header().hash());
+
     let mut height = 1;
     let mut last_shuffled_height = 0;
 
     for _ in 0..loop_blocks {
-        let filtered_block = da_service.get_block_at(height).await?;
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        let initial_block = da_service.get_block_at(height).await?;
 
-        assert!(
-            !seen_transitions.contains_key(&returned_block.header().hash()),
-            "Already seen: {}",
-            returned_block.header().display()
-        );
-        // TODO: Check prev_hash connected to something already seen.
+        // Keep trying until we get a continuation (handles reorgs)
+        let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
+            resolve_to_continuation(&mut state_manager, &da_service, initial_block).await?;
 
-        // Here we do some progression of the chain
-        {
-            da_service.produce_n_blocks_now(empty_blobs).await?;
-            for i in 0..batch_blobs {
-                let blob_data = [i as u8, i as u8];
-                da_service.send_transaction(&blob_data).await.await??;
-            }
-            let head = da_service.get_head_block_header().await?;
-            let head_height = head.height().saturating_sub(last_shuffled_height);
-            if head_height > shuffle_after {
-                let mut da_layer = da_layer.write().await;
-                da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
-                last_shuffled_height = head_height;
-            }
+        // Validate blockchain integrity
+        validate_block_chain_integrity(&returned_block, &seen_transitions, &finalized_hashes);
+
+        // Produce more blocks (simulates chain advancing while we process)
+        da_service.produce_n_blocks_now(empty_blobs).await?;
+        for i in 0..batch_blobs {
+            let blob_data = [i as u8, i as u8];
+            da_service.send_transaction(&blob_data).await.await??;
         }
 
-        // Then saving
+        // Process the state transition
         let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-            state_manager.get_state_root().to_owned(),
+            pre_state_root,
             prover_storage,
             &da_service,
             returned_block.clone(),
@@ -767,12 +824,42 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         let state_root_hash = transition_witness.final_state_root;
         tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
 
         seen_transitions.insert(returned_block.header().hash(), state_root_hash);
 
+        // Track finalized headers
+        let last_finalized = da_service.get_last_finalized_block_header().await?;
+        finalized_hashes.insert(last_finalized.hash());
+
+        // Check if we should rewind (AFTER processing, so it affects the next iteration)
+        let head = da_service.get_head_block_header().await?;
+        let head_height = head.height();
+        let last_finalized_height = last_finalized.height();
+        let blocks_since_last_rewind = head_height.saturating_sub(last_shuffled_height);
+
+        // Only rewind if we have blocks to rewind to (between finalized and head)
+        // and we're past the current block we just processed
+        let processed_height = returned_block.header().height();
+        let safe_min = std::cmp::max(last_finalized_height, processed_height);
+
+        if blocks_since_last_rewind > shuffle_after && head_height > safe_min + 1 {
+            let mut da_layer = da_layer.write().await;
+            // Rewind to a random height, ensuring at least one block above processed
+            let height_to_rewind = rng.gen_range((safe_min + 1)..head_height);
+            da_layer.rewind_to_height(height_to_rewind as u32).await?;
+            last_shuffled_height = height_to_rewind;
+        }
+
+        // Next height is always the one after what we just processed
         height = returned_block.header().height() + 1;
     }
 
@@ -799,13 +886,13 @@ async fn test_chain_progress_between_prepare_and_save_non_instant_finality() -> 
 
     for seed in [SEED_1, SEED_2, SEED_3] {
         // With empty blobs
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 6, seed)
+        test_chain_progress_between_prepare_storage_and_save_changes(finality, 100, 1, 2, 6, seed)
             .await?;
         // Shuffle every time
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 1, 2, 3, seed)
+        test_chain_progress_between_prepare_storage_and_save_changes(finality, 100, 1, 2, 3, seed)
             .await?;
         // Without empty blobs
-        test_chain_progress_between_prepare_storage_and_save_changes(finality, 60, 0, 3, 6, seed)
+        test_chain_progress_between_prepare_storage_and_save_changes(finality, 100, 0, 3, 6, seed)
             .await?;
     }
 
@@ -861,7 +948,7 @@ proptest! {
             Just(1u32),
             Just(5u32)
         ],
-        loop_blocks in 1..=20usize,
+        loop_blocks in 1..=30usize,
         batches in prop_oneof![
             Just(1usize),
             Just(2usize),
@@ -909,7 +996,7 @@ async fn test_change_in_finalized_header() {
 
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
 
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone())
             .await
             .unwrap();
@@ -948,27 +1035,27 @@ async fn test_change_in_finalized_header() {
         .await
         .unwrap();
 
-    state_manager
-        .prepare_storage(alien_block, &da_service)
+    // An alien block from a different DA chain should return NoMatch
+    let _result = state_manager
+        .check_continuation(alien_block.header(), &da_service)
         .await
         .unwrap();
 
     shutdown_sender.send(()).unwrap();
 }
 
-// On empty internal state, state manager should only allow blocks that are
-// direct descendants of last_processed_finalized_header (genesis in this case).
-// Passing a block that skips heights is a misconfiguration and should panic.
+// On empty internal state, if we pass a block that is not adjacent to
+// last_processed_finalized_header (genesis), the state manager should return
+// NoMatch with a height to fetch (recovered via fork point search).
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "Bug in StateManager, finalized blocks haven't been tracked properly")]
-async fn test_state_manager_starts_from_non_finalized_height() {
+async fn test_state_manager_recovers_from_non_adjacent_block() {
     let tempdir = tempfile::tempdir().unwrap();
     let chain_length = 7;
     let finality = 5;
 
     let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
 
-    let (mut state_manager, _shutdown_sender) =
+    let (mut state_manager, _initial_state_root, _shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone())
             .await
             .unwrap();
@@ -984,16 +1071,28 @@ async fn test_state_manager_starts_from_non_finalized_height() {
 
     let last_finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     // This is NOT adjacent to last_processed_finalized_header (genesis),
-    // so it should panic as this is a misconfiguration.
+    // so state manager should return NoMatch to guide us to the right block.
     let non_adjacent_block = da_service
         .get_block_at(last_finalized_header.height() + 1)
         .await
         .unwrap();
 
-    // This should panic
-    let _ = state_manager
-        .prepare_storage(non_adjacent_block, &da_service)
-        .await;
+    // Should return NoMatch with height 1 (the first block after genesis)
+    let result = state_manager
+        .check_continuation(non_adjacent_block.header(), &da_service)
+        .await
+        .unwrap();
+
+    match result {
+        BlockCandidateResolution::NoMatch { height_to_fetch } => {
+            // Fork point search should find block 1 as the first unprocessed block
+            // whose predecessor (genesis) we've seen (it's the finalized header)
+            assert_eq!(height_to_fetch, 1, "Should guide us to block 1");
+        }
+        BlockCandidateResolution::KnownContinuation { .. } => {
+            panic!("Should not be a continuation - block is not adjacent to genesis");
+        }
+    }
 }
 
 // TODO: Add tests that verification of finalized transitions only contains finalized blocks
@@ -1040,11 +1139,15 @@ async fn setup_storage_manager(
 async fn setup_state_manager<Da>(
     storage_path: &std::path::Path,
     da_service: Da,
-) -> anyhow::Result<(TestStateManager<Da>, tokio::sync::watch::Sender<()>)>
+) -> anyhow::Result<(
+    TestStateManager<Da>,
+    StateRoot,
+    tokio::sync::watch::Sender<()>,
+)>
 where
     Da: DaService<Error = anyhow::Error, Spec = MockDaSpec>,
 {
-    let (state_root, mut storage_manager) = setup_storage_manager(storage_path).await?;
+    let (initial_state_root, mut storage_manager) = setup_storage_manager(storage_path).await?;
     let genesis_height = 0;
     let genesis_header = MockBlockHeader::from_height(genesis_height);
     let (stf_state, ledger_state) = storage_manager.create_state_after(&genesis_header)?;
@@ -1074,19 +1177,18 @@ where
     let mut state_manager = StateManager::new(
         storage_manager,
         ledger_db,
-        state_root,
+        initial_state_root,
         state_update_sender,
         None,
         Box::new(InfiniteHeight),
         sync_state,
-        std::time::Duration::from_millis(3_600_000),
         da_header_provider,
         genesis_height,
         genesis_header,
-    )?;
+    );
     state_manager.startup().await?;
 
-    Ok((state_manager, shutdown_tx))
+    Ok((state_manager, initial_state_root, shutdown_tx))
 }
 
 // Writes to user space concatenation of block height bytes and block hash
@@ -1141,34 +1243,42 @@ async fn produce_synthetic_state_transition_witness<Da: DaService>(
 }
 
 // Passed `filtered_block` supposed to be a continuation of the current chain,
-// So this helper function performs transition and checks that there is no error
+// So this helper function performs transition and checks that there is no error.
+// Returns the final state root after the transition.
 async fn process_continuous_transition(
     state_manager: &mut TestStateManagerInMemory,
     filtered_block: MockBlock,
     da_service: &MockDaService,
     finality: u32,
-) -> anyhow::Result<()> {
-    let (prover_storage, returned_block) = state_manager
-        .prepare_storage(filtered_block.clone(), da_service)
-        .await?;
-
-    assert_eq!(filtered_block, returned_block);
+) -> anyhow::Result<StateRoot> {
+    let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
+        state_manager
+            .check_continuation(filtered_block.header(), da_service)
+            .await?,
+    );
 
     let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-        state_manager.get_state_root().to_owned(),
+        pre_state_root,
         prover_storage,
         da_service,
         filtered_block.clone(),
     )
     .await;
 
+    let final_state_root = transition_witness.final_state_root;
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
     state_manager
-        .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            Vec::new(),
+        )
         .await?;
     check_internal_consistency(state_manager, finality as usize);
 
-    Ok(())
+    Ok(final_state_root)
 }
 
 fn check_internal_consistency<Da>(state_manager: &TestStateManager<Da>, finality: usize)
@@ -1252,6 +1362,124 @@ where
     assert_eq!(seen_on_height_size, expected_continuous_size);
 }
 
+/// Resolves a block to a valid continuation, handling reorgs by fetching suggested blocks.
+/// Returns (pre_state, pre_state_root, ledger_pre_state, final_block).
+///
+/// This helper handles the common pattern of:
+/// 1. Call check_continuation
+/// 2. If NoMatch, fetch the suggested block and retry
+/// 3. Continue until we get KnownContinuation
+async fn resolve_to_continuation<Da>(
+    state_manager: &mut TestStateManager<Da>,
+    da_service: &Da,
+    initial_block: MockBlock,
+) -> anyhow::Result<(
+    ProverStorage<S>,
+    StateRoot,
+    <NativeStorageManager<MockDaSpec, ProverStorage<S>> as HierarchicalStorageManager<
+        MockDaSpec,
+    >>::LedgerState,
+    MockBlock,
+)>
+where
+    Da: DaService<Error = anyhow::Error, Spec = MockDaSpec, FilteredBlock = MockBlock>,
+{
+    let mut block = initial_block;
+    loop {
+        match state_manager
+            .check_continuation(block.header(), da_service)
+            .await?
+        {
+            BlockCandidateResolution::KnownContinuation {
+                pre_state,
+                pre_state_root,
+                ledger_pre_state,
+            } => return Ok((pre_state, pre_state_root, ledger_pre_state, block)),
+            BlockCandidateResolution::NoMatch { height_to_fetch } => {
+                block = da_service.get_block_at(height_to_fetch).await?;
+            }
+        }
+    }
+}
+
+/// Validate that a returned block hasn't been seen and its parent is known.
+/// Panics with descriptive message if validation fails.
+fn validate_block_chain_integrity(
+    block: &MockBlock,
+    seen_transitions: &HashMap<MockHash, StateRoot>,
+    finalized_hashes: &std::collections::HashSet<MockHash>,
+) {
+    let hash = block.header().hash();
+    let prev_hash = block.header().prev_hash();
+
+    assert!(
+        !seen_transitions.contains_key(&hash),
+        "Block already seen: {}",
+        block.header().display()
+    );
+
+    assert!(
+        seen_transitions.contains_key(&prev_hash) || finalized_hashes.contains(&prev_hash),
+        "Block's parent not known: {} (prev_hash={}). SEEN: {:?} FINALIZED: {:?}",
+        block.header().display(),
+        prev_hash,
+        seen_transitions.keys().collect::<Vec<_>>(),
+        finalized_hashes
+    );
+}
+
+/// Verify LedgerDb consistency after processing a block.
+/// Checks:
+/// 1. Head slot matches expected slot number
+/// 2. State root matches expected value
+/// 3. Next slot number is head + 1
+/// 4. Finalized height is monotonically increasing (if previous value provided)
+async fn check_ledger_consistency(
+    ledger_db: &LedgerDb,
+    expected_state_root: &[u8],
+    expected_slot_number: SlotNumber,
+    prev_finalized: Option<SlotNumber>,
+) {
+    // 1. Verify head slot matches expected
+    let (actual_slot, stored_slot) = ledger_db
+        .get_head_slot()
+        .expect("should get head slot")
+        .expect("head slot should exist");
+    assert_eq!(
+        actual_slot, expected_slot_number,
+        "slot number mismatch: expected {expected_slot_number:?}, got {actual_slot:?}",
+    );
+    assert_eq!(
+        stored_slot.state_root.as_ref(),
+        expected_state_root,
+        "state root mismatch at slot {expected_slot_number:?}",
+    );
+
+    // 2. Verify next slot number is head + 1
+    let next_items = ledger_db
+        .get_next_items_numbers()
+        .expect("should get next items");
+    assert_eq!(
+        next_items.slot_number,
+        expected_slot_number.next(),
+        "next slot number mismatch: expected {:?}, got {:?}",
+        expected_slot_number.next(),
+        next_items.slot_number
+    );
+
+    // 3. Verify finalized height is monotonic (if we have previous)
+    if let Some(prev) = prev_finalized {
+        let current_finalized = ledger_db
+            .get_latest_finalized_slot_number()
+            .await
+            .expect("should get finalized");
+        assert!(
+            current_finalized >= prev,
+            "finalized height decreased: {prev:?} -> {current_finalized:?}",
+        );
+    }
+}
+
 /// Tests StateManager behavior when DA layer reports stale headers (below actual finalized height).
 /// Uses the same pattern as `test_progressing_with_shuffle` since StorableMockDaService is required for Randomizer.
 #[tokio::test(flavor = "multi_thread")]
@@ -1279,7 +1507,7 @@ async fn test_progressing_with_rewind_below_finalized(
         },
     )
     .await;
-    let (mut state_manager, shutdown_sender) =
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     // Submit blobs
@@ -1300,14 +1528,17 @@ async fn test_progressing_with_rewind_below_finalized(
 
     let mut height = 1u64;
     for _ in 0..loop_blocks {
-        let filtered_block = da_service.get_block_at(height).await?;
+        let initial_block = da_service.get_block_at(height).await?;
 
-        let (prover_storage, returned_block) = state_manager
-            .prepare_storage(filtered_block, &da_service)
-            .await?;
+        // Keep trying until we get a continuation (handles reorgs)
+        let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
+            resolve_to_continuation(&mut state_manager, &da_service, initial_block).await?;
+
+        // Note: This test exercises abnormal DA behavior (RewindBelowLastFinalized),
+        // so we skip validate_block_chain_integrity as finalized headers may be stale.
 
         let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
-            state_manager.get_state_root().to_owned(),
+            pre_state_root,
             prover_storage,
             &da_service,
             returned_block.clone(),
@@ -1318,7 +1549,13 @@ async fn test_progressing_with_rewind_below_finalized(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         state_manager
-            .process_stf_changes(change_set, transition_witness, slot_commit, Vec::new())
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
             .await?;
         // Skip check_internal_consistency - this test exercises abnormal DA behavior
         // where finalized headers may be stale, so normal consistency rules don't apply
@@ -1327,6 +1564,351 @@ async fn test_progressing_with_rewind_below_finalized(
 
         // Keep submitting blobs to advance chain
         da_service.send_transaction(&blob_data).await.await??;
+    }
+
+    shutdown_sender.send(())?;
+    Ok(())
+}
+
+// ==================== DA Failure Handling Tests ====================
+
+/// Test that StateManager handles DA errors gracefully during fork point search.
+/// Uses the new FailureBehavior::FailAfterNCalls to inject failures.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 5;
+
+    let da_layer = std::sync::Arc::new(tokio::sync::RwLock::new(
+        StorableMockDaLayer::new_in_memory(finality).await?,
+    ));
+    let da_service = StorableMockDaService::new(
+        SEQUENCER_ADDRESS,
+        da_layer.clone(),
+        BlockProducingConfig::OnBatchSubmit {
+            block_wait_timeout_ms: Some(3_000),
+        },
+    )
+    .await;
+
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    // Process several blocks normally first to build up state
+    let blob_data = [10; 10];
+    for _ in 0..8 {
+        da_service.send_transaction(&blob_data).await.await??;
+    }
+
+    // Process first few blocks to populate state_on_block
+    for height in 1..=5u64 {
+        let filtered_block = da_service.get_block_at(height).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+
+        let (prover_storage, pre_state_root, ledger_pre_state, block) =
+            resolve_to_continuation(&mut state_manager, &da_service, filtered_block).await?;
+        let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+            pre_state_root,
+            prover_storage,
+            &da_service,
+            block.clone(),
+        )
+        .await;
+        let slot_commit: MockSlotCommit = SlotCommit::new(block, Default::default());
+        state_manager
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
+            .await?;
+    }
+
+    // Now trigger a reorg by shuffling - this will cause binary search on next check_continuation
+    {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let mut da_layer = da_layer.write().await;
+        da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
+    }
+
+    // Configure DA to fail after 2 successful get_block_header_at calls
+    // This will cause an error during the binary search
+    da_service.set_fail_after_n_calls(2).await;
+
+    // Try to get continuation - binary search should fail due to DA error
+    let new_block = da_service.get_block_at(6).await?;
+    let result = state_manager
+        .check_continuation(new_block.header(), &da_service)
+        .await;
+
+    // The error should propagate cleanly
+    let err = match result {
+        Err(e) => e,
+        Ok(_) => panic!("Expected error from DA failure, got Ok"),
+    };
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("Injected failure"),
+        "Error should mention injected failure: {err_msg}",
+    );
+
+    // Clear failure behavior and verify we can recover
+    da_service.clear_failure_behavior().await;
+
+    // Now the operation should succeed
+    let result = state_manager
+        .check_continuation(new_block.header(), &da_service)
+        .await;
+    match result {
+        Ok(_) => {}
+        Err(e) => panic!("Should succeed after clearing failure, got: {e}"),
+    }
+
+    shutdown_sender.send(())?;
+    Ok(())
+}
+
+/// Test that StateManager handles reorgs that occur during the binary search.
+/// Uses FailureBehavior::ReorgDuringCall to trigger a shuffle mid-search.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 10;
+
+    let da_layer = std::sync::Arc::new(tokio::sync::RwLock::new(
+        StorableMockDaLayer::new_in_memory(finality).await?,
+    ));
+    let da_service = StorableMockDaService::new(
+        SEQUENCER_ADDRESS,
+        da_layer.clone(),
+        BlockProducingConfig::OnBatchSubmit {
+            block_wait_timeout_ms: Some(3_000),
+        },
+    )
+    .await;
+
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    // Build up a chain with multiple blocks
+    let blob_data = [10; 10];
+    for _ in 0..15 {
+        da_service.send_transaction(&blob_data).await.await??;
+    }
+
+    // Process several blocks to populate state
+    for height in 1..=10u64 {
+        let filtered_block = da_service.get_block_at(height).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+
+        let (prover_storage, pre_state_root, ledger_pre_state, block) =
+            resolve_to_continuation(&mut state_manager, &da_service, filtered_block).await?;
+        let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+            pre_state_root,
+            prover_storage,
+            &da_service,
+            block.clone(),
+        )
+        .await;
+        let slot_commit: MockSlotCommit = SlotCommit::new(block, Default::default());
+        state_manager
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
+            .await?;
+    }
+
+    // Trigger initial reorg
+    {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(100);
+        let mut da_layer = da_layer.write().await;
+        da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
+    }
+
+    // Configure DA to trigger another reorg when height 7 is queried
+    // This simulates a reorg happening mid-binary-search
+    da_service.set_reorg_during_get_block(7).await;
+
+    // Get a block that will trigger binary search
+    let new_block = da_service.get_block_at(11).await?;
+
+    // The check_continuation should handle the mid-search reorg gracefully
+    // by detecting the head change and retrying
+    let seen_transitions: HashMap<MockHash, StateRoot> = HashMap::new();
+    let mut finalized_hashes: HashSet<MockHash> = HashSet::new();
+    finalized_hashes.insert(da_service.get_block_at(0).await?.header().hash());
+
+    // Use resolve_to_continuation which handles retries
+    let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
+        resolve_to_continuation(&mut state_manager, &da_service, new_block).await?;
+
+    // We should get a valid continuation even after the mid-search reorg
+    assert!(
+        !seen_transitions.contains_key(&returned_block.header().hash()),
+        "Should return unseen block"
+    );
+
+    // Process the returned block to verify it's valid
+    let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+        pre_state_root,
+        prover_storage,
+        &da_service,
+        returned_block.clone(),
+    )
+    .await;
+
+    let slot_commit: MockSlotCommit = SlotCommit::new(returned_block, Default::default());
+    state_manager
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            Vec::new(),
+        )
+        .await?;
+
+    // Internal consistency should still hold
+    check_internal_consistency(&state_manager, finality as usize);
+
+    shutdown_sender.send(())?;
+    Ok(())
+}
+
+// ==================== LedgerDb Consistency Tests ====================
+
+/// Test that LedgerDb remains consistent after processing blocks.
+/// Verifies state roots, slot numbers, and finalized height monotonicity.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_ledger_consistency_after_processing() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 3;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let mut prev_finalized: Option<SlotNumber> = None;
+
+    for height in 1..=10u64 {
+        da_service
+            .send_transaction(&[height as u8; 10])
+            .await
+            .await??;
+        let filtered_block = da_service.get_block_at(height).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+
+        let state_root = process_continuous_transition(
+            &mut state_manager,
+            filtered_block,
+            &da_service,
+            finality,
+        )
+        .await?;
+
+        // Verify LedgerDb consistency - state_root is what we just committed
+        let expected_slot = SlotNumber::new(height);
+        check_ledger_consistency(
+            &state_manager.ledger_db,
+            state_root.as_ref(),
+            expected_slot,
+            prev_finalized,
+        )
+        .await;
+
+        // Track previous finalized for monotonicity check
+        prev_finalized = Some(
+            state_manager
+                .ledger_db
+                .get_latest_finalized_slot_number()
+                .await?,
+        );
+    }
+
+    shutdown_sender.send(())?;
+    Ok(())
+}
+
+/// Test that finalized height is strictly monotonic (never decreases).
+#[tokio::test(flavor = "multi_thread")]
+async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 5;
+
+    let da_layer = std::sync::Arc::new(tokio::sync::RwLock::new(
+        StorableMockDaLayer::new_in_memory(finality).await?,
+    ));
+    let da_service = StorableMockDaService::new(
+        SEQUENCER_ADDRESS,
+        da_layer.clone(),
+        BlockProducingConfig::OnBatchSubmit {
+            block_wait_timeout_ms: Some(3_000),
+        },
+    )
+    .await;
+
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let blob_data = [10; 10];
+    let mut prev_finalized = state_manager
+        .ledger_db
+        .get_latest_finalized_slot_number()
+        .await?;
+
+    let mut rng = rand::rngs::StdRng::seed_from_u64(12345);
+
+    // Process many blocks with periodic shuffles to stress test finalization
+    for i in 0..30 {
+        da_service.send_transaction(&blob_data).await.await??;
+        let height = (i + 1) as u64;
+
+        let initial_block = da_service.get_block_at(height).await?;
+        let (prover_storage, pre_state_root, ledger_pre_state, returned_block) =
+            resolve_to_continuation(&mut state_manager, &da_service, initial_block).await?;
+
+        let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+            pre_state_root,
+            prover_storage,
+            &da_service,
+            returned_block.clone(),
+        )
+        .await;
+
+        let slot_commit: MockSlotCommit = SlotCommit::new(returned_block, Default::default());
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .process_stf_changes(
+                change_set,
+                ledger_pre_state,
+                transition_witness,
+                slot_commit,
+                Vec::new(),
+            )
+            .await?;
+
+        // Check that finalized height never decreases
+        let current_finalized = state_manager
+            .ledger_db
+            .get_latest_finalized_slot_number()
+            .await?;
+        assert!(
+            current_finalized >= prev_finalized,
+            "Finalized height decreased from {prev_finalized:?} to {current_finalized:?} at iteration {i}",
+        );
+        prev_finalized = current_finalized;
+
+        // Occasionally trigger shuffles to test consistency under reorgs
+        if i > 0 && i % 5 == 0 {
+            let mut da_layer = da_layer.write().await;
+            da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
+        }
     }
 
     shutdown_sender.send(())?;

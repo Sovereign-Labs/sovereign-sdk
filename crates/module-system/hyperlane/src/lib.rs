@@ -104,6 +104,10 @@ pub struct Mailbox<S: Spec, R: Recipient<S>> {
     #[module]
     pub recipients: R,
 
+    /// The number of successful deliveries.
+    #[state]
+    pub deliveries_count: StateValue<u64>,
+
     #[phantom]
     phantom: std::marker::PhantomData<S>,
 }
