@@ -30,7 +30,11 @@ use std::ops::DerefMut;
 const METHOD_NOT_SUPPORTED_CODE: i32 = -32004;
 
 fn method_not_supported(method: &'static str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(METHOD_NOT_SUPPORTED_CODE, "Method not supported", Some(method))
+    ErrorObjectOwned::owned(
+        METHOD_NOT_SUPPORTED_CODE,
+        "Method not supported",
+        Some(method),
+    )
 }
 
 #[rpc_gen(client, server)]
