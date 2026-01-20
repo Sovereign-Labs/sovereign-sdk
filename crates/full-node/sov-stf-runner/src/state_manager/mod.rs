@@ -888,7 +888,9 @@ where
 
         if last_finalized_header.height() > highest_seen_transition {
             // Syncing case: DA is ahead of us
-            // TODO: PROBLEM: THIS RETURNED BLOCK CAN BE SOMETHING COMPLETELY WRONG AND NOT FINALIZED.
+            // TODO: PROBLEM. This can return orphaned (non-finalized) block if:
+            //   - we are on chain with reorgs.
+            //   - connected RPC node has been switched abruptly between call to `get_last_finalized_block` and now is on part of the chain that is out of sync.
             Ok(self
                 .finalized_headers_provider
                 .get_block_header_at(highest_seen_transition)
