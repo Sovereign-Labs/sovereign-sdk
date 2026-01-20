@@ -604,6 +604,7 @@ where
         reason: &'static str,
     ) -> anyhow::Result<ProcessFinalCatchupData> {
         let mut inner = self.get_inner_with_timing(reason).await;
+        let tx_cache_writer = inner.tx_cache_writer.clone();
         // Some events might come in while we're waiting to grab the lock.
         // Replay them.
         while let Ok(event) = db_event_subscription.try_recv() {
@@ -614,6 +615,7 @@ where
 
             do_next_event(
                 &mut executor,
+                &tx_cache_writer,
                 event,
                 &mut data.batches_count,
                 &mut data.transactions_count,

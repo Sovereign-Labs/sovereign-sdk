@@ -424,7 +424,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Done replaying txs");
 
         if !batch.is_in_progress {
-            self.end_rollup_block().await;
+            let _ = self.end_rollup_block().await;
         } else {
             trace!("The batch is still in progress; will keep the background task running");
         }
@@ -751,7 +751,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    pub async fn end_rollup_block(&mut self) {
+    #[must_use]
+    /// Closes the current batch and returns confirmations for all of the non-preferred txs included in the batch.
+    pub async fn end_rollup_block(&mut self) -> Vec<AcceptedTx<Confirmation<S, Rt>>> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
@@ -763,7 +765,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .await
             .expect("Error while shutting down in-progress rollup block, nothing to do. This is a bug, please report it");
 
-        let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
+        let mut forced_txs = Vec::new();
         let mut saw_non_preferred_batch = false;
         for batch_receipt in batch_receipts {
             // We already increment the event number for our own transactions
@@ -772,12 +774,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 continue;
             }
             saw_non_preferred_batch = true;
-            let mut accepted_txs = Vec::with_capacity(batch_receipt.tx_receipts.len());
             for tx_receipt in batch_receipt.tx_receipts {
                 let accepted_tx = self.process_tx_receipt(&tx_receipt);
-                accepted_txs.push(accepted_tx);
+                forced_txs.push(accepted_tx);
             }
-            accepted_txs_by_batch.push(accepted_txs);
         }
         if saw_non_preferred_batch {
             let _ = self
@@ -821,6 +821,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         trace!(%rollup_height, "Successfully ended rollup block");
+        forced_txs
     }
 }
 

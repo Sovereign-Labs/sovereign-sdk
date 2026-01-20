@@ -5,6 +5,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_state::{NativeStorage, Storage};
 
 use crate::metrics::PreferredSequencerUpdateStateMetrics;
+use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
     get_next_sequence_number_according_to_node, DbEvent, FetchBatches, Flow,
     PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
@@ -50,6 +51,7 @@ where
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
         // Total time to update the state for `replay_soft_confirmations_on_top_of_node_stat`e, including time spent in the `Message` channel.
         let mut total_message_processing_duration = std::time::Duration::ZERO;
+        let tx_cache_writer = self.transaction_cache.write_handle();
 
         // Now that we're not locking on the sequencer state anymore, we can replay all the batches.
 
@@ -148,6 +150,7 @@ where
             let event = db_event_subscription.try_recv().unwrap();
             do_next_event(
                 &mut executor,
+                &tx_cache_writer,
                 event,
                 &mut batches_count,
                 &mut transactions_count,
@@ -226,6 +229,7 @@ where
 #[tracing::instrument(skip_all, level = "warn", name = "update_state::do_next_event")]
 pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
     executor: &mut RollupBlockExecutor<S, Rt>,
+    tx_cache_writer: &TxResultWriter<S, Rt>,
     event: DbEvent,
     batches_count: &mut u64,
     transactions_count: &mut usize,
@@ -240,7 +244,10 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
         }
         DbEvent::BatchClosed(_) => {
             tracing::trace!("Done replaying txs");
-            executor.end_rollup_block().await;
+            let forced_txs = executor.end_rollup_block().await;
+            for tx in forced_txs {
+                tx_cache_writer.insert(tx).await;
+            }
             *batch_is_in_progress = false;
         }
         DbEvent::BatchStarted {
