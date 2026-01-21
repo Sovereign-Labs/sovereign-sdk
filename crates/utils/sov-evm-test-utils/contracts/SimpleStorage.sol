@@ -25,6 +25,11 @@ contract SimpleStorage {
         uint256 value2
     );
 
+    // Event with only indexed params (no data payload)
+    event IndexedOnlyLog(
+        uint256 indexed value
+    );
+
     function set(uint256 _num) public {
         num = _num;
         emit SimpleLog(msg.sender, num, num, num);
@@ -68,6 +73,11 @@ contract SimpleStorage {
     // Emit a log with no indexed topics (only event signature in topic0)
     function emitDataOnlyLog(uint256 v1, uint256 v2) public {
         emit DataOnlyLog(v1, v2);
+    }
+
+    // Emit a log with only indexed topics (data == 0x)
+    function emitIndexedOnlyLog(uint256 value) public {
+        emit IndexedOnlyLog(value);
     }
 
     // Burn gas by computing keccak256 in a loop (for gas usage testing)

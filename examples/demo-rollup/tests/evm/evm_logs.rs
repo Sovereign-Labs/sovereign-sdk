@@ -697,6 +697,63 @@ async fn get_logs_data_only_log() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let value = U256::from(42);
+    let tx_hash = rollup_and_client
+        .client
+        .alloy_emit_indexed_only_log(rollup_and_client.contract_address, value)
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let receipt = rollup_and_client
+        .client
+        .alloy_receipt(tx_hash)
+        .await
+        .unwrap();
+    let block_hash = receipt.block_hash.expect("block hash should be present");
+
+    let filter = Filter::new()
+        .at_block_hash(block_hash)
+        .address(rollup_and_client.contract_address)
+        .topic0(indexed_only_log_topic0())
+        .topic1(B256::from(value));
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+    assert_eq!(logs.len(), 1);
+
+    let log = &logs[0];
+    assert_log_schema_sealed(log);
+    let topics = log.inner.topics();
+    assert_eq!(topics.len(), 2);
+    assert_eq!(topics[0], indexed_only_log_topic0());
+    assert_eq!(topics[1], B256::from(value));
+    assert!(log.inner.data.data.is_empty());
+
+    let filter_json = serde_json::json!({
+        "blockHash": format!("{:#x}", block_hash),
+        "address": format!("{:#x}", rollup_and_client.contract_address),
+        "topics": [
+            format!("{:#x}", indexed_only_log_topic0()),
+            format!("{:#x}", B256::from(value)),
+        ],
+    });
+    let json_logs = get_logs_raw_json(&rollup_and_client.client, filter_json).await;
+    assert_eq!(json_logs.len(), 1);
+    let data = json_logs[0]
+        .get("data")
+        .and_then(|v| v.as_str())
+        .expect("data should be a string");
+    assert_eq!(data, "0x");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new(
         EVM_EXTENSION.max_log_limit,
@@ -1361,6 +1418,10 @@ fn full_topic_log_topic0() -> B256 {
 
 fn data_only_log_topic0() -> B256 {
     keccak256(b"DataOnlyLog(uint256,uint256)")
+}
+
+fn indexed_only_log_topic0() -> B256 {
+    keccak256(b"IndexedOnlyLog(uint256)")
 }
 
 fn address_to_topic(address: Address) -> B256 {

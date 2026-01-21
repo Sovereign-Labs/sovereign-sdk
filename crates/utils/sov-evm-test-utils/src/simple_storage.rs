@@ -102,6 +102,12 @@ impl LegacySimpleStorage {
         Bytes::from(call.abi_encode())
     }
 
+    /// Emit a log with only indexed topics (data == 0x).
+    pub fn emit_indexed_only_log(&self, value: U256) -> Bytes {
+        let call = SimpleStorage::emitIndexedOnlyLogCall { value };
+        Bytes::from(call.abi_encode())
+    }
+
     /// Burn gas by computing keccak256 in a loop (for gas usage testing).
     pub fn burn_gas(&self, iterations: u32) -> Bytes {
         let call = SimpleStorage::burnGasCall {
@@ -123,6 +129,7 @@ sol! {
     event SimpleLog(address indexed sender,uint256 indexed topic1,uint256 indexed topic2,uint256 value);
     event FullTopicLog(uint256 indexed topic0,uint256 indexed topic1,uint256 indexed topic2,uint256 data);
     event DataOnlyLog(uint256 value1,uint256 value2);
+    event IndexedOnlyLog(uint256 indexed value);
 }
 
 impl LegacySimpleStorage {

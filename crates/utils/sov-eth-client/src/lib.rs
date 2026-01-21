@@ -301,6 +301,19 @@ impl SimpleStorageClient {
         self.send_tx(tx).await.unwrap()
     }
 
+    /// Emit a log with only indexed topics (data == 0x).
+    pub async fn alloy_emit_indexed_only_log(
+        &self,
+        contract_address: Address,
+        value: U256,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.emit_indexed_only_log(value)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
     /// Burn gas by computing keccak256 in a loop (for gas usage testing).
     pub async fn alloy_burn_gas(&self, contract_address: Address, iterations: u32) -> TxHash {
         let tx = self.make_tx(
