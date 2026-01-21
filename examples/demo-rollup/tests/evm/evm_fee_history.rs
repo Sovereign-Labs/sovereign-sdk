@@ -135,6 +135,8 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
     assert_eq!(fee_history.base_fee_per_gas.len(), 3);
     assert_eq!(fee_history.gas_used_ratio.len(), 2);
 
+    // TODO: Can we have more checkes here?
+
     Ok(())
 }
 
@@ -183,6 +185,8 @@ async fn test_fee_history_finalized_tag() -> anyhow::Result<()> {
     assert_eq!(fee_history.base_fee_per_gas.len(), 3);
     assert_eq!(fee_history.gas_used_ratio.len(), 2);
 
+    // TODO: More checks here, data, etc
+
     Ok(())
 }
 
@@ -200,6 +204,8 @@ async fn test_fee_history_safe_tag() -> anyhow::Result<()> {
     // Safe tag should work and return valid data
     assert_eq!(fee_history.base_fee_per_gas.len(), 3);
     assert_eq!(fee_history.gas_used_ratio.len(), 2);
+
+    // TODO: More data checks here?
 
     Ok(())
 }
@@ -240,6 +246,8 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
         .get_fee_history(2, BlockNumberOrTag::Pending, &[])
         .await?;
 
+    // TODO: Checks that they are not zero, so bug in both won't be ignored
+
     assert_eq!(latest_history.oldest_block, pending_history.oldest_block);
     assert_eq!(
         latest_history.base_fee_per_gas,
@@ -277,6 +285,7 @@ async fn test_fee_history_percentile_out_of_range_over_100() -> anyhow::Result<(
         .await;
 
     assert!(result.is_err(), "Percentile > 100 should return error");
+    // TODO: Get partial check on error message and code
 
     Ok(())
 }
@@ -297,6 +306,7 @@ async fn test_fee_history_percentiles_not_monotonic() -> anyhow::Result<()> {
         result.is_err(),
         "Non-monotonic percentiles should return error"
     );
+    // TODO: Check error code and message
 
     Ok(())
 }
@@ -307,37 +317,41 @@ async fn test_fee_history_percentiles_not_monotonic() -> anyhow::Result<()> {
 async fn test_fee_history_array_length_invariants() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
+    let total_blocks = 10;
+    rollup.wait_for_next_blocks(total_blocks).await;
     rollup.pause_preferred_batches().await;
 
-    let block_count = 4u64;
-    let fee_history = client
-        .get_fee_history(block_count, BlockNumberOrTag::Latest, &[25.0, 75.0])
-        .await?;
+    for block_count in 1..8 {
+        let fee_history = client
+            .get_fee_history(block_count, BlockNumberOrTag::Latest, &[25.0, 75.0])
+            .await?;
 
-    // Key invariant: base_fee_per_gas has block_count + 1 entries
-    assert_eq!(
-        fee_history.base_fee_per_gas.len(),
-        (block_count + 1) as usize,
-        "base_fee_per_gas should have block_count + 1 entries"
-    );
+        // TODO: Assert that data values are not zero
 
-    // gas_used_ratio has block_count entries
-    assert_eq!(
-        fee_history.gas_used_ratio.len(),
-        block_count as usize,
-        "gas_used_ratio should have block_count entries"
-    );
+        // Key invariant: base_fee_per_gas has block_count + 1 entries
+        assert_eq!(
+            fee_history.base_fee_per_gas.len(),
+            (block_count + 1) as usize,
+            "base_fee_per_gas should have block_count + 1 entries"
+        );
 
-    // reward (if present) has block_count rows, each with percentile_count columns
-    let rewards = fee_history.reward.expect("reward should be present");
-    assert_eq!(
-        rewards.len(),
-        block_count as usize,
-        "reward should have block_count rows"
-    );
-    for (i, row) in rewards.iter().enumerate() {
-        assert_eq!(row.len(), 2, "reward row {i} should have 2 columns");
+        // gas_used_ratio has block_count entries
+        assert_eq!(
+            fee_history.gas_used_ratio.len(),
+            block_count as usize,
+            "gas_used_ratio should have block_count entries"
+        );
+
+        // reward (if present) has block_count rows, each with percentile_count columns
+        let rewards = fee_history.reward.expect("reward should be present");
+        assert_eq!(
+            rewards.len(),
+            block_count as usize,
+            "reward should have block_count rows"
+        );
+        for (i, row) in rewards.iter().enumerate() {
+            assert_eq!(row.len(), 2, "reward row {i} should have 2 columns");
+        }
     }
 
     Ok(())
@@ -641,17 +655,25 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    let fee_history = client
-        .get_fee_history(4, BlockNumberOrTag::Finalized, &[])
-        .await?;
+    let latest_block = client.get_block_number().await?;
+    let latest_block_number = BlockNumberOrTag::Number(latest_block);
 
-    // At least one block should have gas_used_ratio > 0
-    let has_nonzero_ratio = fee_history.gas_used_ratio.iter().any(|&r| r > 0.0);
-    assert!(
-        has_nonzero_ratio,
-        "Expected at least one block with gas_used_ratio > 0.0, got {:?}",
-        fee_history.gas_used_ratio
-    );
+    for block_id in [
+        BlockNumberOrTag::Finalized,
+        BlockNumberOrTag::Pending,
+        latest_block_number,
+    ] {
+        let fee_history = client.get_fee_history(4, block_id, &[]).await?;
+
+        // At least one block should have gas_used_ratio > 0
+        // TODO: Why not .last()?
+        let has_nonzero_ratio = fee_history.gas_used_ratio.iter().any(|&r| r > 0.0);
+        assert!(
+            has_nonzero_ratio,
+            "Expected at least one block for {block_id:?} with gas_used_ratio > 0.0, got {:?}",
+            fee_history.gas_used_ratio
+        );
+    }
 
     Ok(())
 }
@@ -969,6 +991,7 @@ async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
         .get_fee_history(3, BlockNumberOrTag::Safe, &[25.0, 75.0])
         .await?;
 
+    // TODO: Check that is not zero. Submit tx if needed
     // In this rollup, finalized and safe both map to latest sealed block
     assert_eq!(
         finalized.oldest_block, safe.oldest_block,
@@ -999,6 +1022,7 @@ async fn test_fee_history_block_count_1024_boundary() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     // Request exactly 1024 blocks - should work without error
+    // TODO: How though, we produced only 5 blocks
     let fee_history = client
         .get_fee_history(1024, BlockNumberOrTag::Latest, &[])
         .await?;
@@ -1086,6 +1110,7 @@ async fn test_fee_history_blob_gas_fields_empty() -> anyhow::Result<()> {
         .await?;
 
     // EIP-4844 blob gas fields should be empty in this rollup
+    // TODO: This should be separated assertion, that applied in ALL test cases. probably extract that + !.is_empty for other fields
     assert!(
         fee_history.base_fee_per_blob_gas.is_empty(),
         "base_fee_per_blob_gas should be empty (EIP-4844 not implemented), got {:?}",
@@ -1122,6 +1147,7 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
         "Should have block_count + 1 base fees"
     );
 
+    // TODO: HOW is this prediction? What if it is zero == zero.
     let predicted_fee = fee_history.base_fee_per_gas[1];
     let next_block = client
         .get_block_by_number(BlockNumberOrTag::Number(newest_block + 1))
@@ -1178,6 +1204,7 @@ async fn test_fee_history_future_block() -> anyhow::Result<()> {
         }
         Err(_) => {
             // Error is also acceptable for future block
+            // TODO: Assert error code, etc
         }
     }
 
