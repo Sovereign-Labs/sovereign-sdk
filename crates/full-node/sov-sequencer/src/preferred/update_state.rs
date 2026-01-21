@@ -10,6 +10,8 @@ use crate::preferred::{
     PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
     StateUpdateInfo,
 };
+use crate::SequencerRole;
+use tracing::error;
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
 where
@@ -122,6 +124,22 @@ where
         // Replay the in-progress batch if it exists.
         let mut batch_is_in_progress = false;
         if let Some(batch) = in_progress_batch {
+            let seq_nr_in_of_in_progress_batch = batch.sequence_number;
+
+            if seq_nr_in_of_in_progress_batch < next_sequence_number {
+                if self.seq_role == SequencerRole::Replica {
+                    error!(seq_nr_in_of_in_progress_batch, next_sequence_number, "The replica has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node. 
+                    This may indicate that Postgres notifications are delayed. In this case, the update from the node is ignored. 
+                    If this error occurs repeatedly, investigate the database stack in the deployment.");
+                    return Ok(());
+                } else {
+                    error!(
+                        seq_role,
+                        seq_nr_in_of_in_progress_batch, next_sequence_number, "TODO"
+                    )
+                }
+            }
+
             batches_count += 1;
             transactions_count += batch.txs.len();
             batch_is_in_progress = true;

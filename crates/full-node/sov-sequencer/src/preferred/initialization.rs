@@ -208,6 +208,7 @@ where
         handles.push(nonce_buffer_task);
 
         let seq = PreferredSequencer(Arc::new(PreferredSequencerFields {
+            seq_role,
             synchronized_state_updator: synchronized_state_updator.clone(),
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
