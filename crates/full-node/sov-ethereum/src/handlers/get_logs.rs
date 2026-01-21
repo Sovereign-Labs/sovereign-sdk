@@ -1,4 +1,4 @@
-use crate::handlers::ETH_RPC_ERROR;
+use crate::rpc_limit_exceeded;
 use crate::Ethereum;
 use crate::EthereumAddress;
 use crate::EthereumAuthenticator;
@@ -46,10 +46,8 @@ where
         let LogsWithMaybeCursor { logs, cursor } = service.logs_for_filter().await?;
 
         if cursor.is_some() {
-            return Err(ErrorObjectOwned::owned(
-                jsonrpsee::types::error::UNKNOWN_ERROR_CODE,
-                ETH_RPC_ERROR,
-                Some("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"),
+            return Err(rpc_limit_exceeded(
+                "Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested",
             ));
         }
 

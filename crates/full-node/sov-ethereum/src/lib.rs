@@ -3,7 +3,6 @@ mod handlers;
 use std::convert::Infallible;
 
 use alloy_primitives::{B256, U256};
-use jsonrpsee::types::error::UNKNOWN_ERROR_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -13,6 +12,9 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_rpc_eth_types::{
+    internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code, EthApiError,
+};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
@@ -28,6 +30,10 @@ pub struct EthRpcConfig {
     /// Shutdown signal receiver for graceful termination
     pub shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
+
+const LIMIT_EXCEEDED_CODE: i32 = -32005;
+const RESOURCE_NOT_FOUND_CODE: i32 = -32001;
+const TX_REJECTED_CODE: i32 = -32003;
 
 pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Seq) -> RpcModule<()>
 where
@@ -120,9 +126,8 @@ where
 {
     fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
-        let signed_transaction = convert_to_tx_signed(raw_tx).map_err(|err| {
-            ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, err.to_string(), None::<()>)
-        })?;
+        let signed_transaction = convert_to_tx_signed(raw_tx)
+            .map_err(|err| ErrorObjectOwned::from(EthApiError::from(err)))?;
 
         let tx_hash = signed_transaction.hash();
 
@@ -137,6 +142,22 @@ where
     }
 }
 
-pub(crate) fn to_jsonrpsee_error_object(err: impl ToString, message: &str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, message, Some(err.to_string()))
+pub(crate) fn rpc_invalid_params(err: impl ToString) -> ErrorObjectOwned {
+    invalid_params_rpc_err(err.to_string())
+}
+
+pub(crate) fn rpc_internal_error(err: impl ToString) -> ErrorObjectOwned {
+    internal_rpc_err(err.to_string())
+}
+
+pub(crate) fn rpc_limit_exceeded(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_code(LIMIT_EXCEEDED_CODE, err.to_string())
+}
+
+pub(crate) fn rpc_tx_rejected(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_code(TX_REJECTED_CODE, err.to_string())
+}
+
+pub(crate) fn rpc_resource_not_found(err: impl ToString) -> ErrorObjectOwned {
+    rpc_error_with_code(RESOURCE_NOT_FOUND_CODE, err.to_string())
 }
