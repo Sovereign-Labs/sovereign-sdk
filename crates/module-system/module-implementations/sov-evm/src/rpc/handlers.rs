@@ -11,7 +11,6 @@ use alloy_rpc_types::{
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::ErrorObjectOwned;
 use revm::context::result::ResultAndState;
 use revm::Database;
 use revm_database_interface::TryDatabaseCommit;
@@ -25,16 +24,6 @@ use tracing::trace;
 
 use crate::{apply_margins, Evm};
 use std::ops::DerefMut;
-
-const METHOD_NOT_SUPPORTED_CODE: i32 = -32004;
-
-fn method_not_supported(method: &'static str) -> ErrorObjectOwned {
-    ErrorObjectOwned::owned(
-        METHOD_NOT_SUPPORTED_CODE,
-        "Method not supported",
-        Some(method),
-    )
-}
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -418,24 +407,6 @@ where
         trace!(method = "net_listening", "EVM module JSON-RPC request");
         // Rollup is always accepting connections via RPC
         Ok(true)
-    }
-
-    /// Handler for: `net_peerCount`
-    /// Returns number of peers currently connected to the client.
-    #[rpc_method(name = "net_peerCount")]
-    pub fn net_peer_count(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<U64> {
-        trace!(method = "net_peerCount", "EVM module JSON-RPC request");
-        Err(method_not_supported("net_peerCount"))
-    }
-
-    // ========== eth status methods ==========
-
-    /// Handler for: `eth_syncing`
-    /// Returns false indicating the node is not syncing.
-    #[rpc_method(name = "eth_syncing")]
-    pub fn eth_syncing(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<bool> {
-        trace!(method = "eth_syncing", "EVM module JSON-RPC request");
-        Err(method_not_supported("eth_syncing"))
     }
 
     /// Handler for: `eth_maxPriorityFeePerGas`

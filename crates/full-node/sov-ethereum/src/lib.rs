@@ -98,6 +98,8 @@ where
         "eth_signTypedData_v4",
         "eth_getProof",
         "eth_createAccessList",
+        "eth_syncing",
+        "net_peerCount",
         "trace_block",
         "trace_call",
         "trace_filter",
@@ -200,7 +202,10 @@ pub(crate) fn rpc_limit_exceeded(err: impl ToString) -> ErrorObjectOwned {
 }
 
 pub(crate) fn rpc_method_not_supported(method: &str) -> ErrorObjectOwned {
-    rpc_error_with_data(METHOD_NOT_SUPPORTED_CODE, "Method not supported", method)
+    rpc_error_with_code(
+        METHOD_NOT_SUPPORTED_CODE,
+        format!("Method {method} not supported"),
+    )
 }
 
 pub(crate) fn rpc_tx_rejected(err: impl ToString) -> ErrorObjectOwned {
