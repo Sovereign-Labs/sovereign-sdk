@@ -2408,8 +2408,7 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let plans =
-        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
     let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
     let sender = rollup_and_client.client.address();
 
@@ -2479,8 +2478,7 @@ async fn evm_test_get_logs_with_cursor() {
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let plans =
-        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
     let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
     let sender = rollup_and_client.client.address();
 
@@ -2537,8 +2535,7 @@ async fn evm_test_get_logs_at_max_response_size() {
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let plans =
-        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
     let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
     let sender = rollup_and_client.client.address();
 
@@ -2599,8 +2596,7 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         .await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let plans =
-        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
     let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
     let sender = rollup_and_client.client.address();
 
