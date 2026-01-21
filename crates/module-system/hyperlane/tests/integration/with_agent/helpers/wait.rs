@@ -31,8 +31,6 @@ pub enum WaitError {
     Timeout(String),
     /// Relayer encountered too many errors.
     TooManyErrors { initial: u64, current: u64 },
-    /// Relayer encountered a critical error.
-    CriticalError,
     /// Failed to fetch metrics.
     MetricsError(MetricsError),
 }
@@ -47,7 +45,6 @@ impl std::fmt::Display for WaitError {
                     "Relayer error count increased from {initial} to {current}"
                 )
             }
-            WaitError::CriticalError => write!(f, "Relayer encountered a critical error"),
             WaitError::MetricsError(e) => write!(f, "Metrics error: {e}"),
         }
     }
@@ -144,85 +141,6 @@ pub async fn wait_for_messages_processed(
             Err(ref e) => {
                 tracing::warn!(?e, elapsed = ?start.elapsed(), "Failed to fetch metrics, retrying...");
             }
-        }
-
-        tokio::time::sleep(config.poll_interval).await;
-    }
-}
-
-/// Waits for all relayer queues to be empty.
-///
-/// This polls the `hyperlane_submitter_queue_length` metric for each queue type
-/// until all are empty or times out.
-#[allow(dead_code)]
-pub async fn wait_for_queues_empty(
-    metrics: &RelayerMetricsClient,
-    config: RelayerWaitConfig,
-) -> Result<(), WaitError> {
-    let start = std::time::Instant::now();
-    let initial_errors = get_error_count_safe(metrics).await;
-    let queue_names = ["prepare_queue", "submit_queue", "confirm_queue"];
-
-    tracing::info!(
-        timeout_secs = ?config.timeout.as_secs(),
-        "Waiting for relayer queues to empty"
-    );
-
-    loop {
-        // Check for timeout
-        if start.elapsed() > config.timeout {
-            let queue_lengths: Vec<_> =
-                futures::future::join_all(queue_names.iter().map(|q| metrics.get_queue_length(q)))
-                    .await;
-            return Err(WaitError::Timeout(format!(
-                "Queue lengths after {:?}: {:?}",
-                start.elapsed(),
-                queue_names
-                    .iter()
-                    .zip(queue_lengths.iter())
-                    .map(|(n, l)| format!(
-                        "{n}={}",
-                        l.as_ref()
-                            .map(|v| v.to_string())
-                            .unwrap_or_else(|_| "?".into())
-                    ))
-                    .collect::<Vec<_>>()
-            )));
-        }
-
-        // Check for critical errors
-        if metrics.has_critical_error().await.unwrap_or(false) {
-            return Err(WaitError::CriticalError);
-        }
-
-        // Check for error increase
-        let current_errors = get_error_count_safe(metrics).await;
-        if current_errors > initial_errors + config.max_error_increase {
-            return Err(WaitError::TooManyErrors {
-                initial: initial_errors,
-                current: current_errors,
-            });
-        }
-
-        // Check if all queues are empty
-        let mut all_empty = true;
-        for queue_name in &queue_names {
-            match metrics.get_queue_length(queue_name).await {
-                // Queue is empty or metric doesn't exist (treat as empty)
-                Ok(0) | Err(MetricsError::MetricNotFound(_)) => {}
-                Ok(len) => {
-                    tracing::debug!(%queue_name, %len, "Queue not empty yet");
-                    all_empty = false;
-                }
-                Err(e) => {
-                    tracing::warn!(?e, %queue_name, "Failed to fetch queue length");
-                }
-            }
-        }
-
-        if all_empty {
-            tracing::info!(elapsed = ?start.elapsed(), "All queues empty");
-            return Ok(());
         }
 
         tokio::time::sleep(config.poll_interval).await;

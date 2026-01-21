@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 use anyhow::Result;
 use base64::prelude::BASE64_STANDARD;
@@ -44,7 +43,6 @@ use sov_test_utils::{default_test_signed_transaction, TestSpec, TestUser};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::ImageExt;
 use testcontainers_modules::anvil::AnvilNode;
-use tokio::time::sleep;
 use tokio_stream::StreamExt;
 
 use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
@@ -375,22 +373,15 @@ async fn test_dispatch_message_to_evm_counterparty() {
 
             // Wait for the relayer to process the message and submit to EVM
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
-            if let Some(metrics) = hyperlane.metrics() {
-                wait_for_messages_processed(
-                    metrics,
-                    "sovtest",
-                    "ethtest",
-                    1,
-                    RelayerWaitConfig::default(),
-                )
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!(?e, "Failed waiting for messages, continuing anyway");
-                });
-            } else {
-                // Fallback if metrics are not available
-                sleep(Duration::from_secs(20)).await;
-            }
+            wait_for_messages_processed(
+                hyperlane.metrics(),
+                "sovtest",
+                "ethtest",
+                1,
+                RelayerWaitConfig::default(),
+            )
+            .await
+            .expect("Relayer metrics check failed");
 
             // Check for events on EVM
             tracing::info!("Checking for events on EVM counterparty...");
@@ -615,22 +606,15 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
             // check if transfer was received by counterparty
             tracing::info!("Waiting for warp transfer to be relayed to EVM...");
-            if let Some(metrics) = hyperlane.metrics() {
-                wait_for_messages_processed(
-                    metrics,
-                    "sovtest",
-                    "ethtest",
-                    1,
-                    RelayerWaitConfig::default(),
-                )
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!(?e, "Failed waiting for warp transfer, continuing anyway");
-                });
-            } else {
-                // Fallback if metrics are not available
-                sleep(Duration::from_secs(10)).await;
-            }
+            wait_for_messages_processed(
+                hyperlane.metrics(),
+                "sovtest",
+                "ethtest",
+                1,
+                RelayerWaitConfig::default(),
+            )
+            .await
+            .expect("Relayer metrics check failed");
             let (origin_domain, recipient) = hyperlane
                 .latest_warp_transfer_on_counterparty(remote_route_id)
                 .await;
@@ -881,6 +865,7 @@ fn rpc_result_to_bytes(result: Value) -> Vec<u8> {
     }
 }
 
+// anvil_dumpState can return gzip-compressed bytes; keep flate2 to decode those snapshots.
 fn maybe_decompress_gzip(bytes: Vec<u8>) -> Vec<u8> {
     if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut decoder = flate2::read::GzDecoder::new(bytes.as_slice());

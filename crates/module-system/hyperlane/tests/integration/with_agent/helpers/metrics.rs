@@ -52,18 +52,6 @@ impl RelayerMetricsClient {
             .map_err(|e| MetricsError::FetchError(e.to_string()))
     }
 
-    /// Debug: dumps all metrics containing a keyword
-    #[allow(dead_code)]
-    pub async fn dump_metrics_containing(&self, keyword: &str) {
-        if let Ok(text) = self.fetch_metrics().await {
-            for line in text.lines() {
-                if line.contains(keyword) && !line.starts_with('#') {
-                    eprintln!("[METRICS] {line}");
-                }
-            }
-        }
-    }
-
     /// Gets the last known message nonce that was processed for a given origin/remote pair.
     ///
     /// Metric: `hyperlane_last_known_message_nonce{origin, remote, phase="message_processed"}`
@@ -81,17 +69,6 @@ impl RelayerMetricsClient {
             ("phase", "message_processed"),
         ];
         parse_prometheus_metric(&metrics_text, "hyperlane_last_known_message_nonce", &labels)
-            .map(|v| v as u64)
-    }
-
-    /// Gets the length of a specific queue.
-    ///
-    /// Metric: `hyperlane_submitter_queue_length{queue_name, ...}`
-    #[allow(dead_code)]
-    pub async fn get_queue_length(&self, queue_name: &str) -> Result<u64, MetricsError> {
-        let metrics_text = self.fetch_metrics().await?;
-        let labels = [("queue_name", queue_name)];
-        parse_prometheus_metric(&metrics_text, "hyperlane_submitter_queue_length", &labels)
             .map(|v| v as u64)
     }
 
@@ -128,21 +105,6 @@ impl RelayerMetricsClient {
             Err(MetricsError::MetricNotFound(_)) => Ok(0),
             Err(e) => Err(e),
         }
-    }
-
-    /// Gets the gas payment for messages to a specific destination.
-    ///
-    /// Metric: `hyperlane_wallet_balance{...}`
-    /// This can be used to monitor the relayer's wallet balance.
-    #[allow(dead_code)]
-    pub async fn get_wallet_balance(
-        &self,
-        chain: &str,
-        wallet_address: &str,
-    ) -> Result<f64, MetricsError> {
-        let metrics_text = self.fetch_metrics().await?;
-        let labels = [("chain", chain), ("wallet_address", wallet_address)];
-        parse_prometheus_metric(&metrics_text, "hyperlane_wallet_balance", &labels)
     }
 }
 

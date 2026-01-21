@@ -386,9 +386,11 @@ pub struct Hyperlane {
 }
 
 impl Hyperlane {
-    /// Returns a reference to the relayer metrics client, if available.
-    pub fn metrics(&self) -> Option<&RelayerMetricsClient> {
-        self.metrics_client.as_ref()
+    /// Returns a reference to the relayer metrics client.
+    pub fn metrics(&self) -> &RelayerMetricsClient {
+        self.metrics_client
+            .as_ref()
+            .expect("Relayer metrics client not configured")
     }
 
     /// Send test message from evm counterparty to sov test recipient
