@@ -475,7 +475,20 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
 
+        let node_id = match &rollup_config.sequencer.sequencer_kind_config {
+            SequencerKindConfig::Standard(std_sequencer_config) => todo!(),
+            SequencerKindConfig::Preferred(preferred_sequencer_config) => {
+                preferred_sequencer_config
+                    .postgres_config
+                    .as_ref()
+                    .unwrap()
+                    .node_id
+                    .clone()
+            }
+        };
+
         let mut runner = StateTransitionRunner::new(
+            node_id,
             rollup_config.runner.clone(),
             axum_tcp,
             if prover_config.is_some() {

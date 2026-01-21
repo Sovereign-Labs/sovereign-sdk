@@ -195,6 +195,16 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         )
     }
 
+    pub fn node_id(&self) -> String {
+        self.seq_config
+            .sequencer_kind_config
+            .postgres_config
+            .as_ref()
+            .unwrap()
+            .node_id
+            .clone()
+    }
+
     pub fn new_with_tx_cache_writer(
         info: &StateUpdateInfo<S::Storage>,
         tx_cache_writer: TxResultWriter<S, Rt>,
@@ -392,6 +402,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         batch: &PreferredBatchToReplay,
         node_state_root: &<S::Storage as Storage>::Root,
     ) -> anyhow::Result<()> {
+        println!("replay_batch {}", self.node_id());
         self.start_rollup_block_for_replay(
             batch.visible_slot_number_after_increase,
             batch.batch.inner.visible_slots_to_advance,
@@ -464,6 +475,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             is_responsible_for_gating_admins: false,
         };
 
+        println!("start_rollup_block_for_replay {}", self.node_id());
         self.start_rollup_block(start_block_data).await;
 
         trace!("Replaying txs");
@@ -551,6 +563,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         start_block_data: StartBlockData<S>,
         executor_context: ExecutionContext,
     ) {
+        println!("spawn_exec_task {}", self.node_id());
         let StartBlockData {
             sanity_check_visible_slot_number_after_increase,
             visible_increase,

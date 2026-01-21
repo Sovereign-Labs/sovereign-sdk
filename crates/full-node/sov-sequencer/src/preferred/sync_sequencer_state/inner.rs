@@ -510,6 +510,7 @@ where
             .current_visible_slot_number()
             .advance(visible_increase.get().into());
 
+        println!("try_to_create_and_start_batch_if_none_in_progress");
         let maybe_seq_nr = self
             .do_batch_start(visible_slot_number_after_increase, visible_increase)
             .await?;

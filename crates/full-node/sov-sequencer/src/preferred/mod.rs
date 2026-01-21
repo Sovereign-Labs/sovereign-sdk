@@ -619,6 +619,23 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     ),
 }
 
+impl<S: Spec, Rt: Runtime<S>> PreferredSeqOperation<S, Rt> {
+    /// TODO
+    pub fn foo(&self) -> String {
+        match self {
+            PreferredSeqOperation::Unreachable => "Unreachable".to_string(),
+            PreferredSeqOperation::WaitForNodeResyncToTip => "WaitForNodeResyncToTip".to_string(),
+            PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack => {
+                "WaitForNodeResyncWithAllowedSlack".to_string()
+            }
+            PreferredSeqOperation::RecoverAndCatchUp => "RecoverAndCatchUp".to_string(),
+            PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(_, _) => {
+                "ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary".to_string()
+            }
+        }
+    }
+}
+
 #[tracing::instrument(skip_all, level = "debug")]
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
@@ -640,6 +657,14 @@ where
         }
     }
 
+    let node_id = &seq
+        .config
+        .sequencer_kind_config
+        .postgres_config
+        .as_ref()
+        .unwrap()
+        .node_id;
+
     let mut rt = Rt::default();
     let timer_start = std::time::Instant::now();
 
@@ -655,6 +680,8 @@ where
         )
         .await
         .map_err(|e| e.into_state_update_error())?;
+
+    println!(">>> update_state_task_inner {node_id} slot_number: {:?} next_sequence_number_according_to_node: {next_sequence_number_according_to_node} operation: {:?}", info.slot_number, operation.foo());
 
     match operation {
         PreferredSeqOperation::Unreachable => {

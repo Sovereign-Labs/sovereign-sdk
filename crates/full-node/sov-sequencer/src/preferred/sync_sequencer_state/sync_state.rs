@@ -411,6 +411,7 @@ where
 
             let fetch_in_progress_batch_time_start = std::time::Instant::now();
             let in_progress_batch = inner.executor_events_sender.fetch_in_progress_batch();
+
             let fetch_in_progress_batch_time = fetch_in_progress_batch_time_start.elapsed();
 
             drop(inner);
@@ -829,6 +830,7 @@ where
         batch_from_master: BatchToStore,
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
+        println!("START BATCH REPLICA {:?}", batch_from_master);
         let mut inner = self.get_inner_with_timing(reason).await;
 
         let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
@@ -848,6 +850,7 @@ where
             seq_nr_from_master,
         )?;
 
+        println!("process_do_batch_start_replica");
         inner
             .do_batch_start(
                 batch_from_master.visible_slot_number_after_increase,
@@ -897,6 +900,7 @@ where
         batch_from_master: BatchToStore,
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
+        println!("END BATCH REPLICA {:?}", batch_from_master);
         let mut inner = self.get_inner_with_timing(reason).await;
         let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
         let seq_nr_from_master = batch_from_master.sequence_number;

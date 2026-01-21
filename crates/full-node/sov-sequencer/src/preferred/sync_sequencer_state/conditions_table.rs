@@ -140,6 +140,9 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             // We wait until the replica is no more than one block behind the tip and override the replica’s sequencer with the node’s state.
             // At this stage, the replica can start accepting PG notifications from the master.
             if sync_status.distance() <= 1 {
+                let inner_sequence_number_of_next_blob = inner.sequence_number_of_next_blob;
+                let inner_has_in_progress_batch = inner.executor.has_in_progress_batch();
+
                 inner.executor_events_sender.clean_all_batches_from_cache();
                 inner
                     .executor_events_sender
@@ -157,6 +160,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                     inner.new_executor_with_empty_uncommitted_changes(info, pinned_cache),
                 ));
 
+                println!("KKKK1 inner_sequence_number_of_next_blob {inner_sequence_number_of_next_blob} inner_has_in_progress_batch {inner_has_in_progress_batch} {:?} ", executor.as_ref().map(|e| e.node_id()));
                 return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
                     executor,
                     Duration::from_secs(0),
@@ -249,6 +253,7 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
         None
     };
 
+    println!("KKKK2 {:?}", executor.as_ref().map(|e| e.node_id()));
     PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
         executor,
         time_spent_fetching_batches,

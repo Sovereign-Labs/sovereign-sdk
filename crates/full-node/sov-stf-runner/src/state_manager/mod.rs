@@ -264,6 +264,7 @@ where
         T: TxReceiptContents,
     >(
         &mut self,
+        node_id: String,
         stf_changes: Sm::StfChangeSet,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
@@ -395,7 +396,7 @@ where
 
         let updating_api_time = self.update_api_and_ledger_storage(&block_header).await?;
 
-        let finalize_start = std::time::Instant::now();
+        let finalize_start: std::time::Instant = std::time::Instant::now();
         for finalized_transition in &finalized_transitions {
             self.storage_manager
                 .finalize(&finalized_transition.block_header)?;

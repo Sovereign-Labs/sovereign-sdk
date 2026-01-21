@@ -48,6 +48,7 @@ where
     Sm: HierarchicalStorageManager<Da::Spec>,
     Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
 {
+    node_id: String,
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
     da_total_timeout: Duration,
@@ -146,6 +147,7 @@ where
     /// Creates a new [`StateTransitionRunner`].
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
+        node_id: String,
         runner_config: RunnerConfig,
         axum_tcp: TcpListener,
         pm_config: Option<ProofManagerConfig<Stf::Address>>,
@@ -231,6 +233,7 @@ where
         background_handles.push(fetcher_background_handle);
 
         Ok(Self {
+            node_id,
             first_unprocessed_height_at_startup,
             da_polling_interval,
             da_total_timeout,
@@ -637,6 +640,7 @@ where
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
             .process_stf_changes(
+                self.node_id.clone(),
                 slot_result.change_set,
                 transition_data,
                 data_to_commit,

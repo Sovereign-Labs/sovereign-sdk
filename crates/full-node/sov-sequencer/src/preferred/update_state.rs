@@ -48,6 +48,8 @@ where
         let mut transactions_count = 0;
         let mut next_sequence_number =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
+
+        println!("do replay_soft_confirmations_on_top_of_node_state");
         // Total time to update the state for `replay_soft_confirmations_on_top_of_node_stat`e, including time spent in the `Message` channel.
         let mut total_message_processing_duration = std::time::Duration::ZERO;
 
@@ -107,6 +109,7 @@ where
                 batches_count += 1;
                 transactions_count += batch.batch.inner.data.len();
                 next_sequence_number = batch.batch.inner.sequence_number.saturating_add(1);
+                println!("replay_batch2 {}", executor.node_id());
                 executor.replay_batch(&batch, &node_state_root).await?;
                 if self.shutdown_receiver.has_changed().unwrap_or(true) {
                     tracing::info!("The sequencer is shutting down. Exiting replay_soft_confirmations_on_top_of_node_state.");
@@ -122,6 +125,19 @@ where
         // Replay the in-progress batch if it exists.
         let mut batch_is_in_progress = false;
         if let Some(batch) = in_progress_batch {
+            let seq_nr_in_prog = batch.sequence_number;
+
+            if seq_nr_in_prog < next_sequence_number {
+                println!(
+                    "XXXXXXXXXXX.  ----   replay_batch1 seq_nr: {} {} {}",
+                    seq_nr_in_prog,
+                    next_sequence_number,
+                    executor.node_id()
+                );
+
+                return Ok(());
+            }
+
             batches_count += 1;
             transactions_count += batch.txs.len();
             batch_is_in_progress = true;
@@ -156,6 +172,8 @@ where
             )
             .await?;
         }
+
+        if batch_is_in_progress {}
 
         let (maybe_data, message_processing_duration) = self
             .synchronized_state_updator
@@ -208,6 +226,7 @@ where
         &self,
         info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
+        println!("do_simple_state_update");
         self.synchronized_state_updator
             .send_simple_state_update_msg(info)
             .await

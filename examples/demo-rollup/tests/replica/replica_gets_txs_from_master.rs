@@ -58,6 +58,13 @@ async fn test_replica_receives_txs_from_da() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_receives_txs_from_postgres() {
+    for i in 0..100 {
+        println!("Iter {i}");
+        foo().await;
+    }
+}
+
+async fn foo() {
     let postgres = PostgresData::create_postgres().await;
 
     let postgres = match postgres {
@@ -112,6 +119,7 @@ async fn test_replica_receives_txs_from_postgres() {
         0,
     );
 
+    println!("SENDING TX");
     test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
     wait_for_all_events_with_timeout(Duration::from_millis(100), 1, &mut event_subscription).await;
 
@@ -122,6 +130,7 @@ async fn test_replica_receives_txs_from_postgres() {
         .unwrap();
 
     assert_eq!(receiver_balance.0, AMOUNT);
+
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;
 }
