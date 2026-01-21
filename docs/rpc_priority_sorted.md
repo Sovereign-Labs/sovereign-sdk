@@ -21,18 +21,21 @@
 
 ## Priority tiers (ordered within each tier)
 
-### P0 - Block-tag and pending semantics (highest ROI)
-1. `eth_getBlockByNumber` - authoritative latest/pending semantics; tx hashes vs objects; EIP-1898 blockHash.
+### P0 - Block-tag and pending semantics (highest ROI, ranked)
+1. `eth_getBlockByNumber` + `eth_getBlockByHash` - authoritative latest/pending semantics; tx hashes vs objects; EIP-1898 blockHash.
 2. `eth_blockNumber` - head monotonicity and alignment with `eth_getBlockByNumber("latest")`.
 3. `eth_getTransactionCount` - pending vs latest nonce; EIP-1898 blockHash.
-4. `eth_getBalance` - state at tags; EIP-1898 blockHash.
-5. `eth_sendRawTransaction` - submission path required for all lifecycle tests.
-6. `eth_getTransactionReceipt` - null while pending; stable once sealed.
-7. `eth_getTransactionByHash` - pending vs mined fields (`blockNumber`, `blockHash`).
-8. `eth_call` - block-tagged state reads; no pending bleed into latest.
-9. `eth_estimateGas` - tag-sensitive estimation; EIP-1898 blockHash.
-10. `eth_getLogs` - range/tag semantics; `blockHash` filter; consistency with receipts.
-11. `eth_getBlockByHash` - consistency for blocks referenced by receipts/logs.
+4. `eth_getLogs` - range/tag semantics; `blockHash` filter; consistency with receipts.
+5. `eth_getTransactionReceipt` - null while pending; stable once sealed.
+6. `eth_getTransactionByHash` - pending vs mined fields (`blockNumber`, `blockHash`).
+7. `eth_call` - block-tagged state reads; no pending bleed into latest.
+8. `eth_estimateGas` - tag-sensitive estimation; EIP-1898 blockHash.
+9. `eth_getBalance` - state at tags; EIP-1898 blockHash.
+10. `eth_subscribe` / `eth_unsubscribe` (logs, newHeads)
+11. `eth_sendRawTransactionSync` (custom)
+12. `realtime_sendRawTransaction` (custom)
+13. `debug_traceTransaction`
+14. ~~`eth_sendRawTransaction` - submission path required for all lifecycle tests.~~ We are fine
 
 ### P1 - Wallet connect, fees, and contract inspection
 1. `eth_chainId`
@@ -45,34 +48,19 @@
 8. `eth_getBlockReceipts`
 9. `eth_getBlockTransactionCountByNumber`
 10. `eth_getBlockTransactionCountByHash`
-11. `eth_subscribe` / `eth_unsubscribe` (logs, newHeads)
-12. `web3_clientVersion`
-13. `web3_sha3`
-14. `net_listening`
-15. `eth_accounts` (local-only)
-16. `eth_sendTransaction` (local-only)
+11. `web3_clientVersion`
+12. `web3_sha3`
+13. `net_listening`
+14. `eth_accounts` (local-only)
+15. `eth_sendTransaction` (local-only)
 
 ### P2 - Debugging and Sovereign-specific RPC
 - `debug_traceBlockByNumber`
-- `debug_traceTransaction`
 - `eth_getLogsWithCursor` (custom)
-- `eth_sendRawTransactionSync` (custom)
-- `realtime_sendRawTransaction` (custom)
+
 
 ### P3 - Unsupported methods
 - Methods listed as "Method not supported" in [docs/rpc_inventory.md].
-
-## Top 10 endpoints to test first (ranked)
-1. `eth_getBlockByNumber` - core latest/pending/head semantics and block schema.
-2. `eth_blockNumber` - head monotonicity and alignment with `latest`.
-3. `eth_getTransactionCount` - pending vs latest nonce behavior.
-4. `eth_getBalance` - block-tagged balance correctness.
-5. `eth_sendRawTransaction` - baseline submission path.
-6. `eth_getTransactionReceipt` - pending should be null; mined should be stable.
-7. `eth_getTransactionByHash` - pending vs mined field semantics.
-8. `eth_call` - block-tagged state reads.
-9. `eth_estimateGas` - tag-sensitive estimation.
-10. `eth_getLogs` - log range/tag semantics and blockHash filter.
 
 ## Block selector coverage (apply to P0/P1 state methods)
 - Tags: `earliest`, `latest`, `pending`, `safe`, `finalized`, `Number(n)`.

@@ -2402,13 +2402,19 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
         RollupAndClient::new(max_log_limit, EVM_EXTENSION.response_size_limit).await;
     let start_tx = rollup_and_client.get_tx_count().await as u32;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
+    let plans =
+        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    let sender = rollup_and_client.client.address();
+
     let mut nb_of_logs_received = 0;
+    let mut collected = Vec::new();
     let mut logs_with_cursor = rollup_and_client
         .get_logs_with_cursor_and_filter(&serde_json::json!({
                 "fromBlock": "0x0",
@@ -2417,6 +2423,7 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
         .await;
 
     nb_of_logs_received += logs_with_cursor.logs.len();
+    collected.extend(logs_with_cursor.logs.iter().map(|log| log.log.clone()));
 
     let mut nb_of_logs_until_prev_cursor = start_tx * nb_of_logs_per_tx;
     loop {
@@ -2449,9 +2456,11 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
             }))
             .await;
         nb_of_logs_received += logs_with_cursor.logs.len();
+        collected.extend(logs_with_cursor.logs.iter().map(|log| log.log.clone()));
     }
 
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
+    assert_expected_simple_logs(&collected, &expected, sender);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2464,16 +2473,23 @@ async fn evm_test_get_logs_with_cursor() {
         RollupAndClient::new(max_log_limit, EVM_EXTENSION.response_size_limit).await;
     let start_tx = rollup_and_client.get_tx_count().await as u32;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
+    let plans =
+        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    let sender = rollup_and_client.client.address();
+
     let mut nb_of_logs_received = 0;
+    let mut collected = Vec::new();
     let mut logs_with_cursor = rollup_and_client.get_logs_with_cursor(None).await;
 
     nb_of_logs_received += logs_with_cursor.logs.len();
+    collected.extend(logs_with_cursor.logs.iter().map(|log| log.log.clone()));
 
     let mut nb_of_logs_until_prev_cursor = start_tx * nb_of_logs_per_tx;
     loop {
@@ -2500,9 +2516,11 @@ async fn evm_test_get_logs_with_cursor() {
 
         logs_with_cursor = rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
         nb_of_logs_received += logs_with_cursor.logs.len();
+        collected.extend(logs_with_cursor.logs.iter().map(|log| log.log.clone()));
     }
 
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
+    assert_expected_simple_logs(&collected, &expected, sender);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2513,16 +2531,23 @@ async fn evm_test_get_logs_at_max_response_size() {
     // Set a low limit on response sizes to force pagination.
     let rollup_and_client = RollupAndClient::new(EVM_EXTENSION.max_log_limit, 1_000).await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
+    let plans =
+        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    let sender = rollup_and_client.client.address();
+
     let mut nb_of_logs_received = 0;
+    let mut collected = Vec::new();
     let mut logs_with_cursor = rollup_and_client.get_logs_with_cursor(None).await;
 
     nb_of_logs_received += logs_with_cursor.logs.len();
+    collected.extend(logs_with_cursor.logs.iter().map(|log| log.log.clone()));
 
     let mut iters = 0;
     while let Some(packed_cursor) = logs_with_cursor.cursor {
@@ -2531,10 +2556,12 @@ async fn evm_test_get_logs_at_max_response_size() {
         let cursor = Cursor::unpack(&packed_cursor).unwrap();
         logs_with_cursor = rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
         nb_of_logs_received += logs_with_cursor.logs.len();
+        collected.extend(logs_with_cursor.logs.iter().map(|log| log.log.clone()));
     }
 
     assert_eq!(nb_of_logs_received as u32, nb_of_txs * nb_of_logs_per_tx);
     assert!(iters > 1, "We should have reached the response size limit and been forced to paginate. This test might need adjusting, or pagination is broken.");
+    assert_expected_simple_logs(&collected, &expected, sender);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -2567,16 +2594,30 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
     let rollup_and_client =
         RollupAndClient::new(max_log_limit, EVM_EXTENSION.response_size_limit).await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let plans =
+        simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    let sender = rollup_and_client.client.address();
 
     let LogsWithMaybeCursor { mut logs, cursor } =
         rollup_and_client.get_logs_with_cursor(None).await;
     let cursor = cursor.map(|c| Cursor::unpack(&c).unwrap()).unwrap();
     assert_eq!(logs.len(), 1);
     let log = logs.pop().unwrap();
+    let expected_log = &expected[0];
+    assert_simple_log(
+        &log.log,
+        &expected_log.meta,
+        sender,
+        expected_log.topic1,
+        expected_log.topic2,
+        expected_log.data,
+    );
     assert_eq!(log.log.transaction_index, Some(0));
     assert_eq!(log.log.log_index, Some(0));
     assert_eq!(cursor.tx_index_absolute, 1);
@@ -2586,6 +2627,15 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         rollup_and_client.get_logs_with_cursor(Some(cursor)).await;
     assert_eq!(logs.len(), 1);
     let log = logs.pop().unwrap();
+    let expected_log = &expected[1];
+    assert_simple_log(
+        &log.log,
+        &expected_log.meta,
+        sender,
+        expected_log.topic1,
+        expected_log.topic2,
+        expected_log.data,
+    );
     assert_eq!(log.log.transaction_index, Some(0));
     assert_eq!(log.log.log_index, Some(1));
 }
