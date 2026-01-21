@@ -32,6 +32,7 @@ pub struct EthRpcConfig {
 }
 
 const LIMIT_EXCEEDED_CODE: i32 = -32005;
+const METHOD_NOT_SUPPORTED_CODE: i32 = -32004;
 const RESOURCE_NOT_FOUND_CODE: i32 = -32001;
 const TX_REJECTED_CODE: i32 = -32003;
 
@@ -72,6 +73,52 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    for method in [
+        "eth_protocolVersion",
+        "eth_coinbase",
+        "eth_mining",
+        "eth_hashrate",
+        "eth_getTransactionByBlockHashAndIndex",
+        "eth_getTransactionByBlockNumberAndIndex",
+        "eth_getUncleCountByBlockHash",
+        "eth_getUncleCountByBlockNumber",
+        "eth_getUncleByBlockHashAndIndex",
+        "eth_getUncleByBlockNumberAndIndex",
+        "eth_newFilter",
+        "eth_newBlockFilter",
+        "eth_newPendingTransactionFilter",
+        "eth_uninstallFilter",
+        "eth_getFilterChanges",
+        "eth_getFilterLogs",
+        "eth_sign",
+        "eth_signTransaction",
+        "eth_signTypedData",
+        "eth_signTypedData_v1",
+        "eth_signTypedData_v3",
+        "eth_signTypedData_v4",
+        "eth_getProof",
+        "eth_createAccessList",
+        "eth_syncing",
+        "net_peerCount",
+        "trace_block",
+        "trace_call",
+        "trace_filter",
+        "trace_get",
+        "trace_rawTransaction",
+        "trace_replayBlockTransactions",
+        "trace_replayTransaction",
+        "trace_transaction",
+        "txpool_content",
+        "txpool_contentFrom",
+        "txpool_inspect",
+        "txpool_status",
+    ] {
+        let method_name = method;
+        rpc.register_async_method(method_name, move |_, _, _| {
+            ready(Err::<(), _>(rpc_method_not_supported(method_name)))
+        })?;
+    }
+
     rpc.register_async_method("eth_gasPrice", |_, _, _| {
         // We don't use EVM gas price mechanism and rely on sov gas/gas price.
         // Therefore - we can safely return zero here as it's used by wallets to set gas price when sending transactions.
@@ -152,6 +199,13 @@ pub(crate) fn rpc_internal_error(err: impl ToString) -> ErrorObjectOwned {
 
 pub(crate) fn rpc_limit_exceeded(err: impl ToString) -> ErrorObjectOwned {
     rpc_error_with_code(LIMIT_EXCEEDED_CODE, err.to_string())
+}
+
+pub(crate) fn rpc_method_not_supported(method: &str) -> ErrorObjectOwned {
+    rpc_error_with_code(
+        METHOD_NOT_SUPPORTED_CODE,
+        format!("Method {method} not supported"),
+    )
 }
 
 pub(crate) fn rpc_tx_rejected(err: impl ToString) -> ErrorObjectOwned {

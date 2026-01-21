@@ -376,4 +376,98 @@ where
         trace!(method = "debug_traceTransaction", %tx_hash, "EVM module JSON-RPC request");
         Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
     }
+
+    // ========== web3 namespace ==========
+
+    /// Handler for: `web3_clientVersion`
+    /// Returns the current client version.
+    #[rpc_method(name = "web3_clientVersion")]
+    pub fn web3_client_version(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<String> {
+        trace!(method = "web3_clientVersion", "EVM module JSON-RPC request");
+        Ok(format!(
+            "sov-evm/{}",
+            option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
+        ))
+    }
+
+    /// Handler for: `web3_sha3`
+    /// Returns Keccak-256 hash of the given data.
+    #[rpc_method(name = "web3_sha3")]
+    pub fn web3_sha3(&self, data: Bytes, _state: &mut ApiStateAccessor<S>) -> RpcResult<B256> {
+        trace!(method = "web3_sha3", "EVM module JSON-RPC request");
+        Ok(alloy_primitives::keccak256(&data))
+    }
+
+    // ========== net namespace ==========
+
+    /// Handler for: `net_listening`
+    /// Returns true if client is actively listening for network connections.
+    #[rpc_method(name = "net_listening")]
+    pub fn net_listening(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<bool> {
+        trace!(method = "net_listening", "EVM module JSON-RPC request");
+        // Rollup is always accepting connections via RPC
+        Ok(true)
+    }
+
+    /// Handler for: `eth_maxPriorityFeePerGas`
+    /// Returns the current max priority fee per gas.
+    #[rpc_method(name = "eth_maxPriorityFeePerGas")]
+    pub fn eth_max_priority_fee_per_gas(
+        &self,
+        _state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<U256> {
+        trace!(
+            method = "eth_maxPriorityFeePerGas",
+            "EVM module JSON-RPC request"
+        );
+        // Rollup uses preferred sequencer model, no priority fees
+        Ok(U256::ZERO)
+    }
+
+    /// Handler for: `eth_getBlockTransactionCountByNumber`
+    /// Returns the number of transactions in a block by block number.
+    #[rpc_method(name = "eth_getBlockTransactionCountByNumber")]
+    pub fn get_block_transaction_count_by_number(
+        &self,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<U64>> {
+        trace!(
+            ?block_id,
+            method = "eth_getBlockTransactionCountByNumber",
+            "EVM module JSON-RPC request"
+        );
+        let block = self.get_block(block_id, false.into(), state)?;
+        Ok(block.map(|b| U64::from(b.transactions.len())))
+    }
+
+    /// Handler for: `eth_getBlockTransactionCountByHash`
+    /// Returns the number of transactions in a block by block hash.
+    #[rpc_method(name = "eth_getBlockTransactionCountByHash")]
+    pub fn get_block_transaction_count_by_hash(
+        &self,
+        block_hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<U64>> {
+        trace!(
+            %block_hash,
+            method = "eth_getBlockTransactionCountByHash",
+            "EVM module JSON-RPC request"
+        );
+        let block_number = self
+            .block_hash_to_number
+            .get(&block_hash, state)
+            .unwrap_infallible();
+        match block_number {
+            Some(number) => {
+                let block = self.get_block(
+                    Some(BlockId::Number(BlockNumberOrTag::Number(number))),
+                    false.into(),
+                    state,
+                )?;
+                Ok(block.map(|b| U64::from(b.transactions.len())))
+            }
+            None => Ok(None),
+        }
+    }
 }
