@@ -50,7 +50,7 @@ P3 (explicitly unsupported today):
 
 ## Top 10 to test first (ranked, with rationale)
 
-1. `eth_getBlockByNumber` - Primary entry point for "latest" vs "pending" semantics and header correctness.
+1. `eth_getBlockByNumber` - Primary entry point for "latest" vs "pending" semantics and header correctness. **Note:** Must test both `details=true` (full transaction objects) and `details=false` (transaction hashes only) variants.
 2. `eth_getTransactionCount` - Wallet nonce management; must reflect pending txs for `pending`.
 3. `eth_getBalance` - Core wallet UX; needs correct block-tagged state.
 4. `eth_getTransactionReceipt` - Transaction lifecycle; pending vs mined behavior and block linkage.

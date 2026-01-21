@@ -111,6 +111,43 @@ For each block-tag-aware method, test:
 | With pending txs | | | | | | |
 | Non-existent block | | | | | N/A | |
 
+### EIP-1898 BlockId Coverage
+
+For methods that accept `block_id`, also test the object form:
+- `{"blockHash": <hash>, "requireCanonical": <bool>}` using a known canonical block hash.
+- Validate the result matches the equivalent `Number(n)` / tag-based request.
+- For unknown hashes, expect an error/null response (do not assert error shape).
+
+Recommended methods for blockHash coverage:
+- `eth_getBalance`, `eth_getStorageAt`, `eth_getTransactionCount`, `eth_getCode`
+- `eth_call`, `eth_estimateGas`
+- `eth_getBlockByNumber`, `eth_getBlockReceipts`, `eth_getBlockTransactionCountByNumber`
+- `eth_getLogs` with `filter.blockHash`
+
+### EIP-1898 BlockHash Test Cases
+
+Setup (shared):
+1. Record the latest sealed block before deployment as N0/H0.
+2. Deploy `SimpleStorage`; record deploy block number/hash as N1/H1.
+3. Call `set_value(1)` in its own block; record N2/H2.
+4. Call `emitLogs()` (or equivalent log-emitting method) in its own block; record N3/H3.
+5. Send a simple transfer to a second account in its own block; record N4/H4.
+6. Pause sequencer before assertions.
+
+| ID | Priority | Description |
+|----|----------|-------------|
+| BH01 | P0 | `eth_getBlockByNumber` with `{"blockHash": H2, "requireCanonical": true}` matches `eth_getBlockByHash(H2)` (number/hash/tx count). |
+| BH02 | P0 | `eth_getBalance` for the transfer recipient at H4 matches `Number(N4)` and differs from `Number(N3)`; `requireCanonical: true/false` yield identical results. |
+| BH03 | P0 | `eth_getTransactionCount` for sender at H4 matches `Number(N4)` and reflects the transfer; `requireCanonical` toggle yields identical results. |
+| BH04 | P0 | `eth_getCode` for contract address at H1 is non-empty; at pre-deploy block hash (N0/H0) it is empty. |
+| BH05 | P1 | `eth_getStorageAt` for slot 0 at H2 returns value `1`; at H1 returns `0` (or initial). |
+| BH06 | P1 | `eth_call` for `get()` at H2 returns `1`; at H1 returns `0`; result matches the same calls with `Number(N2)`/`Number(N1)`. |
+| BH07 | P1 | `eth_estimateGas` for `set_value(2)` at H2 matches estimate at `Number(N2)` and is non-zero. |
+| BH08 | P1 | `eth_getBlockReceipts` with blockHash H3 returns the same receipt count as `Number(N3)` and includes the log tx receipt. |
+| BH09 | P1 | `eth_getBlockTransactionCountByNumber` with blockHash H3 equals tx count from `eth_getBlockByHash(H3)`. |
+| BH10 | P1 | `eth_getLogs` with `filter.blockHash = H3` returns only logs from H3; compare to range filter `[N3, N3]`. |
+| BH11 | P2 | Unknown blockHash for blockId methods (e.g., `eth_getBalance`, `eth_getBlockByNumber`) returns an error; do not assert error shape. |
+
 ### Invariants to Assert
 
 1. **Monotonicity**: `eth_blockNumber` never decreases within a session

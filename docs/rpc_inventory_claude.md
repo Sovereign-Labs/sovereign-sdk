@@ -8,7 +8,7 @@ This document catalogs all JSON-RPC methods implemented in the Sovereign SDK EVM
 
 | File | Purpose |
 |------|---------|
-| `crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs` | RPC method handlers (26 methods) |
+| `crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs` | RPC method handlers (25 methods) |
 | `crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs` | Block resolution, state access, pending block |
 | `crates/module-system/module-implementations/sov-evm/src/rpc/fee_history.rs` | Fee history calculation |
 | `crates/module-system/module-implementations/sov-evm/src/rpc/trace.rs` | Debug tracing |
@@ -69,11 +69,14 @@ This document catalogs all JSON-RPC methods implemented in the Sovereign SDK EVM
 
 | Method | Parameters | Location |
 |--------|------------|----------|
+| `eth_gasPrice` | none | lib.rs |
 | `eth_sendRawTransaction` | raw_tx | handlers/mod.rs |
 | `eth_sendRawTransactionSync` | raw_tx, timeout | handlers/mod.rs |
+| `realtime_sendRawTransaction` | raw_tx | handlers/mod.rs (custom) |
 | `eth_getLogs` | filter | handlers/get_logs.rs |
 | `eth_getLogsWithCursor` | filter, cursor | handlers/get_logs.rs (custom) |
 | `eth_subscribe` | subscription_type, filter | handlers/subscribe.rs |
+| `eth_unsubscribe` | subscription_id | handlers/subscribe.rs (via rpc registration) |
 | `eth_accounts` | none | handlers/mod.rs (dev only) |
 | `eth_sendTransaction` | tx | handlers/mod.rs (dev only) |
 
@@ -109,6 +112,13 @@ match block {
 **Pending transaction lookup** (`get_transaction_by_hash`, L242-258):
 - First checks sealed transactions, then falls back to pending pool
 
+### BlockId / EIP-1898 Handling
+
+Methods that accept `block_id` (`BlockId`) also accept EIP-1898 object form:
+- `{"blockHash": <hash>, "requireCanonical": <bool>}` is supported.
+- `requireCanonical` is currently ignored; only `blockHash` is used to resolve a block number.
+- Unknown hashes return `HeaderNotFound` via `block_hash_to_number` lookup.
+
 ## Not Implemented Methods
 
 | Category | Methods |
@@ -120,7 +130,8 @@ match block {
 | Proofs | `eth_getProof` |
 | Access lists | `eth_createAccessList` |
 | Mining | `eth_coinbase`, `eth_mining`, `eth_hashrate`, `eth_protocolVersion` |
-| Gas price | `eth_gasPrice` (present but returns 0) |
+| Tracing (OpenEthereum/Parity) | `trace_block`, `trace_call`, `trace_filter`, `trace_get`, `trace_rawTransaction`, `trace_replayBlockTransactions`, `trace_replayTransaction`, `trace_transaction` |
+| Txpool | `txpool_content`, `txpool_contentFrom`, `txpool_inspect`, `txpool_status` |
 
 ## Error Codes
 

@@ -251,4 +251,53 @@ impl SimpleStorageClient {
         );
         self.send_tx(tx).await.unwrap()
     }
+
+    /// Emit a log with all 4 topic slots populated (max EVM allows).
+    /// Useful for testing full topic array handling.
+    pub async fn alloy_emit_full_topic_log(
+        &self,
+        contract_address: Address,
+        t0: U256,
+        t1: U256,
+        t2: U256,
+        data: U256,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.emit_full_topic_log(t0, t1, t2, data)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Emit logs with configurable topic values for flexible testing scenarios.
+    pub async fn alloy_emit_configurable_logs(
+        &self,
+        contract_address: Address,
+        topic1_base: U256,
+        topic2_base: U256,
+        count: u32,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(
+                self.contract
+                    .emit_configurable_logs(topic1_base, topic2_base, count),
+            ),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Emit a log with no indexed topics (only event signature in topic0).
+    pub async fn alloy_emit_data_only_log(
+        &self,
+        contract_address: Address,
+        v1: U256,
+        v2: U256,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.emit_data_only_log(v1, v2)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
 }

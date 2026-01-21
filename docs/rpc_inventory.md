@@ -57,6 +57,7 @@ Source: `crates/full-node/sov-ethereum/src/lib.rs` and `crates/full-node/sov-eth
 
 Source: `crates/full-node/sov-ethereum/src/lib.rs`.
 
+- `eth_blobBaseFee`
 - `eth_protocolVersion`
 - `eth_coinbase`
 - `eth_mining`
