@@ -69,4 +69,13 @@ contract SimpleStorage {
     function emitDataOnlyLog(uint256 v1, uint256 v2) public {
         emit DataOnlyLog(v1, v2);
     }
+
+    // Burn gas by computing keccak256 in a loop (for gas usage testing)
+    function burnGas(uint256 iterations) public pure returns (bytes32) {
+        bytes32 result = keccak256(abi.encodePacked(iterations));
+        for (uint256 i = 0; i < iterations; i++) {
+            result = keccak256(abi.encodePacked(result));
+        }
+        return result;
+    }
 }

@@ -101,6 +101,14 @@ impl LegacySimpleStorage {
         let call = SimpleStorage::emitDataOnlyLogCall { v1, v2 };
         Bytes::from(call.abi_encode())
     }
+
+    /// Burn gas by computing keccak256 in a loop (for gas usage testing).
+    pub fn burn_gas(&self, iterations: u32) -> Bytes {
+        let call = SimpleStorage::burnGasCall {
+            iterations: U256::from(iterations),
+        };
+        Bytes::from(call.abi_encode())
+    }
 }
 
 /// Log with some additional metadata.

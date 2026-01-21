@@ -369,12 +369,24 @@ Block number format:
 | TC15 | `get_logs_ordered_and_not_removed` | ✅ |
 | TC16 | `evm_test_get_logs_with_cursor` | ✅ |
 | TC17 | `get_logs_time_executed_ms_per_tx` | ✅ |
-| TC18 | `get_logs_earliest_tag` | 🔲 TODO |
-| TC19 | `get_logs_schema_correctness` | 🔲 TODO |
-| TC20 | - | 🔲 TODO |
-| TC21 | `get_logs_empty_result` | 🔲 TODO |
+| TC18 | `get_logs_earliest_tag` | ✅ |
+| TC19 | `get_logs_schema_correctness` | ✅ |
+| TC20 | `get_logs_eip1898_blockhash_object` | ✅ |
+| TC21 | `get_logs_empty_result` | ✅ |
 | TC22 | `get_logs_full_topic_log` | ✅ |
-| TC23-TC35 | - | 🔲 TODO |
+| TC23 | `get_logs_empty_topics_matches_all` | ✅ |
+| TC24 | `get_logs_topic0_only_matches_any_indexed` | ✅ |
+| TC25 | `get_logs_topic1_without_topic0` | ✅ |
+| TC26 | `get_logs_topic0_or_semantics_multiple` | ✅ |
+| TC27 | `get_logs_topic0_and_topic1_or_semantics` | ✅ |
+| TC28 | `get_logs_trailing_null_topics_ignored` | ✅ |
+| TC29 | `get_logs_full_topic_log` | ✅ |
+| TC30 | `evm_test_get_logs` | ✅ |
+| TC31 | `evm_test_get_logs` | ✅ |
+| TC32 | `get_logs_emitted_fields_match_event` | ✅ |
+| TC33 | `get_logs_emitted_fields_match_event` | ✅ |
+| TC34 | - | 🔲 TODO (requires new event with no non-indexed params) |
+| TC35 | `get_logs_schema_correctness` | ✅ |
 | TC36 | `get_logs_data_only_log` | ✅ |
 | TC37 | `get_logs_topic0_filters_event_signature` | ✅ |
 | TC38 | `get_logs_emitted_fields_match_event` | ✅ |

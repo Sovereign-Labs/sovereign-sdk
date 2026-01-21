@@ -1,3 +1,9 @@
+//! eth_feeHistory RPC endpoint tests
+//!
+//! Coverage notes:
+//! - TC11 (percentile < 0): Skipped - alloy client validates percentiles client-side,
+//!   negative values would require raw JSON-RPC to test server-side validation.
+
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockNumberOrTag;
 
@@ -523,7 +529,7 @@ async fn test_fee_history_progression() -> anyhow::Result<()> {
     // The difference should be approximately equal to blocks produced
     let block_diff = oldest2 - oldest1;
     assert!(
-        block_diff >= 2 && block_diff <= 4,
+        (2..=4).contains(&block_diff),
         "Block advancement should be ~3, got {block_diff}"
     );
 
@@ -669,7 +675,7 @@ async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
 /// 2. Implementing proper EIP-1559 elasticity constraints
 ///
 /// See: crates/module-system/module-implementations/sov-chain-state/src/gas.rs
-#[ignore = "Known bug: base_fee can drop to 0 due to saturating_sub (violates EIP-1559)"]
+// #[ignore = "Known bug: base_fee can drop to 0 due to saturating_sub (violates EIP-1559)"]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -699,20 +705,11 @@ async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
         // But if prev is 0, any value is acceptable
         if prev > 0 {
             let max_change = prev / 8 + prev / 50; // ~14.5%
-            let diff = if curr > prev {
-                curr - prev
-            } else {
-                prev - curr
-            };
+            let diff = curr.abs_diff(prev);
             assert!(
                 diff <= max_change,
-                "Base fee swing from block {}->{} is too large: {} -> {} (diff={}, max={})",
+                "Base fee swing from block {}->{i} is too large: {prev} -> {curr} (diff={diff}, max={max_change})",
                 i - 1,
-                i,
-                prev,
-                curr,
-                diff,
-                max_change
             );
         }
     }
@@ -821,7 +818,7 @@ async fn test_fee_history_duplicate_percentiles() -> anyhow::Result<()> {
 /// Some([[], []]) - empty 2D arrays. This may confuse clients that check for
 /// reward presence to determine if percentiles were requested.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known bug: empty percentiles returns Some([[], []]) instead of None"]
+// #[ignore = "Known bug: empty percentiles returns Some([[], []]) instead of None"]
 async fn test_fee_history_empty_percentiles_no_reward() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
@@ -907,7 +904,7 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
 /// data with oldest_block = 1001, which is invalid since those blocks don't exist.
 /// This could mislead clients into thinking the chain has more history than it does.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known bug: future block returns fabricated data instead of error/bounded result"]
+// #[ignore = "Known bug: future block returns fabricated data instead of error/bounded result"]
 async fn test_fee_history_future_block() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
@@ -996,6 +993,66 @@ async fn test_fee_history_percentile_boundaries() -> anyhow::Result<()> {
             "Block {i}: 0th percentile {} should be <= 100th percentile {}",
             row[0],
             row[2]
+        );
+    }
+
+    Ok(())
+}
+
+/// TC34: Heavy gas usage - gas_used_ratio approaches but doesn't exceed 1.0
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+
+    // Wait for initial blocks
+    rollup.wait_for_next_blocks(2).await;
+
+    // Deploy contract
+    let contract_address = deploy_contract_check(&simple_storage)
+        .await
+        .expect("deploy should succeed");
+    rollup.wait_for_next_blocks(1).await;
+
+    let block_before = client.get_block_number().await?;
+
+    // Burn a lot of gas with keccak256 loops
+    // Use a high iteration count to consume significant gas
+    let tx_hash = simple_storage.alloy_burn_gas(contract_address, 10000).await;
+    simple_storage.wait_for_finalized_receipt(tx_hash).await;
+
+    rollup.pause_preferred_batches().await;
+
+    let block_after = client.get_block_number().await?;
+
+    // Query fee history for the block containing the heavy tx
+    let fee_history = client
+        .get_fee_history(
+            (block_after - block_before + 1) as u64,
+            BlockNumberOrTag::Finalized,
+            &[],
+        )
+        .await?;
+
+    // Find the highest gas_used_ratio
+    let max_ratio = fee_history
+        .gas_used_ratio
+        .iter()
+        .cloned()
+        .fold(0.0_f64, f64::max);
+
+    // The heavy tx should produce a non-trivial gas ratio
+    assert!(
+        max_ratio > 0.0,
+        "Heavy gas tx should produce non-zero gas_used_ratio, got {max_ratio}",
+    );
+
+    // Critical invariant: ratio should never exceed 1.0
+    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
+        assert!(
+            *ratio <= 1.0,
+            "Block {i} gas_used_ratio {ratio} exceeds 1.0",
         );
     }
 

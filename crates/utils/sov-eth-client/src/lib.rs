@@ -300,4 +300,13 @@ impl SimpleStorageClient {
         );
         self.send_tx(tx).await.unwrap()
     }
+
+    /// Burn gas by computing keccak256 in a loop (for gas usage testing).
+    pub async fn alloy_burn_gas(&self, contract_address: Address, iterations: u32) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.burn_gas(iterations)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
 }

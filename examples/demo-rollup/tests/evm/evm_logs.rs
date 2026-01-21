@@ -6,7 +6,10 @@ use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use alloy_primitives::{keccak256, Address, B256, U256};
 use alloy_provider::Provider;
-use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
+use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
+use serde_json::Value;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_ethereum::Cursor;
@@ -32,6 +35,9 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
         .to_block(BlockNumberOrTag::Pending);
     let logs_after_first = client.get_logs(&pending_filter).await?;
     assert_eq!(logs_after_first.len(), 2);
+    for log in &logs_after_first {
+        assert_log_schema_pending(log);
+    }
 
     let first_hash = client
         .get_block_by_number(BlockNumberOrTag::Latest)
@@ -56,6 +62,9 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     assert!(!logs_by_hash.is_empty());
     assert_eq!(logs_by_hash, logs_after_first);
     assert!(logs_after_all.starts_with(&logs_by_hash));
+    for log in &logs_by_hash {
+        assert_log_schema_pending(log);
+    }
 
     let log = &logs_by_hash[0];
     let pending_hash = log
@@ -142,6 +151,7 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len() as u32, nb_of_txs);
     for log in logs {
+        assert_log_schema_pending(&log);
         assert!(filter.matches(log.inner.as_ref()));
     }
     rollup_and_client
@@ -358,15 +368,18 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
         .alloy_emit_logs(rollup_and_client.contract_address, 42, nb_of_logs_per_tx)
         .await;
 
+    let sender = rollup_and_client.client.address();
     let filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
         .to_block(BlockNumberOrTag::Pending)
-        .topic2(U256::from(42))
+        .topic0(simple_log_topic0())
+        .topic1(sender)
         .topic3(U256::from(4));
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 1);
     for log in logs {
+        assert_log_schema_pending(&log);
         assert!(filter.matches(log.inner.as_ref()));
     }
 
@@ -560,6 +573,7 @@ async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
     let topic0 = simple_log_topic0();
     let sender_topic = address_to_topic(sender);
     for (idx, log) in logs.iter().enumerate() {
+        assert_log_schema_sealed(log);
         let idx_u256 = U256::from(idx as u64);
         let expected_topic1 = topic1_base + idx_u256;
         let expected_topic2 = topic2_base + idx_u256;
@@ -618,6 +632,7 @@ async fn get_logs_full_topic_log() -> anyhow::Result<()> {
     assert_eq!(logs.len(), 1);
 
     let log = &logs[0];
+    assert_log_schema_sealed(log);
     let topics = log.inner.topics();
     assert_eq!(topics.len(), 4);
     assert_eq!(topics[0], full_topic_log_topic0());
@@ -665,6 +680,7 @@ async fn get_logs_data_only_log() -> anyhow::Result<()> {
     assert_eq!(logs.len(), 1);
 
     let log = &logs[0];
+    assert_log_schema_sealed(log);
     let topics = log.inner.topics();
     assert_eq!(topics.len(), 1);
     assert_eq!(topics[0], data_only_log_topic0());
@@ -734,6 +750,452 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
         .test_rollup
         .resume_preferred_batches()
         .await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_earliest_tag() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let tx_hashes = rollup_and_client.produce_logs(3, 2, Some(1)).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let last_tx = *tx_hashes.last().expect("expected log tx hash");
+    let last_receipt = rollup_and_client
+        .client
+        .alloy_receipt(last_tx)
+        .await
+        .unwrap();
+    let max_block = last_receipt
+        .block_number
+        .expect("block number should be present");
+
+    let earliest_filter = Filter::new()
+        .from_block(BlockNumberOrTag::Earliest)
+        .to_block(max_block);
+    let zero_filter = Filter::new().from_block(0).to_block(max_block);
+
+    let earliest_logs = rollup_and_client.client.get_logs(&earliest_filter).await;
+    let zero_logs = rollup_and_client.client.get_logs(&zero_filter).await;
+
+    assert!(!earliest_logs.is_empty());
+    assert_eq!(earliest_logs, zero_logs);
+    for log in &earliest_logs {
+        assert_log_schema_sealed(log);
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_schema_correctness() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let tx_hashes = rollup_and_client.produce_logs(2, 3, Some(1)).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let last_tx = *tx_hashes.last().expect("expected log tx hash");
+    let last_receipt = rollup_and_client
+        .client
+        .alloy_receipt(last_tx)
+        .await
+        .unwrap();
+    let max_block = last_receipt
+        .block_number
+        .expect("block number should be present");
+
+    let filter = serde_json::json!({
+        "fromBlock": "0x0",
+        "toBlock": format!("0x{max_block:x}"),
+        "address": format!("{:#x}", rollup_and_client.contract_address),
+    });
+    let logs = get_logs_raw_json(&rollup_and_client.client, filter).await;
+    assert!(!logs.is_empty());
+    for log in &logs {
+        assert_log_json_schema(log);
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_eip1898_blockhash_object() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let tx_hash = rollup_and_client
+        .client
+        .alloy_emit_logs(rollup_and_client.contract_address, 7, 2)
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let receipt = rollup_and_client
+        .client
+        .alloy_receipt(tx_hash)
+        .await
+        .unwrap();
+    let block_hash = receipt.block_hash.expect("block hash should be present");
+
+    let filter = serde_json::json!({
+        "fromBlock": {
+            "blockHash": format!("{:#x}", block_hash),
+            "requireCanonical": true,
+        },
+        "toBlock": {
+            "blockHash": format!("{:#x}", block_hash),
+            "requireCanonical": true,
+        },
+        "address": format!("{:#x}", rollup_and_client.contract_address),
+    });
+    let eip_logs = get_logs_raw_typed(&rollup_and_client.client, filter).await;
+    assert!(!eip_logs.is_empty());
+    for log in &eip_logs {
+        assert_log_schema_sealed(log);
+    }
+
+    let expected = rollup_and_client
+        .client
+        .get_logs(
+            &Filter::new()
+                .at_block_hash(block_hash)
+                .address(rollup_and_client.contract_address),
+        )
+        .await;
+    assert_eq!(eip_logs, expected);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_empty_result() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    rollup_and_client.produce_logs(1, 2, None).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let empty_address = Address::from([0x11; 20]);
+    let filter = Filter::new()
+        .from_block(0)
+        .to_block(BlockNumberOrTag::Latest)
+        .address(empty_address);
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+    assert!(logs.is_empty());
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_empty_topics_matches_all() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let tx_hashes = rollup_and_client.produce_logs(2, 2, Some(1)).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let last_tx = *tx_hashes.last().expect("expected log tx hash");
+    let last_receipt = rollup_and_client
+        .client
+        .alloy_receipt(last_tx)
+        .await
+        .unwrap();
+    let max_block = last_receipt
+        .block_number
+        .expect("block number should be present");
+
+    let filter_with_empty_topics = serde_json::json!({
+        "fromBlock": "0x0",
+        "toBlock": format!("0x{max_block:x}"),
+        "address": format!("{:#x}", rollup_and_client.contract_address),
+        "topics": [],
+    });
+    let logs_with_empty_topics =
+        get_logs_raw_typed(&rollup_and_client.client, filter_with_empty_topics).await;
+
+    let filter = Filter::new()
+        .from_block(0)
+        .to_block(max_block)
+        .address(rollup_and_client.contract_address);
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+
+    assert_eq!(logs_with_empty_topics, logs);
+    for log in &logs_with_empty_topics {
+        assert_log_schema_sealed(log);
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_topic0_only_matches_any_indexed() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let tx_hash = rollup_and_client
+        .client
+        .alloy_emit_configurable_logs(
+            rollup_and_client.contract_address,
+            U256::from(10),
+            U256::from(20),
+            3,
+        )
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let receipt = rollup_and_client
+        .client
+        .alloy_receipt(tx_hash)
+        .await
+        .unwrap();
+    let block_hash = receipt.block_hash.expect("block hash should be present");
+
+    let filter = Filter::new()
+        .at_block_hash(block_hash)
+        .address(rollup_and_client.contract_address)
+        .topic0(simple_log_topic0());
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+
+    assert_eq!(logs.len(), 3);
+    for log in &logs {
+        assert_log_schema_sealed(log);
+        assert_eq!(log.inner.topics()[0], simple_log_topic0());
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_topic1_without_topic0() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let sender = rollup_and_client.client.address();
+    let simple_tx = rollup_and_client
+        .client
+        .alloy_emit_logs(rollup_and_client.contract_address, 5, 3)
+        .await;
+    let data_tx = rollup_and_client
+        .client
+        .alloy_emit_data_only_log(
+            rollup_and_client.contract_address,
+            U256::from(1),
+            U256::from(2),
+        )
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let simple_receipt = rollup_and_client
+        .client
+        .alloy_receipt(simple_tx)
+        .await
+        .unwrap();
+    let data_receipt = rollup_and_client
+        .client
+        .alloy_receipt(data_tx)
+        .await
+        .unwrap();
+    let max_block = simple_receipt
+        .block_number
+        .expect("block number should be present")
+        .max(
+            data_receipt
+                .block_number
+                .expect("block number should be present"),
+        );
+
+    let filter = Filter::new()
+        .from_block(0)
+        .to_block(max_block)
+        .address(rollup_and_client.contract_address)
+        .topic1(sender);
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+
+    assert_eq!(logs.len(), 3);
+    for log in &logs {
+        assert_log_schema_sealed(log);
+        assert_eq!(log.inner.topics()[1], address_to_topic(sender));
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let simple_tx = rollup_and_client
+        .client
+        .alloy_emit_logs(rollup_and_client.contract_address, 1, 2)
+        .await;
+    let data_tx = rollup_and_client
+        .client
+        .alloy_emit_data_only_log(
+            rollup_and_client.contract_address,
+            U256::from(9),
+            U256::from(10),
+        )
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let simple_receipt = rollup_and_client
+        .client
+        .alloy_receipt(simple_tx)
+        .await
+        .unwrap();
+    let data_receipt = rollup_and_client
+        .client
+        .alloy_receipt(data_tx)
+        .await
+        .unwrap();
+    let max_block = simple_receipt
+        .block_number
+        .expect("block number should be present")
+        .max(
+            data_receipt
+                .block_number
+                .expect("block number should be present"),
+        );
+
+    let filter = Filter::new()
+        .from_block(0)
+        .to_block(max_block)
+        .address(rollup_and_client.contract_address)
+        .topic0(vec![simple_log_topic0(), data_only_log_topic0()]);
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+
+    assert_eq!(logs.len(), 3);
+    for log in &logs {
+        assert_log_schema_sealed(log);
+        let sig = log.inner.topics()[0];
+        assert!(sig == simple_log_topic0() || sig == data_only_log_topic0());
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let sender = rollup_and_client.client.address();
+    let full_topic_value = U256::from(777);
+    let simple_tx = rollup_and_client
+        .client
+        .alloy_emit_logs(rollup_and_client.contract_address, 7, 1)
+        .await;
+    let full_tx = rollup_and_client
+        .client
+        .alloy_emit_full_topic_log(
+            rollup_and_client.contract_address,
+            full_topic_value,
+            U256::from(1),
+            U256::from(2),
+            U256::from(3),
+        )
+        .await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let simple_receipt = rollup_and_client
+        .client
+        .alloy_receipt(simple_tx)
+        .await
+        .unwrap();
+    let full_receipt = rollup_and_client
+        .client
+        .alloy_receipt(full_tx)
+        .await
+        .unwrap();
+    let max_block = simple_receipt
+        .block_number
+        .expect("block number should be present")
+        .max(
+            full_receipt
+                .block_number
+                .expect("block number should be present"),
+        );
+
+    let filter = Filter::new()
+        .from_block(0)
+        .to_block(max_block)
+        .address(rollup_and_client.contract_address)
+        .topic0(vec![simple_log_topic0(), full_topic_log_topic0()])
+        .topic1(vec![address_to_topic(sender), B256::from(full_topic_value)]);
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+
+    assert_eq!(logs.len(), 2);
+    for log in &logs {
+        assert_log_schema_sealed(log);
+        let sig = log.inner.topics()[0];
+        let first_indexed = log.inner.topics()[1];
+        assert!(sig == simple_log_topic0() || sig == full_topic_log_topic0());
+        assert!(
+            first_indexed == address_to_topic(sender)
+                || first_indexed == B256::from(full_topic_value)
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_trailing_null_topics_ignored() -> anyhow::Result<()> {
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    let tx_hashes = rollup_and_client.produce_logs(2, 2, Some(1)).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+    let last_tx = *tx_hashes.last().expect("expected log tx hash");
+    let last_receipt = rollup_and_client
+        .client
+        .alloy_receipt(last_tx)
+        .await
+        .unwrap();
+    let max_block = last_receipt
+        .block_number
+        .expect("block number should be present");
+
+    let filter_with_nulls = serde_json::json!({
+        "fromBlock": "0x0",
+        "toBlock": format!("0x{max_block:x}"),
+        "address": format!("{:#x}", rollup_and_client.contract_address),
+        "topics": [
+            format!("{:#x}", simple_log_topic0()),
+            null,
+            null
+        ],
+    });
+    let logs_with_nulls = get_logs_raw_typed(&rollup_and_client.client, filter_with_nulls).await;
+
+    let filter = Filter::new()
+        .from_block(0)
+        .to_block(max_block)
+        .address(rollup_and_client.contract_address)
+        .topic0(simple_log_topic0());
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+
+    assert_eq!(logs_with_nulls, logs);
+    for log in &logs_with_nulls {
+        assert_log_schema_sealed(log);
+    }
     Ok(())
 }
 
@@ -867,6 +1329,7 @@ async fn evm_test_get_logs_range_limit() {
 fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_of_logs: u32) {
     assert_eq!(logs.len() as u32, expected_nb_of_logs);
     for log in logs {
+        assert_log_schema_sealed(&log);
         assert!(filter.matches(log.inner.as_ref()));
     }
 }
@@ -874,7 +1337,7 @@ fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_
 fn assert_logs_ordered_and_not_removed(logs: &[alloy_rpc_types_eth::Log]) {
     let mut previous = None;
     for log in logs {
-        assert!(!log.removed);
+        assert_log_schema_sealed(log);
         let key = (
             log.block_number.expect("block number should be present"),
             log.transaction_index
@@ -910,6 +1373,110 @@ fn decode_two_u256(data: &[u8]) -> (U256, U256) {
     assert_eq!(data.len(), 64);
     let (first, second) = data.split_at(32);
     (U256::from_be_slice(first), U256::from_be_slice(second))
+}
+
+fn assert_log_schema_common(log: &Log) {
+    assert!(log.transaction_hash.is_some());
+    assert!(log.transaction_index.is_some());
+    assert!(log.log_index.is_some());
+    assert!(log.inner.topics().len() <= 4);
+    assert!(!log.inner.topics().is_empty());
+    assert!(log.inner.data.data.len() % 32 == 0);
+    assert!(!log.removed);
+    assert_ne!(log.address(), Address::ZERO);
+}
+
+fn assert_log_schema_sealed(log: &Log) {
+    assert_log_schema_common(log);
+    let block_hash = log.block_hash.expect("block hash should be present");
+    assert_ne!(block_hash, B256::ZERO);
+    assert!(log.block_number.is_some());
+}
+
+fn assert_log_schema_pending(log: &Log) {
+    assert_log_schema_common(log);
+    let block_hash = log
+        .block_hash
+        .expect("pending log should include a block hash");
+    assert_ne!(block_hash, B256::ZERO);
+    assert!(log.block_number.is_some());
+    assert!(log.block_timestamp.unwrap_or(0) > 0);
+}
+
+fn assert_hex_fixed(value: &Value, expected_len: usize) {
+    let hex = value
+        .as_str()
+        .expect("expected hex string for fixed-size field");
+    assert!(hex.starts_with("0x"));
+    assert_eq!(hex.len(), expected_len);
+}
+
+fn assert_hex_quantity(value: &Value) -> u64 {
+    let hex = value
+        .as_str()
+        .expect("expected hex string for quantity field");
+    assert!(hex.starts_with("0x"));
+    let digits = &hex[2..];
+    assert!(!digits.is_empty());
+    u64::from_str_radix(digits, 16).expect("valid hex quantity")
+}
+
+fn assert_hex_data(value: &Value) {
+    let hex = value.as_str().expect("expected hex string for data field");
+    assert!(hex.starts_with("0x"));
+    let digits = &hex[2..];
+    assert!(digits.len() % 2 == 0);
+}
+
+fn assert_log_json_schema(log: &Value) {
+    let obj = log.as_object().expect("log should be a JSON object");
+    assert_hex_fixed(obj.get("address").expect("address should be present"), 42);
+    assert_hex_fixed(
+        obj.get("blockHash").expect("blockHash should be present"),
+        66,
+    );
+    assert_hex_quantity(
+        obj.get("blockNumber")
+            .expect("blockNumber should be present"),
+    );
+    assert_hex_fixed(
+        obj.get("transactionHash")
+            .expect("transactionHash should be present"),
+        66,
+    );
+    assert_hex_quantity(
+        obj.get("transactionIndex")
+            .expect("transactionIndex should be present"),
+    );
+    assert_hex_quantity(obj.get("logIndex").expect("logIndex should be present"));
+    assert_hex_data(obj.get("data").expect("data should be present"));
+
+    let topics = obj.get("topics").expect("topics should be present");
+    let topics = topics.as_array().expect("topics should be an array");
+    assert!(topics.len() <= 4);
+    assert!(!topics.is_empty());
+    for topic in topics {
+        assert_hex_fixed(topic, 66);
+    }
+
+    let removed = obj.get("removed").expect("removed should be present");
+    assert!(removed.as_bool().is_some());
+}
+
+async fn get_logs_raw_typed(client: &SimpleStorageClient, filter: Value) -> Vec<Log> {
+    client
+        .ws
+        .request("eth_getLogs", rpc_params![filter])
+        .await
+        .unwrap()
+}
+
+async fn get_logs_raw_json(client: &SimpleStorageClient, filter: Value) -> Vec<Value> {
+    client
+        .ws
+        .request("eth_getLogs", rpc_params![filter])
+        .await
+        .unwrap()
 }
 
 #[tokio::test(flavor = "multi_thread")]
