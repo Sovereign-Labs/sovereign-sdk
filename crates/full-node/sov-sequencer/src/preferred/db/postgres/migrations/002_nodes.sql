@@ -8,3 +8,7 @@ CREATE TABLE IF NOT EXISTS nodes (
 
 -- Create index on last_updated for efficient queries on stale nodes
 CREATE INDEX IF NOT EXISTS idx_nodes_last_updated ON nodes(last_updated);
+
+-- Timestamp when leadership was acquired; used for grace-period checks
+ALTER TABLE sequencer_leader
+ADD COLUMN leader_acquired_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
