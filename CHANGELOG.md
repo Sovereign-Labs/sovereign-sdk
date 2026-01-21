@@ -1,5 +1,6 @@
 # 2026-01-20
 - #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
+- #2380 EVM: Validate `eth_feeHistory` input parameters.
 
 # 2026-01-16
 - #2342 EVM: Populate the `gas_limit` for pending block.
