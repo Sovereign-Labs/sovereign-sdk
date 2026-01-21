@@ -83,13 +83,10 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
 }
 
 fn assert_err(err: RpcError<TransportErrorKind>) {
-    let err_str = err
-        .as_error_resp()
-        .unwrap()
-        .data
-        .as_ref()
-        .unwrap()
-        .to_string();
-
-    err_str.contains("X_FORWARDED_FOR");
+    let payload = err.as_error_resp().unwrap();
+    assert!(
+        payload.message.as_ref().contains(X_FORWARDED_FOR),
+        "expected error message to include IP: {}",
+        X_FORWARDED_FOR
+    );
 }
