@@ -356,7 +356,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             storage: rollup_db_config,
             runner: RunnerConfig {
                 da_polling_interval_ms: TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
-                da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
                     &self.config.axum_host,
                     self.config.axum_port,
@@ -553,6 +552,7 @@ where
             block_producing,
             da_layer: None,
             randomization: None,
+            failure_behavior: Default::default(),
         };
 
         Self {

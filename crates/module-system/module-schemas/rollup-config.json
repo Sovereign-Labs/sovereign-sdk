@@ -171,6 +171,106 @@
         }
       ]
     },
+    "FailureBehavior": {
+      "description": "Configurable failure behavior for testing error handling in consumers of MockDa. This allows tests to inject failures at specific points during DA operations.",
+      "oneOf": [
+        {
+          "description": "No failures (default behavior).",
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        },
+        {
+          "description": "Fail `get_block_at` or `get_block_header_at` after N successful calls. The counter decrements on each call; when it reaches 0, failures may occur based on the configured probability.",
+          "type": "object",
+          "required": [
+            "fail_after_n_calls"
+          ],
+          "properties": {
+            "fail_after_n_calls": {
+              "type": "object",
+              "required": [
+                "remaining"
+              ],
+              "properties": {
+                "failure_probability": {
+                  "description": "Probability of failure (0-100). 100 = always fail, 0 = never fail.",
+                  "default": 100,
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                },
+                "remaining": {
+                  "description": "Number of successful calls remaining before failures may start.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or `get_block_header_at` is called for a specific height. After the reorg is triggered, subsequent calls proceed normally.",
+          "type": "object",
+          "required": [
+            "reorg_during_call"
+          ],
+          "properties": {
+            "reorg_during_call": {
+              "type": "object",
+              "required": [
+                "trigger_at_height"
+              ],
+              "properties": {
+                "trigger_at_height": {
+                  "description": "The height that triggers the reorg.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Add artificial delays to `get_block_at` or `get_block_header_at` after N calls. Useful for testing timeout handling and slow DA scenarios.",
+          "type": "object",
+          "required": [
+            "delay_after_n_calls"
+          ],
+          "properties": {
+            "delay_after_n_calls": {
+              "type": "object",
+              "required": [
+                "delay_range_ms",
+                "remaining"
+              ],
+              "properties": {
+                "delay_range_ms": {
+                  "description": "Range of delay in milliseconds. A random value from this range is used.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Range_of_uint64"
+                    }
+                  ]
+                },
+                "remaining": {
+                  "description": "Number of calls before delays start.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "HexHash": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
       "type": "string",
@@ -262,6 +362,15 @@
         "connection_string": {
           "description": "Connection string to the database for storing Da Data. - \"sqlite://demo_data/da.sqlite?mode=rwc\" - \"sqlite::memory:\" - \"postgresql://root:hunter2@aws.amazon.com/mock-da\"",
           "type": "string"
+        },
+        "failure_behavior": {
+          "description": "Configures failure injection for testing. Defaults to `FailureBehavior::None` (no failures).",
+          "default": "none",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FailureBehavior"
+            }
+          ]
         },
         "finalization_blocks": {
           "description": "Defines how many blocks progress to finalization.",
@@ -686,6 +795,25 @@
         }
       }
     },
+    "Range_of_uint64": {
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "RecoveryStrategy": {
       "description": "Strategy for handling the scenario where the preferred sequencer finds itself close to or past deferred_slots_count in the past, i.e. risking its soft confirmations being invalidated due to the possibility of a non-preferred (deferred) batch having been included.",
       "oneOf": [
@@ -857,13 +985,6 @@
         },
         "da_polling_interval_ms": {
           "description": "Polling interval for the DA service to check the sync status (in milliseconds).",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "da_total_timeout_secs": {
-          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead to rollup shutdown.",
-          "default": 600,
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0

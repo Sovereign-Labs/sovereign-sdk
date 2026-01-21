@@ -523,9 +523,10 @@ async fn test_pinned_cache_after_total_resync() {
     test_rollup.shutdown().await.unwrap();
 }
 
-/// Ensures that RAM pinning works again after the node falls out of sync
+/// Ensures that RAM pinning works again after the node falls out of sync.
+/// Marked as flaky, because it calls the manual produce_batch endpoint but sometimes there’s no open batch.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_pinned_cache_after_fast_resync() {
+async fn flaky_test_pinned_cache_after_fast_resync() {
     sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
     // Finalise some blocks

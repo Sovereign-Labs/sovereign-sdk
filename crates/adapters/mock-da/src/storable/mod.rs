@@ -39,6 +39,7 @@ mod tests {
             block_producing: BlockProducingConfig::Manual,
             da_layer: None,
             randomization: None,
+            failure_behavior: Default::default(),
         };
         let blocks = 5;
         let start = Time::now();
