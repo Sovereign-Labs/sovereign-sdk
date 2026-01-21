@@ -264,8 +264,7 @@ fn validate_seq_nr_from_node(
             SequencerRole::Replica => {
                 // If this occurs on replicas, we log the error and skip `update_state` for the batch received from the node.
                 // If the database slowdown is temporary, the issue will be resolved when the next `update_state` call succeeds.
-                // If the situation persists, the replica will eventually enter sync mode in that case that the database
-                // setup needs to be examined.
+                // If the situation persists, the replica will eventually enter sync mode in that case that the database setup needs to be examined.
                 error!(seq_nr_of_in_progress_batch, next_sequence_number_according_to_node, "The replica has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node. 
                     This indicate that Postgres notifications are delayed. In this case, the update from the node is ignored. 
                     If this error occurs repeatedly, investigate the database stack in the deployment.");
