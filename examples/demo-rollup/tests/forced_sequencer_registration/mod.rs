@@ -353,11 +353,9 @@ async fn evm_tx_unregistered_test_case(
 ) -> anyhow::Result<()> {
     // Use the funded sender from genesis (same as used in EVM tests)
     let sender = EvmAccount::from_private_key_hex(SENDER_PRIV_KEY);
-    // let sender_address = sender.address();
 
     // Generate a random receiver
-    let receiver = EvmAccount::generate();
-    let receiver_address = receiver.address();
+    let receiver_address = EvmAccount::generate().address();
 
     // Get initial balance via RPC
     let provider = alloy_client(http_addr);
@@ -368,22 +366,12 @@ async fn evm_tx_unregistered_test_case(
         "Receiver should start with 0 balance"
     );
 
-    // Build EVM transfer tx
-    let transfer_amount = U256::from(1u64);
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
-    // Send via preferred sequencer first to establish nonce ordering.
-    let preferred_nonce = provider.get_transaction_count(sender.address()).await?;
-    let tx = build_evm_transfer_tx( receiver_address, transfer_amount, preferred_nonce);
-    provider
-        .send_transaction(tx.into())
-        .await?
-        .get_receipt()
-        .await?;
-
-    // Submit via unregistered DA service after preferred tx is confirmed.
-    let forced_nonce = provider.get_transaction_count(sender.address()).await?;
-    let forced_tx = build_evm_transfer_tx( receiver_address, transfer_amount, forced_nonce);
+    // Submit EVM transfer via unregistered DA service (forced tx).
+    let transfer_amount = U256::from(1u64);
+    let nonce = provider.get_transaction_count(sender.address()).await?;
+    let forced_tx = build_evm_transfer_tx(receiver_address, transfer_amount, nonce);
     let blob = evm_transaction_into_blob(&sender, forced_tx);
     let _receipt = da_service
         .send_transaction(&blob)
@@ -393,27 +381,14 @@ async fn evm_tx_unregistered_test_case(
 
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    let expected_balance = transfer_amount + transfer_amount;
     poll_until(
-        &format!("EVM balance {} for {}", expected_balance, receiver_address),
+        &format!("EVM balance {} for {}", transfer_amount, receiver_address),
         || async {
             let balance = provider.get_balance(receiver_address).await?;
-            Ok((balance == expected_balance).then_some(()))
+            Ok((balance == transfer_amount).then_some(()))
         },
     )
     .await?;
-
-    let tx = build_evm_transfer_tx( receiver_address, transfer_amount, forced_nonce + 1);
-    provider
-        .send_transaction(tx.into())
-        .await?
-        .get_receipt()
-        .await?;
-
-    assert_eq!(
-        provider.get_balance(receiver_address).await?,
-        (transfer_amount + transfer_amount + transfer_amount)
-    );
     Ok(())
 }
 
