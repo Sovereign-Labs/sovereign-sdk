@@ -11469,6 +11469,7 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "derive_more 1.0.0",
+ "flate2",
  "futures",
  "hex",
  "indoc",
