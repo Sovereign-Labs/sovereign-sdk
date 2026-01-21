@@ -284,23 +284,6 @@ where
         block_number
     }
 
-    /// Retrieves a sealed block by number.
-    pub fn get_sealed_block_by_number(
-        &self,
-        block_number: BlockNumberOrTag,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
-        let pending_or_block_nr = self.block_tag_to_pending_or_block(block_number, state);
-
-        Ok(match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
-            PendingOrBlock::Pending => {
-                let pending_block = self.pending_block(state);
-                Some(MaybeSealedBlock::Pending(pending_block))
-            }
-        })
-    }
-
     fn get_maybe_sealed_block_by_id(
         &self,
         block_id: BlockId,
