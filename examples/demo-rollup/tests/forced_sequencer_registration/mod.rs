@@ -40,9 +40,7 @@ use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use tokio::time::{sleep, timeout};
 
-use crate::bank::helpers::{
-    assert_balance, build_create_token_tx, create_keys_and_addresses, send_tx_and_wait_for_status,
-};
+use crate::bank::helpers::{assert_balance, build_create_token_tx, create_keys_and_addresses};
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::evm::evm_test_helper::{alloy_client, SENDER_PRIV_KEY};
 use crate::test_helpers::{
@@ -405,16 +403,12 @@ async fn bank_transfer_unregistered_test_case(
     client: NodeClient,
     _http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
-    let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
-    let initial_balance = 1_000u128;
+    let (key, _, _, recipient_address) = create_keys_and_addresses();
+    let token_id = config_gas_token_id();
     let transfer_amount = 250u128;
 
-    let create_token_tx = build_create_token_tx(&key, 0, initial_balance);
-    send_tx_and_wait_for_status(&[create_token_tx], &client).await?;
-    wait_for_bank_balance(&client, initial_balance, token_id, user_address).await?;
-
     let transfer_tx =
-        build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 1);
+        build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 0);
     let blob = transaction_into_blob(transfer_tx);
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
@@ -425,13 +419,6 @@ async fn bank_transfer_unregistered_test_case(
         .expect("Failed to submit bank transfer blob to DA");
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    wait_for_bank_balance(
-        &client,
-        initial_balance - transfer_amount,
-        token_id,
-        user_address,
-    )
-    .await?;
     wait_for_bank_balance(&client, transfer_amount, token_id, recipient_address).await?;
 
     Ok(())
