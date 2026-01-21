@@ -373,7 +373,7 @@ async fn test_dispatch_message_to_evm_counterparty() {
 
             // Wait for the relayer to process the message and submit to EVM
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
-            wait_for_messages_processed(
+            if let Err(err) = wait_for_messages_processed(
                 hyperlane.metrics(),
                 "sovtest",
                 "ethtest",
@@ -381,7 +381,10 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 RelayerWaitConfig::default(),
             )
             .await
-            .expect("Relayer metrics check failed");
+            {
+                hyperlane.print_stdout().await;
+                panic!("Relayer metrics check failed: {err}");
+            }
 
             // Check for events on EVM
             tracing::info!("Checking for events on EVM counterparty...");
@@ -606,7 +609,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
 
             // check if transfer was received by counterparty
             tracing::info!("Waiting for warp transfer to be relayed to EVM...");
-            wait_for_messages_processed(
+            if let Err(err) = wait_for_messages_processed(
                 hyperlane.metrics(),
                 "sovtest",
                 "ethtest",
@@ -614,7 +617,10 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
                 RelayerWaitConfig::default(),
             )
             .await
-            .expect("Relayer metrics check failed");
+            {
+                hyperlane.print_stdout().await;
+                panic!("Relayer metrics check failed: {err}");
+            }
             let (origin_domain, recipient) = hyperlane
                 .latest_warp_transfer_on_counterparty(remote_route_id)
                 .await;

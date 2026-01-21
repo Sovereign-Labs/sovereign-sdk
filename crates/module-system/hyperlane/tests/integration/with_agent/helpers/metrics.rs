@@ -52,24 +52,36 @@ impl RelayerMetricsClient {
             .map_err(|e| MetricsError::FetchError(e.to_string()))
     }
 
-    /// Gets the last known message nonce that was processed for a given origin/remote pair.
+    /// Gets the count of messages processed for a given origin/remote pair.
     ///
-    /// Metric: `hyperlane_last_known_message_nonce{origin, remote, phase="message_processed"}`
-    /// This metric tracks the nonce (sequence number) of the last message that was processed.
-    /// A value > 0 indicates at least one message has been processed.
+    /// Metric: `hyperlane_messages_processed_count{origin, remote}`
+    /// This counter is incremented after a message is confirmed as delivered.
     pub async fn get_messages_processed_count(
         &self,
         origin: &str,
         remote: &str,
     ) -> Result<u64, MetricsError> {
         let metrics_text = self.fetch_metrics().await?;
-        let labels = [
-            ("origin", origin),
-            ("remote", remote),
-            ("phase", "message_processed"),
-        ];
-        parse_prometheus_metric(&metrics_text, "hyperlane_last_known_message_nonce", &labels)
+        let labels = [("origin", origin), ("remote", remote)];
+        parse_prometheus_metric(&metrics_text, "hyperlane_messages_processed_count", &labels)
             .map(|v| v as u64)
+    }
+
+    /// Gets the count of finalized transactions from Lander for a destination chain.
+    ///
+    /// Metric: `hyperlane_lander_finalized_transactions{destination=...}`
+    pub async fn get_lander_finalized_transactions(
+        &self,
+        destination: &str,
+    ) -> Result<u64, MetricsError> {
+        let metrics_text = self.fetch_metrics().await?;
+        let labels = [("destination", destination)];
+        parse_prometheus_metric(
+            &metrics_text,
+            "hyperlane_lander_finalized_transactions",
+            &labels,
+        )
+        .map(|v| v as u64)
     }
 
     /// Checks if the relayer has encountered a critical error on any chain.
@@ -249,27 +261,21 @@ mod tests {
         let text = r#"
 # HELP hyperlane_messages_processed_count Number of messages processed
 # TYPE hyperlane_messages_processed_count counter
-hyperlane_messages_processed_count{origin_chain="sovtest",destination_chain="ethtest"} 5
-hyperlane_messages_processed_count{origin_chain="ethtest",destination_chain="sovtest"} 3
+hyperlane_messages_processed_count{origin="sovtest",remote="ethtest"} 5
+hyperlane_messages_processed_count{origin="ethtest",remote="sovtest"} 3
 "#;
 
         let result = parse_prometheus_metric(
             text,
             "hyperlane_messages_processed_count",
-            &[
-                ("origin_chain", "sovtest"),
-                ("destination_chain", "ethtest"),
-            ],
+            &[("origin", "sovtest"), ("remote", "ethtest")],
         );
         assert_eq!(result.unwrap(), 5.0);
 
         let result = parse_prometheus_metric(
             text,
             "hyperlane_messages_processed_count",
-            &[
-                ("origin_chain", "ethtest"),
-                ("destination_chain", "sovtest"),
-            ],
+            &[("origin", "ethtest"), ("remote", "sovtest")],
         );
         assert_eq!(result.unwrap(), 3.0);
     }
@@ -298,8 +304,8 @@ hyperlane_some_other_metric 42
 
     #[test]
     fn test_parse_label_string() {
-        let labels = parse_label_string(r#"origin_chain="sovtest",destination_chain="ethtest""#);
-        assert_eq!(labels.get("origin_chain"), Some(&"sovtest"));
-        assert_eq!(labels.get("destination_chain"), Some(&"ethtest"));
+        let labels = parse_label_string(r#"origin="sovtest",remote="ethtest""#);
+        assert_eq!(labels.get("origin"), Some(&"sovtest"));
+        assert_eq!(labels.get("remote"), Some(&"ethtest"));
     }
 }

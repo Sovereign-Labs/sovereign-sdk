@@ -29,6 +29,8 @@ impl Default for RelayerWaitConfig {
 pub enum WaitError {
     /// Timed out waiting for the condition.
     Timeout(String),
+    /// Relayer reported a critical error.
+    CriticalError,
     /// Relayer encountered too many errors.
     TooManyErrors { initial: u64, current: u64 },
     /// Failed to fetch metrics.
@@ -39,6 +41,7 @@ impl std::fmt::Display for WaitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             WaitError::Timeout(msg) => write!(f, "Timeout: {msg}"),
+            WaitError::CriticalError => write!(f, "Relayer reported a critical error"),
             WaitError::TooManyErrors { initial, current } => {
                 write!(
                     f,
@@ -71,6 +74,10 @@ pub async fn wait_for_messages_processed(
 ) -> Result<(), WaitError> {
     let start = std::time::Instant::now();
     let initial_errors = get_error_count_safe(metrics).await;
+    let initial_messages = get_messages_processed_count_safe(metrics, origin, remote).await;
+    let initial_finalized = get_lander_finalized_transactions_safe(metrics, remote).await;
+    let target_messages = initial_messages.saturating_add(expected_count);
+    let target_finalized = initial_finalized.saturating_add(expected_count);
 
     tracing::info!(
         %origin,
@@ -80,6 +87,8 @@ pub async fn wait_for_messages_processed(
         "Waiting for messages to be processed"
     );
 
+    // hyperlane_messages_processed_count increments only after confirmation, which is delayed
+    // ~10 minutes in production builds. Lander finalized transactions are a faster signal.
     // Debug: dump all available metrics once at start
     if let Ok(text) = metrics.fetch_metrics().await {
         eprintln!("[DEBUG] === Available metrics (non-comment lines) ===");
@@ -94,23 +103,18 @@ pub async fn wait_for_messages_processed(
     loop {
         // Check for timeout
         if start.elapsed() > config.timeout {
-            let current_count = metrics
-                .get_messages_processed_count(origin, remote)
-                .await
-                .unwrap_or(0);
+            let current_messages = get_messages_processed_count_safe(metrics, origin, remote).await;
+            let current_finalized = get_lander_finalized_transactions_safe(metrics, remote).await;
             return Err(WaitError::Timeout(format!(
-                "Messages processed: {current_count}/{expected_count} after {:?}",
+                "Messages processed: {current_messages}/{target_messages}, \
+                 lander finalized txs: {current_finalized}/{target_finalized} after {:?}",
                 start.elapsed()
             )));
         }
 
         // Check for critical errors
-        // Note: The hyperlane_critical_error metric is set when the relayer loses
-        // liveness on a chain, typically due to unreliable RPCs. We log this but
-        // don't immediately fail - the message may still be processed.
         if metrics.has_critical_error().await.unwrap_or(false) {
-            eprintln!("[WARN] Relayer reports critical_error=1 for a chain (possible RPC issue)");
-            // Don't return early - let the timeout handle actual failures
+            return Err(WaitError::CriticalError);
         }
 
         // Check for error increase
@@ -122,26 +126,26 @@ pub async fn wait_for_messages_processed(
             });
         }
 
-        // Check if we've reached the expected count
-        match metrics.get_messages_processed_count(origin, remote).await {
-            Ok(count) if count >= expected_count => {
-                tracing::info!(
-                    %count,
-                    elapsed = ?start.elapsed(),
-                    "Messages processed successfully"
-                );
-                return Ok(());
-            }
-            Ok(count) => {
-                tracing::info!(%count, %expected_count, elapsed = ?start.elapsed(), "Waiting for more messages...");
-            }
-            Err(MetricsError::MetricNotFound(ref m)) => {
-                tracing::info!(%m, elapsed = ?start.elapsed(), "Metric not found yet, waiting...");
-            }
-            Err(ref e) => {
-                tracing::warn!(?e, elapsed = ?start.elapsed(), "Failed to fetch metrics, retrying...");
-            }
+        let current_messages = get_messages_processed_count_safe(metrics, origin, remote).await;
+        let current_finalized = get_lander_finalized_transactions_safe(metrics, remote).await;
+        if current_messages >= target_messages || current_finalized >= target_finalized {
+            tracing::info!(
+                %current_messages,
+                %current_finalized,
+                elapsed = ?start.elapsed(),
+                "Relayer progress detected"
+            );
+            return Ok(());
         }
+
+        tracing::info!(
+            %current_messages,
+            %target_messages,
+            %current_finalized,
+            %target_finalized,
+            elapsed = ?start.elapsed(),
+            "Waiting for relayer progress..."
+        );
 
         tokio::time::sleep(config.poll_interval).await;
     }
@@ -150,4 +154,25 @@ pub async fn wait_for_messages_processed(
 /// Gets the error count, returning 0 if metrics are unavailable.
 async fn get_error_count_safe(metrics: &RelayerMetricsClient) -> u64 {
     metrics.get_error_count().await.unwrap_or(0)
+}
+
+async fn get_messages_processed_count_safe(
+    metrics: &RelayerMetricsClient,
+    origin: &str,
+    remote: &str,
+) -> u64 {
+    metrics
+        .get_messages_processed_count(origin, remote)
+        .await
+        .unwrap_or(0)
+}
+
+async fn get_lander_finalized_transactions_safe(
+    metrics: &RelayerMetricsClient,
+    destination: &str,
+) -> u64 {
+    metrics
+        .get_lander_finalized_transactions(destination)
+        .await
+        .unwrap_or(0)
 }
