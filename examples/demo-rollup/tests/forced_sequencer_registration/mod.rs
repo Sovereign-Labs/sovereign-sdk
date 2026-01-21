@@ -59,58 +59,25 @@ const FINALIZATION_BLOCKS: u32 = 1;
 const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(60);
 const FORCED_TX_BATCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
-// Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
-// Steps:
-// 1. Start the rollup with the preferred sequencer and demo-stf.
-// 2. Submit a forced registration from another DA address.
-// 3. Wait until the forced registration is processed.
-// 4. Use the REST API to confirm that the new sequencer is registered.
+/// Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_forced_sequencer_registration() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
-
-    let rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Zk),
-        // We need to set the block producing mode to periodic to ensure that the forced registration
-        // eventually succeeds because the registration batch is deferred.
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        FINALIZATION_BLOCKS,
-    )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
-    .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
-        c.automatic_batch_production = true;
-        c.rollup_prover_config = None;
-        c.max_channel_size = 1;
-        c.max_infos_in_db = 1;
-    })
-    .start()
-    .await?;
-
-    let da_service = Arc::new(
-        rollup
-            .da_service
-            .another_on_the_same_layer(UNREGISTERED_SENDER)
-            .await,
-    );
-
-    tokio::select! {
-        err = rollup.rollup_task => err??,
-        res = forced_sequencer_registration_test_case(da_service, &rollup.client) => res?,
-    };
-    Ok(())
+    let (rollup, da_service) = setup().await;
+    run_forced_tx_test(rollup, da_service, forced_sequencer_registration_test_case).await
 }
 
 async fn forced_sequencer_registration_test_case(
     da_service: Arc<impl DaService>,
-    client: &NodeClient,
+    client: NodeClient,
+    _http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
     let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
     let key = key_and_address.private_key;
 
     let tx = build_register_sequencer_tx(&key, 0);
     let blob = transaction_into_blob(tx);
-    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
+    let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
     let _receipt = da_service
         .send_transaction(&blob)
@@ -328,9 +295,6 @@ fn evm_transaction_into_blob(account: &EvmAccount, tx: TxEip1559) -> Vec<u8> {
     .unwrap()
 }
 
-/// Address for second unregistered sender (different from UNREGISTERED_SENDER used in registration test)
-const UNREGISTERED_EVM_SENDER: MockAddress = MockAddress::new([122; 32]);
-
 async fn setup() -> (TestRollup<MockDemoRollup<Native>>, Arc<impl DaService>) {
     setup_with_block_producing(TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING).await
 }
@@ -366,7 +330,7 @@ async fn setup_with_block_producing(
     let da_service = Arc::new(
         rollup
             .da_service
-            .another_on_the_same_layer(UNREGISTERED_EVM_SENDER)
+            .another_on_the_same_layer(UNREGISTERED_SENDER)
             .await,
     );
 
