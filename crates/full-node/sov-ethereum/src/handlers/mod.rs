@@ -1,6 +1,8 @@
 mod get_logs;
 mod subscribe;
 #[cfg(feature = "local")]
+use alloy_eips::BlockId;
+#[cfg(feature = "local")]
 use alloy_eips::Encodable2718;
 #[cfg(feature = "local")]
 use alloy_primitives::Address;
@@ -217,7 +219,7 @@ where
 
             let estimated_gas = evm.eth_estimate_gas(
                 transaction_request.clone(),
-                Some("pending".to_string()),
+                Some(BlockId::pending()),
                 &mut state,
             )?;
             transaction_request.gas = Some(estimated_gas.to::<u64>());

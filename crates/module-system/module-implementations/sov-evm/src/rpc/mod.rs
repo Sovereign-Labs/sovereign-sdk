@@ -10,7 +10,7 @@ pub use crate::primitive_types::MaybeSealedBlock;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
-use alloy_eips::BlockNumberOrTag;
+use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
@@ -109,11 +109,12 @@ where
 
     fn get_block(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Option<Block>, EthApiError> {
-        let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
             return Ok(None);
         };
         let transactions = self.get_block_transactions(&block, kind, state)?;
@@ -172,13 +173,14 @@ where
 
     fn get_receipts(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<
         Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>,
         EthApiError,
     > {
-        let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
             return Ok(None);
         };
         let Some(receipts) = block
@@ -194,10 +196,10 @@ where
     fn call(
         &self,
         request: TransactionRequest,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let block_env = self.resolve_block_env_for_call(block_number, state)?;
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
         let tx_env = prepare_call_env(&block_env, request.clone())?;
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
@@ -228,21 +230,38 @@ where
         None
     }
 
-    /// Convert string to block nr.
-    pub fn str_to_block_nr(
+    fn block_tag_to_pending_or_block(
         &self,
-        block_number: Option<String>,
+        block: BlockNumberOrTag,
+        state: &mut ApiStateAccessor<S>,
+    ) -> PendingOrBlock {
+        let block_numbers = self.block_numbers(state);
+        match block {
+            BlockNumberOrTag::Earliest => PendingOrBlock::Number(*block_numbers.start()),
+            // We treat latest and pending the same to avoid foundry issues
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => PendingOrBlock::Pending,
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                PendingOrBlock::Number(*block_numbers.end())
+            }
+            BlockNumberOrTag::Number(number) => PendingOrBlock::Number(number),
+        }
+    }
+
+    fn block_id_to_pending_or_block(
+        &self,
+        block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<PendingOrBlock, EthApiError> {
-        let block_number_str = block_number.unwrap_or_else(|| "latest".into());
-
-        Ok(match block_number_str.as_str() {
-            "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
-            // We treat latest and pending the same to avoid foundry issues
-            "latest" | "pending" => PendingOrBlock::Pending,
-            number => {
-                let number = u64::from_str_radix(number.trim_start_matches("0x"), 16)
-                    .map_err(|e| EthApiError::InvalidBlockNumber(block_number_str, e))?;
+        Ok(match block_id {
+            BlockId::Number(tag) => self.block_tag_to_pending_or_block(tag, state),
+            BlockId::Hash(hash) => {
+                let Some(number) = self
+                    .block_hash_to_number
+                    .get(&hash.block_hash, state)
+                    .unwrap_infallible()
+                else {
+                    return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
+                };
                 PendingOrBlock::Number(number)
             }
         })
@@ -265,20 +284,26 @@ where
         block_number
     }
 
-    /// Retrieves a sealed block by number.
-    pub fn get_sealed_block_by_number(
+    fn get_maybe_sealed_block_by_id(
         &self,
-        block_number: Option<String>,
+        block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
-        let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
-
-        Ok(match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
-            PendingOrBlock::Pending => {
-                let pending_block = self.pending_block(state);
-                Some(MaybeSealedBlock::Pending(pending_block))
+        Ok(match block_id {
+            BlockId::Number(tag) => {
+                let pending_or_block = self.block_tag_to_pending_or_block(tag, state);
+                match pending_or_block {
+                    PendingOrBlock::Number(number) => self.get_maybe_sealed_block(number, state),
+                    PendingOrBlock::Pending => {
+                        Some(MaybeSealedBlock::Pending(self.pending_block(state)))
+                    }
+                }
             }
+            BlockId::Hash(hash) => self
+                .block_hash_to_number
+                .get(&hash.block_hash, state)
+                .unwrap_infallible()
+                .and_then(|number| self.get_maybe_sealed_block(number, state)),
         })
     }
 
@@ -344,12 +369,13 @@ where
         }
     }
 
-    fn resolve_state<'a>(
+    fn resolve_state_for_block_id<'a>(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &'a mut ApiStateAccessor<S>,
     ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
-        let pending_or_block_nr = self.str_to_block_nr(block_number, state)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let pending_or_block_nr = self.block_id_to_pending_or_block(block_id, state)?;
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
@@ -366,11 +392,12 @@ where
 
     fn resolve_block_env_for_call(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockEnv, EthApiError> {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
         let maybe_block = self
-            .get_sealed_block_by_number(block_number, state)?
+            .get_maybe_sealed_block_by_id(block_id, state)?
             .ok_or(EthApiError::UnknownBlock)?;
 
         let mut block_env = match maybe_block {
