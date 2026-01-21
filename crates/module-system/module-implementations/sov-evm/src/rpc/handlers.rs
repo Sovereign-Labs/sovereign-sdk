@@ -479,7 +479,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<U64>> {
         trace!(
-            ?block_hash,
+            %block_hash,
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
