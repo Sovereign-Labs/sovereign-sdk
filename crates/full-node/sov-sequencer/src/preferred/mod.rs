@@ -113,6 +113,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    seq_role: SequencerRole,
     synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
