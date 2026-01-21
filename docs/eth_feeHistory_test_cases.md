@@ -13,6 +13,38 @@
   - If provided, response includes `reward` array with priority fee percentiles.
   - If omitted or empty, `reward` field is omitted from response.
 
+## Curl example
+
+```bash
+curl -X POST http://localhost:8545 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_feeHistory",
+    "params": [4, "latest", [25, 50, 75]],
+    "id": 1
+  }'
+```
+
+Response:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "oldestBlock": "0x5",
+    "baseFeePerGas": ["0x7", "0x7", "0x7", "0x7", "0x7"],
+    "gasUsedRatio": [0.0, 0.15, 0.0, 0.32],
+    "reward": [
+      ["0x0", "0x0", "0x0"],
+      ["0x0", "0x0", "0x0"],
+      ["0x0", "0x0", "0x0"],
+      ["0x0", "0x0", "0x0"]
+    ]
+  }
+}
+```
+
 ## Response schema
 | Field | Type | Length | Notes |
 |-------|------|--------|-------|
