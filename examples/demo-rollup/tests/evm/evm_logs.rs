@@ -22,26 +22,103 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client.clone()).await?;
-    let tx = contract.emitLogs(U256::ZERO, U256::from(1)).send().await?;
     rollup.pause_preferred_batches().await;
-    let receipt = tx.get_receipt().await?;
+    let _tx = contract.emitLogs(U256::ZERO, U256::from(1)).send().await?;
 
     let filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
         .to_block(BlockNumberOrTag::Pending);
     let logs = client.get_logs(&filter).await?;
-    let receipt_logs = receipt.inner.into_logs();
-    assert_eq!(receipt_logs, logs);
-    assert_eq!(receipt_logs.len(), 1);
-    assert_eq!(receipt_logs[0].block_hash, None);
+    assert_eq!(logs.len(), 1);
+    let log = &logs[0];
+    let pending_hash = log
+        .block_hash
+        .expect("pending logs should include a synthetic block hash");
+    assert_ne!(pending_hash, B256::ZERO);
     assert_ne!(
-        receipt_logs[0]
-            .block_timestamp
+        log.block_timestamp
             .expect("block timestamp should be present"),
         0
     );
 
+    let latest_block = client
+        .get_block_by_number(BlockNumberOrTag::Latest)
+        .await?
+        .expect("latest block should be present");
+    assert_eq!(latest_block.header.hash, pending_hash);
+
+    let hash_filter = Filter::new().at_block_hash(pending_hash);
+    let logs_by_hash = client.get_logs(&hash_filter).await?;
+    assert_eq!(logs_by_hash, logs);
+
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_latest_and_pending_match() {
+    let nb_of_txs = 3;
+    let nb_of_logs_per_tx: u32 = 2;
+
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    rollup_and_client
+        .test_rollup
+        .pause_preferred_batches()
+        .await;
+
+    rollup_and_client
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
+        .await;
+
+    let pending_filter = Filter::new()
+        .from_block(BlockNumberOrTag::Pending)
+        .to_block(BlockNumberOrTag::Pending);
+    let latest_filter = Filter::new()
+        .from_block(BlockNumberOrTag::Latest)
+        .to_block(BlockNumberOrTag::Latest);
+
+    let pending_logs = rollup_and_client.client.get_logs(&pending_filter).await;
+    let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
+
+    assert!(!pending_logs.is_empty());
+    assert_eq!(pending_logs, latest_logs);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_logs_pending_with_topic_filter() {
+    let nb_of_txs = 5;
+    let nb_of_logs_per_tx: u32 = 5;
+
+    let rollup_and_client = RollupAndClient::new(
+        EVM_EXTENSION.max_log_limit,
+        EVM_EXTENSION.response_size_limit,
+    )
+    .await;
+
+    rollup_and_client
+        .test_rollup
+        .pause_preferred_batches()
+        .await;
+
+    rollup_and_client
+        .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
+        .await;
+
+    let topic: B256 = U256::from(3).into();
+    let filter = Filter::new()
+        .from_block(BlockNumberOrTag::Pending)
+        .to_block(BlockNumberOrTag::Pending)
+        .topic3(topic);
+
+    let logs = rollup_and_client.client.get_logs(&filter).await;
+    assert_eq!(logs.len() as u32, nb_of_txs);
+    for log in logs {
+        assert!(filter.matches(log.inner.as_ref()));
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
