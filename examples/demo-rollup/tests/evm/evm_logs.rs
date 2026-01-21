@@ -1,11 +1,7 @@
-// This is fo
 #![allow(deprecated)]
-use crate::evm::evm_test_helper::alloy_client;
-use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
-use alloy_primitives::{keccak256, Address, B256, U256};
-use alloy_provider::Provider;
+use alloy_primitives::{keccak256, Address, TxHash, B256, U256};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
@@ -13,7 +9,6 @@ use serde_json::Value;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_ethereum::Cursor;
-use sov_evm_test_utils::SimpleStorage;
 use sov_modules_api::execution_mode::Native;
 use sov_rpc_eth_types::FilterWithCursor;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
@@ -23,60 +18,49 @@ use std::collections::HashMap;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_log_from_pending_block() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let contract_address = client.alloy_deploy_contract().await;
     rollup.wait_for_next_blocks(1).await;
-    let client = alloy_client(rollup.http_addr);
-    let contract = SimpleStorage::deploy(client.clone()).await?;
     rollup.pause_preferred_batches().await;
 
-    let _first_tx = contract.emitLogs(U256::ZERO, U256::from(2)).send().await?;
+    let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
+    let pending_block = latest_block_context(&client).await;
     let pending_filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
         .to_block(BlockNumberOrTag::Pending);
-    let logs_after_first = client.get_logs(&pending_filter).await?;
+    let logs_after_first = client.get_logs(&pending_filter).await;
     assert_eq!(logs_after_first.len(), 2);
-    for log in &logs_after_first {
-        assert_log_schema_pending(log);
+
+    for (idx, log) in logs_after_first.iter().enumerate() {
+        let expected = ExpectedLogMeta {
+            address: contract_address,
+            tx_hash: first_tx,
+            tx_index: 0,
+            log_index: idx as u64,
+            block_hash: pending_block.hash,
+            block_number: pending_block.number,
+            block_timestamp: Some(pending_block.timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected,
+            client.address(),
+            U256::ZERO,
+            U256::from(idx as u64),
+            U256::ZERO,
+        );
     }
 
-    let first_hash = client
-        .get_block_by_number(BlockNumberOrTag::Latest)
-        .await?
-        .expect("latest block should be present")
-        .header
-        .hash;
+    let _second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
+    let _third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
 
-    let _second_tx = contract
-        .emitLogs(U256::from(1), U256::from(1))
-        .send()
-        .await?;
-    let _third_tx = contract
-        .emitLogs(U256::from(2), U256::from(1))
-        .send()
-        .await?;
-
-    let logs_after_all = client.get_logs(&pending_filter).await?;
-    let hash_filter = Filter::new().at_block_hash(first_hash);
-    let logs_by_hash = client.get_logs(&hash_filter).await?;
+    let logs_after_all = client.get_logs(&pending_filter).await;
+    let hash_filter = Filter::new().at_block_hash(pending_block.hash);
+    let logs_by_hash = client.get_logs(&hash_filter).await;
 
     assert!(!logs_by_hash.is_empty());
     assert_eq!(logs_by_hash, logs_after_first);
     assert!(logs_after_all.starts_with(&logs_by_hash));
-    for log in &logs_by_hash {
-        assert_log_schema_pending(log);
-    }
-
-    let log = &logs_by_hash[0];
-    let pending_hash = log
-        .block_hash
-        .expect("pending logs should include a synthetic block hash");
-    assert_ne!(pending_hash, B256::ZERO);
-    assert_eq!(pending_hash, first_hash);
-    assert_ne!(
-        log.block_timestamp
-            .expect("block timestamp should be present"),
-        0
-    );
 
     rollup.resume_preferred_batches().await;
 
@@ -99,9 +83,11 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
         .pause_preferred_batches()
         .await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
+    let pending_block = latest_block_context(&rollup_and_client.client).await;
+    let sender = rollup_and_client.client.address();
 
     let pending_filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
@@ -113,7 +99,28 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     let pending_logs = rollup_and_client.client.get_logs(&pending_filter).await;
     let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
 
-    assert!(!pending_logs.is_empty());
+    let mut expected = Vec::new();
+    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
+        for log_index_in_tx in 0..nb_of_logs_per_tx {
+            let expected_meta = ExpectedLogMeta {
+                address: rollup_and_client.contract_address,
+                tx_hash: *tx_hash,
+                tx_index: tx_index as u64,
+                log_index: tx_index as u64 * nb_of_logs_per_tx as u64 + log_index_in_tx as u64,
+                block_hash: pending_block.hash,
+                block_number: pending_block.number,
+                block_timestamp: Some(pending_block.timestamp),
+            };
+            expected.push(ExpectedSimpleLog {
+                meta: expected_meta,
+                topic1: U256::from(tx_index as u64),
+                topic2: U256::from(log_index_in_tx as u64),
+                data: U256::ZERO,
+            });
+        }
+    }
+
+    assert_expected_simple_logs(&pending_logs, &expected, sender);
     assert_eq!(pending_logs, latest_logs);
     rollup_and_client
         .test_rollup
@@ -138,9 +145,11 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
         .pause_preferred_batches()
         .await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
+    let pending_block = latest_block_context(&rollup_and_client.client).await;
+    let sender = rollup_and_client.client.address();
 
     let topic: B256 = U256::from(3).into();
     let filter = Filter::new()
@@ -150,8 +159,25 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
 
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len() as u32, nb_of_txs);
-    for log in logs {
-        assert_log_schema_pending(&log);
+    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
+        let expected_meta = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash: *tx_hash,
+            tx_index: tx_index as u64,
+            log_index: (tx_index as u64) * nb_of_logs_per_tx as u64 + 3,
+            block_hash: pending_block.hash,
+            block_number: pending_block.number,
+            block_timestamp: Some(pending_block.timestamp),
+        };
+        let log = &logs[tx_index];
+        assert_simple_log(
+            log,
+            &expected_meta,
+            sender,
+            U256::from(tx_index as u64),
+            U256::from(3),
+            U256::ZERO,
+        );
         assert!(filter.matches(log.inner.as_ref()));
     }
     rollup_and_client
@@ -177,9 +203,11 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
         .pause_preferred_batches()
         .await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
+    let pending_block = latest_block_context(&rollup_and_client.client).await;
+    let sender = rollup_and_client.client.address();
 
     let default_filter = Filter::new();
     let latest_filter = Filter::new()
@@ -189,7 +217,28 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     let default_logs = rollup_and_client.client.get_logs(&default_filter).await;
     let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
 
-    assert!(!default_logs.is_empty());
+    let mut expected = Vec::new();
+    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
+        for log_index_in_tx in 0..nb_of_logs_per_tx {
+            let expected_meta = ExpectedLogMeta {
+                address: rollup_and_client.contract_address,
+                tx_hash: *tx_hash,
+                tx_index: tx_index as u64,
+                log_index: tx_index as u64 * nb_of_logs_per_tx as u64 + log_index_in_tx as u64,
+                block_hash: pending_block.hash,
+                block_number: pending_block.number,
+                block_timestamp: Some(pending_block.timestamp),
+            };
+            expected.push(ExpectedSimpleLog {
+                meta: expected_meta,
+                topic1: U256::from(tx_index as u64),
+                topic2: U256::from(log_index_in_tx as u64),
+                data: U256::ZERO,
+            });
+        }
+    }
+
+    assert_expected_simple_logs(&default_logs, &expected, sender);
     assert_eq!(default_logs, latest_logs);
 
     rollup_and_client
@@ -243,22 +292,54 @@ async fn get_logs_single_block_range() -> anyhow::Result<()> {
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let receipt = rollup_and_client
+    let block_number = rollup_and_client
         .client
         .alloy_receipt(tx_hashes[0])
         .await
-        .unwrap();
-    let block_number = receipt.block_number.unwrap();
+        .unwrap()
+        .block_number
+        .expect("block number should be present");
 
     let filter = Filter::new()
         .from_block(block_number)
         .to_block(block_number);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
-    assert_eq!(logs.len() as u32, nb_of_logs_per_tx);
-    for log in logs {
-        assert_eq!(log.block_number, Some(block_number));
+    let plans = [
+        TxLogPlan {
+            tx_hash: tx_hashes[0],
+            log_count: nb_of_logs_per_tx as u64,
+        },
+        TxLogPlan {
+            tx_hash: tx_hashes[1],
+            log_count: nb_of_logs_per_tx as u64,
+        },
+    ];
+    let meta_map = build_tx_log_meta(&rollup_and_client.client, &plans).await;
+    let meta = meta_map
+        .get(&tx_hashes[0])
+        .expect("tx0 meta should be present");
+    let sender = rollup_and_client.client.address();
+    let mut expected = Vec::new();
+    for log_index_in_tx in 0..nb_of_logs_per_tx {
+        let expected_meta = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash: tx_hashes[0],
+            tx_index: meta.tx_index,
+            log_index: meta.base_log_index + log_index_in_tx as u64,
+            block_hash: meta.block_hash,
+            block_number: meta.block_number,
+            block_timestamp: Some(meta.block_timestamp),
+        };
+        expected.push(ExpectedSimpleLog {
+            meta: expected_meta,
+            topic1: U256::ZERO,
+            topic2: U256::from(log_index_in_tx as u64),
+            data: U256::ZERO,
+        });
     }
+
+    assert_expected_simple_logs(&logs, &expected, sender);
     Ok(())
 }
 
@@ -267,8 +348,9 @@ async fn get_logs_address_filter_single() -> anyhow::Result<()> {
     let (test_rollup, client, contract_a, contract_b) = setup_two_contracts().await;
 
     test_rollup.pause_preferred_batches().await;
-    client.alloy_emit_logs(contract_a, 1, 2).await;
-    client.alloy_emit_logs(contract_b, 2, 3).await;
+    let tx_a = client.alloy_emit_logs(contract_a, 1, 2).await;
+    let _tx_b = client.alloy_emit_logs(contract_b, 2, 3).await;
+    let pending_block = latest_block_context(&client).await;
 
     let filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
@@ -277,8 +359,24 @@ async fn get_logs_address_filter_single() -> anyhow::Result<()> {
     let logs = client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 2);
-    for log in logs {
-        assert_eq!(log.address(), contract_a);
+    for (idx, log) in logs.iter().enumerate() {
+        let expected = ExpectedLogMeta {
+            address: contract_a,
+            tx_hash: tx_a,
+            tx_index: 0,
+            log_index: idx as u64,
+            block_hash: pending_block.hash,
+            block_number: pending_block.number,
+            block_timestamp: Some(pending_block.timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected,
+            client.address(),
+            U256::from(1),
+            U256::from(idx as u64),
+            U256::ZERO,
+        );
         assert!(filter.matches(log.inner.as_ref()));
     }
 
@@ -291,8 +389,9 @@ async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
     let (test_rollup, client, contract_a, contract_b) = setup_two_contracts().await;
 
     test_rollup.pause_preferred_batches().await;
-    client.alloy_emit_logs(contract_a, 1, 2).await;
-    client.alloy_emit_logs(contract_b, 2, 3).await;
+    let tx_a = client.alloy_emit_logs(contract_a, 1, 2).await;
+    let tx_b = client.alloy_emit_logs(contract_b, 2, 3).await;
+    let pending_block = latest_block_context(&client).await;
 
     let filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
@@ -301,7 +400,30 @@ async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
     let logs = client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 5);
-    for log in logs {
+    for (idx, log) in logs.iter().enumerate() {
+        let (address, tx_hash, tx_index, log_index_in_tx, topic1) = if idx < 2 {
+            (contract_a, tx_a, 0u64, idx as u64, U256::from(1))
+        } else {
+            let log_index_in_tx = (idx - 2) as u64;
+            (contract_b, tx_b, 1u64, log_index_in_tx, U256::from(2))
+        };
+        let expected = ExpectedLogMeta {
+            address,
+            tx_hash,
+            tx_index,
+            log_index: idx as u64,
+            block_hash: pending_block.hash,
+            block_number: pending_block.number,
+            block_timestamp: Some(pending_block.timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected,
+            client.address(),
+            topic1,
+            U256::from(log_index_in_tx),
+            U256::ZERO,
+        );
         assert!(filter.matches(log.inner.as_ref()));
     }
 
@@ -325,9 +447,11 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
         .pause_preferred_batches()
         .await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
+    let pending_block = latest_block_context(&rollup_and_client.client).await;
+    let sender = rollup_and_client.client.address();
 
     let topics = vec![U256::from(1).into(), U256::from(3).into()];
     let filter = Filter::new()
@@ -337,7 +461,31 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     assert_eq!(logs.len() as u32, nb_of_txs * 2);
-    for log in logs {
+    let expected_log_indexes = [1u64, 3u64];
+    let mut expected = Vec::new();
+    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
+        for log_index_in_tx in expected_log_indexes {
+            expected.push((tx_index as u64, *tx_hash, log_index_in_tx));
+        }
+    }
+    for (log, (tx_index, tx_hash, log_index_in_tx)) in logs.iter().zip(expected) {
+        let expected_meta = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash,
+            tx_index,
+            log_index: tx_index * nb_of_logs_per_tx as u64 + log_index_in_tx,
+            block_hash: pending_block.hash,
+            block_number: pending_block.number,
+            block_timestamp: Some(pending_block.timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected_meta,
+            sender,
+            U256::from(tx_index),
+            U256::from(log_index_in_tx),
+            U256::ZERO,
+        );
         assert!(filter.matches(log.inner.as_ref()));
     }
 
@@ -363,10 +511,11 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
         .pause_preferred_batches()
         .await;
 
-    rollup_and_client
+    let tx_hash = rollup_and_client
         .client
         .alloy_emit_logs(rollup_and_client.contract_address, 42, nb_of_logs_per_tx)
         .await;
+    let pending_block = latest_block_context(&rollup_and_client.client).await;
 
     let sender = rollup_and_client.client.address();
     let filter = Filter::new()
@@ -378,10 +527,24 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 1);
-    for log in logs {
-        assert_log_schema_pending(&log);
-        assert!(filter.matches(log.inner.as_ref()));
-    }
+    let expected = ExpectedLogMeta {
+        address: rollup_and_client.contract_address,
+        tx_hash,
+        tx_index: 0,
+        log_index: 4,
+        block_hash: pending_block.hash,
+        block_number: pending_block.number,
+        block_timestamp: Some(pending_block.timestamp),
+    };
+    assert_simple_log(
+        &logs[0],
+        &expected,
+        sender,
+        U256::from(42),
+        U256::from(4),
+        U256::ZERO,
+    );
+    assert!(filter.matches(logs[0].inner.as_ref()));
 
     rollup_and_client
         .test_rollup
@@ -395,8 +558,9 @@ async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
     let (test_rollup, client, contract_a, contract_b) = setup_two_contracts().await;
 
     test_rollup.pause_preferred_batches().await;
-    client.alloy_emit_logs(contract_a, 7, 3).await;
-    client.alloy_emit_logs(contract_b, 7, 3).await;
+    let tx_a = client.alloy_emit_logs(contract_a, 7, 3).await;
+    let _tx_b = client.alloy_emit_logs(contract_b, 7, 3).await;
+    let pending_block = latest_block_context(&client).await;
 
     let filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
@@ -406,10 +570,24 @@ async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
     let logs = client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 1);
-    for log in logs {
-        assert_eq!(log.address(), contract_a);
-        assert!(filter.matches(log.inner.as_ref()));
-    }
+    let expected = ExpectedLogMeta {
+        address: contract_a,
+        tx_hash: tx_a,
+        tx_index: 0,
+        log_index: 1,
+        block_hash: pending_block.hash,
+        block_number: pending_block.number,
+        block_timestamp: Some(pending_block.timestamp),
+    };
+    assert_simple_log(
+        &logs[0],
+        &expected,
+        client.address(),
+        U256::from(7),
+        U256::from(1),
+        U256::ZERO,
+    );
+    assert!(filter.matches(logs[0].inner.as_ref()));
 
     test_rollup.resume_preferred_batches().await;
     Ok(())
@@ -429,12 +607,13 @@ async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
         .await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
-    let sealed_receipt = rollup_and_client
+    let sealed_hash = rollup_and_client
         .client
         .alloy_receipt(sealed_tx)
         .await
-        .unwrap();
-    let sealed_hash = sealed_receipt.block_hash.unwrap();
+        .unwrap()
+        .block_hash
+        .expect("block hash should be present");
 
     rollup_and_client
         .test_rollup
@@ -449,6 +628,38 @@ async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
         .client
         .get_logs(&Filter::new().at_block_hash(sealed_hash))
         .await;
+    assert_eq!(sealed_logs.len(), 2);
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[TxLogPlan {
+            tx_hash: sealed_tx,
+            log_count: 2,
+        }],
+    )
+    .await;
+    let meta = meta_map
+        .get(&sealed_tx)
+        .expect("sealed tx meta should be present");
+    let sender = rollup_and_client.client.address();
+    for (idx, log) in sealed_logs.iter().enumerate() {
+        let expected = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash: sealed_tx,
+            tx_index: meta.tx_index,
+            log_index: meta.base_log_index + idx as u64,
+            block_hash: meta.block_hash,
+            block_number: meta.block_number,
+            block_timestamp: Some(meta.block_timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected,
+            sender,
+            U256::from(1),
+            U256::from(idx as u64),
+            U256::ZERO,
+        );
+    }
 
     let safe_filter = Filter::new()
         .from_block(BlockNumberOrTag::Safe)
@@ -480,7 +691,7 @@ async fn get_logs_ordered_and_not_removed() -> anyhow::Result<()> {
     )
     .await;
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(1))
         .await;
 
@@ -490,8 +701,10 @@ async fn get_logs_ordered_and_not_removed() -> anyhow::Result<()> {
         .client
         .get_logs(&new_filter_for_all_logs())
         .await;
-    assert!(!logs.is_empty());
-    assert_logs_ordered_and_not_removed(&logs);
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    assert_expected_simple_logs(&logs, &expected, sender);
     Ok(())
 }
 
@@ -506,8 +719,8 @@ async fn get_logs_time_executed_ms_per_tx() -> anyhow::Result<()> {
         .await
         .number();
 
-    let _tx1 = evm_client.alloy_emit_logs(contract_address, 0, 3).await;
-    let _tx2 = evm_client.alloy_emit_logs(contract_address, 1, 2).await;
+    let tx1 = evm_client.alloy_emit_logs(contract_address, 0, 3).await;
+    let tx2 = evm_client.alloy_emit_logs(contract_address, 1, 2).await;
     test_rollup.wait_for_next_blocks(1).await;
 
     let filter = Filter::new()
@@ -516,15 +729,43 @@ async fn get_logs_time_executed_ms_per_tx() -> anyhow::Result<()> {
     let logs = evm_client.get_logs_with_timestamp(&filter).await;
     assert!(!logs.is_empty());
 
+    let sender = evm_client.address();
+    let plans = [
+        SimpleLogPlan {
+            tx_hash: tx1,
+            topic1: U256::ZERO,
+            log_count: 3,
+            data: U256::ZERO,
+        },
+        SimpleLogPlan {
+            tx_hash: tx2,
+            topic1: U256::from(1),
+            log_count: 2,
+            data: U256::ZERO,
+        },
+    ];
+    let expected = expected_simple_logs_from_plans(&evm_client, contract_address, &plans).await;
+
     let mut times_by_tx = HashMap::new();
-    for log in logs {
-        let tx_hash = log
+    assert_eq!(logs.len(), expected.len());
+    for (log_with_time, expected_log) in logs.iter().zip(expected.iter()) {
+        assert_simple_log(
+            &log_with_time.log,
+            &expected_log.meta,
+            sender,
+            expected_log.topic1,
+            expected_log.topic2,
+            expected_log.data,
+        );
+        let tx_hash = log_with_time
             .log
             .transaction_hash
             .expect("transaction hash should be present");
-        let entry = times_by_tx.entry(tx_hash).or_insert(log.time_executed_ms);
-        assert_eq!(*entry, log.time_executed_ms);
-        assert!(log.time_executed_ms > 0);
+        let entry = times_by_tx
+            .entry(tx_hash)
+            .or_insert(log_with_time.time_executed_ms);
+        assert_eq!(*entry, log_with_time.time_executed_ms);
+        assert!(log_with_time.time_executed_ms > 0);
     }
     Ok(())
 }
@@ -559,9 +800,17 @@ async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
         .await
         .unwrap();
     let block_hash = receipt.block_hash.expect("block hash should be present");
-    let block_number = receipt
-        .block_number
-        .expect("block number should be present");
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[TxLogPlan {
+            tx_hash,
+            log_count: nb_of_logs_per_tx as u64,
+        }],
+    )
+    .await;
+    let meta = meta_map
+        .get(&tx_hash)
+        .expect("configurable logs tx meta should be present");
 
     let filter = Filter::new()
         .at_block_hash(block_hash)
@@ -570,30 +819,27 @@ async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len() as u32, nb_of_logs_per_tx);
 
-    let topic0 = simple_log_topic0();
-    let sender_topic = address_to_topic(sender);
     for (idx, log) in logs.iter().enumerate() {
-        assert_log_schema_sealed(log);
         let idx_u256 = U256::from(idx as u64);
         let expected_topic1 = topic1_base + idx_u256;
         let expected_topic2 = topic2_base + idx_u256;
-        let topics = log.inner.topics();
-        assert_eq!(topics.len(), 4);
-        assert_eq!(topics[0], topic0);
-        assert_eq!(topics[1], sender_topic);
-        assert_eq!(topics[2], B256::from(expected_topic1));
-        assert_eq!(topics[3], B256::from(expected_topic2));
-
-        assert_eq!(log.address(), rollup_and_client.contract_address);
-        assert_eq!(log.transaction_hash, Some(tx_hash));
-        assert_eq!(log.transaction_index, Some(0));
-        assert_eq!(log.log_index, Some(idx as u64));
-        assert_eq!(log.block_number, Some(block_number));
-        assert_eq!(log.block_hash, Some(block_hash));
-
-        let data = log.inner.data.data.as_ref();
-        assert_eq!(data.len(), 32);
-        assert_eq!(U256::from_be_slice(data), idx_u256);
+        let expected = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash,
+            tx_index: meta.tx_index,
+            log_index: meta.base_log_index + idx as u64,
+            block_hash: meta.block_hash,
+            block_number: meta.block_number,
+            block_timestamp: Some(meta.block_timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected,
+            sender,
+            expected_topic1,
+            expected_topic2,
+            idx_u256,
+        );
     }
     Ok(())
 }
@@ -631,20 +877,28 @@ async fn get_logs_full_topic_log() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len(), 1);
 
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[TxLogPlan {
+            tx_hash,
+            log_count: 1,
+        }],
+    )
+    .await;
+    let meta = meta_map
+        .get(&tx_hash)
+        .expect("full topic tx meta should be present");
     let log = &logs[0];
-    assert_log_schema_sealed(log);
-    let topics = log.inner.topics();
-    assert_eq!(topics.len(), 4);
-    assert_eq!(topics[0], full_topic_log_topic0());
-    assert_eq!(topics[1], B256::from(t0));
-    assert_eq!(topics[2], B256::from(t1));
-    assert_eq!(topics[3], B256::from(t2));
-    assert_eq!(log.address(), rollup_and_client.contract_address);
-    assert_eq!(log.transaction_hash, Some(tx_hash));
-
-    let data_bytes = log.inner.data.data.as_ref();
-    assert_eq!(data_bytes.len(), 32);
-    assert_eq!(U256::from_be_slice(data_bytes), data);
+    let expected = ExpectedLogMeta {
+        address: rollup_and_client.contract_address,
+        tx_hash,
+        tx_index: meta.tx_index,
+        log_index: meta.base_log_index,
+        block_hash: meta.block_hash,
+        block_number: meta.block_number,
+        block_timestamp: Some(meta.block_timestamp),
+    };
+    assert_full_topic_log(log, &expected, t0, t1, t2, data);
 
     Ok(())
 }
@@ -679,19 +933,28 @@ async fn get_logs_data_only_log() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len(), 1);
 
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[TxLogPlan {
+            tx_hash,
+            log_count: 1,
+        }],
+    )
+    .await;
+    let meta = meta_map
+        .get(&tx_hash)
+        .expect("data-only tx meta should be present");
     let log = &logs[0];
-    assert_log_schema_sealed(log);
-    let topics = log.inner.topics();
-    assert_eq!(topics.len(), 1);
-    assert_eq!(topics[0], data_only_log_topic0());
-    assert_eq!(log.address(), rollup_and_client.contract_address);
-    assert_eq!(log.transaction_hash, Some(tx_hash));
-
-    let data_bytes = log.inner.data.data.as_ref();
-    assert_eq!(data_bytes.len(), 64);
-    let (decoded_v1, decoded_v2) = decode_two_u256(data_bytes);
-    assert_eq!(decoded_v1, v1);
-    assert_eq!(decoded_v2, v2);
+    let expected = ExpectedLogMeta {
+        address: rollup_and_client.contract_address,
+        tx_hash,
+        tx_index: meta.tx_index,
+        log_index: meta.base_log_index,
+        block_hash: meta.block_hash,
+        block_number: meta.block_number,
+        block_timestamp: Some(meta.block_timestamp),
+    };
+    assert_data_only_log(log, &expected, v1, v2);
 
     Ok(())
 }
@@ -726,13 +989,28 @@ async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len(), 1);
 
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[TxLogPlan {
+            tx_hash,
+            log_count: 1,
+        }],
+    )
+    .await;
+    let meta = meta_map
+        .get(&tx_hash)
+        .expect("indexed-only tx meta should be present");
     let log = &logs[0];
-    assert_log_schema_sealed(log);
-    let topics = log.inner.topics();
-    assert_eq!(topics.len(), 2);
-    assert_eq!(topics[0], indexed_only_log_topic0());
-    assert_eq!(topics[1], B256::from(value));
-    assert!(log.inner.data.data.is_empty());
+    let expected = ExpectedLogMeta {
+        address: rollup_and_client.contract_address,
+        tx_hash,
+        tx_index: meta.tx_index,
+        log_index: meta.base_log_index,
+        block_hash: meta.block_hash,
+        block_number: meta.block_number,
+        block_timestamp: Some(meta.block_timestamp),
+    };
+    assert_indexed_only_log(log, &expected, value);
 
     let filter_json = serde_json::json!({
         "blockHash": format!("{:#x}", block_hash),
@@ -766,11 +1044,11 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
         .pause_preferred_batches()
         .await;
 
-    let _simple_tx = rollup_and_client
+    let simple_tx = rollup_and_client
         .client
         .alloy_emit_logs(rollup_and_client.contract_address, 1, 2)
         .await;
-    let _data_tx = rollup_and_client
+    let data_tx = rollup_and_client
         .client
         .alloy_emit_data_only_log(
             rollup_and_client.contract_address,
@@ -778,6 +1056,8 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
             U256::from(2),
         )
         .await;
+    let pending_block = latest_block_context(&rollup_and_client.client).await;
+    let sender = rollup_and_client.client.address();
 
     let simple_filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
@@ -786,10 +1066,24 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
         .topic0(simple_log_topic0());
     let simple_logs = rollup_and_client.client.get_logs(&simple_filter).await;
     assert_eq!(simple_logs.len(), 2);
-    for log in simple_logs {
-        let topics = log.inner.topics();
-        assert_eq!(topics.len(), 4);
-        assert_eq!(topics[0], simple_log_topic0());
+    for (idx, log) in simple_logs.iter().enumerate() {
+        let expected = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash: simple_tx,
+            tx_index: 0,
+            log_index: idx as u64,
+            block_hash: pending_block.hash,
+            block_number: pending_block.number,
+            block_timestamp: Some(pending_block.timestamp),
+        };
+        assert_simple_log(
+            log,
+            &expected,
+            sender,
+            U256::from(1),
+            U256::from(idx as u64),
+            U256::ZERO,
+        );
     }
 
     let data_filter = Filter::new()
@@ -799,9 +1093,16 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
         .topic0(data_only_log_topic0());
     let data_logs = rollup_and_client.client.get_logs(&data_filter).await;
     assert_eq!(data_logs.len(), 1);
-    let topics = data_logs[0].inner.topics();
-    assert_eq!(topics.len(), 1);
-    assert_eq!(topics[0], data_only_log_topic0());
+    let expected = ExpectedLogMeta {
+        address: rollup_and_client.contract_address,
+        tx_hash: data_tx,
+        tx_index: 1,
+        log_index: 2,
+        block_hash: pending_block.hash,
+        block_number: pending_block.number,
+        block_timestamp: Some(pending_block.timestamp),
+    };
+    assert_data_only_log(&data_logs[0], &expected, U256::from(1), U256::from(2));
 
     rollup_and_client
         .test_rollup
@@ -838,11 +1139,12 @@ async fn get_logs_earliest_tag() -> anyhow::Result<()> {
     let earliest_logs = rollup_and_client.client.get_logs(&earliest_filter).await;
     let zero_logs = rollup_and_client.client.get_logs(&zero_filter).await;
 
-    assert!(!earliest_logs.is_empty());
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, 2, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+
+    assert_expected_simple_logs(&earliest_logs, &expected, sender);
     assert_eq!(earliest_logs, zero_logs);
-    for log in &earliest_logs {
-        assert_log_schema_sealed(log);
-    }
     Ok(())
 }
 
@@ -872,9 +1174,14 @@ async fn get_logs_schema_correctness() -> anyhow::Result<()> {
         "address": format!("{:#x}", rollup_and_client.contract_address),
     });
     let logs = get_logs_raw_json(&rollup_and_client.client, filter).await;
-    assert!(!logs.is_empty());
-    for log in &logs {
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, 3, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+
+    assert_eq!(logs.len(), expected.len());
+    for (log, expected_log) in logs.iter().zip(expected.iter()) {
         assert_log_json_schema(log);
+        assert_log_json_matches_expected_simple_log(log, expected_log, sender);
     }
     Ok(())
 }
@@ -912,10 +1219,15 @@ async fn get_logs_eip1898_blockhash_object() -> anyhow::Result<()> {
         "address": format!("{:#x}", rollup_and_client.contract_address),
     });
     let eip_logs = get_logs_raw_typed(&rollup_and_client.client, filter).await;
-    assert!(!eip_logs.is_empty());
-    for log in &eip_logs {
-        assert_log_schema_sealed(log);
-    }
+    let sender = rollup_and_client.client.address();
+    let plans = [SimpleLogPlan {
+        tx_hash,
+        topic1: U256::from(7),
+        log_count: 2,
+        data: U256::ZERO,
+    }];
+    let expected_logs = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    assert_expected_simple_logs(&eip_logs, &expected_logs, sender);
 
     let expected = rollup_and_client
         .client
@@ -985,10 +1297,11 @@ async fn get_logs_empty_topics_matches_all() -> anyhow::Result<()> {
         .address(rollup_and_client.contract_address);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, 2, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    assert_expected_simple_logs(&logs_with_empty_topics, &expected, sender);
     assert_eq!(logs_with_empty_topics, logs);
-    for log in &logs_with_empty_topics {
-        assert_log_schema_sealed(log);
-    }
     Ok(())
 }
 
@@ -1024,10 +1337,38 @@ async fn get_logs_topic0_only_matches_any_indexed() -> anyhow::Result<()> {
         .topic0(simple_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[TxLogPlan {
+            tx_hash,
+            log_count: 3,
+        }],
+    )
+    .await;
+    let meta = meta_map
+        .get(&tx_hash)
+        .expect("configurable logs tx meta should be present");
+    let sender = rollup_and_client.client.address();
     assert_eq!(logs.len(), 3);
-    for log in &logs {
-        assert_log_schema_sealed(log);
-        assert_eq!(log.inner.topics()[0], simple_log_topic0());
+    for (idx, log) in logs.iter().enumerate() {
+        let expected_meta = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash,
+            tx_index: meta.tx_index,
+            log_index: meta.base_log_index + idx as u64,
+            block_hash: meta.block_hash,
+            block_number: meta.block_number,
+            block_timestamp: Some(meta.block_timestamp),
+        };
+        let idx_u256 = U256::from(idx as u64);
+        assert_simple_log(
+            log,
+            &expected_meta,
+            sender,
+            U256::from(10) + idx_u256,
+            U256::from(20) + idx_u256,
+            idx_u256,
+        );
     }
     Ok(())
 }
@@ -1080,11 +1421,43 @@ async fn get_logs_topic1_without_topic0() -> anyhow::Result<()> {
         .topic1(sender);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
-    assert_eq!(logs.len(), 3);
-    for log in &logs {
-        assert_log_schema_sealed(log);
-        assert_eq!(log.inner.topics()[1], address_to_topic(sender));
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[
+            TxLogPlan {
+                tx_hash: simple_tx,
+                log_count: 3,
+            },
+            TxLogPlan {
+                tx_hash: data_tx,
+                log_count: 1,
+            },
+        ],
+    )
+    .await;
+    let meta = meta_map
+        .get(&simple_tx)
+        .expect("simple tx meta should be present");
+    let mut expected = Vec::new();
+    for log_index_in_tx in 0..3u64 {
+        let expected_meta = ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash: simple_tx,
+            tx_index: meta.tx_index,
+            log_index: meta.base_log_index + log_index_in_tx,
+            block_hash: meta.block_hash,
+            block_number: meta.block_number,
+            block_timestamp: Some(meta.block_timestamp),
+        };
+        expected.push(ExpectedSimpleLog {
+            meta: expected_meta,
+            topic1: U256::from(5),
+            topic2: U256::from(log_index_in_tx),
+            data: U256::ZERO,
+        });
     }
+
+    assert_expected_simple_logs(&logs, &expected, sender);
     Ok(())
 }
 
@@ -1135,12 +1508,70 @@ async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
         .topic0(vec![simple_log_topic0(), data_only_log_topic0()]);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
-    assert_eq!(logs.len(), 3);
-    for log in &logs {
-        assert_log_schema_sealed(log);
-        let sig = log.inner.topics()[0];
-        assert!(sig == simple_log_topic0() || sig == data_only_log_topic0());
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[
+            TxLogPlan {
+                tx_hash: simple_tx,
+                log_count: 2,
+            },
+            TxLogPlan {
+                tx_hash: data_tx,
+                log_count: 1,
+            },
+        ],
+    )
+    .await;
+    let simple_meta = meta_map
+        .get(&simple_tx)
+        .expect("simple tx meta should be present");
+    let data_meta = meta_map
+        .get(&data_tx)
+        .expect("data-only tx meta should be present");
+
+    let mut expected = Vec::new();
+    for log_index_in_tx in 0..2u64 {
+        expected.push(ExpectedLogEntry {
+            meta: ExpectedLogMeta {
+                address: rollup_and_client.contract_address,
+                tx_hash: simple_tx,
+                tx_index: simple_meta.tx_index,
+                log_index: simple_meta.base_log_index + log_index_in_tx,
+                block_hash: simple_meta.block_hash,
+                block_number: simple_meta.block_number,
+                block_timestamp: Some(simple_meta.block_timestamp),
+            },
+            kind: ExpectedLogKind::Simple {
+                topic1: U256::from(1),
+                topic2: U256::from(log_index_in_tx),
+                data: U256::ZERO,
+            },
+        });
     }
+    expected.push(ExpectedLogEntry {
+        meta: ExpectedLogMeta {
+            address: rollup_and_client.contract_address,
+            tx_hash: data_tx,
+            tx_index: data_meta.tx_index,
+            log_index: data_meta.base_log_index,
+            block_hash: data_meta.block_hash,
+            block_number: data_meta.block_number,
+            block_timestamp: Some(data_meta.block_timestamp),
+        },
+        kind: ExpectedLogKind::DataOnly {
+            v1: U256::from(9),
+            v2: U256::from(10),
+        },
+    });
+    expected.sort_by_key(|entry| {
+        (
+            entry.meta.block_number,
+            entry.meta.tx_index,
+            entry.meta.log_index,
+        )
+    });
+
+    assert_expected_log_entries(&logs, &expected, rollup_and_client.client.address());
     Ok(())
 }
 
@@ -1196,17 +1627,71 @@ async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
         .topic1(vec![address_to_topic(sender), B256::from(full_topic_value)]);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
-    assert_eq!(logs.len(), 2);
-    for log in &logs {
-        assert_log_schema_sealed(log);
-        let sig = log.inner.topics()[0];
-        let first_indexed = log.inner.topics()[1];
-        assert!(sig == simple_log_topic0() || sig == full_topic_log_topic0());
-        assert!(
-            first_indexed == address_to_topic(sender)
-                || first_indexed == B256::from(full_topic_value)
-        );
-    }
+    let meta_map = build_tx_log_meta(
+        &rollup_and_client.client,
+        &[
+            TxLogPlan {
+                tx_hash: simple_tx,
+                log_count: 1,
+            },
+            TxLogPlan {
+                tx_hash: full_tx,
+                log_count: 1,
+            },
+        ],
+    )
+    .await;
+    let simple_meta = meta_map
+        .get(&simple_tx)
+        .expect("simple tx meta should be present");
+    let full_meta = meta_map
+        .get(&full_tx)
+        .expect("full topic tx meta should be present");
+
+    let mut expected = vec![
+        ExpectedLogEntry {
+            meta: ExpectedLogMeta {
+                address: rollup_and_client.contract_address,
+                tx_hash: simple_tx,
+                tx_index: simple_meta.tx_index,
+                log_index: simple_meta.base_log_index,
+                block_hash: simple_meta.block_hash,
+                block_number: simple_meta.block_number,
+                block_timestamp: Some(simple_meta.block_timestamp),
+            },
+            kind: ExpectedLogKind::Simple {
+                topic1: U256::from(7),
+                topic2: U256::ZERO,
+                data: U256::ZERO,
+            },
+        },
+        ExpectedLogEntry {
+            meta: ExpectedLogMeta {
+                address: rollup_and_client.contract_address,
+                tx_hash: full_tx,
+                tx_index: full_meta.tx_index,
+                log_index: full_meta.base_log_index,
+                block_hash: full_meta.block_hash,
+                block_number: full_meta.block_number,
+                block_timestamp: Some(full_meta.block_timestamp),
+            },
+            kind: ExpectedLogKind::FullTopic {
+                t0: full_topic_value,
+                t1: U256::from(1),
+                t2: U256::from(2),
+                data: U256::from(3),
+            },
+        },
+    ];
+    expected.sort_by_key(|entry| {
+        (
+            entry.meta.block_number,
+            entry.meta.tx_index,
+            entry.meta.log_index,
+        )
+    });
+
+    assert_expected_log_entries(&logs, &expected, sender);
     Ok(())
 }
 
@@ -1249,10 +1734,11 @@ async fn get_logs_trailing_null_topics_ignored() -> anyhow::Result<()> {
         .topic0(simple_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, 2, U256::ZERO);
+    let expected = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
+    assert_expected_simple_logs(&logs_with_nulls, &expected, sender);
     assert_eq!(logs_with_nulls, logs);
-    for log in &logs_with_nulls {
-        assert_log_schema_sealed(log);
-    }
     Ok(())
 }
 
@@ -1291,20 +1777,13 @@ async fn evm_test_get_logs() {
         .unwrap();
     let block_hash = rec.block_hash.unwrap();
 
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected_all = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
     {
         let filter = Filter::new().at_block_hash(block_hash);
         let logs = rollup_and_client.client.get_logs(&filter).await;
-        assert_eq!(logs.len() as u32, nb_of_txs * nb_of_logs_per_tx);
-
-        for (index, log) in logs.into_iter().enumerate() {
-            let index = index as u64;
-            assert!(filter.matches(log.inner.as_ref()));
-            assert_eq!(log.log_index.unwrap(), index);
-            assert_eq!(
-                log.transaction_index.unwrap(),
-                (index / nb_of_logs_per_tx as u64)
-            );
-        }
+        assert_expected_simple_logs(&logs, &expected_all, sender);
     }
 
     // topic3 seolects one log from each tx
@@ -1313,7 +1792,8 @@ async fn evm_test_get_logs() {
         let filter = Filter::new().at_block_hash(block_hash).topic3(topic);
 
         let logs = rollup_and_client.client.get_logs(&filter).await;
-        check_logs(&filter, logs, nb_of_txs);
+        let expected_topic3 = filter_expected_by_topic2(&expected_all, U256::from(3));
+        assert_expected_simple_logs(&logs, &expected_topic3, sender);
     }
 }
 
@@ -1334,11 +1814,15 @@ async fn evm_test_get_logs_range() {
         .await
         .number();
 
-    rollup_and_client
+    let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(3))
         .await;
 
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
+    let sender = rollup_and_client.client.address();
+    let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
+    let expected_all = expected_simple_logs_for_rollup(&rollup_and_client, &plans).await;
 
     // Check logs from all txs.
     {
@@ -1347,7 +1831,7 @@ async fn evm_test_get_logs_range() {
             .to_block(BlockNumberOrTag::Latest);
 
         let logs = rollup_and_client.client.get_logs(&filter).await;
-        check_logs(&filter, logs, nb_of_txs * nb_of_logs_per_tx);
+        assert_expected_simple_logs(&logs, &expected_all, sender);
     }
 
     // topic3 seolects one log from each tx
@@ -1359,7 +1843,8 @@ async fn evm_test_get_logs_range() {
             .topic3(topic);
 
         let logs = rollup_and_client.client.get_logs(&filter).await;
-        check_logs(&filter, logs, nb_of_txs);
+        let expected_topic3 = filter_expected_by_topic2(&expected_all, U256::from(3));
+        assert_expected_simple_logs(&logs, &expected_topic3, sender);
     }
 }
 
@@ -1381,31 +1866,6 @@ async fn evm_test_get_logs_range_limit() {
     let logs = rollup_and_client.client.get_logs_allow_error().await;
     assert!(logs.is_err());
     assert!(logs.unwrap_err().to_string().contains("Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested"));
-}
-
-fn check_logs(filter: &Filter, logs: Vec<alloy_rpc_types_eth::Log>, expected_nb_of_logs: u32) {
-    assert_eq!(logs.len() as u32, expected_nb_of_logs);
-    for log in logs {
-        assert_log_schema_sealed(&log);
-        assert!(filter.matches(log.inner.as_ref()));
-    }
-}
-
-fn assert_logs_ordered_and_not_removed(logs: &[alloy_rpc_types_eth::Log]) {
-    let mut previous = None;
-    for log in logs {
-        assert_log_schema_sealed(log);
-        let key = (
-            log.block_number.expect("block number should be present"),
-            log.transaction_index
-                .expect("transaction index should be present"),
-            log.log_index.expect("log index should be present"),
-        );
-        if let Some(previous) = previous {
-            assert!(previous <= key);
-        }
-        previous = Some(key);
-    }
 }
 
 fn simple_log_topic0() -> B256 {
@@ -1436,32 +1896,424 @@ fn decode_two_u256(data: &[u8]) -> (U256, U256) {
     (U256::from_be_slice(first), U256::from_be_slice(second))
 }
 
-fn assert_log_schema_common(log: &Log) {
-    assert!(log.transaction_hash.is_some());
-    assert!(log.transaction_index.is_some());
-    assert!(log.log_index.is_some());
-    assert!(log.inner.topics().len() <= 4);
-    assert!(!log.inner.topics().is_empty());
-    assert!(log.inner.data.data.len() % 32 == 0);
+struct BlockContext {
+    hash: B256,
+    number: u64,
+    timestamp: u64,
+}
+
+#[derive(Clone, Copy)]
+struct ExpectedLogMeta {
+    address: Address,
+    tx_hash: alloy_primitives::TxHash,
+    tx_index: u64,
+    log_index: u64,
+    block_hash: B256,
+    block_number: u64,
+    block_timestamp: Option<u64>,
+}
+
+#[derive(Clone, Copy)]
+struct TxLogPlan {
+    tx_hash: TxHash,
+    log_count: u64,
+}
+
+struct TxLogMeta {
+    block_hash: B256,
+    block_number: u64,
+    tx_index: u64,
+    base_log_index: u64,
+    block_timestamp: u64,
+}
+
+#[derive(Clone)]
+struct SimpleLogPlan {
+    tx_hash: TxHash,
+    topic1: U256,
+    log_count: u64,
+    data: U256,
+}
+
+#[derive(Clone)]
+struct ExpectedSimpleLog {
+    meta: ExpectedLogMeta,
+    topic1: U256,
+    topic2: U256,
+    data: U256,
+}
+
+enum ExpectedLogKind {
+    Simple {
+        topic1: U256,
+        topic2: U256,
+        data: U256,
+    },
+    DataOnly {
+        v1: U256,
+        v2: U256,
+    },
+    FullTopic {
+        t0: U256,
+        t1: U256,
+        t2: U256,
+        data: U256,
+    },
+}
+
+struct ExpectedLogEntry {
+    meta: ExpectedLogMeta,
+    kind: ExpectedLogKind,
+}
+
+async fn block_context_by_number(client: &SimpleStorageClient, number: u64) -> BlockContext {
+    let block = client
+        .eth_get_block_by_number(Some(format!("0x{number:x}")))
+        .await;
+    BlockContext {
+        hash: block.header.hash,
+        number: block.number(),
+        timestamp: block.header.timestamp,
+    }
+}
+
+async fn latest_block_context(client: &SimpleStorageClient) -> BlockContext {
+    let block = client
+        .eth_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
+        .await;
+    BlockContext {
+        hash: block.header.hash,
+        number: block.number(),
+        timestamp: block.header.timestamp,
+    }
+}
+
+async fn build_tx_log_meta(
+    client: &SimpleStorageClient,
+    plans: &[TxLogPlan],
+) -> HashMap<TxHash, TxLogMeta> {
+    struct PlanReceipt {
+        plan: TxLogPlan,
+        block_number: u64,
+        block_hash: B256,
+        tx_index: u64,
+    }
+
+    let mut by_block: HashMap<u64, Vec<PlanReceipt>> = HashMap::new();
+    for plan in plans {
+        let receipt = client
+            .alloy_receipt(plan.tx_hash)
+            .await
+            .expect("receipt should be present for test tx");
+        let block_number = receipt
+            .block_number
+            .expect("block number should be present");
+        let block_hash = receipt.block_hash.expect("block hash should be present");
+        let tx_index = receipt
+            .transaction_index
+            .expect("transaction index should be present");
+        by_block.entry(block_number).or_default().push(PlanReceipt {
+            plan: *plan,
+            block_number,
+            block_hash,
+            tx_index,
+        });
+    }
+
+    let mut meta_map = HashMap::new();
+    for (block_number, mut entries) in by_block {
+        entries.sort_by_key(|entry| entry.tx_index);
+        let block = block_context_by_number(client, block_number).await;
+        let mut base_log_index = 0u64;
+        for entry in entries {
+            assert_eq!(block.hash, entry.block_hash);
+            meta_map.insert(
+                entry.plan.tx_hash,
+                TxLogMeta {
+                    block_hash: entry.block_hash,
+                    block_number: entry.block_number,
+                    tx_index: entry.tx_index,
+                    base_log_index,
+                    block_timestamp: block.timestamp,
+                },
+            );
+            base_log_index += entry.plan.log_count;
+        }
+    }
+
+    meta_map
+}
+
+async fn expected_simple_logs_from_plans(
+    client: &SimpleStorageClient,
+    contract_address: Address,
+    plans: &[SimpleLogPlan],
+) -> Vec<ExpectedSimpleLog> {
+    let tx_plans: Vec<TxLogPlan> = plans
+        .iter()
+        .map(|plan| TxLogPlan {
+            tx_hash: plan.tx_hash,
+            log_count: plan.log_count,
+        })
+        .collect();
+    let meta_map = build_tx_log_meta(client, &tx_plans).await;
+    let mut expected = Vec::new();
+    for plan in plans {
+        let meta = meta_map
+            .get(&plan.tx_hash)
+            .expect("tx meta should be present");
+        for log_index_in_tx in 0..plan.log_count {
+            let expected_meta = ExpectedLogMeta {
+                address: contract_address,
+                tx_hash: plan.tx_hash,
+                tx_index: meta.tx_index,
+                log_index: meta.base_log_index + log_index_in_tx,
+                block_hash: meta.block_hash,
+                block_number: meta.block_number,
+                block_timestamp: Some(meta.block_timestamp),
+            };
+            expected.push(ExpectedSimpleLog {
+                meta: expected_meta,
+                topic1: plan.topic1,
+                topic2: U256::from(log_index_in_tx),
+                data: plan.data,
+            });
+        }
+    }
+    expected.sort_by_key(|entry| {
+        (
+            entry.meta.block_number,
+            entry.meta.tx_index,
+            entry.meta.log_index,
+        )
+    });
+    expected
+}
+
+fn simple_log_plans_from_hashes(
+    tx_hashes: &[TxHash],
+    log_count: u64,
+    data: U256,
+) -> Vec<SimpleLogPlan> {
+    tx_hashes
+        .iter()
+        .enumerate()
+        .map(|(idx, tx_hash)| SimpleLogPlan {
+            tx_hash: *tx_hash,
+            topic1: U256::from(idx as u64),
+            log_count,
+            data,
+        })
+        .collect()
+}
+
+fn filter_expected_by_topic2(
+    expected: &[ExpectedSimpleLog],
+    topic2: U256,
+) -> Vec<ExpectedSimpleLog> {
+    expected
+        .iter()
+        .filter(|log| log.topic2 == topic2)
+        .cloned()
+        .collect()
+}
+
+async fn expected_simple_logs_for_rollup(
+    rollup_and_client: &RollupAndClient,
+    plans: &[SimpleLogPlan],
+) -> Vec<ExpectedSimpleLog> {
+    expected_simple_logs_from_plans(
+        &rollup_and_client.client,
+        rollup_and_client.contract_address,
+        plans,
+    )
+    .await
+}
+
+fn assert_expected_simple_logs(logs: &[Log], expected: &[ExpectedSimpleLog], sender: Address) {
+    assert_eq!(logs.len(), expected.len());
+    for (log, expected_log) in logs.iter().zip(expected.iter()) {
+        assert_simple_log(
+            log,
+            &expected_log.meta,
+            sender,
+            expected_log.topic1,
+            expected_log.topic2,
+            expected_log.data,
+        );
+    }
+}
+
+fn assert_expected_log_entries(logs: &[Log], expected: &[ExpectedLogEntry], sender: Address) {
+    assert_eq!(logs.len(), expected.len());
+    for (log, expected_log) in logs.iter().zip(expected.iter()) {
+        match &expected_log.kind {
+            ExpectedLogKind::Simple {
+                topic1,
+                topic2,
+                data,
+            } => {
+                assert_simple_log(log, &expected_log.meta, sender, *topic1, *topic2, *data);
+            }
+            ExpectedLogKind::DataOnly { v1, v2 } => {
+                assert_data_only_log(log, &expected_log.meta, *v1, *v2);
+            }
+            ExpectedLogKind::FullTopic { t0, t1, t2, data } => {
+                assert_full_topic_log(log, &expected_log.meta, *t0, *t1, *t2, *data);
+            }
+        }
+    }
+}
+
+fn assert_log_meta(log: &Log, expected: &ExpectedLogMeta) {
+    assert_eq!(log.address(), expected.address);
+    assert_eq!(log.transaction_hash, Some(expected.tx_hash));
+    assert_eq!(log.transaction_index, Some(expected.tx_index));
+    assert_eq!(log.log_index, Some(expected.log_index));
+    assert_eq!(log.block_hash, Some(expected.block_hash));
+    assert_eq!(log.block_number, Some(expected.block_number));
+    if let Some(expected_timestamp) = expected.block_timestamp {
+        assert_eq!(log.block_timestamp, Some(expected_timestamp));
+    }
     assert!(!log.removed);
-    assert_ne!(log.address(), Address::ZERO);
 }
 
-fn assert_log_schema_sealed(log: &Log) {
-    assert_log_schema_common(log);
-    let block_hash = log.block_hash.expect("block hash should be present");
-    assert_ne!(block_hash, B256::ZERO);
-    assert!(log.block_number.is_some());
+fn assert_simple_log(
+    log: &Log,
+    expected: &ExpectedLogMeta,
+    sender: Address,
+    topic1: U256,
+    topic2: U256,
+    data: U256,
+) {
+    assert_log_meta(log, expected);
+    let expected_topics = vec![
+        simple_log_topic0(),
+        address_to_topic(sender),
+        B256::from(topic1),
+        B256::from(topic2),
+    ];
+    assert_eq!(log.inner.topics(), expected_topics.as_slice());
+    assert_eq!(U256::from_be_slice(log.inner.data.data.as_ref()), data);
 }
 
-fn assert_log_schema_pending(log: &Log) {
-    assert_log_schema_common(log);
-    let block_hash = log
-        .block_hash
-        .expect("pending log should include a block hash");
-    assert_ne!(block_hash, B256::ZERO);
-    assert!(log.block_number.is_some());
-    assert!(log.block_timestamp.unwrap_or(0) > 0);
+fn assert_full_topic_log(
+    log: &Log,
+    expected: &ExpectedLogMeta,
+    t0: U256,
+    t1: U256,
+    t2: U256,
+    data: U256,
+) {
+    assert_log_meta(log, expected);
+    let expected_topics = vec![
+        full_topic_log_topic0(),
+        B256::from(t0),
+        B256::from(t1),
+        B256::from(t2),
+    ];
+    assert_eq!(log.inner.topics(), expected_topics.as_slice());
+    assert_eq!(U256::from_be_slice(log.inner.data.data.as_ref()), data);
+}
+
+fn assert_data_only_log(log: &Log, expected: &ExpectedLogMeta, v1: U256, v2: U256) {
+    assert_log_meta(log, expected);
+    let expected_topics = vec![data_only_log_topic0()];
+    assert_eq!(log.inner.topics(), expected_topics.as_slice());
+    let data_bytes = log.inner.data.data.as_ref();
+    let (decoded_v1, decoded_v2) = decode_two_u256(data_bytes);
+    assert_eq!(decoded_v1, v1);
+    assert_eq!(decoded_v2, v2);
+}
+
+fn assert_indexed_only_log(log: &Log, expected: &ExpectedLogMeta, value: U256) {
+    assert_log_meta(log, expected);
+    let expected_topics = vec![indexed_only_log_topic0(), B256::from(value)];
+    assert_eq!(log.inner.topics(), expected_topics.as_slice());
+    assert!(log.inner.data.data.is_empty());
+}
+
+fn u64_to_quantity_hex(value: u64) -> String {
+    format!("0x{value:x}")
+}
+
+fn u256_to_data_hex(value: U256) -> String {
+    format!("0x{value:064x}")
+}
+
+fn assert_log_json_matches_expected_simple_log(
+    log: &Value,
+    expected: &ExpectedSimpleLog,
+    sender: Address,
+) {
+    let obj = log.as_object().expect("log should be a JSON object");
+    let expected_address = format!("{:#x}", expected.meta.address);
+    assert_eq!(
+        obj.get("address")
+            .and_then(|v| v.as_str())
+            .expect("address should be a string"),
+        expected_address
+    );
+    let expected_block_hash = format!("{:#x}", expected.meta.block_hash);
+    assert_eq!(
+        obj.get("blockHash")
+            .and_then(|v| v.as_str())
+            .expect("blockHash should be a string"),
+        expected_block_hash
+    );
+    assert_eq!(
+        obj.get("blockNumber")
+            .and_then(|v| v.as_str())
+            .expect("blockNumber should be a string"),
+        u64_to_quantity_hex(expected.meta.block_number)
+    );
+    let expected_tx_hash = format!("{:#x}", expected.meta.tx_hash);
+    assert_eq!(
+        obj.get("transactionHash")
+            .and_then(|v| v.as_str())
+            .expect("transactionHash should be a string"),
+        expected_tx_hash
+    );
+    assert_eq!(
+        obj.get("transactionIndex")
+            .and_then(|v| v.as_str())
+            .expect("transactionIndex should be a string"),
+        u64_to_quantity_hex(expected.meta.tx_index)
+    );
+    assert_eq!(
+        obj.get("logIndex")
+            .and_then(|v| v.as_str())
+            .expect("logIndex should be a string"),
+        u64_to_quantity_hex(expected.meta.log_index)
+    );
+    assert_eq!(
+        obj.get("data")
+            .and_then(|v| v.as_str())
+            .expect("data should be a string"),
+        u256_to_data_hex(expected.data)
+    );
+
+    let topics = obj
+        .get("topics")
+        .and_then(|v| v.as_array())
+        .expect("topics should be an array");
+    let expected_topics = [
+        format!("{:#x}", simple_log_topic0()),
+        format!("{:#x}", address_to_topic(sender)),
+        format!("{:#x}", B256::from(expected.topic1)),
+        format!("{:#x}", B256::from(expected.topic2)),
+    ];
+    assert_eq!(topics.len(), expected_topics.len());
+    for (topic, expected_topic) in topics.iter().zip(expected_topics.iter()) {
+        let actual = topic.as_str().expect("topic should be a string");
+        assert_eq!(actual, expected_topic);
+    }
+
+    let removed = obj
+        .get("removed")
+        .and_then(|v| v.as_bool())
+        .expect("removed should be a bool");
+    assert!(!removed);
 }
 
 fn assert_hex_fixed(value: &Value, expected_len: usize) {

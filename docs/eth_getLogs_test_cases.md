@@ -4,6 +4,7 @@
 - Returns logs that match a filter, scoped by block range or block hash.
 - Logs are ordered by block number, transaction index, then log index.
 - This rollup uses soft-confirmation semantics: `latest` == `pending`, and logs are expected to be visible immediately.
+- Responses include non-standard `blockTimestamp` and `timeExecutedMs` fields.
 
 ## Parameters (filter object)
 - `fromBlock` / `toBlock`: block tag or hex number; inclusive range.
@@ -247,12 +248,18 @@ Behavior varies across Ethereum clients (Geth, Erigon, Nethermind, Reth):
 | QuickNode | Varies by plan | Varies |
 | This rollup | Configurable | Configurable via `eth_getLogsWithCursor` |
 
-## Rollup-specific semantics (assumptions)
-- `latest` and `pending` return the same soft-confirmed view.
-- Logs from the soft-confirmed block include a synthetic `blockHash`, and that hash is queryable via `blockHash`.
-- `safe` and `finalized` map to the last sealed (canonical) head and should exclude pending logs (confirm if needed).
+## Rollup-specific semantics (current implementation)
+- `latest` and `pending` resolve to the pending head (block number = sealed head + 1).
+- Pending logs include `blockNumber` and `blockTimestamp`, but `blockHash` is `null` (pending blocks are not sealed).
+- `safe` and `finalized` map to the last sealed (canonical) head and exclude pending logs.
 - `removed` is always `false` in `eth_getLogs` responses.
+- Responses include non-standard `blockTimestamp` and `timeExecutedMs` fields.
 - Error-shape and invalid-param tests are out of scope for this PR.
+
+## Potential mismatches / likely bugs to validate
+- Pending block headers use an empty logs bloom; `matches_bloom` is used for prefiltering, so pending queries with address/topics may incorrectly return empty results.
+- Pending block hash is not indexed (block_hash_to_number only includes sealed blocks). `eth_getLogs` returns `blockHash: null`, while `eth_getBlockByNumber("latest")` exposes a `0x0` hash, so `blockHash` filters cannot resolve pending logs.
+- EIP-1898 block-hash objects in `fromBlock`/`toBlock` are not deserialized by `BlockNumberOrTag` (string-only), so TC20 may be invalid.
 
 ## Response schema (per Ethereum JSON-RPC spec)
 
@@ -265,10 +272,12 @@ Each log object in the response array must contain:
 | `transactionHash` | `DATA` (32 bytes) | Hash of the transaction that emitted this log |
 | `blockHash` | `DATA` (32 bytes) | Hash of the block containing this log |
 | `blockNumber` | `QUANTITY` (hex) | Block number containing this log |
+| `blockTimestamp` | `QUANTITY` (hex) | Non-standard; present in this rollup (block timestamp) |
 | `address` | `DATA` (20 bytes) | Address of the contract that emitted this log |
 | `data` | `DATA` | Non-indexed arguments of the log |
 | `topics` | `Array<DATA>` | Array of 0-4 indexed log arguments (32 bytes each) |
 | `removed` | `Boolean` | `true` if log was removed due to chain reorg (always `false` for this rollup) |
+| `timeExecutedMs` | `QUANTITY` (hex) | Non-standard; present in this rollup (execution time, per tx) |
 
 ## Log shapes covered in tests
 
@@ -276,6 +285,7 @@ These cases intentionally vary event signatures, indexed topics, and data payloa
 - `SimpleLog` (`emitLogs`, `emitConfigurableLogs`, `set`): 3 indexed topics + 1 data word (topics = signature, sender, topic1, topic2).
 - `FullTopicLog` (`emitFullTopicLog`): 3 indexed topics + 1 data word, max topic length with a distinct signature.
 - `DataOnlyLog` (`emitDataOnlyLog`): 0 indexed topics (topics length 1 for signature), data has two uint256 words.
+- `IndexedOnlyLog` (`emitIndexedOnlyLog`): 1 indexed topic, no data payload (data = `0x`).
 
 Transaction sources covered:
 - Single-log transactions (`emitFullTopicLog`, `emitDataOnlyLog`).
@@ -288,8 +298,8 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 
 Block selector semantics:
 - TC01 [P0]: `latest` and `pending` ranges return identical logs (paused sequencer, same filter).
-- TC02 [P0]: pending logs include a synthetic `blockHash` and non-zero `blockTimestamp`.
-- TC03 [P0]: `blockHash` filter for the synthetic block returns logs for all transactions in the pending block up to and including the user's tx (prefix semantics; expected to fail today).
+- TC02 [P0]: pending logs include `blockNumber` and non-zero `blockTimestamp`, and `blockHash` is `null`.
+- TC03 [P1]: `blockHash` filter for a sealed block returns the same logs as range `[N, N]`, and all logs have `blockHash == H`.
 - TC04 [P2]: `safe`/`finalized` return a subset of `latest` and exclude pending (assumption-dependent).
 - TC05 [P1]: inclusive boundaries: `fromBlock == toBlock` returns only that block's logs.
 - TC06 [P1]: `fromBlock` omitted defaults to `latest`, `toBlock` omitted defaults to `latest`.
@@ -316,7 +326,7 @@ Optional extension (non-standard field):
 Additional coverage:
 - TC18 [P1]: `earliest` tag returns logs starting from block 0.
 - TC19 [P1]: schema validation - all required fields present with correct types (hex quantities, 32-byte hashes, 20-byte addresses).
-- TC20 [P1]: EIP-1898 `blockHash` object syntax (`{"blockHash": "0x...", "requireCanonical": true}`) works for `fromBlock`/`toBlock`.
+- TC20 [P3]: EIP-1898 `blockHash` object syntax (`{"blockHash": "0x...", "requireCanonical": true}`) for `fromBlock`/`toBlock` is not supported by the current parser; skip unless support is added.
 - TC21 [P2]: empty result - filter matching no logs returns empty array `[]`, not an error.
 - TC22 [P2]: `FullTopicLog` uses max topics (4 including signature) and data matches the argument.
 
@@ -348,13 +358,18 @@ Data field correctness:
 Block number format:
 - TC35 [P3]: block numbers in response are hex-encoded (e.g., `"0x5"` not `5` or `"5"`).
 
+Value correctness (cross-check with receipts/blocks):
+- TC39 [P0]: for a sealed block, each log returned by `eth_getLogs` matches `eth_getTransactionReceipt` for `blockHash`, `blockNumber`, `transactionHash`, `transactionIndex`, `logIndex`, `address`, `topics`, and `data`.
+- TC40 [P1]: `blockTimestamp` equals `eth_getBlockByNumber` timestamp for sealed logs; logs from the same block share the same `blockTimestamp`.
+- TC41 [P1]: in multi-block ranges, `transactionIndex` and `logIndex` reset at each block boundary.
+
 ## Test case to implementation mapping
 
 | Test Case | Implemented Test Function | Status |
 |-----------|---------------------------|--------|
 | TC01 | `get_logs_latest_and_pending_match` | ✅ |
-| TC02 | `get_log_from_pending_block` | ✅ |
-| TC03 | `get_log_from_pending_block` (partial) | ⚠️ |
+| TC02 | `get_log_from_pending_block` | ⚠️ (expects non-null `blockHash`) |
+| TC03 | (missing) | TODO |
 | TC04 | `get_logs_safe_finalized_exclude_pending` | ✅ |
 | TC05 | `get_logs_single_block_range` | ✅ |
 | TC06 | `get_logs_default_range_matches_latest` | ✅ |
@@ -371,7 +386,7 @@ Block number format:
 | TC17 | `get_logs_time_executed_ms_per_tx` | ✅ |
 | TC18 | `get_logs_earliest_tag` | ✅ |
 | TC19 | `get_logs_schema_correctness` | ✅ |
-| TC20 | `get_logs_eip1898_blockhash_object` | ✅ |
+| TC20 | `get_logs_eip1898_blockhash_object` | ⚠️ (parser rejects EIP-1898 object) |
 | TC21 | `get_logs_empty_result` | ✅ |
 | TC22 | `get_logs_full_topic_log` | ✅ |
 | TC23 | `get_logs_empty_topics_matches_all` | ✅ |
@@ -385,11 +400,19 @@ Block number format:
 | TC31 | `evm_test_get_logs` | ✅ |
 | TC32 | `get_logs_emitted_fields_match_event` | ✅ |
 | TC33 | `get_logs_emitted_fields_match_event` | ✅ |
-| TC34 | - | 🔲 TODO (requires new event with no non-indexed params) |
+| TC34 | `get_logs_indexed_only_log_data_empty` | ✅ |
 | TC35 | `get_logs_schema_correctness` | ✅ |
 | TC36 | `get_logs_data_only_log` | ✅ |
 | TC37 | `get_logs_topic0_filters_event_signature` | ✅ |
 | TC38 | `get_logs_emitted_fields_match_event` | ✅ |
+| TC39 | (missing) | TODO |
+| TC40 | (missing) | TODO |
+| TC41 | (missing) | TODO |
+
+## Value-level assertion gaps in current tests
+- Most filter-semantics tests assert counts or `filter.matches`, but do not cross-check log fields against receipts.
+- Pending tests assume `blockHash` is present; current implementation returns `blockHash: null` for pending logs.
+- TC20 is currently marked as implemented, but the parser does not accept EIP-1898 objects for `fromBlock`/`toBlock`.
 
 ## References
 

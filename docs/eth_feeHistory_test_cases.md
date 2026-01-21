@@ -6,9 +6,11 @@
 - Introduced by EIP-1559; critical for wallet fee estimation UX.
 
 ## Parameters
-- `blockCount`: Number of blocks to return (1-1024). Values > 1024 are capped.
+- `blockCount`: Number of blocks to return (1-1024). Current implementation caps values > 1024 to 1024.
+  - If the range would extend before genesis, the response contains fewer blocks (`oldestBlock = 0`).
 - `newestBlock`: Block tag or hex number identifying the end of the range.
   - Supported tags: `latest`, `pending`, `finalized`, `safe`, `earliest`, or hex block number.
+  - Spec: `latest` = most recent sealed block; `pending` = next block including mempool txs; `safe`/`finalized` may lag head.
 - `rewardPercentiles`: Optional array of floats (0-100), must be monotonically increasing.
   - If provided, response includes `reward` array with priority fee percentiles.
   - If omitted or empty, `reward` field is omitted from response.
@@ -46,21 +48,31 @@ Response:
 ```
 
 ## Response schema
+Let `returnedBlockCount = number of blocks actually returned` (<= `blockCount`).
 | Field | Type | Length | Notes |
 |-------|------|--------|-------|
 | `oldestBlock` | uint | - | First block number in returned range |
-| `baseFeePerGas` | uint[] | blockCount + 1 | Includes predicted next block fee |
-| `gasUsedRatio` | float[] | blockCount | Each value in [0.0, 1.0] |
-| `reward` | uint[][] | blockCount × len(percentiles) | Only if percentiles provided |
-| `baseFeePerBlobGas` | uint[] | blockCount + 1 | EIP-4844; empty in this rollup |
-| `blobGasUsedRatio` | float[] | blockCount | EIP-4844; empty in this rollup |
+| `baseFeePerGas` | uint[] | returnedBlockCount + 1 | Includes predicted next block fee |
+| `gasUsedRatio` | float[] | returnedBlockCount | Each value in [0.0, 1.0] |
+| `reward` | uint[][] | returnedBlockCount × len(percentiles) | Only if percentiles provided |
+| `baseFeePerBlobGas` | uint[] | returnedBlockCount + 1 | EIP-4844; empty in this rollup |
+| `blobGasUsedRatio` | float[] | returnedBlockCount | EIP-4844; empty in this rollup |
 
-## Rollup-specific semantics (assumptions)
-- `latest` and `pending` resolve to the same pending block (differs from Ethereum spec where `latest` = most recent sealed block).
+## Implementation notes and deviations
+Rollup-specific behavior (intended):
+- `latest` resolves to `pending` (tooling compatibility).
 - `finalized` and `safe` both resolve to the latest sealed block.
-- `reward` always returns zeros (preferred sequencer model, no priority fee auction).
+- `reward` values are zeros (preferred sequencer model, no priority fee auction).
 - Blob gas fields (`baseFeePerBlobGas`, `blobGasUsedRatio`) return empty arrays (EIP-4844 not implemented).
-- Percentile validation allows `<=` (monotonically non-decreasing), not strictly `<`.
+- Percentile validation allows `<=` (monotonically non-decreasing).
+- `blockCount > 1024` is capped to 1024 (no error).
+
+Known deviations vs Ethereum L1 (bugs to track, based on code/tests):
+- `baseFeePerGas` can drop to 0 after genesis (violates EIP-1559 min base fee).
+- Genesis `baseFeePerGas` in `eth_feeHistory` does not match the block header.
+- Empty `rewardPercentiles` returns `reward` as empty rows instead of omitting the field.
+- `reward` row count is based on requested `blockCount`, not `returnedBlockCount`, when the range underflows.
+- `pending` baseFeePerGas in `eth_feeHistory` does not match the pending block header.
 
 ## Test cases
 
@@ -70,7 +82,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 
 | ID | Priority | Description |
 |----|----------|-------------|
-| TC01 | P0 | `latest` and `pending` return identical results (same oldest_block, same array lengths). |
+| TC01 | P0 | `latest` and `pending` return identical results (all fields equal). |
 | TC02 | P0 | `finalized` returns valid data for sealed blocks only. |
 | TC03 | P0 | `safe` returns valid data (same behavior as `finalized` in this rollup). |
 | TC04 | P1 | `earliest` with blockCount=2 returns oldest_block=0 (graceful underflow handling). |
@@ -97,7 +109,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | TC15 | P0 | `base_fee_per_gas.len() == gas_used_ratio.len() + 1` for any valid request. |
 | TC16 | P0 | `gas_used_ratio.len() == blockCount` (or available blocks if fewer exist). |
 | TC17 | P1 | `oldest_block == newestBlock - blockCount + 1` for normal ranges. |
-| TC18 | P1 | `reward` array has dimensions `[blockCount][len(percentiles)]` when percentiles provided. |
+| TC18 | P1 | `reward` array has dimensions `[returnedBlockCount][len(percentiles)]` when percentiles provided. |
 | TC19 | P2 | `baseFeePerBlobGas` and `blobGasUsedRatio` are empty arrays (rollup-specific). |
 
 ### Value correctness
@@ -105,10 +117,11 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | ID | Priority | Description |
 |----|----------|-------------|
 | TC20 | P0 | All `gas_used_ratio` values are in range [0.0, 1.0]. |
-| TC21 | P1 | For a block that includes at least one transaction, `gas_used_ratio` is > 0.0. |
-| TC22 | P1 | `base_fee_per_gas` values are non-negative (u128, but verify no weird serialization). |
-| TC23 | P1 | All `reward` values are zero (rollup-specific: no priority fees). |
-| TC24 | P2 | `base_fee_per_gas[blockCount]` is the predicted next block fee (verify it exists and is reasonable). |
+| TC21 | P0 | `gas_used_ratio[i] == gas_used / gas_limit` for each returned block (match `eth_getBlockByNumber`). |
+| TC22 | P0 | `base_fee_per_gas[i]` matches `eth_getBlockByNumber` baseFeePerGas for each returned block. |
+| TC23 | P1 | `base_fee_per_gas[last]` matches baseFeePerGas of block `newestBlock + 1` when that block is sealed. |
+| TC24 | P1 | `base_fee_per_gas[i] >= 1` for all blocks after genesis (EIP-1559 min base fee). |
+| TC25 | P2 | All `reward` values are zero (rollup-specific: no priority fees). |
 
 ### Edge cases
 
@@ -149,6 +162,13 @@ For reference, these cases are already covered in `evm_fee_history.rs`:
 - blockCount=0 error
 - Specific block number
 - Large blockCount capped to 1024
+- Latest and pending return identical results (intentional semantics)
+- Pending baseFeePerGas matches pending block header (KNOWN BUG)
+- Reward row count matches returned block count when range underflows (KNOWN BUG)
+- Fee history values match block headers for base fee and gas used ratio
+- Earliest (genesis) fee history values match block headers (KNOWN BUG)
+- Base fee >= 1 after genesis (KNOWN BUG)
+- Predicted next base fee matches the next sealed block header
 
 ## Test dependencies
 
@@ -157,10 +177,11 @@ For reference, these cases are already covered in `evm_fee_history.rs`:
 - For TC21, ensure at least one block includes a transaction (a simple transfer is sufficient)
 - **For state scenarios**: Deploy `SimpleStorage` contract, use `set_value()` for transactions
 - Use `alloy_client` with `get_fee_history` method
+- Use `eth_getBlockByNumber` for value-level cross-checks
 - **For heavy gas tests**: May need contract with expensive operations (loops, storage writes)
 
 ## Implementation notes
 
 - Run tests with: `SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup --test all_tests 'fee_history'`
 - Follow existing test patterns in `evm_fee_history.rs`
-- Assert invariants, not absolute values (anti-flakiness)
+- Assert absolute values when derived from canonical block headers; otherwise use invariants
