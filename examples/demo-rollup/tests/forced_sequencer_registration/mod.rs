@@ -27,17 +27,17 @@ use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
+use sov_modules_api::PrivateKey;
+use sov_modules_api::PublicKey as _;
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
 use sov_modules_macros::config_value;
 use sov_risc0_adapter::crypto::private_key::Risc0PrivateKey;
-use sov_modules_api::PublicKey as _;
-use sov_modules_api::PrivateKey;
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::ForcedTxBatchNotification;
 use sov_sequencer_registry::KnownSequencer;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
-use sov_test_utils::{TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
+use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use tokio::time::{sleep, timeout};
 
 use crate::bank::helpers::{
@@ -174,6 +174,8 @@ async fn subscribe_forced_tx_batches(
     Ok(subscription)
 }
 
+/// A handy helper that waits until the *sequencer* has processed a forced tx batch.
+/// This ensures that the test will fail if the sequencer misbehaves even if the node later picks up the batch.
 async fn wait_for_forced_tx_batch(
     subscription: &mut BoxStream<'static, anyhow::Result<ForcedTxBatchNotification>>,
 ) -> anyhow::Result<ForcedTxBatchNotification> {
@@ -455,7 +457,6 @@ async fn evm_tx_unregistered_test_case(
     )
     .await?;
 
-    // Note: the sequencer sends the batch notification before udpating the API state, so we still have to wait for the balance to be updated.
     let tx = build_evm_transfer_tx(&sender, receiver_address, transfer_amount, forced_nonce + 1);
     provider
         .send_transaction(tx.into())
@@ -535,7 +536,7 @@ async fn test_forced_txs_survive_resync() -> anyhow::Result<()> {
 }
 
 /// Verifies forced transactions show up in sequencer state after a resync
-/// 
+///
 /// Steps:
 /// 1. Create a token and do one transfer through the prefererd sequencer.
 /// 2. Pause the sequencer and create enough batches to unsync the node. Each da block should include some forced txs to give good coverage
@@ -551,7 +552,11 @@ async fn forced_txs_resync_test_case(
     let valid_tx_key = Risc0PrivateKey::generate();
     let valid_tx_address = valid_tx_key.pub_key().credential_id().into();
     let invalid_tx_key = Risc0PrivateKey::generate();
-    let second_token_id = sov_bank::get_token_id::<TestSpec>(TOKEN_NAME, Some(TOKEN_DECIMALS), &valid_tx_key.pub_key().credential_id().into());
+    let second_token_id = sov_bank::get_token_id::<TestSpec>(
+        TOKEN_NAME,
+        Some(TOKEN_DECIMALS),
+        &valid_tx_key.pub_key().credential_id().into(),
+    );
     let initial_balance = 1_000u128;
     let preferred_transfer = 50u128;
     let forced_transfer = 5u128;
@@ -582,7 +587,6 @@ async fn forced_txs_resync_test_case(
                 body: BASE64_STANDARD.encode(&borsh::to_vec(&preferred_tx).unwrap()),
             })
             .await?;
-        
 
         // Create a second token for valid txs which don't affect the balances or nonces of the main token/accounts
         let create_second_token_tx = build_create_token_tx(&valid_tx_key, 0, initial_balance);
@@ -595,7 +599,6 @@ async fn forced_txs_resync_test_case(
         rollup.da_service.produce_block_now().await?;
         let _ = slot_subscription.next().await.unwrap()?;
         assert_balance(client, initial_balance, token_id, user_address, None).await?;
-
     }
 
     let forced_start_nonce = 2u64;
@@ -635,7 +638,7 @@ async fn forced_txs_resync_test_case(
     // This is necessary because the preferred sequencer tries not to produce batches when there are more than a few blobs in flight, and the blob sender
     // only recognizes that a blob is no longer in flight when it appears in the ledger DB - but that only happens after the visible slot number has been incremented.
     // So (because of all the forced txs) we have a mild chicken-and-egg problem where the preferred sequencer only produces batches very infrequently.
-    // 
+    //
     // Originally, these da blocks were empty - and having them empty works fine. But we more recently added some forced txs from other addresses (both valid and invalid)
     // during these blocks to make sure that forced txs  don't cause any breakage in the sequencer after resync.
     let nonce_of_first_possibly_skipped_tx = 0;
@@ -662,7 +665,7 @@ async fn forced_txs_resync_test_case(
                 .await?
                 .expect("Failed to submit forced bank transfer blob to DA");
         }
-        
+
         // The important part - produce a block to give the sequencer a chance to increment the visible slot number.
         // Wait for the slot update notification and the state update notification to be sure we're not racing.
         rollup.da_service.produce_block_now().await?;
@@ -671,7 +674,11 @@ async fn forced_txs_resync_test_case(
 
     // Now, that we're sure we've produced batches to increment the visible slot number, just wait for the state update notification that we've processed all of the forced txs.
     for i in 0..RESYNC_FORCED_BLOCKS + 15 {
-        println!("Waiting for state update {} of {}", i, RESYNC_FORCED_BLOCKS + 15);
+        println!(
+            "Waiting for state update {} of {}",
+            i,
+            RESYNC_FORCED_BLOCKS + 15
+        );
         let update = state_update_subscription.next().await.unwrap()?;
         if update.slot_number.get() >= slot_num_of_last_forced_tx {
             break;
@@ -681,7 +688,14 @@ async fn forced_txs_resync_test_case(
     // Check that all of the forced txs before the resync went through. This uses the primary token ID
     let expected_sender_balance = initial_balance - total_forced_tx_amount;
     println!("Checking sender balance");
-    assert_balance(client, expected_sender_balance, token_id, user_address, None).await?;
+    assert_balance(
+        client,
+        expected_sender_balance,
+        token_id,
+        user_address,
+        None,
+    )
+    .await?;
     println!("Checking recipient balance");
     assert_balance(
         client,
@@ -708,7 +722,6 @@ async fn forced_txs_resync_test_case(
         })
         .await?;
 
-        
     assert_balance(
         client,
         expected_sender_balance - preferred_transfer,
@@ -731,13 +744,13 @@ async fn forced_txs_resync_test_case(
     let token_2_balance = client
         .get_balance::<TestSpec>(&recipient_address, &second_token_id, None)
         .await
-        .with_context(|| {
-            format!(
-                "Failed to get balance of token 2 for user {user_address})"
-            )
-        })?;
+        .with_context(|| format!("Failed to get balance of token 2 for user {user_address})"))?;
 
-    assert_ne!(token_2_balance, Amount::ZERO, "Token 2 balance should be non-zero");
+    assert_ne!(
+        token_2_balance,
+        Amount::ZERO,
+        "Token 2 balance should be non-zero"
+    );
 
     Ok(())
 }
