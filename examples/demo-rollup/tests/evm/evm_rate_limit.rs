@@ -86,7 +86,7 @@ fn assert_err(err: RpcError<TransportErrorKind>) {
     let payload = err.as_error_resp().unwrap();
     assert!(
         payload.message.as_ref().contains(X_FORWARDED_FOR),
-        "expected error message to include IP: {}",
-        X_FORWARDED_FOR
+        "expected error message to include IP: {X_FORWARDED_FOR}, but it was: {}",
+        payload.message,
     );
 }
