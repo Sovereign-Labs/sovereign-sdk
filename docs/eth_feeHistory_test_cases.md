@@ -139,7 +139,7 @@ These test realistic usage patterns with actual blockchain state changes.
 | ID | Priority | Description |
 |----|----------|-------------|
 | TC29 | P0 | Empty blocks have `gas_used_ratio = 0.0`; verify multiple consecutive empty blocks. |
-| TC30 | P0 | Block with transaction has `gas_used_ratio > 0.0`; deploy contract and verify ratio reflects gas consumed. |
+| TC30 | P0 | Block with transaction returns expected `base_fee_per_gas` and `gas_used_ratio` (derive from genesis config and receipt `gas_used`). |
 | TC31 | P1 | Multiple transactions across blocks: send 3 txs in separate blocks, verify fee history shows distinct ratios for each. |
 | TC32 | P1 | Fee history progression: query at block N, produce more blocks, query again - `oldest_block` should advance. |
 | TC33 | P1 | Same block queried via `Number(N)` and via range ending at N returns consistent `gas_used_ratio` for that block. |

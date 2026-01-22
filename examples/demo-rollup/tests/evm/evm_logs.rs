@@ -62,6 +62,8 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     assert_eq!(logs_by_hash, logs_after_first);
     assert!(logs_after_all.starts_with(&logs_by_hash));
 
+    // TODO: extend checks to include validating data from second and third tx
+
     rollup.resume_preferred_batches().await;
 
     Ok(())
