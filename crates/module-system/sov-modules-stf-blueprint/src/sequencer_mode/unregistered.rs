@@ -163,7 +163,7 @@ pub(crate) fn authenticate_unregistered_tx<S: Spec, R: Runtime<S>, I: StateProvi
     Ok((tx, auth_data, R::wrap_call(call)))
 }
 
-// #[tracing::instrument(skip_all, name = "StfBlueprint::apply_batch")]
+#[tracing::instrument(skip_all, name = "StfBlueprint::apply_batch")]
 #[allow(clippy::too_many_arguments)]
 #[cfg_attr(feature = "bench", sov_modules_api::cycle_tracker)]
 pub(crate) fn apply_batch<S, RT>(
