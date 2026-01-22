@@ -7,6 +7,7 @@ use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecover
 use crate::executor::get_cfg_env;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 pub use crate::primitive_types::MaybeSealedBlock;
+use crate::primitive_types::SyntheticBlockWithoutRootsAndBloom;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
@@ -60,22 +61,22 @@ where
 {
     fn get_block_transactions(
         &self,
-        block: &MaybeSealedBlock,
+        block: &SealedBlock,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockTransactions<Transaction>, EthApiError> {
-        let tx_range = block.tx_range();
+        let tx_range = block.transactions.start..block.transactions.end;
         let txs = match kind {
             BlockTransactionsKind::Full => {
-                let txs = tx_range
+                let txs: Vec<Transaction> = tx_range
                     .into_iter()
                     .enumerate()
                     .map(|(pos, idx)| {
                         let tx = self.tx(idx, state)?;
                         Ok::<_, EthApiError>(from_recovered_with_block_context(
                             tx.into(),
-                            block.hash(),
-                            block.number(),
+                            Some(block.header.hash()),
+                            block.number,
                             pos as u64,
                         ))
                     })
@@ -95,18 +96,7 @@ where
         };
         Ok(txs)
     }
-
-    /// Gets RPC Block Header including the size
-    pub fn get_rpc_header(&self, block: MaybeSealedBlock) -> Result<Header, EthApiError> {
-        let block_size = match &block {
-            MaybeSealedBlock::Sealed(sealed) => sealed.rlp_size,
-            // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
-            MaybeSealedBlock::Pending(_) => 0,
-        };
-        let header = Header::from_consensus(block.into(), None, Some(U256::from(block_size)));
-        Ok(header)
-    }
-
+  
     fn get_block(
         &self,
         block_number: Option<String>,
@@ -116,13 +106,45 @@ where
         let Some(block) = self.get_sealed_block_by_number(block_number, state)? else {
             return Ok(None);
         };
-        let transactions = self.get_block_transactions(&block, kind, state)?;
-        Ok(Some(Block {
-            header: self.get_rpc_header(block)?,
-            transactions,
-            uncles: vec![],
-            withdrawals: None,
-        }))
+        match block {
+            MaybeSealedBlock::Sealed(sealed) =>  {
+                let block_size = sealed.rlp_size;
+                let transactions = self.get_block_transactions(&sealed, kind, state)?;
+                let header = Header::from_consensus(sealed.header.into(), None, Some(U256::from(block_size)));
+                Ok(Some(Block {
+                    header,
+                    transactions,
+                    uncles: vec![],
+                    withdrawals: None,
+                }))
+            }
+            // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
+            MaybeSealedBlock::PartialSynthetic(block) =>  {
+                let len = block.transactions.end - block.transactions.start;
+                let mut txs = Vec::with_capacity(len as usize);
+                let mut receipts = Vec::with_capacity(len as usize);
+                for tx_idx in block.transactions.clone() {
+                    let tx = self.tx(tx_idx, state)?;
+                    txs.push(tx);
+                    let receipt = self.receipt(tx_idx, state).unwrap_or_else(|| panic!("Tx {tx_idx} exists but has no corresponding receipt. This is a bug, please report it."));
+                    let receipt = receipt.0.receipt;
+                    receipts.push(receipt);
+                }
+                let (synthetic_block, txs) = block.finish_and_seal(txs, &receipts);
+                let header = Header::from_consensus(synthetic_block.header, None, Some(U256::from(synthetic_block.rlp_size)));
+                let txs = match kind {
+                    BlockTransactionsKind::Full => BlockTransactions::Full(txs.into_iter().enumerate().map(|(tx_idx, tx)| from_recovered_with_block_context(tx.into(), Some(header.hash), header.number, tx_idx as u64)).collect()),
+                    BlockTransactionsKind::Hashes => BlockTransactions::Hashes(txs.into_iter().map(|tx| *tx.signed_transaction.hash()).collect()),
+                };
+                Ok(Some(Block {
+                    header,
+                    transactions: txs,
+                    uncles: vec![],
+                    withdrawals: None,
+                }))
+            }
+        }
+       
     }
 
     fn get_contract_code(
@@ -215,14 +237,19 @@ where
         block_number: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<MaybeSealedBlock> {
+        // Check if the block is already sealed. Important: We must do this before checking the block env, because blocks are sealed in the finalize_hook.
+        // but the block env is set during the begin_rollup_block_hook.
+        // That means that if we call this function after the finalize hook but before the start of the next block, the "pending" block env corresponds to the same
+        // number and set of txs as the latest sealed block - in which case we want to return the sealed version of it rather than making up a synthetic one.
         let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
             return Some(MaybeSealedBlock::Sealed(block));
         }
 
-        let pending = self.pending_block(state);
-        if block_number == pending.header.number {
-            return Some(MaybeSealedBlock::Pending(pending));
+        let block_env = self.block_env(state).unwrap_infallible();
+        if block_env.number == block_number {
+            let pending = self.pending_block(Some(block_env), state);
+            return Some(MaybeSealedBlock::PartialSynthetic(pending));
         }
 
         None
@@ -276,8 +303,8 @@ where
         Ok(match pending_or_block_nr {
             PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
             PendingOrBlock::Pending => {
-                let pending_block = self.pending_block(state);
-                Some(MaybeSealedBlock::Pending(pending_block))
+                let pending_block = self.pending_block(None, state);
+                Some(MaybeSealedBlock::PartialSynthetic(pending_block))
             }
         })
     }
@@ -291,8 +318,13 @@ where
             .expect("Block should exist as index is inside block_numbers")
     }
 
-    /// Retrieves the pending block.
-    pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
+    /// Retrieves the pending block. We maintain the invariant that the pending block always has number
+    /// latest_sealed_block.number + 1. (Both are updated during the finalize_hook, so they're atomic).
+    /// 
+    /// Note that values in the block_env (including the block number there!) are updated during the begin_rollup_block_hook, so the values here may be stale
+    /// if this function is called while no rollup block is in progress. In that case, the number of transactions will be zero.
+    // TODO: Have this function return None if no block is pending!
+    pub fn pending_block(&self, block_env: Option<BlockEnv>, state: &mut ApiStateAccessor<S>) -> SyntheticBlockWithoutRootsAndBloom {
         let block_numbers = self.block_numbers(state);
 
         let head_block = self
@@ -300,7 +332,7 @@ where
             .get(block_numbers.end(), state)
             .unwrap_infallible()
             .expect("Block should exist as index is inside block_numbers");
-        let current_block_env = self.block_env(state).unwrap_infallible();
+        let current_block_env = block_env.unwrap_or_else(|| self.block_env(state).unwrap_infallible());
 
         assert_eq!(&head_block.header.number, block_numbers.end());
 
@@ -320,15 +352,17 @@ where
                 .map(|blob_gas| blob_gas.excess_blob_gas),
             base_fee_per_gas: Some(current_block_env.basefee),
             gas_limit: current_block_env.gas_limit,
-            // Default values
-            ommers_hash: EMPTY_OMMER_ROOT_HASH,
-            beneficiary: Address::ZERO,
+            // Values that will be filled in later
+            gas_used: 0,
+            logs_bloom: Bloom::default(),
             state_root: EMPTY_ROOT_HASH,
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
-            logs_bloom: Bloom::default(),
+
+            // Values that never need to be initailized
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            beneficiary: Address::ZERO,
             difficulty: U256::ZERO,
-            gas_used: 0,
             extra_data: Bytes::default(),
             mix_hash: B256::ZERO,
             nonce: B64::ZERO,
@@ -338,10 +372,7 @@ where
             requests_hash: None,
         };
 
-        crate::Block {
-            header,
-            transactions: start..end,
-        }
+        SyntheticBlockWithoutRootsAndBloom::new(header, start..end)
     }
 
     fn resolve_state<'a>(
@@ -374,7 +405,7 @@ where
             .ok_or(EthApiError::UnknownBlock)?;
 
         let mut block_env = match maybe_block {
-            MaybeSealedBlock::Pending(_) => self.block_env(state).unwrap_infallible(),
+            MaybeSealedBlock::PartialSynthetic(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
         };
         // Set the base fee to zero for evm execution. Gas is paid for by the sov gas meter instead

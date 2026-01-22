@@ -50,7 +50,7 @@ where
 
     tokio::spawn(async move {
         match request {
-            SubscriptionRequest::Heads => streamer.blocks().await,
+            SubscriptionRequest::Heads => streamer.new_heads().await,
             SubscriptionRequest::Logs(filter) => streamer.logs(filter).await,
         }
     });

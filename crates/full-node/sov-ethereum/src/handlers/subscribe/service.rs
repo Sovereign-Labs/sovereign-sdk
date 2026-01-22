@@ -21,6 +21,9 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use thiserror::Error;
 
+/// Don't send new heads notifcations for synthetic blocks more frequently than this.
+const SYNTHETIC_NEW_HEADS_MAX_FREQUENCY_MS: u64 = 200;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Block does not exist")]
@@ -43,6 +46,67 @@ where
     evm: Evm<S>,
 }
 
+struct SyntheticBlockWatermark {
+    block_number_of_last_notification: u64,
+    // The tx index of the last notification, if known. 
+    // It's not known to use when we send a notification for a *real* block, 
+    // so we have special handling in that case
+    tx_index_of_last_notification_if_known: Option<u64>,
+}
+
+enum SyntheticBlockWatermarkAdvanceResult {
+    NewRealBlock(u64),
+    NewSyntheticBlock,
+    NoChange,
+}
+
+impl SyntheticBlockWatermark {
+    fn from_synthetic_block(synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> Self {
+        Self {
+            block_number_of_last_notification: synthetic_block.header.number,
+            tx_index_of_last_notification_if_known: synthetic_block.transactions.end,
+        }
+    }
+
+    fn advance_and_emit_synthetic_block_notification(&mut self, synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> SyntheticBlockWatermarkAdvanceResult {
+        self.block_number_of_last_notification = synthetic_block.header.number;
+        self.tx_index_of_last_notification_if_known = synthetic_block.transactions.end.saturating_sub(1);
+        SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
+    }
+
+
+    fn advance_and_emit_real_block_notification(&mut self) -> SyntheticBlockWatermarkAdvanceResult {
+        // Per https://www.quicknode.com/docs/ethereum/eth_subscribe - we should send a notification each time a new header is appended
+        // Even if that means sending multiple notifications in succession. This means that we should increment the block number by one
+        // rather than jumping to the height of the synthetic block.
+        self.block_number_of_last_notification += 1;
+        // There's no guaranteed relationship between the first tx index of the synthetic block and the last tx index of the *current* real block that we need to notify for.
+        // We might have missed some synthetic block notifications due to tokio's nondeterminism. That's fine; just set it to None to reflect that we don't know for sure.
+        self.tx_index_of_last_notification_if_known = None;
+        SyntheticBlockWatermarkAdvanceResult::NewRealBlock(self.block_number_of_last_notification)
+    }
+    
+
+    // We want to send a notification if...
+    // There's been a new real block
+    // There's been a new synthetic block *and* it's been more than 200ms since the last notification
+    fn advance(&mut self, synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> SyntheticBlockWatermarkAdvanceResult {
+        if self.block_number_of_last_notification < synthetic_block.header.number {
+            return self.advance_and_emit_real_block_notification();
+        }
+
+        // If the synthetic block is empty, don't notify. 
+        // Similarly if we've already sent a notification for this synthetic block, don't notify again.
+        if synthetic_block.num_transactions() != 0 && || self.tx_index_of_last_notification_if_known.unwrap_or(0) < synthetic_block.last_tx_index() {
+            return self.advance_and_emit_synthetic_block_notification(synthetic_block);
+        }
+
+        SyntheticBlockWatermarkAdvanceResult::NoChange
+    }
+
+}
+
+// TODO: Refactor this into a long-running background task to reduce overhead. Right now, we do duplicate fetching for each subscription.
 impl<S, Seq> Streamer<S, Seq>
 where
     S: Spec,
@@ -61,7 +125,8 @@ where
     /// Stream new logs matching the provided filter to the subscriber.
     pub async fn logs(&self, filter: Box<Filter>) -> Result<(), Error> {
         let mut state = self.ethereum.api_state_accessor();
-        let pending_block = self.evm.pending_block(&mut state);
+        let pending_block = self.evm.pending_block(None, &mut state);
+        let synthetic_block_watermark = SyntheticBlockWatermark::from_synthetic_block(pending_block);
         let mut tx_watermark = Watermark::new(..pending_block.transactions.end);
 
         // Fetch the initial block. If it's stale, it will be replaced below.
@@ -79,7 +144,7 @@ where
                     }
 
                     let mut state = self.ethereum.api_state_accessor();
-                    let pending_block = self.evm.pending_block(&mut state);
+                    let pending_block = self.evm.pending_block(None, &mut state);
 
                     for tx_idx in tx_watermark.advance(..pending_block.transactions.end) {
                         let (receipt, time) = self.get_receipt(tx_idx, &mut state)?;
@@ -101,14 +166,18 @@ where
     }
 
     /// Stream new block headers to the subscriber.
-    pub async fn blocks(&self) -> Result<(), Error> {
+    pub async fn new_heads(&self) -> Result<(), Error> {
+        // Pick up here
+        // Long term todo: Refactor this into a long-running background task 
+
         let mut state = self.ethereum.api_state_accessor();
-        let latest_block = self.evm.latest_block(&mut state);
-        let mut block_watermark = Watermark::new(..latest_block.header.number + 1);
+        let pending_block = self.evm.pending_block(None, &mut state);
+        let mut watermark = SyntheticBlockWatermark::from_synthetic_block(&pending_block);
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
         let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
 
+        let mut last_send_time = Instant::now();
         loop {
             tokio::select! {
                 result = state_updates.changed() => {
@@ -117,13 +186,20 @@ where
                         break;
                     }
 
+                    // TODO(@preston-evans98) - I think this checkpoint change notification might be problematic on resync/restart. Figure that out.
+                    // TODO: Wait - if it's been less than 200ms since the last update, skip the pending block check.
                     let mut state = self.ethereum.api_state_accessor();
                     let latest_block = self.evm.latest_block(&mut state);
 
+                    let mut sent = false;
                     for block_number in block_watermark.advance(..latest_block.header.number + 1) {
                         let block = self.get_block(block_number, &mut state)?;
-                        let rpc_header = self.evm.get_rpc_header(block)?;
+                        let rpc_header = self.evm.get_rpc_header(block, &mut state)?;
+                        sent = true;
                         self.send(&rpc_header).await?;
+                    }
+                    if sent {
+                        last_update_time = Instant::now();
                     }
                 }
                 _ = shutdown_receiver.changed() => {
